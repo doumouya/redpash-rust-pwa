@@ -94,21 +94,27 @@
         <input class="rp-rt-search" type="search" placeholder="Search rows…"
                autocomplete="off" oninput="rtSearch(this, 'file')" />
 
-        <label class="rp-rt-switch" title="Edit mode">
-          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'edit')" />
-          <span class="rp-rt-switch-track"></span>
-          <i class="bi bi-pencil rp-rt-switch-ico"></i>
-        </label>
-        <label class="rp-rt-switch" title="Select mode">
-          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'select')" />
-          <span class="rp-rt-switch-track"></span>
-          <i class="bi bi-check2-square rp-rt-switch-ico"></i>
-        </label>
-        <label class="rp-rt-switch" title="Delete mode">
-          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'delete')" />
-          <span class="rp-rt-switch-track"></span>
-          <i class="bi bi-trash rp-rt-switch-ico"></i>
-        </label>
+        <!-- Mode triplet — icon buttons (matches the cleaner Overview
+             toolbar). Active state goes via `.is-active` on click;
+             rtToggleMode walks `[data-rt-mode]` siblings so only one
+             button stays active at a time. aria-pressed exposes the
+             toggle state to assistive tech (was role="switch" via the
+             <input> previously). -->
+        <button type="button" class="rp-rt-icon-btn" data-rt-mode="edit"
+                aria-pressed="false" title="Edit mode"
+                onclick="rtToggleMode(this, 'file', 'edit')">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button type="button" class="rp-rt-icon-btn" data-rt-mode="select"
+                aria-pressed="false" title="Select mode"
+                onclick="rtToggleMode(this, 'file', 'select')">
+          <i class="bi bi-check2-square"></i>
+        </button>
+        <button type="button" class="rp-rt-icon-btn" data-rt-mode="delete"
+                aria-pressed="false" title="Delete mode"
+                onclick="rtToggleMode(this, 'file', 'delete')">
+          <i class="bi bi-trash"></i>
+        </button>
 
         <button class="rp-rt-icon-btn" title="Refresh" onclick="rtRefresh('file', this)">
           <i class="bi bi-arrow-clockwise"></i>

@@ -371,18 +371,9 @@ html[data-theme="light"] #page-objects .rp-rt-toolbar {
   background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
-/* Mode switches — glass track + muted knob/icon. The library's
-   :checked ~ rules (higher specificity) still flip to accent when on. */
-.rp-rt-switch-track {
-  background: transparent;
-  border-color: var(--over1, #45475a);
-}
-.rp-rt-switch-track::after { background: var(--sub, #a6adc8); }
-.rp-rt-switch:hover input:not(:checked) ~ .rp-rt-switch-track {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  border-color: var(--over1, #45475a);
-}
-.rp-rt-switch-ico { color: var(--sub, #a6adc8); }
+/* Mode triplet (edit / select / delete) — icon buttons now, was
+   `.rp-rt-switch` toggles. Active state via `.rp-rt-icon-btn.is-active`
+   from the library (rp-rt-icon-btn defaults are already in main.css). */
 
 /* Toolbar search — glass treatment. */
 .rp-rt-search {

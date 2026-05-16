@@ -166,7 +166,7 @@ delete modes (so the row's own affordances win).
 ## Toolbar
 
 Same library chrome as the Objects page (filter button, search input,
-mode switches, controls dropdown), with one extra: the **fix-wrapped
+mode icon-button triplet, controls dropdown), with one extra: the **fix-wrapped
 banner** (`#cleaner-fix-wrapped`) appears above the table when
 `_detectWrappedCsv()` flags the active file — clicking it opens
 `modal-unwrap-csv` which previews the parsed-vs-re-split shape and

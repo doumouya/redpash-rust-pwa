@@ -70,21 +70,26 @@
       <input class="rp-rt-search" type="search" placeholder="Search projects…"
              autocomplete="off" oninput="objSearch(this)" />
 
-      <label class="rp-rt-switch" title="Edit mode">
-        <input type="checkbox" onchange="objToggleMode(this, 'edit')" />
-        <span class="rp-rt-switch-track"></span>
-        <i class="bi bi-pencil rp-rt-switch-ico"></i>
-      </label>
-      <label class="rp-rt-switch" title="Delete mode">
-        <input type="checkbox" onchange="objToggleMode(this, 'delete')" />
-        <span class="rp-rt-switch-track"></span>
-        <i class="bi bi-trash rp-rt-switch-ico"></i>
-      </label>
-      <label class="rp-rt-switch" title="Select mode">
-        <input type="checkbox" onchange="objToggleMode(this, 'select')" />
-        <span class="rp-rt-switch-track"></span>
-        <i class="bi bi-check2-square rp-rt-switch-ico"></i>
-      </label>
+      <!-- Mode triplet — icon buttons (consistent with the cleaner
+           Overview toolbar). Active state via `.is-active`;
+           objToggleMode walks `[data-rt-mode]` siblings so only one
+           stays active at a time. aria-pressed exposes the toggle
+           state to assistive tech. -->
+      <button type="button" class="rp-rt-icon-btn" data-rt-mode="edit"
+              aria-pressed="false" title="Edit mode"
+              onclick="objToggleMode(this, 'edit')">
+        <i class="bi bi-pencil"></i>
+      </button>
+      <button type="button" class="rp-rt-icon-btn" data-rt-mode="delete"
+              aria-pressed="false" title="Delete mode"
+              onclick="objToggleMode(this, 'delete')">
+        <i class="bi bi-trash"></i>
+      </button>
+      <button type="button" class="rp-rt-icon-btn" data-rt-mode="select"
+              aria-pressed="false" title="Select mode"
+              onclick="objToggleMode(this, 'select')">
+        <i class="bi bi-check2-square"></i>
+      </button>
 
       <!-- Selection chip + bulk-delete — visible only while select-mode
            is on AND at least one row is ticked (CSS-gated). Click the

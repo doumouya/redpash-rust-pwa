@@ -840,9 +840,13 @@ function _wireGlobals(root) {
       if (ttl) ttl.textContent = SCHEMAS[kind].title;
       const search = panel.querySelector(".rp-rt-search");
       if (search) { search.value = ""; search.placeholder = `Search ${kind}…`; }
-      // Reset the inline modes — uncheck the toggles AND drop the
-      // panel's mode class (the CSS source of truth).
-      panel.querySelectorAll(".rp-rt-switch input[type=checkbox]").forEach((c) => { c.checked = false; });
+      // Reset the inline modes — drop the active class + aria-pressed on
+      // every mode icon button AND drop the panel's mode class (CSS
+      // source of truth).
+      panel.querySelectorAll(".rp-rt-icon-btn[data-rt-mode]").forEach((b) => {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-pressed", "false");
+      });
       panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
       const rowsLbl = panel.querySelector("[data-rt-rows-label]");
       if (rowsLbl) {
@@ -1048,16 +1052,25 @@ function _wireGlobals(root) {
   // panel; the CSS surfaces / hides the always-emitted leading checkbox
   // + trailing trash columns and the edit hover cue, so toggling a mode
   // never re-renders the table body.
-  window.objToggleMode = (chk, mode) => {
+  window.objToggleMode = (btn, mode) => {
     const panel = root.querySelector(".rp-rt-panel");
     if (!panel) return;
-    // One mode at a time — clear the sibling switches.
-    chk.closest(".rp-rt-toolbar")
-      ?.querySelectorAll(".rp-rt-switch input[type=checkbox]")
-      .forEach((c) => { if (c !== chk) c.checked = false; });
+    const wasActive = btn.classList.contains("is-active");
+    const nowActive = !wasActive;
+    // One mode at a time — clear sibling mode buttons.
+    btn.closest(".rp-rt-toolbar")
+      ?.querySelectorAll(".rp-rt-icon-btn[data-rt-mode]")
+      .forEach((b) => {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-pressed", "false");
+      });
+    if (nowActive) {
+      btn.classList.add("is-active");
+      btn.setAttribute("aria-pressed", "true");
+    }
     panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
-    if (chk.checked) panel.classList.add(`rp-rt-mode-${mode}`);
-    STATE[currentKind].mode = chk.checked ? mode : null;
+    if (nowActive) panel.classList.add(`rp-rt-mode-${mode}`);
+    STATE[currentKind].mode = nowActive ? mode : null;
     // Any mode change clears the selection — objClearSelection syncs the
     // DOM (uncheck boxes, drop tints) without a full body re-render.
     window.objClearSelection();

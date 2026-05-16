@@ -216,7 +216,7 @@ view (yet) and don't persist across reloads.
 |---|---|---|
 | Filter | `objToggleFilter(btn)` | Slides the predicate **filter side panel** open / closed; lights the funnel button; seeds one empty predicate row on first open. See below. |
 | Search | `objSearch(input)` | Client-side filter via `_objMatchesSearch(kind, row, q)` — case-insensitive, scans every column of the kind (including hidden-by-default ones) through `_objColValue`. |
-| Edit / Select / Delete | `objToggleMode` | The three mode switches — see *Edit / Select / Delete modes*. |
+| Edit / Select / Delete | `objToggleMode` | Three icon-button toggles (`<button data-rt-mode="…">`, `.is-active` + `aria-pressed` flip on click). Mutually exclusive. See *Edit / Select / Delete modes*. |
 | Refresh | `objRefresh(btn)` | Re-runs `loadTable(currentKind)`; spins the icon via the library's `rp-rt-refreshing` class. |
 | Row numbers | `objToggleRowNums(btn)` | Toggles a leading `#` index column. Page-aware (`start + i + 1`). Resets per tab. |
 | Favorites | `objToggleFav(btn)` | Filters to `is_favorite` rows. **Shown only on the Reports / Dashboards tabs** — `objActivateTab` toggles the button's `display` per kind, and resets `objFavOnly` on every tab switch (a kind with no `is_favorite` field would otherwise filter to nothing). |
@@ -238,7 +238,7 @@ both `.rp-rt-pill-dd` and `.rp-rt-cols-dd` — the trigger's next sibling
 is always the dropdown panel.
 
 **Glass control treatment** — every redtable control (toolbar buttons,
-pill dropdowns, mode switches, search, back button, row actions) is
+pill dropdowns, mode icon buttons, search, back button, row actions) is
 restyled in `objects.css` to a transparent-fill / `--over1`-border /
 `--sub`-text "glass" look, with a translucent-white hover. A
 filled-translucent control picks up the panel backdrop's hue and reads

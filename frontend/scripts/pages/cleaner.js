@@ -1696,19 +1696,26 @@ function _wireGlobals(root) {
   // reads to surface/hide the leading + trailing columns and the
   // dblclick / hover affordances. Mirrors the demo's `toggleS2Mode`
   // pattern, scoped to the cleaner panel rather than the home redtable.
-  window.rtToggleMode = (chk, _kind, mode) => {
-    const tbar = chk.closest(".rp-rt-toolbar");
-    // Only one mode active at a time — clear the other switches.
-    tbar?.querySelectorAll(".rp-rt-switch input[type=checkbox]").forEach((c) => {
-      if (c !== chk) c.checked = false;
+  window.rtToggleMode = (btn, _kind, mode) => {
+    const tbar = btn.closest(".rp-rt-toolbar");
+    const wasActive = btn.classList.contains("is-active");
+    const nowActive = !wasActive;
+    // Only one mode active at a time — clear sibling mode buttons.
+    tbar?.querySelectorAll(".rp-rt-icon-btn[data-rt-mode]").forEach((b) => {
+      b.classList.remove("is-active");
+      b.setAttribute("aria-pressed", "false");
     });
+    if (nowActive) {
+      btn.classList.add("is-active");
+      btn.setAttribute("aria-pressed", "true");
+    }
     const panel = root.querySelector(".rp-rt-panel--cleaner");
     if (!panel) return;
     panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
-    if (chk.checked) panel.classList.add(`rp-rt-mode-${mode}`);
+    if (nowActive) panel.classList.add(`rp-rt-mode-${mode}`);
     // Switching away from select-mode clears the tick state so the next
     // re-entry starts clean (and stale ticks don't leak into bulk-delete).
-    if (mode !== "select" || !chk.checked) {
+    if (mode !== "select" || !nowActive) {
       STATE.selected.clear();
       _renderSelectionChip(root);
     }
