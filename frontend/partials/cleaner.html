@@ -129,9 +129,25 @@
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 10)">10 rows</div>
             <div class="rp-rt-dd-item rp-rt-dd-selected" onclick="rtSetRows(this, 'file', 25)">25 rows</div>
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 50)">50 rows</div>
-            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 'all')">All rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 100)">100 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 500)">500 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 5000)">5k rows (max)</div>
           </div>
         </div>
+
+        <!-- Link search + rows-per-page across file tabs. Default OFF
+             (per-tab). When ON, typing in search OR changing rows-per-
+             page on one tab applies to every other open file tab too —
+             useful for "find this ID across related datasets" or
+             "give me 50 rows on everything". Mode + sort + page stay
+             per-tab regardless (mode is data-mutation-risky; sort is
+             schema-dependent). Pref: prefs.cleaner_link_toolbar. -->
+        <button type="button" class="rp-rt-icon-btn" id="cleaner-link-toolbar"
+                aria-pressed="false"
+                title="Sync search + rows-per-page across file tabs"
+                onclick="cleanerToggleLink(this)">
+          <i class="bi bi-link-45deg"></i>
+        </button>
 
         <!-- Selection chip — surfaces while select-mode is on AND at least
              one row is ticked. Click clears; the trash button next to it

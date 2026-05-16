@@ -42,14 +42,29 @@ let STATE = {
   page:        1,                     // current page index
   pageSize:    25,                    // rows per page (matches the dd default)
   pageData:    null,                  // last { rows, total, … } response
+  q:           "",                    // toolbar search query
   selected:    new Set(),             // page-relative row indices ticked in select mode
   filterOpen:  false,                 // funnel side-panel open/closed
   // Chained column sort — primary first, remaining keys break ties.
   // Empty array → no sort header sent → backend uses the frame's
   // natural order. PageQuery accepts a JSON `sorts` param that
-  // overrides the legacy single-column `sort/dir` pair. Reset on every
-  // file switch (per-file sort doesn't survive across tabs).
+  // overrides the legacy single-column `sort/dir` pair.
   sorts:       [],
+  // Per-file toolbar prefs, keyed by file rid. Holds the user's
+  // pageSize / sorts / q / mode / page so switching tabs doesn't
+  // leak one file's choices into another's. Snapshot on leave +
+  // rehydrate on enter happens inside cleanerActivateTab. Memory-
+  // only (no localStorage); defaults below kick in for never-visited
+  // tabs.
+  filePrefs:   new Map(),
+  // Chain-link toggle in the toolbar: when true, search query and
+  // rows-per-page stick across file tabs (useful for "find this ID
+  // across related files" or "give me 50 rows everywhere"). When
+  // false (default), they're per-tab via filePrefs. Mode + sort +
+  // page index are ALWAYS per-tab regardless — mode is data-mutation
+  // risky and sort is schema-dependent. Persisted to
+  // prefs.cleaner_link_toolbar.
+  linkToolbar: false,
   // Per-user "tabs I've closed" set — keyed by file RID. Persisted to
   // `prefs.cleaner_hidden_files` via rpSavePref. Mirrors objTabs on the
   // Objects page: hides crowded file tabs on big projects (17+ files)
@@ -91,6 +106,12 @@ export default async function mount(root, ctx) {
   // a different project). Persisted via rpSavePref on every show/hide.
   const savedHidden = ctx?.session?.prefs?.cleaner_hidden_files;
   STATE.hiddenFiles = new Set(Array.isArray(savedHidden) ? savedHidden : []);
+
+  // Toolbar-link toggle — drives whether search + rows-per-page
+  // stick across file tabs. Pref persisted server-side; mount-time
+  // hydration sets STATE.linkToolbar before the toggle button is
+  // rendered, so the active class reflects the user's last choice.
+  STATE.linkToolbar = ctx?.session?.prefs?.cleaner_link_toolbar === true;
 
   // Learned sentinel values — the user-extension of the backend's
   // built-in SENTINELS list. The Fix-invalid modal scans every file
@@ -211,6 +232,139 @@ function _rpAnimOnce(el, cls) {
   void el.offsetWidth;
   el.classList.add(cls);
   el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
+}
+
+// ── Per-file toolbar prefs (snapshot + restore on tab switch) ────
+// Each file tab keeps its own rows-per-page, search query, sort
+// chain, mode, and current page index. Without this, changing any
+// of those on one tab silently leaks into every other open tab.
+// Memory-only — defaults below apply for never-visited tabs.
+const _OV_DEFAULT_PAGE_SIZE = 25;
+// Hard cap on rows-per-page. Salesforce caps at 2k for reference;
+// 5k × ~17 cols ≈ 85k DOM nodes which browsers handle fine even
+// when select-mode unhides the per-row checkbox column. Going much
+// higher (the old "All rows" pinned to 100k) hangs the browser on
+// mode flips because every row's `<td>` has to re-layout.
+const _PAGE_SIZE_MAX = 5000;
+function _clampPageSize(n) {
+  if (n === "all") return _PAGE_SIZE_MAX;            // legacy "all" → cap
+  const num = Number(n);
+  if (!Number.isFinite(num) || num <= 0) return _OV_DEFAULT_PAGE_SIZE;
+  return Math.min(num, _PAGE_SIZE_MAX);
+}
+
+// ── Page cache (per-file, LRU) ────────────────────────────────────
+// Caches the last N page responses keyed by every parameter that
+// distinguishes a request. Tab-switching back and forth re-uses the
+// cached payload instead of re-fetching — at 5k rows the cache hit
+// is the difference between an instant tab switch and a 3 s wait.
+// Invalidated when steps mutate the file's frame (see _invalidatePageCache).
+const _PAGE_CACHE_MAX = 12;
+const _pageCache = new Map();   // key → { rows, total, all_count, … }
+// Per-file applied-steps count we last observed. _loadPage compares
+// the current count against this to detect "the file changed since
+// the cached pages were fetched" and invalidates that file's cache.
+const _fileStepsRev = new Map(); // rid → applied-count integer
+function _pageCacheKey(rid, page, size, sorts, q) {
+  return `${rid}:${page}:${size}:${JSON.stringify(sorts || [])}:${q || ""}`;
+}
+function _pageCacheGet(key) {
+  if (!_pageCache.has(key)) return null;
+  // LRU: re-insert moves the entry to the end of the iteration order.
+  const v = _pageCache.get(key);
+  _pageCache.delete(key); _pageCache.set(key, v);
+  return v;
+}
+function _pageCachePut(key, value) {
+  if (_pageCache.has(key)) _pageCache.delete(key);
+  _pageCache.set(key, value);
+  while (_pageCache.size > _PAGE_CACHE_MAX) {
+    // Drop oldest (first iter entry).
+    const oldest = _pageCache.keys().next().value;
+    _pageCache.delete(oldest);
+  }
+}
+// Drop every cached page for a given file. Called whenever a step
+// is applied / undone / redone — the underlying frame changed, so
+// the cached rows are now stale.
+function _invalidatePageCache(rid) {
+  if (!rid) return;
+  for (const key of [..._pageCache.keys()]) {
+    if (key.startsWith(`${rid}:`)) _pageCache.delete(key);
+  }
+}
+function _saveFilePrefs(rid) {
+  if (!rid) return;
+  // When linkToolbar is ON, search + rows-per-page are toolbar-global;
+  // don't snapshot them per-file (so they don't get pinned to a stale
+  // value if the user later toggles linkToolbar off).
+  const existing = STATE.filePrefs.get(rid) || {};
+  STATE.filePrefs.set(rid, {
+    pageSize: STATE.linkToolbar ? existing.pageSize : STATE.pageSize,
+    page:     STATE.page,
+    q:        STATE.linkToolbar ? existing.q        : STATE.q,
+    sorts:    Array.isArray(STATE.sorts) ? STATE.sorts.map((k) => ({ ...k })) : [],
+    mode:     _currentPanelMode(),
+  });
+}
+function _loadFilePrefs(root, rid) {
+  const p = STATE.filePrefs.get(rid) || {};
+  // Linked fields keep their current STATE value (toolbar-global);
+  // unlinked fields hydrate from the per-file snapshot or fall back
+  // to defaults for never-visited tabs.
+  if (!STATE.linkToolbar) {
+    STATE.pageSize = Number(p.pageSize) > 0 ? Number(p.pageSize) : _OV_DEFAULT_PAGE_SIZE;
+    STATE.q        = typeof p.q === "string" ? p.q : "";
+  }
+  STATE.page     = Number(p.page)     > 0 ? Number(p.page)     : 1;
+  STATE.sorts    = Array.isArray(p.sorts) ? p.sorts.map((k) => ({ ...k })) : [];
+  // Re-paint the toolbar widgets so the user sees the rehydrated
+  // values, not the previous tab's.
+  _syncToolbarToState(root);
+  _applyPanelMode(root, p.mode || null);
+}
+// Read the panel's current mode out of its rp-rt-mode-* class.
+function _currentPanelMode() {
+  const panel = document.querySelector(".rp-rt-panel--cleaner");
+  if (!panel) return null;
+  for (const m of ["edit", "select", "delete"]) {
+    if (panel.classList.contains(`rp-rt-mode-${m}`)) return m;
+  }
+  return null;
+}
+// Flip the panel's rp-rt-mode-* class + the matching mode icon
+// button's is-active / aria-pressed state to `mode` (or none).
+function _applyPanelMode(root, mode) {
+  const panel = root.querySelector(".rp-rt-panel--cleaner");
+  if (!panel) return;
+  panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
+  root.querySelectorAll('[data-cleaner-view="file"].rp-rt-toolbar .rp-rt-icon-btn[data-rt-mode]')
+    .forEach((b) => {
+      const on = b.dataset.rtMode === mode;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  if (mode) panel.classList.add(`rp-rt-mode-${mode}`);
+}
+// Push STATE.pageSize / STATE.q into the toolbar DOM (rows label +
+// dd-selected checkmark + search input value). Called after
+// _loadFilePrefs so the visible toolbar matches the restored state.
+// Label format mirrors what rtSetRows writes: ≥5000 reads as "5k",
+// everything else as the raw count.
+function _syncToolbarToState(root) {
+  const size = STATE.pageSize;
+  const lbl  = root.querySelector("[data-rt-rows-label]");
+  if (lbl) lbl.textContent = size >= 5000 ? "5k" : String(size);
+  const dd = lbl?.closest(".rp-rt-dd-wrap");
+  dd?.querySelectorAll(".rp-rt-dd-item").forEach((i) => {
+    // Match the dropdown item that starts with the active size's
+    // numeric prefix ("10", "25", "5k", …).
+    const want = size >= 5000 ? "5k" : String(size);
+    i.classList.toggle("rp-rt-dd-selected",
+      i.textContent.trim().toLowerCase().startsWith(want));
+  });
+  const search = root.querySelector('[data-cleaner-view="file"] .rp-rt-search');
+  if (search) search.value = STATE.q || "";
 }
 
 // ── Render: title + meta ─────────────────────────────────────────────
@@ -398,26 +552,43 @@ async function _loadPage(root) {
   const tbody = root.querySelector("[data-rt-tbody]");
   if (!thead || !tbody) return;
 
-  tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>`;
-
-  const params = new URLSearchParams();
-  params.set("page", String(STATE.page));
-  params.set("size", String(STATE.pageSize));
-  if (STATE.q) params.set("q", STATE.q);
-  // Server-side chained sort — PageQuery's `sorts` JSON param accepts
-  // `[{col, dir}, …]`, primary first; remaining keys break ties.
-  // PageQuery prefers `sorts` over the legacy single `sort/dir` pair,
-  // so a non-empty chain is the only thing we send.
-  if (STATE.sorts?.length) {
-    params.set("sorts", JSON.stringify(STATE.sorts));
+  // Auto-invalidate the page cache for this file whenever its step
+  // revision changes (a step was applied / undone / redone since the
+  // last load). We track per-file step counts in _fileStepsRev; if
+  // the current STATE.steps length differs, drop all cached pages
+  // for this rid before consulting the cache. This avoids having to
+  // call _invalidatePageCache from every step-apply call site.
+  const stepsRev = (STATE.steps || []).filter((s) => s.applied === true).length;
+  if (_fileStepsRev.get(STATE.rid) !== stepsRev) {
+    _invalidatePageCache(STATE.rid);
+    _fileStepsRev.set(STATE.rid, stepsRev);
   }
 
-  let res;
-  try {
-    res = await api.get(`/files/${encodeURIComponent(STATE.rid)}/page?${params.toString()}`);
-  } catch (err) {
-    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem">Couldn't load page: ${_escHtml(err.body?.error ?? err.message)}</td></tr>`;
-    return;
+  // Cache lookup — if we've already fetched this exact (rid, page,
+  // size, sorts, q) combo since the last step mutation, reuse it so
+  // tab-switches feel instant instead of paying a 3s round-trip on a
+  // 5k-row page.
+  const cacheKey = _pageCacheKey(STATE.rid, STATE.page, STATE.pageSize, STATE.sorts, STATE.q);
+  let res = _pageCacheGet(cacheKey);
+
+  if (!res) {
+    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>`;
+
+    const params = new URLSearchParams();
+    params.set("page", String(STATE.page));
+    params.set("size", String(STATE.pageSize));
+    if (STATE.q) params.set("q", STATE.q);
+    if (STATE.sorts?.length) {
+      params.set("sorts", JSON.stringify(STATE.sorts));
+    }
+
+    try {
+      res = await api.get(`/files/${encodeURIComponent(STATE.rid)}/page?${params.toString()}`);
+      _pageCachePut(cacheKey, res);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem">Couldn't load page: ${_escHtml(err.body?.error ?? err.message)}</td></tr>`;
+      return;
+    }
   }
   STATE.pageData = res;
 
@@ -492,6 +663,54 @@ async function _loadPage(root) {
   const end    = Math.min(STATE.page * STATE.pageSize, total);
   const infoEl = root.querySelector("[data-rt-rows-info]");
   if (infoEl) infoEl.textContent = total === 0 ? "0 rows" : `${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`;
+
+  // Page nav — populates the [data-rt-pages] slot. Smart window
+  // (Django-style): [1 … cur-1 cur cur+1 … last] so we don't render
+  // 1000+ buttons for a 100k-row file at 10 rows/page.
+  _renderPaging(root, res.pages ?? 1);
+}
+
+// Render the page navigator into [data-rt-pages]. Hidden when only
+// one page; otherwise: ← prev, page-number buttons (smart window),
+// → next. cleanerSetPage(n) is the click target — validates the
+// requested page + reloads.
+function _renderPaging(root, totalPages) {
+  // [data-rt-pages] is a panel-level slot (shared between file +
+  // overview chrome). Overview is client-side paginated so we never
+  // paint into it from there — _renderPaging is only called from
+  // _loadPage which is file-view only.
+  const slot = root.querySelector("[data-rt-pages]");
+  if (!slot) return;
+  if (totalPages <= 1) { slot.innerHTML = ""; return; }
+  const cur = Math.max(1, Math.min(totalPages, STATE.page || 1));
+  const nums = _smartPageNums(cur, totalPages);
+  const prevDisabled = cur === 1 ? "disabled" : "";
+  const nextDisabled = cur === totalPages ? "disabled" : "";
+  const buttons = nums.map((p) => {
+    if (p === "…") return `<span class="rp-rt-pg rp-rt-pg-gap">…</span>`;
+    const cls = `rp-rt-pg${p === cur ? " on" : ""}`;
+    return `<button class="${cls}" onclick="cleanerSetPage(${p})">${p}</button>`;
+  }).join("");
+  slot.innerHTML = `
+    <button class="rp-rt-pg" ${prevDisabled} onclick="cleanerSetPage(${cur - 1})" title="Previous page">
+      <i class="bi bi-chevron-left"></i>
+    </button>
+    ${buttons}
+    <button class="rp-rt-pg" ${nextDisabled} onclick="cleanerSetPage(${cur + 1})" title="Next page">
+      <i class="bi bi-chevron-right"></i>
+    </button>`;
+}
+
+// Mirrors the demo's _s2PageNums: total ≤ 7 → list everything; else
+// [1, …, cur-1, cur, cur+1, …, last] with literal "…" sentinels.
+function _smartPageNums(cur, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out = [1];
+  if (cur > 3) out.push("…");
+  for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) out.push(p);
+  if (cur < total - 2) out.push("…");
+  out.push(total);
+  return out;
 }
 
 // ── Inline-onclick globals ────────────────────────────────────────────
@@ -756,6 +975,10 @@ function _wireGlobals(root) {
       try {
         history.replaceState(null, "", `#/cleaner?project=${encodeURIComponent(STATE.project?.redpash_id ?? "")}`);
       } catch {}
+      // Snapshot the leaving file's toolbar prefs so re-opening it
+      // from Overview later restores its pageSize / search / sorts /
+      // mode / page.
+      if (STATE.rid) _saveFilePrefs(STATE.rid);
       // Drop ALL file-specific state so the chrome that's still
       // visible in overview mode (header title + undo/redo/save +
       // Data Types + Applied + Encoding picker) doesn't keep painting
@@ -776,6 +999,12 @@ function _wireGlobals(root) {
       return;
     }
     if (fid === STATE.rid) return;
+
+    // Snapshot the leaving tab's toolbar prefs into filePrefs so
+    // re-entering this file later restores its pageSize / search /
+    // sorts / mode / page index. Without this, every per-tab toolbar
+    // choice would leak across tabs.
+    if (STATE.rid) _saveFilePrefs(STATE.rid);
 
     // If the target was × -closed in the tab strip, opening it from
     // elsewhere (e.g. Overview row click) is an explicit intent to view
@@ -823,8 +1052,12 @@ function _wireGlobals(root) {
     STATE.summary = detail.summary;
     STATE.columns = detail.columns ?? [];
     STATE.steps   = detail.steps ?? [];
-    STATE.page    = 1;
-    STATE.sorts   = [];
+    // Rehydrate toolbar prefs from the per-file snapshot (defaults
+    // for never-visited tabs). _loadFilePrefs sets STATE.pageSize /
+    // page / q / sorts and re-applies them to the toolbar DOM
+    // (rows-per-page label + dropdown checkmark, search input value,
+    // mode button is-active state).
+    _loadFilePrefs(root, fid);
 
     // Re-paint just the slots that depend on the active file. Tabs
     // already flipped above; project meta + status + cleanness aggregate
@@ -1983,13 +2216,44 @@ function _wireGlobals(root) {
     const dd = item.closest(".rp-rt-pill-dd");
     dd?.querySelectorAll(".rp-rt-dd-item").forEach((e) => e.classList.remove("rp-rt-dd-selected"));
     item.classList.add("rp-rt-dd-selected");
-    const lbl = root.querySelector("[data-rt-rows-label]");
-    if (lbl) lbl.textContent = n === "all" ? "All" : String(n);
-    STATE.pageSize = n === "all" ? 100000 : Number(n);
+    const size = _clampPageSize(n);
+    const lbl  = root.querySelector("[data-rt-rows-label]");
+    if (lbl) lbl.textContent = size >= 5000 ? "5k" : String(size);
+    STATE.pageSize = size;
     STATE.page     = 1;
     dd?.classList.remove("open");
     await _loadPage(root);
   };
+
+  // Jump to a specific page. Bounded against STATE.pageData.pages
+  // so stale clicks (e.g. on a [Next] button that was painted
+  // before a filter shrunk the result set) can't overshoot.
+  window.cleanerSetPage = async (n) => {
+    const total = STATE.pageData?.pages ?? 1;
+    const next = Math.max(1, Math.min(Number(n) || 1, total));
+    if (next === STATE.page) return;
+    STATE.page = next;
+    await _loadPage(root);
+  };
+
+  // Chain-link toolbar — flips STATE.linkToolbar + persists +
+  // re-applies the visual state. When ON, search + rows-per-page
+  // stick across file tabs (the snapshot/restore helpers skip those
+  // fields, so the active values just carry through). When the user
+  // flips OFF, every tab from then on is per-tab again — past
+  // synchronisation isn't unwound.
+  window.cleanerToggleLink = (btn) => {
+    STATE.linkToolbar = !STATE.linkToolbar;
+    btn.classList.toggle("is-active", STATE.linkToolbar);
+    btn.setAttribute("aria-pressed", STATE.linkToolbar ? "true" : "false");
+    window.rpSavePref?.("cleaner_link_toolbar", STATE.linkToolbar);
+  };
+  // Initial paint of the link toggle to match the rehydrated pref.
+  const linkBtn = root.querySelector("#cleaner-link-toolbar");
+  if (linkBtn) {
+    linkBtn.classList.toggle("is-active", STATE.linkToolbar);
+    linkBtn.setAttribute("aria-pressed", STATE.linkToolbar ? "true" : "false");
+  }
 }
 
 // Anchor a freshly-opened tool modal to the button that triggered it.
