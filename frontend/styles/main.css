@@ -129,6 +129,17 @@ body {
   color: var(--rp-text);
 }
 
+/* Active state for any .rp-rt-icon-btn (mode triplet edit/select/delete,
+   filter funnel, link-toolbar, row-open toggle, etc.). The library
+   defines the base button look but leaves .is-active unstyled — we
+   layer the accent tint here so every page picks it up without a per-
+   page rule. */
+.rp-rt-icon-btn.is-active {
+  background: color-mix(in srgb, var(--rp-accent) 18%, transparent);
+  color: var(--rp-accent);
+  border-color: color-mix(in srgb, var(--rp-accent) 35%, transparent);
+}
+
 /* ── Brand "R" mark — inline RedPash circular badge ─────────────
    `<span class="rp-r">R</span>edPash` renders the R as the canonical
    red-gradient circle from icons/favicon.svg with the Savate-900

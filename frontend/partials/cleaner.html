@@ -32,6 +32,17 @@
     </div>
     <div class="rp-rt-panel rp-rt-panel--cleaner" data-rt="file">
 
+      <!-- ── Project tabs — panel-header level, ABOVE rp-rt-header. ─
+           Each tab = an opened project (prefs.cleaner_open_projects).
+           Switching snapshots + restores the full project STATE slice
+           for an instant feel; the picker (+) opens any not-yet-open
+           project the user owns. Persisted across sessions. -->
+      <div class="rp-rt-proj-tabs">
+        <div class="rp-rt-proj-tabs-inner" id="cleaner-proj-tabs-list">
+          <!-- Rendered by _renderProjectTabs() once /api/projects responds. -->
+        </div>
+      </div>
+
       <!-- ── Header — title · meta · status · cleanness · undo / redo / save / export · + ─
            (The page-level back button lives in .rp-rt-topbar above.) -->
       <div class="rp-rt-header">
@@ -40,8 +51,6 @@
         <div class="rp-rtp-hdr-info" data-cleaner-chrome="hdr-info">
           <div class="rp-rtp-hdr-meta" id="cleaner-proj-meta">—</div>
         </div>
-
-        <span class="badge" id="cleaner-proj-status" style="margin-right:0.5rem"></span>
 
         <div class="rp-rtp-overall">
           <span class="rp-rtp-overall-lbl">Overall cleanness</span>

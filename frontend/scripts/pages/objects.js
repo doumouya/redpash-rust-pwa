@@ -198,9 +198,16 @@ const SCHEMAS = {
       // a read-only "published" value when the project has a public
       // dashboard, which the badge map renders but the edit list omits.
       { key: "stage",       label: "Stage",       render: (r) => _objBadge(r.stage) },
-      { key: "status",      label: "Status",      render: (r) => _objBadge(r.status),
+      // Status is derived: opened in the cleaner = Active, archived =
+      // Archived, anything else = Draft. The inline edit collapses to
+      // a single archive toggle (Archive / Unarchive) — picking
+      // Active or Draft manually would conflict with the derived
+      // semantic and confuse the user. "Unarchive" writes the raw
+      // status back to "draft" (the neutral baseline), so the
+      // derivation re-takes over.
+      { key: "status",      label: "Status",      render: (r) => _objBadge(_objDerivedStatus(r)),
         edit: { type: "enum", field: "status",
-                options: [["draft","Draft"],["active","Active"],["archived","Archived"]] } },
+                options: [["archived","Archive"],["draft","Unarchive"]] } },
       { key: "updated_at",  label: "Modified",    render: (r) => fmtDate(r.updated_at) },
       // Available-but-hidden by default — toggle on via the Columns
       // dropdown.
@@ -563,6 +570,18 @@ let objShowRowOpen = true;
 // `objSave` via rpSavePref. `{}` when the user has never saved a view.
 let objViews = {};
 
+// Mirror of prefs.cleaner_open_projects — the user's open project tabs
+// in the cleaner. Drives the Projects-tab Status column's derived
+// badge ("Active" = open in cleaner, "Draft" = not, "Archived" =
+// honored verbatim). Set on mount; refreshed only on next mount /
+// page reload (the cleaner is the source of truth for the open set).
+let objOpenProjects = new Set();
+function _objDerivedStatus(row) {
+  if (objOpenProjects.has(row?.redpash_id)) return "active";
+  if (String(row?.status ?? "").toLowerCase() === "archived") return "archived";
+  return "draft";
+}
+
 // kind → singular noun, for the header meta line ("1 project" vs
 // "3 projects").
 const _SINGULAR = {
@@ -746,6 +765,13 @@ export default async function mount(root, ctx) {
   // explicitly set `false` via the toolbar toggle (an absent pref
   // means "never asked").
   objShowRowOpen = ctx?.session?.prefs?.objects_show_row_open !== false;
+
+  // Mirror cleaner_open_projects so the Projects-tab Status column can
+  // derive its badge from "opened in the cleaner" (= Active) rather
+  // than the stored draft/active/archived field. Refreshed only at
+  // mount — the cleaner page owns this pref's writes.
+  const open = ctx?.session?.prefs?.cleaner_open_projects;
+  objOpenProjects = new Set(Array.isArray(open) ? open : []);
 
   _wireGlobals(root);
   _bindColsDdHover(root);

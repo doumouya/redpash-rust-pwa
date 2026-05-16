@@ -68,8 +68,16 @@ async function loadSession() {
   }
   // Apply per-user accent override (Settings page) so the brand colour
   // persists across reloads without a paint flash from re-binding.
+  // Set BOTH custom-properties — app sheets use --rp-accent (alias)
+  // but most pre-existing rules (and library overrides) read --accent
+  // directly. Without overriding --accent too, the user's blue theme
+  // would still paint half the surfaces (active mode buttons, project
+  // tab rims, drag-drop outlines, etc.) RedPash red.
   const accent = session?.prefs?.accent;
-  if (accent) document.documentElement.style.setProperty("--rp-accent", accent);
+  if (accent) {
+    document.documentElement.style.setProperty("--rp-accent", accent);
+    document.documentElement.style.setProperty("--accent",    accent);
+  }
   // Seed localStorage from the account so the synchronous shell
   // restores (theme, float-bar positions, bg palette) read the user's
   // SAVED choices — not whatever this browser happened to cache.

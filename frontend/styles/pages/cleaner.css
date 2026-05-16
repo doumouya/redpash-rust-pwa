@@ -234,6 +234,169 @@
 #page-cleaner.overview-active #cleaner-filter-panel,
 #page-cleaner.overview-active #cleaner-tools-panel { display: none; }
 
+/* Per-file Overall-cleanness bar is meaningless on the Overview pane —
+   that view already shows the project-level aggregate in its own
+   header. Hide it to keep the toolbar header focused. */
+#page-cleaner.overview-active .rp-rtp-overall { display: none; }
+
+/* ── Project tabs (panel-header level) ───────────────────────────
+   Multiple opened projects live as tabs at the very top of the
+   .rp-rt-panel — the cleaner equivalent of the Objects-page tab
+   strip. Each tab snapshots + restores its own STATE slice on
+   switch (no fetch). Inactive tabs are muted; the active tab gets
+   an accent rim that matches the file-tab vocabulary below it. */
+.rp-rt-proj-tabs {
+  display: flex;
+  align-items: end;
+  padding: 0.375rem 0.5rem 0;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
+}
+.rp-rt-proj-tabs-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.rp-rt-proj-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  border-radius: 0.5rem 0.5rem 0 0;
+  background: transparent;
+  border: 0.0625rem solid transparent;
+  border-bottom: 0;
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 14rem;
+  transition: background 0.15s, color 0.15s;
+}
+.rp-rt-proj-tab:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+.rp-rt-proj-tab.active {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--accent);
+  box-shadow: 0 -0.125rem 0 0 var(--accent) inset;
+}
+.rp-rt-proj-tab .bi-folder2-open {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+.rp-rt-proj-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-rt-proj-tab-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  opacity: 0;
+  color: var(--muted);
+  margin-left: 0.125rem;
+  transition: opacity 0.15s, background 0.15s;
+}
+.rp-rt-proj-tab:hover .rp-rt-proj-tab-x,
+.rp-rt-proj-tab.active .rp-rt-proj-tab-x { opacity: 0.7; }
+.rp-rt-proj-tab-x:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+  color: var(--red);
+}
+.rp-rt-proj-tab-x .bi { font-size: 0.6875rem; }
+
+/* "+" project picker — mirrors the file-tab add menu pattern. Pure
+   CSS hover-open (the inline outside-click handler in cleaner.js
+   that hides .rp-rtp-tab-add-menu also catches this since both use
+   `hidden`-toggle conventions). */
+.rp-rt-proj-add-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.25rem;
+}
+.rp-rt-proj-add {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rp-rt-proj-add:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.rp-rt-proj-add-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 250;
+  min-width: 14rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.4);
+  padding: 0.25rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.25rem);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+/* Open state — JS adds .open via _bindProjAddHover with a 180ms grace
+   timer so the menu survives the gap between the + trigger and the
+   panel (pure CSS :hover is unreliable across an absolutely-positioned
+   panel; same pattern the library's .rp-rt-cols-dd uses). */
+.rp-rt-proj-add-wrap:hover .rp-rt-proj-add-menu,
+.rp-rt-proj-add-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.rp-rt-proj-add-hdr {
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.5938rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+}
+.rp-rt-proj-add-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.rp-rt-proj-add-item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.rp-rt-proj-add-item .bi { color: var(--accent); }
+.rp-rt-proj-add-empty {
+  padding: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* Flex chain fix — without `min-width: 0`, the .rp-rt-body row flex
    container won't let .rp-rt-table-wrap shrink past its content's
    min-content. In overview mode the table content is small so the
@@ -699,12 +862,10 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   border-top: 0.0312rem solid var(--over0);
 }
 
-/* Funnel button active state when the panel is open. */
-.rp-rt-icon-btn.is-active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
+/* Active state lives in main.css now (.rp-rt-icon-btn.is-active using
+   --rp-accent so it follows the user's theme override). The duplicate
+   here was hardwired to --accent (RedPash red), which beat the global
+   rule on the cleaner page and painted blue-themed buttons red. */
 
 /* ━━━━━━━━━━━━━━━━━━ COLUMN DRAG-TO-REORDER ━━━━━━━━━━━━━━━━━━
  *

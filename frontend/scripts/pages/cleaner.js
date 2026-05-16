@@ -87,6 +87,34 @@ let STATE = {
   // drag handles. Snapshotted into filePrefs[rid].colWidths on tab
   // switch + restored on enter, so column layout is sticky per file.
   colWidths:     {},
+
+  // ── Project tabs (panel-header level) ────────────────────────────
+  // The cleaner now keeps multiple PROJECTS open simultaneously, the
+  // same way the Objects page keeps multiple entity-kind tabs open.
+  // Switching tabs snapshots the leaving project's full STATE slice
+  // into `projectSnapshots[pid]` and restores the entering project's
+  // slice (or does a fresh fetch on first visit). Inactive projects
+  // hold no live fetches — switching back replays from snapshot.
+  //
+  //   openProjects     — ordered list of PRJ_… ids the user has open
+  //                      as tabs. Persisted to prefs.cleaner_open_projects;
+  //                      auto-grows whenever the user navigates to a new
+  //                      project via URL.
+  //   projectMeta      — pid → minimal { redpash_id, name, status, … }
+  //                      for tab labels. Hydrated from /api/projects on
+  //                      mount; refreshed lazily when a project is
+  //                      switched into.
+  //   projectSnapshots — pid → captured STATE slice (rid / files /
+  //                      filePrefs / page / sorts / hiddenCols / …).
+  //                      In-memory only; refresh of the page drops
+  //                      session state — the URL + openProjects list
+  //                      restore the structure on the next mount.
+  //   activeProjectId  — which project the user is currently viewing.
+  //                      Matches the ?project= URL param.
+  openProjects:     [],
+  projectMeta:      new Map(),
+  projectSnapshots: new Map(),
+  activeProjectId:  null,
 };
 
 export default async function mount(root, ctx) {
@@ -229,10 +257,40 @@ export default async function mount(root, ctx) {
     ) ?? null;
     STATE.files = files.items ?? [];
 
+    // ── Project-tab hydration ────────────────────────────────────
+    // Cache every project's meta for the tab strip's "+" picker AND
+    // for label lookups when restoring a snapshot. Then merge the
+    // saved open-tabs pref with the current pid so a direct URL nav
+    // always opens its target as a tab (the user is by definition
+    // working in that project right now).
+    for (const p of (projects.items ?? [])) {
+      if (p?.redpash_id) STATE.projectMeta.set(p.redpash_id, p);
+    }
+    const knownPids   = new Set(STATE.projectMeta.keys());
+    const savedOpen   = ctx?.session?.prefs?.cleaner_open_projects;
+    let openList      = Array.isArray(savedOpen)
+      ? savedOpen.filter((pid) => knownPids.has(pid))
+      : [];
+    if (projectIdForList && !openList.includes(projectIdForList)) {
+      openList.push(projectIdForList);
+    }
+    if (!openList.length && knownPids.size) {
+      // Brand-new user with no saved set — fall back to the project
+      // they're currently looking at (or, if neither URL nor pref
+      // resolved one, the first project in their account).
+      openList = [projectIdForList ?? [...knownPids][0]];
+    }
+    STATE.openProjects    = openList;
+    STATE.activeProjectId = projectIdForList ?? openList[0] ?? null;
+    // Persist back if the URL landing grew the saved set.
+    if (JSON.stringify(savedOpen ?? []) !== JSON.stringify(openList)) {
+      window.rpSavePref?.("cleaner_open_projects", openList);
+    }
+    _renderProjectTabs(root);
+
     // Paint static chrome from the data we just gathered.
     _renderTitle(root);
     _renderHeaderMeta(root);
-    _renderStatusBadge(root);
     _renderOverallCleanness(root);
     _renderTabs(root);
     _renderHistoryButtons(root);
@@ -386,6 +444,137 @@ function _loadFilePrefs(root, rid) {
     window.cleanerBuildColsDropdown();
   }
 }
+
+// ── Per-project snapshot / restore ──────────────────────────────
+// The panel-header project tabs let the user keep multiple PROJECTS
+// open at once. Switching projects snapshots the leaving project's
+// full STATE slice into `projectSnapshots[pid]` and restores the
+// entering project's slice (or does a fresh fetch on first visit).
+// Inactive projects hold no live fetches — switching back replays
+// from snapshot for an instant feel.
+//
+// Fields captured per snapshot:
+//   project / files / project-files chrome (overview)
+//   rid + summary + columns + steps + pageData (active file)
+//   page / pageSize / q / sorts / mode (active file toolbar)
+//   filePrefs (per-file prefs WITHIN this project)
+//   hiddenFiles (closed file tabs WITHIN this project)
+//   showRowNums / hiddenCols / colWidths (active file STATE-level)
+//   ov (Overview session state — mode / selected / q / sorts; the
+//       layout fields colOrder / hiddenCols / colWidths are
+//       localStorage-keyed globally, not snapshotted)
+function _saveProjectSnapshot(pid) {
+  if (!pid) return;
+  STATE.projectSnapshots.set(pid, {
+    project:    STATE.project,
+    files:      STATE.files,
+    hiddenFiles: new Set(STATE.hiddenFiles),
+    // Active-file slice
+    rid:         STATE.rid,
+    summary:     STATE.summary,
+    columns:     STATE.columns,
+    steps:       STATE.steps,
+    pageData:    STATE.pageData,
+    page:        STATE.page,
+    pageSize:    STATE.pageSize,
+    q:           STATE.q,
+    sorts:       STATE.sorts.map((k) => ({ ...k })),
+    selected:    new Set(STATE.selected),
+    // Per-file map AND active-file STATE-level mirrors of its prefs
+    filePrefs:   new Map(STATE.filePrefs),
+    showRowNums: STATE.showRowNums,
+    hiddenCols:  new Set(STATE.hiddenCols),
+    colWidths:   { ...STATE.colWidths },
+    // Overview session state — layout fields stay localStorage-global
+    ov: {
+      mode:     OV.mode,
+      selected: new Set(OV.selected),
+      q:        OV.q,
+      sorts:    OV.sorts.map((k) => ({ ...k })),
+    },
+  });
+}
+
+// Restore STATE from a saved snapshot. Returns true on success, false
+// when there's nothing cached (caller falls back to _fetchProjectFresh).
+function _loadProjectSnapshot(pid) {
+  if (!pid) return false;
+  const s = STATE.projectSnapshots.get(pid);
+  if (!s) return false;
+  STATE.project     = s.project ?? null;
+  STATE.files       = Array.isArray(s.files) ? s.files : [];
+  STATE.hiddenFiles = s.hiddenFiles instanceof Set ? new Set(s.hiddenFiles) : new Set();
+  STATE.rid         = s.rid ?? null;
+  STATE.summary     = s.summary ?? null;
+  STATE.columns     = Array.isArray(s.columns) ? s.columns : [];
+  STATE.steps       = Array.isArray(s.steps)   ? s.steps   : [];
+  STATE.pageData    = s.pageData ?? null;
+  STATE.page        = Number(s.page) > 0 ? Number(s.page) : 1;
+  STATE.pageSize    = Number(s.pageSize) > 0 ? Number(s.pageSize) : _OV_DEFAULT_PAGE_SIZE;
+  STATE.q           = typeof s.q === "string" ? s.q : "";
+  STATE.sorts       = Array.isArray(s.sorts) ? s.sorts.map((k) => ({ ...k })) : [];
+  STATE.selected    = s.selected instanceof Set ? new Set(s.selected) : new Set();
+  STATE.filePrefs   = s.filePrefs instanceof Map ? new Map(s.filePrefs) : new Map();
+  STATE.showRowNums = !!s.showRowNums;
+  STATE.hiddenCols  = s.hiddenCols instanceof Set ? new Set(s.hiddenCols) : new Set();
+  STATE.colWidths   = (s.colWidths && typeof s.colWidths === "object") ? { ...s.colWidths } : {};
+  OV.mode     = s.ov?.mode ?? null;
+  OV.selected = s.ov?.selected instanceof Set ? new Set(s.ov.selected) : new Set();
+  OV.q        = typeof s.ov?.q === "string" ? s.ov.q : "";
+  OV.sorts    = Array.isArray(s.ov?.sorts) ? s.ov.sorts.map((k) => ({ ...k })) : [];
+  return true;
+}
+
+// First-visit / never-snapshotted project: do the mount-style fetch
+// pair (projects list + this project's files), populate STATE, then
+// (if a file was requested) fetch its detail. Returns the resolved
+// active-file rid, or null when the user landed on the overview.
+async function _fetchProjectFresh(pid, opts = {}) {
+  const { fileRid = null } = opts;
+  // Files list first — also used to pick the default active file when
+  // the URL was a bare ?project=.
+  const filesRes = await api.get(`/projects/${encodeURIComponent(pid)}/files`)
+    .catch(() => ({ items: [] }));
+  STATE.files = filesRes.items ?? [];
+  STATE.hiddenFiles = new Set();
+  STATE.filePrefs   = new Map();
+  STATE.selected    = new Set();
+  STATE.page        = 1;
+  STATE.pageSize    = _OV_DEFAULT_PAGE_SIZE;
+  STATE.q           = "";
+  STATE.sorts       = [];
+  STATE.hiddenCols  = new Set();
+  STATE.colWidths   = {};
+  STATE.pageData    = null;
+  // Project meta — pulled fresh so the badge picks up server-side
+  // status / stage changes since the last cleaner visit. Falls back
+  // to the cached projectMeta entry if /projects refused.
+  const projects = await api.get("/projects").catch(() => ({ items: [] }));
+  STATE.project = (projects.items ?? []).find((p) => p.redpash_id === pid)
+                 ?? STATE.projectMeta.get(pid) ?? null;
+  // File detail — only when the caller asked for a specific file (or
+  // a single-file project is the natural landing). Overview-landing
+  // leaves rid null + columns empty (matches the project-only flow
+  // in mount()).
+  if (fileRid) {
+    try {
+      const detail = await api.get(`/files/${encodeURIComponent(fileRid)}`);
+      STATE.rid     = fileRid;
+      STATE.summary = detail.summary;
+      STATE.columns = detail.columns ?? [];
+      STATE.steps   = detail.steps   ?? [];
+    } catch {
+      STATE.rid = null; STATE.summary = null; STATE.columns = []; STATE.steps = [];
+    }
+  } else {
+    STATE.rid = null; STATE.summary = null; STATE.columns = []; STATE.steps = [];
+  }
+  // Cache the meta for the tab strip even if /projects returned this
+  // project — keeps the label stable through later renames.
+  if (STATE.project) STATE.projectMeta.set(pid, STATE.project);
+  return STATE.rid;
+}
+
 // Read the panel's current mode out of its rp-rt-mode-* class.
 function _currentPanelMode() {
   const panel = document.querySelector(".rp-rt-panel--cleaner");
@@ -495,20 +684,6 @@ function _renderHeaderMeta(root) {
   meta.textContent = `${projName} · ${n} file${n !== 1 ? "s" : ""}`;
 }
 
-function _renderStatusBadge(root) {
-  const el = root.querySelector("#cleaner-proj-status");
-  if (!el) return;
-  const p = STATE.project;
-  if (!p) { el.textContent = ""; el.className = "badge"; return; }
-  // Catppuccin-style: green for active/published, yellow for archived,
-  // neutral grey for draft. `published` is the backend's read-only
-  // overlay when the project has a public dashboard.
-  const cls = { active: "b-green", published: "b-green", draft: "", archived: "b-yellow" }[p.status] ?? "";
-  const lbl = { active: "Active",  published: "Published", draft: "Draft", archived: "Archived" }[p.status] ?? (p.status ?? "");
-  el.textContent = lbl;
-  el.className   = `badge ${cls}`.trim();
-}
-
 function _renderOverallCleanness(root) {
   const fill = root.querySelector("#cleaner-overall-fill");
   const pctE = root.querySelector("#cleaner-overall-pct");
@@ -534,6 +709,85 @@ function _renderOverallCleanness(root) {
 }
 
 // ── Render: tabs (Overview + 1 per file) ─────────────────────────────
+// Project-tab strip — paints one tab per pid in STATE.openProjects at
+// the panel-header level. Active tab carries the redtable .active class
+// + an accent border. Each tab has an × close button (suppressed when
+// only one tab remains — closing the last would orphan the page). A
+// trailing "+" pops a picker dropdown of every NOT-yet-open project
+// the user owns. Idempotent — safe to call from any render entry.
+function _renderProjectTabs(root) {
+  const strip = root.querySelector("#cleaner-proj-tabs-list");
+  if (!strip) return;
+  const ids   = Array.isArray(STATE.openProjects) ? STATE.openProjects : [];
+  const last  = ids.length <= 1;
+  const html  = ids.map((pid) => {
+    const meta   = STATE.projectMeta.get(pid) ?? STATE.projectSnapshots.get(pid)?.project;
+    const name   = meta?.name ?? pid;
+    const active = pid === STATE.activeProjectId;
+    return `<button class="rp-rt-proj-tab${active ? " active" : ""}"
+                    data-pid="${_escAttr(pid)}"
+                    title="${_escAttr(name)}"
+                    onclick="cleanerSwitchProject('${_escAttr(pid)}')">
+      <i class="bi bi-folder2-open"></i>
+      <span class="rp-rt-proj-tab-name">${_escHtml(name)}</span>
+      ${last ? "" : `<span class="rp-rt-proj-tab-x" title="Close project tab"
+                           onclick="event.stopPropagation();cleanerCloseProject('${_escAttr(pid)}')"
+        ><i class="bi bi-x"></i></span>`}
+    </button>`;
+  }).join("");
+  // The "+" trigger is a no-fetch CSS-hover dropdown listing every
+  // project NOT already open. Built fresh on each render so newly
+  // created projects appear without a reload.
+  const knownPids = new Set(ids);
+  const candidates = [...STATE.projectMeta.values()]
+    .filter((p) => p && !knownPids.has(p.redpash_id))
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  const picker = candidates.length
+    ? candidates.map((p) => `<div class="rp-rt-proj-add-item"
+                                  onclick="cleanerOpenProject('${_escAttr(p.redpash_id)}')">
+        <i class="bi bi-folder2-open"></i> ${_escHtml(p.name ?? p.redpash_id)}
+      </div>`).join("")
+    : `<div class="rp-rt-proj-add-empty">All your projects are already open.</div>`;
+  const add = `<div class="rp-rt-proj-add-wrap">
+      <button class="rp-rt-proj-add" type="button" aria-label="Open another project" title="Open another project"
+              onclick="event.stopPropagation()">
+        <i class="bi bi-plus-lg"></i>
+      </button>
+      <div class="rp-rt-proj-add-menu">
+        <div class="rp-rt-proj-add-hdr">Open another project</div>
+        ${picker}
+      </div>
+    </div>`;
+  strip.innerHTML = html + add;
+  // Sticky-hover bind for the + picker — same 180ms grace timer the
+  // library cols-dd uses. The wrap is recreated on every render, so
+  // re-bind every time (no dataset guard needed — fresh elements have
+  // no stale listeners).
+  _bindProjAddHover(strip);
+}
+
+// Keeps the + project-picker dropdown open across the gap between the
+// trigger and the panel. Pure CSS :hover propagation through an
+// absolutely-positioned menu is unreliable (same reason the library's
+// .rp-rt-cols-dd needs JS help — see _bindColsDdHover).
+function _bindProjAddHover(strip) {
+  const wrap = strip.querySelector(".rp-rt-proj-add-wrap");
+  const menu = wrap?.querySelector(".rp-rt-proj-add-menu");
+  if (!wrap || !menu) return;
+  let closeTimer = null;
+  const open  = () => {
+    if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+    menu.classList.add("open");
+  };
+  const close = () => {
+    closeTimer = setTimeout(() => { menu.classList.remove("open"); closeTimer = null; }, 180);
+  };
+  wrap.addEventListener("mouseenter", open);
+  wrap.addEventListener("mouseleave", close);
+  menu.addEventListener("mouseenter", open);
+  menu.addEventListener("mouseleave", close);
+}
+
 function _renderTabs(root) {
   const list = root.querySelector("#cleaner-tabs-list");
   if (!list) return;
@@ -1173,6 +1427,72 @@ function _wireGlobals(root) {
     if (e.target.closest(".rp-rtp-tab-add-wrap")) return;
     root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
   });
+
+  // ── Project tabs (panel-header level) ────────────────────────────
+  // Switch the active project — snapshots the leaving project's full
+  // STATE slice, then either restores the entering project's snapshot
+  // (instant) or does a fresh fetch on first visit. Updates the URL
+  // via replaceState so a refresh lands on the same project.
+  window.cleanerSwitchProject = async (pid) => {
+    if (!pid || pid === STATE.activeProjectId) return;
+    if (STATE.activeProjectId) _saveProjectSnapshot(STATE.activeProjectId);
+    STATE.activeProjectId = pid;
+    history.replaceState(null, "", `#/cleaner?project=${encodeURIComponent(pid)}`);
+    if (!_loadProjectSnapshot(pid)) {
+      // First visit — full fetch. Default landing is the project Overview
+      // (rid=null); the user picks a file from the tab strip afterwards.
+      await _fetchProjectFresh(pid, { fileRid: null });
+    }
+    // Repaint everything that depends on the project switch.
+    _renderProjectTabs(root);
+    _renderTitle(root);
+    _renderHeaderMeta(root);
+    _renderOverallCleanness(root);
+    _renderHistoryButtons(root);
+    _renderEncodingPicker(root);
+    _renderTabs(root);
+    if (STATE.rid) {
+      await _loadPage(root);
+      _syncToolbarToState(root);
+      window.cleanerBuildColsDropdown?.();
+    } else {
+      // No active file → land on the project's overview pane.
+      window.cleanerActivateTab?.("");
+    }
+  };
+  // Open another project from the picker dropdown. Appends to
+  // openProjects, persists the pref, then switches to it. No-op
+  // if the project is already open.
+  window.cleanerOpenProject = async (pid) => {
+    if (!pid) return;
+    if (!STATE.openProjects.includes(pid)) {
+      STATE.openProjects.push(pid);
+      window.rpSavePref?.("cleaner_open_projects", STATE.openProjects);
+    }
+    // Hide the add-menu in case it's still open from the click.
+    root.querySelectorAll(".rp-rt-proj-add-menu").forEach((m) => m.hidden = true);
+    await window.cleanerSwitchProject(pid);
+  };
+  // Close a project tab. Drops it from openProjects + persists. If the
+  // user closed the active tab, switch to a neighbour (next, else
+  // previous). If they closed the only tab the page would orphan —
+  // the × button is suppressed in that case via _renderProjectTabs.
+  window.cleanerCloseProject = async (pid) => {
+    if (!pid || STATE.openProjects.length <= 1) return;
+    const i = STATE.openProjects.indexOf(pid);
+    if (i < 0) return;
+    STATE.openProjects.splice(i, 1);
+    // Drop the snapshot — releases the cached files / pageData.
+    STATE.projectSnapshots.delete(pid);
+    window.rpSavePref?.("cleaner_open_projects", STATE.openProjects);
+    if (pid === STATE.activeProjectId) {
+      const next = STATE.openProjects[i] ?? STATE.openProjects[i - 1];
+      STATE.activeProjectId = null;   // force switchProject to refetch / restore
+      await window.cleanerSwitchProject(next);
+    } else {
+      _renderProjectTabs(root);
+    }
+  };
 
   window.cleanerActivateTab = async (fid) => {
     if (!fid) {
