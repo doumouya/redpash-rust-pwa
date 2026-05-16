@@ -28,7 +28,7 @@ same chrome.
 | File | Role |
 |---|---|
 | [`partials/objects.html`](../../../../frontend/partials/objects.html) | Markup. `.rp-rt-topbar` header + `#obj-tabs` strip + one `.rp-rt-panel--embedded` redtable: header chrome, toolbar, predicate **filter side panel** + table, paging. |
-| [`styles/pages/objects.css`](../../../../frontend/styles/pages/objects.css) | Library `@import`s + full-bleed `#page-objects` + tab strip + customizable-tab styles + edit/select/delete mode CSS + the **glass control treatment**, glass-overlay rules for header/toolbar/tabs, **predicate filter panel** CSS, **row-number** column, **resizable-column** ellipsis rule, **star toggle**, and trailing per-row open-button cell — all staged from the `redpash-demo/redtable` prototype. |
+| [`styles/pages/objects.css`](../../../../frontend/styles/pages/objects.css) | Library `@import`s + full-bleed `#page-objects` + tab strip (with drag-to-reorder cues) + customizable-tab styles + edit/select/delete icon-button mode CSS + the **glass control treatment**, glass-overlay rules for header/toolbar/tabs, **predicate filter panel** CSS, **row-number** column, **resizable-column** ellipsis rule, **column drag** cues (`.rp-rt-th-drag` / `.rp-rt-th-drop`), **sortable-header** affordances, **star toggle**, leading per-row open-button cell, and **cell-level anchors** (`.obj-cell-link` / `.obj-cell-id`) for the Projects-tab Name + Project-ID columns — all staged from the `redpash-demo/redtable` prototype. |
 | [`scripts/pages/objects.js`](../../../../frontend/scripts/pages/objects.js) | The schema-driven redtable engine: `SCHEMAS`, `STATE`, `loadTable` / `renderTable`, tab switching, the predicate-filter engine, row-numbers + favorites toggles, **resizable columns** (`_objInitColResize`), **star toggle** (`_objStarBtn` / `objToggleStar`), **stage-driven row open buttons** (`_objRowOpenButtons`), bulk **score / clear-score**, and all the `obj*` inline-onclick globals. |
 | [`scripts/objects-catalog.js`](../../../../frontend/scripts/objects-catalog.js) | Shared module — `OBJECT_TAB_CATALOG`, `OBJECT_TAB_KEYS`, `normalizeObjectTabs`. Imported by both `objects.js` and `profile.js` so the page and the Settings control agree on the catalog. |
 | [`scripts/main.js`](../../../../frontend/scripts/main.js) (shell) | Route entry `{ path: "/objects", chrome: "full", … }`. `/reports` + `/dashboards` kept as `hidden: true` routes (builder hosts, no nav label). |
@@ -257,7 +257,8 @@ non-Objects pages.
 
 ## Per-row open buttons
 
-Every row carries a trailing `.obj-row-open-cell` with one or more
+Every row carries a **leading** `.obj-row-open-cell` (first column of
+both `<thead>` and `<tbody>`, `text-align: left`) with one or more
 icon links emitted by `_objRowOpenButtons(kind, row)`:
 
 | Kind | Buttons | Where they go |
@@ -273,7 +274,52 @@ longer opens anything — that auto-navigation was UX-unfriendly
 (accidental clicks bounced you out of the page); the open intent is
 now explicit. The button column is **always emitted** and lives outside
 the select / delete mode columns so it doesn't collapse when modes
-toggle.
+toggle. The cell was originally trailing — it now sits at the row's
+start so users land on the actions at the natural left edge instead
+of scanning to the end.
+
+---
+
+## Projects-tab cell anchors
+
+On the Projects tab specifically, the **Name** and **Project ID**
+columns render their value through `<a class="obj-cell-link"
+href="#/cleaner?project=<rid>" target="_blank">…</a>` — same href as
+`rowHref`, plus native anchor semantics so middle-click / cmd-click
+"open in new tab" works. `onclick="event.stopPropagation()"` defends
+against any future row-level click handler. The `obj-cell-id` variant
+adds a monospace font for the RID column; both classes inherit the
+cell's text color + size so they theme cleanly in light / dark.
+
+---
+
+## Drag-to-reorder — tabs
+
+Every `.obj-tab` in the tab strip is `draggable="true"` — drop on
+another tab inserts source BEFORE target (Mac Finder / Excel
+convention, same as the column-drag pattern). `objTabDrag*` handlers
+mirror `objColDrag*`; on drop, `objTabs` is spliced and persisted via
+`rpSavePref("objects_tabs", …)` so the new order shows up immediately
+in Profile's Settings panel too. Cues:
+`.obj-tab-drag` (source: 40% opacity + accent tint) /
+`.obj-tab-drop` (target: inset accent left border = "insert here").
+
+The same drag pattern is mirrored on **Profile → Settings → Object
+tabs** — active pills are reordered to match the user's preferred
+order (inactive pills follow in catalog order) and the active ones
+are draggable. Both surfaces write the same `prefs.objects_tabs` pref.
+
+---
+
+## Drag-to-reorder — columns
+
+Every data `<th>` (those with `data-rt-col`) is `draggable="true"`
+too. `objColDrag*` handlers splice `state.colOrder` in place; the
+Save view button persists into `prefs.objects_views` (no per-drag
+PATCH). Same cue classes (`.rp-rt-th-drag` / `.rp-rt-th-drop`) reused
+from the cleaner's column-drag pattern. The drag is compatible with
+the existing **Column-order** hover dropdown — `objBuildColOrderList`
+re-renders after a drop so both UIs reflect the new layout.
 
 ---
 
@@ -355,9 +401,15 @@ How it filters:
 ## Edit / Select / Delete modes
 
 Ported from the Cleaner page (`styles/pages/cleaner.css`).
-`objToggleMode(chk, mode)` flips a `rp-rt-mode-<mode>` class on the
-`.rp-rt-panel`; the three modes are **mutually exclusive** (toggling
-one clears the sibling switches). Any mode change clears the selection.
+`objToggleMode(btn, mode)` flips a `rp-rt-mode-<mode>` class on the
+`.rp-rt-panel`; the three modes are **mutually exclusive** (the
+handler walks `.rp-rt-icon-btn[data-rt-mode]` siblings to clear the
+others + flip `aria-pressed` accordingly). Any mode change clears
+the selection. The triplet is rendered as `<button
+class="rp-rt-icon-btn" data-rt-mode="edit | delete | select"
+aria-pressed="false">` — was `<label class="rp-rt-switch">` toggles
+before; consolidated to icon buttons so all three redtable surfaces
+(Objects, cleaner file-table, cleaner Overview) share one vocabulary.
 
 The leading checkbox column (`data-mode-col="select"`) and trailing
 trash column (`data-mode-col="delete"`) are **always emitted** by

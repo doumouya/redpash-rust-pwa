@@ -217,11 +217,15 @@ one-click affordance instead of going through the Edit-mode dblclick
 
 ## Mode classes — edit / select / delete
 
-Three mutually-exclusive inline modes, controlled by checkbox switches
-in the toolbar. The handler (`objToggleMode` in
-[`objects.js`](../../../frontend/scripts/pages/objects.js), same shape
-for cleaner / reports / dashboards) flips the `rp-rt-mode-*` class on
-the panel and clears the sibling switches.
+Three mutually-exclusive inline modes, controlled by an **icon-button
+triplet** in the toolbar (`<button class="rp-rt-icon-btn"
+data-rt-mode="edit | select | delete" aria-pressed="…">`). The handler
+(`objToggleMode` / `rtToggleMode` — same shape on every page) walks
+`.rp-rt-icon-btn[data-rt-mode]` siblings to clear the others, flips
+`.is-active` + `aria-pressed` on the clicked one, then sets the
+`rp-rt-mode-*` class on the panel. Was a `<label class="rp-rt-switch">`
+toggle before the consolidation — switches are still in the library
+for `redpash-demo`'s use, just no longer emitted by the app.
 
 | Mode | Effect |
 |---|---|

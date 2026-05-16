@@ -140,42 +140,129 @@ Switching tabs (`cleanerActivateTab(fid)`):
   explicitly opening it overrides the closed state) and the strip
   re-renders.
 - Optimistic `.active` class flip on the tab strip.
-- If coming from Overview, swap panes: hide `#cleaner-overview`,
-  show `#cleaner-table`, drop the `overview-active` class.
+- **Snapshot the leaving tab's per-file toolbar prefs** (rows-per-
+  page, search query, sort chain, mode, page index) into
+  `STATE.filePrefs.set(prevRid, …)` so re-entering that tab later
+  restores them — see *Per-file toolbar prefs* below.
+- Drop `overview-active` from `#page-cleaner` so CSS swaps the
+  visible chrome block (`data-cleaner-view="file"` vs `"overview"`)
+  back to the file view.
 - `replaceState` URL to `?file=…`, `GET /api/files/:rid`, update
-  STATE, repaint chrome, `_loadPage()`.
+  STATE, repaint chrome, **`_loadFilePrefs(root, newRid)`** to
+  rehydrate the new tab's prefs + sync the toolbar widgets, then
+  `_loadPage()`.
 
-**Overview tab** — `#cleaner-overview`. When `cleanerActivateTab("")`
-fires, it wipes `STATE.rid`/`summary`/`columns`/`steps`/`page` (so
-the file-table chrome that stays visible doesn't paint the previously-
-open file's state), repaints chrome, and calls `_renderOverview(root)`.
-Renders a project-level mini-redtable using bespoke `.ov-rt-*` markup
-inside a single `<div class="ov-rt">` — toolbar (search · selection
-chip · bulk-delete · score-files · refresh · edit/select/delete mode
-toggles · columns picker) on top of an `.rp-rt-table-wrap` body. CSS
-hides the file-table chrome (`#page-cleaner.overview-active`
-selectors in `cleaner.css`) when this pane is showing — the Overview
-brings its own toolbar.
+**Overview tab** — `#cleaner-ov-toolbar` + `#cleaner-ov-table`,
+both **sibling chrome blocks** of the file-view (same nesting level
+under the panel, not inside the outer `.rp-rt-table-wrap`). When
+`cleanerActivateTab("")` fires, it snapshots the leaving file's prefs,
+wipes `STATE.rid`/`summary`/`columns`/`steps`/`page` so the chrome
+that stays visible (header + Data Types + Encoding + Applied list)
+doesn't paint the previously-open file, then calls
+`_renderOverview(root)` which paints the toolbar HTML into
+`#cleaner-ov-toolbar` and the thead+tbody into `#cleaner-ov-table`.
 
-Per-row affordances: a click on a non-interactive cell switches the
-active file tab via `_ovRowClick`, which no-ops in edit / select /
-delete modes (so the row's own affordances win).
+Both halves use the library's `rp-rt-toolbar` / `rp-rt-body` /
+`rp-rt-table-wrap` / `rp-rt-table` classes natively — no `.ov-rt-*`
+namespace anymore. CSS gates visibility on
+`#page-cleaner.overview-active` flipping which `data-cleaner-view`
+block is visible, so the cleaner is "one panel with two
+interchangeable bodies, both built from library primitives."
+
+Per-row affordances on the Overview: row click switches the active
+file tab via `_ovRowClick`, no-ops in edit / select / delete modes
+(those modes own the click affordance). Mode-gating now reuses the
+panel's `rp-rt-mode-*` classes — the old parallel `[data-ov-mode]`
+system is gone.
 
 ---
 
 ## Toolbar
 
-Same library chrome as the Objects page (filter button, search input,
-mode icon-button triplet, controls dropdown), with one extra: the **fix-wrapped
-banner** (`#cleaner-fix-wrapped`) appears above the table when
-`_detectWrappedCsv()` flags the active file — clicking it opens
-`modal-unwrap-csv` which previews the parsed-vs-re-split shape and
-applies a single `unwrap_csv` step on Apply.
+Same library chrome as the Objects page (filter funnel, `<input
+class="rp-rt-search">` directly, rows-per-page pill, chain-link
+toggle, mode icon-button triplet — see *Per-file toolbar prefs*), with
+two extras: the **fix-wrapped banner** (`#cleaner-fix-wrapped`)
+appears above the table when `_detectWrappedCsv()` flags the active
+file — clicking it opens `modal-unwrap-csv` which previews the
+parsed-vs-re-split shape and applies a single `unwrap_csv` step on
+Apply.
 
 The three inline modes (`rp-rt-mode-edit` / `rp-rt-mode-select` /
 `rp-rt-mode-delete`) work exactly as in [the redtable doc](../../redpash-components/redtable.md#mode-classes--edit--select--delete) —
 edit-mode dblclick swaps a cell for a `text` / `bool` / `enum` /
-`select` / `open` editor and dispatches the change.
+`select` / `open` editor and dispatches the change. The mode toggles
+are **icon buttons** (`<button class="rp-rt-icon-btn"
+data-rt-mode="…" aria-pressed="…">`) — same vocabulary as the cleaner
+Overview + Objects page. `rtToggleMode` reads `.is-active` on the
+button, flips `aria-pressed`, and walks `.rp-rt-icon-btn[data-rt-
+mode]` siblings to enforce the one-at-a-time invariant.
+
+### Header title — `_renderTitle`
+
+Header reads `[📂 folder-icon] [project name] — [📄 file-icon] [file
+name]`. Both names are anchors:
+
+- **Project name** → `#/objects?tab=projects` (Objects browse).
+- **File name** → `#/objects?tab=files`.
+
+When STATE.rid is null (Overview tab), the file half is dropped
+entirely so the title reads `[📂] [project name]` only. Icons use
+`bi-folder2-open` + `bi-file-earmark-text` — same iconography as the
+Objects-page tab strip uses for those kinds.
+
+### Per-file toolbar prefs (`STATE.filePrefs`)
+
+Each file tab keeps its own rows-per-page, search query, sort chain,
+mode, and current page index — without snapshot/rehydrate, changing
+any of those on one tab leaks into every other open tab. Mechanism:
+- `STATE.filePrefs` is a `Map<rid, {pageSize, page, q, sorts, mode}>`.
+- On tab leave: `_saveFilePrefs(prevRid)` snapshots the current values.
+- On tab enter: `_loadFilePrefs(root, newRid)` rehydrates from the
+  snapshot (defaults for never-visited tabs) and calls
+  `_syncToolbarToState` + `_applyPanelMode` to repaint the rows
+  label, dropdown checkmark, search input value, and mode-button
+  active state.
+
+**Chain-link toggle** (`#cleaner-link-toolbar`, icon button right
+after the rows-per-page pill). When ON, search + rows-per-page stick
+across file tabs (the snapshot/restore helpers skip those two fields,
+so the active values just carry through). When OFF (default), they're
+per-tab. Mode + sort + page stay per-tab regardless — mode is
+data-mutation-risky and sort is schema-dependent. Pref persisted to
+`prefs.cleaner_link_toolbar`.
+
+### Rows-per-page + 5k cap
+
+Dropdown items: **10 / 25 / 50 / 100 / 500 / 1500 / 3000 / 5k (max)**.
+The old "All rows" option is gone — at ~85k DOM nodes (5k × 17
+columns) the browser handles select-mode flips smoothly; the old
+pinned 100k cap froze the page when the user toggled select. The
+`_clampPageSize` helper enforces the 5k cap; legacy filePrefs values
+above the cap clamp down on load. Label format: `5k` for ≥5000, raw
+integer otherwise.
+
+### Page cache (`_pageCache`, LRU 12)
+
+Keys responses by `${rid}:${page}:${pageSize}:${JSON(sorts)}:${q}` so
+tab-switches within the same params reuse the cached payload instead
+of paying the 3 s round-trip on a 5k-row page. Auto-invalidates
+per-file via `_fileStepsRev` — every step apply / undo / redo
+increments the applied-steps count, which `_loadPage` detects and
+drops the rid's cached pages before consulting the cache. No
+per-step-callsite bookkeeping required.
+
+### Pagination
+
+`[data-rt-pages]` slot in the panel's paging footer, scoped to
+`data-cleaner-view="file"` so the Overview hides it (Overview is
+fully client-side paginated). `_renderPaging(root, totalPages)`
+paints a Django-style smart window via `_smartPageNums`:
+`total ≤ 7` lists every page, else
+`[< 1 … cur-1 cur cur+1 … last >]` with literal "…" gap spans.
+`cleanerSetPage(n)` validates against `STATE.pageData.pages` before
+applying — stale clicks (e.g. on a `>` painted before a filter
+shrunk the result) clamp instead of overshoot.
 
 ---
 
