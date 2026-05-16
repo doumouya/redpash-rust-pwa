@@ -2780,15 +2780,8 @@ function _renderOverview(root) {
       <span>${_escHtml(c.label)}</span>
     </label>`).join("");
 
-  const total = (STATE.files ?? []).length;
   ov.innerHTML = `
     <div class="ov-rt" data-ov-mode="${OV.mode ?? ""}">
-      <div class="ov-rt-head">
-        <div>
-          <h3 class="ov-rt-title">${_escHtml(proj.name ?? "Overview")}</h3>
-          <span class="ov-rt-sub">${total} file${total !== 1 ? "s" : ""}${proj.description ? ` · ${_escHtml(proj.description)}` : ""}</span>
-        </div>
-      </div>
       <div class="ov-rt-toolbar">
         <div class="ov-rt-search">
           <i class="bi bi-search bi-sm"></i>
