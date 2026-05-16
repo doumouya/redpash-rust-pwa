@@ -940,6 +940,14 @@ html[data-theme="light"] #page-objects .rp-rt-toolbar {
   color: var(--accent);
   border-bottom-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
+/* When the panel is in edit-mode the anchor would steal the
+   dblclick-to-edit affordance (first click opens a new tab, dblclick
+   never fires). Disable pointer events so the dblclick falls through
+   to the editable cell. The text still reads correctly — only the
+   click is muted. */
+#page-objects .rp-rt-panel.rp-rt-mode-edit .obj-cell-link {
+  pointer-events: none;
+}
 /* ID variant — monospaced only. Color + size inherit from the cell
    so it reads in the same tone as the surrounding row text in both
    light and dark themes (was `var(--muted)`, which stayed grey on

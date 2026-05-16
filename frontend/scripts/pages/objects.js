@@ -242,12 +242,18 @@ const SCHEMAS = {
     fetch:    () => api.get("/files"),
     columns:  [
       // edit:text — dblclick the File cell in edit mode → inline rename
-      // (PATCH display_name via the schema's saveEdit below).
-      { key: "filename",   label: "File",     render: (r) => esc(r.display_name ?? r.filename),
+      // (PATCH display_name via the schema's saveEdit below). Anchor
+      // links to the file's cleaner; CSS disables its pointer events
+      // when the panel is in rp-rt-mode-edit so dblclick falls through.
+      { key: "filename",   label: "File",
+        render: (r) => `<a class="obj-cell-link" href="#/cleaner?file=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.display_name ?? r.filename)}</a>`,
         edit: { type: "text", field: "display_name" } },
       // Project — edit:select (source:"projects") moves the file to
       // another of the owner's projects (PATCH project_redpash_id).
-      { key: "project",    label: "Project",  render: (r) => esc(projectName(r.project_redpash_id)),
+      // Anchor links to that project's cleaner; same edit-mode
+      // pointer-events caveat applies.
+      { key: "project",    label: "Project",
+        render: (r) => `<a class="obj-cell-link" href="#/cleaner?project=${esc(r.project_redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(projectName(r.project_redpash_id))}</a>`,
         edit: { type: "select", field: "project_redpash_id", source: "projects" } },
       // stage is computed (import → clean → report → publish, derived
       // from steps / reports / dashboards) — read-only badge, no edit.
@@ -271,8 +277,13 @@ const SCHEMAS = {
         edit: { type: "enum", field: "delimiter",
                 options: [[",", "Comma (,)"], [";", "Semicolon (;)"], ["\t", "Tab"], ["|", "Pipe (|)"]] } },
       { key: "created_at",         label: "Created",    hidden: true, render: (r) => fmtDate(r.created_at) },
-      { key: "project_redpash_id", label: "Project ID", hidden: true, render: (r) => esc(r.project_redpash_id) },
-      { key: "redpash_id",         label: "File ID",    hidden: true, render: (r) => esc(r.redpash_id) },
+      // IDs render as monospaced anchors (same destinations as Project /
+      // File columns above). Hidden by default; opted into via the
+      // Columns dropdown.
+      { key: "project_redpash_id", label: "Project ID", hidden: true,
+        render: (r) => `<a class="obj-cell-link obj-cell-id" href="#/cleaner?project=${esc(r.project_redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.project_redpash_id)}</a>` },
+      { key: "redpash_id",         label: "File ID",    hidden: true,
+        render: (r) => `<a class="obj-cell-link obj-cell-id" href="#/cleaner?file=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.redpash_id)}</a>` },
     ],
     rowHref:   (r) => `#/cleaner?file=${encodeURIComponent(r.redpash_id)}`,
     canDelete: true,
