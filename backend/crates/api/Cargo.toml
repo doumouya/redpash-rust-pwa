@@ -1,0 +1,40 @@
+# HTTP server. One route module per resource under src/routes/. The
+# binary is `redpash-api`; it loads DATABASE_URL + a few other env vars
+# at startup, binds to REDPASH_BIND, and serves both the API and (in
+# dev) the frontend's static assets.
+
+[package]
+name    = "api"
+version = { workspace = true }
+edition = { workspace = true }
+
+[[bin]]
+name = "redpash-api"
+path = "src/main.rs"
+
+[dependencies]
+shared = { path = "../shared" }
+data   = { path = "../data" }
+
+axum               = { workspace = true }
+tokio              = { workspace = true }
+tower              = { workspace = true }
+tower-http         = { workspace = true }
+bytes              = { workspace = true }
+dashmap            = { workspace = true }
+
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+thiserror          = { workspace = true }
+anyhow             = { workspace = true }
+
+sqlx               = { workspace = true }
+chrono             = { workspace = true }
+uuid               = { workspace = true }
+polars             = { workspace = true }
+encoding_rs        = { workspace = true }
+
+dotenvy            = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest            = { workspace = true }

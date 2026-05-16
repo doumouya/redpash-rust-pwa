@@ -1,0 +1,133 @@
+/* ────────────────── Home page — mirrors redpash-demo #page-home.
+ *
+ * Composes the library's home-screen + redtable + stat-strip + minitable
+ * + upload-zone + avatar + page-dots + float-btn components. The opt-in
+ * shell.css is loaded here too so the body becomes a flex column with
+ * hidden overflow (each step card mounts its own scroll container).
+ * Router removes this <link> on navigation away, restoring the app's
+ * normal body chrome.
+ * ──────────────────────────────────────────────────────────────────── */
+
+@import "/vendor/redpash-components/shell.css";
+
+@import "/vendor/redpash-components/components/typography.css";
+@import "/vendor/redpash-components/components/button.css";
+@import "/vendor/redpash-components/components/form.css";
+@import "/vendor/redpash-components/components/card.css";
+@import "/vendor/redpash-components/components/modal.css";
+@import "/vendor/redpash-components/components/auth-modals.css";
+@import "/vendor/redpash-components/components/theme-toggle.css";
+@import "/vendor/redpash-components/components/float-btn.css";
+@import "/vendor/redpash-components/components/avatar.css";
+@import "/vendor/redpash-components/components/page-dots.css";
+@import "/vendor/redpash-components/components/home-screen.css";
+@import "/vendor/redpash-components/components/minitable.css";
+@import "/vendor/redpash-components/components/badge.css";
+@import "/vendor/redpash-components/components/stat-strip.css";
+@import "/vendor/redpash-components/components/upload-zone.css";
+@import "/vendor/redpash-components/components/file-review.css";
+@import "/vendor/redpash-components/components/redtable.css";
+@import "/vendor/redpash-components/components/redtable-pro.css";
+@import "/vendor/redpash-components/components/filter-by.css";
+@import "/vendor/redpash-components/components/col-order.css";
+
+/* Full-bleed shell (no topbar, no .rp-app gutter) is set globally by
+   main.css via `body[data-chrome="full"]` — see scripts/main.js's
+   ROUTES table. Per-page CSS only owns layout INSIDE the page now. */
+
+#page-home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* The library's page-dots strip is `display: none` by default — pages
+   opt in via .visible or a :has() selector. Reveal whenever #page-home
+   is mounted; the IntersectionObserver in home.js handles the active-
+   dot sync as the user scrolls between the 5 step cards. */
+body:has(#page-home) .rp-page-dots { display: flex; }
+
+/* The library accent restore (catppuccin blue) is now applied
+   globally via `body[data-chrome="full"]` in main.css — see
+   docs/frontend/design.md. */
+
+/* Placeholder rows on the "Recent projects" mini-table — keep the
+   table at a fixed 5-row height even when the database has fewer
+   projects. Muted + non-interactive (no hover, no pointer cursor). */
+.rp-minitable-row--placeholder {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Bump the home avatar to clearly differentiate it from the 2.5rem
+   float buttons in the corners. The library's .rp-avatar--lg sizes
+   are 2.5rem / 3rem — too close to .rp-float-btn (also 2.5rem). The
+   avatar represents "you" and warrants visual primacy. */
+#home-avatar.rp-avatar--lg {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.25rem;
+}
+@media (min-width: 30em) {
+  #home-avatar.rp-avatar--lg {
+    width: 4.5rem;
+    height: 4.5rem;
+    font-size: 1.375rem;
+  }
+}
+
+#page-home .hs-import .hs-content {
+  width: 90%;
+  margin-inline: auto;
+}
+
+/* The bottom-left float bar fades on step ≥ 2 — port of the demo's
+   .is-not-first-step rules. JS adds the class to #page-home when the
+   scroll-snap leaves step 1. */
+#page-home .rp-float-bar--bl,
+#page-home .rp-avatar--float,
+#page-home .rp-float-bar--tr {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+#page-home.is-not-first-step .rp-avatar--float,
+#page-home.is-not-first-step .rp-float-bar--tr {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.75rem);
+}
+#page-home.is-not-first-step .rp-float-bar--bl {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.75rem);
+}
+
+/* ── "Log in as user" switcher modal (dev tool) ──────────────────── */
+.home-switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 22rem;
+  overflow-y: auto;
+  min-width: 20rem;
+}
+.home-switch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  background: none;
+  border: 0.0625rem solid transparent;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  color: var(--text);
+}
+.home-switch-row:hover {
+  background: var(--over1);
+  border-color: var(--over2, var(--over1));
+}
+.home-switch-name { font-weight: 600; font-size: 0.875rem; }
+.home-switch-sub  { font-size: 0.75rem; color: var(--muted); }

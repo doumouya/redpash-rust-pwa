@@ -1,0 +1,231 @@
+/* ─────────────────── RedPash — global styles ───────────────────
+   Token sheet + reset + shell chrome. Component-scoped CSS lives in
+   /styles/components/ and is imported below; per-page CSS is loaded
+   by the router via <link data-page-css>.
+
+   Color system: a single accent (--rp-accent) drives everything that
+   needs brand colour. Settings page rebinds --rp-accent to support
+   user-chosen hues without touching the component sheets.
+
+   Library integration (Phase 4c+): we @import the bare-named tokens
+   from redpash-components and alias them into our --rp-* names below.
+   This lets library components like .rp-hero and .rp-cta-btn consume
+   var(--bg) / var(--accent) natively while app-authored sheets keep
+   using var(--rp-bg) / var(--rp-accent) unchanged.
+
+   Theme switching is driven by the library's [data-theme] attribute
+   (set on <html> in index.html — "system" follows prefers-color-scheme).
+   See docs/frontend/design.md for the full integration spec. */
+
+/* Library tokens — defines --bg, --accent, --over0/1, --shadow, --r, etc. */
+@import "/vendor/redpash-components/tokens.css";
+
+/* Library defensive resets — anchor / button / .bi defaults + universal
+   box-sizing + margin/padding reset. Loading globally lets us drop the
+   app's own element selectors (`a { … }`, etc.) that historically
+   leaked into library components like .rp-brand-mark. The body-chrome
+   half lives in shell.css and is opt-in per page (landing only). */
+@import "/vendor/redpash-components/reset.css";
+
+/* Library background utilities — .rp-bg-import / .rp-bg-clean / .rp-bg-report
+   / .rp-bg-publish paint the four home-step gradients on any element. The
+   gradients themselves are tokens (--bg-step-*) defined in tokens.css and
+   auto-swap with the active theme. Loaded globally so any partial or
+   per-page CSS can opt in with just the class — no per-page @import. */
+@import "/vendor/redpash-components/components/backgrounds.css";
+
+/* App-owned component sheets — these reference --rp-*. */
+@import "/styles/components/buttons.css";
+@import "/styles/components/topbar.css";
+@import "/styles/components/toast.css";
+@import "/styles/components/modal.css";
+@import "/styles/components/filters.css";
+@import "/styles/components/forms.css";
+
+:root {
+  /* Brand override — the library's catppuccin --accent gets RedPash red.
+     Library components and aliased --rp-accent both inherit this. */
+  --accent: #b3001b;
+
+  /* Alias layer: library bare → app prefixed. App-authored CSS keeps
+     reading --rp-* without churn. */
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
+  --rp-shadow:        var(--shadow-sm);
+  --rp-shadow-lg:     var(--shadow);
+  --rp-radius:        var(--r);
+
+  /* Home-step gradient backgrounds, aliased into the app's --rp-* namespace.
+     Use either form interchangeably:
+        background: var(--rp-bg-step-import);   // app-style alias
+        background: var(--bg-step-import);      // raw library token
+        <div class="rp-bg-import">              // utility class
+     Auto-swap with the active theme via the underlying library tokens. */
+  --rp-bg-step-import:  var(--bg-step-import);
+  --rp-bg-step-clean:   var(--bg-step-clean);
+  --rp-bg-step-report:  var(--bg-step-report);
+  --rp-bg-step-publish: var(--bg-step-publish);
+
+  /* App-only tokens — no library counterpart, defined here directly. */
+  --rp-accent-soft:   #f7d6dc;
+  --rp-accent-strong: #7a0013;
+  --rp-text-inverse:  #ffffff;
+  --rp-success:       #1f7a3a;
+  --rp-warning:       #b06d00;
+  --rp-danger:        #b3001b;
+  --rp-font:          -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --rp-font-mono:     ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rp-radius-lg:     14px;
+  --rp-topbar-h:      56px;
+  --rp-gutter:        20px;
+}
+
+/* App-side body chrome. The universal `*` / anchor / button defaults
+   come from the library's reset.css (imported above). What's left
+   here is app-specific: page-scroll body (NOT the demo's hidden
+   overflow + flex chrome — that's shell.css, opt-in per page) and
+   the app's brand font/colors. */
+html, body { height: 100%; }
+body {
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font-family: var(--rp-font);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Markdown content anchors keep the classic underline-on-hover affordance.
+   Scoped to .rp-docs__content so the rule doesn't leak globally — see
+   the layering discipline in docs/frontend/design.md. */
+.rp-docs__content a         { color: var(--rp-accent); }
+.rp-docs__content a:hover   { text-decoration: underline; }
+
+.rp-app {
+  min-height: calc(100vh - var(--rp-topbar-h));
+  padding: var(--rp-gutter);
+}
+
+/* Shared full-bleed page topbar — a slim row with a back arrow and a
+   page title above the panel. Used by /objects and /cleaner so the
+   chrome reads as one family. Was `.obj-topbar` / `.obj-title`; promoted
+   here so other full-bleed pages can opt in without duplicating CSS. */
+.rp-rt-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1.25rem 0.625rem;
+  flex-shrink: 0;
+}
+.rp-rt-page-title {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 650;
+  color: var(--rp-text);
+}
+
+/* Full-bleed shell — opt-in per route via `chrome: "full"` in main.js's
+   ROUTES table. Router writes `<body data-chrome="full">` BEFORE the
+   per-page CSS link starts downloading, so there's no FOUC of the
+   default app gutter / topbar before the partial mounts. Used by
+   /landing and /home (their float bars take over chrome duties). */
+body[data-chrome="full"] #topbar { display: none; }
+body[data-chrome="full"] .rp-app {
+  padding: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Brand accent on full-bleed pages.
+   App-wide we rebind --accent to RedPash red (in :root above). But the
+   library's full-bleed surfaces (landing hero, home-screen Step 1
+   "import" tint, auth-modal social-button hovers, etc.) compose
+   var(--accent) expecting the library's catppuccin blue. Re-binding
+   it on body[data-chrome="full"] gives every full-bleed page the
+   library palette in one place; the rest of the app (topbar, redtable
+   chrome, cleaner sidebar, etc.) keeps the brand red.
+   The other step tints in home-screen.css use their own named tokens
+   (--green / --purple / --red), so this override doesn't affect them. */
+body[data-chrome="full"]                                                   { --accent: #89b4fa; }
+html[data-theme="light"] body[data-chrome="full"]                          { --accent: #4f8ef7; }
+@media (prefers-color-scheme: light) { html[data-theme="system"] body[data-chrome="full"] { --accent: #4f8ef7; } }
+@media (prefers-color-scheme: dark)  { html[data-theme="system"] body[data-chrome="full"] { --accent: #89b4fa; } }
+
+/* Palette preview — when the user toggles Preview ON in Settings, the
+   page's background surface is repainted with the chosen gradient from
+   tokens.css. Toggle OFF (the attribute disappears) and surfaces fall
+   back to their defaults. !important is justified here because the
+   targets all set plain `background` declarations with no higher
+   specificity (the .hs-* classes in home-screen.css, and the library's
+   own .rp-rt-panel base gradient in redtable.css).
+
+   Targets, one per page family:
+     • .hs-card        — home step cards (each has its own gradient)
+     • #page-cleaner   — the cleaner page root; the `.rp-rt-panel--cleaner`
+                         and `.rp-rtp` wrapper are both transparent inside
+                         it, so painting the root lets the topbar AND the
+                         panel both inherit the gradient (previously we
+                         targeted the panel only — the topbar above it
+                         stayed on the page bg)
+     • #page-objects   — the objects page root (its panel is
+                         .rp-rt-panel--embedded → transparent, so
+                         painting the root shows through) */
+html[data-bg-preview="on"][data-bg-palette="import"]  .hs-card,
+html[data-bg-preview="on"][data-bg-palette="import"]  #page-cleaner,
+html[data-bg-preview="on"][data-bg-palette="import"]  #page-objects  { background: var(--bg-step-import)  !important; }
+html[data-bg-preview="on"][data-bg-palette="clean"]   .hs-card,
+html[data-bg-preview="on"][data-bg-palette="clean"]   #page-cleaner,
+html[data-bg-preview="on"][data-bg-palette="clean"]   #page-objects  { background: var(--bg-step-clean)   !important; }
+html[data-bg-preview="on"][data-bg-palette="report"]  .hs-card,
+html[data-bg-preview="on"][data-bg-palette="report"]  #page-cleaner,
+html[data-bg-preview="on"][data-bg-palette="report"]  #page-objects  { background: var(--bg-step-report)  !important; }
+html[data-bg-preview="on"][data-bg-palette="publish"] .hs-card,
+html[data-bg-preview="on"][data-bg-palette="publish"] #page-cleaner,
+html[data-bg-preview="on"][data-bg-palette="publish"] #page-objects  { background: var(--bg-step-publish) !important; }
+
+.rp-muted { color: var(--rp-text-muted); }
+
+/* Boot splash — shown until the router renders the first route. */
+.rp-boot {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  min-height: 60vh;
+  color: var(--rp-text-muted);
+}
+.rp-boot img { opacity: 0.85; animation: rp-pulse 1.2s ease-in-out infinite; }
+@keyframes rp-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.6; }
+  50%      { transform: scale(1.05); opacity: 1;   }
+}
+
+/* Filter-panel button feedback animations. One-shot classes flashed by
+   the eraser / save / apply handlers via `_rpAnimOnce` — reflow +
+   animationend removal lets repeat clicks re-fire. */
+@keyframes rp-rt-wipe {
+  0%   { transform: rotate(0deg)   scale(1); }
+  40%  { transform: rotate(-18deg) scale(1.15); }
+  100% { transform: rotate(0deg)   scale(1); }
+}
+.rp-rt-anim-wipe { animation: rp-rt-wipe 0.35s ease-out; }
+
+@keyframes rp-rt-glow {
+  0%   { box-shadow: 0 0 0 0       color-mix(in srgb, var(--accent, #b3001b) 60%, transparent); }
+  30%  { box-shadow: 0 0 0.5rem 0.125rem color-mix(in srgb, var(--accent, #b3001b) 60%, transparent); }
+  100% { box-shadow: 0 0 0 0       color-mix(in srgb, var(--accent, #b3001b)  0%, transparent); }
+}
+.rp-rt-anim-glow { animation: rp-rt-glow 0.9s ease-out; }
+
+@keyframes rp-rt-pulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0     color-mix(in srgb, var(--accent, #b3001b) 50%, transparent); }
+  40%  { transform: scale(1.06); box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--accent, #b3001b)  0%, transparent); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0     transparent; }
+}
+.rp-rt-anim-pulse { animation: rp-rt-pulse 0.45s ease-out; }

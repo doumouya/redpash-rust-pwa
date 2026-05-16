@@ -1,0 +1,105 @@
+/* Form primitives — used by the profile + settings pages. Keep this
+   small; the rest of the app doesn't need form chrome yet. */
+
+.rp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.rp-field > span:first-child {
+  font-weight: 500;
+  color: var(--rp-text);
+  font-size: 13px;
+}
+.rp-field input[type="text"],
+.rp-field input[type="email"],
+.rp-field textarea,
+.rp-field select {
+  padding: 8px 10px;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+}
+.rp-field input:focus,
+.rp-field textarea:focus,
+.rp-field select:focus {
+  outline: 2px solid var(--rp-accent-soft);
+  border-color: var(--rp-accent);
+}
+.rp-field input[type="color"] {
+  width: 56px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface);
+  cursor: pointer;
+}
+.rp-field__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rp-field small { color: var(--rp-text-muted); }
+
+/* Profile-specific layout: avatar + meta on the left, fields on the right. */
+.rp-profile,
+.rp-settings {
+  max-width: 760px;
+  margin: 24px auto;
+  padding: 0 var(--rp-gutter);
+}
+.rp-profile__header { margin-bottom: 16px; }
+
+.rp-profile__form {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .rp-profile__form { grid-template-columns: 1fr; }
+}
+
+.rp-profile__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+}
+.rp-profile__avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--rp-surface-2);
+}
+.rp-profile__meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  width: 100%;
+}
+.rp-profile__meta dt { color: var(--rp-text-muted); font-weight: 500; }
+.rp-profile__meta dd { margin: 0; color: var(--rp-text); word-break: break-all; }
+.rp-profile__rid { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+
+.rp-profile__fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.rp-profile__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

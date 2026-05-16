@@ -1,0 +1,39 @@
+# ── Rust ──────────────────────────────────────────────────────────
+# 12 GB of build artefacts at last check — never commit.
+/backend/target/
+# sqlx offline-query cache; not needed for app builds (CI can regenerate).
+/backend/.sqlx/
+
+# ── Secrets ───────────────────────────────────────────────────────
+# Real env file with DATABASE_URL + OAuth credentials. .env.example is
+# tracked as the template.
+/backend/.env
+.env
+.env.local
+
+# ── User data — on-disk file blob store ──────────────────────────
+# REDPASH_DATA_DIR defaults to ./backend/data; holds uploaded CSV
+# bytes (files/<rid>.bin). 7.6 GB and growing per dev session.
+/backend/data/
+/data/
+
+# ── Node / JS (if any deps land later) ───────────────────────────
+**/node_modules/
+**/dist/
+**/.cache/
+
+# ── Logs / runtime ────────────────────────────────────────────────
+*.log
+*.pid
+/tmp/
+
+# ── OS cruft ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDEs ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo

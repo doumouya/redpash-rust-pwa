@@ -1,0 +1,3003 @@
+// Cleaner page — standalone redtable-pro workspace.
+//
+// Phase 1 (this slice):
+//   • Parses ?file=FIL_… from the URL hash.
+//   • Fetches /api/files/:rid for summary + columns + steps.
+//   • Fetches the rest of the files in the same project for the tabs.
+//   • Paints header chrome (title · project meta · status badge · overall
+//     cleanness bar · undo / redo / save / export disabled states).
+//   • Builds the tabs row (Overview + one tab per file).
+//   • Loads the first page via /api/files/:rid/page and renders rows in
+//     the redtable body.
+//
+// Phase 2+ (not in this slice):
+//   • Tool modals — clones from a per-tool template, populates with
+//     active-file columns, POSTs /api/files/:rid/steps on Apply.
+//   • Filter / search / column-order panels (lift from existing
+//     scripts/cleaner/filters + scripts/redtable).
+//   • Edit / select / delete inline modes on the tbody.
+//   • Live wrapped-row + mixed-date detectors.
+//   • Joins panel for multi-file projects.
+//
+// What's kept client-side per the user's direction:
+//   tabs, edit mode, select mode, delete mode, refresh
+// What runs server-side:
+//   every step kind (rename, dedup, fill, drop_columns, snake_case,
+//   replace_text, format_dates, etc.) via /api/files/:rid/steps
+//   — the existing tool modules under scripts/cleaner/tools/ already
+//   POST to those endpoints; Phase 2 splices them into the new chrome.
+
+import { api } from "/scripts/api.js";
+import { toast } from "/scripts/ui/toast.js";
+
+// Page-scoped state. Reset on every mount() so navigation in / out of
+// the cleaner doesn't leak previous-file data.
+let STATE = {
+  rid:         null,                  // active file RID from URL
+  summary:     null,                  // FileSummary for active file
+  columns:     [],                    // ColumnMeta[] for active file
+  steps:       [],                    // ProjectStep[] history
+  project:     null,                  // { redpash_id, name, status, … }
+  files:       [],                    // every file in the project
+  page:        1,                     // current page index
+  pageSize:    25,                    // rows per page (matches the dd default)
+  pageData:    null,                  // last { rows, total, … } response
+  selected:    new Set(),             // page-relative row indices ticked in select mode
+  filterOpen:  false,                 // funnel side-panel open/closed
+  // Chained column sort — primary first, remaining keys break ties.
+  // Empty array → no sort header sent → backend uses the frame's
+  // natural order. PageQuery accepts a JSON `sorts` param that
+  // overrides the legacy single-column `sort/dir` pair. Reset on every
+  // file switch (per-file sort doesn't survive across tabs).
+  sorts:       [],
+  // Per-user "tabs I've closed" set — keyed by file RID. Persisted to
+  // `prefs.cleaner_hidden_files` via rpSavePref. Mirrors objTabs on the
+  // Objects page: hides crowded file tabs on big projects (17+ files)
+  // without deleting the files themselves; cleanerShowFileTab puts a
+  // tab back from the "+" dropdown.
+  hiddenFiles: new Set(),
+};
+
+export default async function mount(root, ctx) {
+  // Cleaner URL forms — both supported:
+  //   #/cleaner?file=FIL_…    open that file directly
+  //   #/cleaner?project=PRJ_… open the project, land on its first file
+  // When both are present, ?file= wins. The home page links into
+  // either form depending on what the user clicked (project row vs.
+  // file row).
+  const q          = new URLSearchParams(location.hash.split("?")[1] ?? "");
+  const fileRid    = q.get("file");
+  const projectRid = q.get("project");
+  if (!fileRid && !projectRid) {
+    root.querySelector("#cleaner-title").textContent = "No file selected";
+    toast.error("Cleaner needs ?project=PRJ_… or ?file=FIL_… in the URL");
+    return;
+  }
+
+  // Fresh overview state on every mount — OV is module-level, so
+  // without this a previous cleaner session's selection / mode / search
+  // would leak into the next one. hiddenCols is the exception: it's a
+  // user layout preference, restored from localStorage so the column
+  // choice persists across sessions.
+  OV = { mode: null, selected: new Set(), q: "", hiddenCols: _ovLoadHiddenCols() };
+
+  // Hidden file tabs — restore the user's "tabs I've closed" set from
+  // server prefs. Flat list of file RIDs (file RIDs are globally unique,
+  // so no per-project keying needed — a hidden RID just won't match in
+  // a different project). Persisted via rpSavePref on every show/hide.
+  const savedHidden = ctx?.session?.prefs?.cleaner_hidden_files;
+  STATE.hiddenFiles = new Set(Array.isArray(savedHidden) ? savedHidden : []);
+
+  // Learned sentinel values — the user-extension of the backend's
+  // built-in SENTINELS list. The Fix-invalid modal scans every file
+  // for these in addition to the canonical set, so once a user has
+  // taught the app that "???" / "----" / "#####" are junk in *their*
+  // data, future files pick those up automatically.
+  // Stored canonical (trimmed + lowercased) — the scan match is
+  // case-insensitive, so storing variants would just bloat the set.
+  const savedLearned = ctx?.session?.prefs?.learned_sentinels;
+  STATE.learnedSentinels = new Set(
+    Array.isArray(savedLearned)
+      ? savedLearned.map((s) => String(s).trim().toLowerCase()).filter(Boolean)
+      : [],
+  );
+
+  // Inline-onclick globals — defined first so the inline handlers in
+  // the partial don't fire before the closure exists.
+  _wireGlobals(root);
+
+  try {
+    // Two landing modes:
+    //   • ?file=FIL_…  → open that file, populate STATE.summary + columns
+    //                    + steps, paint the file table.
+    //   • ?project=PRJ_… (only) → land on the project Overview pane.
+    //     Don't auto-pick the first file (the user opened the project,
+    //     not a specific file; the Overview is what they want).
+    //     STATE.rid stays null until they click a file tab.
+    const projectOnly = !fileRid && !!projectRid;
+
+    let resolvedRid = fileRid;
+    let preFetchedFiles = null;
+    let projectIdForList = null;
+
+    if (projectOnly) {
+      // Project landing → fetch the project's files; no file detail.
+      const filesRes = await api.get(`/projects/${encodeURIComponent(projectRid)}/files`);
+      preFetchedFiles  = filesRes.items ?? [];
+      projectIdForList = projectRid;
+      if (!preFetchedFiles.length) {
+        root.querySelector("#cleaner-title").textContent = "Empty project";
+        toast.info("This project has no files yet. Upload one from /home.");
+        // Still paint the project chrome + empty Overview.
+      }
+      STATE.rid     = null;
+      STATE.summary = null;
+      STATE.columns = [];
+      STATE.steps   = [];
+    } else {
+      // File landing — original flow.
+      STATE.rid = resolvedRid;
+      const detail = await api.get(`/files/${encodeURIComponent(resolvedRid)}`);
+      STATE.summary    = detail.summary;
+      STATE.columns    = detail.columns ?? [];
+      STATE.steps      = detail.steps ?? [];
+      projectIdForList = detail.summary.project_redpash_id;
+    }
+
+    // Project meta + sibling files (the file path already has the list
+    // in `preFetchedFiles` if it had to fetch them; here we cover both).
+    const [projects, files] = await Promise.all([
+      api.get("/projects").catch(() => ({ items: [] })),
+      preFetchedFiles
+        ? Promise.resolve({ items: preFetchedFiles })
+        : api.get(`/projects/${encodeURIComponent(projectIdForList)}/files`)
+            .catch(() => ({ items: [] })),
+    ]);
+    STATE.project = projects.items?.find(
+      (p) => p.redpash_id === projectIdForList,
+    ) ?? null;
+    STATE.files = files.items ?? [];
+
+    // Paint static chrome from the data we just gathered.
+    _renderTitle(root);
+    _renderHeaderMeta(root);
+    _renderStatusBadge(root);
+    _renderOverallCleanness(root);
+    _renderTabs(root);
+    _renderHistoryButtons(root);
+    _renderAppliedList(root);
+    _renderDtypeList(root);
+    _renderEncodingPicker(root);
+
+    if (projectOnly) {
+      // Land on Overview — cleanerActivateTab("") flips the Overview
+      // tab active + calls _renderOverview. No _loadPage (no active file).
+      window.cleanerActivateTab("");
+    } else {
+      // Load the first page of rows into the body.
+      await _loadPage(root);
+    }
+
+  } catch (err) {
+    toast.error(`Couldn't open file: ${err.body?.error ?? err.message}`);
+    root.querySelector("#cleaner-title").textContent = "File not found";
+  }
+}
+
+// One-shot animation helper for the filter-panel buttons. Reflow +
+// animationend removal lets repeat clicks re-fire the same keyframes.
+function _rpAnimOnce(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
+}
+
+// ── Render: title + meta ─────────────────────────────────────────────
+function _renderTitle(root) {
+  const ttl = root.querySelector("#cleaner-title");
+  if (!ttl) return;
+  // Header always shows the project context; appends the active file
+  // only when one is open (STATE.rid set). When the user returns to
+  // the Overview tab, STATE.rid is null again — the previous file's
+  // name is dropped instead of lingering (matches the user's mental
+  // model: "no file open, no file name").
+  const projName = STATE.project?.name ?? "—";
+  const s = STATE.summary ?? {};
+  const fileName = STATE.rid ? (s.display_name ?? s.filename ?? "—") : null;
+  ttl.textContent = fileName
+    ? `Project: ${projName} — File: ${fileName}`
+    : `Project: ${projName}`;
+}
+
+function _renderHeaderMeta(root) {
+  const meta = root.querySelector("#cleaner-proj-meta");
+  if (!meta) return;
+  const projName = STATE.project?.name ?? "—";
+  const n        = STATE.files.length;
+  meta.textContent = `${projName} · ${n} file${n !== 1 ? "s" : ""}`;
+}
+
+function _renderStatusBadge(root) {
+  const el = root.querySelector("#cleaner-proj-status");
+  if (!el) return;
+  const p = STATE.project;
+  if (!p) { el.textContent = ""; el.className = "badge"; return; }
+  // Catppuccin-style: green for active/published, yellow for archived,
+  // neutral grey for draft. `published` is the backend's read-only
+  // overlay when the project has a public dashboard.
+  const cls = { active: "b-green", published: "b-green", draft: "", archived: "b-yellow" }[p.status] ?? "";
+  const lbl = { active: "Active",  published: "Published", draft: "Draft", archived: "Archived" }[p.status] ?? (p.status ?? "");
+  el.textContent = lbl;
+  el.className   = `badge ${cls}`.trim();
+}
+
+function _renderOverallCleanness(root) {
+  const fill = root.querySelector("#cleaner-overall-fill");
+  const pctE = root.querySelector("#cleaner-overall-pct");
+  if (!fill || !pctE) return;
+
+  // Use the project's cleanness_pct if available; fall back to the
+  // active file's cleanness when the project hasn't computed an
+  // aggregate yet. Library threshold mirror: ≥90 green / ≥70 yellow / red.
+  const raw = STATE.project?.cleanness_pct ?? STATE.summary?.cleanness_pct;
+  if (raw == null || isNaN(raw)) {
+    fill.style.width = "0%";
+    fill.style.background = "var(--muted)";
+    pctE.textContent = "—";
+    pctE.style.color = "var(--muted)";
+    return;
+  }
+  const pct = Math.max(0, Math.min(100, raw));
+  const color = pct >= 90 ? "var(--green)" : pct >= 70 ? "var(--yellow)" : "var(--red)";
+  fill.style.width      = `${pct}%`;
+  fill.style.background = color;
+  pctE.textContent      = `${Math.round(pct)}%`;
+  pctE.style.color      = color;
+}
+
+// ── Render: tabs (Overview + 1 per file) ─────────────────────────────
+function _renderTabs(root) {
+  const list = root.querySelector("#cleaner-tabs-list");
+  if (!list) return;
+
+  // The Overview tab is "active" whenever the overview pane is showing
+  // — `#page-cleaner.overview-active` is the source of truth. This
+  // keeps the tab highlighted across overview re-renders triggered by
+  // delete / edit / refresh, which all call _renderTabs.
+  const inOverview = root.querySelector("#page-cleaner")?.classList.contains("overview-active");
+  const ov = `
+    <button class="rp-rtp-tab ${inOverview ? "active" : ""}"
+            data-file-id=""
+            onclick="cleanerActivateTab('')">
+      <i class="bi bi-folder2-open"></i>
+      <span class="rp-rtp-tab-name">Overview</span>
+    </button>`;
+
+  // Split files: visible ones get rendered as tabs; hidden ones populate
+  // the "+" dropdown so the user can put them back. The hidden set
+  // survives across mounts via prefs.cleaner_hidden_files.
+  const visibleFiles = STATE.files.filter((f) => !STATE.hiddenFiles.has(f.redpash_id));
+  const hiddenFiles  = STATE.files.filter((f) =>  STATE.hiddenFiles.has(f.redpash_id));
+
+  const tabs = visibleFiles.map((f) => {
+    const isActive = f.redpash_id === STATE.rid;
+    // Tab dot color hints at file cleanness (matches the demo).
+    const pct = f.cleanness_pct;
+    let dotCls = "";
+    if (pct != null) dotCls = pct >= 90 ? "ok" : pct >= 70 ? "warn" : "bad";
+    const dot = dotCls ? `<span class="rp-rtp-tab-dot ${dotCls}"></span>` : "";
+    const name = _escHtml(f.display_name ?? f.filename ?? "");
+    const rid  = _escAttr(f.redpash_id);
+    // The × is hidden until tab-hover / active and stops propagating
+    // its click so closing doesn't also activate the tab.
+    return `
+      <button class="rp-rtp-tab ${isActive ? "active" : ""}"
+              data-file-id="${rid}"
+              onclick="cleanerActivateTab('${rid}')">
+        ${dot}
+        <i class="bi bi-file-earmark-spreadsheet"></i>
+        <span class="rp-rtp-tab-name">${name}</span>
+        <span class="rp-rtp-tab-x" role="button"
+              onclick="event.stopPropagation(); cleanerHideFileTab('${rid}')"
+              title="Hide this tab (won't delete the file)">
+          <i class="bi bi-x"></i>
+        </span>
+      </button>`;
+  }).join("");
+
+  // "+" add-back control — disabled when nothing is hidden. Dropdown is
+  // a sibling so it can escape the tab strip's overflow if needed.
+  const addItems = hiddenFiles.map((f) => {
+    const name = _escHtml(f.display_name ?? f.filename ?? "");
+    return `<button class="rp-rtp-tab-add-item"
+                    onclick="cleanerShowFileTab('${_escAttr(f.redpash_id)}')">
+      <i class="bi bi-file-earmark-spreadsheet"></i> ${name}
+    </button>`;
+  }).join("") || `<div class="rp-rtp-tab-add-empty">All file tabs are visible.</div>`;
+  const add = `
+    <span class="rp-rtp-tab-add-wrap">
+      <button class="rp-rtp-tab-add" ${hiddenFiles.length ? "" : "disabled"}
+              onclick="cleanerToggleAddMenu(this)"
+              title="${hiddenFiles.length
+                ? `Show a hidden file tab (${hiddenFiles.length} hidden)`
+                : "All file tabs are visible"}">
+        <i class="bi bi-plus"></i>
+      </button>
+      <div class="rp-rtp-tab-add-menu" hidden>${addItems}</div>
+    </span>`;
+
+  list.innerHTML = ov + tabs + add;
+}
+
+// ── Render: undo / redo / save state ──────────────────────────────────
+function _renderHistoryButtons(root) {
+  const undoBtn = root.querySelector("#cleaner-undo");
+  const redoBtn = root.querySelector("#cleaner-redo");
+  const saveBtn = root.querySelector("#cleaner-save");
+  // Backend's ProjectStep uses a boolean `applied` (true = currently
+  // in the cursor, false = undone and waiting to redo). The frontend
+  // earlier read a non-existent `s.status` field; both counts were
+  // always 0 → undo + redo were permanently disabled.
+  const applied = STATE.steps.filter((s) => s.applied === true).length;
+  const undone  = STATE.steps.filter((s) => s.applied === false).length;
+  if (undoBtn) undoBtn.disabled = applied === 0;
+  if (redoBtn) redoBtn.disabled = undone  === 0;
+  // Save (snapshot) is always available once a file is open — the
+  // user might want a clean checkpoint at any point, even before
+  // applying any steps.
+  if (saveBtn) saveBtn.disabled = !STATE.rid;
+}
+
+// ── Render: encoding picker ──────────────────────────────────────────
+function _renderEncodingPicker(root) {
+  const sel  = root.querySelector("#cleaner-encoding-select");
+  const now  = root.querySelector("#cleaner-encoding-now");
+  if (!sel) return;
+  const enc  = (STATE.summary?.encoding ?? "").toLowerCase();
+  const opts = Array.from(sel.options).map((o) => o.value.toLowerCase());
+  sel.value = opts.includes(enc) ? enc : "";
+  if (now) now.textContent = enc ? `detected: ${enc}` : "";
+}
+
+// ── Render: paged rows ────────────────────────────────────────────────
+async function _loadPage(root) {
+  // Leaving overview mode → flip the panes back + drop the
+  // overview-active class so the main toolbar / filter / tools panels
+  // reappear. Safe to call when already in table mode (idempotent).
+  const ov  = root.querySelector("#cleaner-overview");
+  const tbl = root.querySelector("#cleaner-table");
+  if (ov)  ov.hidden  = true;
+  if (tbl) tbl.hidden = false;
+  root.querySelector("#page-cleaner")?.classList.remove("overview-active");
+
+  const thead = root.querySelector("[data-rt-thead]");
+  const tbody = root.querySelector("[data-rt-tbody]");
+  if (!thead || !tbody) return;
+
+  tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>`;
+
+  const params = new URLSearchParams();
+  params.set("page", String(STATE.page));
+  params.set("size", String(STATE.pageSize));
+  if (STATE.q) params.set("q", STATE.q);
+  // Server-side chained sort — PageQuery's `sorts` JSON param accepts
+  // `[{col, dir}, …]`, primary first; remaining keys break ties.
+  // PageQuery prefers `sorts` over the legacy single `sort/dir` pair,
+  // so a non-empty chain is the only thing we send.
+  if (STATE.sorts?.length) {
+    params.set("sorts", JSON.stringify(STATE.sorts));
+  }
+
+  let res;
+  try {
+    res = await api.get(`/files/${encodeURIComponent(STATE.rid)}/page?${params.toString()}`);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem">Couldn't load page: ${_escHtml(err.body?.error ?? err.message)}</td></tr>`;
+    return;
+  }
+  STATE.pageData = res;
+
+  // Header — column names from the file detail (already fetched).
+  // Mode-aware extras: a leading checkbox column (select-mode) and a
+  // trailing trash column (delete-mode). Both are always emitted but
+  // hidden by CSS unless the matching mode class is on the panel —
+  // avoids a body re-render every time the user flips a toggle.
+  //
+  // Data-column TH elements are also `draggable` so the user can
+  // reorder columns by drag. The drop handler POSTs `filter_columns`
+  // with the new order (which Polars's `select(refs)` honours), so
+  // reorder is an undoable step like any other.
+  const sortRank = new Map(
+    (STATE.sorts || []).map((k, i) => [k.col, { dir: k.dir, rank: i + 1 }]),
+  );
+  const showRanks = sortRank.size > 1;
+  thead.innerHTML = `<tr>
+    <th data-mode-col="select" style="width:1.5rem">
+      <input type="checkbox" id="cleaner-sel-all" onchange="cleanerSelectAll(this.checked)" />
+    </th>
+    ${STATE.columns.map((c) => {
+      const entry = sortRank.get(c.name);
+      const cls   = `rp-rt-th-sortable${entry ? " rp-rt-sort-th" : ""}`;
+      const arrow = entry
+        ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
+        : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
+      return `<th draggable="true" class="${cls}" data-col="${_escAttr(c.name)}"
+        onclick="cleanerSortBy('${_escAttr(c.name)}', event)"
+        ondragstart="cleanerColDragStart(event)"
+        ondragover="cleanerColDragOver(event)"
+        ondragleave="cleanerColDragLeave(event)"
+        ondrop="cleanerColDrop(event)"
+        ondragend="cleanerColDragEnd(event)">${_escHtml(c.name)}${arrow}</th>`;
+    }).join("")}
+    <th data-mode-col="delete" style="width:1.75rem"></th>
+  </tr>`;
+
+  // Reset the page-relative selection — indices only make sense within
+  // a single page since the server may return a different slice next
+  // time (sort, search, page bump).
+  STATE.selected.clear();
+  _renderSelectionChip(root);
+
+  const rows = res.rows ?? [];
+  if (!rows.length) {
+    const span = STATE.columns.length + 2;  // +1 leading, +1 trailing
+    tbody.innerHTML = `<tr><td colspan="${span}" style="text-align:center;color:var(--muted);padding:1rem">No rows.</td></tr>`;
+  } else {
+    // data-ri holds the page-relative row index — used by the select /
+    // delete handlers AND, when delete-mode commits, mapped to the
+    // ABSOLUTE row index via (page-1)*pageSize+ri before being sent to
+    // /steps drop_rows.
+    tbody.innerHTML = rows.map((row, ri) =>
+      `<tr data-ri="${ri}">
+        <td data-mode-col="select"><input type="checkbox" class="rp-rt-row-chk" data-ri="${ri}" onchange="cleanerRowSelect(this)" /></td>
+        ${row.map((c, ci) =>
+          `<td data-col="${_escAttr(STATE.columns[ci]?.name ?? "")}" data-ri="${ri}" ondblclick="cleanerCellEdit(this)">${_escHtml(c ?? "")}</td>`
+        ).join("")}
+        <td data-mode-col="delete"><button type="button" class="rp-rt-row-del" title="Drop this row" onclick="cleanerRowDelete(${ri})"><i class="bi bi-trash3"></i></button></td>
+      </tr>`
+    ).join("");
+  }
+
+  // Reveal / hide the wrapped-CSV banner based on the current page
+   // sample. Cheap heuristic; the Rust step verifies + re-parses.
+  _renderWrappedBanner(root);
+
+  // Paging summary line.
+  const total  = res.total ?? rows.length;
+  const start  = total === 0 ? 0 : (STATE.page - 1) * STATE.pageSize + 1;
+  const end    = Math.min(STATE.page * STATE.pageSize, total);
+  const infoEl = root.querySelector("[data-rt-rows-info]");
+  if (infoEl) infoEl.textContent = total === 0 ? "0 rows" : `${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`;
+}
+
+// ── Inline-onclick globals ────────────────────────────────────────────
+function _wireGlobals(root) {
+  // Header chrome
+  window.cleanerBack    = () => { location.hash = "#/objects"; };
+
+  // Export — GET /:rid/export streams the current view (post
+  // step-replay) as a CSV with a Content-Disposition filename. We
+  // fetch-as-blob rather than navigating the browser to the URL so a
+  // failure surfaces as a toast instead of a blank tab, and so the
+  // session cookie rides along (credentials: "include"). The blob is
+  // handed to a transient <a download> click, then the object URL is
+  // revoked to free memory.
+  window.cleanerExport = async () => {
+    if (!STATE.rid) { toast.error("Open a file first."); return; }
+    const btn = root.querySelector("#cleaner-export");
+    btn?.classList.add("is-spinning");
+    try {
+      const res = await fetch(
+        `/api/files/${encodeURIComponent(STATE.rid)}/export`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { msg = (await res.json()).error ?? msg; } catch {}
+        throw new Error(msg);
+      }
+      // Pull the server-suggested filename out of Content-Disposition;
+      // fall back to the in-memory summary name if the header is
+      // missing or unparseable.
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const m  = /filename="?([^"]+)"?/.exec(cd);
+      const stem = (STATE.summary?.display_name ?? STATE.summary?.filename ?? "export")
+        .replace(/\.csv$/i, "");
+      const name = m?.[1] ?? `${stem}.csv`;
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${name}`);
+    } catch (err) {
+      toast.error(`Export failed: ${err.message ?? err}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+    }
+  };
+
+  // Add a new file to the ACTIVE project. The + button programmatically
+  // clicks a hidden <input type="file"> (we create one on demand);
+  // user picks a file → we POST it through /api/files/upload with the
+  // `project_name` field set to STATE.project.name. The backend's
+  // `ensure_named_project` finds the existing project by (owner, name)
+  // rather than creating a duplicate. Then we refresh the tab strip +
+  // jump to the newly-uploaded file.
+  window.cleanerAddFile = () => {
+    if (!STATE.project) { toast.error("No project loaded."); return; }
+    let inp = root.querySelector("#cleaner-add-file-input");
+    if (!inp) {
+      inp = document.createElement("input");
+      inp.type = "file";
+      inp.id   = "cleaner-add-file-input";
+      inp.accept = ".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods";
+      inp.multiple = true;   // multi-select — mirrors the Objects upload modal
+      inp.style.display = "none";
+      inp.onchange = async () => {
+        const files = [...(inp.files ?? [])];
+        inp.value = "";   // allow re-picking the same file(s) later
+        if (!files.length) return;
+
+        // Sequential upload — one POST per file, same as the Objects
+        // upload-modal addFiles loop. Each success toasts its filename;
+        // a failure stops the run and reports how far we got.
+        let lastEnv = null, done = 0;
+        for (const file of files) {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("project_name", STATE.project.name ?? "");
+          try {
+            const res = await fetch("/api/files/upload", {
+              method: "POST", body: form, credentials: "include",
+            });
+            if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
+            lastEnv = await res.json();
+            done++;
+          } catch (err) {
+            toast.error(`Stopped after ${done} — ${file.name}: ${err.message ?? err}`);
+            break;
+          }
+        }
+        if (!done) return;
+
+        // Refresh the sibling-files list + tabs once at the end so the
+        // strip rebuilds with every new file at once.
+        const lst = await api.get(`/projects/${encodeURIComponent(STATE.project.redpash_id)}/files`).catch(() => null);
+        if (lst?.items) STATE.files = lst.items;
+        _renderHeaderMeta(root);
+        _renderTabs(root);
+
+        toast.success(`Added ${done} file${done !== 1 ? "s" : ""}`);
+
+        // Navigate into the LAST uploaded file (matches the
+        // home page's single-upload auto-nav for the 1-file case, and
+        // is the most-recent-thing-I-touched for multi-file).
+        if (lastEnv?.summary?.redpash_id) {
+          window.cleanerActivateTab(lastEnv.summary.redpash_id);
+        }
+      };
+      root.appendChild(inp);
+    }
+    inp.click();
+  };
+
+  // Save snapshot — POST /:rid/snapshot creates a new project file
+  // with the current view as its content. Default name = filename
+  // stem + "_cleaned.csv". Returns a FileEnvelope for the NEW file;
+  // we jump to it so the user is editing the snapshot, not the
+  // original (preserving the original's full step history).
+  window.cleanerSave = async () => {
+    if (!STATE.summary) return;
+    const stem = (STATE.summary.display_name ?? STATE.summary.filename ?? "file")
+      .replace(/\.[^.]+$/, "");
+    const defaultName = `${stem}_cleaned.csv`;
+    const name = prompt("Save current view as a new file:", defaultName);
+    if (!name || !name.trim()) return;
+    try {
+      const env = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/snapshot`,
+        { name: name.trim() },
+      );
+      toast.success(`Saved ${env.summary.filename}`);
+      location.hash = `#/cleaner?file=${encodeURIComponent(env.summary.redpash_id)}`;
+    } catch (err) {
+      toast.error(`Save failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Undo / redo — backend POSTs return the same FileEnvelope as add_step,
+  // so the post-call refresh is identical to cleanerApplyTool.
+  const _afterHistory = async (envelope, label) => {
+    STATE.summary = envelope.summary;
+    STATE.columns = envelope.columns ?? [];
+    STATE.steps   = envelope.steps   ?? [];
+    // Keep the tab strip in sync — cleanness_pct may have moved.
+    const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+    if (idx >= 0) STATE.files[idx] = envelope.summary;
+    _renderTitle(root);
+    _renderHeaderMeta(root);
+    _renderOverallCleanness(root);
+    _renderHistoryButtons(root);
+    _renderAppliedList(root);
+      _renderDtypeList(root);
+    _renderTabs(root);
+    await _loadPage(root);
+    toast.success(label);
+  };
+  window.cleanerUndo = async () => {
+    try {
+      const env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/undo`, {});
+      await _afterHistory(env, "Undone");
+    } catch (err) {
+      toast.error(`Undo failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+  window.cleanerRedo = async () => {
+    try {
+      const env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/redo`, {});
+      await _afterHistory(env, "Redone");
+    } catch (err) {
+      toast.error(`Redo failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Tab switching — kept client-side per user direction. Mirrors the
+  // Django pattern in clarna-django/static/js/cleaner.js
+  // `_cleanerActivateTab`: history.replaceState + targeted re-fetch
+  // INSTEAD of a hash change (which would trigger the router and
+  // re-mount the whole partial). Result: switching between files is
+  // just one /api/files/:rid round-trip + a re-paint of the affected
+  // slots, no partial swap, no /api/projects refetch.
+  // Persist STATE.hiddenFiles to the user's account prefs. Same pattern
+  // as objects.js _persistObjTabs — fire-and-forget, the in-memory set
+  // is already authoritative for this session.
+  const _persistHidden = () => {
+    window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
+  };
+
+  // × on a file tab — hide it (keep the file in the project). If the
+  // hidden tab was active, fall back to the next visible file, else
+  // overview. The "+" dropdown then surfaces the hidden file so the
+  // user can put it back.
+  window.cleanerHideFileTab = (fid) => {
+    if (!fid) return;
+    STATE.hiddenFiles.add(fid);
+    _persistHidden();
+    if (STATE.rid === fid) {
+      const nextVisible = STATE.files.find((f) =>
+        f.redpash_id !== fid && !STATE.hiddenFiles.has(f.redpash_id));
+      const target = nextVisible?.redpash_id ?? "";
+      // Re-render before activating so the activate path sees the new
+      // tab strip. cleanerActivateTab("") routes to Overview.
+      _renderTabs(root);
+      window.cleanerActivateTab(target);
+    } else {
+      _renderTabs(root);
+    }
+  };
+
+  // "+" menu item — put a hidden file tab back. Close the menu first so
+  // the re-render doesn't leave a stale popover.
+  window.cleanerShowFileTab = (fid) => {
+    if (!fid) return;
+    STATE.hiddenFiles.delete(fid);
+    _persistHidden();
+    root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
+    _renderTabs(root);
+  };
+
+  // Toggle the "+" dropdown. Menu is position:fixed (so it escapes
+  // .rp-rtp-tabs' overflow-y:hidden clip), so we anchor it to the
+  // button's bounding rect at click time. Falls off the right edge?
+  // Shift left so it stays in the viewport.
+  window.cleanerToggleAddMenu = (btn) => {
+    const menu = btn.parentElement?.querySelector(".rp-rtp-tab-add-menu");
+    if (!menu) return;
+    const wasOpen = !menu.hidden;
+    root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
+    if (wasOpen) return;
+    const r = btn.getBoundingClientRect();
+    menu.style.top  = `${r.bottom + 4}px`;
+    menu.hidden = false;
+    // Now that the menu is in the flow, clamp its left edge so it
+    // doesn't spill off-viewport.
+    const w = menu.offsetWidth;
+    let left = r.left;
+    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+    if (left < 8) left = 8;
+    menu.style.left = `${left}px`;
+  };
+  // Outside-click dismisses the add-menu.
+  root.addEventListener("click", (e) => {
+    if (e.target.closest(".rp-rtp-tab-add-wrap")) return;
+    root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
+  });
+
+  window.cleanerActivateTab = async (fid) => {
+    if (!fid) {
+      // Overview — project-level view that REPLACES the table body
+      // with a per-file summary. The tools panel + toolbar stay
+      // visible but stop targeting an active file. The Rust /api
+      // didn't change for this; we paint from STATE.files which is
+      // already in memory.
+      root.querySelectorAll("#cleaner-tabs-list .rp-rtp-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.fileId === "");
+      });
+      try {
+        history.replaceState(null, "", `#/cleaner?project=${encodeURIComponent(STATE.project?.redpash_id ?? "")}`);
+      } catch {}
+      // Drop ALL file-specific state so the chrome that's still
+      // visible in overview mode (header title + undo/redo/save +
+      // Data Types + Applied + Encoding picker) doesn't keep painting
+      // the previously-open file. Without this, e.g. undo stays
+      // enabled and the Tools-panel Data Types list still shows that
+      // file's columns — both confusing in a no-file-active context.
+      STATE.rid     = null;
+      STATE.summary = null;
+      STATE.columns = [];
+      STATE.steps   = [];
+      STATE.page    = 1;
+      _renderTitle(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderEncodingPicker(root);
+      _renderOverview(root);
+      return;
+    }
+    if (fid === STATE.rid) return;
+
+    // If the target was × -closed in the tab strip, opening it from
+    // elsewhere (e.g. Overview row click) is an explicit intent to view
+    // it — un-hide and re-render the strip so the tab pops back.
+    if (STATE.hiddenFiles?.has(fid)) {
+      STATE.hiddenFiles.delete(fid);
+      window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
+      _renderTabs(root);
+    }
+
+    // Optimistic UI: flip the .active class before the fetch lands so
+    // the click feels instant. Django uses the same approach.
+    root.querySelectorAll("#cleaner-tabs-list .rp-rtp-tab").forEach((t) => {
+      t.classList.toggle("active", t.dataset.fileId === fid);
+    });
+
+    // Coming from Overview (no active file rid before)? Swap panes —
+    // hide the OV, show the file table, drop the overview-active class.
+    // _renderOverview did the inverse on the way in.
+    const ov  = root.querySelector("#cleaner-overview");
+    const tbl = root.querySelector("#cleaner-table");
+    if (ov)  ov.hidden  = true;
+    if (tbl) tbl.hidden = false;
+    root.querySelector("#page-cleaner")?.classList.remove("overview-active");
+
+    // Update the URL hash WITHOUT firing hashchange so the router
+    // doesn't intercept and re-mount. replaceState (not pushState)
+    // because re-clicking a sibling tab shouldn't pollute the back
+    // stack with every step.
+    try {
+      history.replaceState(null, "", `#/cleaner?file=${encodeURIComponent(fid)}`);
+    } catch {}
+
+    // Fetch just the new file's detail. Project + files lineup didn't
+    // change, so we leave STATE.project / STATE.files alone.
+    let detail;
+    try {
+      detail = await api.get(`/files/${encodeURIComponent(fid)}`);
+    } catch (err) {
+      toast.error(`Couldn't open file: ${err.body?.error ?? err.message}`);
+      // Roll the active class back onto the previous tab.
+      root.querySelectorAll("#cleaner-tabs-list .rp-rtp-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.fileId === STATE.rid);
+      });
+      return;
+    }
+
+    STATE.rid     = fid;
+    STATE.summary = detail.summary;
+    STATE.columns = detail.columns ?? [];
+    STATE.steps   = detail.steps ?? [];
+    STATE.page    = 1;
+    STATE.sorts   = [];
+
+    // Re-paint just the slots that depend on the active file. Tabs
+    // already flipped above; project meta + status + cleanness aggregate
+    // are project-scope and don't move when switching files.
+    _renderTitle(root);
+    _renderHistoryButtons(root);
+    _renderAppliedList(root);
+      _renderDtypeList(root);
+    _renderEncodingPicker(root);
+    _renderOverallCleanness(root);  // cleanness uses summary as fallback when project agg is null
+    await _loadPage(root);
+  };
+
+  // Tools panel toggle — class flip for now; Phase 2 wires the modals.
+  window.toggleCleanerTools = () => {
+    const panel = root.querySelector("#cleaner-tools-panel");
+    if (!panel) return;
+    panel.classList.toggle("open");
+  };
+
+  // Collapse / expand a tools-panel section. Ported from the demo's
+  // toggleToolSect — flips `.open` on both the header and the next
+  // sibling (the body). Library CSS does the rest: chevron rotates
+  // -90° when the header loses `.open`, body display flips between
+  // none and flex via `.rp-rtp-tool-sect-body.open`.
+  window.cleanerToggleToolSect = (header) => {
+    if (!header) return;
+    header.classList.toggle("open");
+    const body = header.nextElementSibling;
+    if (body && body.classList.contains("rp-rtp-tool-sect-body")) {
+      body.classList.toggle("open");
+    }
+  };
+
+  // ─── Overview redtable handlers (isolated from the file table) ────
+  // Everything below reads/writes the `OV` state object and the
+  // `#cleaner-overview` DOM ONLY. None of it touches STATE.selected or
+  // the `.rp-rt-panel--cleaner` mode classes — so operating on the
+  // overview list never leaks into a file tab's redtable.
+
+  // Mode toggle — mutually exclusive. The mode lives on OV.mode and is
+  // mirrored to a data-attr on `.ov-rt` that the CSS reads to show /
+  // hide the leading checkbox + trailing trash columns and the
+  // edit-mode hover cue. Re-renders the overview to repaint the
+  // toolbar's active states.
+  window.ovToggleMode = (mode) => {
+    OV.mode = OV.mode === mode ? null : mode;
+    // Leaving select-mode clears ticks so a stale selection can't
+    // carry into the next select-mode entry or a bulk delete.
+    if (OV.mode !== "select") OV.selected.clear();
+    _renderOverview(root);
+  };
+
+  // Client-side search — STATE.files is small, so no fetch. Debounced
+  // lightly so typing doesn't re-render on every keystroke.
+  let _ovSearchTimer = null;
+  window.ovSearch = (input) => {
+    clearTimeout(_ovSearchTimer);
+    const val = input.value ?? "";
+    _ovSearchTimer = setTimeout(() => {
+      OV.q = val;
+      _renderOverview(root);
+      // Restore focus + caret — _renderOverview rebuilt the input.
+      const fresh = root.querySelector(".ov-rt-search input");
+      if (fresh) { fresh.focus(); fresh.setSelectionRange(val.length, val.length); }
+    }, 180);
+  };
+
+  window.ovRowSelect = (chk) => {
+    const rid = chk.dataset.rid;
+    if (chk.checked) OV.selected.add(rid);
+    else             OV.selected.delete(rid);
+    chk.closest("tr")?.classList.toggle("rp-rt-row-sel", chk.checked);
+    _renderOvSelectionChip(root);
+  };
+
+  window.ovSelectAll = (on) => {
+    OV.selected.clear();
+    root.querySelectorAll(".ov-rt-table tbody .ov-row-chk").forEach((cb) => {
+      cb.checked = on;
+      cb.closest("tr")?.classList.toggle("rp-rt-row-sel", on);
+      if (on) OV.selected.add(cb.dataset.rid);
+    });
+    _renderOvSelectionChip(root);
+  };
+
+  window.ovClearSelection = () => {
+    OV.selected.clear();
+    root.querySelectorAll(".ov-rt-table tbody .ov-row-chk").forEach((cb) => {
+      cb.checked = false;
+      cb.closest("tr")?.classList.remove("rp-rt-row-sel");
+    });
+    const head = root.querySelector("#ov-sel-all");
+    if (head) { head.checked = false; head.indeterminate = false; }
+    _renderOvSelectionChip(root);
+  };
+
+  // Delete one file. After the DELETE lands we drop it from STATE.files,
+  // the tab strip, and OV.selected, then re-render both the overview
+  // and the tabs. If the deleted file happened to be the active one,
+  // STATE.rid is repointed at the first survivor (or null) so a later
+  // tab click doesn't 404.
+  const _afterFileDeleted = (rid) => {
+    STATE.files = (STATE.files ?? []).filter((f) => f.redpash_id !== rid);
+    OV.selected.delete(rid);
+    if (STATE.rid === rid) {
+      STATE.rid     = STATE.files[0]?.redpash_id ?? null;
+      STATE.summary = null;
+    }
+    _renderTabs(root);
+    _renderHeaderMeta(root);
+    _renderOverview(root);
+  };
+
+  window.ovRowDelete = async (rid) => {
+    const f = (STATE.files ?? []).find((x) => x.redpash_id === rid);
+    const label = f?.display_name ?? f?.filename ?? rid;
+    if (!confirm(`Delete "${label}"? This removes its cleaning history and any reports built from it.`)) return;
+    try {
+      await api.delete(`/files/${encodeURIComponent(rid)}`);
+      _afterFileDeleted(rid);
+      toast.success(`Deleted ${label}`);
+    } catch (err) {
+      toast.error(`Delete failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  window.ovBulkDelete = async () => {
+    const ids = [...OV.selected];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} file${ids.length !== 1 ? "s" : ""}? This removes their cleaning history and any reports built from them.`)) return;
+    // Sequential — keeps the error story simple and the file count is
+    // small. A failure stops the run and reports how far we got.
+    let done = 0;
+    for (const rid of ids) {
+      try {
+        await api.delete(`/files/${encodeURIComponent(rid)}`);
+        STATE.files = (STATE.files ?? []).filter((f) => f.redpash_id !== rid);
+        OV.selected.delete(rid);
+        if (STATE.rid === rid) { STATE.rid = null; STATE.summary = null; }
+        done++;
+      } catch (err) {
+        _renderTabs(root); _renderHeaderMeta(root); _renderOverview(root);
+        toast.error(`Stopped after ${done} — ${err.body?.error ?? err.message}`);
+        return;
+      }
+    }
+    if (STATE.rid == null) STATE.rid = STATE.files[0]?.redpash_id ?? null;
+    _renderTabs(root); _renderHeaderMeta(root); _renderOverview(root);
+    toast.success(`Deleted ${done} file${done !== 1 ? "s" : ""}`);
+  };
+
+  // Inline name edit — only fires in edit mode. Swaps the cell text
+  // for an input; on commit PATCHes display_name. The icon prefix is
+  // re-added on re-render.
+  window.ovCellEdit = (td) => {
+    if (OV.mode !== "edit") return;
+    if (td.querySelector("input")) return;
+    const rid = td.dataset.rid;
+    const f   = (STATE.files ?? []).find((x) => x.redpash_id === rid);
+    if (!f) return;
+    const oldVal = f.display_name ?? f.filename ?? "";
+    const inp = document.createElement("input");
+    inp.className = "rp-rt-cell-input";
+    inp.value = oldVal;
+    inp.autocomplete = "off";
+    inp.spellcheck = false;
+    td.innerHTML = "";
+    td.appendChild(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const commit = async () => {
+      if (done) return;
+      done = true;
+      const newVal = inp.value.trim();
+      if (!newVal || newVal === oldVal) { _renderOverview(root); return; }
+      try {
+        const updated = await api.patch(`/files/${encodeURIComponent(rid)}`, { display_name: newVal });
+        const idx = STATE.files.findIndex((x) => x.redpash_id === rid);
+        if (idx >= 0) STATE.files[idx] = updated;
+        _renderTabs(root);
+        _renderOverview(root);
+        toast.success(`Renamed to ${updated.display_name ?? updated.filename}`);
+      } catch (err) {
+        _renderOverview(root);
+        toast.error(`Rename failed: ${err.body?.error ?? err.message}`);
+      }
+    };
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter")  { e.preventDefault(); inp.blur(); }
+      if (e.key === "Escape") { done = true; _renderOverview(root); }
+    });
+  };
+
+  // Score files — compute (or recompute) the cleanness score for every
+  // file in the project. New uploads get a score automatically; this
+  // backfills legacy files that predate scoring and refreshes any that
+  // drifted. Sequential POSTs keep the error story simple; the file
+  // count per project is small.
+  // Overview row click → switch the active file tab in-place. Disabled
+  // in select/delete/edit modes (those own the click affordance) and
+  // when the click bubbled from an interactive child (checkbox, button,
+  // input). The leading select / trailing delete <td>s also
+  // stop-propagation in the markup as a belt-and-braces guard.
+  window._ovRowClick = (e, rid) => {
+    if (!rid) return;
+    if (OV.mode === "select" || OV.mode === "delete" || OV.mode === "edit") return;
+    if (e.target.closest("input, button, a, select, .rp-rt-row-del")) return;
+    window.cleanerActivateTab(rid);
+  };
+
+  window.ovScoreFiles = async () => {
+    const files = STATE.files ?? [];
+    if (!files.length) { toast.info("No files to score."); return; }
+    const btn = root.querySelector("#ov-score-btn");
+    if (btn) { btn.disabled = true; btn.classList.add("is-spinning"); }
+    let done = 0;
+    for (const f of files) {
+      try {
+        const summary = await api.post(`/files/${encodeURIComponent(f.redpash_id)}/cleanness`, {});
+        const idx = STATE.files.findIndex((x) => x.redpash_id === f.redpash_id);
+        if (idx >= 0) STATE.files[idx] = summary;
+        done++;
+      } catch (err) {
+        if (btn) { btn.disabled = false; btn.classList.remove("is-spinning"); }
+        _renderTabs(root); _renderOverview(root);
+        toast.error(`Stopped after ${done} — ${err.body?.error ?? err.message}`);
+        return;
+      }
+    }
+    _renderTabs(root);       // tab dots read cleanness_pct
+    _renderOverview(root);
+    toast.success(`Scored ${done} file${done !== 1 ? "s" : ""}`);
+  };
+
+  // Column-visibility picker. Toggling a checkbox flips the key in
+  // OV.hiddenCols, persists to localStorage, and re-renders. The picker
+  // dropdown open/close is a pure class flip.
+  window.ovToggleColumn = (key, checked) => {
+    if (checked) OV.hiddenCols.delete(key);
+    else         OV.hiddenCols.add(key);
+    _ovSaveHiddenCols();
+    _renderOverview(root);
+    // Re-open the dropdown — _renderOverview rebuilt it closed, but the
+    // user is mid-adjustment and likely wants to toggle more.
+    const dd = root.querySelector(".ov-colpick-dd");
+    if (dd) dd.hidden = false;
+  };
+  window.ovToggleColPicker = (btn) => {
+    const dd = btn.parentElement?.querySelector(".ov-colpick-dd");
+    if (dd) dd.hidden = !dd.hidden;
+  };
+  // Close the column picker on any click outside it. Guarded by a
+  // window flag so re-mounting the cleaner doesn't stack listeners.
+  if (!window._ovColPickWired) {
+    window._ovColPickWired = true;
+    document.addEventListener("click", (e) => {
+      if (e.target.closest(".ov-colpick")) return;
+      document.querySelectorAll(".ov-colpick-dd:not([hidden])")
+        .forEach((dd) => { dd.hidden = true; });
+    });
+  }
+
+  // Refresh — re-fetch the project's file list from the server.
+  window.ovRefresh = async () => {
+    const pid = STATE.project?.redpash_id;
+    if (!pid) return;
+    try {
+      const res = await api.get(`/projects/${encodeURIComponent(pid)}/files`);
+      STATE.files = res.items ?? [];
+      _renderTabs(root);
+      _renderHeaderMeta(root);
+      _renderOverview(root);
+    } catch (err) {
+      toast.error(`Refresh failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+  // ─── Tool open / apply ─────────────────────────────────────────
+  // Single open / apply pair covers every modal. Per-tool population
+  // (column selects, checklists, sub-line text, special previews) sits
+  // in _populateToolModal; per-tool Apply param-reading sits in the
+  // big switch inside cleanerApplyTool. Both keyed off the same tool
+  // id used in the partial markup (tool-rename, tool-snake, …).
+  // Tool modals open ANCHORED to the button the user clicked rather than
+  // centered. Mirrors the Django pattern: the table stays visible (overlay
+  // is transparent — see styles/pages/cleaner.css `#page-cleaner .modal-overlay`)
+  // and the modal floats next to its trigger so the user keeps spatial
+  // context. The button reference comes through the inline onclick as
+  // `cleanerOpenTool('tool-…', this)`.
+  window.cleanerOpenTool = (toolId, btn) => {
+    if (!STATE.summary) { toast.error("Open a file first."); return; }
+    _populateToolModal(toolId);
+    window.openModal(toolId);
+    _positionToolModal(toolId, btn);
+  };
+
+  // tool-invalid — scope dropdown (all-columns vs single-column) shows
+  // / hides the column picker. Mode dropdown (null vs custom) shows /
+  // hides the custom-value input. Both live on the modal as `hidden`
+  // siblings to keep the layout stable without animating.
+  window.cleanerToolInvalidScope = (sel) => {
+    const modal = sel.closest(".modal-overlay");
+    const field = modal?.querySelector("[data-tool-invalid-col-field]");
+    if (field) field.hidden = sel.value !== "one";
+  };
+  window.cleanerToolInvalidMode = (sel) => {
+    const modal = sel.closest(".modal-overlay");
+    const field = modal?.querySelector("[data-tool-invalid-value-field]");
+    if (field) field.hidden = sel.value !== "custom";
+  };
+  // "All" / "None" header buttons on the sentinel checklist.
+  window.cleanerToolInvalidSelectAll = (on) => {
+    const modal = document.getElementById("modal-tool-invalid");
+    modal?.querySelectorAll("[data-tool-sentinel]").forEach((c) => { c.checked = !!on; });
+  };
+
+  // Add a user-typed sentinel to the modal's ad-hoc set + re-scan so
+  // the new value (if it's actually in the file) appears in the
+  // checklist with its real count and column hits. On Apply, any
+  // ad-hoc value that's still ticked is persisted to
+  // prefs.learned_sentinels so future scans pick it up automatically.
+  window.cleanerToolInvalidAddExtra = async (inputEl) => {
+    if (!inputEl) return;
+    const raw = String(inputEl.value || "");
+    const canon = raw.trim().toLowerCase();
+    if (!canon) return;
+    const modal = inputEl.closest(".modal-overlay");
+    if (!modal) return;
+    inputEl.value = "";
+    if (_toolInvalidAdhoc.has(canon) || STATE.learnedSentinels?.has(canon)) {
+      // Already in the scan; no-op the re-scan but flash the existing
+      // row so the user sees their value is being looked at.
+      const existing = modal.querySelector(`[data-tool-sentinel="${CSS.escape(raw.trim())}"]`);
+      if (existing) {
+        existing.checked = true;
+        const lbl = existing.closest("label");
+        if (lbl) { lbl.style.transition = "background .2s"; lbl.style.background = "color-mix(in srgb,var(--accent) 12%,transparent)"; setTimeout(() => { lbl.style.background = ""; }, 600); }
+      }
+      return;
+    }
+    _toolInvalidAdhoc.add(canon);
+    await _refreshSentinelList(modal, { preserve: true });
+    // If the re-scan didn't surface the value, the canonical key
+    // wasn't in the file — drop it from the ad-hoc set so the next
+    // scan doesn't keep paying for it, and tell the user.
+    const surfaced = modal.querySelector(`[data-tool-sentinel]`)
+      && [...modal.querySelectorAll("[data-tool-sentinel]")]
+            .some((c) => c.dataset.toolSentinel.trim().toLowerCase() === canon);
+    if (!surfaced) {
+      _toolInvalidAdhoc.delete(canon);
+      toast.info(`No cells matched "${raw.trim()}" in this file.`);
+    }
+  };
+
+  // Direct cast from the Data Types panel — no modal, just `cast` with
+  // the suggested dtype. Posted to /steps; the response refresh mirrors
+  // cleanerApplyTool's path. A cast on a dirty column may null some
+  // cells (Polars' cast is non-strict on string sources, except date
+  // which goes through parse_date_flex) — that surfaces the dirt to
+  // the user, who can then apply remove_text / replace_text first.
+  // POST the cast step + refresh chrome. Used by both the no-prompt
+  // path (zero-null cast) and the modal's "Apply cast" button.
+  const _applyCastStep = async (column, dtype) => {
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "cast", params: { column, dtype } },
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderTitle(root);
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+      toast.success(`cast · ${column} → ${dtype}`);
+    } catch (err) {
+      toast.error(`Cast failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  window.cleanerCastColumn = async (column, dtype) => {
+    if (!STATE.summary || !column || !dtype) return;
+    // Dry-run first — count rows that would silently become null (e.g.
+    // casting a date column with one `"2023"` cell). When the count is
+    // zero, apply silently. When non-zero, open the cast-confirm
+    // modal — populated with the column + dtype + sample bad values
+    // — so the user has to confirm before data goes away.
+    let preview;
+    try {
+      preview = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/cast-preview`,
+        { column, dtype },
+      );
+    } catch (err) {
+      toast.error(`Couldn't preview cast: ${err.body?.error ?? err.message}`);
+      return;
+    }
+    if (!preview || (preview.would_null ?? 0) === 0) {
+      await _applyCastStep(column, dtype);
+      return;
+    }
+    // Populate + open the cast-confirm modal.
+    const titleEl   = root.querySelector("#cast-confirm-title");
+    const subEl     = root.querySelector("#cast-confirm-sub");
+    const samplesEl = root.querySelector("#cast-confirm-samples");
+    const applyBtn  = root.querySelector("#cast-confirm-apply");
+    if (titleEl)   titleEl.textContent = `Confirm cast — ${preview.would_null} value${preview.would_null !== 1 ? "s" : ""} will become null`;
+    if (subEl)     subEl.textContent   = `Casting "${column}" to ${dtype} sets ${preview.would_null} of ${preview.total} cell${preview.total !== 1 ? "s" : ""} to null.`;
+    if (samplesEl) {
+      const lines = (preview.samples ?? []).map((s) => `  • ${s}`).join("\n");
+      const more  = preview.would_null > (preview.samples?.length ?? 0)
+        ? `\n  …and ${preview.would_null - preview.samples.length} more` : "";
+      samplesEl.textContent = `${lines}${more}` || "(no samples)";
+    }
+    if (applyBtn) {
+      // Replace the onclick each time so a stale (column, dtype) pair
+      // from a previous open can't fire when the user clicks Apply.
+      applyBtn.onclick = async () => {
+        window.closeModal("cast-confirm");
+        await _applyCastStep(column, dtype);
+      };
+    }
+    window.openModal("cast-confirm");
+  };
+
+  // Dismiss a cast suggestion — user is saying "this column is text on
+  // purpose, stop pestering me". Per-file localStorage; the dismiss
+  // survives reloads but doesn't bleed to other files (CODE_POSTAL in
+  // file A doesn't dismiss CODE_POSTAL in file B).
+  window.cleanerSkipCast = (column) => {
+    if (!STATE.rid || !column) return;
+    const set = _dtypeSkipLoad(STATE.rid);
+    set.add(column);
+    _dtypeSkipSave(STATE.rid, set);
+    _renderDtypeList(root);
+  };
+  // Inverse — put a dismissed column back in the suggestion stream.
+  window.cleanerRevertSkipCast = (column) => {
+    if (!STATE.rid || !column) return;
+    const set = _dtypeSkipLoad(STATE.rid);
+    set.delete(column);
+    _dtypeSkipSave(STATE.rid, set);
+    _renderDtypeList(root);
+  };
+
+  window.cleanerApplyTool = async (toolId) => {
+    if (!STATE.summary) return;
+    const payload = _readToolPayload(toolId);
+    if (!payload) return;   // validator already toasted
+
+    // Close the modal optimistically. If the apply fails we'll surface
+    // the error in a toast; the user keeps the form values via the DOM
+    // since we haven't reset them.
+    window.closeModal(toolId);
+
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        payload,
+      );
+      // Backend returns the new summary + columns + steps after replay.
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      // Keep the tab strip's view of the active file in sync — the dot
+      // color reads off cleanness_pct, and a step often nudges that.
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderTitle(root);
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+
+      const op = res.last_op ?? {};
+      const delta = op.rows_after != null && op.rows_before != null
+        ? (op.rows_after - op.rows_before) : null;
+      const note = delta != null && delta !== 0
+        ? `${delta > 0 ? "+" : ""}${delta.toLocaleString()} rows`
+        : (op.cells_changed != null ? `${op.cells_changed.toLocaleString()} cells` : "applied");
+      toast.success(`${payload.kind} · ${note}`);
+    } catch (err) {
+      toast.error(`Apply failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Dedup mode change — re-render the duplicate count + samples for the
+  // newly chosen strategy. Phase 2.1 fully populates this; for now it
+  // just refreshes the dedup detection against the new key.
+  window.cleanerDedupModeChanged = () => _refreshDedupPreview(root);
+
+  // Unwrap-CSV — the banner appears when _detectWrappedCsv() flags
+  // the active file. Opening the modal paints a Before/After preview
+  // (raw single-column text + the parsed re-split columns) so the
+  // user can sanity-check before clicking Apply. The Apply POSTs a
+  // single `unwrap_csv` step; Rust handles the re-parse.
+  window.openUnwrapCsvModal = () => {
+    if (!STATE.summary) return;
+    const m = document.getElementById("modal-unwrap-csv");
+    if (!m) return;
+    // Subtitle — filename · row count.
+    const sub = m.querySelector("#unwrap-csv-sub");
+    if (sub) sub.textContent = `${STATE.summary.display_name ?? STATE.summary.filename ?? "—"} · ${(STATE.summary.row_count ?? 0).toLocaleString()} rows`;
+
+    // Before: dump the raw single-column preview lines. We use the
+    // already-loaded page data so this is a same-frame operation
+    // (no extra fetch).
+    const before = m.querySelector("#unwrap-csv-before");
+    const rows   = STATE.pageData?.rows ?? [];
+    if (before) {
+      const header = STATE.columns[0]?.name ?? "";
+      const lines  = [header, ...rows.slice(0, 8).map((r) => r[0] ?? "")];
+      before.textContent = lines.join("\n");
+    }
+
+    // After: re-split each preview row on common separators (`,` then
+    // `;` then `\t`) and render as a small table. The Rust side will
+    // do the real parse — this is just a hint so the user can see the
+    // shape they'll get.
+    const afterTbl = m.querySelector("#unwrap-csv-after-table");
+    if (afterTbl) {
+      const sample = rows.slice(0, 5).map((r) => r[0] ?? "");
+      const sep    = _guessSeparator(sample);
+      const parsed = sample.map((line) => _splitCsvLine(line, sep));
+      const ncols  = Math.max(0, ...parsed.map((p) => p.length));
+      const hdrLine = STATE.columns[0]?.name ?? "";
+      const hdrCells = _splitCsvLine(hdrLine, sep).slice(0, ncols);
+      afterTbl.innerHTML = `
+        <thead><tr>${
+          Array.from({ length: ncols }, (_, i) =>
+            `<th style="padding:0.25rem 0.4rem;text-align:left;color:var(--muted);font-weight:600">${_escHtml(hdrCells[i] ?? `col_${i+1}`)}</th>`
+          ).join("")
+        }</tr></thead>
+        <tbody>${parsed.map((p) =>
+          `<tr>${Array.from({ length: ncols }, (_, i) =>
+            `<td style="padding:0.2rem 0.4rem">${_escHtml(p[i] ?? "")}</td>`
+          ).join("")}</tr>`
+        ).join("")}</tbody>`;
+    }
+    window.openModal("unwrap-csv");
+  };
+
+  window.applyUnwrapCsv = async () => {
+    if (!STATE.rid) return;
+    window.closeModal("unwrap-csv");
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "unwrap_csv", params: {} },
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderTitle(root);
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+      toast.success(`Unwrapped — ${STATE.columns.length} columns detected`);
+    } catch (err) {
+      toast.error(`Unwrap failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Encoding override — POST /:rid/encoding re-parses the stored bytes
+  // through TextDecoder(value) and refreshes the file.
+  //
+  // The backend requires a specific codec label (encoding_rs::for_label);
+  // the dropdown's "Auto-detect" option is a no-op for that endpoint
+  // because detection only runs on upload. If the user lands on the
+  // wrong codec and sees mojibake (Chinese-looking glyphs in the
+  // table — that's how UTF-16 / Latin-1 bytes look when decoded the
+  // wrong way) they pick the originally-detected codec from the
+  // dropdown again to restore the right rendering.
+  window.setCleanerEncoding = async (val) => {
+    if (!STATE.rid) return;
+    if (!val) {
+      // Empty value would 400 server-side; explain instead.
+      toast.info("Pick a specific codec — auto-detect runs only on upload.");
+      _renderEncodingPicker(root);  // bounce the select back to the active value
+      return;
+    }
+    try {
+      const env = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/encoding`,
+        { encoding: val },
+      );
+      STATE.summary = env.summary;
+      STATE.columns = env.columns ?? [];
+      STATE.steps   = env.steps   ?? [];
+      _renderTitle(root);
+      _renderHeaderMeta(root);
+      _renderEncodingPicker(root);
+      await _loadPage(root);
+      toast.success(`Encoding → ${val}. If accents look wrong, pick another codec.`);
+    } catch (err) {
+      toast.error(`Encoding failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // ── Filter panel ─────────────────────────────────────────────────
+  // Funnel toggle → slide the side panel in/out + flip the button
+  // active state. Predicates collected from the panel POST as a
+  // single `filter_rows` step.
+  window.rtToggleFilter = () => {
+    const panel = root.querySelector("#cleaner-filter-panel");
+    const btn   = root.querySelector(".rp-rt-toolbar .rp-rt-icon-btn"); // first one is the funnel
+    if (!panel) return;
+    STATE.filterOpen = !panel.classList.contains("open");
+    panel.classList.toggle("open", STATE.filterOpen);
+    if (btn) btn.classList.toggle("is-active", STATE.filterOpen);
+    if (STATE.filterOpen) _ensureFilterRow(root);
+  };
+
+  // Add an empty predicate row. Building a row is delegated to
+  // _appendFilterRow so the inline "+" button and the lazy "create
+  // first row on panel open" code path share the same shape.
+  window.cleanerAddFilterRow = () => {
+    _appendFilterRow(root);
+    _refreshFilterApplyState(root);
+  };
+  window.cleanerClearFilterDraft = (btn) => {
+    _rpAnimOnce(btn ?? root.querySelector(".rp-rt-icon-btn[onclick*='cleanerClearFilterDraft']"),
+                "rp-rt-anim-wipe");
+    const box = root.querySelector("#cleaner-filter-rows");
+    if (box) box.innerHTML = "";
+    _ensureFilterRow(root);
+    _refreshFilterApplyState(root);
+  };
+
+  // Save filter (floppy) — placeholder, mirrors objSaveFilter; just
+  // flashes the glow animation for now. Wires to a real named-filter
+  // store when that lands.
+  window.cleanerSaveFilter = (btn) => {
+    _rpAnimOnce(btn ?? root.querySelector(".rp-rt-icon-btn[onclick*='cleanerSaveFilter']"),
+                "rp-rt-anim-glow");
+  };
+
+  // AND/OR pill — flips .is-active on the clicked button; the value is
+  // read at apply time. Matches objSetCombo so the two filter panels
+  // share the same vocabulary.
+  window.cleanerSetCombo = (btn) => {
+    btn.parentElement?.querySelectorAll("button")
+       .forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+  };
+
+  // Apply — read all predicate rows into the {kind, params} payload,
+  // POST, then refresh the whole page like every other step. The Rust
+  // side validates op vocabulary and shape; bad payloads come back as
+  // a 400 with the error text in the body.
+  window.cleanerApplyFilter = async (btn) => {
+    _rpAnimOnce(btn ?? root.querySelector("#cleaner-filter-apply"), "rp-rt-anim-pulse");
+    if (!STATE.rid) return;
+    const box  = root.querySelector("#cleaner-filter-rows");
+    const rows = box ? [...box.querySelectorAll(".rp-rt-fb-row")] : [];
+    const comboBtn   = root.querySelector("#cleaner-fb-combo button.is-active");
+    const combinator = comboBtn ? comboBtn.dataset.combo : "and";
+    const predicates = [];
+    for (const r of rows) {
+      const column = r.querySelector("[data-fb-col]")?.value;
+      const op     = r.querySelector("[data-fb-op]")?.value;
+      if (!column || !op) continue;
+      const pred = { column, op };
+      // is_null/not_null have no value; in/not_in expect an array; the
+      // rest take a single string the Rust side parses to the right
+      // type (numeric / date / string).
+      if (op === "is_null" || op === "not_null") {
+        predicates.push(pred);
+        continue;
+      }
+      const raw = r.querySelector("[data-fb-val]")?.value ?? "";
+      if (op === "in" || op === "not_in") {
+        pred.value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!pred.value.length) continue;  // skip empty lists
+      } else if (op === "between") {
+        // Two comma-separated endpoints. Anything else gets dropped
+        // on the floor so a half-filled row doesn't 400 the whole apply.
+        const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (parts.length !== 2) continue;
+        pred.value = parts.map((s) => Number(s));
+        if (pred.value.some(Number.isNaN)) continue;
+      } else if (["gt", "gte", "lt", "lte"].includes(op)) {
+        const n = Number(raw);
+        if (Number.isNaN(n) || raw === "") continue;
+        pred.value = n;
+      } else {
+        if (raw === "") continue;
+        pred.value = raw;
+      }
+      predicates.push(pred);
+    }
+    if (!predicates.length) {
+      toast.error("Add at least one complete predicate.");
+      return;
+    }
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "filter_rows", params: { combinator, predicates } },
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+      const op = res.last_op ?? {};
+      const delta = op.rows_after != null && op.rows_before != null
+        ? (op.rows_after - op.rows_before) : null;
+      toast.success(`Filter applied · ${delta != null ? `${delta.toLocaleString()} rows` : "ok"}`);
+    } catch (err) {
+      toast.error(`Filter failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Toolbar search — debounced so we don't fire a /page request on
+  // every keystroke. The backend's PageQuery accepts `q` and runs the
+  // same case-insensitive substring match the rest of the redtables
+  // use, so this works without any new endpoint plumbing.
+  let _searchTimer = null;
+  window.rtSearch = (input) => {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(async () => {
+      STATE.q    = (input.value ?? "").trim();
+      STATE.page = 1;
+      await _loadPage(root);
+    }, 200);
+  };
+  // Three mutually-exclusive inline modes (edit / select / delete). Each
+  // flips a `rp-rt-mode-<mode>` class on the cleaner panel that the CSS
+  // reads to surface/hide the leading + trailing columns and the
+  // dblclick / hover affordances. Mirrors the demo's `toggleS2Mode`
+  // pattern, scoped to the cleaner panel rather than the home redtable.
+  window.rtToggleMode = (chk, _kind, mode) => {
+    const tbar = chk.closest(".rp-rt-toolbar");
+    // Only one mode active at a time — clear the other switches.
+    tbar?.querySelectorAll(".rp-rt-switch input[type=checkbox]").forEach((c) => {
+      if (c !== chk) c.checked = false;
+    });
+    const panel = root.querySelector(".rp-rt-panel--cleaner");
+    if (!panel) return;
+    panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
+    if (chk.checked) panel.classList.add(`rp-rt-mode-${mode}`);
+    // Switching away from select-mode clears the tick state so the next
+    // re-entry starts clean (and stale ticks don't leak into bulk-delete).
+    if (mode !== "select" || !chk.checked) {
+      STATE.selected.clear();
+      _renderSelectionChip(root);
+    }
+  };
+
+  // ── Per-row select / delete + bulk delete ─────────────────────────
+  // Page-relative indices flow through the handlers; we map to the
+  // absolute row index (the one the backend stores) only at /steps
+  // POST time, via (page-1)*pageSize + ri.
+  const _absoluteIndex = (ri) => (STATE.page - 1) * STATE.pageSize + Number(ri);
+
+  window.cleanerRowSelect = (chk) => {
+    const ri = Number(chk.dataset.ri);
+    if (chk.checked) STATE.selected.add(ri);
+    else             STATE.selected.delete(ri);
+    chk.closest("tr")?.classList.toggle("rp-rt-row-sel", chk.checked);
+    _renderSelectionChip(root);
+  };
+
+  window.cleanerSelectAll = (on) => {
+    STATE.selected.clear();
+    root.querySelectorAll("tbody .rp-rt-row-chk").forEach((cb) => {
+      cb.checked = on;
+      const tr = cb.closest("tr");
+      tr?.classList.toggle("rp-rt-row-sel", on);
+      if (on) STATE.selected.add(Number(cb.dataset.ri));
+    });
+    _renderSelectionChip(root);
+  };
+
+  window.cleanerClearSelection = () => {
+    window.cleanerSelectAll(false);
+    const head = root.querySelector("#cleaner-sel-all");
+    if (head) head.checked = false;
+  };
+
+  // Single-row delete. Confirms via a toast-shaped prompt (browser
+  // confirm is acceptable here — the action is destructive and the page
+  // doesn't have a richer modal helper yet). Issues drop_rows with one
+  // absolute index; the step is undoable like any other.
+  window.cleanerRowDelete = async (ri) => {
+    if (!STATE.rid) return;
+    if (!confirm("Drop this row?")) return;
+    await _applyDropRows([_absoluteIndex(ri)], "row dropped");
+  };
+
+  window.cleanerBulkDelete = async () => {
+    if (!STATE.rid || !STATE.selected.size) return;
+    const n = STATE.selected.size;
+    if (!confirm(`Drop ${n} selected row${n !== 1 ? "s" : ""}?`)) return;
+    const indices = [...STATE.selected].map(_absoluteIndex);
+    await _applyDropRows(indices, `${n} row${n !== 1 ? "s" : ""} dropped`);
+  };
+
+  async function _applyDropRows(indices, label) {
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "drop_rows", params: { indices } },
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+      toast.success(label);
+    } catch (err) {
+      toast.error(`Drop failed: ${err.body?.error ?? err.message}`);
+    }
+  }
+
+  // ── Column drag-to-reorder ────────────────────────────────────────
+  // HTML5 drag-and-drop on the data TH elements. We stash the source
+  // column name on the dataTransfer, paint a drop cue on hover, and
+  // when the user releases over another TH we POST `filter_columns`
+  // with the new full order. The Rust side's `filter_columns` arm
+  // re-orders via Polars `select(refs)` which preserves the list
+  // order — so reorder is just the existing kind with the existing
+  // columns set, in a different order.
+  let _dragCol = null;
+  window.cleanerColDragStart = (e) => {
+    const th = e.currentTarget;
+    _dragCol = th?.dataset?.col || null;
+    if (_dragCol) {
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox refuses to fire dragover unless we set some data.
+      try { e.dataTransfer.setData("text/plain", _dragCol); } catch {}
+      th.classList.add("rp-rt-th-drag");
+    }
+  };
+  window.cleanerColDragOver = (e) => {
+    if (!_dragCol) return;
+    e.preventDefault();   // required to enable drop
+    e.dataTransfer.dropEffect = "move";
+    const th = e.currentTarget;
+    if (th && th.dataset.col !== _dragCol) th.classList.add("rp-rt-th-drop");
+  };
+  window.cleanerColDragLeave = (e) => {
+    e.currentTarget?.classList.remove("rp-rt-th-drop");
+  };
+  window.cleanerColDragEnd = () => {
+    root.querySelectorAll("thead th.rp-rt-th-drag, thead th.rp-rt-th-drop")
+      .forEach((t) => t.classList.remove("rp-rt-th-drag", "rp-rt-th-drop"));
+    _dragCol = null;
+  };
+  window.cleanerColDrop = async (e) => {
+    e.preventDefault();
+    const targetTh = e.currentTarget;
+    const target   = targetTh?.dataset?.col;
+    const source   = _dragCol;
+    window.cleanerColDragEnd();
+    if (!source || !target || source === target) return;
+    // Build the new column order: take the existing order, pull
+    // `source` out, then insert it BEFORE `target`. "Drop on a column"
+    // means "insert here" — matches Mac Finder / Excel column drag.
+    const names = STATE.columns.map((c) => c.name);
+    const from  = names.indexOf(source);
+    const to    = names.indexOf(target);
+    if (from < 0 || to < 0) return;
+    names.splice(from, 1);
+    const insertAt = names.indexOf(target);
+    names.splice(insertAt, 0, source);
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "filter_columns", params: { cols: names } },
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+      toast.success(`Moved ${source} before ${target}`);
+    } catch (err) {
+      toast.error(`Reorder failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Column-header click → mutate the sort chain.
+  //   • plain click  → replace chain with [{col, asc}], or flip dir
+  //                    when col is already the sole sort key.
+  //   • shift-click  → append at asc; if col already in the chain,
+  //                    flip its dir; alt+shift-click drops it.
+  // The chain is serialised as a `sorts` JSON query param on the next
+  // /page fetch (PageQuery prefers it over the legacy single-col
+  // sort/dir pair). The header is also `draggable` for column
+  // reorder — `dragend` fires instead of click after a real drag, so
+  // the two don't collide.
+  window.cleanerSortBy = (col, ev) => {
+    if (!col) return;
+    if (!Array.isArray(STATE.sorts)) STATE.sorts = [];
+    const shift = !!(ev && ev.shiftKey);
+    const alt   = !!(ev && ev.altKey);
+    const idx   = STATE.sorts.findIndex((k) => k.col === col);
+    if (shift) {
+      if (idx >= 0) {
+        if (alt) STATE.sorts.splice(idx, 1);
+        else     STATE.sorts[idx].dir = STATE.sorts[idx].dir === "asc" ? "desc" : "asc";
+      } else {
+        STATE.sorts.push({ col, dir: "asc" });
+      }
+    } else {
+      if (STATE.sorts.length === 1 && STATE.sorts[0].col === col) {
+        STATE.sorts[0].dir = STATE.sorts[0].dir === "asc" ? "desc" : "asc";
+      } else {
+        STATE.sorts = [{ col, dir: "asc" }];
+      }
+    }
+    STATE.page = 1;
+    _loadPage(root);
+  };
+
+  // Cell inline-edit — dblclick swaps a TD for an input. On commit the
+  // value is POSTed as a `replace_text` step scoped to that column,
+  // where `find` is the original cell value and `replacement` is the
+  // new value. Caveats:
+  //   • The backend has no per-cell PATCH endpoint, so every other cell
+  //     in that column with the SAME value will also flip. Acceptable
+  //     for sentinel cleanup ("???" → "") but surprising for unique
+  //     values. We surface this in the toast so the user knows.
+  //   • For a single-occurrence edit, undo + retry is the recovery
+  //     path — the step is undoable like any other.
+  window.cleanerCellEdit = (td) => {
+    const panel = root.querySelector(".rp-rt-panel--cleaner");
+    if (!panel?.classList.contains("rp-rt-mode-edit")) return;
+    if (td.querySelector("input")) return;
+    const col    = td.dataset.col;
+    const oldVal = td.textContent;
+    const inp = document.createElement("input");
+    inp.className = "rp-rt-cell-input";
+    inp.value     = oldVal;
+    inp.autocomplete = "off";
+    inp.spellcheck   = false;
+    td.innerHTML = "";
+    td.appendChild(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const restore = () => { td.textContent = oldVal; };
+    const commit = async () => {
+      if (done) return;
+      done = true;
+      const newVal = inp.value;
+      if (newVal === oldVal || !col) { restore(); return; }
+      td.textContent = newVal;
+      try {
+        const res = await api.post(
+          `/files/${encodeURIComponent(STATE.rid)}/steps`,
+          { kind: "replace_text", params: { column: col, find: oldVal, replacement: newVal } },
+        );
+        STATE.summary = res.summary;
+        STATE.columns = res.columns ?? [];
+        STATE.steps   = res.steps   ?? [];
+        const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+        if (idx >= 0) STATE.files[idx] = res.summary;
+        _renderHeaderMeta(root);
+        _renderOverallCleanness(root);
+        _renderHistoryButtons(root);
+        _renderAppliedList(root);
+      _renderDtypeList(root);
+        _renderTabs(root);
+        await _loadPage(root);
+        const cells = res.last_op?.cells_changed ?? 0;
+        toast.success(cells > 1
+          ? `Replaced ${cells.toLocaleString()} cells in ${col}`
+          : `Updated ${col}`);
+      } catch (err) {
+        restore();
+        toast.error(`Edit failed: ${err.body?.error ?? err.message}`);
+      }
+    };
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter")  { e.preventDefault(); inp.blur(); }
+      if (e.key === "Escape") { done = true; restore(); }
+      if (e.key === "Tab")    { e.preventDefault(); inp.blur(); }
+    });
+  };
+  window.rtRefresh = async (_kind, btn) => {
+    btn?.classList.add("is-spinning");
+    try { await _loadPage(root); }
+    finally { btn?.classList.remove("is-spinning"); }
+  };
+  window.rtToggleDd = (btn) => {
+    const dd = btn.nextElementSibling;
+    if (!dd) return;
+    document.querySelectorAll(".rp-rt-pill-dd.open").forEach((o) => o.classList.remove("open"));
+    dd.classList.toggle("open");
+  };
+  window.rtSetRows = async (item, _kind, n) => {
+    const dd = item.closest(".rp-rt-pill-dd");
+    dd?.querySelectorAll(".rp-rt-dd-item").forEach((e) => e.classList.remove("rp-rt-dd-selected"));
+    item.classList.add("rp-rt-dd-selected");
+    const lbl = root.querySelector("[data-rt-rows-label]");
+    if (lbl) lbl.textContent = n === "all" ? "All" : String(n);
+    STATE.pageSize = n === "all" ? 100000 : Number(n);
+    STATE.page     = 1;
+    dd?.classList.remove("open");
+    await _loadPage(root);
+  };
+}
+
+// Anchor a freshly-opened tool modal to the button that triggered it.
+// Mirrors Django's _cleanerPositionModal: prefer the LEFT of the button,
+// fall back to the RIGHT if it would clip off the viewport; clamp top so
+// the modal never spills below the bottom edge.
+//
+// Two waits: one rAF so the browser has laid out the modal (we need its
+// real offsetWidth/Height), and we re-apply position whenever the modal
+// resizes (drop-cols' checklist height jumps after _populateToolModal
+// fills it asynchronously on some browsers).
+function _positionToolModal(toolId, btn) {
+  const overlay = document.getElementById(`modal-${toolId}`);
+  const modal   = overlay?.querySelector(".modal");
+  if (!modal) return;
+  // No anchor (e.g. opening from the inspect→snake chain) → recenter
+  // by clearing the inline overrides; the library's flex centering
+  // takes over.
+  if (!btn) {
+    modal.style.position = "";
+    modal.style.left     = "";
+    modal.style.top      = "";
+    modal.style.margin   = "";
+    return;
+  }
+  const rect = btn.getBoundingClientRect();
+  const gap  = 12;
+  modal.style.position = "fixed";
+  modal.style.margin   = "0";
+  requestAnimationFrame(() => {
+    const vpW = window.innerWidth, vpH = window.innerHeight;
+    const mw  = modal.offsetWidth  || 400;
+    const mh  = modal.offsetHeight || 300;
+    let left = rect.left - mw - gap;
+    if (left < gap) left = rect.right + gap;
+    left = Math.max(gap, Math.min(left, vpW - mw - gap));
+    let top = rect.top;
+    if (top + mh > vpH - gap) top = Math.max(gap, vpH - mh - gap);
+    modal.style.left = `${left}px`;
+    modal.style.top  = `${top}px`;
+  });
+}
+
+// ── Tool modal: open-time population ─────────────────────────────────
+// Fills the shared form-binding slots:
+//   [data-tool-cols]       — column <select>
+//   [data-tool-checklist]  — column checkbox grid
+//   [data-tool-sub]        — subtitle ("filename · N rows")
+// Per-tool tweaks (preview tables, dedup mode select) happen after.
+function _populateToolModal(toolId) {
+  const modal = document.getElementById(`modal-${toolId}`);
+  if (!modal) return;
+
+  const subText = `${STATE.summary?.display_name ?? STATE.summary?.filename ?? "—"} · ${(STATE.summary?.row_count ?? 0).toLocaleString()} rows`;
+  modal.querySelectorAll("[data-tool-sub]").forEach((el) => { el.textContent = subText; });
+
+  // Column <select>s. Some modals (join columns) carry two; each gets
+  // the same option list — Column A defaults to first, Column B to
+  // second if available.
+  const cols = STATE.columns ?? [];
+  modal.querySelectorAll("select[data-tool-cols]").forEach((sel, idx) => {
+    sel.innerHTML = cols.map((c, i) =>
+      `<option value="${_escAttr(c.name)}">${_escHtml(c.name)}${c.dtype ? ` · ${_escHtml(c.dtype)}` : ""}</option>`
+    ).join("");
+    if (idx === 1 && cols.length > 1) sel.selectedIndex = 1;
+  });
+
+  // Checklist (drop-columns / filter-columns / drop-empty-rows).
+  modal.querySelectorAll("[data-tool-checklist]").forEach((box) => {
+    box.innerHTML = cols.map((c) => `
+      <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.375rem;border-radius:0.25rem;cursor:pointer">
+        <input type="checkbox" data-tool-col="${_escAttr(c.name)}" />
+        <span style="font-size:0.75rem">${_escHtml(c.name)}</span>
+        ${c.dtype ? `<small style="color:var(--muted);font-size:0.625rem;margin-left:auto">${_escHtml(c.dtype)}</small>` : ""}
+      </label>`).join("");
+  });
+
+  // tool-snake preview — show before/after of every column name.
+  if (toolId === "tool-snake") {
+    const preview = modal.querySelector("[data-tool-snake-preview]");
+    if (preview) {
+      preview.innerHTML = cols.map((c) => {
+        const after = c.name.toLowerCase()
+          .replace(/[\s\-.]+/g, "_").replace(/[^a-z0-9_]/g, "")
+          .replace(/_+/g, "_").replace(/^_|_$/g, "");
+        const changed = after !== c.name;
+        return `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:0.625rem;padding:0.125rem 0">
+          <span style="color:${changed ? "var(--muted)" : "var(--text)"}">${_escHtml(c.name)}</span>
+          <span style="color:${changed ? "var(--green)" : "var(--muted)"}">${_escHtml(after)}</span>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  // tool-dedup — populate mode <select> + refresh preview.
+  if (toolId === "tool-dedup") {
+    const sel = modal.querySelector("[data-tool-dedup-mode]");
+    if (sel) {
+      // Full-row mode + one entry per column. The user can dedup on
+      // either the whole record or a single key column.
+      sel.innerHTML = `<option value="">Full-row equality</option>` +
+        cols.map((c) => `<option value="${_escAttr(c.name)}">${_escHtml(c.name)} only</option>`).join("");
+    }
+    _refreshDedupPreview(document);
+  }
+
+  // tool-invalid — reset scope / mode toggles to their hidden defaults,
+  // clear the ad-hoc additions from the previous open, and kick off
+  // the sentinel scan (with the user's learned set merged in as
+  // extras). The checklist paints from the response.
+  if (toolId === "tool-invalid") {
+    const scopeSel = modal.querySelector("[data-tool-invalid-scope]");
+    const colField = modal.querySelector("[data-tool-invalid-col-field]");
+    const modeSel  = modal.querySelector("[data-tool-invalid-mode]");
+    const valField = modal.querySelector("[data-tool-invalid-value-field]");
+    if (scopeSel) scopeSel.value = "all";
+    if (colField) colField.hidden = true;
+    if (modeSel)  modeSel.value = "null";
+    if (valField) valField.hidden = true;
+    const valInp = modal.querySelector("[data-tool-value]");
+    if (valInp) valInp.value = "";
+    const extraInp = modal.querySelector("[data-tool-invalid-extra]");
+    if (extraInp) extraInp.value = "";
+    _toolInvalidAdhoc = new Set();
+    _refreshSentinelList(modal);
+  }
+
+  // tool-inspect — read-only column stats rendered into [data-tool-inspect-body].
+  // Shows dtype + null % + unique % + sample value per column. The
+  // numbers come straight from the file's ColumnMeta (populated by
+  // data::dtype::summarize on upload / step apply).
+  if (toolId === "tool-inspect") {
+    const box = modal.querySelector("[data-tool-inspect-body]");
+    if (box) {
+      box.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:0.6875rem">
+          <thead><tr style="background:var(--over0)">
+            <th style="padding:0.375rem 0.5rem;text-align:left;color:var(--muted)">#</th>
+            <th style="padding:0.375rem 0.5rem;text-align:left;color:var(--text)">Column</th>
+            <th style="padding:0.375rem 0.5rem;text-align:left;color:var(--text)">Type</th>
+            <th style="padding:0.375rem 0.5rem;text-align:right;color:var(--text)">Null</th>
+            <th style="padding:0.375rem 0.5rem;text-align:right;color:var(--text)">Unique</th>
+            <th style="padding:0.375rem 0.5rem;text-align:left;color:var(--text)">Sample</th>
+          </tr></thead>
+          <tbody>${cols.map((c, i) => {
+            const np = c.null_pct;
+            const up = c.unique_pct;
+            const nullCol   = np == null ? "var(--muted)" : np >= 20 ? "var(--red)" : np >= 5 ? "var(--yellow)" : "var(--green)";
+            const uniqCol   = up == null ? "var(--muted)" : "var(--text)";
+            const sampleVal = c.sample == null ? "<span style=\"color:var(--muted)\">∅</span>" : _escHtml(String(c.sample).slice(0, 60));
+            return `<tr>
+              <td style="padding:0.25rem 0.5rem;color:var(--muted)">${i + 1}</td>
+              <td style="padding:0.25rem 0.5rem;color:var(--text)">${_escHtml(c.name)}</td>
+              <td style="padding:0.25rem 0.5rem;color:var(--sub)">${_escHtml(c.dtype ?? "")}</td>
+              <td style="padding:0.25rem 0.5rem;text-align:right;color:${nullCol}">${np != null ? `${np.toFixed(1)}%` : "—"}</td>
+              <td style="padding:0.25rem 0.5rem;text-align:right;color:${uniqCol}">${up != null ? `${up.toFixed(1)}%` : "—"}</td>
+              <td style="padding:0.25rem 0.5rem;color:var(--sub);max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sampleVal}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+    }
+  }
+}
+
+// Per-modal-session set of ad-hoc sentinels the user typed in the
+// "Add a custom value" input. Reset every time the modal is opened
+// (see _populateToolModal for "tool-invalid"). These are merged with
+// STATE.learnedSentinels when calling /sentinels?extra=…, and on Apply
+// any of them that survived (still checked) flow into the persisted
+// learned set via rpSavePref.
+let _toolInvalidAdhoc = new Set();
+
+// Build the union of learned + ad-hoc canonical sentinels that goes
+// into the /sentinels?extra= query. We dedupe in canonical form so a
+// user who learned "n/a" doesn't end up sending both that and a fresh
+// "N/A" typo on every scan.
+function _toolInvalidExtras() {
+  const out = new Set();
+  for (const s of STATE.learnedSentinels ?? []) {
+    const c = String(s).trim().toLowerCase();
+    if (c) out.add(c);
+  }
+  for (const s of _toolInvalidAdhoc) {
+    const c = String(s).trim().toLowerCase();
+    if (c) out.add(c);
+  }
+  return [...out];
+}
+
+// Fetch + render the sentinel checklist for the tool-invalid modal.
+// Each row is one distinct cell value found by the backend scan, with
+// its total count and the columns it appears in. The checkboxes carry
+// the raw value as their data attribute; _readToolPayload reads them
+// back into the `sentinels` array sent with the fix_invalid step.
+//
+// Extras (the user's learned set + this-session ad-hoc additions) are
+// passed through ?extra=csv so the scan picks up values the canonical
+// SENTINELS list doesn't know about. Realistic sentinels are short
+// alphanum / punctuation strings — comma in a sentinel is improbable
+// — so CSV-joining is fine; if it ever bites, switch to JSON.
+async function _refreshSentinelList(modal, opts = {}) {
+  const box = modal.querySelector("[data-tool-invalid-list]");
+  if (!box) return;
+  const previouslyChecked = new Set(
+    [...modal.querySelectorAll("[data-tool-sentinel]:checked")]
+      .map((c) => c.dataset.toolSentinel),
+  );
+  box.innerHTML = `<div style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.6875rem">Scanning…</div>`;
+  const extras = _toolInvalidExtras();
+  const qs = extras.length ? `?extra=${encodeURIComponent(extras.join(","))}` : "";
+  let res;
+  try {
+    res = await api.get(`/files/${encodeURIComponent(STATE.rid)}/sentinels${qs}`);
+  } catch (err) {
+    box.innerHTML = `<div style="padding:0.5rem 0.75rem;color:var(--red);font-size:0.6875rem">Couldn't scan: ${_escHtml(err.body?.error ?? err.message)}</div>`;
+    return;
+  }
+  const items = res?.items ?? [];
+  const applyBtn = modal.querySelector("[data-tool-apply]");
+  // Surface the "learned set is in use" hint so the user knows their
+  // teaching is being applied even when nothing matched in this file.
+  const lblEl = modal.querySelector("[data-tool-invalid-learned-count]");
+  if (lblEl) {
+    const n = (STATE.learnedSentinels?.size ?? 0);
+    lblEl.textContent = n > 0 ? `${n} learned value${n === 1 ? "" : "s"} in your scan` : "";
+  }
+  if (!items.length) {
+    const known = (res?.known ?? []).length;
+    box.innerHTML = `<div style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.6875rem">Nothing matched — no known sentinels (out of ${known}) and no learned values found in the file. Type a placeholder you can see in the data below and click Add.</div>`;
+    if (applyBtn) applyBtn.disabled = true;
+    return;
+  }
+  if (applyBtn) applyBtn.disabled = false;
+  // Sort by count desc is server-side; pre-tick everything on first
+  // paint (when previouslyChecked is empty); on a re-scan, preserve
+  // the user's existing tick choices and pre-tick newly-surfaced rows
+  // so the user doesn't have to re-tick the value they just typed.
+  const firstPaint = previouslyChecked.size === 0 && !opts.preserve;
+  box.innerHTML = items.map((it, i) => {
+    const colsLbl = it.columns.length === 1
+      ? `${_escHtml(it.columns[0][0])}`
+      : `${it.columns.length} columns`;
+    const colsTitle = it.columns.map(([n, c]) => `${n} (${c.toLocaleString()})`).join(" · ");
+    const shouldCheck = firstPaint
+      ? i < 3
+      : (previouslyChecked.has(it.value) || _toolInvalidAdhoc.has(it.value.trim().toLowerCase()));
+    const isLearned = !SENTINELS_BUILTIN.has(it.canonical);
+    const checked = shouldCheck ? " checked" : "";
+    const badge = isLearned
+      ? `<span style="font-size:0.5rem;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:0.05rem 0.35rem;border-radius:0.25rem;margin-left:0.25rem">learned</span>`
+      : "";
+    return `<label style="display:flex;align-items:center;gap:0.625rem;padding:0.375rem 0.625rem;border-bottom:1px solid var(--over1);cursor:pointer">
+      <input type="checkbox" data-tool-sentinel="${_escAttr(it.value)}"${checked} />
+      <span style="font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:0.6875rem;background:color-mix(in srgb,var(--yellow) 16%,transparent);color:var(--yellow);padding:0.05rem 0.4rem;border-radius:0.25rem">${_escHtml(it.value)}</span>${badge}
+      <span style="font-size:0.6875rem;color:var(--sub)">${it.total.toLocaleString()} cell${it.total === 1 ? "" : "s"}</span>
+      <span style="font-size:0.625rem;color:var(--muted);margin-left:auto" title="${_escAttr(colsTitle)}">in ${_escHtml(colsLbl)}</span>
+    </label>`;
+  }).join("");
+}
+
+// Built-in SENTINELS — mirrored from data::stats::SENTINELS so the
+// renderer can tag the user's *learned* additions with a small chip,
+// distinguishing them from the canonical set. Kept in sync by hand
+// (the list rarely changes); a one-row drift just paints a "learned"
+// chip on a canonical value, no functional impact.
+const SENTINELS_BUILTIN = new Set([
+  "n/a", "na", "n.a.", "-", "--", "?", "null", "none", "nan",
+  "#n/a", ".", "tbd", "x", "#ref!", "#value!", "unknown", "undefined",
+]);
+
+// Read the modal's inputs into a {kind, params} payload for /steps.
+// Returns null on validation failure (already toasted).
+function _readToolPayload(toolId) {
+  const m = document.getElementById(`modal-${toolId}`);
+  if (!m) return null;
+  const cols = (sel) => Array.from(m.querySelectorAll(`[data-tool-col]:checked`)).map((c) => c.dataset.toolCol);
+  const v    = (sel) => m.querySelector(sel)?.value ?? "";
+
+  switch (toolId) {
+    case "tool-rename": {
+      const from = v("[data-tool-cols]");
+      const to   = v("[data-tool-new-name]").trim();
+      if (!from) return _vErr("Pick a column.");
+      if (!to)   return _vErr("New name cannot be empty.");
+      return { kind: "rename_column", params: { from, to } };
+    }
+    case "tool-snake": {
+      return { kind: "snake_case_columns", params: {} };
+    }
+    case "tool-replacenames": {
+      const find    = v("[data-tool-find]");
+      const replace = v("[data-tool-replace]");
+      if (!find) return _vErr("Find pattern cannot be empty.");
+      return { kind: "replace_in_names", params: { find, replace } };
+    }
+    case "tool-changecase": {
+      const column = v("[data-tool-cols]");
+      const mode   = v("[data-tool-case-mode]") || "lower";
+      if (!column) return _vErr("Pick a column.");
+      return { kind: "change_case", params: { column, mode } };
+    }
+    case "tool-filtersel": {
+      // Keep matched columns. Take ticked rows; if the regex field is
+      // non-empty, also include any column whose name matches it.
+      const ticked = cols();
+      const re     = v("[data-tool-regex]").trim();
+      const keep   = new Set(ticked);
+      if (re) {
+        let rx;
+        try { rx = new RegExp(re, "i"); }
+        catch { return _vErr(`Bad regex: ${re}`); }
+        STATE.columns.forEach((c) => { if (rx.test(c.name)) keep.add(c.name); });
+      }
+      if (keep.size === 0) return _vErr("Tick at least one column or supply a regex.");
+      return { kind: "filter_columns", params: { cols: [...keep] } };
+    }
+    case "tool-dropcols": {
+      const drop = cols();
+      if (!drop.length) return _vErr("Tick at least one column to drop.");
+      return { kind: "drop_columns", params: { cols: drop } };
+    }
+    case "tool-split": {
+      const column = v("[data-tool-cols]");
+      const sep    = v("[data-tool-sep]");
+      const intoS  = v("[data-tool-into]").trim();
+      if (!column) return _vErr("Pick a column.");
+      if (!sep)    return _vErr("Separator cannot be empty.");
+      if (!intoS)  return _vErr("Name the new columns (comma-separated).");
+      const into = intoS.split(",").map((s) => s.trim()).filter(Boolean);
+      return { kind: "split_column", params: { column, sep, into } };
+    }
+    case "tool-joinco": {
+      const a   = m.querySelector("[data-tool-col-a]")?.value ?? "";
+      const b   = m.querySelector("[data-tool-col-b]")?.value ?? "";
+      const sep = v("[data-tool-sep]");
+      const into= v("[data-tool-into]").trim();
+      if (!a || !b)      return _vErr("Pick two columns.");
+      if (a === b)       return _vErr("Pick two different columns.");
+      if (!into)         return _vErr("Name the new column.");
+      return { kind: "join_columns", params: { a, b, sep, into } };
+    }
+    case "tool-removetext": {
+      const column = v("[data-tool-cols]");
+      const find   = v("[data-tool-find]");
+      if (!column) return _vErr("Pick a column.");
+      if (!find)   return _vErr("Pattern cannot be empty.");
+      return { kind: "replace_text", params: { column, find, replacement: "" } };
+    }
+    case "tool-replacetext": {
+      const column      = v("[data-tool-cols]");
+      const find        = v("[data-tool-find]");
+      const replacement = v("[data-tool-replace]");
+      if (!column) return _vErr("Pick a column.");
+      if (!find)   return _vErr("Find cannot be empty.");
+      return { kind: "replace_text", params: { column, find, replacement } };
+    }
+    case "tool-fill": {
+      const column   = v("[data-tool-cols]");
+      const strategy = v("[data-tool-fill-mode]") || "value";
+      const value    = v("[data-tool-value]");
+      if (!column) return _vErr("Pick a column.");
+      const params = { column, strategy };
+      if (strategy === "value") params.value = value;
+      return { kind: "fill_nulls", params };
+    }
+    case "tool-invalid": {
+      // Picked sentinels — raw cell values from the scan, preserved
+      // with their original casing so the SQL match is exact.
+      const sentinels = Array.from(m.querySelectorAll(`[data-tool-sentinel]:checked`))
+        .map((c) => c.dataset.toolSentinel);
+      if (!sentinels.length) return _vErr("Tick at least one sentinel to fix.");
+      // Teach the app: any picked value whose canonical form was an
+      // ad-hoc addition (not in SENTINELS_BUILTIN and not already
+      // learned) gets pushed into prefs.learned_sentinels so the next
+      // file the user opens scans for it without them having to retype.
+      const toLearn = [];
+      for (const s of sentinels) {
+        const canon = String(s).trim().toLowerCase();
+        if (!canon) continue;
+        if (SENTINELS_BUILTIN.has(canon)) continue;
+        if (STATE.learnedSentinels?.has(canon)) continue;
+        toLearn.push(canon);
+      }
+      if (toLearn.length) {
+        for (const c of toLearn) STATE.learnedSentinels.add(c);
+        window.rpSavePref?.("learned_sentinels", [...STATE.learnedSentinels]);
+      }
+      const scope = v("[data-tool-invalid-scope]") || "all";
+      const mode  = v("[data-tool-invalid-mode]")  || "null";
+      const params = { sentinels };
+      if (scope === "one") {
+        const column = v("[data-tool-cols]");
+        if (!column) return _vErr("Pick a column.");
+        params.columns = [column];
+      }
+      if (mode === "custom") {
+        // Empty custom field still falls back to null — typing nothing
+        // is the same as picking "Empty (null)" above, no toast needed.
+        const val = v("[data-tool-value]");
+        if (val !== "") params.replacement = val;
+      }
+      return { kind: "fix_invalid", params };
+    }
+    case "tool-dates": {
+      const column        = v("[data-tool-cols]");
+      const fmt           = v("[data-tool-date-fmt]") || "%Y-%m-%d";
+      const on_incomplete = v("[data-tool-date-incomplete]") || "null";
+      if (!column) return _vErr("Pick a column.");
+      return { kind: "format_dates", params: { column, fmt, on_incomplete } };
+    }
+    case "tool-droprows": {
+      // Backend takes a list of cols; row is dropped when ALL listed
+      // cols are null. Empty list → require every column to be null.
+      const checked = cols();
+      return { kind: "drop_nulls", params: { cols: checked } };
+    }
+    case "tool-dedup": {
+      // _refreshDedupPreview pre-computed the indices when the modal
+      // opened (or when the mode select changed). The Apply button is
+      // disabled when indices is empty, so by the time we land here
+      // there's something to drop.
+      const indices = STATE._dedupIndices ?? [];
+      if (!indices.length) return _vErr("No duplicates detected.");
+      return { kind: "drop_rows", params: { indices } };
+    }
+    case "tool-find":
+    case "tool-inspect": {
+      // Read-only tools; no apply.
+      return null;
+    }
+    default: {
+      _vErr(`Unknown tool: ${toolId}`);
+      return null;
+    }
+  }
+}
+
+function _vErr(msg) { toast.error(msg); return null; }
+
+// ── Applied history list ─────────────────────────────────────────────
+// Data Types panel (#cleaner-dtype-list, "click to cast"). Each column
+// renders one row: storage dtype + (when ColumnMeta.semantic_dtype
+// disagrees) the sniffed target with a clickable cast affordance.
+// Click → POST a `cast` step (`window.cleanerCastColumn`). Columns
+// where storage matches semantic, or the column is genuinely string,
+// render as a read-only badge — nothing to do.
+const _DTYPE_SUGGEST = { int: "int", float: "float", bool: "bool", date: "date" };
+
+// Per-file "user said no, don't suggest" set. Persisted to localStorage
+// keyed by file rid so the dismissal sticks across reloads. The Rust
+// sniffer's heuristics catch most ID-shaped columns (CODE_POSTAL,
+// siren, …) but the user is the ultimate authority — once they
+// click ✗ on a suggestion, that column is excluded from future
+// suggestions for THIS file. The ↻ revert affordance on a dismissed
+// row pulls it back into the suggestion stream.
+const _DTYPE_SKIP_KEY = (rid) => `rp-dtype-skip-${rid}`;
+function _dtypeSkipLoad(rid) {
+  if (!rid) return new Set();
+  try {
+    const raw = localStorage.getItem(_DTYPE_SKIP_KEY(rid));
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
+}
+function _dtypeSkipSave(rid, set) {
+  if (!rid) return;
+  try { localStorage.setItem(_DTYPE_SKIP_KEY(rid), JSON.stringify([...set])); } catch {}
+}
+
+function _renderDtypeList(root) {
+  const box = root.querySelector("#cleaner-dtype-list");
+  if (!box) return;
+  const cols = STATE.columns ?? [];
+  if (!cols.length) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty">Open a file to see column types</div>`;
+    return;
+  }
+  const skip = _dtypeSkipLoad(STATE.rid);
+  box.innerHTML = cols.map((c) => {
+    const storage = c.dtype ?? "string";
+    const target  = (storage === "string" && _DTYPE_SUGGEST[c.semantic_dtype])
+      ? _DTYPE_SUGGEST[c.semantic_dtype] : null;
+    // Dismissed-but-eligible columns get the "kept as text" affordance
+    // — they sit in the read-only ladder visually but carry a ↻
+    // revert button so the user can put them back in play.
+    if (target && skip.has(c.name)) {
+      return `<div class="rp-rtp-dtype-row rp-rtp-dtype-row--kept">
+        <span class="rp-rtp-dtype-name">${_escHtml(c.name)}</span>
+        <span class="rp-rtp-dtype-storage">kept as text</span>
+        <button type="button" class="rp-rtp-dtype-revert"
+                onclick="cleanerRevertSkipCast('${_escAttr(c.name)}')"
+                title="Show the cast suggestion again">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </button>
+      </div>`;
+    }
+    if (target) {
+      // Live suggestion: name + storage→target hint + ✓ apply + ✗ dismiss.
+      // Apply mirrors the old one-click behaviour; dismiss persists the
+      // skip so the next render of this file doesn't re-pester.
+      return `<div class="rp-rtp-dtype-row rp-rtp-dtype-row--suggest"
+                   title="${_escAttr(c.name)} looks like ${target}">
+        <span class="rp-rtp-dtype-name">${_escHtml(c.name)}</span>
+        <span class="rp-rtp-dtype-arrow">${_escHtml(storage)} → ${target}</span>
+        <button type="button" class="rp-rtp-dtype-confirm"
+                onclick="cleanerCastColumn('${_escAttr(c.name)}', '${target}')"
+                title="Cast to ${target}">
+          <i class="bi bi-check2"></i>
+        </button>
+        <button type="button" class="rp-rtp-dtype-dismiss"
+                onclick="cleanerSkipCast('${_escAttr(c.name)}')"
+                title="Keep as text — don't suggest again for this file">
+          <i class="bi bi-x"></i>
+        </button>
+      </div>`;
+    }
+    // Read-only — storage already matches intent (or it's genuine text).
+    return `<div class="rp-rtp-dtype-row">
+      <span class="rp-rtp-dtype-name">${_escHtml(c.name)}</span>
+      <span class="rp-rtp-dtype-storage">${_escHtml(storage)}</span>
+    </div>`;
+  }).join("");
+  // Side-effect: dtype-list is re-rendered on every STATE.columns change,
+  // so this is the right place to keep the filter panel's column
+  // dropdowns in sync. Cheap (touches just the open <select>s).
+  _syncFilterRowColumns(root);
+}
+
+// Reflow the column dropdowns on every existing predicate row to match
+// the current STATE.columns. Preserves the user's selection when the
+// column still exists; falls back to the first column otherwise. The op
+// + value fields are untouched. Called from _renderDtypeList so any
+// path that changes columns (file switch, drop/rename/cast steps) keeps
+// the filter UI honest without a refresh.
+function _syncFilterRowColumns(root) {
+  const rows = root.querySelectorAll("#cleaner-filter-rows .rp-rt-fb-row");
+  if (!rows.length) return;
+  const cols = STATE.columns ?? [];
+  const opts = cols.map((c) =>
+    `<option value="${_escAttr(c.name)}">${_escHtml(c.name)}${c.dtype ? ` · ${_escHtml(c.dtype)}` : ""}</option>`
+  ).join("");
+  const names = new Set(cols.map((c) => c.name));
+  for (const r of rows) {
+    const sel = r.querySelector("[data-fb-col]");
+    if (!sel) continue;
+    const prev = sel.value;
+    sel.innerHTML = opts;
+    if (names.has(prev)) sel.value = prev;
+  }
+  _refreshFilterApplyState(root);
+}
+
+function _renderAppliedList(root) {
+  const box = root.querySelector("#cleaner-applied-list");
+  const cnt = root.querySelector("#cleaner-applied-count");
+  if (!box) return;
+  const steps = STATE.steps ?? [];
+  const applied = steps.filter((s) => s.applied === true);
+  if (cnt) cnt.textContent = applied.length ? `(${applied.length})` : "";
+  if (!steps.length) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty">No operations yet.</div>`;
+    return;
+  }
+  box.innerHTML = steps.map((s) => {
+    const dim = s.applied === false;
+    const kind = (s.kind ?? "").replace(/_/g, " ");
+    return `<div style="font-size:0.6875rem;padding:0.25rem 0.375rem;border-radius:0.25rem;${dim ? "opacity:0.45;text-decoration:line-through" : ""}">
+      <i class="bi bi-dot"></i> ${_escHtml(kind)}
+    </div>`;
+  }).join("");
+}
+
+// ── Dedup preview (lightweight) ──────────────────────────────────────
+// Hits /api/files/:rid/dedup with the chosen key and shows total /
+// unique counts. Phase 2.1 will add the rich sample preview the demo
+// has; this gives the user enough info to know how many rows the
+// Remove duplicates click will drop.
+async function _refreshDedupPreview(root) {
+  const m = document.getElementById("modal-tool-dedup");
+  if (!m) return;
+  const stats   = m.querySelector("[data-tool-stats]");
+  const samples = m.querySelector("[data-tool-dedup-samples]");
+  const hint    = m.querySelector("[data-tool-dedup-hint]");
+  const apply   = m.querySelector("[data-tool-apply]");
+  const key     = m.querySelector("[data-tool-dedup-mode]")?.value ?? "";
+
+  if (stats) stats.innerHTML = `<span class="rp-tm-stat">Detecting…</span>`;
+  if (hint)  hint.textContent = key
+    ? `Two rows are considered duplicates when they share the same '${key}'.`
+    : "Two rows are considered duplicates when every column matches.";
+  if (apply) { apply.disabled = true; apply.style.opacity = "0.45"; }
+
+  try {
+    const qs = key ? `?by=${encodeURIComponent(key)}` : "";
+    const report = await api.get(`/files/${encodeURIComponent(STATE.rid)}/dedup${qs}`);
+    STATE._dedupReport = report;  // stash for the apply branch
+    STATE._dedupKey    = key;
+
+    // Sample API differs slightly between codepaths — handle both
+    // (`rows` is the rich preview shape; `duplicate_rows` is the
+    // lightweight count used by the home-page dedup tile).
+    const tot      = report.total_rows ?? STATE.summary?.row_count ?? 0;
+    const groups   = report.total_groups ?? null;
+    const reported = (report.rows?.length) ?? report.duplicate_rows ?? 0;
+    // Indices to drop: non-first-of-group rows in the preview. With
+    // the by-column strategy the backend groups by that key; with
+    // full-row mode it groups by every column.
+    const indices  = _dedupIndicesToDrop(report);
+    STATE._dedupIndices = indices;
+
+    if (stats) {
+      const dup   = indices.length;
+      stats.innerHTML = `
+        <span class="rp-tm-stat" style="color:${dup ? "var(--yellow)" : "var(--green)"}">${dup.toLocaleString()} duplicate row${dup !== 1 ? "s" : ""}</span>
+        ${groups != null ? `<span class="rp-tm-stat">in ${groups.toLocaleString()} group${groups !== 1 ? "s" : ""}</span>` : ""}
+        <span class="rp-tm-stat">of ${tot.toLocaleString()}</span>`;
+    }
+    if (apply) {
+      apply.disabled = indices.length === 0;
+      apply.style.opacity = indices.length === 0 ? "0.45" : "1";
+    }
+
+    // Sample preview — first ~10 duplicate rows so the user can sanity-
+    // check before clicking the danger-tinted Remove button.
+    if (samples) {
+      const sample = (report.rows ?? []).slice(0, 10);
+      if (!sample.length) {
+        samples.innerHTML = "";
+      } else {
+        samples.innerHTML = `
+          <div class="rp-tm-field-lbl" style="margin-top:0.5rem">Preview (first ${sample.length})</div>
+          <div style="max-height:10rem;overflow:auto;border:0.0313rem solid var(--over0);border-radius:0.4375rem">
+            <table style="width:100%;font-size:0.625rem;border-collapse:collapse">
+              <thead><tr style="background:var(--over0)">
+                <th style="padding:0.25rem 0.5rem;text-align:left;color:var(--muted)">#</th>
+                ${(report.columns ?? STATE.columns.map((c) => c.name)).map((c) => `<th style="padding:0.25rem 0.5rem;text-align:left;color:var(--text)">${_escHtml(c)}</th>`).join("")}
+              </tr></thead>
+              <tbody>${sample.map((r) =>
+                `<tr><td style="padding:0.25rem 0.5rem;color:var(--muted)">${r.index ?? ""}</td>${
+                  (r.cells ?? []).map((c) =>
+                    `<td style="padding:0.25rem 0.5rem">${c == null ? "<span style=\"color:var(--muted)\">∅</span>" : _escHtml(c)}</td>`
+                  ).join("")
+                }</tr>`
+              ).join("")}</tbody>
+            </table>
+          </div>`;
+      }
+    }
+  } catch (err) {
+    if (stats) stats.innerHTML = `<span class="rp-tm-stat" style="color:var(--red)">${_escHtml(err.body?.error ?? err.message)}</span>`;
+  }
+}
+
+// Compute the row indices we'd drop: all non-first members of each
+// duplicate group, using the by-column key (or full-row equality
+// when no by= was passed). Mirrors the legacy dedup.js logic but
+// without rendering a separate dialog — the cleaner modal already
+// shows the preview.
+function _dedupIndicesToDrop(report) {
+  const rows = report.rows ?? [];
+  if (!rows.length) return [];
+  const colCount = (report.columns ?? []).length;
+  const keyIdx = report.by_indices?.length
+    ? report.by_indices
+    : Array.from({ length: colCount }, (_, i) => i);
+  const drop = [];
+  let prevKey = null;
+  for (const r of rows) {
+    const key = keyIdx.map((i) => r.cells?.[i] ?? "").join("");
+    if (key === prevKey) drop.push(r.index);
+    prevKey = key;
+  }
+  return drop;
+}
+
+// ── Overview pane — isolated files redtable ──────────────────────────
+// Renders when the user clicks the Overview tab. It is a SELF-CONTAINED
+// redtable — its own toolbar, its own table, and its own state object
+// (`OV` below). It deliberately shares NOTHING with the file-tabs'
+// table: select/delete/edit-mode here flip classes on the overview's
+// own wrapper and write to `OV.selected`, never `STATE.selected` or
+// `.rp-rt-panel--cleaner`. So ticking a row here can't tick rows in a
+// file tab.
+//
+// The data source is STATE.files (already in memory — a project has at
+// most a few dozen files), so search filters client-side with no
+// fetch. Delete hits DELETE /api/files/:rid; inline name/status edits
+// hit PATCH /api/files/:rid.
+let OV = {
+  mode:       null,          // "select" | "delete" | "edit" | null
+  selected:   new Set(),     // redpash_ids ticked in select mode
+  q:          "",            // client-side search query
+  hiddenCols: new Set(),     // OV_COLUMNS keys the user has hidden
+};
+
+// The overview redtable's data columns (between the leading select
+// checkbox and the trailing delete trash). `key` drives both the
+// column-visibility picker and the per-cell renderer in _ovCell.
+const OV_COLUMNS = [
+  { key: "name",     label: "Name",     align: "left"  },
+  { key: "stage",    label: "Stage",    align: "left"  },
+  { key: "rows",     label: "Rows",     align: "right" },
+  { key: "cols",     label: "Cols",     align: "right" },
+  { key: "clean",    label: "Clean",    align: "right" },
+  { key: "size",     label: "Size",     align: "right" },
+  { key: "modified", label: "Modified", align: "left"  },
+];
+const OV_HIDDEN_LS_KEY = "rp-overview-hidden-cols";
+
+function _ovLoadHiddenCols() {
+  try {
+    const raw = localStorage.getItem(OV_HIDDEN_LS_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+function _ovSaveHiddenCols() {
+  try { localStorage.setItem(OV_HIDDEN_LS_KEY, JSON.stringify([...OV.hiddenCols])); } catch {}
+}
+
+// Render one data cell for a given column key + file row.
+function _ovCell(key, f) {
+  switch (key) {
+    case "name": {
+      const rid  = _escAttr(f.redpash_id);
+      const name = _escHtml(f.display_name ?? f.filename ?? "—");
+      return `<td class="ov-cell-name" data-rid="${rid}" data-field="display_name"
+                  ondblclick="ovCellEdit(this)" title="Double-click to rename (edit mode)">
+                <i class="bi bi-file-earmark-spreadsheet" style="margin-right:0.375rem;color:var(--muted)"></i>${name}
+              </td>`;
+    }
+    case "stage": {
+      // Computed pipeline stage (import → clean → report → publish) —
+      // derived from steps / reports / dashboards, so read-only.
+      const stage  = f.stage ?? "import";
+      const stTone = stage === "publish" ? "var(--green)"
+                   : stage === "report"  ? "var(--accent)"
+                   : stage === "clean"   ? "var(--yellow)"
+                   :                       "var(--muted)";
+      return `<td class="ov-cell-stage">
+                <span class="rp-tag" style="color:${stTone};border-color:${stTone}">${_escHtml(stage)}</span>
+              </td>`;
+    }
+    case "rows": return `<td style="text-align:right">${(f.row_count ?? 0).toLocaleString()}</td>`;
+    case "cols": return `<td style="text-align:right">${(f.col_count ?? 0).toLocaleString()}</td>`;
+    case "clean": {
+      const pct  = f.cleanness_pct;
+      const tone = pct == null ? "var(--muted)"
+                : pct >= 90    ? "var(--green)"
+                : pct >= 70    ? "var(--yellow)"
+                :                "var(--red)";
+      return `<td style="text-align:right;color:${tone}">${pct != null ? `${Math.round(pct)}%` : "—"}</td>`;
+    }
+    case "size":     return `<td style="text-align:right;color:var(--muted)">${_fmtBytes(f.file_size_bytes)}</td>`;
+    case "modified": return `<td style="color:var(--muted)">${_fmtDate(f.updated_at)}</td>`;
+    default:         return `<td></td>`;
+  }
+}
+
+function _renderOverview(root) {
+  const ov  = root.querySelector("#cleaner-overview");
+  const tbl = root.querySelector("#cleaner-table");
+  if (!ov) return;
+  if (tbl) tbl.hidden = true;
+  ov.hidden = false;
+  // Hide the file-table chrome (main toolbar + filter / tools panels)
+  // — in overview mode those would target the now-hidden file table.
+  // The overview brings its own toolbar.
+  root.querySelector("#page-cleaner")?.classList.add("overview-active");
+
+  const proj  = STATE.project ?? {};
+  const q     = OV.q.trim().toLowerCase();
+  const files = (STATE.files ?? []).filter((f) => {
+    if (!q) return true;
+    const hay = `${f.display_name ?? ""} ${f.filename ?? ""} ${f.stage ?? ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  const visCols = OV_COLUMNS.filter((c) => !OV.hiddenCols.has(c.key));
+  const colspan = visCols.length + 2;  // + leading select + trailing delete
+
+  const headCells = visCols.map((c) =>
+    `<th style="text-align:${c.align}">${_escHtml(c.label)}</th>`
+  ).join("");
+
+  const rowHtml = files.map((f) => {
+    const rid = _escAttr(f.redpash_id);
+    const sel = OV.selected.has(f.redpash_id);
+    // Row click → switch the active file tab. _ovRowClick skips when
+    // the panel is in select/delete/edit mode (those modes own the
+    // click affordance — tick, trash, rename) so it doesn't fight
+    // with the dblclick-to-rename in the name cell.
+    return `
+      <tr data-rid="${rid}" class="${sel ? "rp-rt-row-sel" : ""}"
+          onclick="_ovRowClick(event, '${rid}')">
+        <td data-mode-col="select" onclick="event.stopPropagation()">
+          <input type="checkbox" class="ov-row-chk" data-rid="${rid}"
+                 ${sel ? "checked" : ""} onchange="ovRowSelect(this)" />
+        </td>
+        ${visCols.map((c) => _ovCell(c.key, f)).join("")}
+        <td data-mode-col="delete" onclick="event.stopPropagation()">
+          <button type="button" class="rp-rt-row-del" title="Delete this file"
+                  onclick="ovRowDelete('${rid}')"><i class="bi bi-trash3"></i></button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  const emptyRow = files.length === 0
+    ? `<tr><td colspan="${colspan}" style="text-align:center;color:var(--muted);padding:2rem">${
+        OV.q ? "No files match your search." : "No files in this project yet — use the + button to add one."
+      }</td></tr>`
+    : "";
+
+  // Column-visibility picker dropdown — one checkbox per OV_COLUMNS
+  // entry. Persisted to localStorage so the layout sticks across
+  // sessions (and the SW debugging cache-clears the user does).
+  const colPickerItems = OV_COLUMNS.map((c) => `
+    <label class="ov-colpick-item">
+      <input type="checkbox" ${OV.hiddenCols.has(c.key) ? "" : "checked"}
+             onchange="ovToggleColumn('${c.key}', this.checked)" />
+      <span>${_escHtml(c.label)}</span>
+    </label>`).join("");
+
+  const total = (STATE.files ?? []).length;
+  ov.innerHTML = `
+    <div class="ov-rt" data-ov-mode="${OV.mode ?? ""}">
+      <div class="ov-rt-head">
+        <div>
+          <h3 class="ov-rt-title">${_escHtml(proj.name ?? "Overview")}</h3>
+          <span class="ov-rt-sub">${total} file${total !== 1 ? "s" : ""}${proj.description ? ` · ${_escHtml(proj.description)}` : ""}</span>
+        </div>
+      </div>
+      <div class="ov-rt-toolbar">
+        <div class="ov-rt-search">
+          <i class="bi bi-search bi-sm"></i>
+          <input type="search" placeholder="Search files…" value="${_escAttr(OV.q)}"
+                 oninput="ovSearch(this)" />
+        </div>
+        <span class="rp-rt-sel-chip" id="ov-sel-chip" data-has-sel="0"
+              onclick="ovClearSelection()" title="Click to clear selection">
+          <i class="bi bi-check2-square"></i><span id="ov-sel-count">0 selected</span>
+        </span>
+        <button class="rp-rt-icon-btn" id="ov-bulk-del" style="display:none;color:var(--red)"
+                title="Delete selected files" onclick="ovBulkDelete()">
+          <i class="bi bi-trash3"></i>
+        </button>
+        <div class="ov-rt-toolbar-modes">
+          <!-- Order (left → right): edit · delete · select · refresh ·
+               clean (score) · columns. Edit/delete/select stay grouped
+               as a mode triplet; refresh is the divider; the trailing
+               two are "data" actions (re-score the project + pick which
+               cols to show). -->
+          <button class="rp-rt-icon-btn ${OV.mode === "edit" ? "is-active" : ""}"
+                  title="Edit mode — double-click a name, pick a status"
+                  onclick="ovToggleMode('edit')"><i class="bi bi-pencil"></i></button>
+          <button class="rp-rt-icon-btn ${OV.mode === "delete" ? "is-active" : ""}"
+                  title="Delete mode" onclick="ovToggleMode('delete')"><i class="bi bi-trash3"></i></button>
+          <button class="rp-rt-icon-btn ${OV.mode === "select" ? "is-active" : ""}"
+                  title="Select mode" onclick="ovToggleMode('select')"><i class="bi bi-check2-square"></i></button>
+          <button class="rp-rt-icon-btn" title="Refresh" onclick="ovRefresh()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <!-- Score-files — icon-only; spinner CSS targets
+               #ov-score-btn.is-spinning. -->
+          <button class="rp-rt-icon-btn" id="ov-score-btn"
+                  title="Compute the cleanness score for every file in this project"
+                  onclick="ovScoreFiles()">
+            <i class="bi bi-magic"></i>
+          </button>
+          <div class="ov-colpick">
+            <button class="rp-rt-icon-btn" title="Show / hide columns"
+                    onclick="ovToggleColPicker(this)"><i class="bi bi-layout-three-columns"></i></button>
+            <div class="ov-colpick-dd" hidden>
+              <div class="ov-colpick-hdr">Columns</div>
+              ${colPickerItems}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rp-rt-table-wrap">
+        <table class="rp-rt-table ov-rt-table">
+          <thead>
+            <tr>
+              <th data-mode-col="select" style="width:1.5rem">
+                <input type="checkbox" id="ov-sel-all" onchange="ovSelectAll(this.checked)" />
+              </th>
+              ${headCells}
+              <th data-mode-col="delete" style="width:1.75rem"></th>
+            </tr>
+          </thead>
+          <tbody>${rowHtml || emptyRow}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  _renderOvSelectionChip(root);
+}
+
+// Selection chip + bulk-delete visibility for the overview redtable.
+// Mirrors _renderSelectionChip but reads OV.selected and is gated on
+// the overview being in select-mode (CSS pin in cleaner.css).
+function _renderOvSelectionChip(root) {
+  const chip = root.querySelector("#ov-sel-chip");
+  const cnt  = root.querySelector("#ov-sel-count");
+  const del  = root.querySelector("#ov-bulk-del");
+  const n    = OV.selected.size;
+  if (chip) chip.dataset.hasSel = n > 0 ? "1" : "0";
+  if (cnt)  cnt.textContent = `${n} selected`;
+  if (del)  del.style.display = n > 0 ? "inline-flex" : "none";
+  const head  = root.querySelector("#ov-sel-all");
+  const total = root.querySelectorAll(".ov-rt-table tbody .ov-row-chk").length;
+  if (head) {
+    head.checked       = total > 0 && n === total;
+    head.indeterminate = n > 0 && n < total;
+  }
+}
+
+// Human-readable byte size — mirrors home.js fmtSize.
+function _fmtBytes(b) {
+  if (b == null) return "—";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Short date — "May 13" style; falls back to the raw string.
+function _fmtDate(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch { return String(iso); }
+}
+
+// ── Wrapped-CSV detector ─────────────────────────────────────────────
+// A file is "wrapped" when:
+//   • There's exactly ONE column, AND
+//   • that column's NAME itself contains a separator, AND
+//   • most preview values contain the same separator.
+//
+// The column-name signal is the killer: Polars used the first line as
+// the header, so a wrapped file's single column is named something
+// like `Numero_dossier_ID,"Client","Formule",…`. A legitimate
+// one-column file has a clean header (`email`, `id`) — its name never
+// contains a comma / semicolon / tab. The earlier "stable separator
+// count across rows" heuristic was too strict: real datasets have
+// free-text fields with internal commas, so the per-row count varies
+// and the file would slip past undetected.
+//
+// Never destructive — the banner just reveals the Fix button; the
+// Rust `unwrap_csv` step does the real re-parse. A false positive is
+// just a banner the user can ignore.
+function _renderWrappedBanner(root) {
+  const banner = root.querySelector("#cleaner-fix-wrapped");
+  if (!banner) return;
+  banner.style.display = _detectWrappedCsv() ? "" : "none";
+}
+
+function _detectWrappedCsv() {
+  if (STATE.columns.length !== 1) return false;
+  const colName = String(STATE.columns[0]?.name ?? "");
+  const rows = STATE.pageData?.rows ?? [];
+  if (rows.length < 2) return false;
+  const sample = rows.slice(0, 12).map((r) => String(r[0] ?? ""));
+  for (const sep of [",", ";", "\t", "|"]) {
+    if (!colName.includes(sep)) continue;            // header must carry the sep
+    const withSep = sample.filter((s) => s.includes(sep)).length;
+    if (withSep >= Math.ceil(sample.length * 0.7)) return true;  // ≥70% of rows agree
+  }
+  return false;
+}
+
+// Pick the separator that gives the most CONSISTENT column count
+// across sample lines. Mirrors Polars' own CSV sep sniff but only on
+// the preview we already have on the client.
+function _guessSeparator(lines) {
+  const SEPS = [",", ";", "\t", "|"];
+  let best = ",", bestVariance = Infinity;
+  for (const s of SEPS) {
+    const counts = lines.map((l) => _splitCsvLine(String(l ?? ""), s).length);
+    if (counts.every((c) => c === 1)) continue;  // sep doesn't appear → skip
+    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+    const variance = counts.reduce((a, c) => a + (c - mean) ** 2, 0) / counts.length;
+    if (variance < bestVariance) { bestVariance = variance; best = s; }
+  }
+  return best;
+}
+
+// Minimal CSV-line splitter that honours double-quote escaping. Good
+// enough for the After-preview rendering; Rust handles the real parse.
+function _splitCsvLine(line, sep) {
+  const out = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQ = false; }
+      else { cur += ch; }
+    } else {
+      if (ch === '"') { inQ = true; }
+      else if (ch === sep) { out.push(cur); cur = ""; }
+      else { cur += ch; }
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// ── Filter side panel ────────────────────────────────────────────────
+// Each predicate row owns three controls:
+//   • column dropdown ([data-fb-col])  — from STATE.columns
+//   • op dropdown     ([data-fb-op])   — 16 ops, mirrors Rust vocabulary
+//   • value input     ([data-fb-val])  — text/number/date depending on op
+// Plus a remove button. Op vocabulary lives in one place so a future
+// vocabulary widening just edits the list below.
+const FILTER_OPS = [
+  ["eq",          "equals"],
+  ["neq",         "not equals"],
+  ["contains",    "contains"],
+  ["starts_with", "starts with"],
+  ["ends_with",   "ends with"],
+  ["in",          "in (comma-list)"],
+  ["not_in",      "not in (comma-list)"],
+  ["gt",          ">"],
+  ["gte",         "≥"],
+  ["lt",          "<"],
+  ["lte",         "≤"],
+  ["between",     "between (lo, hi)"],
+  ["before",      "before (YYYY-MM-DD)"],
+  ["after",       "after (YYYY-MM-DD)"],
+  ["is_null",     "is null"],
+  ["not_null",    "is not null"],
+];
+
+function _ensureFilterRow(root) {
+  const box = root.querySelector("#cleaner-filter-rows");
+  if (box && !box.children.length) _appendFilterRow(root);
+}
+
+function _appendFilterRow(root) {
+  const box = root.querySelector("#cleaner-filter-rows");
+  if (!box || !STATE.columns.length) return;
+  const colOpts = STATE.columns.map((c) =>
+    `<option value="${_escAttr(c.name)}">${_escHtml(c.name)}${c.dtype ? ` · ${_escHtml(c.dtype)}` : ""}</option>`
+  ).join("");
+  const opOpts = FILTER_OPS.map(([v, l]) =>
+    `<option value="${v}">${_escHtml(l)}</option>`
+  ).join("");
+
+  const div = document.createElement("div");
+  div.className = "rp-rt-fb-row";
+  // Three stacked rows, same shape as the Objects-page row:
+  //   row 1: × (top-right via align-self: flex-end on .rp-rt-fb-rm)
+  //   row 2: col + op selects, 50/50 grid (.rp-rt-fb-selects)
+  //   row 3: value input (.rp-rt-fb-val)
+  div.innerHTML =
+      `<button class="rp-rt-fb-rm" onclick="_cleanerFilterRowRemove(this)" title="Remove predicate">`
+    +   `<i class="bi bi-x"></i>`
+    + `</button>`
+    + `<div class="rp-rt-fb-selects">`
+    +   `<select data-fb-col onchange="_cleanerFilterRowChanged(this)">${colOpts}</select>`
+    +   `<select data-fb-op  onchange="_cleanerFilterRowChanged(this)">${opOpts}</select>`
+    + `</div>`
+    + `<input class="rp-rt-fb-val" data-fb-val type="text" placeholder="value"`
+    +   ` oninput="_cleanerFilterRowChanged(this)" />`;
+  box.appendChild(div);
+  _refreshFilterApplyState(root);
+}
+
+// One handler covers all three controls on a predicate row. Re-shapes
+// the value input (text → number → date → hidden) when the op changes,
+// then re-evaluates whether Apply should be enabled.
+window._cleanerFilterRowChanged = (el) => {
+  const row = el.closest(".rp-rt-fb-row");
+  if (!row) return;
+  const op  = row.querySelector("[data-fb-op]")?.value;
+  const inp = row.querySelector("[data-fb-val]");
+  if (op && inp) {
+    if (op === "is_null" || op === "not_null") {
+      row.classList.add("rp-rt-fb-no-value");
+    } else {
+      row.classList.remove("rp-rt-fb-no-value");
+      // Switch the input type to match the op so the user gets the
+      // right keyboard / picker. between/in keep `text` so the user
+      // can type a comma-list.
+      const dateOp    = op === "before" || op === "after";
+      const numericOp = ["gt", "gte", "lt", "lte"].includes(op);
+      inp.type = dateOp ? "date" : numericOp ? "number" : "text";
+      inp.placeholder = (op === "between") ? "10, 50"
+                      : (op === "in" || op === "not_in") ? "France, Italy"
+                      : "value";
+    }
+  }
+  _refreshFilterApplyState(document);
+};
+
+window._cleanerFilterRowRemove = (btn) => {
+  const row = btn.closest(".rp-rt-fb-row");
+  row?.remove();
+  _refreshFilterApplyState(document);
+};
+
+// Apply enabled when at least one row has a column + op + valid value
+// (or is one of the value-less ops). Avoids the "click apply, get
+// nothing happened" UX of letting the button fire on an empty form.
+function _refreshFilterApplyState(scope) {
+  const apply = scope.querySelector("#cleaner-filter-apply");
+  if (!apply) return;
+  const rows = scope.querySelectorAll("#cleaner-filter-rows .rp-rt-fb-row");
+  let ok = false;
+  for (const r of rows) {
+    const op  = r.querySelector("[data-fb-op]")?.value;
+    if (!op) continue;
+    if (op === "is_null" || op === "not_null") { ok = true; break; }
+    const val = r.querySelector("[data-fb-val]")?.value ?? "";
+    if (val.trim() !== "") { ok = true; break; }
+  }
+  apply.disabled = !ok;
+}
+
+// ── Selection chip + bulk-delete button visibility ──────────────────
+// Two surfaces react to selected-count > 0:
+//   • the chip itself (`#cleaner-sel-chip`) shows N selected
+//   • the red trash button next to it shows up
+// The CSS pin (`.rp-rt-mode-select .rp-rt-sel-chip[data-has-sel="1"]`)
+// also gates on the panel being in select-mode, so leaving select-mode
+// hides both even if the Set wasn't yet cleared.
+function _renderSelectionChip(root) {
+  const chip = root.querySelector("#cleaner-sel-chip");
+  const cnt  = root.querySelector("#cleaner-sel-count");
+  const del  = root.querySelector("#cleaner-bulk-del-btn");
+  const n    = STATE.selected.size;
+  if (chip) chip.dataset.hasSel = n > 0 ? "1" : "0";
+  if (cnt)  cnt.textContent = `${n} selected`;
+  if (del)  del.style.display = n > 0 ? "inline-flex" : "none";
+  // Sync the master checkbox (indeterminate when partial).
+  const head = root.querySelector("#cleaner-sel-all");
+  const total = root.querySelectorAll("tbody .rp-rt-row-chk").length;
+  if (head) {
+    head.checked       = total > 0 && n === total;
+    head.indeterminate = n > 0 && n < total;
+  }
+}
+
+// ── Utilities ────────────────────────────────────────────────────────
+function _escHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (ch) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+  ));
+}
+function _escAttr(s) { return _escHtml(s); }

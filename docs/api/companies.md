@@ -1,0 +1,219 @@
+---
+title: Companies
+section: API
+order: 5
+---
+
+# `/api/companies/*`
+
+A company is the multi-tenancy boundary: a user belongs to zero or more
+companies via `company_memberships`, and a project is either
+company-scoped (`projects.company_id`) or personal. The membership
+table doubles as the access-control check — every handler resolves the
+caller's role and **404s** (not 403) when they aren't a member, so
+company existence is never leaked.
+
+> **Dev relaxation.** While the app is still in active development,
+> the membership gate on `PATCH` and `DELETE` is **off** ("we are
+> still developping the App, I can't have restriction") — every signed-
+> in user can edit / delete any company from the Objects page. The
+> guards documented below for those two endpoints are the *target*
+> shape, to re-enable before any non-dev deployment.
+
+**Route file:** [`crates/api/src/routes/companies.rs`](../../backend/crates/api/src/routes/companies.rs)
+**DTOs:** [`shared::company`](../../backend/crates/shared/src/company.rs) — `Company`, `CompanySummary`, `CompanyMember`
+**Migration:** 007 companies
+
+---
+
+## Roles
+
+`owner` > `admin` > `member`.
+
+| Action | Required role |
+|---|---|
+| List / read company + members | any member |
+| Create a company | any signed-in user (becomes `owner`) |
+| Patch company metadata, add / change / remove members | `owner` or `admin` |
+| Grant the `owner` role | `owner` only |
+| Remove or demote an `owner` | `owner` only, and never the **last** owner |
+| Leave a company (remove self) | any member (still can't strand the last owner) |
+| Delete a company | `owner` only |
+
+`admin` can't remove an `owner`; the last `owner` can't be removed or
+demoted (transfer ownership first).
+
+---
+
+## `GET /api/companies`
+
+All companies, sorted by `name`. Each carries the caller's role (when
+they're a member) and the total member count. The query LEFT JOINs
+`company_memberships ON company_id = companies.redpash_id AND user_id
+= :me`, so non-members see the row with `my_role: null` rather than
+having it filtered out — same dev-relaxation rationale as above (the
+Objects-page Companies tab needs to show every company so it can be
+edited / deleted from there).
+
+```jsonc
+200 OK
+{
+  "items": [
+    {
+      "redpash_id":   "CMP_5F3C7A21D8E94B6E92A1C0F4B3D7E0A2",
+      "name":         "Acme Data Co",
+      "slug":         "acme-data-co-5f3c7a",   // immutable, auto-derived
+      "avatar_url":   null,
+      "created_at":   "2026-05-21T09:00:00Z",
+      "updated_at":   "2026-05-21T09:00:00Z",
+      "member_count": 4,
+      "my_role":      "owner"      // null when caller isn't a member
+    }
+  ]
+}
+```
+
+`my_role` is `Option<String>` in the DTO (was `String` before the LEFT
+JOIN refactor); the frontend's `_objBadge` / `canDeleteRow` checks
+treat `null` the same as "no role yet".
+
+---
+
+## `POST /api/companies`
+
+Create a company. The creator is seated as its `owner` in the same
+transaction, so a company never exists without an owner.
+
+```jsonc
+POST /api/companies
+{
+  "name": "Acme Data Co",
+  "slug": "acme"            // optional — base for the slug; defaults to slugified name
+}
+```
+
+`slug` is **immutable**: derived as `{slugified-base}-{6-hex}` (a slice
+of the new RID) so it's unique by construction — no collision retry.
+Returns the created `Company`.
+
+---
+
+## `GET /api/companies/:rid`
+
+The company record. Requires membership.
+
+---
+
+## `PATCH /api/companies/:rid`
+
+Sparse update — `name`, `slug`, and `avatar_url`. `slug` graduated
+from immutable to user-editable so the Objects-page inline edit can
+rename a company's URL handle; the underlying column is `UNIQUE`, so
+a collision returns **`409 conflict / slug_taken`** instead of the
+old 500. Membership / role gates are currently off (dev relaxation).
+
+```jsonc
+PATCH /api/companies/CMP_…
+{ "name": "Acme Analytics", "slug": "acme-analytics", "avatar_url": "https://…/logo.png" }
+```
+
+Empty `name` is dropped server-side. Returns the updated `Company`.
+
+---
+
+## `DELETE /api/companies/:rid`
+
+Delete a company. Owner-only is the target gate; currently
+dev-permissive — any signed-in user can delete via the Objects-page
+trash. `company_memberships` cascades; `projects.company_id` is
+`ON DELETE SET NULL`, so company projects survive as personal projects
+rather than being deleted.
+
+```jsonc
+200 OK
+{ "ok": true }
+```
+
+---
+
+## `GET /api/companies/:rid/members`
+
+Members of a company, joined with each member's user profile, sorted by
+`joined_at`. Requires membership.
+
+```jsonc
+200 OK
+{
+  "items": [
+    {
+      "user_redpash_id": "USR_9A2B…",
+      "display_name":    "Jane Smith",
+      "username":        "jane.9a2b3c4d",
+      "avatar_url":      null,
+      "role":            "owner",
+      "joined_at":       "2026-05-21T09:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## `POST /api/companies/:rid/members`
+
+Add a member, or change an existing member's role (upsert on the
+composite PK). Requires `owner` / `admin`. Returns the refreshed
+member list.
+
+```jsonc
+POST /api/companies/CMP_…/members
+{
+  "user_id": "USR_…",
+  "role":    "admin"        // optional — owner | admin | member, defaults to "member"
+}
+```
+
+Only an `owner` may grant `role: "owner"`. Re-adding the last `owner`
+with a lesser role is refused (it would strand the company).
+
+---
+
+## `DELETE /api/companies/:rid/members/:user_id`
+
+Remove a member. A member may remove **themselves** (leave); removing
+anyone else needs `owner` / `admin`. Returns the refreshed member list.
+
+The last `owner` can't be removed, and an `admin` can't remove an
+`owner`.
+
+---
+
+## Errors
+
+| Status | `kind`            | When |
+|--------|-------------------|------|
+| 400    | `invalid`         | Empty company name; `role` not one of owner/admin/member |
+| 401    | `unauthenticated` | OAuth enabled, no session cookie |
+| 403    | `forbidden`       | Authenticated + a member, but role too low for the action (or last-owner / admin-vs-owner guard) — currently bypassed on `PATCH` / `DELETE` |
+| 404    | `not_found`       | Company RID missing **or** caller isn't a member; membership / target user not found |
+| 409    | `conflict / slug_taken` | `PATCH` requested a `slug` that already belongs to another company (UNIQUE constraint 23505 → mapped) |
+| 500    | `db`              | Postgres unreachable |
+
+---
+
+## Related
+
+- [projects.md](projects.md) — `PATCH /api/projects/:rid` accepts a
+  `company_id` to scope a project to a company the editor belongs to.
+- [db/schema.md](../db/schema.md) — `companies`, `company_memberships`,
+  `project_memberships` table definitions.
+
+---
+
+## Scope note
+
+Migration 007 lands the company **data model** and this `/api/companies`
+resource. Company-scoped *visibility* of projects / files / reports /
+dashboards — and any use of `project_memberships` in access checks —
+is a deliberate follow-up; today every owner-scoped endpoint still
+gates on `projects.owner_id` alone.

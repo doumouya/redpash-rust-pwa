@@ -1,0 +1,836 @@
+<!-- Cleaner workspace — mirrors redpash-demo's #page-cleaner.
+     The demo MOVES the home page's redtable panel into a slot; we own
+     the page in our router model, so the panel + Pro chrome are embedded
+     directly here. JS in scripts/pages/cleaner.js fetches /api/files/:rid,
+     paints the header (project meta · status · cleanness bar · save / undo /
+     redo / export) and mounts the file's data into the redtable body.
+
+     Phase 1 (this slice): visual shell + table rendering of the active
+     file via the existing redtable engine. Tool modals and the rest of
+     the tools-panel wiring land in subsequent phases. -->
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+
+<div id="page-cleaner" data-rt-type="file">
+
+  <!-- .rp-rtp = redtable Pro wrapper. Adds the cleanness bar / tabs /
+       tools-panel styling on top of the base .rp-rt-panel.
+       NB: the topbar lives INSIDE this wrapper so it inherits the
+       workspace gradient (.rp-rtp paints var(--grad-clean)). Placing
+       the topbar outside leaves it on the page's default surface,
+       which reads as a flat strip floating over the gradient. -->
+  <div class="rp-rtp">
+
+    <!-- Page header — back to Objects + title. Shared with /objects
+         via .rp-rt-topbar in main.css; cleanerBack() routes to #/objects. -->
+    <div class="rp-rt-topbar">
+      <button class="rp-rt-back" onclick="cleanerBack()"
+              aria-label="Back to Objects" title="Back to Objects">
+        <i class="bi bi-arrow-left"></i>
+      </button>
+      <h1 class="rp-rt-page-title">Cleaner</h1>
+    </div>
+    <div class="rp-rt-panel rp-rt-panel--cleaner" data-rt="file">
+
+      <!-- ── Header — title · meta · status · cleanness · undo / redo / save / export · + ─
+           (The page-level back button lives in .rp-rt-topbar above.) -->
+      <div class="rp-rt-header">
+        <h2 class="rp-rt-title" data-rt-title id="cleaner-title">Loading…</h2>
+
+        <div class="rp-rtp-hdr-info" data-cleaner-chrome="hdr-info">
+          <div class="rp-rtp-hdr-meta" id="cleaner-proj-meta">—</div>
+        </div>
+
+        <span class="badge" id="cleaner-proj-status" style="margin-right:0.5rem"></span>
+
+        <div class="rp-rtp-overall">
+          <span class="rp-rtp-overall-lbl">Overall cleanness</span>
+          <div class="rp-rtp-overall-bar">
+            <div class="rp-rtp-overall-fill" id="cleaner-overall-fill" style="width:0%;background:var(--muted)"></div>
+          </div>
+          <span class="rp-rtp-overall-pct" id="cleaner-overall-pct">—</span>
+        </div>
+
+        <button id="cleaner-undo" class="btn btn-ghost btn-sm" title="Undo (Ctrl+Z)"
+                onclick="cleanerUndo()" disabled>
+          <i class="bi bi-arrow-counterclockwise bi-sm"></i>
+        </button>
+        <button id="cleaner-redo" class="btn btn-ghost btn-sm" title="Redo (Ctrl+Shift+Z)"
+                onclick="cleanerRedo()" disabled>
+          <i class="bi bi-arrow-clockwise bi-sm"></i>
+        </button>
+        <button id="cleaner-save" class="btn btn-ghost btn-sm" title="Save all changes"
+                onclick="cleanerSave()" disabled>
+          <i class="bi bi-cloud-arrow-up bi-sm"></i> Save
+        </button>
+        <button class="btn btn-ghost btn-sm" id="cleaner-export" style="margin-right:0.375rem"
+                onclick="cleanerExport()" title="Export current view">
+          <i class="bi bi-download bi-sm"></i> Export
+        </button>
+
+        <button class="rp-rt-add" aria-label="Add file to project" title="Add file"
+                onclick="cleanerAddFile()">
+          <i class="bi bi-plus"></i>
+        </button>
+      </div>
+
+      <!-- ── Tabs row — 1 Overview tab + 1 per file in the project ───── -->
+      <div class="rp-rtp-tabs">
+        <div class="rp-rtp-tabs-inner" id="cleaner-tabs-list">
+          <!-- Rendered by JS once /api/files and /api/projects respond. -->
+        </div>
+      </div>
+
+      <!-- ── Toolbar — same controls as the home redtables. ─── -->
+      <div class="rp-rt-toolbar">
+        <button class="rp-rt-icon-btn" onclick="rtToggleFilter(this)" title="Filter">
+          <i class="bi bi-funnel"></i>
+        </button>
+        <input class="rp-rt-search" type="search" placeholder="Search rows…"
+               autocomplete="off" oninput="rtSearch(this, 'file')" />
+
+        <label class="rp-rt-switch" title="Edit mode">
+          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'edit')" />
+          <span class="rp-rt-switch-track"></span>
+          <i class="bi bi-pencil rp-rt-switch-ico"></i>
+        </label>
+        <label class="rp-rt-switch" title="Select mode">
+          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'select')" />
+          <span class="rp-rt-switch-track"></span>
+          <i class="bi bi-check2-square rp-rt-switch-ico"></i>
+        </label>
+        <label class="rp-rt-switch" title="Delete mode">
+          <input type="checkbox" onchange="rtToggleMode(this, 'file', 'delete')" />
+          <span class="rp-rt-switch-track"></span>
+          <i class="bi bi-trash rp-rt-switch-ico"></i>
+        </label>
+
+        <button class="rp-rt-icon-btn" title="Refresh" onclick="rtRefresh('file', this)">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+
+        <div class="rp-rt-dd-wrap">
+          <button class="rp-rt-pill-btn" onclick="rtToggleDd(this)" title="Rows per page">
+            <span data-rt-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
+            <i class="bi bi-chevron-down rp-rt-pill-chevron"></i>
+          </button>
+          <div class="rp-rt-pill-dd">
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 10)">10 rows</div>
+            <div class="rp-rt-dd-item rp-rt-dd-selected" onclick="rtSetRows(this, 'file', 25)">25 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 50)">50 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 'all')">All rows</div>
+          </div>
+        </div>
+
+        <!-- Selection chip — surfaces while select-mode is on AND at least
+             one row is ticked. Click clears; the trash button next to it
+             POSTs drop_rows for the whole selection. Lifted from the
+             demo's bulk-bar pattern but inlined into the toolbar to avoid
+             reflowing the table body. -->
+        <span class="rp-rt-sel-chip" id="cleaner-sel-chip" data-has-sel="0"
+              onclick="cleanerClearSelection()" title="Click to clear selection">
+          <i class="bi bi-check2-square"></i>
+          <span id="cleaner-sel-count">0 selected</span>
+        </span>
+        <button class="rp-rt-icon-btn" id="cleaner-bulk-del-btn"
+                style="display:none;color:var(--red)"
+                title="Delete selected rows"
+                onclick="cleanerBulkDelete()">
+          <i class="bi bi-trash3"></i>
+        </button>
+
+        <button class="rp-rt-icon-btn" id="cleaner-tools-btn"
+                onclick="toggleCleanerTools()" title="Cleaning tools" style="margin-left:auto">
+          <i class="bi bi-tools"></i>
+        </button>
+      </div>
+
+      <!-- ── Body: filter side panel + redtable + tools side panel ─── -->
+      <div class="rp-rt-body">
+
+        <!-- Filter side panel — slides in from the LEFT of the body when
+             the funnel button toggles it. Each predicate row is
+             (column · op · value · ✕); combinator radios at the top
+             decide whether all/any must match. Apply POSTs a single
+             `filter_rows` step to /steps; the Rust side composes the
+             predicates into one Polars expression (see
+             backend/crates/data/src/steps.rs `build_filter_predicate`).
+             Empty list disables Apply — a no-op step would still be
+             persisted to history and that's noise. -->
+        <div class="rp-rt-filter-panel" id="cleaner-filter-panel">
+          <div class="rp-rt-filter-inner">
+            <!-- Header mirrors the Objects-page filter panel: eraser
+                 (clear-draft), save-filter (placeholder), apply. The
+                 Close action is kept in the footer because the cleaner's
+                 filter panel is a left side-slider with no toolbar close. -->
+            <div class="rp-rt-filter-hdr">
+              <span class="rp-rtp-tools-hdr">Filter rows</span>
+              <button class="rp-rt-icon-btn" onclick="cleanerClearFilterDraft(this)"
+                      title="Clear all predicates" style="margin-left:auto">
+                <i class="bi bi-eraser"></i>
+              </button>
+              <button class="rp-rt-icon-btn" onclick="cleanerSaveFilter(this)" title="Save filter">
+                <i class="bi bi-floppy"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm" id="cleaner-filter-apply"
+                      onclick="cleanerApplyFilter(this)" disabled>
+                <i class="bi bi-funnel bi-sm"></i> Apply
+              </button>
+            </div>
+
+            <div class="rp-rtp-tool-sect open">
+              <span class="rp-rtp-tool-sect-lbl">Match</span>
+            </div>
+            <div class="rp-rt-fb-op-toggle" id="cleaner-fb-combo">
+              <button type="button" class="is-active" data-combo="and"
+                      onclick="cleanerSetCombo(this)">AND</button>
+              <button type="button" data-combo="or"
+                      onclick="cleanerSetCombo(this)">OR</button>
+            </div>
+
+            <div class="rp-rtp-tool-sect open" style="margin-top:0.625rem">
+              <span class="rp-rtp-tool-sect-lbl">Predicates</span>
+            </div>
+            <div id="cleaner-filter-rows">
+              <!-- Predicate rows live here. _ensureFilterRow keeps at
+                   least one editable row in the DOM so the user always
+                   has somewhere to type. -->
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="cleanerAddFilterRow()"
+                    style="margin-top:0.375rem;width:100%;justify-content:center">
+              <i class="bi bi-plus-circle bi-sm"></i> Add predicate
+            </button>
+
+            <!-- Footer keeps just Close (Apply moved to the header). -->
+            <div class="rp-rt-filter-footer">
+              <button class="btn btn-ghost btn-sm" onclick="rtToggleFilter()">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rp-rt-table-wrap">
+          <!-- File-issue banner: wrapped rows. Lives at the TOP of the
+               table-wrap (not inside the collapsed tools panel) so it's
+               always visible the moment _detectWrappedCsv() flags the
+               file. Sticky so it stays put while the table scrolls. -->
+          <div class="rp-rtp-fix-banner" id="cleaner-fix-wrapped"
+               data-scope="file" style="display:none">
+            <i class="bi bi-exclamation-triangle"></i>
+            <div class="rp-rtp-fix-banner-body">
+              <div class="rp-rtp-fix-banner-ttl">Wrapped rows detected</div>
+              <div class="rp-rtp-fix-banner-sub">Every row is double-quoted with internal quotes escaped — the file parses as one column.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openUnwrapCsvModal()">Fix</button>
+          </div>
+
+          <!-- Overview pane (sibling of the table). Hidden by default;
+               shown when the Overview tab is active. Painted by JS
+               `_renderOverview()`. -->
+          <div class="rp-rtp-overview" id="cleaner-overview" hidden></div>
+          <table class="rp-rt-table" id="cleaner-table">
+            <thead data-rt-thead></thead>
+            <tbody data-rt-tbody>
+              <tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Cleaning tools side panel.
+             Section visibility scoped per active tab:
+               data-scope="file"    — operates on the active file
+               data-scope="project" — needs all files (joins)
+               data-scope="any"     — always visible
+             Phase 1 ships the visual structure; each button's
+             cleanerOpenTool(...) handler lands in Phase 2. -->
+        <div class="rp-rtp-tools" id="cleaner-tools-panel">
+          <div class="rp-rtp-tools-inner">
+
+            <!-- Cleaning Tools — row-level. -->
+            <div class="rp-rtp-tool-sect open" data-scope="file" onclick="cleanerToggleToolSect(this)">
+              <span class="rp-rtp-tool-sect-lbl">Cleaning Tools</span>
+              <i class="bi bi-chevron-down rp-rtp-tool-sect-chevron"></i>
+            </div>
+            <div class="rp-rtp-tool-sect-body open" data-scope="file">
+              <div class="rp-rtp-ct-grid">
+                <button class="rp-rtp-ct-btn" title="Remove duplicates"   onclick="cleanerOpenTool('tool-dedup', this)"><i class="bi bi-copy"></i><span class="rp-rtp-ct-btn-lbl">Remove duplicates</span></button>
+                <button class="rp-rtp-ct-btn" title="Fill missing values" onclick="cleanerOpenTool('tool-fill', this)"><i class="bi bi-pencil-fill"></i><span class="rp-rtp-ct-btn-lbl">Fill missing values</span></button>
+                <button class="rp-rtp-ct-btn" title="Fix invalid values"  onclick="cleanerOpenTool('tool-invalid', this)"><i class="bi bi-wrench-adjustable"></i><span class="rp-rtp-ct-btn-lbl">Fix invalid values</span></button>
+                <button class="rp-rtp-ct-btn" title="Format dates"        onclick="cleanerOpenTool('tool-dates', this)"><i class="bi bi-calendar3"></i><span class="rp-rtp-ct-btn-lbl">Format dates</span></button>
+                <button class="rp-rtp-ct-btn" title="Drop empty rows"     onclick="cleanerOpenTool('tool-droprows', this)"><i class="bi bi-file-minus"></i><span class="rp-rtp-ct-btn-lbl">Drop empty rows</span></button>
+              </div>
+            </div>
+
+            <!-- Column Names. -->
+            <div class="rp-rtp-tool-sect open" data-scope="file" onclick="cleanerToggleToolSect(this)">
+              <span class="rp-rtp-tool-sect-lbl">Column Names</span>
+              <i class="bi bi-chevron-down rp-rtp-tool-sect-chevron"></i>
+            </div>
+            <div class="rp-rtp-tool-sect-body open" data-scope="file">
+              <div class="rp-rtp-ct-grid">
+                <button class="rp-rtp-ct-btn" title="Inspect columns"   onclick="cleanerOpenTool('tool-inspect', this)"><i class="bi bi-eye"></i><span class="rp-rtp-ct-btn-lbl">Inspect columns</span></button>
+                <button class="rp-rtp-ct-btn" title="Rename column"     onclick="cleanerOpenTool('tool-rename', this)"><i class="bi bi-cursor-text"></i><span class="rp-rtp-ct-btn-lbl">Rename column</span></button>
+                <button class="rp-rtp-ct-btn" title="Snake_case all"    onclick="cleanerOpenTool('tool-snake', this)"><i class="bi bi-braces"></i><span class="rp-rtp-ct-btn-lbl">Snake_case all</span></button>
+                <button class="rp-rtp-ct-btn" title="Replace in names"  onclick="cleanerOpenTool('tool-replacenames', this)"><i class="bi bi-tag"></i><span class="rp-rtp-ct-btn-lbl">Replace in names</span></button>
+                <button class="rp-rtp-ct-btn" title="Change case"       onclick="cleanerOpenTool('tool-changecase', this)"><i class="bi bi-fonts"></i><span class="rp-rtp-ct-btn-lbl">Change case</span></button>
+                <button class="rp-rtp-ct-btn" title="Filter / select"   onclick="cleanerOpenTool('tool-filtersel', this)"><i class="bi bi-funnel-fill"></i><span class="rp-rtp-ct-btn-lbl">Filter / select</span></button>
+                <button class="rp-rtp-ct-btn" title="Drop columns"      onclick="cleanerOpenTool('tool-dropcols', this)"><i class="bi bi-dash-square"></i><span class="rp-rtp-ct-btn-lbl">Drop columns</span></button>
+              </div>
+            </div>
+
+            <!-- String Ops. -->
+            <div class="rp-rtp-tool-sect open" data-scope="file" onclick="cleanerToggleToolSect(this)">
+              <span class="rp-rtp-tool-sect-lbl">String Ops</span>
+              <i class="bi bi-chevron-down rp-rtp-tool-sect-chevron"></i>
+            </div>
+            <div class="rp-rtp-tool-sect-body open" data-scope="file">
+              <div class="rp-rtp-ct-grid">
+                <button class="rp-rtp-ct-btn" title="Split column"    onclick="cleanerOpenTool('tool-split', this)"><i class="bi bi-scissors"></i><span class="rp-rtp-ct-btn-lbl">Split column</span></button>
+                <button class="rp-rtp-ct-btn" title="Join columns"    onclick="cleanerOpenTool('tool-joinco', this)"><i class="bi bi-link-45deg"></i><span class="rp-rtp-ct-btn-lbl">Join columns</span></button>
+                <button class="rp-rtp-ct-btn" title="Remove text"     onclick="cleanerOpenTool('tool-removetext', this)"><i class="bi bi-eraser"></i><span class="rp-rtp-ct-btn-lbl">Remove text</span></button>
+                <button class="rp-rtp-ct-btn" title="Find in values"  onclick="cleanerOpenTool('tool-find', this)"><i class="bi bi-search"></i><span class="rp-rtp-ct-btn-lbl">Find in values</span></button>
+                <button class="rp-rtp-ct-btn" title="Replace text"    onclick="cleanerOpenTool('tool-replacetext', this)"><i class="bi bi-arrow-repeat"></i><span class="rp-rtp-ct-btn-lbl">Replace text</span></button>
+              </div>
+            </div>
+
+            <!-- Data Types — click a row to cast the column. -->
+            <div class="rp-rtp-type-sep" data-scope="file">
+              <div class="rp-rtp-tools-hdr">Data Types <span class="rp-rtp-tools-hdr-hint">(click to cast)</span></div>
+              <div id="cleaner-dtype-list"><div class="rp-rtp-dtype-empty">Open a file to see column types</div></div>
+            </div>
+
+            <!-- File Encoding override. Auto-detect → user override sends
+                 a ?encoding= query on the next /page fetch. -->
+            <div class="rp-rtp-type-sep" data-scope="file">
+              <div class="rp-rtp-tools-hdr">
+                File Encoding
+                <span class="rp-rtp-tools-hdr-hint" id="cleaner-encoding-now"></span>
+              </div>
+              <select id="cleaner-encoding-select" class="rp-tm-select"
+                      style="height:1.875rem;font-size:0.6875rem"
+                      onchange="setCleanerEncoding(this.value)">
+                <option value="">Auto-detect</option>
+                <option value="utf-8">UTF-8</option>
+                <option value="utf-16le">UTF-16 LE</option>
+                <option value="utf-16be">UTF-16 BE</option>
+                <option value="windows-1252">Windows-1252 (Latin-1+)</option>
+                <option value="iso-8859-1">ISO-8859-1</option>
+                <option value="iso-8859-15">ISO-8859-15</option>
+                <option value="windows-1250">Windows-1250</option>
+                <option value="macintosh">MacRoman</option>
+              </select>
+              <div id="cleaner-encoding-note" style="font-size:0.6rem;color:var(--muted);margin-top:0.25rem;line-height:1.3"></div>
+            </div>
+
+            <!-- Applied history — populated by cleanerApplyTool → POST -->
+            <div class="rp-rtp-type-sep" data-scope="file">
+              <div class="rp-rtp-tools-hdr">Applied <span class="rp-rtp-tools-hdr-hint" id="cleaner-applied-count"></span></div>
+              <div id="cleaner-applied-list"><div class="rp-rtp-dtype-empty">No operations yet.</div></div>
+            </div>
+
+            <!-- Project-scope: Join Preparation. Greyed until cleaning done. -->
+            <div class="rp-rtp-join-panel" data-scope="project">
+              <div class="rp-rtp-tools-hdr">Join Preparation</div>
+              <div id="cleaner-join-body"><div class="rp-rtp-dtype-empty">Load a project with 2+ files to detect joins.</div></div>
+            </div>
+
+            <div class="rp-rtp-panel-footer" data-scope="project">
+              <div class="rp-rtp-panel-footer-lbl">Clean all files to unlock joining</div>
+              <button class="btn btn-ghost" style="width:100%;justify-content:center;opacity:.45;cursor:not-allowed" disabled>
+                <i class="bi bi-link-45deg bi-sm"></i> Preview joined data
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-rt-paging">
+        <div class="rp-rt-rows-info" data-rt-rows-info></div>
+        <div class="rp-rt-pages" data-rt-pages></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ━━━━━━━━━━━━━━━━━━ CLEANING TOOL MODALS ━━━━━━━━━━━━━━━━━━
+
+       18 modals lifted from redpash-demo's #page-cleaner section. Each
+       carries `.rp-tm-*` library classes from tool-modal.css and follows
+       the form-binding convention `_populateToolModal()` reads:
+
+         <select data-tool-cols>       Auto-filled with active-file columns
+         <div data-tool-checklist>     Renders a checkbox per column
+         [data-tool-sub]               Subtitle slot
+         <button data-tool-apply>      Primary action
+
+       Each apply button calls cleanerApplyTool('<id>') which reads the
+       modal's inputs into a {kind, params} payload and POSTs to
+       /api/files/:rid/steps. The Rust backend already supports every
+       kind we send.
+       ─────────────────────────────────────────────────────────────── -->
+
+  <!-- Cast-confirm — triggered from the Data Types panel's ✓ button
+       when a cast would null one or more cells. Same shell pattern as
+       the other tool modals; populated dynamically by cleaner.js's
+       cleanerCastColumn before opening. -->
+  <div class="modal-overlay" id="modal-cast-confirm"
+       onclick="closeModal('cast-confirm')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:34rem">
+      <button class="modal-close" onclick="closeModal('cast-confirm')" aria-label="Close"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--yellow)">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <div>
+          <div class="rp-tm-ttl" id="cast-confirm-title">Confirm cast</div>
+          <div class="rp-tm-sub"  id="cast-confirm-sub">…</div>
+        </div>
+      </div>
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl">Values that will become null</div>
+        <pre id="cast-confirm-samples" style="background:var(--bg);padding:0.5rem 0.625rem;border-radius:0.4375rem;overflow:auto;max-height:8rem;font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:0.6875rem;color:var(--text);white-space:pre;line-height:1.55;margin:0;border:0.0313rem solid var(--over0)"></pre>
+      </div>
+      <div class="rp-tm-sub" style="font-size:0.6875rem;color:var(--muted)">
+        You can undo this from the toolbar if it lands badly.
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost"   onclick="closeModal('cast-confirm')">Cancel</button>
+        <button class="btn btn-primary" id="cast-confirm-apply"><i class="bi bi-check2 bi-sm"></i> Apply cast</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unwrap-CSV — triggered from the cleaner's "Wrapped rows" banner. -->
+  <div class="modal-overlay" id="modal-unwrap-csv"
+       onclick="closeModal('unwrap-csv')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:38rem">
+      <button class="modal-close" onclick="closeModal('unwrap-csv')" aria-label="Close"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--yellow)"><i class="bi bi-bandaid"></i></div>
+        <div><div class="rp-tm-ttl">Unescape wrapped rows</div><div class="rp-tm-sub" id="unwrap-csv-sub">…</div></div>
+      </div>
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl">Before — raw file</div>
+        <pre id="unwrap-csv-before" style="background:var(--bg);padding:0.5rem 0.625rem;border-radius:0.4375rem;overflow:auto;max-height:8rem;font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:0.625rem;color:rgba(255,255,255,0.55);white-space:pre;line-height:1.45;margin:0;border:0.0313rem solid var(--over0)"></pre>
+      </div>
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl">After — parsed columns</div>
+        <div style="overflow:auto;max-height:8rem;border:0.0313rem solid var(--over0);border-radius:0.4375rem">
+          <table class="rp-rt-table" id="unwrap-csv-after-table" style="font-size:0.625rem"></table>
+        </div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('unwrap-csv')">Cancel</button>
+        <button class="btn btn-primary" onclick="applyUnwrapCsv()"><i class="bi bi-check2 bi-sm"></i> Apply fix</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inspect columns -->
+  <div class="modal-overlay" id="modal-tool-inspect" onclick="closeModal('tool-inspect')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:32.5rem">
+      <button class="modal-close" onclick="closeModal('tool-inspect')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-layout-three-columns"></i></div>
+        <div><div class="rp-tm-ttl">Inspect columns</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+      <div data-tool-inspect-body style="max-height:18rem;overflow-y:auto"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-inspect')">Close</button>
+        <button class="btn btn-primary" onclick="closeModal('tool-inspect');cleanerOpenTool('tool-snake')">Run Snake_case all <i class="bi bi-arrow-right bi-sm"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename column -->
+  <div class="modal-overlay" id="modal-tool-rename" onclick="closeModal('tool-rename')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-rename')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-pencil-square"></i></div>
+        <div><div class="rp-tm-ttl">Rename column</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column to rename</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">New name</div><input class="rp-tm-input" data-tool-new-name placeholder="Enter new column name…"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-rename')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-rename')">Apply rename</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snake_case all -->
+  <div class="modal-overlay" id="modal-tool-snake" onclick="closeModal('tool-snake')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:31.25rem">
+      <button class="modal-close" onclick="closeModal('tool-snake')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-arrow-left-right"></i></div>
+        <div><div class="rp-tm-ttl">Snake_case all columns</div><div class="rp-tm-sub">Replaces <code>.</code> · spaces · dashes with <code>_</code></div></div>
+      </div>
+      <div class="rp-tm-preview">
+        <div class="rp-tm-preview-hdr">Preview</div>
+        <div class="rp-tm-preview-body" data-tool-snake-preview style="max-height:9rem;overflow-y:auto"></div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-snake')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-snake')">Apply to all columns</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Replace in column names -->
+  <div class="modal-overlay" id="modal-tool-replacenames" onclick="closeModal('tool-replacenames')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-replacenames')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-fonts"></i></div>
+        <div><div class="rp-tm-ttl">Replace in names</div><div class="rp-tm-sub">Find &amp; replace a character across all column names</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem">
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Find</div><input class="rp-tm-input" data-tool-find value="."></div>
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Replace with</div><input class="rp-tm-input" data-tool-replace value="_"></div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-replacenames')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-replacenames')">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change case -->
+  <div class="modal-overlay" id="modal-tool-changecase" onclick="closeModal('tool-changecase')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-changecase')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-type"></i></div>
+        <div><div class="rp-tm-ttl">Change case</div><div class="rp-tm-sub">Transform string values' casing</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Target case</div>
+        <select class="rp-tm-select" data-tool-case-mode>
+          <option value="lower">lowercase</option>
+          <option value="upper">UPPERCASE</option>
+          <option value="title">Title Case</option>
+        </select>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-changecase')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-changecase')">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter / select columns -->
+  <div class="modal-overlay" id="modal-tool-filtersel" onclick="closeModal('tool-filtersel')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-filtersel')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-filter-square"></i></div>
+        <div><div class="rp-tm-ttl">Filter / select columns</div><div class="rp-tm-sub" data-tool-sub>Keep a subset of columns in the output file</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Name pattern (regex)</div><input class="rp-tm-input" data-tool-regex placeholder="e.g. TOP.* or date.*"></div>
+      <div data-tool-checklist style="max-height:14rem;overflow-y:auto"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-filtersel')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-filtersel')">Keep matched columns</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drop columns -->
+  <div class="modal-overlay" id="modal-tool-dropcols" onclick="closeModal('tool-dropcols')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-dropcols')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--red) 10%,transparent);color:var(--red)"><i class="bi bi-trash3"></i></div>
+        <div><div class="rp-tm-ttl">Drop columns</div><div class="rp-tm-sub">Permanently remove columns from this file</div></div>
+      </div>
+      <div class="rp-tm-field-lbl" style="margin-bottom:0.25rem">Select columns to drop</div>
+      <div data-tool-checklist style="max-height:14rem;overflow-y:auto"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-dropcols')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply style="background:var(--red);border-color:var(--red)" onclick="cleanerApplyTool('tool-dropcols')">Drop columns</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Split column -->
+  <div class="modal-overlay" id="modal-tool-split" onclick="closeModal('tool-split')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:30rem">
+      <button class="modal-close" onclick="closeModal('tool-split')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-layout-split"></i></div>
+        <div><div class="rp-tm-ttl">Split column</div><div class="rp-tm-sub">Divide one column into multiple by a separator</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column to split</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem">
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Separator</div><input class="rp-tm-input" data-tool-sep value="/"></div>
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">New column names (comma-sep.)</div><input class="rp-tm-input" data-tool-into placeholder="col_a, col_b, col_c"></div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-split')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-split')">Split &amp; add columns</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join columns -->
+  <div class="modal-overlay" id="modal-tool-joinco" onclick="closeModal('tool-joinco')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-joinco')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-link"></i></div>
+        <div><div class="rp-tm-ttl">Join columns</div><div class="rp-tm-sub">Concatenate two columns into one</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.5rem;align-items:end">
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column A</div><select class="rp-tm-select" data-tool-cols data-tool-col-a></select></div>
+        <div style="padding-bottom:0.1rem;color:var(--muted);font-size:1.125rem">+</div>
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column B</div><select class="rp-tm-select" data-tool-cols data-tool-col-b></select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem">
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Separator</div><input class="rp-tm-input" data-tool-sep value=" - "></div>
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">New column name</div><input class="rp-tm-input" data-tool-into placeholder="joined_col"></div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-joinco')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-joinco')">Create joined column</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Remove text -->
+  <div class="modal-overlay" id="modal-tool-removetext" onclick="closeModal('tool-removetext')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-removetext')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-eraser"></i></div>
+        <div><div class="rp-tm-ttl">Remove text</div><div class="rp-tm-sub">Strip a word or pattern from string values</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Pattern to remove</div><input class="rp-tm-input" data-tool-find placeholder="word, phrase or regex…"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-removetext')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-removetext')">Apply to column</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Find in values -->
+  <div class="modal-overlay" id="modal-tool-find" onclick="closeModal('tool-find')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-find')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-search"></i></div>
+        <div><div class="rp-tm-ttl">Find in values</div><div class="rp-tm-sub">Search for a string or regex across one or all columns</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Search in</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Search for</div><input class="rp-tm-input" placeholder="Search term or pattern…"></div>
+      <div class="rp-tm-find" data-tool-find-box></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-find')">Close</button>
+        <button class="btn btn-primary" onclick="closeModal('tool-find');cleanerOpenTool('tool-replacetext')">Replace these values <i class="bi bi-arrow-right bi-sm"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Replace text -->
+  <div class="modal-overlay" id="modal-tool-replacetext" onclick="closeModal('tool-replacetext')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-replacetext')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-arrow-repeat"></i></div>
+        <div><div class="rp-tm-ttl">Replace text</div><div class="rp-tm-sub">Find and replace a word or expression in string values</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem">
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Find</div><input class="rp-tm-input" data-tool-find placeholder="search term…"></div>
+        <div class="rp-tm-field"><div class="rp-tm-field-lbl">Replace with</div><input class="rp-tm-input" data-tool-replace placeholder="leave blank to remove"></div>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-replacetext')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-replacetext')">Replace values</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Remove duplicates -->
+  <div class="modal-overlay" id="modal-tool-dedup" onclick="closeModal('tool-dedup')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:34rem">
+      <button class="modal-close" onclick="closeModal('tool-dedup')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--green) 10%,transparent);color:var(--green)"><i class="bi bi-copy"></i></div>
+        <div><div class="rp-tm-ttl">Remove duplicates</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl">Detect duplicates by</div>
+        <select class="rp-tm-select" data-tool-dedup-mode onchange="cleanerDedupModeChanged()"></select>
+        <div data-tool-dedup-hint style="font-size:0.625rem;color:var(--sub);margin-top:0.25rem;line-height:1.4"></div>
+      </div>
+
+      <div class="rp-tm-stats" data-tool-stats></div>
+      <div data-tool-dedup-samples style="margin-top:0.625rem"></div>
+
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-dedup')">Close</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-dedup')">Remove duplicates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fill missing values -->
+  <div class="modal-overlay" id="modal-tool-fill" onclick="closeModal('tool-fill')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-fill')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-input-cursor-text"></i></div>
+        <div><div class="rp-tm-ttl">Fill missing values</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Fill method</div>
+        <select class="rp-tm-select" data-tool-fill-mode>
+          <option value="value">Replace with a fixed value</option>
+          <option value="forward">Forward fill (previous row)</option>
+          <option value="mode">Most frequent value</option>
+        </select>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Value</div><input class="rp-tm-input" data-tool-value placeholder="fill value…"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-fill')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-fill')">Fill nulls</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fix invalid values -->
+  <div class="modal-overlay" id="modal-tool-invalid" onclick="closeModal('tool-invalid')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:34rem">
+      <button class="modal-close" onclick="closeModal('tool-invalid')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--yellow) 10%,transparent);color:var(--yellow)"><i class="bi bi-exclamation-diamond"></i></div>
+        <div><div class="rp-tm-ttl">Fix invalid values</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--sub);margin-bottom:0.75rem" data-tool-invalid-desc>
+        Scans every string column for known sentinel placeholders (<code>N/A</code>, <code>?</code>, <code>—</code>, <code>null</code>, <code>unknown</code>, …) and lists what's actually in your file. Tick the ones to replace.
+      </div>
+
+      <!-- Sentinel checklist — populated on open from GET /api/files/:rid/sentinels?extra=. -->
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Sentinels found in this file</span>
+          <span style="display:flex;gap:0.5rem;align-items:center">
+            <button type="button" class="btn btn-ghost" style="font-size:0.625rem;padding:0.1rem 0.4rem" onclick="cleanerToolInvalidSelectAll(true)">All</button>
+            <button type="button" class="btn btn-ghost" style="font-size:0.625rem;padding:0.1rem 0.4rem" onclick="cleanerToolInvalidSelectAll(false)">None</button>
+          </span>
+        </div>
+        <div data-tool-invalid-list
+             style="max-height:14rem;overflow:auto;border:1px solid var(--over1);border-radius:0.375rem;background:var(--over0)">
+          <div style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.6875rem">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Teach the app: add a custom value, rescan immediately, persist
+           it to prefs.learned_sentinels on Apply so future files pick it
+           up automatically. -->
+      <div class="rp-tm-field">
+        <div class="rp-tm-field-lbl" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Don't see it? Add a custom value</span>
+          <span data-tool-invalid-learned-count style="font-size:0.625rem;color:var(--muted)"></span>
+        </div>
+        <div style="display:flex;gap:0.375rem">
+          <input class="rp-tm-input" data-tool-invalid-extra
+                 placeholder="e.g. ??? or ----"
+                 onkeydown="if (event.key==='Enter') { event.preventDefault(); cleanerToolInvalidAddExtra(this); }"
+                 style="flex:1">
+          <button type="button" class="btn btn-ghost"
+                  onclick="cleanerToolInvalidAddExtra(this.previousElementSibling)">
+            <i class="bi bi-plus-lg"></i>
+            Add
+          </button>
+        </div>
+        <div data-tool-invalid-extra-hint style="font-size:0.625rem;color:var(--muted);margin-top:0.25rem">
+          Added to your learned-sentinels list when you click Fix values — RedPash will scan for it automatically in every future file.
+        </div>
+      </div>
+
+      <!-- Scope — replace across all string columns, or restrict to one. -->
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Scope</div>
+        <select class="rp-tm-select" data-tool-invalid-scope onchange="cleanerToolInvalidScope(this)">
+          <option value="all">All string columns</option>
+          <option value="one">A single column…</option>
+        </select>
+      </div>
+      <div class="rp-tm-field" data-tool-invalid-col-field hidden>
+        <div class="rp-tm-field-lbl">Column</div>
+        <select class="rp-tm-select" data-tool-cols></select>
+      </div>
+
+      <!-- What to put in their place. -->
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Replace with</div>
+        <select class="rp-tm-select" data-tool-invalid-mode onchange="cleanerToolInvalidMode(this)">
+          <option value="null">Empty (null)</option>
+          <option value="custom">A custom value…</option>
+        </select>
+      </div>
+      <div class="rp-tm-field" data-tool-invalid-value-field hidden>
+        <div class="rp-tm-field-lbl">Custom value</div>
+        <input class="rp-tm-input" data-tool-value placeholder="e.g. 0 or unknown">
+      </div>
+
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-invalid')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-invalid')">Fix values</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Format dates -->
+  <div class="modal-overlay" id="modal-tool-dates" onclick="closeModal('tool-dates')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-dates')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--yellow) 10%,transparent);color:var(--yellow)"><i class="bi bi-calendar-event"></i></div>
+        <div><div class="rp-tm-ttl">Format dates</div><div class="rp-tm-sub" data-tool-sub>—</div></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--sub);margin-bottom:0.75rem" data-tool-dates-desc>Polars parses ISO / European / dotted styles automatically. Pick the output format and how to treat unparseable values.</div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Column</div><select class="rp-tm-select" data-tool-cols></select></div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">Target format</div>
+        <select class="rp-tm-select" data-tool-date-fmt>
+          <option value="%Y-%m-%d">YYYY-MM-DD (ISO 8601 — recommended)</option>
+          <option value="%d/%m/%Y">DD/MM/YYYY</option>
+          <option value="%m/%d/%Y">MM/DD/YYYY</option>
+          <option value="%Y/%m/%d">YYYY/MM/DD</option>
+        </select>
+      </div>
+      <div class="rp-tm-field"><div class="rp-tm-field-lbl">When date is incomplete</div>
+        <select class="rp-tm-select" data-tool-date-incomplete>
+          <option value="null">Set to null</option>
+          <option value="keep">Keep as-is</option>
+          <option value="drop">Drop the row</option>
+        </select>
+      </div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tool-dates')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-dates')">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drop empty rows -->
+  <div class="modal-overlay" id="modal-tool-droprows" onclick="closeModal('tool-droprows')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal('tool-droprows')"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon"><i class="bi bi-dash-circle"></i></div>
+        <div><div class="rp-tm-ttl">Drop empty rows</div><div class="rp-tm-sub">Remove rows where the selected columns are null</div></div>
+      </div>
+      <div class="rp-tm-field-lbl" style="margin-bottom:0.25rem">Drop rows where ALL of these columns are null. Leave none ticked to require all columns.</div>
+      <div data-tool-checklist style="max-height:14rem;overflow-y:auto"></div>
+      <div class="rp-tm-footer" style="margin-top:0.75rem">
+        <button class="btn btn-ghost" onclick="closeModal('tool-droprows')">Cancel</button>
+        <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-droprows')">Drop rows</button>
+      </div>
+    </div>
+  </div>
+
+</div>

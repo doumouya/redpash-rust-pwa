@@ -1,0 +1,17 @@
+<!-- RedPash brand mark (PWA install icon + in-page logo).
+     Same recipe as favicon.svg at 2× viewBox so the launcher / topbar
+     get the higher-res circle. Path is the canonical Savate-900 R
+     glyph — see favicon.svg for the extraction note. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="RedPash">
+  <defs>
+    <radialGradient id="rp-logo-gradient" cx="38%" cy="35%" r="75%">
+      <stop offset="0%"   stop-color="#ff7a7a"/>
+      <stop offset="48%"  stop-color="#e53935"/>
+      <stop offset="100%" stop-color="#8b0000"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="32" fill="url(#rp-logo-gradient)"/>
+  <g fill="#ffffff" transform="translate(32 32) scale(0.068 -0.068) translate(-379.5 -357)">
+    <path d="M578 -16Q542 -16 517 -2.5Q492 11 476.5 44Q461 77 453 133Q449 166 440 182Q431 198 415 203.5Q399 209 370 209H150V367H459Q488 367 501 378Q514 389 514 411Q514 431 500 441Q486 451 460 451H166V0H70V730H403Q482 730 532 704.5Q582 679 606 629.5Q630 580 630 506Q630 392 582.5 333Q535 274 429 285L424 295Q474 295 497.5 285Q521 275 533 239Q539 221 548 211Q557 201 568 196.5Q579 192 592 192Q606 192 619.5 196.5Q633 201 644 210L689 55Q670 18 642.5 1Q615 -16 578 -16Z"/>
+  </g>
+</svg>

@@ -1,0 +1,287 @@
+<!-- Objects page — the single browse surface for projects / files /
+     reports / dashboards. One redtable, customizable tabs. Replaces
+     Home's old steps 2–5 and the standalone /reports + /dashboards
+     routes.
+
+     Full-bleed shell (chrome:"full" in main.js ROUTES) — no rp-topbar.
+     It owns its own header (.rp-rt-topbar: back-to-Home + title), shared
+     with the cleaner page so the two full-bleed workspaces read alike.
+     The toolbar handlers are
+     kind-implicit: objects.js tracks currentKind and the obj* globals
+     read it, so the single panel serves every tab. -->
+
+<!-- Bootstrap Icons — each partial loads its own copy; the router
+     strips the previous partial's <link> on navigation, so without
+     this every icon on the page renders as an empty box. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+
+<div id="page-objects">
+
+  <!-- Page header — back to Home + title. -->
+  <div class="rp-rt-topbar">
+    <button class="rp-rt-back" onclick="location.hash='#/home'"
+            aria-label="Back to Home" title="Back to Home">
+      <i class="bi bi-arrow-left"></i>
+    </button>
+    <h1 class="rp-rt-page-title">Objects overview</h1>
+  </div>
+
+  <!-- Tab strip — filled by objects.js _renderTabs(). -->
+  <div class="obj-tabs" id="obj-tabs"></div>
+
+  <!-- Single redtable panel. data-rt is updated per tab by
+       objActivateTab so any future per-kind CSS hooks have something
+       to target; the JS itself selects the panel by class. -->
+  <div class="rp-rt-panel rp-rt-panel--embedded" data-rt="projects">
+    <!-- Header — panel title + a live meta line + Save / Export + the
+         add button. Objects is a browse surface, so the redtable's
+         editor chrome (undo / redo, status badge, cleanness bar) was
+         dropped — it has no meaning here. `obj-hdr-meta` shows live
+         row counts; Save persists the current tab's view config
+         (columns / order / rows-per-page / row numbers / date format)
+         as a per-tab pref — the predicate filter is NOT included, the
+         filter panel has its own save button; Export downloads the
+         current filtered view as CSV. -->
+    <div class="rp-rt-header">
+      <h2 class="rp-rt-title" data-rt-title>My Projects</h2>
+
+      <div class="rp-rtp-hdr-info">
+        <div class="rp-rtp-hdr-meta" id="obj-hdr-meta">—</div>
+      </div>
+
+      <button id="obj-save" class="btn btn-ghost btn-sm" title="Save this tab's view (columns, order, rows-per-page, row numbers, date format)"
+              onclick="objSave()">
+        <i class="bi bi-cloud-arrow-up bi-sm"></i> Save view
+      </button>
+      <button class="btn btn-ghost btn-sm" id="obj-export" style="margin-right:0.375rem"
+              onclick="objExport()" title="Export current view as CSV">
+        <i class="bi bi-download bi-sm"></i> Export
+      </button>
+
+      <button class="rp-rt-add" data-rt-add aria-label="Add" title="Add" onclick="objAdd()">
+        <i class="bi bi-plus"></i>
+      </button>
+    </div>
+
+    <div class="rp-rt-toolbar">
+      <button class="rp-rt-icon-btn" onclick="objToggleFilter(this)" title="Filter">
+        <i class="bi bi-funnel"></i>
+      </button>
+      <input class="rp-rt-search" type="search" placeholder="Search projects…"
+             autocomplete="off" oninput="objSearch(this)" />
+
+      <label class="rp-rt-switch" title="Edit mode">
+        <input type="checkbox" onchange="objToggleMode(this, 'edit')" />
+        <span class="rp-rt-switch-track"></span>
+        <i class="bi bi-pencil rp-rt-switch-ico"></i>
+      </label>
+      <label class="rp-rt-switch" title="Delete mode">
+        <input type="checkbox" onchange="objToggleMode(this, 'delete')" />
+        <span class="rp-rt-switch-track"></span>
+        <i class="bi bi-trash rp-rt-switch-ico"></i>
+      </label>
+      <label class="rp-rt-switch" title="Select mode">
+        <input type="checkbox" onchange="objToggleMode(this, 'select')" />
+        <span class="rp-rt-switch-track"></span>
+        <i class="bi bi-check2-square rp-rt-switch-ico"></i>
+      </label>
+
+      <!-- Selection chip + bulk-delete — visible only while select-mode
+           is on AND at least one row is ticked (CSS-gated). Click the
+           chip to clear; the trash button bulk-deletes the selection. -->
+      <span class="rp-rt-sel-chip" id="obj-sel-chip" data-has-sel="0"
+            onclick="objClearSelection()" title="Click to clear selection">
+        <i class="bi bi-check2-square"></i>
+        <span id="obj-sel-count">0 selected</span>
+      </span>
+      <button class="rp-rt-icon-btn" id="obj-bulk-del-btn"
+              style="display:none;color:var(--red)"
+              title="Delete selected" onclick="objBulkDelete()">
+        <i class="bi bi-trash3"></i>
+      </button>
+
+      <!-- Bulk score / clear-score — visible only on the Files tab when
+           the selection is non-empty. Same per-file loop as the toolbar
+           Score / Clear buttons (objScoreFiles / objClearFileScores)
+           but scoped to the ticked rows. -->
+      <button class="rp-rt-icon-btn" id="obj-bulk-score-btn"
+              style="display:none" title="Score selected"
+              onclick="objBulkScore(this)">
+        <i class="bi bi-magic"></i>
+      </button>
+      <button class="rp-rt-icon-btn" id="obj-bulk-clear-score-btn"
+              style="display:none" title="Clear selected scores"
+              onclick="objBulkClearScores(this)">
+        <i class="bi bi-slash-circle"></i>
+      </button>
+
+      <button class="rp-rt-icon-btn" title="Refresh" onclick="objRefresh(this)">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+
+      <!-- Show row numbers — toggles a leading "#" index column. -->
+      <button class="rp-rt-icon-btn" id="obj-rownum-btn" title="Show row numbers"
+              onclick="objToggleRowNums(this)">
+        <i class="bi bi-list-ol"></i>
+      </button>
+
+      <!-- Favorites only — filters to ★ rows. Only shown on tabs whose
+           objects carry an is_favorite attribute (reports / dashboards);
+           objActivateTab toggles its display per kind. -->
+      <button class="rp-rt-icon-btn" id="obj-fav-btn" title="Favorites only"
+              style="display:none" onclick="objToggleFav(this)">
+        <i class="bi bi-star-fill"></i>
+      </button>
+
+      <!-- Score files — recomputes cleanness for every file in the
+           project. Mirrors the cleaner overview's #ov-score-btn but as
+           an icon-only toolbar button. Only shown on the Files tab. -->
+      <button class="rp-rt-icon-btn" id="obj-score-btn" title="Score files"
+              style="display:none" onclick="objScoreFiles(this)">
+        <i class="bi bi-magic"></i>
+      </button>
+
+      <!-- Clear scores — dev/test convenience: nulls cleanness_pct for
+           every file in the list so the user can re-run "Score files"
+           and verify the recompute path. Files-tab only. -->
+      <button class="rp-rt-icon-btn" id="obj-clear-score-btn" title="Clear scores"
+              style="display:none" onclick="objClearFileScores(this)">
+        <i class="bi bi-slash-circle"></i>
+      </button>
+
+      <div class="rp-rt-dd-wrap">
+        <button class="rp-rt-pill-btn" onclick="objToggleDd(this)" title="Rows per page">
+          <span data-rt-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
+          <i class="bi bi-chevron-down rp-rt-pill-chevron"></i>
+        </button>
+        <!-- Capped at 250 — "All" rendered every row at once and lagged
+             the page on large tables. -->
+        <div class="rp-rt-pill-dd">
+          <div class="rp-rt-dd-item"                   onclick="objSetRows(this, 10)">10 rows</div>
+          <div class="rp-rt-dd-item rp-rt-dd-selected" onclick="objSetRows(this, 25)">25 rows</div>
+          <div class="rp-rt-dd-item"                   onclick="objSetRows(this, 50)">50 rows</div>
+          <div class="rp-rt-dd-item"                   onclick="objSetRows(this, 100)">100 rows</div>
+          <div class="rp-rt-dd-item"                   onclick="objSetRows(this, 250)">250 rows</div>
+        </div>
+      </div>
+
+      <!-- Date format — how date columns (Modified, …) render. Module-
+           wide setting; objSetDateFmt re-renders the active tab. -->
+      <div class="rp-rt-dd-wrap">
+        <button class="rp-rt-pill-btn" onclick="objToggleDd(this)" title="Date format">
+          <i class="bi bi-calendar3" style="font-size:0.75rem;margin-right:0.25rem"></i>
+          <span data-rt-datefmt-label>Date &amp; time</span>
+          <i class="bi bi-chevron-down rp-rt-pill-chevron"></i>
+        </button>
+        <div class="rp-rt-pill-dd">
+          <div class="rp-rt-dd-item"                   onclick="objSetDateFmt(this, 'relative')">Relative</div>
+          <div class="rp-rt-dd-item"                   onclick="objSetDateFmt(this, 'date')">Date</div>
+          <div class="rp-rt-dd-item rp-rt-dd-selected" onclick="objSetDateFmt(this, 'datetime')">Date &amp; time</div>
+        </div>
+      </div>
+
+      <!-- Columns — show / hide columns. Per-tab; the checkbox list is
+           rebuilt by objBuildColsDropdown() on every tab switch.
+           Pure-hover dropdown (library .rp-rt-cols-wrap:hover rule) —
+           NO onclick: a click handler would pin it open via `.open`
+           and break the hover-to-close. -->
+      <div class="rp-rt-cols-wrap">
+        <button class="rp-rt-icon-btn" type="button" title="Columns">
+          <i class="bi bi-layout-three-columns"></i>
+        </button>
+        <div class="rp-rt-cols-dd" id="obj-cols-dd"><!-- built by objBuildColsDropdown() --></div>
+      </div>
+
+      <!-- Column order — drag to reorder the visible columns. Per-tab;
+           the list is rebuilt by objBuildColOrderList(). Pure-hover, as
+           above. -->
+      <div class="rp-rt-cols-wrap">
+        <button class="rp-rt-icon-btn" type="button" title="Column order">
+          <i class="bi bi-arrow-down-up"></i>
+        </button>
+        <div class="rp-rt-cols-dd" id="obj-col-order-dd">
+          <div class="rp-col-order">
+            <div class="rp-col-order-hd">Drag to reorder</div>
+            <div id="obj-col-order-list"><!-- built by objBuildColOrderList() --></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rp-rt-body">
+
+      <!-- Predicate filter side panel — ported from the redpash-demo
+           redtable prototype. Two-tab strip: "Filters" hosts the
+           predicate filter; "Report tools" is hidden on the Objects
+           page (Objects only needs the Filter tab — see the redtable
+           superset plan). objToggleFilter opens/closes it. -->
+      <div id="obj-filter-panel" class="rp-rt-filter">
+        <div class="rp-rt-side-tabs">
+          <button class="rp-rt-side-tab active" type="button"
+                  onclick="objSidePane(this, 'obj-filter-pane-1')">Filters</button>
+          <button class="rp-rt-side-tab" type="button" hidden
+                  onclick="objSidePane(this, 'obj-filter-pane-2')">Report tools</button>
+        </div>
+
+        <div class="rp-rt-side-pane active" id="obj-filter-pane-1">
+          <div class="rp-rt-filter-inner">
+            <div class="rp-rt-filter-hdr">
+              <span class="rp-rtp-tools-hdr">Filter rows</span>
+              <button class="rp-rt-icon-btn" onclick="objClearFilterDraft(this)"
+                      title="Clear all predicates" style="margin-left:auto">
+                <i class="bi bi-eraser"></i>
+              </button>
+              <button class="rp-rt-icon-btn" onclick="objSaveFilter(this)" title="Save filter">
+                <i class="bi bi-floppy"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm" id="obj-filter-apply"
+                      onclick="objApplyFilter(this)" disabled>
+                <i class="bi bi-funnel bi-sm"></i> Apply
+              </button>
+            </div>
+
+            <div class="rp-rtp-tool-sect open">
+              <span class="rp-rtp-tool-sect-lbl">Match</span>
+            </div>
+            <div class="rp-rt-fb-op-toggle" id="obj-fb-combo">
+              <button type="button" class="is-active" data-combo="and"
+                      onclick="objSetCombo(this)">AND</button>
+              <button type="button" data-combo="or"
+                      onclick="objSetCombo(this)">OR</button>
+            </div>
+
+            <div class="rp-rtp-tool-sect open" style="margin-top:0.625rem">
+              <span class="rp-rtp-tool-sect-lbl">Predicates</span>
+            </div>
+            <div id="obj-filter-rows"><!-- predicate rows built by JS --></div>
+            <button class="btn btn-ghost btn-sm" onclick="objAddFilterRow()"
+                    style="margin-top:0.375rem;width:100%;justify-content:center">
+              <i class="bi bi-plus-circle bi-sm"></i> Add predicate
+            </button>
+          </div>
+        </div>
+
+        <!-- Report tools pane — hidden on the Objects page; kept so the
+             structure matches the Cleaner / Report pages. -->
+        <div class="rp-rt-side-pane" id="obj-filter-pane-2" hidden></div>
+      </div>
+
+      <div class="rp-rt-table-wrap">
+        <table class="rp-rt-table">
+          <thead data-rt-thead></thead>
+          <tbody data-rt-tbody>
+            <tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="rp-rt-paging">
+      <div class="rp-rt-rows-info" data-rt-rows-info></div>
+      <div class="rp-rt-pages" data-rt-pages></div>
+    </div>
+    <!-- Bulk actions moved to the toolbar (selection chip + bulk-delete
+         button) — ported from the Cleaner's mode treatment. -->
+  </div>
+
+</div>

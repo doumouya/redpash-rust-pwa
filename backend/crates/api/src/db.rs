@@ -1,0 +1,1559 @@
+//! Thin SQL helpers.
+//!
+//! All queries are non-macro (`sqlx::query` + `query_as::<_, Row>`) so
+//! the crate compiles without `DATABASE_URL` at build time. Each helper
+//! takes a `&PgPool` and returns a domain DTO from `shared::*`.
+
+use chrono::{DateTime, Utc};
+use shared::company::{Company, CompanyMember, CompanySummary};
+use shared::dashboard::{Dashboard, DashboardSpec};
+use shared::file::{ColumnMeta, FileSummary};
+use shared::project::ProjectSummary;
+use shared::report::{Report, ReportSpec};
+use shared::step::ProjectStep;
+use shared::user::{UserMembership, UserProfile};
+use sqlx::{FromRow, PgPool, Row};
+
+// ─── users ──────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct UserRow {
+    redpash_id:   String,
+    username:     String,
+    email:        Option<String>,
+    display_name: String,
+    avatar_url:   Option<String>,
+    job_title:    Option<String>,
+    organisation: Option<String>,
+    use_case:     Option<String>,
+    plan:         String,
+    locale:       String,
+    prefs:        serde_json::Value,
+}
+impl From<UserRow> for UserProfile {
+    fn from(r: UserRow) -> Self {
+        Self {
+            redpash_id:   r.redpash_id,
+            username:     r.username,
+            email:        r.email,
+            display_name: r.display_name,
+            avatar_url:   r.avatar_url,
+            job_title:    r.job_title,
+            organisation: r.organisation,
+            use_case:     r.use_case,
+            plan:         r.plan,
+            locale:       r.locale,
+            prefs:        r.prefs,
+            memberships:  Vec::new(),
+        }
+    }
+}
+
+pub async fn find_user_by_username(pool: &PgPool, username: &str) -> sqlx::Result<Option<UserProfile>> {
+    let row: Option<UserRow> = sqlx::query_as(
+        "SELECT redpash_id, username, email, display_name, avatar_url,
+                job_title, organisation, use_case, plan, locale, prefs
+         FROM users WHERE username = $1",
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn find_user_by_id(pool: &PgPool, rid: &str) -> sqlx::Result<Option<UserProfile>> {
+    let row: Option<UserRow> = sqlx::query_as(
+        "SELECT redpash_id, username, email, display_name, avatar_url,
+                job_title, organisation, use_case, plan, locale, prefs
+         FROM users WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Every user — powers the Objects page's owner-reassignment picker.
+/// No org scoping yet (single-tenant); add a `WHERE org_id = …` when
+/// organisations land.
+pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
+    let rows: Vec<UserRow> = sqlx::query_as(
+        "SELECT redpash_id, username, email, display_name, avatar_url,
+                job_title, organisation, use_case, plan, locale, prefs
+         FROM users ORDER BY display_name ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+    // Memberships in one round-trip — group_concat by user id, then
+    // attach. Cheap at directory scale; if/when the users table grows
+    // into thousands, switch to a windowed query or paginate.
+    let mem_rows = sqlx::query(
+        "SELECT m.user_redpash_id, m.company_id, m.role, c.name AS company_name
+         FROM company_memberships m
+         JOIN companies c ON c.redpash_id = m.company_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut by_user: std::collections::HashMap<String, Vec<UserMembership>> =
+        std::collections::HashMap::new();
+    for r in &mem_rows {
+        by_user.entry(r.get::<String, _>("user_redpash_id")).or_default().push(UserMembership {
+            company_id:   r.get("company_id"),
+            company_name: r.get("company_name"),
+            role:         r.get("role"),
+        });
+    }
+    Ok(rows.into_iter().map(|r| {
+        let mut u: UserProfile = r.into();
+        u.memberships = by_user.remove(&u.redpash_id).unwrap_or_default();
+        u
+    }).collect())
+}
+
+/// Sparse update — every `Option::Some` field overwrites the column;
+/// `None` keeps the existing value via `COALESCE`. `prefs_patch` is
+/// merged shallowly with the existing JSONB via the `||` operator so
+/// callers can patch a single key without re-sending the whole object.
+/// `updated_at` is bumped on every call.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_user(
+    pool:         &PgPool,
+    rid:          &str,
+    display_name: Option<&str>,
+    username:     Option<&str>,
+    email:        Option<&str>,
+    plan:         Option<&str>,
+    avatar_url:   Option<&str>,
+    job_title:    Option<&str>,
+    organisation: Option<&str>,
+    use_case:     Option<&str>,
+    locale:       Option<&str>,
+    prefs_patch:  Option<&serde_json::Value>,
+) -> sqlx::Result<Option<UserProfile>> {
+    let row: Option<UserRow> = sqlx::query_as(
+        "UPDATE users SET
+            display_name = COALESCE($2,  display_name),
+            username     = COALESCE($3,  username),
+            email        = COALESCE($4,  email),
+            plan         = COALESCE($5,  plan),
+            avatar_url   = COALESCE($6,  avatar_url),
+            job_title    = COALESCE($7,  job_title),
+            organisation = COALESCE($8,  organisation),
+            use_case     = COALESCE($9,  use_case),
+            locale       = COALESCE($10, locale),
+            prefs        = prefs || COALESCE($11, '{}'::jsonb),
+            updated_at   = now()
+         WHERE redpash_id = $1
+         RETURNING redpash_id, username, email, display_name, avatar_url,
+                   job_title, organisation, use_case, plan, locale, prefs",
+    )
+    .bind(rid)
+    .bind(display_name)
+    .bind(username)
+    .bind(email)
+    .bind(plan)
+    .bind(avatar_url)
+    .bind(job_title)
+    .bind(organisation)
+    .bind(use_case)
+    .bind(locale)
+    .bind(prefs_patch)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_user(
+    pool:         &PgPool,
+    rid:          &str,
+    username:     &str,
+    display_name: &str,
+    email:        Option<&str>,
+) -> sqlx::Result<UserProfile> {
+    let row: UserRow = sqlx::query_as(
+        "INSERT INTO users (redpash_id, username, display_name, email)
+         VALUES ($1, $2, $3, $4)
+         RETURNING redpash_id, username, email, display_name, avatar_url,
+                   job_title, organisation, use_case, plan, locale, prefs",
+    )
+    .bind(rid)
+    .bind(username)
+    .bind(display_name)
+    .bind(email)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+pub async fn delete_user(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    // FKs from sessions / project_memberships / company_memberships /
+    // projects.owner_id all cascade — the row going away takes the
+    // user's auth + their owned projects with it. Use with care; the
+    // Users-tab UI in dev mode is intentionally permissive.
+    let n = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+/// Look up a user by their Google `sub` (subject) claim. The Google
+/// `sub` is stable per Google account across name/email changes, so
+/// this is the right matching key for returning users.
+pub async fn find_user_by_google_sub(pool: &PgPool, sub: &str) -> sqlx::Result<Option<UserProfile>> {
+    let row: Option<UserRow> = sqlx::query_as(
+        "SELECT redpash_id, username, email, display_name, avatar_url,
+                job_title, organisation, use_case, plan, locale, prefs
+         FROM users WHERE google_sub = $1",
+    )
+    .bind(sub)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Upsert a user by Google sub. On insert, generates a new RID and
+/// populates display_name / email / avatar_url from the OAuth claims.
+/// On match, refreshes display_name / email / avatar_url so the
+/// stored profile tracks the Google account.
+pub async fn upsert_google_user(
+    pool:         &PgPool,
+    sub:          &str,
+    email:        &str,
+    display_name: &str,
+    avatar_url:   Option<&str>,
+) -> sqlx::Result<UserProfile> {
+    if let Some(existing) = find_user_by_google_sub(pool, sub).await? {
+        // Refresh the soft profile fields each sign-in so the user's
+        // name and avatar stay in sync with their Google account.
+        let row: UserRow = sqlx::query_as(
+            "UPDATE users
+                SET email        = $2,
+                    display_name = $3,
+                    avatar_url   = $4,
+                    updated_at   = now()
+              WHERE redpash_id = $1
+              RETURNING redpash_id, username, email, display_name, avatar_url,
+                        job_title, organisation, use_case, plan, locale, prefs",
+        )
+        .bind(&existing.redpash_id)
+        .bind(email)
+        .bind(display_name)
+        .bind(avatar_url)
+        .fetch_one(pool)
+        .await?;
+        return Ok(row.into());
+    }
+    let rid = crate::id::new("USR");
+    // Username derives from email's local part — collision-resistant
+    // via the RID suffix so unique-constraints don't fail on repeats.
+    let local = email.split('@').next().unwrap_or("user");
+    let username = format!("{local}.{}", &rid[4..12].to_ascii_lowercase());
+    let row: UserRow = sqlx::query_as(
+        "INSERT INTO users (redpash_id, username, email, display_name, avatar_url, google_sub)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING redpash_id, username, email, display_name, avatar_url,
+                   job_title, organisation, use_case, plan, locale, prefs",
+    )
+    .bind(&rid)
+    .bind(&username)
+    .bind(email)
+    .bind(display_name)
+    .bind(avatar_url)
+    .bind(sub)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+// ─── sessions ───────────────────────────────────────────────────
+
+pub async fn create_session(pool: &PgPool, user_rid: &str, ttl_days: i64) -> sqlx::Result<String> {
+    let sid = crate::id::new("SES");
+    sqlx::query(
+        "INSERT INTO sessions (redpash_id, user_redpash_id, expires_at)
+         VALUES ($1, $2, now() + ($3 || ' days')::interval)",
+    )
+    .bind(&sid)
+    .bind(user_rid)
+    .bind(ttl_days.to_string())
+    .execute(pool)
+    .await?;
+    Ok(sid)
+}
+
+/// Returns the user RID for a session if it exists and hasn't expired.
+/// Auto-deletes the row if expired (cheap cleanup on the read path).
+pub async fn find_session_user(pool: &PgPool, sid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT user_redpash_id, expires_at FROM sessions WHERE redpash_id = $1",
+    )
+    .bind(sid)
+    .fetch_optional(pool)
+    .await?;
+    let Some((user_rid, expires_at)) = row else { return Ok(None); };
+    if expires_at < Utc::now() {
+        let _ = sqlx::query("DELETE FROM sessions WHERE redpash_id = $1")
+            .bind(sid)
+            .execute(pool)
+            .await;
+        return Ok(None);
+    }
+    Ok(Some(user_rid))
+}
+
+pub async fn delete_session(pool: &PgPool, sid: &str) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM sessions WHERE redpash_id = $1")
+        .bind(sid)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// ─── projects ───────────────────────────────────────────────────
+
+pub async fn find_default_project(pool: &PgPool, owner: &str) -> sqlx::Result<Option<String>> {
+    let row = sqlx::query("SELECT redpash_id FROM projects WHERE owner_id = $1 AND is_default LIMIT 1")
+        .bind(owner)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.get::<String, _>(0)))
+}
+
+pub async fn insert_project(pool: &PgPool, rid: &str, owner: &str, name: &str, is_default: bool) -> sqlx::Result<()> {
+    sqlx::query("INSERT INTO projects (redpash_id, owner_id, name, is_default) VALUES ($1, $2, $3, $4)")
+        .bind(rid)
+        .bind(owner)
+        .bind(name)
+        .bind(is_default)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Idempotent — returns the user's default project RID, creating it
+/// if the user has none yet. Called on every Google sign-in so a
+/// brand-new account lands with a usable workspace immediately.
+pub async fn ensure_default_project(pool: &PgPool, owner: &str) -> sqlx::Result<String> {
+    if let Some(rid) = find_default_project(pool, owner).await? {
+        return Ok(rid);
+    }
+    let rid = crate::id::new("PRJ");
+    insert_project(pool, &rid, owner, "Workspace", true).await?;
+    Ok(rid)
+}
+
+/// Find a project by name within this owner's workspace. Returns the
+/// first match (name is not unique today; could be made unique with a
+/// partial index later). Case-sensitive match.
+pub async fn find_project_by_name(pool: &PgPool, owner: &str, name: &str) -> sqlx::Result<Option<String>> {
+    let row = sqlx::query(
+        "SELECT redpash_id FROM projects \
+         WHERE owner_id = $1 AND name = $2 \
+         ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(owner)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.get::<String, _>(0)))
+}
+
+/// Find-or-create a project under `owner` with the given name.
+///
+/// Called from the upload handler when the file-review modal supplies a
+/// project_name field — without this, every upload pools into the
+/// auto-created "Workspace" default and the user can never split files
+/// into separate projects. The matching is case-sensitive on `name`, so
+/// a fresh capitalisation creates a new project. is_default stays false
+/// here so the user's default-Workspace assignment isn't disturbed.
+pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sqlx::Result<String> {
+    if let Some(rid) = find_project_by_name(pool, owner, name).await? {
+        return Ok(rid);
+    }
+    let rid = crate::id::new("PRJ");
+    insert_project(pool, &rid, owner, name, false).await?;
+    Ok(rid)
+}
+
+// Shared SELECT for ProjectSummary — joins `users` for the owner's
+// display_name / username. `{where}` is spliced per caller.
+//
+// `stage` is computed: the most advanced stage of any file in the
+// project, aggregated from the `file_stages` view. `status` is the
+// stored column, with a 'published' overlay when the project has a
+// public dashboard (the stored draft/active/archived is what the
+// inline edit-cell writes; 'published' is never persisted).
+const PROJECT_SELECT: &str =
+    "SELECT p.redpash_id, p.name, p.description, p.is_default, p.owner_id, p.company_id,
+            (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
+                      WHEN 3 THEN 'publish' WHEN 2 THEN 'report' WHEN 1 THEN 'clean'
+                      ELSE 'import' END
+             FROM file_stages fs WHERE fs.project_redpash_id = p.redpash_id) AS stage,
+            CASE WHEN EXISTS (SELECT 1 FROM dashboards d
+                              WHERE d.project_redpash_id = p.redpash_id AND d.is_public)
+                 THEN 'published' ELSE p.status END AS status,
+            p.created_at, p.updated_at,
+            u.display_name AS owner_display_name, u.username AS owner_username,
+            (SELECT COUNT(*) FROM project_files f WHERE f.project_redpash_id = p.redpash_id) AS file_count
+     FROM projects p JOIN users u ON u.redpash_id = p.owner_id";
+
+fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
+    ProjectSummary {
+        redpash_id:         r.get("redpash_id"),
+        name:               r.get("name"),
+        description:        r.try_get("description").ok(),
+        file_count:         r.try_get::<i64, _>("file_count").unwrap_or(0) as u32,
+        cleanness_pct:      None,
+        stage:              r.get("stage"),
+        status:             r.get("status"),
+        is_default:         r.get("is_default"),
+        owner_id:           r.get("owner_id"),
+        owner_display_name: r.get("owner_display_name"),
+        owner_username:     r.get("owner_username"),
+        company_id:         r.get("company_id"),
+        created_at:         r.get::<DateTime<Utc>, _>("created_at"),
+        updated_at:         r.get::<DateTime<Utc>, _>("updated_at"),
+    }
+}
+
+pub async fn list_projects(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<ProjectSummary>> {
+    let rows = sqlx::query(
+        &format!("{PROJECT_SELECT} WHERE p.owner_id = $1
+                  ORDER BY p.is_default DESC, p.created_at ASC"),
+    )
+    .bind(owner)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(row_to_project).collect())
+}
+
+pub async fn get_project(pool: &PgPool, rid: &str) -> sqlx::Result<Option<ProjectSummary>> {
+    let row = sqlx::query(&format!("{PROJECT_SELECT} WHERE p.redpash_id = $1"))
+        .bind(rid)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.as_ref().map(row_to_project))
+}
+
+// Sparse metadata update from the Objects overview's inline edit-mode.
+// COALESCE keeps any field the caller didn't send. Returns the fresh
+// ProjectSummary (re-fetched through the owner join) or None if the
+// project doesn't exist. `owner` is the project's current owner —
+// needed to clear their existing default when flipping `is_default` on
+// (the `projects_owner_default_idx` partial unique index allows only
+// one default per owner, so the two writes run in one transaction).
+#[allow(clippy::too_many_arguments)]
+pub async fn update_project_meta(
+    pool:        &PgPool,
+    rid:         &str,
+    owner:       &str,
+    name:        Option<&str>,
+    description: Option<&str>,
+    is_default:  Option<bool>,
+    owner_id:    Option<&str>,
+    company_id:  Option<&str>,
+    status:      Option<&str>,
+) -> sqlx::Result<Option<ProjectSummary>> {
+    let mut tx = pool.begin().await?;
+    if is_default == Some(true) {
+        sqlx::query(
+            "UPDATE projects SET is_default = false, updated_at = now()
+             WHERE owner_id = $1 AND is_default AND redpash_id <> $2",
+        )
+        .bind(owner)
+        .bind(rid)
+        .execute(&mut *tx)
+        .await?;
+    }
+    // COALESCE keeps any unsent field — including `company_id`, so this
+    // path can set or re-scope a project's company but not clear it back
+    // to personal (a dedicated unset path lands with the company UI).
+    let res = sqlx::query(
+        "UPDATE projects
+         SET name        = COALESCE($2, name),
+             description  = COALESCE($3, description),
+             is_default   = COALESCE($4, is_default),
+             owner_id     = COALESCE($5, owner_id),
+             company_id   = COALESCE($6, company_id),
+             status       = COALESCE($7, status),
+             updated_at   = now()
+         WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .bind(name)
+    .bind(description)
+    .bind(is_default)
+    .bind(owner_id)
+    .bind(company_id)
+    .bind(status)
+    .execute(&mut *tx)
+    .await?;
+    if res.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    tx.commit().await?;
+    get_project(pool, rid).await
+}
+
+/// File RIDs in a project — the project-delete handler grabs these
+/// *before* the cascade clears the rows, so it can evict the hot-frame
+/// cache and unlink the on-disk blobs (the FK cascade only drops DB
+/// rows, not the files on disk).
+pub async fn project_file_rids(pool: &PgPool, project_rid: &str) -> sqlx::Result<Vec<String>> {
+    let rows = sqlx::query("SELECT redpash_id FROM project_files WHERE project_redpash_id = $1")
+        .bind(project_rid)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("redpash_id")).collect())
+}
+
+/// Delete a project — unless it's the owner's **default**. The
+/// `AND NOT is_default` guard makes the check atomic with the delete:
+/// `Ok(false)` means the row exists (the handler's `ensure_owner`
+/// already confirmed that) but is the default, so the caller must
+/// promote another project to default first. Cascades to files /
+/// steps / reports / dashboards / memberships via FK.
+pub async fn delete_project(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM projects WHERE redpash_id = $1 AND NOT is_default")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+// ─── project_files ──────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct FileRow {
+    redpash_id:         String,
+    project_redpash_id: String,
+    filename:           String,
+    display_name:       Option<String>,
+    file_type:          String,
+    stage:              String,
+    row_count:          Option<i64>,
+    col_count:          Option<i32>,
+    file_size_bytes:    Option<i64>,
+    cleanness_pct:      Option<f32>,
+    encoding:           Option<String>,
+    delimiter:          Option<String>,
+    storage_path:       String,
+    created_at:         DateTime<Utc>,
+    updated_at:         DateTime<Utc>,
+}
+
+pub struct FileFull {
+    pub summary:      FileSummary,
+    pub storage_path: String,
+}
+
+impl From<FileRow> for FileFull {
+    fn from(r: FileRow) -> Self {
+        let summary = FileSummary {
+            redpash_id:         r.redpash_id,
+            project_redpash_id: r.project_redpash_id,
+            filename:           r.filename,
+            display_name:       r.display_name,
+            file_type:          r.file_type,
+            stage:              r.stage,
+            row_count:          r.row_count.map(|v| v as u64),
+            col_count:          r.col_count.map(|v| v as u32),
+            file_size_bytes:    r.file_size_bytes.map(|v| v as u64),
+            cleanness_pct:      r.cleanness_pct,
+            encoding:           r.encoding,
+            delimiter:          r.delimiter,
+            created_at:         r.created_at,
+            updated_at:         r.updated_at,
+        };
+        Self { summary, storage_path: r.storage_path }
+    }
+}
+
+pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
+    let rows: Vec<FileRow> = sqlx::query_as(
+        "SELECT pf.redpash_id, pf.project_redpash_id, pf.filename, pf.display_name, pf.file_type,
+                fs.stage, pf.row_count, pf.col_count, pf.file_size_bytes, pf.cleanness_pct,
+                pf.encoding, pf.delimiter, pf.storage_path, pf.created_at, pf.updated_at
+         FROM project_files pf
+         JOIN file_stages fs ON fs.file_redpash_id = pf.redpash_id
+         WHERE pf.project_redpash_id = $1
+         ORDER BY pf.created_at ASC",
+    )
+    .bind(project_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| FileFull::from(r).summary).collect())
+}
+
+/// Every file owned by `owner_rid` (FK chain via project_files →
+/// projects → owner_id). Powers the home page's "My Files" step.
+pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
+    let rows: Vec<FileRow> = sqlx::query_as(
+        "SELECT f.redpash_id, f.project_redpash_id, f.filename, f.display_name,
+                f.file_type, fs.stage, f.row_count, f.col_count, f.file_size_bytes,
+                f.cleanness_pct, f.encoding, f.delimiter,
+                f.storage_path, f.created_at, f.updated_at
+         FROM project_files f
+         JOIN projects p ON p.redpash_id = f.project_redpash_id
+         JOIN file_stages fs ON fs.file_redpash_id = f.redpash_id
+         WHERE p.owner_id = $1
+         ORDER BY f.updated_at DESC",
+    )
+    .bind(owner_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| FileFull::from(r).summary).collect())
+}
+
+/// (rid, display_name or filename) for every file in `project_rid`
+/// except `exclude_rid`. Powers the joins detector.
+pub async fn list_files_in_project_except(
+    pool:         &PgPool,
+    project_rid:  &str,
+    exclude_rid:  &str,
+) -> sqlx::Result<Vec<(String, String)>> {
+    let rows = sqlx::query(
+        "SELECT redpash_id, COALESCE(display_name, filename) AS title
+         FROM project_files
+         WHERE project_redpash_id = $1 AND redpash_id <> $2
+         ORDER BY created_at ASC",
+    )
+    .bind(project_rid)
+    .bind(exclude_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter()
+        .map(|r| (r.get::<String, _>("redpash_id"), r.get::<String, _>("title")))
+        .collect())
+}
+
+pub async fn find_file(pool: &PgPool, rid: &str) -> sqlx::Result<Option<FileFull>> {
+    let row: Option<FileRow> = sqlx::query_as(
+        "SELECT pf.redpash_id, pf.project_redpash_id, pf.filename, pf.display_name, pf.file_type,
+                fs.stage, pf.row_count, pf.col_count, pf.file_size_bytes, pf.cleanness_pct,
+                pf.encoding, pf.delimiter, pf.storage_path, pf.created_at, pf.updated_at
+         FROM project_files pf
+         JOIN file_stages fs ON fs.file_redpash_id = pf.redpash_id
+         WHERE pf.redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Delete a file row. `project_steps` and `reports` both declare
+/// `ON DELETE CASCADE` on `project_files`, so the history and any
+/// reports built from this file go with it. Returns whether a row was
+/// actually removed (false → caller surfaces a 404).
+pub async fn delete_file(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Sparse metadata update — `display_name`, `project_redpash_id`
+/// (move the file to another project), `encoding` and `delimiter`. A
+/// `None` leaves that column untouched (COALESCE). File `stage` is
+/// computed from the `file_stages` view, not stored, so it isn't
+/// editable here. Re-fetches through `find_file` so the returned
+/// summary carries the joined stage.
+pub async fn update_file_meta(
+    pool:               &PgPool,
+    rid:                &str,
+    display_name:       Option<&str>,
+    project_redpash_id: Option<&str>,
+    encoding:           Option<&str>,
+    delimiter:          Option<&str>,
+) -> sqlx::Result<Option<FileFull>> {
+    let res = sqlx::query(
+        "UPDATE project_files
+         SET display_name       = COALESCE($2, display_name),
+             project_redpash_id = COALESCE($3, project_redpash_id),
+             encoding           = COALESCE($4, encoding),
+             delimiter          = COALESCE($5, delimiter),
+             updated_at         = now()
+         WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .bind(display_name)
+    .bind(project_redpash_id)
+    .bind(encoding)
+    .bind(delimiter)
+    .execute(pool)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Ok(None);
+    }
+    find_file(pool, rid).await
+}
+
+pub async fn update_file_encoding(pool: &PgPool, rid: &str, encoding: &str) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE project_files SET encoding = $1, updated_at = now() WHERE redpash_id = $2",
+    )
+    .bind(encoding)
+    .bind(rid)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Null-out a file's cleanness score (testing/dev convenience). Used
+/// by `DELETE /api/files/:rid/cleanness` so the user can clear scores
+/// and re-run the score-files button to verify the recompute path.
+pub async fn clear_file_cleanness(pool: &PgPool, rid: &str) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE project_files SET cleanness_pct = NULL, updated_at = now()
+         WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_file_columns(
+    pool:      &PgPool,
+    rid:       &str,
+    columns:   &[ColumnMeta],
+    row_count: u64,
+    col_count: u32,
+    cleanness: Option<f32>,
+) -> sqlx::Result<()> {
+    let cols_json = serde_json::to_value(columns).unwrap_or(serde_json::json!([]));
+    sqlx::query(
+        "UPDATE project_files
+         SET columns_meta = $1, row_count = $2, col_count = $3,
+             cleanness_pct = $4, updated_at = now()
+         WHERE redpash_id = $5",
+    )
+    .bind(cols_json)
+    .bind(row_count as i64)
+    .bind(col_count as i32)
+    .bind(cleanness)
+    .bind(rid)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_file(
+    pool:         &PgPool,
+    rid:          &str,
+    project:      &str,
+    filename:     &str,
+    encoding:     &str,
+    row_count:    u64,
+    col_count:    u32,
+    size_bytes:   u64,
+    storage_path: &str,
+    columns:      &[ColumnMeta],
+    cleanness:    Option<f32>,
+) -> sqlx::Result<()> {
+    let cols_json = serde_json::to_value(columns).unwrap_or(serde_json::json!([]));
+    sqlx::query(
+        "INSERT INTO project_files
+            (redpash_id, project_redpash_id, filename, display_name,
+             row_count, col_count, file_size_bytes, encoding, storage_path,
+             columns_meta, cleanness_pct)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10)",
+    )
+    .bind(rid)
+    .bind(project)
+    .bind(filename)
+    .bind(row_count as i64)
+    .bind(col_count as i32)
+    .bind(size_bytes as i64)
+    .bind(encoding)
+    .bind(storage_path)
+    .bind(cols_json)
+    .bind(cleanness)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+// ─── reports ────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct ReportRow {
+    redpash_id:         String,
+    project_redpash_id: String,
+    source_file_id:     String,
+    title:              String,
+    description:        Option<String>,
+    spec:               serde_json::Value,
+    is_favorite:        bool,
+    is_public:          bool,
+    folder:             Option<String>,
+    created_at:         DateTime<Utc>,
+    updated_at:         DateTime<Utc>,
+    // Owner join — only present in list_reports' SELECT. #[sqlx(default)]
+    // keeps single-row fetchers (find_report / update_report /
+    // patch_report_meta / set_report_favorite) working without the join.
+    #[sqlx(default)] owner_id:           Option<String>,
+    #[sqlx(default)] owner_display_name: Option<String>,
+    #[sqlx(default)] owner_username:     Option<String>,
+}
+impl From<ReportRow> for Report {
+    fn from(r: ReportRow) -> Self {
+        Self {
+            redpash_id:         r.redpash_id,
+            project_redpash_id: r.project_redpash_id,
+            source_file_id:     r.source_file_id,
+            title:              r.title,
+            description:        r.description,
+            spec:               serde_json::from_value(r.spec).unwrap_or_default(),
+            is_favorite:        r.is_favorite,
+            is_public:          r.is_public,
+            folder:             r.folder,
+            owner_id:           r.owner_id,
+            owner_display_name: r.owner_display_name,
+            owner_username:     r.owner_username,
+            created_at:         r.created_at,
+            updated_at:         r.updated_at,
+        }
+    }
+}
+
+const REPORT_COLS: &str = "redpash_id, project_redpash_id, source_file_id, title, description,
+                           spec, is_favorite, is_public, folder, created_at, updated_at";
+
+pub async fn list_reports(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Report>> {
+    // Sort: folder name first (NULLs last so uncategorised lands at the
+    // bottom), then favourites within each folder, then by updated_at.
+    let rows: Vec<ReportRow> = sqlx::query_as(
+        "SELECT r.redpash_id, r.project_redpash_id, r.source_file_id, r.title, r.description,
+                r.spec, r.is_favorite, r.is_public, r.folder, r.created_at, r.updated_at,
+                p.owner_id AS owner_id,
+                u.display_name AS owner_display_name,
+                u.username AS owner_username
+         FROM reports r
+         JOIN projects p ON p.redpash_id = r.project_redpash_id
+         JOIN users    u ON u.redpash_id = p.owner_id
+         WHERE p.owner_id = $1
+         ORDER BY r.folder ASC NULLS LAST, r.is_favorite DESC, r.updated_at DESC",
+    )
+    .bind(owner)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn find_report(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Report>> {
+    let row: Option<ReportRow> = sqlx::query_as(&format!(
+        "SELECT {REPORT_COLS} FROM reports WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_report(
+    pool:    &PgPool,
+    rid:     &str,
+    project: &str,
+    source:  &str,
+    title:   &str,
+    spec:    &ReportSpec,
+    folder:  Option<&str>,
+) -> sqlx::Result<Report> {
+    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
+    let row: ReportRow = sqlx::query_as(&format!(
+        "INSERT INTO reports (redpash_id, project_redpash_id, source_file_id, title, spec, folder)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING {REPORT_COLS}"
+    ))
+    .bind(rid)
+    .bind(project)
+    .bind(source)
+    .bind(title)
+    .bind(spec_json)
+    .bind(folder)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+pub async fn update_report(
+    pool:   &PgPool,
+    rid:    &str,
+    title:  &str,
+    spec:   &ReportSpec,
+    source: &str,
+    folder: Option<&str>,
+) -> sqlx::Result<Option<Report>> {
+    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
+    let row: Option<ReportRow> = sqlx::query_as(&format!(
+        "UPDATE reports
+         SET title = $1, spec = $2, source_file_id = $3, folder = $4, updated_at = now()
+         WHERE redpash_id = $5
+         RETURNING {REPORT_COLS}"
+    ))
+    .bind(title)
+    .bind(spec_json)
+    .bind(source)
+    .bind(folder)
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Sparse metadata update for the Reports-tab inline editor.
+/// `None` keeps the existing column value (COALESCE).
+pub async fn patch_report_meta(
+    pool:        &PgPool,
+    rid:         &str,
+    title:       Option<&str>,
+    description: Option<&str>,
+    folder:      Option<&str>,
+    is_favorite: Option<bool>,
+    is_public:   Option<bool>,
+) -> sqlx::Result<Option<Report>> {
+    let row: Option<ReportRow> = sqlx::query_as(&format!(
+        "UPDATE reports
+         SET title       = COALESCE($2, title),
+             description = COALESCE($3, description),
+             folder      = COALESCE($4, folder),
+             is_favorite = COALESCE($5, is_favorite),
+             is_public   = COALESCE($6, is_public),
+             updated_at  = now()
+         WHERE redpash_id = $1
+         RETURNING {REPORT_COLS}"
+    ))
+    .bind(rid)
+    .bind(title)
+    .bind(description)
+    .bind(folder)
+    .bind(is_favorite)
+    .bind(is_public)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn set_report_favorite(
+    pool:  &PgPool,
+    rid:   &str,
+    value: bool,
+) -> sqlx::Result<Option<Report>> {
+    let row: Option<ReportRow> = sqlx::query_as(&format!(
+        "UPDATE reports SET is_favorite = $1, updated_at = now()
+         WHERE redpash_id = $2
+         RETURNING {REPORT_COLS}"
+    ))
+    .bind(value)
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn delete_report(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query("DELETE FROM reports WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+// ─── dashboards ─────────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct DashboardRow {
+    redpash_id:         String,
+    project_redpash_id: String,
+    title:              String,
+    description:        Option<String>,
+    spec:               serde_json::Value,
+    is_favorite:        bool,
+    is_public:          bool,
+    folder:             Option<String>,
+    created_at:         DateTime<Utc>,
+    updated_at:         DateTime<Utc>,
+    // Owner join — only present in list_dashboards' SELECT. #[sqlx(default)]
+    // keeps single-row fetchers (find / update / patch / set_favorite)
+    // working without the join.
+    #[sqlx(default)] owner_id:           Option<String>,
+    #[sqlx(default)] owner_display_name: Option<String>,
+    #[sqlx(default)] owner_username:     Option<String>,
+}
+impl From<DashboardRow> for Dashboard {
+    fn from(r: DashboardRow) -> Self {
+        Self {
+            redpash_id:         r.redpash_id,
+            project_redpash_id: r.project_redpash_id,
+            title:              r.title,
+            description:        r.description,
+            spec:               serde_json::from_value(r.spec).unwrap_or_default(),
+            is_favorite:        r.is_favorite,
+            is_public:          r.is_public,
+            folder:             r.folder,
+            owner_id:           r.owner_id,
+            owner_display_name: r.owner_display_name,
+            owner_username:     r.owner_username,
+            created_at:         r.created_at,
+            updated_at:         r.updated_at,
+        }
+    }
+}
+
+const DASHBOARD_COLS: &str = "redpash_id, project_redpash_id, title, description, spec,
+                              is_favorite, is_public, folder, created_at, updated_at";
+
+pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Dashboard>> {
+    let rows: Vec<DashboardRow> = sqlx::query_as(
+        "SELECT d.redpash_id, d.project_redpash_id, d.title, d.description, d.spec,
+                d.is_favorite, d.is_public, d.folder, d.created_at, d.updated_at,
+                p.owner_id AS owner_id,
+                u.display_name AS owner_display_name,
+                u.username AS owner_username
+         FROM dashboards d
+         JOIN projects p ON p.redpash_id = d.project_redpash_id
+         JOIN users    u ON u.redpash_id = p.owner_id
+         WHERE p.owner_id = $1
+         ORDER BY d.folder ASC NULLS LAST, d.is_favorite DESC, d.updated_at DESC",
+    )
+    .bind(owner)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn find_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Dashboard>> {
+    let row: Option<DashboardRow> = sqlx::query_as(&format!(
+        "SELECT {DASHBOARD_COLS} FROM dashboards WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_dashboard(
+    pool:    &PgPool,
+    rid:     &str,
+    project: &str,
+    title:   &str,
+    spec:    &DashboardSpec,
+    folder:  Option<&str>,
+    description: Option<&str>,
+) -> sqlx::Result<Dashboard> {
+    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
+    let row: DashboardRow = sqlx::query_as(&format!(
+        "INSERT INTO dashboards (redpash_id, project_redpash_id, title, description, spec, folder)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING {DASHBOARD_COLS}"
+    ))
+    .bind(rid)
+    .bind(project)
+    .bind(title)
+    .bind(description)
+    .bind(spec_json)
+    .bind(folder)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+pub async fn update_dashboard(
+    pool:    &PgPool,
+    rid:     &str,
+    title:   &str,
+    spec:    &DashboardSpec,
+    folder:  Option<&str>,
+    description: Option<&str>,
+) -> sqlx::Result<Option<Dashboard>> {
+    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
+    let row: Option<DashboardRow> = sqlx::query_as(&format!(
+        "UPDATE dashboards
+         SET title = $1, description = $2, spec = $3, folder = $4, updated_at = now()
+         WHERE redpash_id = $5
+         RETURNING {DASHBOARD_COLS}"
+    ))
+    .bind(title)
+    .bind(description)
+    .bind(spec_json)
+    .bind(folder)
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn delete_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query("DELETE FROM dashboards WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+/// Sparse metadata update for the Dashboards-tab inline editor.
+/// `None` keeps the existing column value (COALESCE).
+pub async fn patch_dashboard_meta(
+    pool:        &PgPool,
+    rid:         &str,
+    title:       Option<&str>,
+    description: Option<&str>,
+    folder:      Option<&str>,
+    is_favorite: Option<bool>,
+    is_public:   Option<bool>,
+) -> sqlx::Result<Option<Dashboard>> {
+    let row: Option<DashboardRow> = sqlx::query_as(&format!(
+        "UPDATE dashboards
+         SET title       = COALESCE($2, title),
+             description = COALESCE($3, description),
+             folder      = COALESCE($4, folder),
+             is_favorite = COALESCE($5, is_favorite),
+             is_public   = COALESCE($6, is_public),
+             updated_at  = now()
+         WHERE redpash_id = $1
+         RETURNING {DASHBOARD_COLS}"
+    ))
+    .bind(rid)
+    .bind(title)
+    .bind(description)
+    .bind(folder)
+    .bind(is_favorite)
+    .bind(is_public)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn set_dashboard_favorite(
+    pool:  &PgPool,
+    rid:   &str,
+    value: bool,
+) -> sqlx::Result<Option<Dashboard>> {
+    let row: Option<DashboardRow> = sqlx::query_as(&format!(
+        "UPDATE dashboards SET is_favorite = $1, updated_at = now()
+         WHERE redpash_id = $2
+         RETURNING {DASHBOARD_COLS}"
+    ))
+    .bind(value)
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+// ─── project_steps ──────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct StepRow {
+    redpash_id:      String,
+    file_redpash_id: String,
+    ordinal:         i32,
+    kind:            String,
+    params:          serde_json::Value,
+    applied:         bool,
+    created_at:      DateTime<Utc>,
+}
+impl From<StepRow> for ProjectStep {
+    fn from(r: StepRow) -> Self {
+        Self {
+            redpash_id:      r.redpash_id,
+            file_redpash_id: r.file_redpash_id,
+            ordinal:         r.ordinal,
+            kind:            r.kind,
+            params:          r.params,
+            applied:         r.applied,
+            created_at:      r.created_at,
+        }
+    }
+}
+
+/// All steps for a file in ordinal order — applied AND undone.
+/// Frontend uses the full list to draw the Applied panel (with greyed
+/// undone entries) and to enable/disable Undo + Redo buttons.
+pub async fn list_steps(pool: &PgPool, file_rid: &str) -> sqlx::Result<Vec<ProjectStep>> {
+    let rows: Vec<StepRow> = sqlx::query_as(
+        "SELECT redpash_id, file_redpash_id, ordinal, kind, params, applied, created_at
+         FROM project_steps WHERE file_redpash_id = $1 ORDER BY ordinal ASC",
+    )
+    .bind(file_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// Append a new step. Clears the redo stack (deletes any undone rows
+/// for the file) so the new step branches from the live cursor.
+pub async fn insert_step(
+    pool:     &PgPool,
+    rid:      &str,
+    file_rid: &str,
+    kind:     &str,
+    params:   &serde_json::Value,
+) -> sqlx::Result<ProjectStep> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("DELETE FROM project_steps WHERE file_redpash_id = $1 AND applied = false")
+        .bind(file_rid).execute(&mut *tx).await?;
+
+    let next_ord: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(ordinal), 0) + 1 FROM project_steps WHERE file_redpash_id = $1",
+    )
+    .bind(file_rid)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let row: StepRow = sqlx::query_as(
+        "INSERT INTO project_steps (redpash_id, file_redpash_id, ordinal, kind, params)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING redpash_id, file_redpash_id, ordinal, kind, params, applied, created_at",
+    )
+    .bind(rid)
+    .bind(file_rid)
+    .bind(next_ord)
+    .bind(kind)
+    .bind(params)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(row.into())
+}
+
+/// Flip the highest-ordinal applied step to `applied = false`.
+/// Returns whether anything changed.
+pub async fn undo_last(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        "UPDATE project_steps SET applied = false
+         WHERE redpash_id = (
+             SELECT redpash_id FROM project_steps
+             WHERE file_redpash_id = $1 AND applied = true
+             ORDER BY ordinal DESC LIMIT 1
+         )",
+    )
+    .bind(file_rid)
+    .execute(pool)
+    .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+/// Flip the lowest-ordinal undone step back to `applied = true`.
+pub async fn redo_next(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        "UPDATE project_steps SET applied = true
+         WHERE redpash_id = (
+             SELECT redpash_id FROM project_steps
+             WHERE file_redpash_id = $1 AND applied = false
+             ORDER BY ordinal ASC LIMIT 1
+         )",
+    )
+    .bind(file_rid)
+    .execute(pool)
+    .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+// ─── Phase 4c: ownership-scoped lookups ──────────────────────────
+//
+// Each helper resolves the owner user RID for a given resource by
+// following the FK chain to `projects.owner_id`. Returns `None` when
+// the resource doesn't exist — handlers map both "doesn't exist" and
+// "exists but not yours" to the same 404 `not_found` so existence
+// isn't leaked.
+
+pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT owner_id FROM projects WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(o,)| o))
+}
+
+pub async fn report_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT p.owner_id FROM reports r
+         JOIN projects p ON p.redpash_id = r.project_redpash_id
+         WHERE r.redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(o,)| o))
+}
+
+pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT p.owner_id FROM dashboards d
+         JOIN projects p ON p.redpash_id = d.project_redpash_id
+         WHERE d.redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(o,)| o))
+}
+
+pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT p.owner_id FROM project_files f
+         JOIN projects p ON p.redpash_id = f.project_redpash_id
+         WHERE f.redpash_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(o,)| o))
+}
+
+// ─── companies ──────────────────────────────────────────────────
+//
+// A company is the multi-tenancy boundary. `company_memberships` is a
+// pure join table — composite PK `(company_id, user_redpash_id)`, no
+// redpash_id — and it doubles as the access-control check: a user with
+// no membership row simply can't see the company.
+
+#[derive(FromRow)]
+struct CompanyRow {
+    redpash_id: String,
+    name:       String,
+    slug:       String,
+    avatar_url: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+impl From<CompanyRow> for Company {
+    fn from(r: CompanyRow) -> Self {
+        Self {
+            redpash_id: r.redpash_id,
+            name:       r.name,
+            slug:       r.slug,
+            avatar_url: r.avatar_url,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+const COMPANY_COLS: &str = "redpash_id, name, slug, avatar_url, created_at, updated_at";
+
+/// Companies the user belongs to, each carrying the caller's own role
+/// and the total member count.
+/// Returns every company. `my_role` is the caller's role when they
+/// belong to the company, or `None` when they don't — the Companies
+/// tab surfaces non-member companies too so the user can discover and
+/// request to join. Caller-scoped writes (member CRUD, company edits)
+/// still enforce `company_role()` checks at the route layer.
+pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<CompanySummary>> {
+    let rows = sqlx::query(
+        "SELECT c.redpash_id, c.name, c.slug, c.avatar_url, c.created_at, c.updated_at,
+                m.role AS my_role,
+                (SELECT COUNT(*) FROM company_memberships cm
+                 WHERE cm.company_id = c.redpash_id) AS member_count
+         FROM companies c
+         LEFT JOIN company_memberships m
+                ON m.company_id = c.redpash_id AND m.user_redpash_id = $1
+         ORDER BY c.name ASC",
+    )
+    .bind(user_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| CompanySummary {
+            company: Company {
+                redpash_id: r.get("redpash_id"),
+                name:       r.get("name"),
+                slug:       r.get("slug"),
+                avatar_url: r.get("avatar_url"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+            },
+            member_count: r.try_get::<i64, _>("member_count").unwrap_or(0) as u32,
+            my_role:      r.try_get("my_role").ok(),
+        })
+        .collect())
+}
+
+pub async fn get_company(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Company>> {
+    let row: Option<CompanyRow> = sqlx::query_as(&format!(
+        "SELECT {COMPANY_COLS} FROM companies WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// The caller's role in a company, or `None` when they aren't a member.
+/// Handlers treat `None` the same as "company doesn't exist" (404) so
+/// existence isn't leaked.
+pub async fn company_role(
+    pool:        &PgPool,
+    company_rid: &str,
+    user_rid:    &str,
+) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT role FROM company_memberships
+         WHERE company_id = $1 AND user_redpash_id = $2",
+    )
+    .bind(company_rid)
+    .bind(user_rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(r,)| r))
+}
+
+/// Count of owners — guards the "can't strand a company without an
+/// owner" rule on member removal / demotion.
+pub async fn company_owner_count(pool: &PgPool, company_rid: &str) -> sqlx::Result<i64> {
+    let (n,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM company_memberships
+         WHERE company_id = $1 AND role = 'owner'",
+    )
+    .bind(company_rid)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+/// Create a company and seat the creator as its owner — both writes in
+/// one transaction so a company never exists without an owner.
+pub async fn create_company(
+    pool:      &PgPool,
+    rid:       &str,
+    name:      &str,
+    slug:      &str,
+    owner_rid: &str,
+) -> sqlx::Result<Company> {
+    let mut tx = pool.begin().await?;
+    let row: CompanyRow = sqlx::query_as(&format!(
+        "INSERT INTO companies (redpash_id, name, slug)
+         VALUES ($1, $2, $3)
+         RETURNING {COMPANY_COLS}"
+    ))
+    .bind(rid)
+    .bind(name)
+    .bind(slug)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO company_memberships (company_id, user_redpash_id, role)
+         VALUES ($1, $2, 'owner')",
+    )
+    .bind(rid)
+    .bind(owner_rid)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row.into())
+}
+
+/// Sparse update — `name` / `avatar_url` only. `slug` is immutable.
+/// Returns the refreshed record, or `None` when the company is gone.
+pub async fn update_company(
+    pool:       &PgPool,
+    rid:        &str,
+    name:       Option<&str>,
+    slug:       Option<String>,
+    avatar_url: Option<&str>,
+) -> sqlx::Result<Option<Company>> {
+    let row: Option<CompanyRow> = sqlx::query_as(&format!(
+        "UPDATE companies
+         SET name       = COALESCE($2, name),
+             slug       = COALESCE($3, slug),
+             avatar_url = COALESCE($4, avatar_url),
+             updated_at = now()
+         WHERE redpash_id = $1
+         RETURNING {COMPANY_COLS}"
+    ))
+    .bind(rid)
+    .bind(name)
+    .bind(slug)
+    .bind(avatar_url)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Delete a company. `company_memberships` cascades; `projects.company_id`
+/// is `SET NULL` so company projects survive as personal projects.
+pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query("DELETE FROM companies WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+pub async fn list_company_members(
+    pool:        &PgPool,
+    company_rid: &str,
+) -> sqlx::Result<Vec<CompanyMember>> {
+    let rows = sqlx::query(
+        "SELECT m.user_redpash_id, m.role, m.joined_at,
+                u.display_name, u.username, u.avatar_url
+         FROM company_memberships m
+         JOIN users u ON u.redpash_id = m.user_redpash_id
+         WHERE m.company_id = $1
+         ORDER BY m.joined_at ASC",
+    )
+    .bind(company_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| CompanyMember {
+            user_redpash_id: r.get("user_redpash_id"),
+            display_name:    r.get("display_name"),
+            username:        r.get("username"),
+            avatar_url:      r.get("avatar_url"),
+            role:            r.get("role"),
+            joined_at:       r.get("joined_at"),
+        })
+        .collect())
+}
+
+/// Add a member, or update their role if they're already in the company
+/// — the composite PK makes this an upsert.
+pub async fn add_company_member(
+    pool:        &PgPool,
+    company_rid: &str,
+    user_rid:    &str,
+    role:        &str,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO company_memberships (company_id, user_redpash_id, role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (company_id, user_redpash_id)
+         DO UPDATE SET role = EXCLUDED.role",
+    )
+    .bind(company_rid)
+    .bind(user_rid)
+    .bind(role)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn remove_company_member(
+    pool:        &PgPool,
+    company_rid: &str,
+    user_rid:    &str,
+) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        "DELETE FROM company_memberships
+         WHERE company_id = $1 AND user_redpash_id = $2",
+    )
+    .bind(company_rid)
+    .bind(user_rid)
+    .execute(pool)
+    .await?;
+    Ok(n.rows_affected() > 0)
+}

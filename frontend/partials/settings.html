@@ -1,0 +1,31 @@
+<!-- Settings — UI overrides, persisted as `users.prefs jsonb`. -->
+<section class="rp-settings">
+  <header class="rp-profile__header">
+    <h1>Settings</h1>
+    <p class="rp-muted" id="settings-status"></p>
+  </header>
+
+  <form class="rp-settings__form" id="settings-form" novalidate>
+    <label class="rp-field">
+      <span>Accent colour</span>
+      <span class="rp-field__row">
+        <input type="color" name="accent" />
+        <button type="button" class="rp-btn rp-btn--ghost rp-btn--sm" id="settings-accent-reset">Reset</button>
+      </span>
+      <small class="rp-muted">Overrides the theme accent on this account.</small>
+    </label>
+
+    <label class="rp-field">
+      <span>Table density</span>
+      <select name="density">
+        <option value="comfortable">Comfortable</option>
+        <option value="compact">Compact</option>
+      </select>
+      <small class="rp-muted">Applies to the redtable in cleaner / reports.</small>
+    </label>
+
+    <div class="rp-profile__actions">
+      <button type="submit" class="rp-btn rp-btn--primary">Save</button>
+    </div>
+  </form>
+</section>

@@ -1,0 +1,81 @@
+# ━━━━━━━━━━━━━━━━━━ REDPASH BACKEND — Cargo workspace ━━━━━━━━━━━━━━━━━━
+#
+# Three crates form the backend:
+#
+#   api      Axum HTTP server. One route module per resource. Auth +
+#            middleware live here. Imports `data` for any heavy lift.
+#   data     Polars + CSV + chardetng + Maud. Pure compute, no HTTP.
+#            Anything that touches a row or a byte buffer is here.
+#   shared   DTOs serialised over the wire. Both crates depend on it so
+#            request / response types stay in sync at compile time.
+#
+# Build:    cargo build --release   (in this directory)
+# Run dev:  cargo run -p api
+# Test:     cargo test --workspace
+#
+# The default profile leaves debug symbols on; `release` strips them.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[workspace]
+resolver = "2"
+members  = ["crates/api", "crates/data", "crates/shared"]
+
+[workspace.package]
+version  = "0.1.0"
+edition  = "2021"
+authors  = ["Mansa <mansa@redpash.app>"]
+license  = "Proprietary"
+
+# Shared dependencies — pinned here so every crate uses the same versions.
+[workspace.dependencies]
+# Web stack
+axum            = { version = "0.7", features = ["macros", "multipart"] }
+tokio           = { version = "1", features = ["full"] }
+tower           = "0.5"
+tower-http      = { version = "0.6", features = ["cors", "trace", "fs", "compression-br", "limit"] }
+bytes           = "1"
+dashmap         = "6"
+
+# Serialisation + errors
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+thiserror       = "1"
+anyhow          = "1"
+
+# DB
+sqlx            = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
+
+# Data layer
+polars          = { version = "0.43", features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str"] }
+# polars-core 0.43.1 calls hashbrown's `raw_table_mut()` (a feature-gated
+# API) but forgets to enable the `raw` feature in its own Cargo.toml.
+# We pull hashbrown in directly with `raw` so Cargo's feature unification
+# turns it on across the polars dep tree. Remove once polars > 0.43 ships
+# fixed packaging.
+hashbrown       = { version = "0.14", features = ["raw"] }
+chardetng       = "0.1"
+csv             = "1.3"
+encoding_rs     = "0.8"
+# Excel readers — used at upload to convert .xlsx/.xls/.xlsm/.xlsb/.ods
+# into CSV bytes before they enter the standard CSV pipeline.
+calamine        = "0.26"
+
+# HTML rendering for reports / docs
+pulldown-cmark  = "0.12"
+syntect         = "5"
+gray_matter     = "0.2"
+maud            = "0.26"
+
+# Misc
+chrono          = { version = "0.4", features = ["serde"] }
+uuid            = { version = "1", features = ["v4", "serde"] }
+dotenvy         = "0.15"
+tracing         = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# OAuth (Phase 4 auth) — rustls only, no OpenSSL native dep.
+reqwest         = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[profile.release]
+lto             = "thin"
+codegen-units   = 1
+strip           = "symbols"

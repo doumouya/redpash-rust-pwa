@@ -1,0 +1,33 @@
+# Pure-compute crate. Everything that touches a row, a byte buffer, or
+# a Polars frame lives here so the `api` crate stays small and focused
+# on HTTP plumbing.
+
+[package]
+name    = "data"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+shared          = { path = "../shared" }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+thiserror       = { workspace = true }
+anyhow          = { workspace = true }
+
+polars          = { workspace = true }
+# Direct dep only to force the `raw` feature on hashbrown 0.14 — see the
+# explanatory comment in the workspace Cargo.toml. We don't actually use
+# hashbrown in this crate's source.
+hashbrown       = { workspace = true }
+chardetng       = { workspace = true }
+encoding_rs     = { workspace = true }
+csv             = { workspace = true }
+calamine        = { workspace = true }
+
+pulldown-cmark  = { workspace = true }
+syntect         = { workspace = true }
+gray_matter     = { workspace = true }
+maud            = { workspace = true }
+
+chrono          = { workspace = true }
+tracing         = { workspace = true }

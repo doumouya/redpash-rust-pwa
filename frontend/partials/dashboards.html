@@ -1,0 +1,59 @@
+<!-- Dashboards page.
+     Two visual modes share this partial:
+       • #dashboards-list    — saved dashboards (default)
+       • #dashboards-builder — pick a template, configure widgets per slot -->
+<section class="rp-dashboards">
+  <section class="rp-dashboards__list" id="dashboards-list" hidden>
+    <header class="rp-dashboards__head">
+      <h1>Dashboards</h1>
+      <button class="rp-btn rp-btn--primary" data-new>+ New dashboard</button>
+    </header>
+    <div id="dashboards-list-body"></div>
+  </section>
+
+  <section class="rp-dashboards__builder" id="dashboards-builder" hidden>
+    <header class="rp-dashboards__head">
+      <a class="rp-btn rp-btn--sm" href="#/dashboards">← Back</a>
+      <button class="rp-btn rp-btn--sm rp-btn--ghost" type="button" data-undo title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 8h12a5 5 0 0 1 0 10H9"/>
+          <polyline points="7,4 3,8 7,12"/>
+        </svg>
+      </button>
+      <button class="rp-btn rp-btn--sm rp-btn--ghost" type="button" data-redo title="Redo (Ctrl+Y)" aria-label="Redo">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 8H9a5 5 0 0 0 0 10h6"/>
+          <polyline points="17,4 21,8 17,12"/>
+        </svg>
+      </button>
+      <button class="rp-fav" id="dashboard-fav" aria-label="Favorite" hidden>★</button>
+      <input id="dashboard-title"  class="rp-tools__input rp-reports__title-input" placeholder="Dashboard title" />
+      <input id="dashboard-folder" class="rp-tools__input rp-reports__folder-input" placeholder="Folder (optional)" list="dashboard-folders-list" />
+      <datalist id="dashboard-folders-list"></datalist>
+      <div class="rp-reports__head-actions">
+        <button class="rp-btn rp-btn--sm rp-btn--danger" data-del hidden>Delete</button>
+        <button class="rp-btn rp-btn--sm" data-save-as hidden>Save as…</button>
+        <button class="rp-btn rp-btn--sm rp-btn--primary" data-save>Save</button>
+      </div>
+    </header>
+
+    <div class="rp-dashboards__editor">
+      <section class="rp-dashboards__preview" id="dashboard-preview">
+        <p class="rp-muted">Pick a source file and a template to start.</p>
+      </section>
+      <aside class="rp-dashboards__tools">
+        <header class="rp-reports__spec-head"><h2>Dashboard tools</h2></header>
+
+        <section>
+          <header><h2>Template</h2></header>
+          <select class="rp-tools__input" id="dashboard-template"></select>
+        </section>
+
+        <section>
+          <header><h2>Widgets</h2></header>
+          <div id="dashboard-slots"></div>
+        </section>
+      </aside>
+    </div>
+  </section>
+</section>

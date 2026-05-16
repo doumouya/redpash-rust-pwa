@@ -1,0 +1,43 @@
+/* Buttons — single base class with variant modifiers. */
+
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+}
+.rp-btn:hover    { background: var(--rp-surface-2); }
+.rp-btn:active   { transform: translateY(1px); }
+.rp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.rp-btn--primary {
+  background: var(--rp-accent);
+  border-color: var(--rp-accent);
+  color: var(--rp-text-inverse);
+}
+.rp-btn--primary:hover { background: var(--rp-accent-strong); border-color: var(--rp-accent-strong); }
+
+.rp-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.rp-btn--ghost:hover { background: var(--rp-surface-2); }
+
+.rp-btn--danger {
+  background: transparent;
+  border-color: var(--rp-danger);
+  color: var(--rp-danger);
+}
+.rp-btn--danger:hover { background: var(--rp-accent-soft); }
+
+.rp-btn--sm { height: 28px; padding: 0 10px; font-size: 13px; }

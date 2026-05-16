@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- data-theme="system" activates the library's prefers-color-scheme
+     branch (see redpash-components/tokens.css). Settings will let users
+     pin to "light" / "dark" via prefs.theme later. -->
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#b3001b" id="meta-theme" />
+  <title>RedPash</title>
+
+  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Savate is the brand wordmark face. Loaded globally so the favicon
+       SVG (and any in-app .rp-wordmark) renders consistently across
+       all pages, not just /landing. ~30 KB, swapped during font load. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap" />
+
+  <link rel="stylesheet" href="/styles/main.css" />
+
+  <!-- Per-page CSS is loaded by the router as a <link> tagged data-page-css
+       so it can be swapped on navigation. Component CSS files in
+       /styles/components are imported by /styles/main.css. -->
+</head>
+<body>
+  <!-- ────────────────── App shell ──────────────────
+       The shell is intentionally tiny. The router replaces #app with the
+       active page partial; the topbar stays mounted across navigations.
+       See scripts/main.js for the route table. -->
+  <header id="topbar" class="rp-topbar" hidden>
+    <a class="rp-topbar__brand" href="#/home">
+      <img src="/icons/logo.svg" alt="RedPash" width="28" height="28" />
+      <span>RedPash</span>
+    </a>
+    <nav class="rp-topbar__nav" id="topbar-nav"></nav>
+    <div class="rp-topbar__user" id="topbar-user"></div>
+  </header>
+
+  <main id="app" class="rp-app" aria-busy="true">
+    <!-- Boot splash. Replaced by the first route render. -->
+    <div class="rp-boot">
+      <img src="/icons/logo.svg" alt="" width="48" height="48" />
+      <p>Loading RedPash…</p>
+    </div>
+  </main>
+
+  <!-- Toast region — pinned bottom-right, populated by ui/toast.js. -->
+  <div id="toasts" class="rp-toasts" role="status" aria-live="polite"></div>
+
+  <!-- Library client-side file analyser. Registers window.handleFiles +
+       window.closeFileReview + window.switchFrTab + window.updateFrNameValidity
+       used by the upload preview modal in the home page (and any future
+       drop zone). IIFE, no module — load with defer so it parses but
+       waits on the DOM the home partial injects later. -->
+  <script defer src="/vendor/redpash-components/js/file-review.js"></script>
+
+  <script type="module" src="/scripts/main.js"></script>
+</body>
+</html>
