@@ -197,33 +197,57 @@
 
 /* ━━━━━━━━━━━━━━━━━━ OVERVIEW — isolated files redtable ━━━━━━━━━━━━━━
  *
- * Painted when the Overview tab is active. It's a SELF-CONTAINED
- * redtable: own toolbar, own table, own state (the JS `OV` object).
- * It deliberately shares no DOM or state with the file-tabs' table.
+ * Painted when the Overview tab is active. As of the unification
+ * refactor, it shares the library's `.rp-rt-toolbar` + `.rp-rt-body`
+ * + `.rp-rt-table-wrap` + `.rp-rt-table` classes with the file-table
+ * chrome — both halves sit at the same nesting level inside the
+ * panel, tagged `data-cleaner-view="file" | "overview"`. CSS below
+ * just toggles visibility based on `#page-cleaner.overview-active`.
  *
- * When overview is active, #page-cleaner gets `.overview-active` and
- * the file-table chrome (main toolbar + filter + tools panels) is
- * hidden — the overview brings its own toolbar.
+ * The `OV` JS object keeps the per-pane state (selection, search,
+ * sort, mode); mode-gating reuses the panel's `rp-rt-mode-*` classes
+ * the library already ships, so there's no parallel `[data-ov-mode]`
+ * system anymore.
  * ─────────────────────────────────────────────────────────────────── */
-#page-cleaner.overview-active .rp-rt-toolbar,
+
+/* View-toggle — flip whole chrome blocks via the page-level class. */
+#page-cleaner:not(.overview-active) [data-cleaner-view="overview"] { display: none; }
+#page-cleaner.overview-active       [data-cleaner-view="file"]     { display: none; }
+
+/* Overview-active also hides the file-table side panels (filter + tools).
+   They're outside the data-cleaner-view tagged blocks because they live
+   inside the file-view body. */
 #page-cleaner.overview-active #cleaner-filter-panel,
-#page-cleaner.overview-active #cleaner-tools-panel {
-  display: none;
+#page-cleaner.overview-active #cleaner-tools-panel { display: none; }
+
+/* Flex chain fix — without `min-width: 0`, the .rp-rt-body row flex
+   container won't let .rp-rt-table-wrap shrink past its content's
+   min-content. In overview mode the table content is small so the
+   wrap can otherwise collapse. Scoped to #page-cleaner so it doesn't
+   leak to other redtable hosts. */
+#page-cleaner .rp-rt-table-wrap { min-width: 0; }
+
+/* Overview wrap — drop the library's 24px horizontal padding so the
+   frosted thead band + row backgrounds reach the panel edges, matching
+   the toolbar's edge-to-edge look. Bottom 24px kept for breathing room
+   below the last row. File-view wrap keeps the library default so its
+   filter / tools side panels still get their gutter. */
+[data-cleaner-view="overview"] .rp-rt-table-wrap { padding: 0 0 1.5rem; }
+
+/* Overview's sticky thead — same column widths as the file-table, but
+   we want the gradient panel to bleed through instead of an opaque
+   surface block. Frosted text-tone wash + backdrop blur. */
+#cleaner-ov-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.rp-rtp-overview {
-  flex: 1;
-  overflow-y: auto;       /* the single scroll container for the overview */
-  min-width: 0;
-}
-.ov-rt {
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem;
-  gap: 0.625rem;
-}
-/* Score-files button spinner — reuses the .is-spinning convention the
-   redtable refresh button uses. */
+/* Score-files button spinner — reused via the same .is-spinning
+   convention the redtable's Refresh icon uses. */
 #ov-score-btn.is-spinning .bi {
   animation: ov-spin .7s linear infinite;
 }
@@ -242,9 +266,7 @@
 }
 
 /* Column-visibility picker — button + absolutely-positioned dropdown. */
-.ov-colpick {
-  position: relative;
-}
+.ov-colpick { position: relative; }
 .ov-colpick-dd {
   position: absolute;
   top: calc(100% + 0.25rem);
@@ -276,113 +298,27 @@
   color: var(--text);
   cursor: pointer;
 }
-.ov-colpick-item:hover {
-  background: var(--over0);
+.ov-colpick-item:hover { background: var(--over0); }
+
+/* Edit-mode cues on the overview's name + status cells. Reuses the
+   panel's `rp-rt-mode-edit` class so we ride the same toggle path the
+   file-table uses. */
+.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-name {
+  cursor: text;
+}
+.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-name:hover {
+  outline: 0.0625rem dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: -0.0625rem;
+}
+.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag {
+  cursor: pointer;
+}
+.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag:hover {
+  filter: brightness(1.25);
 }
 
-/* Toolbar — same chrome as the library .rp-rt-toolbar (objects-page
-   Files tab) so the OV reads visually consistent: padding, gap, glass
-   overlay over the workspace gradient, bottom hairline. The button
-   layout inside is unchanged (search on the left, selection chip +
-   bulk-delete in the middle, mode cluster on the right via
-   .ov-rt-toolbar-modes `margin-left:auto`). */
-.ov-rt-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(0, 0, 0, 0.1);
-  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
-}
-html[data-theme="light"] .ov-rt-toolbar {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-/* Search — pill shape + frosted glass, mirroring .rp-rt-search. The
-   wrapping <div> IS the pill (it wraps icon + bare input); :focus-within
-   tints the border accent. */
-.ov-rt-search {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 0;
-  padding: 0.55em 1em;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 3rem;
-  color: var(--text);
-  transition: border-color 0.15s, background 0.15s;
-}
-.ov-rt-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-}
-.ov-rt-search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  font: 0.875rem inherit;
-  outline: none;
-}
-.ov-rt-search input::placeholder {
-  color: color-mix(in srgb, var(--text) 35%, transparent);
-}
-.ov-rt-toolbar-modes {
-  display: flex;
-  gap: 0.25rem;
-  margin-left: auto;
-}
-
-/* .rp-rt-table-wrap is the library class — its scroll/clip rules now
-   apply to the Overview table for free (markup renamed in
-   _renderOverview). The bespoke .ov-rt-table-wrap rule is gone. */
-.ov-rt-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.ov-rt-table thead th {
-  position: sticky;
-  top: 0;                 /* sticks to the top of .rp-rtp-overview while scrolling */
-  z-index: 2;
-  background: var(--surface);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-align: left;
-  padding: 0.5rem 0.625rem;
-  border-bottom: 0.0625rem solid var(--over0);
-  white-space: nowrap;
-}
-.ov-rt-table tbody td {
-  font-size: 0.75rem;
-  color: var(--text);
-  padding: 0.4375rem 0.625rem;
-  border-bottom: 0.0625rem solid color-mix(in srgb, var(--over0) 55%, transparent);
-  white-space: nowrap;
-}
-.ov-rt-table tbody tr {
-  cursor: pointer;        /* row click opens the file tab */
-}
-.ov-rt-table tbody tr:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-/* In select/delete/edit modes the row's own controls (tick / trash /
-   rename) own the affordance — drop the pointer cue so the user knows
-   the bare row click is muted. */
-.ov-rt[data-ov-mode="select"] .ov-rt-table tbody tr,
-.ov-rt[data-ov-mode="delete"] .ov-rt-table tbody tr,
-.ov-rt[data-ov-mode="edit"]   .ov-rt-table tbody tr {
-  cursor: default;
-}
-.ov-rt-table tbody tr.rp-rt-row-sel {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-/* Status pill — a small bordered tag; clickable in edit mode. */
-.ov-rt-table .rp-tag {
+/* Status pill — small bordered tag in the Stage / Status cells. */
+#cleaner-ov-table .rp-tag {
   display: inline-block;
   font-size: 0.625rem;
   font-weight: 600;
@@ -391,41 +327,6 @@ html[data-theme="light"] .ov-rt-toolbar {
   border: 0.0625rem solid;
   background: transparent;
   text-transform: capitalize;
-}
-
-/* Mode-gated columns — hidden until the matching mode is on.
-   data-ov-mode lives on `.ov-rt`. */
-.ov-rt [data-mode-col="select"],
-.ov-rt [data-mode-col="delete"] {
-  display: none;
-}
-.ov-rt[data-ov-mode="select"] [data-mode-col="select"] {
-  display: table-cell;
-}
-.ov-rt[data-ov-mode="delete"] [data-mode-col="delete"] {
-  display: table-cell;
-}
-
-/* Edit mode — name cell gets a text cursor + dashed hover cue; the
-   status pill becomes obviously clickable. */
-.ov-rt[data-ov-mode="edit"] .ov-cell-name {
-  cursor: text;
-}
-.ov-rt[data-ov-mode="edit"] .ov-cell-name:hover {
-  outline: 0.0625rem dashed color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: -0.0625rem;
-}
-.ov-rt[data-ov-mode="edit"] .ov-cell-status .rp-tag {
-  cursor: pointer;
-}
-.ov-rt[data-ov-mode="edit"] .ov-cell-status .rp-tag:hover {
-  filter: brightness(1.25);
-}
-
-/* Selection chip — pinned visible only while overview is in select
-   mode AND something is ticked (mirrors the file-table chip rule). */
-.ov-rt[data-ov-mode="select"] .rp-rt-sel-chip[data-has-sel="1"] {
-  display: inline-flex;
 }
 
 /* ━━━━━━━━━━━━━━━━━━ TOOL MODALS — anchored + glass ━━━━━━━━━━━━━━━━━━

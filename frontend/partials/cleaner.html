@@ -82,7 +82,12 @@
       </div>
 
       <!-- ── Toolbar — same controls as the home redtables. ─── -->
-      <div class="rp-rt-toolbar">
+      <!-- ────────────────── FILE-TABLE VIEW ──────────────────
+           Visible when STATE.rid is set (a file tab is active).
+           CSS hides this whole half (toolbar + body) when
+           #page-cleaner.overview-active flips, replaced by the
+           Overview chrome block further down. -->
+      <div class="rp-rt-toolbar" data-cleaner-view="file">
         <button class="rp-rt-icon-btn" onclick="rtToggleFilter(this)" title="Filter">
           <i class="bi bi-funnel"></i>
         </button>
@@ -146,7 +151,7 @@
       </div>
 
       <!-- ── Body: filter side panel + redtable + tools side panel ─── -->
-      <div class="rp-rt-body">
+      <div class="rp-rt-body" data-cleaner-view="file">
 
         <!-- Filter side panel — slides in from the LEFT of the body when
              the funnel button toggles it. Each predicate row is
@@ -223,10 +228,6 @@
             <button class="btn btn-primary btn-sm" onclick="openUnwrapCsvModal()">Fix</button>
           </div>
 
-          <!-- Overview pane (sibling of the table). Hidden by default;
-               shown when the Overview tab is active. Painted by JS
-               `_renderOverview()`. -->
-          <div class="rp-rtp-overview" id="cleaner-overview" hidden></div>
           <table class="rp-rt-table" id="cleaner-table">
             <thead data-rt-thead></thead>
             <tbody data-rt-tbody>
@@ -341,6 +342,27 @@
             </div>
 
           </div>
+        </div>
+      </div>
+
+      <!-- ────────────────── OVERVIEW VIEW ──────────────────
+           Sibling of the file-table chrome above; shown when
+           STATE.rid is null (project landing or user clicked the
+           Overview tab). Both toolbar + body are direct children of
+           the panel, so the toolbar bleeds edge-to-edge like the
+           file-table's does — no nesting inside .rp-rt-table-wrap.
+           Toolbar contents + table body are painted by _renderOverview;
+           the partial just provides the empty mount slots. -->
+      <div class="rp-rt-toolbar" data-cleaner-view="overview"
+           id="cleaner-ov-toolbar"></div>
+      <div class="rp-rt-body" data-cleaner-view="overview">
+        <div class="rp-rt-table-wrap">
+          <table class="rp-rt-table" id="cleaner-ov-table">
+            <thead></thead>
+            <tbody>
+              <tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

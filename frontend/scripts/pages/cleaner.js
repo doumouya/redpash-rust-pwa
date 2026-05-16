@@ -79,7 +79,7 @@ export default async function mount(root, ctx) {
   // would leak into the next one. hiddenCols is the exception: it's a
   // user layout preference, restored from localStorage so the column
   // choice persists across sessions.
-  OV = { mode: null, selected: new Set(), q: "", hiddenCols: _ovLoadHiddenCols() };
+  OV = { mode: null, selected: new Set(), q: "", hiddenCols: _ovLoadHiddenCols(), sorts: [] };
 
   // Hidden file tabs — restore the user's "tabs I've closed" set from
   // server prefs. Flat list of file RIDs (file RIDs are globally unique,
@@ -385,13 +385,9 @@ function _renderEncodingPicker(root) {
 
 // ── Render: paged rows ────────────────────────────────────────────────
 async function _loadPage(root) {
-  // Leaving overview mode → flip the panes back + drop the
-  // overview-active class so the main toolbar / filter / tools panels
-  // reappear. Safe to call when already in table mode (idempotent).
-  const ov  = root.querySelector("#cleaner-overview");
-  const tbl = root.querySelector("#cleaner-table");
-  if (ov)  ov.hidden  = true;
-  if (tbl) tbl.hidden = false;
+  // Leaving overview mode → drop the overview-active class so CSS
+  // flips visibility back to the file-view chrome (toolbar + body
+  // tagged data-cleaner-view="file"). Idempotent.
   root.querySelector("#page-cleaner")?.classList.remove("overview-active");
 
   const thead = root.querySelector("[data-rt-thead]");
@@ -792,13 +788,9 @@ function _wireGlobals(root) {
       t.classList.toggle("active", t.dataset.fileId === fid);
     });
 
-    // Coming from Overview (no active file rid before)? Swap panes —
-    // hide the OV, show the file table, drop the overview-active class.
-    // _renderOverview did the inverse on the way in.
-    const ov  = root.querySelector("#cleaner-overview");
-    const tbl = root.querySelector("#cleaner-table");
-    if (ov)  ov.hidden  = true;
-    if (tbl) tbl.hidden = false;
+    // Coming from Overview → drop overview-active so CSS swaps the
+    // visible chrome block back to the file-view one. _renderOverview
+    // added it on the way in.
     root.querySelector("#page-cleaner")?.classList.remove("overview-active");
 
     // Update the URL hash WITHOUT firing hashchange so the router
@@ -895,6 +887,33 @@ function _wireGlobals(root) {
       const fresh = root.querySelector(".ov-rt-search input");
       if (fresh) { fresh.focus(); fresh.setSelectionRange(val.length, val.length); }
     }, 180);
+  };
+
+  // Column-header click → mutate the chain. Plain click replaces the
+  // chain with [{col, asc}] (or flips dir if it's the sole key);
+  // shift-click appends / flips / drops. Mirrors objSortBy and
+  // cleanerSortBy so the three sortable redtables share one UX.
+  window.ovSortBy = (col, ev) => {
+    if (!col) return;
+    if (!Array.isArray(OV.sorts)) OV.sorts = [];
+    const shift = !!(ev && ev.shiftKey);
+    const alt   = !!(ev && ev.altKey);
+    const idx   = OV.sorts.findIndex((k) => k.col === col);
+    if (shift) {
+      if (idx >= 0) {
+        if (alt) OV.sorts.splice(idx, 1);
+        else     OV.sorts[idx].dir = OV.sorts[idx].dir === "asc" ? "desc" : "asc";
+      } else {
+        OV.sorts.push({ col, dir: "asc" });
+      }
+    } else {
+      if (OV.sorts.length === 1 && OV.sorts[0].col === col) {
+        OV.sorts[0].dir = OV.sorts[0].dir === "asc" ? "desc" : "asc";
+      } else {
+        OV.sorts = [{ col, dir: "asc" }];
+      }
+    }
+    _renderOverview(root);
   };
 
   window.ovRowSelect = (chk) => {
@@ -2657,6 +2676,10 @@ let OV = {
   selected:   new Set(),     // redpash_ids ticked in select mode
   q:          "",            // client-side search query
   hiddenCols: new Set(),     // OV_COLUMNS keys the user has hidden
+  // Chained sort (same shape as Objects.js / cleaner file-table). Empty
+  // → schema natural order. Click flips dir on same col, replaces chain
+  // on a different col; shift-click appends as a tie-breaker.
+  sorts:      [],
 };
 
 // The overview redtable's data columns (between the leading select
@@ -2682,6 +2705,24 @@ function _ovLoadHiddenCols() {
 }
 function _ovSaveHiddenCols() {
   try { localStorage.setItem(OV_HIDDEN_LS_KEY, JSON.stringify([...OV.hiddenCols])); } catch {}
+}
+
+// Sortable value for a column key on a file row. Matches the keys in
+// OV_COLUMNS and mirrors what _ovCell renders, but returns the raw
+// underlying value so the comparator can do numeric vs. locale-string
+// the right way. Modified is sorted on the ISO timestamp string (a
+// reverse-locale-compare via numeric:true is good enough for ISO 8601).
+function _ovSortValue(key, f) {
+  switch (key) {
+    case "name":     return (f.display_name ?? f.filename ?? "").toLowerCase();
+    case "stage":    return f.stage ?? "";
+    case "rows":     return f.row_count ?? null;
+    case "cols":     return f.col_count ?? null;
+    case "clean":    return f.cleanness_pct ?? null;
+    case "size":     return f.file_size_bytes ?? null;
+    case "modified": return f.updated_at ?? "";
+    default:         return null;
+  }
 }
 
 // Render one data cell for a given column key + file row.
@@ -2724,15 +2765,14 @@ function _ovCell(key, f) {
 }
 
 function _renderOverview(root) {
-  const ov  = root.querySelector("#cleaner-overview");
-  const tbl = root.querySelector("#cleaner-table");
-  if (!ov) return;
-  if (tbl) tbl.hidden = true;
-  ov.hidden = false;
-  // Hide the file-table chrome (main toolbar + filter / tools panels)
-  // — in overview mode those would target the now-hidden file table.
-  // The overview brings its own toolbar.
+  // Overview pane is a sibling chrome block (toolbar + body), not a
+  // pane inside the file-table's wrap anymore. CSS toggles visibility
+  // off the page's `.overview-active` class; we just flip the class +
+  // re-paint the two slots.
   root.querySelector("#page-cleaner")?.classList.add("overview-active");
+  const tbEl = root.querySelector("#cleaner-ov-toolbar");
+  const tblEl = root.querySelector("#cleaner-ov-table");
+  if (!tbEl || !tblEl) return;
 
   const proj  = STATE.project ?? {};
   const q     = OV.q.trim().toLowerCase();
@@ -2742,12 +2782,49 @@ function _renderOverview(root) {
     return hay.includes(q);
   });
 
+  // Chained sort — same shape as the Objects-page table-sort. Walks
+  // OV.sorts in order, first non-zero comparison wins. Nulls always
+  // sink. Numeric when both sides parse, locale-string otherwise.
+  if (OV.sorts.length) {
+    const mult = (dir) => dir === "desc" ? -1 : 1;
+    const cmp = (a, b, col, dir) => {
+      const av = _ovSortValue(col, a);
+      const bv = _ovSortValue(col, b);
+      const an = av == null || av === "";
+      const bn = bv == null || bv === "";
+      if (an && bn) return 0;
+      if (an) return 1;
+      if (bn) return -1;
+      const anum = typeof av === "number" ? av : Number(av);
+      const bnum = typeof bv === "number" ? bv : Number(bv);
+      if (Number.isFinite(anum) && Number.isFinite(bnum)) return (anum - bnum) * mult(dir);
+      return String(av).localeCompare(String(bv), undefined, { sensitivity: "base", numeric: true }) * mult(dir);
+    };
+    files.sort((a, b) => {
+      for (const k of OV.sorts) {
+        const c = cmp(a, b, k.col, k.dir);
+        if (c !== 0) return c;
+      }
+      return 0;
+    });
+  }
+
   const visCols = OV_COLUMNS.filter((c) => !OV.hiddenCols.has(c.key));
   const colspan = visCols.length + 2;  // + leading select + trailing delete
 
-  const headCells = visCols.map((c) =>
-    `<th style="text-align:${c.align}">${_escHtml(c.label)}</th>`
-  ).join("");
+  // Build a {col → {dir, rank}} map so each header can render its
+  // sort arrow + (when chained) the position pill. Matches the
+  // visual vocabulary in objects.js / cleaner file-table headers.
+  const sortRank = new Map(OV.sorts.map((k, i) => [k.col, { dir: k.dir, rank: i + 1 }]));
+  const showRanks = sortRank.size > 1;
+  const headCells = visCols.map((c) => {
+    const entry  = sortRank.get(c.key);
+    const cls    = `rp-rt-th-sortable${entry ? " rp-rt-sort-th" : ""}`;
+    const arrow  = entry
+      ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
+      : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
+    return `<th class="${cls}" style="text-align:${c.align}" onclick="ovSortBy('${_escAttr(c.key)}', event)">${_escHtml(c.label)}${arrow}</th>`;
+  }).join("");
 
   const rowHtml = files.map((f) => {
     const rid = _escAttr(f.redpash_id);
@@ -2787,70 +2864,75 @@ function _renderOverview(root) {
       <span>${_escHtml(c.label)}</span>
     </label>`).join("");
 
-  ov.innerHTML = `
-    <div class="ov-rt" data-ov-mode="${OV.mode ?? ""}">
-      <div class="ov-rt-toolbar">
-        <div class="ov-rt-search">
-          <i class="bi bi-search bi-sm"></i>
-          <input type="search" placeholder="Search files…" value="${_escAttr(OV.q)}"
-                 oninput="ovSearch(this)" />
-        </div>
-        <span class="rp-rt-sel-chip" id="ov-sel-chip" data-has-sel="0"
-              onclick="ovClearSelection()" title="Click to clear selection">
-          <i class="bi bi-check2-square"></i><span id="ov-sel-count">0 selected</span>
-        </span>
-        <button class="rp-rt-icon-btn" id="ov-bulk-del" style="display:none;color:var(--red)"
-                title="Delete selected files" onclick="ovBulkDelete()">
-          <i class="bi bi-trash3"></i>
-        </button>
-        <div class="ov-rt-toolbar-modes">
-          <!-- Order (left → right): edit · delete · select · refresh ·
-               clean (score) · columns. Edit/delete/select stay grouped
-               as a mode triplet; refresh is the divider; the trailing
-               two are "data" actions (re-score the project + pick which
-               cols to show). -->
-          <button class="rp-rt-icon-btn ${OV.mode === "edit" ? "is-active" : ""}"
-                  title="Edit mode — double-click a name, pick a status"
-                  onclick="ovToggleMode('edit')"><i class="bi bi-pencil"></i></button>
-          <button class="rp-rt-icon-btn ${OV.mode === "delete" ? "is-active" : ""}"
-                  title="Delete mode" onclick="ovToggleMode('delete')"><i class="bi bi-trash3"></i></button>
-          <button class="rp-rt-icon-btn ${OV.mode === "select" ? "is-active" : ""}"
-                  title="Select mode" onclick="ovToggleMode('select')"><i class="bi bi-check2-square"></i></button>
-          <button class="rp-rt-icon-btn" title="Refresh" onclick="ovRefresh()">
-            <i class="bi bi-arrow-clockwise"></i>
-          </button>
-          <!-- Score-files — icon-only; spinner CSS targets
-               #ov-score-btn.is-spinning. -->
-          <button class="rp-rt-icon-btn" id="ov-score-btn"
-                  title="Compute the cleanness score for every file in this project"
-                  onclick="ovScoreFiles()">
-            <i class="bi bi-magic"></i>
-          </button>
-          <div class="ov-colpick">
-            <button class="rp-rt-icon-btn" title="Show / hide columns"
-                    onclick="ovToggleColPicker(this)"><i class="bi bi-layout-three-columns"></i></button>
-            <div class="ov-colpick-dd" hidden>
-              <div class="ov-colpick-hdr">Columns</div>
-              ${colPickerItems}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="rp-rt-table-wrap">
-        <table class="rp-rt-table ov-rt-table">
-          <thead>
-            <tr>
-              <th data-mode-col="select" style="width:1.5rem">
-                <input type="checkbox" id="ov-sel-all" onchange="ovSelectAll(this.checked)" />
-              </th>
-              ${headCells}
-              <th data-mode-col="delete" style="width:1.75rem"></th>
-            </tr>
-          </thead>
-          <tbody>${rowHtml || emptyRow}</tbody>
-        </table>
+  // Toolbar — paints into the parent partial's #cleaner-ov-toolbar
+  // (already a .rp-rt-toolbar). Uses the library's .rp-rt-search +
+  // .rp-rt-icon-btn classes so it reads identical to the file-table
+  // toolbar; the only Overview-specific affordances are the column
+  // picker dropdown and the score-files spinner button.
+  tbEl.innerHTML = `
+    <div class="rp-rt-search">
+      <i class="bi bi-search bi-sm"></i>
+      <input type="search" placeholder="Search files…" value="${_escAttr(OV.q)}"
+             oninput="ovSearch(this)" />
+    </div>
+    <span class="rp-rt-sel-chip" id="ov-sel-chip" data-has-sel="0"
+          onclick="ovClearSelection()" title="Click to clear selection">
+      <i class="bi bi-check2-square"></i><span id="ov-sel-count">0 selected</span>
+    </span>
+    <button class="rp-rt-icon-btn" id="ov-bulk-del" style="display:none;color:var(--red)"
+            title="Delete selected files" onclick="ovBulkDelete()">
+      <i class="bi bi-trash3"></i>
+    </button>
+    <!-- Mode cluster — pushed right via margin-left:auto on the first
+         button so the toolbar reads search-left / actions-right just
+         like the file-table toolbar. -->
+    <button class="rp-rt-icon-btn ${OV.mode === "edit" ? "is-active" : ""}"
+            style="margin-left:auto"
+            title="Edit mode — double-click a name, pick a status"
+            onclick="ovToggleMode('edit')"><i class="bi bi-pencil"></i></button>
+    <button class="rp-rt-icon-btn ${OV.mode === "delete" ? "is-active" : ""}"
+            title="Delete mode" onclick="ovToggleMode('delete')"><i class="bi bi-trash3"></i></button>
+    <button class="rp-rt-icon-btn ${OV.mode === "select" ? "is-active" : ""}"
+            title="Select mode" onclick="ovToggleMode('select')"><i class="bi bi-check2-square"></i></button>
+    <button class="rp-rt-icon-btn" title="Refresh" onclick="ovRefresh()">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <button class="rp-rt-icon-btn" id="ov-score-btn"
+            title="Compute the cleanness score for every file in this project"
+            onclick="ovScoreFiles()">
+      <i class="bi bi-magic"></i>
+    </button>
+    <div class="ov-colpick">
+      <button class="rp-rt-icon-btn" title="Show / hide columns"
+              onclick="ovToggleColPicker(this)"><i class="bi bi-layout-three-columns"></i></button>
+      <div class="ov-colpick-dd" hidden>
+        <div class="ov-colpick-hdr">Columns</div>
+        ${colPickerItems}
       </div>
     </div>`;
+
+  // Table — paints into the partial's #cleaner-ov-table (already a
+  // .rp-rt-table inside a .rp-rt-table-wrap inside a .rp-rt-body).
+  tblEl.innerHTML = `
+    <thead>
+      <tr>
+        <th data-mode-col="select" style="width:1.5rem">
+          <input type="checkbox" id="ov-sel-all" onchange="ovSelectAll(this.checked)" />
+        </th>
+        ${headCells}
+        <th data-mode-col="delete" style="width:1.75rem"></th>
+      </tr>
+    </thead>
+    <tbody>${rowHtml || emptyRow}</tbody>`;
+
+  // Mode-gating reuses the panel's library `rp-rt-mode-*` classes —
+  // same path the file-table uses — so a single CSS rule per mode
+  // covers both views.
+  const panel = root.querySelector(".rp-rt-panel--cleaner");
+  if (panel) {
+    panel.classList.remove("rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete");
+    if (OV.mode) panel.classList.add(`rp-rt-mode-${OV.mode}`);
+  }
 
   _renderOvSelectionChip(root);
 }
