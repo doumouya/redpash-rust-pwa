@@ -142,15 +142,20 @@ pub struct CleannessReport {
 ///
 /// Returns `None` for an empty frame (no columns or no rows) — nothing
 /// to score, and the DB column is nullable so `None` round-trips.
-pub fn cleanness(df: &DataFrame, columns: &[ColumnMeta]) -> Option<f32> {
-    cleanness_report(df, columns).map(|r| r.score)
+pub fn cleanness(df: &DataFrame, columns: &[ColumnMeta], extras: &[String]) -> Option<f32> {
+    cleanness_report(df, columns, extras).map(|r| r.score)
 }
 
 /// Full breakdown — same gate × value-quality math as `cleanness`, but
 /// returns every sub-score so diagnostic surfaces (the eval harness,
 /// the cleaner sidebar's "why is this low?" view, …) can point at the
 /// specific component that's pulling the file down.
-pub fn cleanness_report(df: &DataFrame, columns: &[ColumnMeta]) -> Option<CleannessReport> {
+/// `extras` extends the canonical `SENTINELS` vocabulary that
+/// `value_hygiene_score` matches against — typically the union of
+/// the caller's `prefs.learned_sentinels` and the `global_sentinels`
+/// view (≥2-user submissions). An empty slice reproduces the
+/// pre-learning baseline byte-for-byte.
+pub fn cleanness_report(df: &DataFrame, columns: &[ColumnMeta], extras: &[String]) -> Option<CleannessReport> {
     if df.width() == 0 || df.height() == 0 || columns.is_empty() {
         return None;
     }
@@ -158,7 +163,7 @@ pub fn cleanness_report(df: &DataFrame, columns: &[ColumnMeta]) -> Option<Cleann
     // ── value quality — four components, each 0..100 ───────────────
     let completeness     = completeness_score(columns);
     let type_consistency = type_consistency_score(df, columns);
-    let value_hygiene    = value_hygiene_score(df);
+    let value_hygiene    = value_hygiene_score(df, extras);
     let row_uniqueness   = row_uniqueness_score(df);
     let value_quality = 0.35 * completeness
                       + 0.25 * type_consistency
@@ -267,7 +272,21 @@ fn is_clean_bool(s: &str) -> bool {
 /// Sentinels matter because they're "filled" — completeness misses
 /// them entirely. Genuinely empty / whitespace-only cells are skipped
 /// (that's completeness's concern). 100 when there are no string cells.
-fn value_hygiene_score(df: &DataFrame) -> f32 {
+///
+/// `extras` extends the canonical `SENTINELS` list with caller-supplied
+/// values (typically `prefs.learned_sentinels` ∪ `global_sentinels`).
+/// Each extra is canonicalised (trim + lowercase) before matching;
+/// passing `&[]` reproduces the pre-learning behaviour exactly.
+fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
+    // Build the per-call canonical vocabulary. `HashSet<&str>` borrows
+    // from `extras_lower`, so the owned vec has to outlive the loop.
+    let extras_lower: Vec<String> = extras.iter()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let mut sentinels: HashSet<&str> = SENTINELS.iter().copied().collect();
+    for e in &extras_lower { sentinels.insert(e.as_str()); }
+
     let (mut total, mut clean) = (0u64, 0u64);
     for c in df.get_columns() {
         if !matches!(c.dtype(), DataType::String) { continue; }
@@ -276,9 +295,9 @@ fn value_hygiene_score(df: &DataFrame) -> f32 {
             let trimmed = raw.trim();
             if trimmed.is_empty() { continue; } // null-ish — not hygiene's job
             total += 1;
-            let padded   = raw.len() != trimmed.len();
-            let sentinel = SENTINELS.contains(&trimmed.to_ascii_lowercase().as_str());
-            if !padded && !sentinel { clean += 1; }
+            let padded     = raw.len() != trimmed.len();
+            let is_sentinel = sentinels.contains(trimmed.to_ascii_lowercase().as_str());
+            if !padded && !is_sentinel { clean += 1; }
         }
     }
     if total == 0 { 100.0 } else { 100.0 * clean as f32 / total as f32 }

@@ -178,6 +178,8 @@ async fn upload(
     tokio::fs::write(&abs_path, &bytes).await
         .map_err(|e| AppError::internal("io", format!("write {}: {e}", abs_path.display())))?;
 
+    let globals = db::list_global_sentinels(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
     let tld = tld_hint.clone();
     let bytes_for_parse = bytes;
     let parsed = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
@@ -185,7 +187,10 @@ async fn upload(
         let cols = data::dtype::summarize(&df)?;
         // Score on the worker thread — the structural pass touches every
         // string cell, so it doesn't belong on the async runtime.
-        let cleanness = data::stats::cleanness(&df, &cols);
+        // Upload-path scoring uses the shared vocabulary (globals).
+        // The uploader's personal additions get applied later via
+        // compute_cleanness when they explicitly request it.
+        let cleanness = data::stats::cleanness(&df, &cols, &globals);
         Ok((df, enc, cols, cleanness))
     })
     .await
@@ -767,12 +772,17 @@ async fn create_join(
     let abs_path    = state.file_path(&new_rid);
     let path_for_blocking = abs_path.clone();
 
+    let globals = db::list_global_sentinels(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
     let (columns, h, w, cleanness) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
         let mut joined = data::joins::execute(&this_frame, &other_frame, &lks, &rks, &jt)?;
         let h = joined.height();
         let w = joined.width();
         let columns = data::dtype::summarize(&joined)?;
-        let cleanness = data::stats::cleanness(&joined, &columns);
+        // Join output scored against the shared (global) vocabulary —
+        // the caller can recompute against their personal additions
+        // via compute_cleanness afterward.
+        let cleanness = data::stats::cleanness(&joined, &columns, &globals);
         let file = std::fs::File::create(&path_for_blocking)
             .map_err(data::DataError::Io)?;
         use polars::prelude::SerWriter;
@@ -855,12 +865,15 @@ async fn snapshot(
     let abs_path    = state.file_path(&new_rid);
     let path_for_blocking = abs_path.clone();
 
+    let globals = db::list_global_sentinels(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
     let (columns, h, w, cleanness) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
         let mut df = (*frame).clone();
         let h = df.height();
         let w = df.width();
         let columns = data::dtype::summarize(&df)?;
-        let cleanness = data::stats::cleanness(&df, &columns);
+        // Snapshot scored against the shared vocabulary (globals).
+        let cleanness = data::stats::cleanness(&df, &columns, &globals);
         let file = std::fs::File::create(&path_for_blocking)
             .map_err(data::DataError::Io)?;
         use polars::prelude::SerWriter;
@@ -1002,9 +1015,65 @@ async fn compute_cleanness(
 ) -> Result<Json<FileSummary>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+
+    // Wipe the cached entry → next hydrate scores against the *global*
+    // baseline (canonical SENTINELS ∪ global_sentinels view). Then, if
+    // the file owner has any personal additions in their
+    // prefs.learned_sentinels, re-score with the full union and persist
+    // — that's the difference between "scoring agrees with everyone"
+    // (hydrate baseline) and "scoring agrees with what THIS user
+    // considers junk too" (compute_cleanness output).
     state.files.remove(&rid);
     let entry = hydrate(&state, &rid).await?;
-    Ok(Json(entry.summary))
+
+    let learned = db::find_user_by_id(&state.db, &user).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .and_then(|u| u.prefs.get("learned_sentinels").cloned())
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+        .unwrap_or_default();
+    let learned: Vec<String> = learned.into_iter()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if learned.is_empty() {
+        // Hydrate's score already matches the only vocabulary this user
+        // has — return as-is, no re-score needed.
+        return Ok(Json(entry.summary));
+    }
+
+    // Union learned + globals. Globals were already baked into the
+    // hydrate score, but we re-query for the union here so the scorer
+    // sees one self-consistent vocabulary (and so we don't depend on
+    // a stale process-level cache).
+    let globals = db::list_global_sentinels(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    let mut union: std::collections::HashSet<String> = globals.into_iter().collect();
+    for v in learned { union.insert(v); }
+    let extras: Vec<String> = union.into_iter().collect();
+
+    // Re-score against the user's full vocabulary off the request task.
+    let frame    = std::sync::Arc::clone(&entry.frame);
+    let cols_clone = entry.columns.clone();
+    let new_score = tokio::task::spawn_blocking(move || {
+        data::stats::cleanness(&frame, &cols_clone, &extras)
+    })
+    .await
+    .map_err(|e| AppError::internal("join", e.to_string()))?;
+
+    db::update_file_columns(
+        &state.db, &rid, &entry.columns,
+        entry.summary.row_count.unwrap_or(0),
+        entry.summary.col_count.unwrap_or(0),
+        new_score,
+    ).await.map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Refresh the cached entry's summary score so subsequent reads
+    // see the user-vocabulary number until the next eviction.
+    let mut updated = entry.clone();
+    updated.summary.cleanness_pct = new_score;
+    state.files.insert(rid.clone(), updated.clone());
+    Ok(Json(updated.summary))
 }
 
 /// `DELETE /api/files/:rid/cleanness` — null-out the stored cleanness
@@ -1050,6 +1119,14 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
     let bytes = tokio::fs::read(&path).await
         .map_err(|e| AppError::internal("io", format!("read {}: {e}", path.display())))?;
 
+    // Hydrate has no per-request session, so it scores against the
+    // shared vocabulary only — the canonical SENTINELS list plus the
+    // global_sentinels view (≥2-user submissions). User-personal
+    // additions get layered on top by compute_cleanness via an
+    // explicit recompute after eviction.
+    let globals = db::list_global_sentinels(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
     // Build the (kind, params) replay list off the request task — Polars
     // work isn't async-friendly. We move the steps in by value.
     let applied: Vec<(String, serde_json::Value)> = steps_all.iter()
@@ -1072,7 +1149,7 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
         let cols = data::dtype::summarize(&df)?;
         // Recomputed on every (cache-miss) hydrate, so it tracks the
         // current step cursor for free.
-        let cleanness = data::stats::cleanness(&df, &cols);
+        let cleanness = data::stats::cleanness(&df, &cols, &globals);
         Ok((df, cols, cleanness))
     })
     .await

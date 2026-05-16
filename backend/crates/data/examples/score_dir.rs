@@ -41,7 +41,10 @@ fn main() {
 }
 
 fn print_report(name: &str, df: &polars::prelude::DataFrame, cols: &[shared::file::ColumnMeta], verbose: bool) {
-    let Some(r) = data::stats::cleanness_report(df, cols) else {
+    // Eval harness intentionally scores against the canonical
+    // SENTINELS set only — extras (learned + global) would make the
+    // reference scores user / DB-dependent. Always &[].
+    let Some(r) = data::stats::cleanness_report(df, cols, &[]) else {
         println!("{name}\tempty");
         return;
     };
