@@ -152,33 +152,13 @@ export default async function mount(root) {
   });
 
   // ── Settings step — Object tabs (multi-select) ─────────────────
-  // Which object types appear as tabs on the Objects page. This is a
-  // mirror of the inline ×/+ on that page — both write the same pref
-  // (prefs.objects_tabs) via rpSavePref, so they stay in sync. Unlike
-  // the other settings groups this is MULTI-select (toggle each pill
-  // independently); at least one tab must stay on.
-  const objTabsGrp = root.querySelector("#settings-object-tabs");
-  if (objTabsGrp) {
-    const objOpts = [...objTabsGrp.querySelectorAll(".rp-set-opt")];
-    const active  = new Set(normalizeObjectTabs(me.prefs?.objects_tabs));
-    objOpts.forEach((b) => b.classList.toggle("active", active.has(b.dataset.key)));
-    objOpts.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const on = btn.classList.contains("active");
-        // Min-1 — refuse to turn off the last remaining tab.
-        if (on && objOpts.filter((b) => b.classList.contains("active")).length === 1) {
-          toast.info("Keep at least one object tab.");
-          return;
-        }
-        btn.classList.toggle("active", !on);
-        // Persist the active keys in catalog (DOM) order.
-        const keys = objOpts
-          .filter((b) => b.classList.contains("active"))
-          .map((b) => b.dataset.key);
-        window.rpSavePref?.("objects_tabs", keys);
-      });
-    });
-  }
+  // Which object types appear as tabs on the Objects page — same pref
+  // (prefs.objects_tabs) as the inline ×/+/drag on the Objects page,
+  // so both surfaces stay in sync. MULTI-select: toggle each pill
+  // independently; at least one tab must stay on. Active pills are
+  // ALSO draggable — order maps to the visual order of the tabs on
+  // the Objects page.
+  wireObjectTabsPicker(root, me).catch(() => {});
 
   // ── Settings step — option pill groups (delimiter / encoding /
   //    export format). Each group persists its chosen `data-value`
@@ -253,6 +233,114 @@ export default async function mount(root) {
 // `prefs.share_sentinels` via rpSavePref (the same PATCH /api/me path
 // the Cleaner Fix-invalid modal uses), so the two surfaces stay in
 // sync on every paint.
+// Object-tabs picker — keeps order visible by reordering pills so the
+// user's active set comes first in their preferred order, then the
+// inactive ones in catalog order. Active pills are draggable; drop
+// re-splices the order array and persists via rpSavePref. Clicking a
+// pill toggles its active state without reordering.
+async function wireObjectTabsPicker(root, me) {
+  const grp = root.querySelector("#settings-object-tabs");
+  if (!grp) return;
+  const allOpts = [...grp.querySelectorAll(".rp-set-opt")];
+  if (!allOpts.length) return;
+
+  // Source of truth: a single array of active keys in display order.
+  // Bootstrapped from prefs.objects_tabs.
+  let order = normalizeObjectTabs(me.prefs?.objects_tabs);
+
+  const reorderDom = () => {
+    const activeSet = new Set(order);
+    // Sort: active pills in `order` first, then inactive in catalog order.
+    const sorted = [...allOpts].sort((a, b) => {
+      const ai = order.indexOf(a.dataset.key);
+      const bi = order.indexOf(b.dataset.key);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return allOpts.indexOf(a) - allOpts.indexOf(b);
+    });
+    // Re-attach in the new order + flip .active.
+    sorted.forEach((el) => grp.appendChild(el));
+    allOpts.forEach((b) => b.classList.toggle("active", activeSet.has(b.dataset.key)));
+  };
+
+  // Click → toggle on/off (min-1 guard). New activations land at the
+  // END of the order; deactivations splice from wherever they were.
+  allOpts.forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      // Drag end fires a click on some browsers — skip if we just dragged.
+      if (btn.dataset.justDragged === "1") { delete btn.dataset.justDragged; return; }
+      const key = btn.dataset.key;
+      const isOn = order.includes(key);
+      if (isOn && order.length === 1) {
+        toast.info("Keep at least one object tab.");
+        return;
+      }
+      if (isOn) order = order.filter((k) => k !== key);
+      else      order.push(key);
+      window.rpSavePref?.("objects_tabs", order);
+      reorderDom();
+    });
+  });
+
+  // Drag-to-reorder among active pills. Inactive pills aren't
+  // draggable — they don't have a position in the order yet.
+  let _dragKey = null;
+  const setDraggable = () => {
+    const activeSet = new Set(order);
+    allOpts.forEach((b) => {
+      const isActive = activeSet.has(b.dataset.key);
+      b.draggable = isActive;
+      if (!isActive) return;
+      // Idempotent wire — addEventListener with the same fn dedupes.
+      b.addEventListener("dragstart", onStart);
+      b.addEventListener("dragover",  onOver);
+      b.addEventListener("dragleave", onLeave);
+      b.addEventListener("drop",      onDrop);
+      b.addEventListener("dragend",   onEnd);
+    });
+  };
+  const onStart = (e) => {
+    const b = e.currentTarget;
+    _dragKey = b.dataset.key;
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", _dragKey); } catch {}
+    b.classList.add("obj-tab-drag");
+    // Mark so the synthetic click that fires on dragend doesn't toggle.
+    b.dataset.justDragged = "1";
+  };
+  const onOver = (e) => {
+    if (!_dragKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const b = e.currentTarget;
+    if (b.dataset.key !== _dragKey) b.classList.add("obj-tab-drop");
+  };
+  const onLeave = (e) => e.currentTarget.classList.remove("obj-tab-drop");
+  const onEnd = () => {
+    grp.querySelectorAll(".obj-tab-drag, .obj-tab-drop")
+       .forEach((el) => el.classList.remove("obj-tab-drag", "obj-tab-drop"));
+    _dragKey = null;
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    const targetKey = e.currentTarget.dataset.key;
+    const sourceKey = _dragKey;
+    onEnd();
+    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+    if (!order.includes(targetKey)) return;
+    order = order.filter((k) => k !== sourceKey);
+    const insertAt = order.indexOf(targetKey);
+    order.splice(insertAt, 0, sourceKey);
+    window.rpSavePref?.("objects_tabs", order);
+    reorderDom();
+    setDraggable();   // wiring is per-pill; new active pills don't auto-rewire
+  };
+
+  reorderDom();
+  setDraggable();
+}
+
 async function wireSentinelSettings(root, me) {
   const list  = root.querySelector("#settings-sentinels-list");
   const share = root.querySelector("#settings-share-sentinels");

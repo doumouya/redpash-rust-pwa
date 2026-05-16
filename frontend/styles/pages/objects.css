@@ -135,6 +135,20 @@ html[data-theme="light"] .obj-tab.active        { color: #1e1e2e; }
 }
 .obj-tab-x .bi { font-size: 0.8125rem; opacity: 1; }
 
+/* Drag-to-reorder cues — mirror the column-drag treatment so the two
+   gestures feel the same. .obj-tab-drag = source (fades out, accent
+   tint); .obj-tab-drop = hover target (accent left border = "insert
+   before me"). */
+.obj-tab[draggable="true"]        { cursor: grab; user-select: none; }
+.obj-tab[draggable="true"]:active { cursor: grabbing; }
+.obj-tab.obj-tab-drag {
+  opacity: 0.4;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.obj-tab.obj-tab-drop {
+  box-shadow: inset 0.1875rem 0 0 0 var(--accent);
+}
+
 /* "+" add-tab control — opens a dropdown of object types not shown.
    Disabled (dimmed, no menu) when every type is already a tab. */
 .obj-tab-add-wrap { position: relative; display: inline-flex; align-items: center; }

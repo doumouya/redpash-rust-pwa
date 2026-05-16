@@ -771,7 +771,18 @@ function _renderTabs(root) {
                  aria-label="Remove ${esc(s.label)} tab"
                  onclick="event.stopPropagation();objRemoveTab('${k}')"><i class="bi bi-x"></i></button>`
       : "";
-    return `<div class="obj-tab" data-kind="${k}" onclick="objActivateTab('${k}')">
+    // Tabs are draggable so the user can reorder them in place;
+    // dropping one on another inserts the source BEFORE the target.
+    // Persists via rpSavePref("objects_tabs", ...) so the new order
+    // shows up immediately in Profile's Settings panel too. Mirrors
+    // ovColDrag* / cleanerColDrag* but mutates objTabs.
+    return `<div class="obj-tab" data-kind="${k}" draggable="true"
+                 onclick="objActivateTab('${k}')"
+                 ondragstart="objTabDragStart(event)"
+                 ondragover="objTabDragOver(event)"
+                 ondragleave="objTabDragLeave(event)"
+                 ondrop="objTabDrop(event)"
+                 ondragend="objTabDragEnd(event)">
       <i class="bi ${s.icon}"></i><span>${esc(s.label)}</span>${x}
     </div>`;
   }).join("");
@@ -1664,6 +1675,53 @@ function _wireGlobals(root) {
   window.objToggleAddMenu = (btn) => {
     const menu = btn.parentElement?.querySelector(".obj-tab-add-menu");
     if (menu) menu.hidden = !menu.hidden;
+  };
+
+  // Drag-to-reorder tabs. Same shape as the column-drag pattern:
+  // dragstart stamps the source kind, dragover marks the target,
+  // drop splices `objTabs` (insert before target). Mutation is
+  // persisted to prefs.objects_tabs so the new order shows up in
+  // Profile's Settings panel as well.
+  let _objTabDragKind = null;
+  window.objTabDragStart = (e) => {
+    const tab = e.currentTarget;
+    _objTabDragKind = tab?.dataset?.kind || null;
+    if (_objTabDragKind) {
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", _objTabDragKind); } catch {}
+      tab.classList.add("obj-tab-drag");
+    }
+  };
+  window.objTabDragOver = (e) => {
+    if (!_objTabDragKind) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const tab = e.currentTarget;
+    if (tab && tab.dataset.kind !== _objTabDragKind) tab.classList.add("obj-tab-drop");
+  };
+  window.objTabDragLeave = (e) => {
+    e.currentTarget?.classList.remove("obj-tab-drop");
+  };
+  window.objTabDragEnd = () => {
+    _root.querySelectorAll(".obj-tab.obj-tab-drag, .obj-tab.obj-tab-drop")
+      .forEach((t) => t.classList.remove("obj-tab-drag", "obj-tab-drop"));
+    _objTabDragKind = null;
+  };
+  window.objTabDrop = (e) => {
+    e.preventDefault();
+    const targetTab = e.currentTarget;
+    const target = targetTab?.dataset?.kind;
+    const source = _objTabDragKind;
+    window.objTabDragEnd();
+    if (!source || !target || source === target) return;
+    const from = objTabs.indexOf(source);
+    if (from < 0) return;
+    objTabs.splice(from, 1);
+    const insertAt = objTabs.indexOf(target);
+    if (insertAt < 0) return;
+    objTabs.splice(insertAt, 0, source);
+    _persistObjTabs();
+    _renderTabs(_root);
   };
   const _closeAddMenu = () => {
     root.querySelector("#obj-tabs .obj-tab-add-menu")

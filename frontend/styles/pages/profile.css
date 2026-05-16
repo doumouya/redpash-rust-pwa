@@ -351,3 +351,23 @@ html[data-theme="light"] .rp-bg-sw {
   line-height: 1;
 }
 .rp-sent-chip-rm:hover { color: var(--red); }
+
+/* Object-tabs picker drag cues — Profile's #settings-object-tabs
+   group reuses the .obj-tab-drag / .obj-tab-drop class names from
+   the Objects page tab strip so the gesture feels the same on both
+   surfaces. Only ACTIVE pills are draggable (inactive ones don't
+   have a position in the order yet — they get one when toggled on). */
+#settings-object-tabs .rp-set-opt[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+#settings-object-tabs .rp-set-opt[draggable="true"]:active {
+  cursor: grabbing;
+}
+#settings-object-tabs .rp-set-opt.obj-tab-drag {
+  opacity: 0.4;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#settings-object-tabs .rp-set-opt.obj-tab-drop {
+  box-shadow: inset 0.1875rem 0 0 0 var(--accent);
+}
