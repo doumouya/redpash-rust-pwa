@@ -130,6 +130,17 @@
         <i class="bi bi-list-ol"></i>
       </button>
 
+      <!-- Show row-open icon cluster (cleaner / report / dashboard
+           direct links). Default ON; flipping it OFF hides the
+           leading .obj-row-open-cell column via CSS so users who
+           don't need them per-row reclaim the horizontal space.
+           Pref persisted to prefs.objects_show_row_open. -->
+      <button class="rp-rt-icon-btn is-active" id="obj-rowopen-btn"
+              aria-pressed="true" title="Show per-row open links"
+              onclick="objToggleRowOpen(this)">
+        <i class="bi bi-box-arrow-up-right"></i>
+      </button>
+
       <!-- Favorites only — filters to ★ rows. Only shown on tabs whose
            objects carry an is_favorite attribute (reports / dashboards);
            objActivateTab toggles its display per kind. -->

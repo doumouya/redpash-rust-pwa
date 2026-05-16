@@ -756,6 +756,13 @@ html[data-theme="light"] #page-objects .rp-rt-toolbar {
      icons flush against the row's left edge instead of pushed away
      from the rest of the cells. */
   text-align: left;
+}
+/* Toolbar toggle (#obj-rowopen-btn → objToggleRowOpen) flips this
+   class on .rp-rt-panel; CSS collapses every .obj-row-open-cell
+   (both <th> and <td>) so the column disappears without a body
+   re-render. */
+.rp-rt-panel.obj-hide-row-open .obj-row-open-cell {
+  display: none;
   padding-left: 0.5rem !important;
   padding-right: 0.5rem !important;
 }

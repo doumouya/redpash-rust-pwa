@@ -540,6 +540,11 @@ const _DATE_FMT_LABEL = { relative: "Relative", date: "Date", datetime: "Date & 
 // tab has a saved view pinning it (objActivateTab).
 let objShowRowNums = false;
 let objFavOnly     = false;
+// Global pref — show/hide the leading .obj-row-open-cell column on
+// every tab. Default ON. Off doesn't re-render the body; it just
+// toggles a panel class that CSS-hides the cells. Persisted to
+// prefs.objects_show_row_open (set once, applies to every tab).
+let objShowRowOpen = true;
 
 // Saved per-tab view config — columns / column order / rows-per-page /
 // predicate filter, keyed by kind. Loaded from `prefs.objects_views`
@@ -725,6 +730,11 @@ export default async function mount(root, ctx) {
   const savedViews = ctx?.session?.prefs?.objects_views;
   objViews = (savedViews && typeof savedViews === "object" && !Array.isArray(savedViews))
     ? savedViews : {};
+
+  // Row-open visibility — defaults to ON; only flip when the user
+  // explicitly set `false` via the toolbar toggle (an absent pref
+  // means "never asked").
+  objShowRowOpen = ctx?.session?.prefs?.objects_show_row_open !== false;
 
   _wireGlobals(root);
   _bindColsDdHover(root);
@@ -917,6 +927,14 @@ function _wireGlobals(root) {
       objFavOnly = false;
       const rnBtn = panel.querySelector("#obj-rownum-btn");
       if (rnBtn) rnBtn.classList.toggle("rp-rt-rownum-active", objShowRowNums);
+      // Row-open icons — global pref, applied to the panel by toggling
+      // `obj-hide-row-open` so CSS hides the cells without a body re-render.
+      panel.classList.toggle("obj-hide-row-open", !objShowRowOpen);
+      const roBtn = panel.querySelector("#obj-rowopen-btn");
+      if (roBtn) {
+        roBtn.classList.toggle("is-active", objShowRowOpen);
+        roBtn.setAttribute("aria-pressed", objShowRowOpen ? "true" : "false");
+      }
       const favBtn = panel.querySelector("#obj-fav-btn");
       if (favBtn) {
         favBtn.classList.remove("rp-rt-fav-active");
@@ -967,6 +985,20 @@ function _wireGlobals(root) {
     objShowRowNums = !objShowRowNums;
     if (btn) btn.classList.toggle("rp-rt-rownum-active", objShowRowNums);
     renderTable(currentKind);
+  };
+  // Row-open icons — toggles the leading .obj-row-open-cell column
+  // via a panel class (CSS handles the display: none). No body
+  // re-render needed since the cells are always emitted. Pref is
+  // global (not per-tab), persisted to prefs.objects_show_row_open.
+  window.objToggleRowOpen = (btn) => {
+    objShowRowOpen = !objShowRowOpen;
+    if (btn) {
+      btn.classList.toggle("is-active", objShowRowOpen);
+      btn.setAttribute("aria-pressed", objShowRowOpen ? "true" : "false");
+    }
+    _root.querySelector(".rp-rt-panel")
+         ?.classList.toggle("obj-hide-row-open", !objShowRowOpen);
+    window.rpSavePref?.("objects_show_row_open", objShowRowOpen);
   };
   // Favorites-only filter — keeps rows flagged is_favorite. The button
   // is only shown on reports / dashboards tabs (objActivateTab).
