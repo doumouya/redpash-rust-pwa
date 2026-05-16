@@ -138,6 +138,20 @@
   overflow: hidden;
 }
 
+/* The library's .rp-rtp wrapper (redtable-pro.css) was authored for
+   the redpash-demo's "clean workspace" — it forces a green gradient
+   background and re-binds --accent to --green so every focus ring,
+   active tab, .rp-rt-add circle, filter funnel, etc. inherits green.
+   In the app we want the cleaner to pick up the user's chosen palette
+   (data-bg-palette) and the body-level --accent (#89b4fa for
+   full-bleed pages — see main.css), so undo both overrides here.
+   `inherit` re-binds --accent to whatever the parent has, which
+   follows the user's choice if they ever rebind it via Settings. */
+#page-cleaner .rp-rtp {
+  background: transparent;
+  --accent: inherit;
+}
+
 /* The pro wrapper sets the surface; the panel inside provides its own
    header / toolbar / body / paging. */
 .rp-rtp {
@@ -349,7 +363,13 @@
 #page-cleaner .modal-overlay .modal {
   position: fixed;
   margin: 0;
-  background: linear-gradient(135deg, rgba(15, 58, 42, 0.97) 0%, rgba(10, 47, 64, 0.96) 100%);
+  /* Neutral surface gradient — was a hardcoded green-to-teal mix
+     (`rgba(15,58,42)` → `rgba(10,47,64)`) inherited from the demo's
+     clean-workspace theme. Now derived from --bg so it tracks the
+     user's chosen palette + dark / light theme automatically. */
+  background: linear-gradient(135deg,
+                              color-mix(in srgb, var(--bg) 96%, var(--text)) 0%,
+                              color-mix(in srgb, var(--bg) 88%, var(--text)) 100%);
   backdrop-filter: blur(1.75rem);
   -webkit-backdrop-filter: blur(1.75rem);
   border: 0.0938rem solid color-mix(in srgb, var(--text) 13%, transparent);
@@ -365,21 +385,30 @@
 }
 #page-cleaner .modal-overlay .rp-tm-input:focus,
 #page-cleaner .modal-overlay .rp-tm-select:focus {
-  border-color: color-mix(in srgb, var(--green) 55%, transparent);
+  /* Focus ring follows --accent (now back to the app's brand red via
+     the .rp-rtp override above), matching focus styling on the rest
+     of the app. Was hardcoded to var(--green). */
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--text) 10%, transparent);
   outline: none;
 }
 #page-cleaner .modal-overlay .rp-tm-select option {
-  background: #0f3a2a;
+  /* Was `#0f3a2a` (dark green); use --surface so it picks up the
+     user's theme. */
+  background: var(--surface);
   color: var(--text);
 }
 #page-cleaner .modal-overlay .rp-tm-footer {
   border-top-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-/* Light theme — mint/sky gradient with darker borders so inputs read. */
+/* Light theme — derived from --bg so it tracks the user's chosen
+   palette. Was a hardcoded mint-to-sky gradient (`#e3ffe7` →
+   `#d9e7ff`) inherited from the demo's clean-workspace theme. */
 html[data-theme="light"] #page-cleaner .modal-overlay .modal {
-  background: linear-gradient(135deg, rgba(227, 255, 231, 0.97) 0%, rgba(217, 231, 255, 0.97) 100%);
+  background: linear-gradient(135deg,
+                              color-mix(in srgb, var(--bg) 96%, var(--text)) 0%,
+                              color-mix(in srgb, var(--bg) 88%, var(--text)) 100%);
   border-color: rgba(30, 30, 46, 0.1);
   color: #1e1e2e;
   box-shadow: 0 1.75rem 4.5rem rgba(0, 0, 0, 0.14);
