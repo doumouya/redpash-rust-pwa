@@ -131,6 +131,8 @@
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 50)">50 rows</div>
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 100)">100 rows</div>
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 500)">500 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 1500)">1500 rows</div>
+            <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 3000)">3000 rows</div>
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 5000)">5k rows (max)</div>
           </div>
         </div>
@@ -388,7 +390,12 @@
         </div>
       </div>
 
-      <div class="rp-rt-paging">
+      <!-- Paging — file-view only. Overview is client-side
+           paginated (all files in memory) so it doesn't need a
+           pager; the data-cleaner-view tag makes CSS hide this
+           whole footer when overview-active, so the file-view's
+           last paginator state can't bleed through. -->
+      <div class="rp-rt-paging" data-cleaner-view="file">
         <div class="rp-rt-rows-info" data-rt-rows-info></div>
         <div class="rp-rt-pages" data-rt-pages></div>
       </div>
