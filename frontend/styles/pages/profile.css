@@ -296,3 +296,58 @@ html[data-theme="light"] .rp-bg-sw {
   border-color: var(--accent);
   box-shadow: 0 0 0.5rem color-mix(in srgb, var(--accent) 50%, transparent);
 }
+
+/* ── Cleanness vocabulary — personal sentinel chips ─────────────
+   Wraps a flexbox of pill-shaped chips, each carrying the canonical
+   value + a × button. Provenance chip (learned vs submitted vs
+   global) is rendered inline by profile.js so the user can see at a
+   glance which of their entries have been promoted. */
+.rp-sentinels-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.rp-sentinels-empty { padding: 0.25rem 0; }
+.rp-sent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.5rem;
+  background: color-mix(in srgb, var(--yellow) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow) 30%, transparent);
+  border-radius: 0.5rem;
+  font-size: 0.6875rem;
+}
+.rp-sent-chip-val {
+  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+  color: var(--yellow);
+}
+.rp-sent-chip-prov {
+  font-size: 0.5625rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rp-sent-chip-prov--learned {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.rp-sent-chip-prov--submitted {
+  background: color-mix(in srgb, var(--sub) 14%, transparent);
+  color: var(--sub);
+}
+.rp-sent-chip-prov--global {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+}
+.rp-sent-chip-rm {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.rp-sent-chip-rm:hover { color: var(--red); }

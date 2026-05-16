@@ -182,23 +182,59 @@ dragging the score down:
 ## User-extended sentinel set — the learning loop
 
 The canonical `SENTINELS` list (above) is finite and biased toward the
-English / French data we've seen. Real datasets carry junk values RedPash
-can't anticipate: `"???"`, `"----"`, `"<NULL>"`, `"NDISPO"`, etc. The
-Cleaner's *Fix invalid values* modal (see
+English / French data we've seen. Real datasets carry junk values
+RedPash can't anticipate: `"???"`, `"----"`, `"<NULL>"`, `"NDISPO"`,
+etc. The system learns from users via three tiers:
+
+| Tier | Source | Scope | Scored by |
+|---|---|---|---|
+| **Built-in** | `data::stats::SENTINELS` (compiled into the crate) | Everyone | Always |
+| **Global** | `global_sentinels` view (`COUNT(DISTINCT user_id) >= 2` over `sentinel_submissions`) | Everyone, once promoted | Always |
+| **Personal** | `prefs.learned_sentinels` JSONB array | One user | Only on explicit `compute_cleanness` |
+
+### Frontend flow
+
+The Cleaner's *Fix invalid values* modal (see
 [cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn))
 lets the user type any string that's polluting their file → backend
 re-scans for it (`GET /api/files/:rid/sentinels?extra=`) → user picks
 it → `Apply` runs one `fix_invalid` step that covers the whole
-selection **and** pushes the canonical (trim + lowercase) form into the
-user's `prefs.learned_sentinels` JSONB array via `rpSavePref`.
+selection **and** pushes the canonical (trim + lowercase) form into
+the user's `prefs.learned_sentinels` JSONB array via `rpSavePref`.
 
-Future scans hand `prefs.learned_sentinels` back to the backend on
-every modal open, so RedPash carries the user's growing vocabulary
-forward across files and sessions. The value-hygiene component of
-cleanness still only docks the *built-in* sentinels today — wiring it
-to also consume `prefs.learned_sentinels` is the natural next step
-(would let "any junk that's been flagged in this user's earlier files"
-drag the score down too, matching the modal's view of reality).
+If the user has consented to share (`prefs.share_sentinels === true`,
+captured via a one-time consent modal on the first custom Apply), the
+PATCH `/api/me` handler also writes the new canonicals to
+`sentinel_submissions(canonical, user_id)`. The view auto-promotes
+them to `global_sentinels` once a second distinct user has flagged
+the same value.
+
+### Scoring with the union
+
+`value_hygiene_score(df, extras: &[String])` and the wrapper
+`cleanness_report(df, columns, extras)` / `cleanness(df, columns,
+extras)` take an extras slice that extends the canonical match set.
+The plumbing is the same as `find_sentinels(df, extras)` — both
+canonicalise (trim + lowercase) and short-circuit empties — so the
+modal scan and the scorer always agree on what counts as a sentinel.
+
+Per call-site:
+
+- **Hydrate** (upload / cache-miss / step-apply / join / snapshot) →
+  `extras = list_global_sentinels()`. Score reflects what every user
+  agrees is junk, no per-user context required (the hydrate path
+  doesn't have a session).
+- **`POST /api/files/:rid/cleanness`** → first runs `hydrate` (so the
+  baseline score is global-only), then if the file owner has any
+  `prefs.learned_sentinels` entries that aren't already in globals,
+  re-scores against `extras = globals ∪ learned`, persists the new
+  number, and refreshes the in-memory cache. The file owner sees
+  *their* view of cleanness; every other reader sees the global
+  baseline until they trigger their own recompute.
+- **`crates/data/examples/score_dir.rs`** — eval harness always
+  passes `extras = &[]` so reference scores stay user / DB-
+  independent. The non-regression guard is: with no extras, the
+  scorer's output must match the pre-learning baseline byte-for-byte.
 
 ## Open follow-ups
 

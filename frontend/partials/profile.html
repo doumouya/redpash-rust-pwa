@@ -484,6 +484,34 @@
                 </div>
               </div>
             </div>
+
+            <!-- Cleanness vocabulary — personal junk-value list the
+                 Cleaner's Fix-invalid modal scans for, plus the
+                 share-with-everyone consent toggle. Drives
+                 prefs.learned_sentinels + prefs.share_sentinels. -->
+            <div class="rp-set-sh" style="margin-top:1.5rem">Cleanness vocabulary</div>
+            <div class="rp-card">
+              <div class="rp-set-row rp-set-row--col">
+                <div class="rp-set-lbl">
+                  <div class="rp-set-title">Your sentinel values</div>
+                  <div class="rp-set-sub">Junk placeholders you've flagged in Fix invalid values. RedPash scans every file for these in addition to the built-in list. Click × to remove an entry.</div>
+                </div>
+                <div id="settings-sentinels-list" class="rp-sentinels-list">
+                  <div class="rp-sentinels-empty" style="font-size:0.75rem;color:var(--muted)">No personal sentinels yet — add them via the Cleaner's Fix invalid values modal.</div>
+                </div>
+              </div>
+              <div class="rp-set-divider"></div>
+              <div class="rp-set-row">
+                <div class="rp-set-lbl">
+                  <div class="rp-set-title">Share with all users</div>
+                  <div class="rp-set-sub">When on, the sentinels you flag join the global vocabulary (after 2+ users flag the same value). We share only the placeholder string, never your data.</div>
+                </div>
+                <div class="rp-set-opt-grp" id="settings-share-sentinels">
+                  <button type="button" class="rp-set-opt" data-value="true"  title="Share my sentinels with everyone">On</button>
+                  <button type="button" class="rp-set-opt" data-value="false" title="Keep my sentinels personal">Off</button>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>

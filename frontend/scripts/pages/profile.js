@@ -230,6 +230,14 @@ export default async function mount(root) {
   wirePosPicker("#settings-topbar-pos", "top",    "r");
   wirePosPicker("#settings-footer-pos", "bottom", "l");
 
+  // ── Cleanness vocabulary — personal sentinel list + share toggle ──
+  // Mirror of the Cleaner Fix-invalid modal's two prefs:
+  //   prefs.learned_sentinels (canonical string[])
+  //   prefs.share_sentinels   (bool | null)
+  // Plus the cross-user `global_sentinels` set (read-only here) so we
+  // can render the right provenance chip per row.
+  wireSentinelSettings(root, me).catch(() => {});
+
   // ── Background palette preview ─────────────────────────────────
   // The toggle + 4 swatches in the Theme row are wired via inline
   // onclick handlers (rpToggleBgPreview / rpSetBgPalette in main.js).
@@ -238,6 +246,93 @@ export default async function mount(root) {
 
   // ── Usage stats (fire-and-forget) ──────────────────────────────
   loadUsage(root).catch(() => {});
+}
+
+// Cleanness vocabulary card — chip list of personal sentinels + a
+// share-with-everyone toggle. Both write `prefs.learned_sentinels` /
+// `prefs.share_sentinels` via rpSavePref (the same PATCH /api/me path
+// the Cleaner Fix-invalid modal uses), so the two surfaces stay in
+// sync on every paint.
+async function wireSentinelSettings(root, me) {
+  const list  = root.querySelector("#settings-sentinels-list");
+  const share = root.querySelector("#settings-share-sentinels");
+  if (!list || !share) return;
+
+  // Working sets — mutated in-place by the chip-remove / share-toggle
+  // handlers. Canonical (trim + lowercase) since the backend matches
+  // case-insensitively.
+  const learned = new Set(
+    (Array.isArray(me.prefs?.learned_sentinels) ? me.prefs.learned_sentinels : [])
+      .map((s) => String(s).trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const global = new Set(
+    (Array.isArray(me.global_sentinels) ? me.global_sentinels : [])
+      .map((s) => String(s).trim().toLowerCase())
+      .filter(Boolean),
+  );
+  let consent = me.prefs?.share_sentinels;
+  if (consent !== true && consent !== false) consent = null;
+
+  const provenance = (canon) => {
+    if (global.has(canon)) return ["global", "rp-sent-chip-prov--global"];
+    if (consent === true)  return ["submitted", "rp-sent-chip-prov--submitted"];
+    return ["learned", "rp-sent-chip-prov--learned"];
+  };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+
+  const renderList = () => {
+    if (!learned.size) {
+      list.innerHTML = `<div class="rp-sentinels-empty" style="font-size:0.75rem;color:var(--muted)">No personal sentinels yet — add them via the Cleaner's Fix invalid values modal.</div>`;
+      return;
+    }
+    list.innerHTML = [...learned].sort().map((canon) => {
+      const [provLbl, provCls] = provenance(canon);
+      const title = provLbl === "global"
+        ? "In the global vocabulary (≥2 users flagged it)"
+        : provLbl === "submitted"
+          ? "Submitted — will join the global vocabulary after 1 more user flags it"
+          : "Personal-only — sharing is off";
+      return `<span class="rp-sent-chip">
+        <span class="rp-sent-chip-val">${esc(canon)}</span>
+        <span class="rp-sent-chip-prov rp-sent-chip-prov--${provLbl}" title="${esc(title)}">${provLbl}</span>
+        <button type="button" class="rp-sent-chip-rm" data-canon="${esc(canon)}" title="Remove from your personal list" aria-label="Remove ${esc(canon)}">×</button>
+      </span>`;
+    }).join("");
+    list.querySelectorAll(".rp-sent-chip-rm").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const canon = btn.dataset.canon;
+        if (!canon || !learned.delete(canon)) return;
+        window.rpSavePref?.("learned_sentinels", [...learned]);
+        renderList();
+      });
+    });
+  };
+  renderList();
+
+  // Share toggle — three-state pref reduced to a two-button pill (On /
+  // Off). The `null` "not yet asked" state is irrelevant once the user
+  // lands here: clicking either button records an explicit choice and
+  // the Cleaner's consent modal is bypassed forever after.
+  const setActive = () => {
+    share.querySelectorAll(".rp-set-opt").forEach((b) => {
+      const matches = (b.dataset.value === "true"  && consent === true)
+                   || (b.dataset.value === "false" && consent === false);
+      b.classList.toggle("active", matches);
+    });
+  };
+  setActive();
+  share.querySelectorAll(".rp-set-opt").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.value === "true";
+      if (next === consent) return;
+      consent = next;
+      setActive();
+      window.rpSavePref?.("share_sentinels", consent);
+      // Provenance chips depend on the consent flag — re-paint.
+      renderList();
+    });
+  });
 }
 
 function populateIdentity(root, me) {

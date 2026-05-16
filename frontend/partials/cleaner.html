@@ -400,6 +400,37 @@
     </div>
   </div>
 
+  <!-- Sentinel-sharing consent — first time the user picks a custom
+       (non-built-in, non-already-learned) sentinel and clicks Fix
+       values, this modal asks if they want their additions to flow
+       into the shared cleanness vocabulary. Choice is sticky
+       (prefs.share_sentinels) — never asked again. -->
+  <div class="modal-overlay" id="modal-sentinel-consent"
+       onclick="closeModal('sentinel-consent')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:30rem">
+      <button class="modal-close" onclick="closeModal('sentinel-consent')" aria-label="Close"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="rp-tm-ttl">Help RedPash get smarter?</div>
+          <div class="rp-tm-sub">A one-time choice — you can change it later in your profile.</div>
+        </div>
+      </div>
+      <div style="font-size:0.8125rem;color:var(--sub);line-height:1.5;margin-bottom:0.75rem">
+        You just flagged <code id="sentinel-consent-sample" style="font-family:'JetBrains Mono','Cascadia Code',monospace;background:color-mix(in srgb,var(--yellow) 16%,transparent);color:var(--yellow);padding:0.05rem 0.4rem;border-radius:0.25rem">???</code> as junk. Share that with every RedPash user so we catch it automatically in their files too.
+      </div>
+      <div style="font-size:0.6875rem;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        <strong>What we share:</strong> only the placeholder string itself (e.g. <code>???</code>), never any of your data or which file it came from.<br>
+        <strong>When it activates:</strong> a placeholder joins the shared vocabulary once at least one other user has independently flagged it too.
+      </div>
+      <div class="rp-tm-footer" style="gap:0.5rem">
+        <button class="btn btn-ghost" id="sentinel-consent-cancel">Cancel</button>
+        <button class="btn btn-ghost" id="sentinel-consent-decline">Just for me</button>
+        <button class="btn btn-primary" id="sentinel-consent-accept"><i class="bi bi-check2 bi-sm"></i> Share &amp; continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Unwrap-CSV — triggered from the cleaner's "Wrapped rows" banner. -->
   <div class="modal-overlay" id="modal-unwrap-csv"
        onclick="closeModal('unwrap-csv')" role="dialog" aria-modal="true">

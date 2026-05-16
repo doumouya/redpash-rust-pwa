@@ -101,6 +101,21 @@ export default async function mount(root, ctx) {
       ? savedLearned.map((s) => String(s).trim().toLowerCase()).filter(Boolean)
       : [],
   );
+  // Global sentinel set — values that ≥2 users have flagged as junk
+  // (server-side `global_sentinels` view, returned at /api/me boot).
+  // Joins the scan vocabulary alongside the user's personal additions,
+  // so a new user gets the benefit of everyone else's prior teaching
+  // on day one. Sharing is opt-in — see `share_sentinels` consent flow.
+  const savedGlobal = ctx?.session?.global_sentinels;
+  STATE.globalSentinels = new Set(
+    Array.isArray(savedGlobal)
+      ? savedGlobal.map((s) => String(s).trim().toLowerCase()).filter(Boolean)
+      : [],
+  );
+  // Sharing consent — tri-state: true (consented), false (declined),
+  // null (not yet asked → consent dialog fires on the first ad-hoc
+  // Apply). Cached in STATE so module-level renderers can read it.
+  STATE.shareSentinels = ctx?.session?.prefs?.share_sentinels ?? null;
 
   // Inline-onclick globals — defined first so the inline handlers in
   // the partial don't fire before the closure exists.
@@ -1263,6 +1278,44 @@ function _wireGlobals(root) {
 
   window.cleanerApplyTool = async (toolId) => {
     if (!STATE.summary) return;
+
+    // First-time consent gate for the fix-invalid tool. If the user is
+    // about to push a custom (non-built-in, non-already-learned)
+    // sentinel AND we've never asked whether they want to share their
+    // additions, open the consent modal and wait for their choice
+    // before letting the apply continue. The choice is sticky
+    // (prefs.share_sentinels) — we never ask again.
+    if (toolId === "tool-invalid" && STATE.shareSentinels == null) {
+      const modal  = document.getElementById("modal-tool-invalid");
+      const picked = [...(modal?.querySelectorAll("[data-tool-sentinel]:checked") ?? [])]
+        .map((c) => c.dataset.toolSentinel);
+      const newToUser = picked.find((s) => {
+        const canon = String(s).trim().toLowerCase();
+        return canon
+          && !SENTINELS_BUILTIN.has(canon)
+          && !STATE.learnedSentinels.has(canon);
+      });
+      if (newToUser) {
+        const choice = await _askSentinelConsent(newToUser);
+        if (choice === "cancel") return;   // user backed out — do nothing
+        STATE.shareSentinels = (choice === "accept");
+        // Persist the consent choice immediately so a refresh keeps it.
+        // PATCH lands BEFORE the step apply, so the server-side
+        // submission recorder in patch_me will see the right flag when
+        // the learned_sentinels PATCH lands a moment later (inside
+        // _readToolPayload below).
+        try {
+          await api.patch("/me", { prefs: { share_sentinels: STATE.shareSentinels } });
+        } catch (err) {
+          toast.error(`Couldn't save sharing choice: ${err.body?.error ?? err.message}`);
+          // Roll back so the next pick re-prompts rather than silently
+          // applying a half-saved decision.
+          STATE.shareSentinels = null;
+          return;
+        }
+      }
+    }
+
     const payload = _readToolPayload(toolId);
     if (!payload) return;   // validator already toasted
 
@@ -2015,6 +2068,40 @@ function _populateToolModal(toolId) {
   }
 }
 
+// Promise-shaped wrapper around #modal-sentinel-consent. Resolves
+// with "accept" (share with everyone), "decline" (just for me), or
+// "cancel" (back out of the apply). The three buttons each resolve
+// + close the modal exactly once; subsequent clicks are no-ops
+// thanks to a one-shot guard. `sampleValue` is shown inside the
+// modal copy so the user sees what they just flagged.
+function _askSentinelConsent(sampleValue) {
+  return new Promise((resolve) => {
+    const modal      = document.getElementById("modal-sentinel-consent");
+    const sampleEl   = modal?.querySelector("#sentinel-consent-sample");
+    const acceptBtn  = modal?.querySelector("#sentinel-consent-accept");
+    const declineBtn = modal?.querySelector("#sentinel-consent-decline");
+    const cancelBtn  = modal?.querySelector("#sentinel-consent-cancel");
+    if (!modal || !acceptBtn || !declineBtn || !cancelBtn) {
+      // Markup missing — fail safe by declining so we don't push
+      // submissions without consent.
+      resolve("decline");
+      return;
+    }
+    if (sampleEl) sampleEl.textContent = sampleValue;
+    let answered = false;
+    const answer = (choice) => {
+      if (answered) return;
+      answered = true;
+      window.closeModal("sentinel-consent");
+      resolve(choice);
+    };
+    acceptBtn.onclick  = () => answer("accept");
+    declineBtn.onclick = () => answer("decline");
+    cancelBtn.onclick  = () => answer("cancel");
+    window.openModal("sentinel-consent");
+  });
+}
+
 // Per-modal-session set of ad-hoc sentinels the user typed in the
 // "Add a custom value" input. Reset every time the modal is opened
 // (see _populateToolModal for "tool-invalid"). These are merged with
@@ -2023,13 +2110,19 @@ function _populateToolModal(toolId) {
 // learned set via rpSavePref.
 let _toolInvalidAdhoc = new Set();
 
-// Build the union of learned + ad-hoc canonical sentinels that goes
-// into the /sentinels?extra= query. We dedupe in canonical form so a
-// user who learned "n/a" doesn't end up sending both that and a fresh
-// "N/A" typo on every scan.
+// Build the union of (personal-learned ∪ global ∪ ad-hoc) canonical
+// sentinels that goes into the /sentinels?extra= query. We dedupe in
+// canonical form so a user who learned "n/a" doesn't end up sending
+// both that and a fresh "N/A" typo on every scan. Globals are merged
+// in so a fresh-from-fixtures user who's never typed anything still
+// gets the benefit of the shared vocabulary on first scan.
 function _toolInvalidExtras() {
   const out = new Set();
   for (const s of STATE.learnedSentinels ?? []) {
+    const c = String(s).trim().toLowerCase();
+    if (c) out.add(c);
+  }
+  for (const s of STATE.globalSentinels ?? []) {
     const c = String(s).trim().toLowerCase();
     if (c) out.add(c);
   }
@@ -2097,11 +2190,25 @@ async function _refreshSentinelList(modal, opts = {}) {
     const shouldCheck = firstPaint
       ? i < 3
       : (previouslyChecked.has(it.value) || _toolInvalidAdhoc.has(it.value.trim().toLowerCase()));
-    const isLearned = !SENTINELS_BUILTIN.has(it.canonical);
     const checked = shouldCheck ? " checked" : "";
-    const badge = isLearned
-      ? `<span style="font-size:0.5rem;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:0.05rem 0.35rem;border-radius:0.25rem;margin-left:0.25rem">learned</span>`
-      : "";
+    // Provenance — distinguishes where the scanner learned this
+    // value: built-in (no chip), the user's own learned set
+    // ("learned"), the shared vocabulary ("global"), or "submitted /
+    // awaiting N user" — a value the user has consented to share
+    // but that hasn't yet hit the global threshold (2 distinct users).
+    const inPersonal = STATE.learnedSentinels?.has(it.canonical);
+    const inGlobal   = STATE.globalSentinels?.has(it.canonical);
+    const wantsShare = STATE.shareSentinels === true;
+    let badge = "";
+    if (!SENTINELS_BUILTIN.has(it.canonical)) {
+      if (inGlobal) {
+        badge = `<span style="font-size:0.5rem;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);padding:0.05rem 0.35rem;border-radius:0.25rem;margin-left:0.25rem" title="In the global vocabulary (≥2 users have flagged it)">global</span>`;
+      } else if (inPersonal && wantsShare) {
+        badge = `<span style="font-size:0.5rem;color:var(--sub);background:color-mix(in srgb,var(--sub) 14%,transparent);padding:0.05rem 0.35rem;border-radius:0.25rem;margin-left:0.25rem" title="Submitted — will join the global vocabulary after 1 more user flags it">submitted</span>`;
+      } else if (inPersonal) {
+        badge = `<span style="font-size:0.5rem;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:0.05rem 0.35rem;border-radius:0.25rem;margin-left:0.25rem" title="In your personal learned set (not shared)">learned</span>`;
+      }
+    }
     return `<label style="display:flex;align-items:center;gap:0.625rem;padding:0.375rem 0.625rem;border-bottom:1px solid var(--over1);cursor:pointer">
       <input type="checkbox" data-tool-sentinel="${_escAttr(it.value)}"${checked} />
       <span style="font-family:'JetBrains Mono','Cascadia Code',monospace;font-size:0.6875rem;background:color-mix(in srgb,var(--yellow) 16%,transparent);color:var(--yellow);padding:0.05rem 0.4rem;border-radius:0.25rem">${_escHtml(it.value)}</span>${badge}

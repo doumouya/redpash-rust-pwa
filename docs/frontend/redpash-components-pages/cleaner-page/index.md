@@ -236,13 +236,20 @@ found* (preserving casing) becomes a checkbox row with its total
 count and the columns it appears in:
 
 > `[x] NA  ·  2,943 cells  ·  in 3 columns`
-> `[x] ??? [learned] · 14,997 cells · in 2 columns`
+> `[x] ??? [global]  · 14,997 cells · in 2 columns`
+> `[x] NDISPO [learned] · 412 cells · in 1 column`
+> `[x] ----   [submitted] · 7 cells · in 1 column`
 
 The first three rows ship pre-ticked so a one-click "Fix values" is
 meaningful even before the user reads anything. Rows whose canonical
-form isn't in the built-in `SENTINELS` set carry a small accent
-**learned** chip so the user can tell which of their teachings is
-firing.
+form isn't in the built-in `SENTINELS` set carry one of three
+provenance chips:
+
+| Chip | Meaning |
+|---|---|
+| **learned** (accent) | In the user's `prefs.learned_sentinels` and **not shared** (their consent is `false` or `null`) |
+| **global** (green) | Promoted to `global_sentinels` (≥2 distinct users have flagged it) — every user gets it automatically |
+| **submitted** (muted) | The user has shared it (`share_sentinels === true`) but it hasn't hit the 2-user threshold yet; tooltip reads *"Submitted — will join the global vocabulary after 1 more user flags it"* |
 
 The modal also exposes:
 
@@ -254,19 +261,50 @@ The modal also exposes:
 - **Scope** — `all string columns` (default) vs `a single column…`.
 - **Replace with** — `Empty (null)` (default) vs `A custom value…`.
 
+### Consent gate on first custom Apply
+
+The first time the user picks a custom (non-built-in, non-already-
+learned) sentinel and clicks Fix values, **before** the step runs
+`cleanerApplyTool('tool-invalid')` opens `#modal-sentinel-consent`:
+
+> **Help RedPash get smarter?**
+> You just flagged `???` as junk. Share that with every RedPash user
+> so we catch it automatically in their files too.
+> *We share only the placeholder string itself, never any of your
+> data. A placeholder joins the shared vocabulary once at least one
+> other user has independently flagged it too.*
+> `[Share & continue]  [Just for me]  [Cancel]`
+
+The handler is a one-shot Promise (`_askSentinelConsent`) that
+resolves `accept | decline | cancel`. The choice PATCHes
+`prefs.share_sentinels` (true / false) and is sticky — never asked
+again. Cancel aborts the whole Apply; the other two proceed.
+
+### Apply path + the learning loop
+
 Apply sends one `fix_invalid` step with `{ sentinels: [picked, …],
 columns?: [one], replacement?: "…" }`. **Any picked sentinel whose
 canonical form is neither built-in nor already learned is pushed into
 `prefs.learned_sentinels` via `rpSavePref` in the same handler** —
 so the next file the user opens scans for it automatically without
-re-typing. The scan order is therefore: built-in `SENTINELS` ∪
-`prefs.learned_sentinels` ∪ this-session ad-hoc additions.
+re-typing. The full scan extras union is:
 
-This is the system's main learning loop today — RedPash genuinely
-can't know every junk-value convention in advance (`"???"`, `"----"`,
-`"<NULL>"`, `"NDISPO"`, …), but the moment a user identifies one in
-their data, it joins the canonical vocabulary for *that user's*
-future files.
+```
+built-in `SENTINELS` ∪ session.global_sentinels ∪ prefs.learned_sentinels ∪ this-session ad-hoc
+```
+
+When `prefs.share_sentinels === true`, the server-side PATCH `/api/me`
+handler ALSO inserts each new canonical into `sentinel_submissions`.
+Once 2 distinct users have submitted the same value, the
+`global_sentinels` view promotes it — every user's next `/api/me`
+bootstrap will return it in `global_sentinels`, and their next
+hydrate / cleanness recompute will dock it as junk.
+
+The learning is therefore *both* personal (immediate, sticky for the
+user) and shared (asynchronous, sticky for everyone once the
+threshold is met). See [features/cleanness.md](../../../features/cleanness.md#user-extended-sentinel-set--the-learning-loop)
+for the scoring side, and [api/me.md](../../../api/me.md) for the
+consent + bootstrap contract.
 
 ### The `unwrap_csv` exception
 
@@ -444,8 +482,11 @@ the live STATE from the saved view if one exists.
 | Project sibling files (tabs) | `GET /api/projects/:rid/files` | ✅ live |
 | Step apply | `POST /api/files/:rid/steps` | ✅ live — all 17 tool kinds + `unwrap_csv` + `cast` |
 | Cast dry-run preview | `POST /api/files/:rid/cast-preview` | ✅ live — drives the cast-confirm modal |
-| Sentinel scan (Fix-invalid modal) | `GET /api/files/:rid/sentinels?extra=…` | ✅ live — populates the modal's checklist with what's actually in the file; `extra=` carries `prefs.learned_sentinels` + this-session additions |
-| Learned-sentinels persistence | `PATCH /api/me` (`prefs.learned_sentinels`) | ✅ live — any custom sentinel a user picks in Fix-invalid joins their personal vocabulary for future files |
+| Sentinel scan (Fix-invalid modal) | `GET /api/files/:rid/sentinels?extra=…` | ✅ live — `extra=` joins `prefs.learned_sentinels` ∪ `session.global_sentinels` ∪ this-session ad-hoc additions |
+| Learned-sentinels persistence | `PATCH /api/me` (`prefs.learned_sentinels`) | ✅ live — pushed via `rpSavePref` whenever the user picks a non-builtin sentinel |
+| Sharing consent | `PATCH /api/me` (`prefs.share_sentinels`) | ✅ live — one-time consent modal on first custom Apply; sticky three-state (`null` / `true` / `false`) |
+| Shared-vocabulary submission | `PATCH /api/me` server-side side-effect → `sentinel_submissions` | ✅ live — server-side recorder; promotes to `global_sentinels` view at `≥2` distinct users |
+| Bootstrap shared vocabulary | `GET /api/me` (`global_sentinels` field on the envelope) | ✅ live — cached in `STATE.globalSentinels` on cleaner mount |
 | Undo / Redo | `POST /api/files/:rid/{undo,redo}` | ✅ live |
 | Encoding override | `POST /api/files/:rid/encoding` | ✅ live |
 | Recompute cleanness on demand | `POST /api/files/:rid/cleanness` | ✅ live |

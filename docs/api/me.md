@@ -46,7 +46,8 @@ Returns the `UserProfile` for whoever owns the request.
   "use_case":     null,
   "plan":         "free",
   "locale":       "en",
-  "prefs":        {}
+  "prefs":        {},
+  "global_sentinels": ["???", "ndispo"]
 }
 ```
 
@@ -54,6 +55,26 @@ Returns the `UserProfile` for whoever owns the request.
 the row but stripped from the DTO.
 
 See [objects/user.md](../objects/user.md) for the full field reference.
+
+### `global_sentinels` — shared cleanness vocabulary
+
+The `/api/me` payload is wrapped in a `MeResponse` envelope that
+`#[serde(flatten)]`s the `UserProfile` and adds session-scoped
+context the frontend needs at bootstrap. Today: `global_sentinels` —
+the canonical sentinel values that have been flagged by **at least 2
+distinct users** via the Cleaner's *Fix invalid values* modal (see
+[features/cleanness.md](../features/cleanness.md) and
+[cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn)).
+
+The list is sourced from the `global_sentinels` view (a
+`COUNT(DISTINCT user_id) >= 2 GROUP BY canonical` over
+`sentinel_submissions`). Frontend caches it in `STATE.globalSentinels`
+on cleaner mount and unions it with `prefs.learned_sentinels` +
+this-session ad-hoc additions before every `?extra=` scan call.
+
+The envelope lives only on `GET /api/me` — other `UserProfile`
+returning endpoints (`/api/users`, `find_user_by_id` callers) keep the
+plain DTO shape.
 
 ### Errors
 
@@ -122,6 +143,28 @@ so callers can flip a single key without re-sending the whole object.
 Server side: `UPDATE users SET <col> = COALESCE($n, <col>), …, prefs =
 prefs || COALESCE($prefs, '{}'::jsonb), updated_at = now() WHERE
 redpash_id = $1 RETURNING …`.
+
+### Side-effect: sentinel learning loop
+
+When the patch's merged `prefs.learned_sentinels` adds any new entries
+**and** `prefs.share_sentinels === true`, the handler also writes one
+row per *newly-added* canonical to `sentinel_submissions` via
+`db::record_sentinel_submission`. This is the consent gate from the
+shared-sentinel learning loop:
+
+- The client is never trusted to perform the submission itself — the
+  PATCH-handler diffs the prior `learned_sentinels` against the
+  post-merge value and writes only the **new** entries.
+- `share_sentinels === false` or `null` → personal `learned_sentinels`
+  still persists, no DB write to `sentinel_submissions`.
+- Insert failures are logged (`tracing::warn`) but never fail the
+  PATCH — the user's personal pref landed; the global signal is
+  best-effort.
+
+See [features/cleanness.md](../features/cleanness.md) for how
+submissions are promoted to the shared vocabulary and used by the
+scorer; the Cleaner modal flow lives in
+[cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn).
 
 ### Response
 
