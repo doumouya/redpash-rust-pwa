@@ -184,7 +184,12 @@ const SCHEMAS = {
     columns:  [
       // name + description are inline-editable (type:"text" → PATCH
       // /api/projects/:rid via the schema saveEdit below).
-      { key: "name",        label: "Name",        render: (r) => esc(r.name),
+      // Name renders as an anchor to the project's cleaner — matches
+      // `rowHref` so a click here lands in the same place a row click
+      // does, plus the user gets browser "open in new tab" via the
+      // anchor semantics that pure-JS row clicks don't give them.
+      { key: "name",        label: "Name",
+        render: (r) => `<a class="obj-cell-link" href="#/cleaner?project=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.name)}</a>`,
         edit: { type: "text", field: "name" } },
       { key: "file_count",  label: "Files",       render: (r) => `${r.file_count ?? 0}` },
       // stage is computed (the furthest stage of any file in the
@@ -202,8 +207,12 @@ const SCHEMAS = {
       { key: "description",        label: "Description", hidden: true,
         render: (r) => _objNullable(r.description),
         edit: { type: "text", field: "description" } },
+      // Project ID — hidden by default; when toggled on it renders
+      // as a monospaced anchor to the cleaner (same destination as
+      // the Name link + rowHref) so the user can copy the rid or
+      // open the project in a new tab from this cell directly.
       { key: "redpash_id",         label: "Project ID",  hidden: true,
-        render: (r) => esc(r.redpash_id) },
+        render: (r) => `<a class="obj-cell-link obj-cell-id" href="#/cleaner?project=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.redpash_id)}</a>` },
       { key: "owner_display_name", label: "Owner",       hidden: true,
         render: (r) => esc(r.owner_display_name ?? "—"),
         edit: { type: "select", field: "owner_id" } },
