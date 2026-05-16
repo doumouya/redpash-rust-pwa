@@ -1931,12 +1931,18 @@ function renderTable(kind) {
                   ondragend="objColDragEnd(event)">${esc(c.label)}${arrow}<span class="rp-rt-col-resize" onclick="event.stopPropagation()" draggable="false"></span></th>`;
     }).join("");
     thead.innerHTML = `<tr>
+      <!-- Open-in-* icon cell is leading now (was trailing). Keeps
+           the always-visible row actions on the LEFT, so users land
+           on them at the start of the row instead of scanning to the
+           end. Mode-gated select / delete columns stay where they
+           were (select leading-ish, delete trailing) so toggling a
+           mode doesn't re-flow the table. -->
+      <th class="obj-row-open-cell" style="width:1px"></th>
       <th data-mode-col="select" style="width:1.5rem">
         <input type="checkbox" id="obj-sel-all" onchange="objSelectAll(this.checked)" />
       </th>
       ${withNum ? `<th class="rp-rt-rownum-th">#</th>` : ""}
       ${cols}
-      <th class="obj-row-open-cell" style="width:1px"></th>
       <th data-mode-col="delete" style="width:1.75rem"></th>
     </tr>`;
     _objInitColResize(thead, state);
@@ -1972,10 +1978,10 @@ function renderTable(kind) {
         ? `<button type="button" class="rp-rt-row-del" disabled title="Set another project as Default before deleting this one"><i class="bi bi-trash3"></i></button>`
         : `<button type="button" class="rp-rt-row-del" title="Delete" onclick="objRowDelete('${rid}')"><i class="bi bi-trash3"></i></button>`;
       return `<tr class="${sel ? "rp-rt-row-sel" : ""}">
+        <td class="obj-row-open-cell">${openBtn}</td>
         <td data-mode-col="select"><input type="checkbox" class="obj-row-chk" data-rid="${rid}" ${sel ? "checked" : ""} onchange="objRowSelect(this)" /></td>
         ${withNum ? `<td class="rp-rt-rownum-td">${(start + i + 1).toLocaleString()}</td>` : ""}
         ${cells}
-        <td class="obj-row-open-cell">${openBtn}</td>
         <td data-mode-col="delete">${delBtn}</td>
       </tr>`;
     }).join("");
