@@ -71,6 +71,22 @@ let STATE = {
   // without deleting the files themselves; cleanerShowFileTab puts a
   // tab back from the "+" dropdown.
   hiddenFiles: new Set(),
+  // Leading "#" row-number column on the file-view CSV table. Per-file
+  // (snapshotted via filePrefs on tab switch); first-tab default comes
+  // from prefs.cleaner_show_row_nums.
+  showRowNums:   false,
+  // Toolbar group that exposes "new report / new dashboard from this
+  // file" actions. Global pref (not per-file), persisted to
+  // prefs.cleaner_show_open_links. Default ON — matches Objects's
+  // analogous #obj-rowopen-btn.
+  showOpenLinks: true,
+  // CSV column names hidden by the user via the Columns dropdown. Set
+  // on switch from filePrefs[rid].hiddenCols; mutated by cleanerToggleCol.
+  hiddenCols:    new Set(),
+  // { colName: px } per-file column widths set via the .rp-rt-col-resize
+  // drag handles. Snapshotted into filePrefs[rid].colWidths on tab
+  // switch + restored on enter, so column layout is sticky per file.
+  colWidths:     {},
 };
 
 export default async function mount(root, ctx) {
@@ -98,6 +114,7 @@ export default async function mount(root, ctx) {
     mode: null, selected: new Set(), q: "", sorts: [],
     hiddenCols: _ovLoadHiddenCols(),
     colOrder:   _ovLoadColOrder(),
+    colWidths:  _ovLoadColWidths(),
   };
 
   // Hidden file tabs — restore the user's "tabs I've closed" set from
@@ -112,6 +129,14 @@ export default async function mount(root, ctx) {
   // hydration sets STATE.linkToolbar before the toggle button is
   // rendered, so the active class reflects the user's last choice.
   STATE.linkToolbar = ctx?.session?.prefs?.cleaner_link_toolbar === true;
+
+  // Defaults for the per-file toolbar prefs we surface in the cleaner
+  // toolbar (row numbers + open-links group). Per-file tabs hydrate
+  // their own values via _loadFilePrefs; these are the values used
+  // before the first file-tab snapshot lands.
+  STATE.showRowNums   = ctx?.session?.prefs?.cleaner_show_row_nums   === true;
+  STATE.showOpenLinks = ctx?.session?.prefs?.cleaner_show_open_links !== false;
+  STATE.hiddenCols    = new Set();
 
   // Learned sentinel values — the user-extension of the backend's
   // built-in SENTINELS list. The Fix-invalid modal scans every file
@@ -145,6 +170,12 @@ export default async function mount(root, ctx) {
   // Inline-onclick globals — defined first so the inline handlers in
   // the partial don't fire before the closure exists.
   _wireGlobals(root);
+
+  // Sticky cols-dropdown hover — one-time bind for every .rp-rt-cols-wrap
+  // in the toolbar so the panel survives the gap between trigger and
+  // dropdown. Library CSS-only :hover is unreliable here (see comment
+  // on _bindColsDdHover).
+  _bindColsDdHover(root);
 
   try {
     // Two landing modes:
@@ -214,6 +245,11 @@ export default async function mount(root, ctx) {
       // tab active + calls _renderOverview. No _loadPage (no active file).
       window.cleanerActivateTab("");
     } else {
+      // First load — paint the columns dropdown + sync the toolbar
+      // additions before the body lands (so the user sees the row-num
+      // toggle / open-link toggle in their saved state on first frame).
+      _syncToolbarToState(root);
+      window.cleanerBuildColsDropdown?.();
       // Load the first page of rows into the body.
       await _loadPage(root);
     }
@@ -300,11 +336,23 @@ function _saveFilePrefs(rid) {
   // value if the user later toggles linkToolbar off).
   const existing = STATE.filePrefs.get(rid) || {};
   STATE.filePrefs.set(rid, {
-    pageSize: STATE.linkToolbar ? existing.pageSize : STATE.pageSize,
-    page:     STATE.page,
-    q:        STATE.linkToolbar ? existing.q        : STATE.q,
-    sorts:    Array.isArray(STATE.sorts) ? STATE.sorts.map((k) => ({ ...k })) : [],
-    mode:     _currentPanelMode(),
+    // Sync-aware fields: when linkToolbar is on, snapshot the EXISTING
+    // (pre-toggle) value so the per-file slot doesn't pin a stale state
+    // that would re-apply if the user later turns sync off. These are
+    // schema-agnostic display prefs (search, rows-per-page, row-nums) —
+    // sharing them across tabs is genuinely useful.
+    pageSize:    STATE.linkToolbar ? existing.pageSize    : STATE.pageSize,
+    q:           STATE.linkToolbar ? existing.q           : STATE.q,
+    showRowNums: STATE.linkToolbar ? existing.showRowNums : !!STATE.showRowNums,
+    // Always per-file: page index (different totals), mode (data-mutation
+    // risky), sort + hidden cols + col widths (schema-dependent — column
+    // names differ across files, so syncing them would either error or
+    // produce nonsensical layouts).
+    page:       STATE.page,
+    sorts:      Array.isArray(STATE.sorts) ? STATE.sorts.map((k) => ({ ...k })) : [],
+    mode:       _currentPanelMode(),
+    hiddenCols: [...(STATE.hiddenCols ?? [])],
+    colWidths:  { ...(STATE.colWidths ?? {}) },
   });
 }
 function _loadFilePrefs(root, rid) {
@@ -315,13 +363,28 @@ function _loadFilePrefs(root, rid) {
   if (!STATE.linkToolbar) {
     STATE.pageSize = Number(p.pageSize) > 0 ? Number(p.pageSize) : _OV_DEFAULT_PAGE_SIZE;
     STATE.q        = typeof p.q === "string" ? p.q : "";
+    // Row-numbers — sync-gated like pageSize/q. When sync is on, leave
+    // STATE.showRowNums alone (it's the toolbar-global value); only when
+    // sync is off do we rehydrate the per-file snapshot.
+    if (typeof p.showRowNums === "boolean") STATE.showRowNums = p.showRowNums;
   }
   STATE.page     = Number(p.page)     > 0 ? Number(p.page)     : 1;
   STATE.sorts    = Array.isArray(p.sorts) ? p.sorts.map((k) => ({ ...k })) : [];
+  // Schema-dependent layout — always per-file regardless of sync, since
+  // column names differ across files (hiding "Email" on one file doesn't
+  // translate to another). New tab → empty set / no widths.
+  STATE.hiddenCols = new Set(Array.isArray(p.hiddenCols) ? p.hiddenCols : []);
+  STATE.colWidths  = (p.colWidths && typeof p.colWidths === "object") ? { ...p.colWidths } : {};
   // Re-paint the toolbar widgets so the user sees the rehydrated
   // values, not the previous tab's.
   _syncToolbarToState(root);
   _applyPanelMode(root, p.mode || null);
+  // The columns dropdown depends on STATE.columns (loaded by the
+  // file-detail fetch in the caller) AND on the freshly-hydrated
+  // hiddenCols set. Rebuild the checkbox list so ticked-state matches.
+  if (typeof window.cleanerBuildColsDropdown === "function") {
+    window.cleanerBuildColsDropdown();
+  }
 }
 // Read the panel's current mode out of its rp-rt-mode-* class.
 function _currentPanelMode() {
@@ -365,6 +428,39 @@ function _syncToolbarToState(root) {
   });
   const search = root.querySelector('[data-cleaner-view="file"] .rp-rt-search');
   if (search) search.value = STATE.q || "";
+
+  // Row-numbers toggle — accent-tint matches the Objects-page button.
+  // (Synced-glow flasher lives below.)
+  const rnBtn = root.querySelector("#cleaner-rownum-btn");
+  if (rnBtn) rnBtn.classList.toggle("rp-rt-rownum-active", !!STATE.showRowNums);
+
+  // Open-links toggle + the two gated action buttons. The CSS gates
+  // visibility via `cleaner-hide-open-links` on the panel, so the
+  // buttons themselves stay in the DOM (anchor semantics for new-tab).
+  const rlBtn = root.querySelector("#cleaner-rowopen-btn");
+  if (rlBtn) {
+    rlBtn.classList.toggle("is-active", !!STATE.showOpenLinks);
+    rlBtn.setAttribute("aria-pressed", STATE.showOpenLinks ? "true" : "false");
+  }
+  const panel = root.querySelector('.rp-rt-panel[data-cleaner-view="file"], .rp-rt-panel');
+  panel?.classList.toggle("cleaner-hide-open-links", !STATE.showOpenLinks);
+}
+
+// Brief accent pulse on every toolbar control governed by the chain-
+// link toggle — search box, rows-per-page pill, row-numbers button. Same
+// reflow-trick the Objects-page `_objFlashSaved` uses so the animation
+// restarts on every toggle even when the class is already present.
+function _cleanerFlashSynced(root) {
+  const targets = [
+    root.querySelector('[data-cleaner-view="file"] .rp-rt-search'),
+    root.querySelector("[data-rt-rows-label]")?.closest(".rp-rt-pill-btn"),
+    root.querySelector("#cleaner-rownum-btn"),
+  ].filter(Boolean);
+  for (const el of targets) {
+    el.classList.remove("cleaner-synced-glow");
+    void el.offsetWidth;            // reflow → restart one-shot animation
+    el.classList.add("cleaner-synced-glow");
+  }
 }
 
 // ── Render: title + meta ─────────────────────────────────────────────
@@ -606,26 +702,49 @@ async function _loadPage(root) {
     (STATE.sorts || []).map((k, i) => [k.col, { dir: k.dir, rank: i + 1 }]),
   );
   const showRanks = sortRank.size > 1;
+  const hidden    = STATE.hiddenCols ?? new Set();
+  const withNum   = !!STATE.showRowNums;
   thead.innerHTML = `<tr>
     <th data-mode-col="select" style="width:1.5rem">
       <input type="checkbox" id="cleaner-sel-all" onchange="cleanerSelectAll(this.checked)" />
     </th>
+    ${withNum ? `<th class="rp-rt-rownum-th">#</th>` : ""}
     ${STATE.columns.map((c) => {
+      if (hidden.has(c.name)) return "";
       const entry = sortRank.get(c.name);
       const cls   = `rp-rt-th-sortable${entry ? " rp-rt-sort-th" : ""}`;
       const arrow = entry
         ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
         : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
-      return `<th draggable="true" class="${cls}" data-col="${_escAttr(c.name)}"
+      // Persisted width (per-file via filePrefs[rid].colWidths) — applied
+      // inline; the trailing .rp-rt-col-resize span is the drag handle
+      // _clInitColResize wires on every render.
+      const w = STATE.colWidths?.[c.name];
+      const wStyle = (Number.isFinite(w) && w >= 48)
+        ? ` style="width:${w}px;min-width:${w}px"`
+        : "";
+      return `<th draggable="true" class="${cls}" data-col="${_escAttr(c.name)}"${wStyle}
         onclick="cleanerSortBy('${_escAttr(c.name)}', event)"
         ondragstart="cleanerColDragStart(event)"
         ondragover="cleanerColDragOver(event)"
         ondragleave="cleanerColDragLeave(event)"
         ondrop="cleanerColDrop(event)"
-        ondragend="cleanerColDragEnd(event)">${_escHtml(c.name)}${arrow}</th>`;
+        ondragend="cleanerColDragEnd(event)">${_escHtml(c.name)}${arrow}<span class="rp-rt-col-resize" onclick="event.stopPropagation()" draggable="false"></span></th>`;
     }).join("")}
     <th data-mode-col="delete" style="width:1.75rem"></th>
   </tr>`;
+
+  // Wire resize handles on the freshly-painted thead. ctx writes into
+  // STATE.colWidths + persists via _saveFilePrefs so the layout survives
+  // tab switches AND in-session re-renders (page change, sort, search,
+  // hide/show, row-numbers toggle).
+  _clInitColResize(thead, {
+    set(name, w) {
+      STATE.colWidths = STATE.colWidths || {};
+      STATE.colWidths[name] = w;
+      if (STATE.rid) _saveFilePrefs(STATE.rid);
+    },
+  });
 
   // Reset the page-relative selection — indices only make sense within
   // a single page since the server may return a different slice next
@@ -635,19 +754,25 @@ async function _loadPage(root) {
 
   const rows = res.rows ?? [];
   if (!rows.length) {
-    const span = STATE.columns.length + 2;  // +1 leading, +1 trailing
+    // +1 select, +1 delete, +1 row-num (when on), minus hidden data cols
+    const visibleData = STATE.columns.filter((c) => !hidden.has(c.name)).length;
+    const span = visibleData + 2 + (withNum ? 1 : 0);
     tbody.innerHTML = `<tr><td colspan="${span}" style="text-align:center;color:var(--muted);padding:1rem">No rows.</td></tr>`;
   } else {
     // data-ri holds the page-relative row index — used by the select /
     // delete handlers AND, when delete-mode commits, mapped to the
     // ABSOLUTE row index via (page-1)*pageSize+ri before being sent to
     // /steps drop_rows.
+    const startNum = (STATE.page - 1) * STATE.pageSize + 1;
     tbody.innerHTML = rows.map((row, ri) =>
       `<tr data-ri="${ri}">
         <td data-mode-col="select"><input type="checkbox" class="rp-rt-row-chk" data-ri="${ri}" onchange="cleanerRowSelect(this)" /></td>
-        ${row.map((c, ci) =>
-          `<td data-col="${_escAttr(STATE.columns[ci]?.name ?? "")}" data-ri="${ri}" ondblclick="cleanerCellEdit(this)">${_escHtml(c ?? "")}</td>`
-        ).join("")}
+        ${withNum ? `<td class="rp-rt-rownum-td">${(startNum + ri).toLocaleString()}</td>` : ""}
+        ${row.map((c, ci) => {
+          const name = STATE.columns[ci]?.name ?? "";
+          if (hidden.has(name)) return "";
+          return `<td data-col="${_escAttr(name)}" data-ri="${ri}" ondblclick="cleanerCellEdit(this)">${_escHtml(c ?? "")}</td>`;
+        }).join("")}
         <td data-mode-col="delete"><button type="button" class="rp-rt-row-del" title="Drop this row" onclick="cleanerRowDelete(${ri})"><i class="bi bi-trash3"></i></button></td>
       </tr>`
     ).join("");
@@ -703,6 +828,35 @@ function _renderPaging(root, totalPages) {
 
 // Mirrors the demo's _s2PageNums: total ≤ 7 → list everything; else
 // [1, …, cur-1, cur, cur+1, …, last] with literal "…" sentinels.
+// ── Columns dropdown hover ────────────────────────────────────────
+// Ported from objects.js `_bindColsDdHover`. Pure CSS :hover propagation
+// through the wide, absolutely-positioned .rp-rt-cols-dd panel is
+// unreliable: as soon as the cursor crosses the gap between the trigger
+// and the panel, hover detaches and the panel fades. Bind an explicit
+// open/close pair with a 180ms grace timer — the panel's own mouseenter
+// cancels the timer, so moving the cursor onto the panel keeps it open.
+// dataset flag guards against double-bind on router re-mount.
+function _bindColsDdHover(root) {
+  root.querySelectorAll(".rp-rt-cols-wrap").forEach((wrap) => {
+    if (wrap.dataset.ddHoverBound) return;
+    wrap.dataset.ddHoverBound = "1";
+    const dd = wrap.querySelector(".rp-rt-cols-dd");
+    if (!dd) return;
+    let closeTimer = null;
+    const open  = () => {
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+      dd.classList.add("open");
+    };
+    const close = () => {
+      closeTimer = setTimeout(() => { dd.classList.remove("open"); closeTimer = null; }, 180);
+    };
+    wrap.addEventListener("mouseenter", open);
+    wrap.addEventListener("mouseleave", close);
+    dd.addEventListener("mouseenter", open);
+    dd.addEventListener("mouseleave", close);
+  });
+}
+
 function _smartPageNums(cur, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const out = [1];
@@ -711,6 +865,64 @@ function _smartPageNums(cur, total) {
   if (cur < total - 2) out.push("…");
   out.push(total);
   return out;
+}
+
+// ── Column resize ─────────────────────────────────────────────────
+// Ported from objects.js _objColResize*; same drag mechanic as that
+// page, but parametrised via a `ctx` object so the Overview table
+// and the per-file CSV table can each persist widths into their own
+// store (OV.colWidths → localStorage for Overview, STATE.colWidths
+// → filePrefs[rid].colWidths for the file view).
+//
+// Wiring: each .rp-rt-col-resize span (emitted inside data-col TH
+// cells) is the absolute-positioned grab handle the library already
+// styles. mousedown captures startX + startW; mousemove pushes the
+// new width into the th's inline style; mouseup commits to the ctx
+// store and triggers a persist callback so the layout survives the
+// next render.
+let _clColResize = null;
+
+function _clInitColResize(thead, ctx) {
+  thead.querySelectorAll(".rp-rt-col-resize").forEach((h) => {
+    h.addEventListener("mousedown", (e) => _clColResizeDown(e, ctx));
+  });
+}
+function _clColResizeDown(e, ctx) {
+  // stopPropagation so the handle drag doesn't kick off the column-
+  // reorder dragstart on the parent <th> (objColDrag* / cleanerColDrag*).
+  e.preventDefault();
+  e.stopPropagation();
+  const handle = e.currentTarget;
+  const th     = handle.closest("th");
+  if (!th) return;
+  _clColResize = {
+    th, handle, ctx,
+    key:    th.dataset.col,
+    startX: e.clientX,
+    startW: th.offsetWidth,
+  };
+  handle.classList.add("rp-rt-resizing");
+  document.body.classList.add("rp-rt-col-resizing");
+  document.addEventListener("mousemove", _clColResizeMove);
+  document.addEventListener("mouseup",   _clColResizeUp);
+}
+function _clColResizeMove(e) {
+  if (!_clColResize) return;
+  // Min 48px so columns can't be dragged into oblivion.
+  const w = Math.max(48, _clColResize.startW + e.clientX - _clColResize.startX);
+  _clColResize.th.style.width    = `${w}px`;
+  _clColResize.th.style.minWidth = `${w}px`;
+}
+function _clColResizeUp() {
+  if (_clColResize) {
+    const { th, handle, ctx, key } = _clColResize;
+    if (ctx && key) ctx.set(key, th.offsetWidth);
+    handle.classList.remove("rp-rt-resizing");
+    _clColResize = null;
+  }
+  document.body.classList.remove("rp-rt-col-resizing");
+  document.removeEventListener("mousemove", _clColResizeMove);
+  document.removeEventListener("mouseup",   _clColResizeUp);
 }
 
 // ── Inline-onclick globals ────────────────────────────────────────────
@@ -2247,6 +2459,11 @@ function _wireGlobals(root) {
     btn.classList.toggle("is-active", STATE.linkToolbar);
     btn.setAttribute("aria-pressed", STATE.linkToolbar ? "true" : "false");
     window.rpSavePref?.("cleaner_link_toolbar", STATE.linkToolbar);
+    // Flash the synced controls so the user can SEE which fields the
+    // chain-link toggle governs — mirrors the Objects-page "Save view"
+    // glow (_objFlashSaved). Fires on both ON and OFF so the toggle
+    // change always surfaces the affected set.
+    _cleanerFlashSynced(root);
   };
   // Initial paint of the link toggle to match the rehydrated pref.
   const linkBtn = root.querySelector("#cleaner-link-toolbar");
@@ -2254,6 +2471,234 @@ function _wireGlobals(root) {
     linkBtn.classList.toggle("is-active", STATE.linkToolbar);
     linkBtn.setAttribute("aria-pressed", STATE.linkToolbar ? "true" : "false");
   }
+
+  // ── Toolbar additions ported from the Objects-page Files tab ──────
+  // Row-numbers toggle — adds a leading "#" index column. Per-file
+  // (snapshotted via _saveFilePrefs); the first-tab default came from
+  // prefs.cleaner_show_row_nums at mount time.
+  window.cleanerToggleRowNums = (btn) => {
+    STATE.showRowNums = !STATE.showRowNums;
+    if (btn) btn.classList.toggle("rp-rt-rownum-active", STATE.showRowNums);
+    if (STATE.rid) _saveFilePrefs(STATE.rid);
+    window.rpSavePref?.("cleaner_show_row_nums", STATE.showRowNums);
+    // Cache-only re-render — _loadPage hits the cache and repaints head + body.
+    if (STATE.rid) _loadPage(root);
+  };
+
+  // Open-links toggle — gates the two action anchors next to it (new
+  // report + new dashboard) via a panel class. Global pref (not per-file).
+  window.cleanerToggleRowOpen = (btn) => {
+    STATE.showOpenLinks = !STATE.showOpenLinks;
+    if (btn) {
+      btn.classList.toggle("is-active", STATE.showOpenLinks);
+      btn.setAttribute("aria-pressed", STATE.showOpenLinks ? "true" : "false");
+    }
+    const panel = root.querySelector(".rp-rt-panel");
+    panel?.classList.toggle("cleaner-hide-open-links", !STATE.showOpenLinks);
+    window.rpSavePref?.("cleaner_show_open_links", STATE.showOpenLinks);
+  };
+
+  // "Open this file in ..." — single-file analogues of the Objects
+  // Files-tab per-row buttons. Bypass the default anchor nav so the
+  // browser opens a new tab via window.open (matches the Objects rows).
+  window.cleanerNewReportFromFile = (ev) => {
+    ev?.preventDefault?.();
+    if (!STATE.rid) { toast.info("Open a file first."); return false; }
+    window.open(`#/reports?new=1&source=${encodeURIComponent(STATE.rid)}`, "_blank", "noopener");
+    return false;
+  };
+  window.cleanerNewDashboardFromFile = (ev) => {
+    ev?.preventDefault?.();
+    const pid = STATE.project?.redpash_id ?? STATE.summary?.project_redpash_id;
+    if (!pid) { toast.info("Couldn't resolve the project for this file."); return false; }
+    window.open(`#/dashboards?new=1&project=${encodeURIComponent(pid)}`, "_blank", "noopener");
+    return false;
+  };
+
+  // Compute / clear cleanness for the CURRENT file. Mirrors Objects's
+  // whole-list bulk handlers but scoped to STATE.rid. Spinner via the
+  // .is-spinning class (same convention as #obj-score-btn). On success,
+  // refetch the file detail so STATE.summary picks up the new
+  // cleanness_pct (badges elsewhere will repaint on their next read).
+  window.cleanerScoreThisFile = async (btn) => {
+    if (!STATE.rid) { toast.info("Open a file first."); return; }
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const summary = await api.post(`/files/${encodeURIComponent(STATE.rid)}/cleanness`, {});
+      if (summary) STATE.summary = summary;
+      toast.success("Cleanness computed.");
+    } catch (err) {
+      toast.error(`Score failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
+    }
+  };
+  window.cleanerClearThisFile = async (btn) => {
+    if (!STATE.rid) { toast.info("Open a file first."); return; }
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const summary = await api.delete(`/files/${encodeURIComponent(STATE.rid)}/cleanness`);
+      if (summary) STATE.summary = summary;
+      toast.success("Cleanness cleared.");
+    } catch (err) {
+      toast.error(`Clear failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
+    }
+  };
+
+  // Columns dropdown — paints a checkbox per CSV column reflecting
+  // STATE.hiddenCols. Min-1 guard keeps at least one data column on so
+  // the table never collapses to a header-only row. Mutations persist
+  // per-file via _saveFilePrefs and trigger a cache-only repaint via
+  // _loadPage (no fetch — page data is still valid).
+  window.cleanerBuildColsDropdown = () => {
+    const dd = root.querySelector("#cleaner-cols-dd");
+    if (!dd) return;
+    const cols = STATE.columns ?? [];
+    if (!cols.length) { dd.innerHTML = ""; return; }
+    const hidden = STATE.hiddenCols ?? new Set();
+    dd.innerHTML = cols.map((c) => {
+      const checked = hidden.has(c.name) ? "" : " checked";
+      return `<label class="rp-rt-col-item">
+        <input type="checkbox" data-cleaner-col="${_escAttr(c.name)}"${checked} />
+        ${_escHtml(c.name)}
+      </label>`;
+    }).join("");
+    dd.querySelectorAll("input[data-cleaner-col]").forEach((cb) => {
+      cb.addEventListener("change", () => window.cleanerToggleCol(cb));
+    });
+  };
+  window.cleanerToggleCol = (cb) => {
+    const name = cb.dataset.cleanerCol;
+    if (!name) return;
+    const hidden = STATE.hiddenCols ?? (STATE.hiddenCols = new Set());
+    const visibleCount = (STATE.columns?.length ?? 0) - hidden.size;
+    if (cb.checked) {
+      hidden.delete(name);
+    } else {
+      if (visibleCount <= 1) {
+        cb.checked = true;
+        toast.info("Keep at least one column visible.");
+        return;
+      }
+      hidden.add(name);
+    }
+    if (STATE.rid) _saveFilePrefs(STATE.rid);
+    if (STATE.rid) _loadPage(root);
+  };
+
+  // Saved-settings inspector — read-only modal that lists every open
+  // file tab + the toolbar/filter state remembered for it. Builds the
+  // body on every open so chips reflect live values (current file's
+  // state comes straight from STATE; other tabs come from their
+  // filePrefs snapshot). Replicates the Profile-page "Saved tab views"
+  // card design (.rp-view-row / .rp-view-chip).
+  window.cleanerShowSaved = () => {
+    const list = root.querySelector("#cleaner-saved-list");
+    if (!list) return;
+    // Live values for the active file beat the snapshot — the snapshot
+    // only refreshes on tab switch, so it can be one toolbar tweak stale.
+    const activeRid = STATE.rid;
+    const snapshotFor = (rid) => {
+      if (rid && rid === activeRid) {
+        return {
+          pageSize:    STATE.pageSize,
+          q:           STATE.q,
+          sorts:       STATE.sorts,
+          showRowNums: STATE.showRowNums,
+          hiddenCols:  [...(STATE.hiddenCols ?? [])],
+          colWidths:   STATE.colWidths ?? {},
+          mode:        _currentPanelMode(),
+        };
+      }
+      return STATE.filePrefs.get(rid) || {};
+    };
+    const sortIcon = (dir) => dir === "desc" ? "bi-arrow-down"
+                            : dir === "asc"  ? "bi-arrow-up"
+                            : "bi-arrow-down-up";
+
+    // Chip strip mirroring the Objects-page toolbar icons + the saved-
+    // view summary on the Profile page so all three surfaces feel like
+    // the same vocabulary.
+    const chips = (s, totalCols) => {
+      const out = [];
+      const hidden = Array.isArray(s.hiddenCols) ? s.hiddenCols.length : 0;
+      const visible = Math.max(0, (totalCols || 0) - hidden);
+      if (totalCols) {
+        out.push(`<span class="rp-view-chip" title="${visible} of ${totalCols} columns visible">
+          <i class="bi bi-layout-three-columns"></i>${visible}/${totalCols}
+        </span>`);
+      }
+      if (s.pageSize) {
+        out.push(`<span class="rp-view-chip" title="${s.pageSize} rows per page">
+          <i class="bi bi-stack"></i>${s.pageSize}
+        </span>`);
+      }
+      if (Array.isArray(s.sorts) && s.sorts.length) {
+        const f = s.sorts[0];
+        const more = s.sorts.length > 1 ? `<sup>+${s.sorts.length - 1}</sup>` : "";
+        out.push(`<span class="rp-view-chip" title="Sorted by ${f.col} (${f.dir})${s.sorts.length > 1 ? ` and ${s.sorts.length - 1} more` : ""}">
+          <i class="bi ${sortIcon(f.dir)}"></i>${_escHtml(f.col)}${more}
+        </span>`);
+      }
+      if (s.q) {
+        out.push(`<span class="rp-view-chip" title="Search query: ${s.q}">
+          <i class="bi bi-search"></i>"${_escHtml(s.q.length > 12 ? s.q.slice(0, 12) + "…" : s.q)}"
+        </span>`);
+      }
+      if (s.showRowNums) {
+        out.push(`<span class="rp-view-chip" title="Row numbers shown"><i class="bi bi-list-ol"></i></span>`);
+      }
+      const wCount = s.colWidths ? Object.keys(s.colWidths).length : 0;
+      if (wCount) {
+        out.push(`<span class="rp-view-chip" title="${wCount} column${wCount === 1 ? "" : "s"} resized">
+          <i class="bi bi-arrows-angle-expand"></i>${wCount}
+        </span>`);
+      }
+      return out.length
+        ? out.join("")
+        : `<span class="rp-view-default">Default view</span>`;
+    };
+
+    // One card per visible file tab (hiddenFiles excluded — those are
+    // the tabs the user has closed). Files that have never been opened
+    // get a "Not opened yet" badge instead of chips since no snapshot
+    // exists for them; their tab loads the global defaults on first open.
+    const visible = (STATE.files ?? []).filter((f) => !STATE.hiddenFiles.has(f.redpash_id));
+    if (!visible.length) {
+      list.innerHTML = `<div class="rp-sentinels-empty" style="font-size:0.75rem;color:var(--muted)">No open file tabs.</div>`;
+    } else {
+      list.innerHTML = visible.map((f) => {
+        const rid     = f.redpash_id;
+        const isOpen  = STATE.filePrefs.has(rid) || rid === activeRid;
+        const isActive = rid === activeRid;
+        const s       = snapshotFor(rid);
+        // For the active file we know columns exactly (STATE.columns);
+        // for snapshotted tabs we don't (no live columns cached), so
+        // fall back to the file summary's col_count.
+        const totalCols = isActive ? (STATE.columns?.length ?? 0)
+                                   : (f.col_count ?? 0);
+        const name = f.display_name ?? f.filename ?? rid;
+        const body = isOpen
+          ? chips(s, totalCols)
+          : `<span class="rp-view-default">Not opened yet — defaults will apply</span>`;
+        return `<div class="rp-view-row${isOpen ? " is-set" : ""}" data-rid="${_escAttr(rid)}">
+          <div class="rp-view-head">
+            <i class="bi bi-file-earmark-text rp-view-icon"></i>
+            <span class="rp-view-name">${_escHtml(name)}</span>
+            ${isActive ? `<span class="rp-view-rm" style="background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:transparent;cursor:default" title="The tab you're on">Active</span>` : ""}
+          </div>
+          <div class="rp-view-sum">${body}</div>
+        </div>`;
+      }).join("");
+    }
+    window.openModal("cleaner-saved");
+  };
 }
 
 // Anchor a freshly-opened tool modal to the button that triggered it.
@@ -3010,6 +3455,10 @@ let OV = {
   // → schema natural order. Click flips dir on same col, replaces chain
   // on a different col; shift-click appends as a tie-breaker.
   sorts:      [],
+  // { colKey: px } — user-resized widths from the .rp-rt-col-resize
+  // handle on each TH. Persisted to localStorage on mouseup so the
+  // layout sticks across reloads.
+  colWidths:  {},
 };
 
 // The overview redtable's data columns (between the leading select
@@ -3026,6 +3475,7 @@ const OV_COLUMNS = [
 ];
 const OV_HIDDEN_LS_KEY = "rp-overview-hidden-cols";
 const OV_ORDER_LS_KEY  = "rp-overview-col-order";
+const OV_WIDTHS_LS_KEY = "rp-overview-col-widths";
 
 function _ovLoadHiddenCols() {
   try {
@@ -3056,6 +3506,32 @@ function _ovLoadColOrder() {
 }
 function _ovSaveColOrder() {
   try { localStorage.setItem(OV_ORDER_LS_KEY, JSON.stringify(OV.colOrder)); } catch {}
+}
+
+// User-resized column widths for the Overview redtable — { key: px }.
+// Same persistence pattern as colOrder: localStorage so the layout
+// survives reloads + SW cache-clears, with a validation pass on load
+// that drops unknown keys (so a column removed from the schema doesn't
+// leave a dangling width entry that never re-renders).
+function _ovLoadColWidths() {
+  try {
+    const raw = localStorage.getItem(OV_WIDTHS_LS_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      const valid = new Set(OV_COLUMNS.map((c) => c.key));
+      const out = {};
+      if (obj && typeof obj === "object") {
+        for (const [k, v] of Object.entries(obj)) {
+          if (valid.has(k) && Number.isFinite(+v) && +v >= 48) out[k] = +v;
+        }
+      }
+      return out;
+    }
+  } catch {}
+  return {};
+}
+function _ovSaveColWidths() {
+  try { localStorage.setItem(OV_WIDTHS_LS_KEY, JSON.stringify(OV.colWidths)); } catch {}
 }
 
 // Sortable value for a column key on a file row. Matches the keys in
@@ -3188,19 +3664,27 @@ function _renderOverview(root) {
     const arrow  = entry
       ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
       : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
+    // User-resized width from OV.colWidths — applied inline so the
+    // layout survives every re-render. The .rp-rt-col-resize span
+    // (library-styled accent line on the TH's right edge) is the
+    // drag handle; _clInitColResize wires it after the head HTML lands.
+    const w  = OV.colWidths?.[c.key];
+    const wStyle = (Number.isFinite(w) && w >= 48)
+      ? ` width:${w}px;min-width:${w}px;`
+      : "";
     // draggable + data-col + drag handlers mirror the file-table
     // thead (cleanerColDrag*). The Overview persists the new order
     // to localStorage instead of POSTing a `filter_columns` step,
     // since column order is a pure UI preference here, not a
     // data-pipeline step.
-    return `<th class="${cls}" style="text-align:${c.align}" data-col="${_escAttr(c.key)}"
+    return `<th class="${cls}" style="text-align:${c.align};${wStyle}" data-col="${_escAttr(c.key)}"
                 draggable="true"
                 onclick="ovSortBy('${_escAttr(c.key)}', event)"
                 ondragstart="ovColDragStart(event)"
                 ondragover="ovColDragOver(event)"
                 ondragleave="ovColDragLeave(event)"
                 ondrop="ovColDrop(event)"
-                ondragend="ovColDragEnd(event)">${_escHtml(c.label)}${arrow}</th>`;
+                ondragend="ovColDragEnd(event)">${_escHtml(c.label)}${arrow}<span class="rp-rt-col-resize" onclick="event.stopPropagation()" draggable="false"></span></th>`;
   }).join("");
 
   const rowHtml = files.map((f) => {
@@ -3299,6 +3783,19 @@ function _renderOverview(root) {
       </tr>
     </thead>
     <tbody>${rowHtml || emptyRow}</tbody>`;
+
+  // Wire the column-resize handles in the freshly-painted thead. The
+  // ctx callback writes to OV.colWidths + persists; the next render
+  // reads back the saved width and applies it inline (so resize is
+  // sticky across reloads, mode switches, sort changes, etc.).
+  const ovThead = tblEl.querySelector("thead");
+  if (ovThead) _clInitColResize(ovThead, {
+    set(key, w) {
+      OV.colWidths = OV.colWidths || {};
+      OV.colWidths[key] = w;
+      _ovSaveColWidths();
+    },
+  });
 
   // Mode-gating reuses the panel's library `rp-rt-mode-*` classes —
   // same path the file-table uses — so a single CSS rule per mode

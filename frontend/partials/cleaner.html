@@ -68,6 +68,17 @@
           <i class="bi bi-download bi-sm"></i> Export
         </button>
 
+        <!-- Saved-settings inspector — opens a modal listing each open
+             file tab + the toolbar / filter state remembered for it
+             (hidden cols, sort chain, rows-per-page, row-nums, search,
+             resized columns). Read-only; replicates the Profile-page
+             "Saved tab views" card design so the two surfaces feel like
+             siblings. cleanerShowSaved() in cleaner.js builds the list. -->
+        <button class="btn btn-ghost btn-sm" id="cleaner-saved-btn"
+                onclick="cleanerShowSaved()" title="See what's saved per tab">
+          <i class="bi bi-sliders bi-sm"></i> Saved settings
+        </button>
+
         <button class="rp-rt-add" aria-label="Add file to project" title="Add file"
                 onclick="cleanerAddFile()">
           <i class="bi bi-plus"></i>
@@ -135,6 +146,57 @@
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 3000)">3000 rows</div>
             <div class="rp-rt-dd-item"                   onclick="rtSetRows(this, 'file', 5000)">5k rows (max)</div>
           </div>
+        </div>
+
+        <!-- Row-number column toggle — adds a leading "#" index column
+             showing the page-relative row number (1, 2, 3…). Mirrors the
+             Objects-page Files-tab #obj-rownum-btn. Pref: cleaner_show_row_nums. -->
+        <button type="button" class="rp-rt-icon-btn" id="cleaner-rownum-btn"
+                title="Show row numbers" onclick="cleanerToggleRowNums(this)">
+          <i class="bi bi-list-ol"></i>
+        </button>
+
+        <!-- Show "open links" toolbar group — gates the two action buttons
+             below (new report + new dashboard, scoped to the current file).
+             Mirrors Objects #obj-rowopen-btn but at toolbar level since
+             cleaner rows are data rows, not file rows. Default ON.
+             Pref: cleaner_show_open_links. -->
+        <button type="button" class="rp-rt-icon-btn is-active" id="cleaner-rowopen-btn"
+                aria-pressed="true" title="Show open-in links"
+                onclick="cleanerToggleRowOpen(this)">
+          <i class="bi bi-box-arrow-up-right"></i>
+        </button>
+        <a class="rp-rt-icon-btn" data-cleaner-open="report" href="#"
+           title="New report from this file" onclick="return cleanerNewReportFromFile(event)">
+          <i class="bi bi-bar-chart-fill"></i>
+        </a>
+        <a class="rp-rt-icon-btn" data-cleaner-open="dashboard" href="#"
+           title="New dashboard for this project" onclick="return cleanerNewDashboardFromFile(event)">
+          <i class="bi bi-grid-1x2-fill"></i>
+        </a>
+
+        <!-- Per-file score / clear — the cleaner equivalent of Objects's
+             whole-list #obj-score-btn / #obj-clear-score-btn, scoped to
+             the currently open file. Calls POST/DELETE
+             /api/files/{rid}/cleanness and refreshes the file detail so
+             any cleanness badge updates inline. -->
+        <button class="rp-rt-icon-btn" id="cleaner-score-btn" title="Compute cleanness for this file"
+                onclick="cleanerScoreThisFile(this)">
+          <i class="bi bi-magic"></i>
+        </button>
+        <button class="rp-rt-icon-btn" id="cleaner-clear-score-btn" title="Clear cleanness for this file"
+                onclick="cleanerClearThisFile(this)">
+          <i class="bi bi-slash-circle"></i>
+        </button>
+
+        <!-- Columns — show / hide CSV columns. Per-file; checkbox list
+             rebuilt by cleanerBuildColsDropdown() whenever STATE.columns
+             refreshes. Hover-only dropdown (mirrors the Objects pattern). -->
+        <div class="rp-rt-cols-wrap">
+          <button class="rp-rt-icon-btn" type="button" title="Columns">
+            <i class="bi bi-layout-three-columns"></i>
+          </button>
+          <div class="rp-rt-cols-dd" id="cleaner-cols-dd"><!-- built by cleanerBuildColsDropdown() --></div>
         </div>
 
         <!-- Link search + rows-per-page across file tabs. Default OFF
@@ -911,6 +973,29 @@
       <div class="rp-tm-footer" style="margin-top:0.75rem">
         <button class="btn btn-ghost" onclick="closeModal('tool-droprows')">Cancel</button>
         <button class="btn btn-primary" data-tool-apply onclick="cleanerApplyTool('tool-droprows')">Drop rows</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved-settings inspector — read-only snapshot of each file tab's
+       toolbar / filter state. Body is built on open by cleanerShowSaved()
+       so the chips reflect the live values. Replicates the Profile-page
+       "Saved tab views" card design. -->
+  <div class="modal-overlay" id="modal-cleaner-saved" onclick="closeModal('cleaner-saved')" role="dialog" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:42rem">
+      <button class="modal-close" onclick="closeModal('cleaner-saved')" aria-label="Close"><i class="bi bi-x-lg bi-sm"></i></button>
+      <div class="rp-tm-hdr">
+        <div class="rp-tm-icon" style="background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)">
+          <i class="bi bi-sliders"></i>
+        </div>
+        <div>
+          <div class="rp-tm-ttl">Saved tab settings</div>
+          <div class="rp-tm-sub">What the cleaner remembers for each open file tab. Read-only — switch tabs and use the toolbar to change a value.</div>
+        </div>
+      </div>
+      <div id="cleaner-saved-list" class="rp-views-list" style="margin-top:0.75rem"></div>
+      <div class="rp-tm-footer">
+        <button class="btn btn-ghost" onclick="closeModal('cleaner-saved')">Close</button>
       </div>
     </div>
   </div>
