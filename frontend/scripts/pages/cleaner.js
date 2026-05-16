@@ -218,12 +218,19 @@ function _renderTitle(root) {
   // the Overview tab, STATE.rid is null again — the previous file's
   // name is dropped instead of lingering (matches the user's mental
   // model: "no file open, no file name").
+  //
+  // Icons swap the "Project:" / "File:" prose for bi-folder2-open and
+  // bi-file-earmark-text — same icons the Objects-page tab strip uses
+  // for those kinds, so a user who learned the iconography there picks
+  // it up here free.
   const projName = STATE.project?.name ?? "—";
   const s = STATE.summary ?? {};
   const fileName = STATE.rid ? (s.display_name ?? s.filename ?? "—") : null;
-  ttl.textContent = fileName
-    ? `Project: ${projName} — File: ${fileName}`
-    : `Project: ${projName}`;
+  const proj = `<i class="bi bi-folder2-open bi-sm" aria-label="Project"></i> ${_escHtml(projName)}`;
+  const file = fileName
+    ? ` <span class="rp-rt-title-sep">—</span> <i class="bi bi-file-earmark-text bi-sm" aria-label="File"></i> ${_escHtml(fileName)}`
+    : "";
+  ttl.innerHTML = `${proj}${file}`;
 }
 
 function _renderHeaderMeta(root) {

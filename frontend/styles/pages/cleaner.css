@@ -924,3 +924,16 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   font-style: italic;
   color: color-mix(in srgb, var(--muted) 80%, var(--text));
 }
+
+/* Header title — bi-folder2-open / bi-file-earmark-text emitted by
+   _renderTitle. Mute the em-dash separator so it doesn't compete
+   with the project / file names visually. */
+#cleaner-title .rp-rt-title-sep {
+  color: var(--muted);
+  margin: 0 0.125rem;
+}
+#cleaner-title .bi {
+  color: var(--sub);
+  margin-right: 0.125rem;
+  vertical-align: -0.05em;
+}
