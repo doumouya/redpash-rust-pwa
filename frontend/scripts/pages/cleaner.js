@@ -884,7 +884,7 @@ function _wireGlobals(root) {
       OV.q = val;
       _renderOverview(root);
       // Restore focus + caret — _renderOverview rebuilt the input.
-      const fresh = root.querySelector(".ov-rt-search input");
+      const fresh = root.querySelector("#cleaner-ov-toolbar .rp-rt-search");
       if (fresh) { fresh.focus(); fresh.setSelectionRange(val.length, val.length); }
     }, 180);
   };
@@ -2870,11 +2870,9 @@ function _renderOverview(root) {
   // toolbar; the only Overview-specific affordances are the column
   // picker dropdown and the score-files spinner button.
   tbEl.innerHTML = `
-    <div class="rp-rt-search">
-      <i class="bi bi-search bi-sm"></i>
-      <input type="search" placeholder="Search files…" value="${_escAttr(OV.q)}"
-             oninput="ovSearch(this)" />
-    </div>
+    <input class="rp-rt-search" type="search" placeholder="Search files…"
+           autocomplete="off" value="${_escAttr(OV.q)}"
+           oninput="ovSearch(this)" />
     <span class="rp-rt-sel-chip" id="ov-sel-chip" data-has-sel="0"
           onclick="ovClearSelection()" title="Click to clear selection">
       <i class="bi bi-check2-square"></i><span id="ov-sel-count">0 selected</span>
