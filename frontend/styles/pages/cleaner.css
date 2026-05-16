@@ -827,6 +827,93 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── Joins panel — candidate list ────────────────────────────────
+   GET /api/files/:rid/joins paints into #cleaner-join-body via
+   _renderJoinsPanel. One section per other-file, with a stack of
+   clickable candidate rows: this_col ↔ other_col + similarity score.
+   Clicking a row POSTs the join + switches to the newly-created
+   file (cleanerCreateJoin). Scores colour-coded: ≥80 green, ≥50
+   yellow, else muted. */
+.rp-rtp-join-file {
+  margin-top: 0.5rem;
+}
+.rp-rtp-join-file-hdr {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0.25rem 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.rp-rtp-join-file-hdr .bi { color: var(--muted); font-size: 0.75rem; }
+.rp-rtp-join-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.rp-rtp-join-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1875rem;
+  padding: 0.375rem 0.5rem;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 0.4375rem;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.6875rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rp-rtp-join-item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.rp-rtp-join-item.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.rp-rtp-join-cols {
+  display: flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+.rp-rtp-join-col {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 7rem;
+  white-space: nowrap;
+}
+.rp-rtp-join-cols .bi {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+}
+.rp-rtp-join-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+.rp-rtp-join-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rp-rtp-join-score[data-score]                  { color: var(--muted); }
+.rp-rtp-join-score[data-score^="5"],
+.rp-rtp-join-score[data-score^="6"],
+.rp-rtp-join-score[data-score^="7"]             { color: #e5b300; }
+.rp-rtp-join-score[data-score^="8"],
+.rp-rtp-join-score[data-score^="9"],
+.rp-rtp-join-score[data-score="100"]            { color: var(--green); }
 .rp-rt-fb-row .rp-rt-fb-rm {
   align-self: flex-end;
   display: inline-flex;
@@ -1177,4 +1264,44 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   padding: 0.125rem 0.4375rem;
   font-size: 0.625rem;
   line-height: 1.3;
+}
+
+/* Saved-filter chips inside the Saved-settings modal — same shape as
+   rp-view-chip but click-loadable with an inline × delete. */
+.rp-view-saved-filters {
+  margin-top: 0.25rem;
+  padding-top: 0.375rem;
+  border-top: 0.0625rem dashed color-mix(in srgb, var(--text) 8%, transparent);
+}
+.rp-view-saved-lbl {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.625rem;
+  margin-right: 0.125rem;
+}
+.rp-view-chip--filter {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  transition: background 0.12s;
+}
+.rp-view-chip--filter:hover {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.rp-view-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-left: 0.125rem;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  opacity: 0.6;
+}
+.rp-view-chip-x:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--red) 22%, transparent);
+  color: var(--red);
 }

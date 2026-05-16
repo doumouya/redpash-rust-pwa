@@ -1278,6 +1278,30 @@ pub async fn undo_last(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
     Ok(n.rows_affected() > 0)
 }
 
+/// Surgically un-apply every step of a given kind on a file. Unlike
+/// `undo_last` (LIFO) this flips `applied = false` for ALL matching
+/// rows regardless of position, so a buried filter_rows step can be
+/// cleared without disturbing the steps applied on top of it. Returns
+/// the number of rows touched (caller may surface a "Cleared N" toast).
+///
+/// Rows aren't deleted — they just leave the applied chain. Redo
+/// won't pick them back up either (redo picks the LOWEST-ordinal
+/// undone step, which is fine: these become permanently undone unless
+/// the user re-applies them via the panel).
+pub async fn clear_steps_of_kind(pool: &PgPool, file_rid: &str, kind: &str)
+    -> sqlx::Result<u64>
+{
+    let n = sqlx::query(
+        "UPDATE project_steps SET applied = false
+         WHERE file_redpash_id = $1 AND kind = $2 AND applied = true",
+    )
+    .bind(file_rid)
+    .bind(kind)
+    .execute(pool)
+    .await?;
+    Ok(n.rows_affected())
+}
+
 /// Flip the lowest-ordinal undone step back to `applied = true`.
 pub async fn redo_next(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
     let n = sqlx::query(

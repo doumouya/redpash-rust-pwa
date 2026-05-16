@@ -115,6 +115,13 @@ let STATE = {
   projectMeta:      new Map(),
   projectSnapshots: new Map(),
   activeProjectId:  null,
+
+  // Per-file named filter store. Shape:
+  //   { [file_rid]: [{ name, combinator, predicates }, …] }
+  // Persisted to prefs.cleaner_saved_filters via rpSavePref. The floppy
+  // button in the filter panel writes here; the Saved-settings modal
+  // surfaces them as click-to-load chips per file.
+  savedFilters: {},
 };
 
 export default async function mount(root, ctx) {
@@ -165,6 +172,13 @@ export default async function mount(root, ctx) {
   STATE.showRowNums   = ctx?.session?.prefs?.cleaner_show_row_nums   === true;
   STATE.showOpenLinks = ctx?.session?.prefs?.cleaner_show_open_links !== false;
   STATE.hiddenCols    = new Set();
+
+  // Saved named filters — keyed by file rid. Each value is an array of
+  // { name, combinator, predicates }. Pulled from prefs on mount; live
+  // mutations land via cleanerSaveFilter / cleanerDeleteSavedFilter,
+  // both of which call rpSavePref to persist.
+  const sf = ctx?.session?.prefs?.cleaner_saved_filters;
+  STATE.savedFilters = (sf && typeof sf === "object" && !Array.isArray(sf)) ? { ...sf } : {};
 
   // Learned sentinel values — the user-extension of the backend's
   // built-in SENTINELS list. The Fix-invalid modal scans every file
@@ -297,6 +311,9 @@ export default async function mount(root, ctx) {
     _renderAppliedList(root);
     _renderDtypeList(root);
     _renderEncodingPicker(root);
+    // Async fetch — fire-and-forget; paints into #cleaner-join-body
+    // when the response lands. Skipped when no active file or <2 files.
+    _renderJoinsPanel(root).catch(() => {});
 
     if (projectOnly) {
       // Land on Overview — cleanerActivateTab("") flips the Overview
@@ -1600,6 +1617,7 @@ function _wireGlobals(root) {
       _renderDtypeList(root);
     _renderEncodingPicker(root);
     _renderOverallCleanness(root);  // cleanness uses summary as fallback when project agg is null
+    _renderJoinsPanel(root).catch(() => {});  // async, paints when ready
     await _loadPage(root);
   };
 
@@ -2342,21 +2360,140 @@ function _wireGlobals(root) {
     _appendFilterRow(root);
     _refreshFilterApplyState(root);
   };
-  window.cleanerClearFilterDraft = (btn) => {
+  // Eraser: wipes the panel draft AND surgically un-applies every
+  // filter_rows step on the active file via POST /:rid/clear-filters.
+  // Single round-trip; the backend flips applied=false for every
+  // matching step regardless of position, so a filter buried under
+  // later operations (filter_columns, renames, …) still clears. The
+  // returned FileEnvelope replaces STATE.steps so the cache-invalidate
+  // tied to applied-count picks up the change on the next _loadPage.
+  window.cleanerClearFilterDraft = async (btn) => {
     _rpAnimOnce(btn ?? root.querySelector(".rp-rt-icon-btn[onclick*='cleanerClearFilterDraft']"),
                 "rp-rt-anim-wipe");
     const box = root.querySelector("#cleaner-filter-rows");
     if (box) box.innerHTML = "";
     _ensureFilterRow(root);
     _refreshFilterApplyState(root);
+
+    if (!STATE.rid) return;
+    const beforeApplied = (STATE.steps ?? []).filter((s) => s.applied === true && s.kind === "filter_rows").length;
+    if (beforeApplied === 0) return;   // nothing to clear; draft wipe was the whole job
+    try {
+      const env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/clear-filters`, {});
+      STATE.summary = env.summary ?? STATE.summary;
+      STATE.columns = env.columns ?? STATE.columns;
+      STATE.steps   = env.steps   ?? STATE.steps;
+      await _loadPage(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      window.cleanerBuildColsDropdown?.();
+      toast.success(`Cleared ${beforeApplied} filter${beforeApplied === 1 ? "" : "s"}.`);
+    } catch (err) {
+      toast.error(`Clear failed: ${err.body?.error ?? err.message}`);
+    }
   };
 
-  // Save filter (floppy) — placeholder, mirrors objSaveFilter; just
-  // flashes the glow animation for now. Wires to a real named-filter
-  // store when that lands.
-  window.cleanerSaveFilter = (btn) => {
+  // Save filter (floppy) — captures the current panel draft, prompts
+  // for a name, and persists into STATE.savedFilters[rid] +
+  // prefs.cleaner_saved_filters. Same payload shape Apply uses so
+  // loading a saved filter can just splat it back into the panel.
+  window.cleanerSaveFilter = async (btn) => {
     _rpAnimOnce(btn ?? root.querySelector(".rp-rt-icon-btn[onclick*='cleanerSaveFilter']"),
                 "rp-rt-anim-glow");
+    if (!STATE.rid) { toast.info("Open a file first."); return; }
+    const draft = _cleanerCollectDraft(root);
+    if (!draft.predicates.length) { toast.info("Add at least one predicate to save."); return; }
+    const name = (prompt("Name this filter:", `Filter ${(STATE.savedFilters?.[STATE.rid]?.length ?? 0) + 1}`) ?? "").trim();
+    if (!name) return;
+    STATE.savedFilters[STATE.rid] = STATE.savedFilters[STATE.rid] || [];
+    // Replace any existing entry with the same name (idempotent rename = update).
+    const list = STATE.savedFilters[STATE.rid];
+    const dupIdx = list.findIndex((f) => f.name === name);
+    const entry  = { name, combinator: draft.combinator, predicates: draft.predicates };
+    if (dupIdx >= 0) list[dupIdx] = entry;
+    else             list.push(entry);
+    window.rpSavePref?.("cleaner_saved_filters", STATE.savedFilters);
+    toast.success(`Saved filter "${name}".`);
+  };
+
+  // Load a saved filter into the panel draft + open the panel so the
+  // user can review / tweak / Apply. Called from the Saved-settings
+  // modal chip click — closes the modal so the user lands on the panel.
+  window.cleanerLoadSavedFilter = (rid, idx) => {
+    const list = STATE.savedFilters?.[rid];
+    const entry = list?.[idx];
+    if (!entry) return;
+    // If the filter belongs to a different file, switch to that file
+    // first — predicates are column-scoped, so loading "Filter X" from
+    // file A into file B would reference columns that don't exist.
+    const apply = () => {
+      _cleanerLoadDraft(root, entry);
+      // Open the filter panel so the user sees the loaded predicates.
+      const panel = root.querySelector("#cleaner-filter-panel");
+      if (panel && !panel.classList.contains("open")) {
+        window.rtToggleFilter?.();
+      }
+      window.closeModal("cleaner-saved");
+    };
+    if (rid !== STATE.rid) {
+      window.cleanerActivateTab(rid).then(apply).catch(() => apply());
+    } else {
+      apply();
+    }
+  };
+  window.cleanerDeleteSavedFilter = (rid, idx) => {
+    const list = STATE.savedFilters?.[rid];
+    if (!list || !list[idx]) return;
+    const removed = list.splice(idx, 1)[0];
+    if (!list.length) delete STATE.savedFilters[rid];
+    window.rpSavePref?.("cleaner_saved_filters", STATE.savedFilters);
+    // Re-render the modal so the chip disappears immediately.
+    if (typeof window.cleanerShowSaved === "function") window.cleanerShowSaved();
+    toast.success(`Deleted "${removed.name}".`);
+  };
+
+  // Joins: POST /api/files/:rid/joins with the picked column pair.
+  // Backend creates a new project_files row (default name
+  // {this}__{other}_join.csv) and returns its FileEnvelope. We refetch
+  // the project's file list so the new tab appears in the strip, then
+  // switch to it. Default join type is inner — matches the backend
+  // default; future iterations may surface a join-type picker inline
+  // on the candidate row.
+  window.cleanerCreateJoin = async (otherRid, thisCol, otherCol, btn) => {
+    if (!STATE.rid) return;
+    if (btn) { btn.disabled = true; btn.classList.add("is-busy"); }
+    let env;
+    try {
+      env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/joins`, {
+        other_file: otherRid,
+        this_cols:  [thisCol],
+        other_cols: [otherCol],
+        join_type:  "inner",
+      });
+    } catch (err) {
+      toast.error(`Join failed: ${err.body?.error ?? err.message}`);
+      if (btn) { btn.disabled = false; btn.classList.remove("is-busy"); }
+      return;
+    }
+    const newRid = env?.summary?.redpash_id;
+    // Refresh the project file list so the new tab shows up in the
+    // strip, then activate it. _afterHistory does similar plumbing
+    // for step apply/undo; here we want a fuller refresh because the
+    // file count changed.
+    const pid = STATE.project?.redpash_id ?? STATE.summary?.project_redpash_id;
+    if (pid) {
+      const files = await api.get(`/projects/${encodeURIComponent(pid)}/files`).catch(() => null);
+      if (files?.items) STATE.files = files.items;
+    }
+    _renderTabs(root);
+    _renderHeaderMeta(root);
+    if (newRid) {
+      await window.cleanerActivateTab(newRid);
+      toast.success(`Joined — ${env?.summary?.display_name ?? newRid}`);
+    } else {
+      toast.success("Join created.");
+    }
   };
 
   // AND/OR pill — flips .is-active on the clicked button; the value is
@@ -3007,6 +3144,24 @@ function _wireGlobals(root) {
         const body = isOpen
           ? chips(s, totalCols)
           : `<span class="rp-view-default">Not opened yet — defaults will apply</span>`;
+        // Saved named filters for this file — chip per filter with
+        // click-to-load + × to delete. Loading routes through
+        // cleanerLoadSavedFilter which switches tabs if needed.
+        const savedList = STATE.savedFilters?.[rid] ?? [];
+        const savedRow = savedList.length
+          ? `<div class="rp-view-sum rp-view-saved-filters">
+              <span class="rp-view-saved-lbl" title="Saved filters">
+                <i class="bi bi-funnel-fill"></i>
+              </span>
+              ${savedList.map((f, i) => `<span class="rp-view-chip rp-view-chip--filter"
+                  title="Load &quot;${_escAttr(f.name)}&quot; (${f.predicates?.length ?? 0} predicate${(f.predicates?.length ?? 0) === 1 ? "" : "s"})"
+                  onclick="cleanerLoadSavedFilter('${_escAttr(rid)}', ${i})">
+                  <i class="bi bi-funnel"></i>${_escHtml(f.name)}
+                  <span class="rp-view-chip-x" title="Delete this saved filter"
+                        onclick="event.stopPropagation();cleanerDeleteSavedFilter('${_escAttr(rid)}', ${i})">×</span>
+                </span>`).join("")}
+            </div>`
+          : "";
         return `<div class="rp-view-row${isOpen ? " is-set" : ""}" data-rid="${_escAttr(rid)}">
           <div class="rp-view-head">
             <i class="bi bi-file-earmark-text rp-view-icon"></i>
@@ -3014,6 +3169,7 @@ function _wireGlobals(root) {
             ${isActive ? `<span class="rp-view-rm" style="background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:transparent;cursor:default" title="The tab you're on">Active</span>` : ""}
           </div>
           <div class="rp-view-sum">${body}</div>
+          ${savedRow}
         </div>`;
       }).join("");
     }
@@ -3640,6 +3796,71 @@ function _renderAppliedList(root) {
     const kind = (s.kind ?? "").replace(/_/g, " ");
     return `<div style="font-size:0.6875rem;padding:0.25rem 0.375rem;border-radius:0.25rem;${dim ? "opacity:0.45;text-decoration:line-through" : ""}">
       <i class="bi bi-dot"></i> ${_escHtml(kind)}
+    </div>`;
+  }).join("");
+}
+
+// ── Joins panel ─────────────────────────────────────────────────────
+// GET /api/files/:rid/joins returns auto-detected join candidates
+// against the other files in the same project. The panel paints one
+// section per other-file with its top column-pair candidates (this_col
+// ↔ other_col + similarity score). Click a candidate row to POST
+// /joins and land on the newly-created joined file. Fetch is skipped
+// when the project has fewer than 2 files (nothing to join against).
+async function _renderJoinsPanel(root) {
+  const box = root.querySelector("#cleaner-join-body");
+  if (!box) return;
+  if (!STATE.rid) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty">Open a file to detect joins.</div>`;
+    return;
+  }
+  const fileCount = (STATE.files ?? []).length;
+  if (fileCount < 2) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty">Load a project with 2+ files to detect joins.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="rp-rtp-dtype-empty"><i class="bi bi-arrow-repeat" style="animation:cleaner-score-spin .9s linear infinite;display:inline-block"></i> Detecting joins…</div>`;
+  let res;
+  try {
+    res = await api.get(`/files/${encodeURIComponent(STATE.rid)}/joins`);
+  } catch (err) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty" style="color:var(--red)">Detect failed: ${_escHtml(err.body?.error ?? err.message)}</div>`;
+    return;
+  }
+  // Guard against a tab switch landing while the fetch was in flight —
+  // STATE.rid may have moved on; don't paint stale results.
+  if (!STATE.rid) return;
+  const files = res.files ?? [];
+  if (!files.length) {
+    box.innerHTML = `<div class="rp-rtp-dtype-empty">No matching columns in other files.</div>`;
+    return;
+  }
+  box.innerHTML = files.map((f) => {
+    const fid   = _escAttr(f.redpash_id);
+    const title = _escHtml(f.title ?? f.redpash_id);
+    const items = (f.candidates ?? []).map((c, i) => {
+      const score = Math.round((c.score ?? 0) * 100);
+      const matches = (c.matches ?? 0).toLocaleString();
+      const samples = (c.samples ?? []).slice(0, 3).join(", ");
+      return `<button class="rp-rtp-join-item" type="button"
+                title="${_escAttr(samples ? "Sample overlaps: " + samples : "")}"
+                onclick="cleanerCreateJoin('${fid}', '${_escAttr(c.this_col)}', '${_escAttr(c.other_col)}', this)">
+        <span class="rp-rtp-join-cols">
+          <span class="rp-rtp-join-col">${_escHtml(c.this_col)}</span>
+          <i class="bi bi-arrow-left-right"></i>
+          <span class="rp-rtp-join-col">${_escHtml(c.other_col)}</span>
+        </span>
+        <span class="rp-rtp-join-meta">
+          <span class="rp-rtp-join-score" data-score="${score}">${score}%</span>
+          <span class="rp-rtp-join-matches">${matches} match${(c.matches ?? 0) === 1 ? "" : "es"}</span>
+        </span>
+      </button>`;
+    }).join("");
+    return `<div class="rp-rtp-join-file">
+      <div class="rp-rtp-join-file-hdr">
+        <i class="bi bi-file-earmark-text"></i> ${title}
+      </div>
+      <div class="rp-rtp-join-items">${items}</div>
     </div>`;
   }).join("");
 }
@@ -4297,6 +4518,71 @@ function _appendFilterRow(root) {
     + `<input class="rp-rt-fb-val" data-fb-val type="text" placeholder="value"`
     +   ` oninput="_cleanerFilterRowChanged(this)" />`;
   box.appendChild(div);
+  _refreshFilterApplyState(root);
+}
+
+// Snapshot the current filter-panel draft into the same shape Apply
+// posts — used by the floppy Save handler so the in-panel state and
+// the saved-named-filter entry stay isomorphic.
+function _cleanerCollectDraft(root) {
+  const box  = root.querySelector("#cleaner-filter-rows");
+  const rows = box ? [...box.querySelectorAll(".rp-rt-fb-row")] : [];
+  const comboBtn   = root.querySelector("#cleaner-fb-combo button.is-active");
+  const combinator = comboBtn ? comboBtn.dataset.combo : "and";
+  const predicates = [];
+  for (const r of rows) {
+    const column = r.querySelector("[data-fb-col]")?.value;
+    const op     = r.querySelector("[data-fb-op]")?.value;
+    if (!column || !op) continue;
+    const pred = { column, op };
+    if (op === "is_null" || op === "not_null") { predicates.push(pred); continue; }
+    const raw = r.querySelector("[data-fb-val]")?.value ?? "";
+    if (op === "in" || op === "not_in") {
+      pred.value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!pred.value.length) continue;
+    } else if (op === "between") {
+      const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      if (parts.length !== 2) continue;
+      pred.value = parts;
+    } else {
+      if (!raw.length) continue;
+      pred.value = raw;
+    }
+    predicates.push(pred);
+  }
+  return { combinator, predicates };
+}
+
+// Restore a saved filter into the panel — wipes any current draft,
+// rebuilds one row per predicate, sets the combinator pill. Doesn't
+// auto-apply: the user reviews + clicks Apply themselves.
+function _cleanerLoadDraft(root, entry) {
+  if (!entry || !Array.isArray(entry.predicates)) return;
+  const box = root.querySelector("#cleaner-filter-rows");
+  if (!box) return;
+  box.innerHTML = "";
+  for (const p of entry.predicates) {
+    _appendFilterRow(root);
+    const row = box.lastElementChild;
+    if (!row) continue;
+    const colSel = row.querySelector("[data-fb-col]");
+    const opSel  = row.querySelector("[data-fb-op]");
+    if (colSel) colSel.value = p.column;
+    if (opSel)  opSel.value  = p.op;
+    // Op may change the value-input shape — fire the change handler
+    // before writing the value so the (potentially-newly-typed) input
+    // accepts it.
+    if (opSel) window._cleanerFilterRowChanged?.(opSel);
+    const valEl = row.querySelector("[data-fb-val]");
+    if (valEl && p.value != null) {
+      valEl.value = Array.isArray(p.value) ? p.value.join(", ") : String(p.value);
+    }
+  }
+  // Combinator pill
+  const combo = String(entry.combinator ?? "and").toLowerCase();
+  root.querySelectorAll("#cleaner-fb-combo button").forEach((b) => {
+    b.classList.toggle("is-active", b.dataset.combo === combo);
+  });
   _refreshFilterApplyState(root);
 }
 

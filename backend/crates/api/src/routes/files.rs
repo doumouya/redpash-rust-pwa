@@ -73,6 +73,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid/cast-preview", post(cast_preview))
         .route("/:rid/undo",     post(undo))
         .route("/:rid/redo",     post(redo))
+        .route("/:rid/clear-filters", post(clear_filters))
         .route("/:rid/encoding", post(set_encoding))
         .route("/:rid/dedup",    get(dedup))
         .route("/:rid/joins",    get(joins).post(create_join))
@@ -515,6 +516,27 @@ async fn undo(
     let changed = db::undo_last(&state.db, &rid).await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
     if changed { state.files.remove(&rid); }
+    rebuild_envelope(&state, &rid).await
+}
+
+/// `POST /api/files/:rid/clear-filters` — surgically un-applies every
+/// `filter_rows` step on the file, regardless of position in history.
+/// Built for the cleaner's eraser button: undo-only walks the topmost
+/// step, so a filter buried under later operations (filter_columns,
+/// renames, …) was unreachable. This flips `applied = false` for the
+/// matching rows; other steps stay applied. Returns the rebuilt
+/// envelope so the frontend can drop its page cache + repaint.
+async fn clear_filters(
+    State(state): State<AppState>,
+    headers:      axum::http::HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<Json<FileEnvelope>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    let _ = hydrate(&state, &rid).await?;
+    let n = db::clear_steps_of_kind(&state.db, &rid, "filter_rows").await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    if n > 0 { state.files.remove(&rid); }
     rebuild_envelope(&state, &rid).await
 }
 

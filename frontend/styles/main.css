@@ -140,6 +140,57 @@ body {
   border-color: color-mix(in srgb, var(--rp-accent) 35%, transparent);
 }
 
+/* ── Side-panel open mode — overlay, not push ─────────────────────
+   Library defaults animate `.rp-rt-filter-panel` and `.rp-rtp-tools`
+   via `width: 0 → 16rem`, which compresses the table-wrap. On real
+   datasets (wide tables, 17+ columns, zoomed-in viewport) the table
+   already overflows horizontally, so the push is invisible and the
+   panel looks like it never opened. Switch both panels to a slide-
+   over-table overlay so the open gesture reads regardless of how
+   much horizontal room the table is using.
+
+   .rp-rt-body needs `position: relative` so the absolutely-positioned
+   panels anchor inside it and inherit its top/bottom bounds. The
+   library already sets `overflow: hidden` on .rp-rt-body so the
+   translated panels won't bleed outside the panel chrome. */
+.rp-rt-body { position: relative; }
+
+.rp-rt-filter-panel,
+.rp-rtp-tools {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16rem;
+  background: var(--surface);
+  overflow: hidden;
+  z-index: 25;
+  /* Animate transform (not width) for cheap, jank-free slides; the
+     library's width-transition becomes a no-op since width is fixed. */
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 1.25rem 0 rgba(0, 0, 0, 0.25);
+}
+.rp-rt-filter-panel {
+  left: 0;
+  border-right: 0.0312rem solid var(--over0, color-mix(in srgb, var(--text) 8%, transparent));
+  transform: translateX(-100%);
+}
+.rp-rtp-tools {
+  right: 0;
+  width: var(--rp-rtp-tools-w, 16rem);
+  border-left: 0.0312rem solid var(--over0, color-mix(in srgb, var(--text) 8%, transparent));
+  transform: translateX(100%);
+}
+.rp-rt-filter-panel.open,
+.rp-rtp-tools.open {
+  transform: translateX(0);
+}
+/* Library's redtable-pro.css carries a light-mode `html[data-theme="light"]
+   .rp-rtp-tools { background: rgba(255,255,255,0.22) }` (specificity 0,0,1,2)
+   that beats the dark-mode-symmetric rule above (0,0,1,0). Match its
+   specificity here so the tools panel reads as the same opaque surface
+   as the filter panel under both themes. */
+html[data-theme="light"] .rp-rtp-tools { background: var(--surface); }
+
 /* ── Brand "R" mark — inline RedPash circular badge ─────────────
    `<span class="rp-r">R</span>edPash` renders the R as the canonical
    red-gradient circle from icons/favicon.svg with the Savate-900

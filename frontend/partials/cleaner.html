@@ -429,12 +429,11 @@
               <div id="cleaner-join-body"><div class="rp-rtp-dtype-empty">Load a project with 2+ files to detect joins.</div></div>
             </div>
 
-            <div class="rp-rtp-panel-footer" data-scope="project">
-              <div class="rp-rtp-panel-footer-lbl">Clean all files to unlock joining</div>
-              <button class="btn btn-ghost" style="width:100%;justify-content:center;opacity:.45;cursor:not-allowed" disabled>
-                <i class="bi bi-link-45deg bi-sm"></i> Preview joined data
-              </button>
-            </div>
+            <!-- Footer used to host a placeholder "Preview joined data"
+                 button; replaced by per-candidate inline Join buttons
+                 in #cleaner-join-body so a click goes straight from
+                 picking a column pair → creating the joined file. -->
+            <div class="rp-rtp-panel-footer" data-scope="project" style="display:none"></div>
 
           </div>
         </div>
