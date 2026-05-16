@@ -341,7 +341,7 @@
 
           <!-- Left col: Appearance -->
           <div class="rp-set-col">
-            <div class="rp-set-sh">Appearance</div>
+            <div class="rp-set-sh">General settings</div>
             <div class="rp-card">
               <div class="rp-set-row">
                 <div class="rp-set-lbl">
@@ -415,15 +415,20 @@
                   <span class="rp-set-opt--soon">Swahili <span class="rp-soon">Soon</span></span>
                 </div>
               </div>
-              <div class="rp-set-divider"></div>
-              <!-- Object tabs — multi-select: which object types appear as
-                   tabs on the Objects page. Mirrors the inline ×/+ on that
-                   page; both write prefs.objects_tabs. Wired in profile.js
-                   (#settings-object-tabs). At least one must stay on. -->
+            </div>
+
+            <!-- Objects-page settings — which object types appear as tabs
+                 (#settings-object-tabs, multi-select, drag-to-reorder) and
+                 the per-tab saved view summary (#settings-views-list).
+                 Both prefs come from prefs.objects_tabs + prefs.objects_views;
+                 the inline ×/+/drag on the Objects page writes the same
+                 keys so this surface stays in sync. -->
+            <div class="rp-set-sh" style="margin-top:1.5rem">Objects-page settings</div>
+            <div class="rp-card">
               <div class="rp-set-row rp-set-row--col">
                 <div class="rp-set-lbl">
                   <div class="rp-set-title">Object tabs</div>
-                  <div class="rp-set-sub">Which object types show as tabs on the Objects page</div>
+                  <div class="rp-set-sub">Which object types show as tabs on the Objects page. Drag active pills to reorder.</div>
                 </div>
                 <div class="rp-set-opt-grp" id="settings-object-tabs">
                   <button type="button" class="rp-set-opt" data-key="projects"><i class="bi bi-folder2-open bi-sm"></i> Projects</button>
@@ -433,6 +438,14 @@
                   <button type="button" class="rp-set-opt" data-key="companies"><i class="bi bi-building bi-sm"></i> Companies</button>
                   <button type="button" class="rp-set-opt" data-key="users"><i class="bi bi-people-fill bi-sm"></i> Users</button>
                 </div>
+              </div>
+              <div class="rp-set-divider"></div>
+              <div class="rp-set-row rp-set-row--col">
+                <div class="rp-set-lbl">
+                  <div class="rp-set-title">Saved tab views</div>
+                  <div class="rp-set-sub">Each tab remembers its own columns, rows-per-page, sort and date format. Adjust them from the Objects-page toolbar; reset here to drop a tab back to the default view.</div>
+                </div>
+                <div id="settings-views-list" class="rp-views-list"></div>
               </div>
             </div>
           </div>
@@ -489,7 +502,7 @@
                  Cleaner's Fix-invalid modal scans for, plus the
                  share-with-everyone consent toggle. Drives
                  prefs.learned_sentinels + prefs.share_sentinels. -->
-            <div class="rp-set-sh" style="margin-top:1.5rem">Cleanness vocabulary</div>
+            <div class="rp-set-sh" style="margin-top:1.5rem">Cleaner-page settings</div>
             <div class="rp-card">
               <div class="rp-set-row rp-set-row--col">
                 <div class="rp-set-lbl">

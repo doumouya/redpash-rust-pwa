@@ -15,7 +15,7 @@
 
 import { api }   from "/scripts/api.js";
 import { toast } from "/scripts/ui/toast.js";
-import { normalizeObjectTabs } from "/scripts/objects-catalog.js";
+import { normalizeObjectTabs, OBJECT_TAB_CATALOG } from "/scripts/objects-catalog.js";
 
 export default async function mount(root) {
   // ── Scroll-snap nav ─────────────────────────────────────────────
@@ -217,6 +217,12 @@ export default async function mount(root) {
   // Plus the cross-user `global_sentinels` set (read-only here) so we
   // can render the right provenance chip per row.
   wireSentinelSettings(root, me).catch(() => {});
+
+  // ── Saved tab views — one row per Objects-page tab. ────────────
+  // Reads prefs.objects_views (map keyed by tab kind). The Objects
+  // page writes this on every column/sort/page change; here we just
+  // surface the current value and let the user reset a tab's view.
+  wireObjectViewsList(root, me).catch(() => {});
 
   // ── Background palette preview ─────────────────────────────────
   // The toggle + 4 swatches in the Theme row are wired via inline
@@ -421,6 +427,101 @@ async function wireSentinelSettings(root, me) {
       renderList();
     });
   });
+}
+
+// Saved tab views — paints one row per OBJECT_TAB_CATALOG entry. Tabs
+// with a stored view get a summary chip + Reset button; tabs with no
+// stored view show "Default view" and no button. Reset deletes that
+// tab's entry from prefs.objects_views and persists the new map; the
+// Objects page recomputes its state from defaults on next mount.
+async function wireObjectViewsList(root, me) {
+  const list = root.querySelector("#settings-views-list");
+  if (!list) return;
+  // Local mutable copy — we splice out tab keys as the user resets them
+  // and persist the whole map each time. Server stores it as a plain
+  // JSONB object so any non-object pref reads as {} here.
+  const views = { ...(me.prefs?.objects_views && typeof me.prefs.objects_views === "object"
+                       ? me.prefs.objects_views
+                       : {}) };
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+
+  // Chips mirror the Objects-page toolbar icons so the user recognises
+  // each saved parameter at a glance:
+  //   bi-layout-three-columns → Columns dropdown (visible cols)
+  //   bi-stack                → Rows-per-page pill
+  //   bi-arrow-down-up        → Sort indicator (the inactive header icon;
+  //                             dir-aware variant when sort is active)
+  //   bi-calendar3            → Date-format pill
+  //   bi-list-ol              → Show-row-numbers toggle
+  const sortIcon = (dir) => dir === "desc" ? "bi-arrow-down"
+                          : dir === "asc"  ? "bi-arrow-up"
+                          : "bi-arrow-down-up";
+
+  const summaryChips = (v) => {
+    if (!v || typeof v !== "object") {
+      return `<span class="rp-view-default">Default view</span>`;
+    }
+    const chips = [];
+    const visible = Array.isArray(v.visibleCols) ? v.visibleCols.length : null;
+    if (visible != null) {
+      chips.push(`<span class="rp-view-chip" title="${visible} visible column${visible === 1 ? "" : "s"}">
+        <i class="bi bi-layout-three-columns"></i>${visible}
+      </span>`);
+    }
+    if (v.rowsPerPage) {
+      chips.push(`<span class="rp-view-chip" title="${v.rowsPerPage} rows per page">
+        <i class="bi bi-stack"></i>${v.rowsPerPage}
+      </span>`);
+    }
+    if (Array.isArray(v.sorts) && v.sorts.length) {
+      const first = v.sorts[0];
+      const extra = v.sorts.length > 1 ? `<sup>+${v.sorts.length - 1}</sup>` : "";
+      chips.push(`<span class="rp-view-chip" title="Sorted by ${first.col} (${first.dir})${v.sorts.length > 1 ? ` and ${v.sorts.length - 1} more` : ""}">
+        <i class="bi ${sortIcon(first.dir)}"></i>${esc(first.col)}${extra}
+      </span>`);
+    }
+    if (v.dateFmt && v.dateFmt !== "auto") {
+      chips.push(`<span class="rp-view-chip" title="Date format: ${v.dateFmt}">
+        <i class="bi bi-calendar3"></i>${esc(v.dateFmt)}
+      </span>`);
+    }
+    if (v.showRowNums) {
+      chips.push(`<span class="rp-view-chip" title="Row numbers shown">
+        <i class="bi bi-list-ol"></i>
+      </span>`);
+    }
+    return chips.length ? chips.join("") : `<span class="rp-view-default">Default view</span>`;
+  };
+
+  const renderList = () => {
+    list.innerHTML = OBJECT_TAB_CATALOG.map((tab) => {
+      const v = views[tab.key];
+      const isSet = !!v && typeof v === "object";
+      return `<div class="rp-view-row${isSet ? " is-set" : ""}" data-key="${esc(tab.key)}">
+        <div class="rp-view-head">
+          <i class="bi ${esc(tab.icon)} rp-view-icon"></i>
+          <span class="rp-view-name">${esc(tab.label)}</span>
+          ${isSet
+            ? `<button type="button" class="rp-view-rm" data-key="${esc(tab.key)}" title="Reset ${esc(tab.label)} to the default view">Reset</button>`
+            : ``}
+        </div>
+        <div class="rp-view-sum">${summaryChips(v)}</div>
+      </div>`;
+    }).join("");
+    list.querySelectorAll(".rp-view-rm").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.key;
+        if (!k || !(k in views)) return;
+        delete views[k];
+        window.rpSavePref?.("objects_views", views);
+        renderList();
+        toast.success(`${OBJECT_TAB_CATALOG.find((t) => t.key === k)?.label ?? k} view reset.`);
+      });
+    });
+  };
+  renderList();
 }
 
 function populateIdentity(root, me) {
