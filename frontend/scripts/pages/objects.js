@@ -988,6 +988,61 @@ function _wireGlobals(root) {
     st.page = 1;
     renderTable(currentKind);
   };
+
+  // Column drag-to-reorder — grab any header, drop on another →
+  // re-arrange. Mirrors cleaner.js ovColDrag* + cleanerColDrag*.
+  // Mutates STATE[kind].colOrder in place; the Save view button is
+  // what persists to prefs.objects_views (consistent with the way the
+  // Columns + Column-order dropdowns already work). Drop on a column
+  // = "insert source before target" (Mac Finder / Excel convention).
+  let _objDragCol = null;
+  window.objColDragStart = (e) => {
+    const th = e.currentTarget;
+    _objDragCol = th?.dataset?.rtCol || null;
+    if (_objDragCol) {
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox refuses to fire dragover unless some data is set.
+      try { e.dataTransfer.setData("text/plain", _objDragCol); } catch {}
+      th.classList.add("rp-rt-th-drag");
+    }
+  };
+  window.objColDragOver = (e) => {
+    if (!_objDragCol) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const th = e.currentTarget;
+    if (th && th.dataset.rtCol !== _objDragCol) th.classList.add("rp-rt-th-drop");
+  };
+  window.objColDragLeave = (e) => {
+    e.currentTarget?.classList.remove("rp-rt-th-drop");
+  };
+  window.objColDragEnd = () => {
+    _root.querySelectorAll("thead th.rp-rt-th-drag, thead th.rp-rt-th-drop")
+      .forEach((t) => t.classList.remove("rp-rt-th-drag", "rp-rt-th-drop"));
+    _objDragCol = null;
+  };
+  window.objColDrop = (e) => {
+    e.preventDefault();
+    const targetTh = e.currentTarget;
+    const target   = targetTh?.dataset?.rtCol;
+    const source   = _objDragCol;
+    window.objColDragEnd();
+    if (!source || !target || source === target) return;
+    _ensureColState(currentKind);
+    const st = STATE[currentKind];
+    const from = st.colOrder.indexOf(source);
+    if (from < 0) return;
+    st.colOrder.splice(from, 1);
+    const insertAt = st.colOrder.indexOf(target);
+    if (insertAt < 0) return;
+    st.colOrder.splice(insertAt, 0, source);
+    renderTable(currentKind);
+    // Refresh the Column-order dropdown (if open) so it reflects the
+    // new order — both UIs read the same state. Needs the kind arg
+    // since the helper takes a single tab key, not currentKind.
+    window.objBuildColOrderList?.(currentKind);
+  };
+
   // Three mutually-exclusive inline modes (edit / select / delete) —
   // ported from the Cleaner. Flips a `rp-rt-mode-<mode>` class on the
   // panel; the CSS surfaces / hides the always-emitted leading checkbox
@@ -1781,7 +1836,19 @@ function renderTable(kind) {
       // bubbles up as a sort click (the mousedown handler preventDefaults
       // the drag, but a no-drag click would still fire on the parent th).
       // Pass `event` so objSortBy can read shiftKey for multi-sort.
-      return `<th data-rt-col="${esc(c.key)}" class="${cls}"${wStyle} onclick="objSortBy('${esc(c.key)}', event)">${esc(c.label)}${arrow}<span class="rp-rt-col-resize" onclick="event.stopPropagation()"></span></th>`;
+      // draggable + drag handlers mirror cleaner.js's ovColDrag*: grab
+      // any header, drop on another → reorder in place. State lives on
+      // `state.colOrder`, persisted to prefs.objects_views via the
+      // existing Save view button (no per-drag PATCH — column order
+      // is a UI pref, not a data-pipeline step).
+      return `<th data-rt-col="${esc(c.key)}" class="${cls}"${wStyle}
+                  draggable="true"
+                  onclick="objSortBy('${esc(c.key)}', event)"
+                  ondragstart="objColDragStart(event)"
+                  ondragover="objColDragOver(event)"
+                  ondragleave="objColDragLeave(event)"
+                  ondrop="objColDrop(event)"
+                  ondragend="objColDragEnd(event)">${esc(c.label)}${arrow}<span class="rp-rt-col-resize" onclick="event.stopPropagation()" draggable="false"></span></th>`;
     }).join("");
     thead.innerHTML = `<tr>
       <th data-mode-col="select" style="width:1.5rem">

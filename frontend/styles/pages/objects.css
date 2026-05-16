@@ -669,6 +669,29 @@ html[data-theme="light"] #page-objects .rp-rt-toolbar {
 .rp-rt-th-sortable:hover .rp-rt-sort-ico { opacity: 0.55; }
 .rp-rt-th-sortable .rp-rt-sort-ico.rp-rt-sort-active { opacity: 0.85; }
 
+/* Column drag-to-reorder cues — every data-column TH is draggable
+   (wired in objects.js via ondragstart/over/leave/drop/end). Visual
+   cues mirror the cleaner's rules in cleaner.css; copied here since
+   cleaner.css doesn't load on this page.
+     .rp-rt-th-drag — dragged TH (lifted look, slightly transparent
+                      so the drop target reads underneath).
+     .rp-rt-th-drop — TH currently under the dragged element (thick
+                      left border in accent → "insert before here"). */
+#page-objects .rp-rt-table thead th[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+#page-objects .rp-rt-table thead th[draggable="true"]:active {
+  cursor: grabbing;
+}
+#page-objects .rp-rt-table thead th.rp-rt-th-drag {
+  opacity: 0.4;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#page-objects .rp-rt-table thead th.rp-rt-th-drop {
+  box-shadow: inset 0.1875rem 0 0 0 var(--accent);
+}
+
 /* Chain-rank badge — appears next to the arrow only when more than
    one sort key is active, so the user can tell primary from tie-
    breakers. Hint shown to users in the column-header tooltip

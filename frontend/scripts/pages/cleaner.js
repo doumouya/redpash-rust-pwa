@@ -79,7 +79,11 @@ export default async function mount(root, ctx) {
   // would leak into the next one. hiddenCols is the exception: it's a
   // user layout preference, restored from localStorage so the column
   // choice persists across sessions.
-  OV = { mode: null, selected: new Set(), q: "", hiddenCols: _ovLoadHiddenCols(), sorts: [] };
+  OV = {
+    mode: null, selected: new Set(), q: "", sorts: [],
+    hiddenCols: _ovLoadHiddenCols(),
+    colOrder:   _ovLoadColOrder(),
+  };
 
   // Hidden file tabs — restore the user's "tabs I've closed" set from
   // server prefs. Flat list of file RIDs (file RIDs are globally unique,
@@ -913,6 +917,55 @@ function _wireGlobals(root) {
         OV.sorts = [{ col, dir: "asc" }];
       }
     }
+    _renderOverview(root);
+  };
+
+  // Column drag-to-reorder — mirrors the file-table's cleanerColDrag*
+  // pattern but mutates OV.colOrder (per-user UI pref) instead of
+  // POSTing a filter_columns step. Drop on a column = "insert source
+  // before target" (matches Mac Finder + Excel + the file table).
+  let _ovDragCol = null;
+  window.ovColDragStart = (e) => {
+    const th = e.currentTarget;
+    _ovDragCol = th?.dataset?.col || null;
+    if (_ovDragCol) {
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox refuses to fire dragover unless some data is set.
+      try { e.dataTransfer.setData("text/plain", _ovDragCol); } catch {}
+      th.classList.add("rp-rt-th-drag");
+    }
+  };
+  window.ovColDragOver = (e) => {
+    if (!_ovDragCol) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const th = e.currentTarget;
+    if (th && th.dataset.col !== _ovDragCol) th.classList.add("rp-rt-th-drop");
+  };
+  window.ovColDragLeave = (e) => {
+    e.currentTarget?.classList.remove("rp-rt-th-drop");
+  };
+  window.ovColDragEnd = () => {
+    root.querySelectorAll("#cleaner-ov-table thead th.rp-rt-th-drag, #cleaner-ov-table thead th.rp-rt-th-drop")
+      .forEach((t) => t.classList.remove("rp-rt-th-drag", "rp-rt-th-drop"));
+    _ovDragCol = null;
+  };
+  window.ovColDrop = (e) => {
+    e.preventDefault();
+    const targetTh = e.currentTarget;
+    const target   = targetTh?.dataset?.col;
+    const source   = _ovDragCol;
+    window.ovColDragEnd();
+    if (!source || !target || source === target) return;
+    // Splice the source key out, re-find target's new index, insert
+    // source before it. Matches the file-table reorder semantics.
+    const from = OV.colOrder.indexOf(source);
+    if (from < 0) return;
+    OV.colOrder.splice(from, 1);
+    const insertAt = OV.colOrder.indexOf(target);
+    if (insertAt < 0) return;
+    OV.colOrder.splice(insertAt, 0, source);
+    _ovSaveColOrder();
     _renderOverview(root);
   };
 
@@ -2676,6 +2729,12 @@ let OV = {
   selected:   new Set(),     // redpash_ids ticked in select mode
   q:          "",            // client-side search query
   hiddenCols: new Set(),     // OV_COLUMNS keys the user has hidden
+  // User's column order — array of OV_COLUMNS keys, possibly a subset
+  // when newly-added columns haven't been seen yet (we reconcile in
+  // _renderOverview by appending unknown keys). Drag-to-reorder via
+  // ovColDrag* mutates this and persists to localStorage. Empty array
+  // means "use the schema's default order from OV_COLUMNS".
+  colOrder:   [],
   // Chained sort (same shape as Objects.js / cleaner file-table). Empty
   // → schema natural order. Click flips dir on same col, replaces chain
   // on a different col; shift-click appends as a tie-breaker.
@@ -2695,6 +2754,7 @@ const OV_COLUMNS = [
   { key: "modified", label: "Modified", align: "left"  },
 ];
 const OV_HIDDEN_LS_KEY = "rp-overview-hidden-cols";
+const OV_ORDER_LS_KEY  = "rp-overview-col-order";
 
 function _ovLoadHiddenCols() {
   try {
@@ -2705,6 +2765,26 @@ function _ovLoadHiddenCols() {
 }
 function _ovSaveHiddenCols() {
   try { localStorage.setItem(OV_HIDDEN_LS_KEY, JSON.stringify([...OV.hiddenCols])); } catch {}
+}
+
+// Per-user column order — saved to localStorage so the layout sticks
+// across reloads + SW cache-clears. Validated against OV_COLUMNS on
+// load (drops unknown keys); _renderOverview appends any new schema
+// keys not present in the saved order so a future column addition
+// doesn't get silently hidden.
+function _ovLoadColOrder() {
+  try {
+    const raw = localStorage.getItem(OV_ORDER_LS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      const valid = new Set(OV_COLUMNS.map((c) => c.key));
+      return Array.isArray(arr) ? arr.filter((k) => valid.has(k)) : [];
+    }
+  } catch {}
+  return [];
+}
+function _ovSaveColOrder() {
+  try { localStorage.setItem(OV_ORDER_LS_KEY, JSON.stringify(OV.colOrder)); } catch {}
 }
 
 // Sortable value for a column key on a file row. Matches the keys in
@@ -2809,7 +2889,21 @@ function _renderOverview(root) {
     });
   }
 
-  const visCols = OV_COLUMNS.filter((c) => !OV.hiddenCols.has(c.key));
+  // Reconcile OV.colOrder against the live OV_COLUMNS schema — drops
+  // unknown keys (deleted columns) and appends any schema keys not
+  // yet in the saved order (so a new schema column shows up at the
+  // end instead of silently disappearing). The reconciliation
+  // mutates OV.colOrder so it's stable across re-renders.
+  {
+    const validKeys = new Set(OV_COLUMNS.map((c) => c.key));
+    OV.colOrder = OV.colOrder.filter((k) => validKeys.has(k));
+    const inOrder = new Set(OV.colOrder);
+    for (const c of OV_COLUMNS) {
+      if (!inOrder.has(c.key)) OV.colOrder.push(c.key);
+    }
+  }
+  const byKey   = new Map(OV_COLUMNS.map((c) => [c.key, c]));
+  const visCols = OV.colOrder.map((k) => byKey.get(k)).filter((c) => c && !OV.hiddenCols.has(c.key));
   const colspan = visCols.length + 2;  // + leading select + trailing delete
 
   // Build a {col → {dir, rank}} map so each header can render its
@@ -2823,7 +2917,19 @@ function _renderOverview(root) {
     const arrow  = entry
       ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
       : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
-    return `<th class="${cls}" style="text-align:${c.align}" onclick="ovSortBy('${_escAttr(c.key)}', event)">${_escHtml(c.label)}${arrow}</th>`;
+    // draggable + data-col + drag handlers mirror the file-table
+    // thead (cleanerColDrag*). The Overview persists the new order
+    // to localStorage instead of POSTing a `filter_columns` step,
+    // since column order is a pure UI preference here, not a
+    // data-pipeline step.
+    return `<th class="${cls}" style="text-align:${c.align}" data-col="${_escAttr(c.key)}"
+                draggable="true"
+                onclick="ovSortBy('${_escAttr(c.key)}', event)"
+                ondragstart="ovColDragStart(event)"
+                ondragover="ovColDragOver(event)"
+                ondragleave="ovColDragLeave(event)"
+                ondrop="ovColDrop(event)"
+                ondragend="ovColDragEnd(event)">${_escHtml(c.label)}${arrow}</th>`;
   }).join("");
 
   const rowHtml = files.map((f) => {
