@@ -1,0 +1,31 @@
+<!-- History rp-modal — full per-project action log. The top section is
+     the in-memory undo window (last ~3 actions, instant to revert);
+     everything below is the deeper history the live app fetches from
+     the backend on open. See project_redpash_undo_history_cache.md
+     for the split. Demo entries are hardcoded; the live app will
+     hydrate from prefs / a /api/.../history endpoint and wire the
+     Revert button to a backend reverse-action call. -->
+<div class="rp-modal-overlay" id="rp-modal-history"
+     onclick="closeModal('history')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl">History</h2>
+        <div class="rp-modal-sub">Past actions in this project — newest first. The most recent are cached client-side (instant revert); older entries come from the backend.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('history')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- History list — painted by JS on modal open. The local cache
+         (last ~3 actions, .rp-hist-local) renders first; backend
+         entries follow, separated by .rp-hist-sep dividers. -->
+    <div class="rp-hist-list" data-cleaner-history-list></div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" title="Revert all 3 in-memory actions at once">
+        <i class="bi bi-arrow-counterclockwise"></i> Undo all local
+      </button>
+      <button class="btn btn-ghost" onclick="closeModal('history')">Close</button>
+    </div>
+  </div>
+</div>

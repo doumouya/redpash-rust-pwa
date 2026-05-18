@@ -57,6 +57,16 @@
        waits on the DOM the home partial injects later. -->
   <script defer src="/vendor/redpash-components/js/file-review.js"></script>
 
+  <!-- Prerelease (Phase 2): sandbox fragment loader + interaction script.
+       include.js exposes window.rpInclude so partials' children resolve
+       recursively after the router injects a partial. controls.js exposes
+       window.sp* (activate/delete tab, toggle modal, render object tabs)
+       so inline onclick handlers in the sandbox partials don't
+       ReferenceError. Per-page modules decide whether to await
+       rpInclude(root) before querying the DOM. -->
+  <script defer src="/scripts/include.js"></script>
+  <script defer src="/scripts/controls.js"></script>
+
   <script type="module" src="/scripts/main.js"></script>
 </body>
 </html>

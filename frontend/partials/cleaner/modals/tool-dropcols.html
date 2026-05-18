@@ -1,0 +1,31 @@
+<!-- Drop columns — mirrors modal-tool-dropcols (live app cleaner.html
+     lines 692-706). Multi-checkbox; destructive primary button. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-dropcols"
+     onclick="closeModal('tool-dropcols')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-dash-square"></i> Drop columns</h2>
+        <div class="rp-modal-sub">Permanently remove columns from this file.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-dropcols')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Select columns to drop</span>
+      <div style="display:flex;flex-direction:column;gap:0.1875rem">
+        <label class="rp-dd-checkbox"><input type="checkbox" /> Numero_dossier_ID</label>
+        <label class="rp-dd-checkbox"><input type="checkbox" /> Client</label>
+        <label class="rp-dd-checkbox"><input type="checkbox" checked /> Matricule.de.traitement</label>
+        <label class="rp-dd-checkbox"><input type="checkbox" checked /> Outil.d.assistance</label>
+        <label class="rp-dd-checkbox"><input type="checkbox" /> TOP.D.R</label>
+        <label class="rp-dd-checkbox"><input type="checkbox" checked /> TOP.Autres.Garanties</label>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-dropcols')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-dropcols')">Drop columns</button>
+    </div>
+  </div>
+</div>

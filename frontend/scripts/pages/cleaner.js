@@ -125,6 +125,25 @@ let STATE = {
 };
 
 export default async function mount(root, ctx) {
+  // Prerelease (Phase 2): the partial is now a thin shell that data-includes
+  // a tree of sub-partials. Wait for the fragment loader to finish before
+  // querying the DOM, otherwise every querySelector below sees an empty
+  // mount point. include.js exposes the recursive walker as window.rpInclude.
+  if (typeof window.rpInclude === "function") {
+    try { await window.rpInclude(root); }
+    catch (err) { console.warn("[cleaner] rpInclude failed", err); }
+  }
+
+  // Phase 3 wiring — when the sandbox markup is on screen (no
+  // #cleaner-title), branch into mountSandbox(). The legacy mount path
+  // below stays intact for the historical cleaner.live.html, so a
+  // future revert just swaps the partial file.
+  const sandboxStrip = root.querySelector(".rp-rt-proj-tabs-inner");
+  if (sandboxStrip) {
+    await mountSandbox(root, ctx, sandboxStrip);
+    return;
+  }
+
   // Cleaner URL forms — both supported:
   //   #/cleaner?file=FIL_…    open that file directly
   //   #/cleaner?project=PRJ_… open the project, land on its first file
@@ -1387,6 +1406,28 @@ function _wireGlobals(root) {
     window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
   };
 
+  // Repaint both sandbox tab strips from current STATE. Called from
+  // every handler that mutates openProjects / hiddenFiles / activeProjectId
+  // so the sandbox UI stays in sync. The old _renderTabs / _renderProjectTabs
+  // calls in those handlers still run but no-op silently in the sandbox
+  // layout (their target elements #cleaner-tabs-list / #cleaner-project-tabs
+  // don't exist in the sandbox markup).
+  const _repaintSandboxStrips = () => {
+    const activeFile = STATE.files.find((f) => f.redpash_id === STATE.rid) || null;
+    if (typeof _renderSandboxFileTabs === "function") {
+      _renderSandboxFileTabs(root, STATE.files, activeFile);
+    }
+    const pstrip = root.querySelector(".rp-rt-proj-tabs-inner");
+    if (pstrip && typeof _renderSandboxProjectTabs === "function") {
+      const projsByPid = new Map();
+      if (STATE.project) projsByPid.set(STATE.project.redpash_id, STATE.project);
+      if (STATE.projectMeta) {
+        for (const [k, v] of STATE.projectMeta.entries()) projsByPid.set(k, v);
+      }
+      _renderSandboxProjectTabs(pstrip, projsByPid, STATE.openProjects, STATE.activeProjectId);
+    }
+  };
+
   // × on a file tab — hide it (keep the file in the project). If the
   // hidden tab was active, fall back to the next visible file, else
   // overview. The "+" dropdown then surfaces the hidden file so the
@@ -1402,9 +1443,11 @@ function _wireGlobals(root) {
       // Re-render before activating so the activate path sees the new
       // tab strip. cleanerActivateTab("") routes to Overview.
       _renderTabs(root);
+      _repaintSandboxStrips();
       window.cleanerActivateTab(target);
     } else {
       _renderTabs(root);
+      _repaintSandboxStrips();
     }
   };
 
@@ -1416,6 +1459,7 @@ function _wireGlobals(root) {
     _persistHidden();
     root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
     _renderTabs(root);
+    _repaintSandboxStrips();
   };
 
   // Toggle the "+" dropdown. Menu is position:fixed (so it escapes
@@ -1468,6 +1512,10 @@ function _wireGlobals(root) {
     _renderHistoryButtons(root);
     _renderEncodingPicker(root);
     _renderTabs(root);
+    // Sandbox markup uses different selectors — re-render those too so
+    // both file and project strips reflect the switch (active class,
+    // visible-file set, etc.).
+    _repaintSandboxStrips();
     if (STATE.rid) {
       await _loadPage(root);
       _syncToolbarToState(root);
@@ -1506,8 +1554,11 @@ function _wireGlobals(root) {
       const next = STATE.openProjects[i] ?? STATE.openProjects[i - 1];
       STATE.activeProjectId = null;   // force switchProject to refetch / restore
       await window.cleanerSwitchProject(next);
+      // switchProject calls _repaintSandboxStrips on its own via the
+      // patched flow below — no need to re-call here.
     } else {
       _renderProjectTabs(root);
+      _repaintSandboxStrips();
     }
   };
 
@@ -4668,3 +4719,688 @@ function _escHtml(s) {
   ));
 }
 function _escAttr(s) { return _escHtml(s); }
+
+// ── Phase 3 wiring — sandbox markup ↔ real backend ──────────────────
+// Active when the prerelease shell (/partials/cleaner.html → data-include
+// tree under /partials/cleaner/) is on screen. Mirrors the live cleaner's
+// multi-project tab model: each tab is one "opened project" from the
+// user's prefs.cleaner_open_projects list, hydrated with labels from
+// /api/projects. Landing via the URL always adds the target project to
+// the open list if it's missing.
+//
+// Click on a tab → location.hash = "#/cleaner?project=PRJ_…" → router
+// re-mounts cleaner with the new active. Heavier than a state-only
+// switch (re-fetches partial + re-runs rpInclude) but matches the
+// hash-router model; a state-only switcher lands later.
+//
+// Roadmap (TODO list below the function body):
+//   • Once active project is known: fetch /projects/:rid/files, populate
+//     the file-tabs strip with one tab per file.
+//   • When ?file=FIL_… is set, fetch /files/:rid + /files/:rid/page and
+//     paint the redtable body.
+//   • Wire toolbar mode triplet + selection chip to STATE.
+//   • Bridge the sandbox filter panel to live's filters/panel.js engine.
+//   • Bridge each sandbox tool modal to its scripts/cleaner/tools/* dispatcher.
+async function mountSandbox(root, ctx, strip) {
+  // Drop sandbox demo data FIRST — before any awaits or early returns.
+  // The sandbox cleaner partials ship hardcoded "sentinel" / "Clients
+  // Clean" project tabs (and similar file tabs / header chrome / table
+  // rows) so the standalone mockup looks alive. On the real backend
+  // those tabs are misleading, so we strip them on every mount. Real
+  // tabs land below after the API fetch resolves.
+  strip.querySelectorAll(".rp-rt-proj-tab").forEach((t) => t.remove());
+
+  const q          = new URLSearchParams(location.hash.split("?")[1] ?? "");
+  const projectRid = q.get("project");
+  const fileRid    = q.get("file");
+
+  if (!projectRid && !fileRid) {
+    toast.error("Cleaner needs ?project=PRJ_… or ?file=FIL_… in the URL");
+    return;
+  }
+
+  // Resolve the active project id — prefer the URL's ?project, else
+  // derive from the file's project_redpash_id.
+  let activePid = projectRid;
+  if (!activePid && fileRid) {
+    try {
+      const detail = await api.get(`/files/${encodeURIComponent(fileRid)}`);
+      activePid = detail.summary?.project_redpash_id ?? null;
+    } catch (err) {
+      console.error("[cleaner] /files/:rid fetch failed", err);
+      toast.error("Failed to load file");
+      return;
+    }
+  }
+  if (!activePid) {
+    toast.error("Could not resolve project from URL");
+    return;
+  }
+
+  // Hydrate the user's project list (for tab labels + membership check).
+  let projects = [];
+  try {
+    const res = await api.get("/projects");
+    projects = res.items ?? [];
+  } catch (err) {
+    console.error("[cleaner] /projects fetch failed", err);
+    toast.error("Failed to load projects");
+    return;
+  }
+
+  const projectsByPid = new Map(projects.map((p) => [p.redpash_id, p]));
+  if (!projectsByPid.has(activePid)) {
+    toast.error(`Project not found: ${activePid}`);
+    return;
+  }
+
+  // Merge saved open-tabs pref with the active project. The URL always
+  // wins — direct nav to a project should open it as a tab if it
+  // wasn't already, since the user is by definition working there now.
+  const savedOpen = ctx?.session?.prefs?.cleaner_open_projects;
+  let openList = Array.isArray(savedOpen)
+    ? savedOpen.filter((pid) => projectsByPid.has(pid))
+    : [];
+  if (!openList.includes(activePid)) openList.push(activePid);
+  if (!openList.length) openList = [activePid];
+
+  // Persist if the open list grew or pruned. Fire-and-forget — pref
+  // failures shouldn't block the render.
+  const prevJson = JSON.stringify(savedOpen ?? []);
+  const nextJson = JSON.stringify(openList);
+  if (prevJson !== nextJson && typeof window.rpSavePref === "function") {
+    window.rpSavePref("cleaner_open_projects", openList);
+  }
+
+  _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid);
+  _populateOpenProjectPicker(root, projects, openList);
+
+  // ── Files for the active project ────────────────────────────────
+  // Fetch files, decide active file (URL ?file= wins; else first file).
+  let files = [];
+  try {
+    const res = await api.get(`/projects/${encodeURIComponent(activePid)}/files`);
+    files = res.items ?? [];
+  } catch (err) {
+    console.error("[cleaner] /projects/:rid/files fetch failed", err);
+    toast.error("Failed to load files");
+    return;
+  }
+
+  let activeFile = null;
+  if (fileRid) {
+    activeFile = files.find((f) => f.redpash_id === fileRid) ?? null;
+    if (!activeFile) {
+      toast.error(`File not found in this project: ${fileRid}`);
+    }
+  }
+  if (!activeFile && files.length) activeFile = files[0];
+
+  const activeProj = projectsByPid.get(activePid);
+  _renderSandboxHeader(root, activeProj, activeFile, files);
+  _renderSandboxFileTabs(root, files, activeFile);
+
+  if (activeFile) {
+    await _paintSandboxTable(root, activeFile);
+  } else {
+    // No file in the project yet — clear the table mount, leave overview
+    // pane available for the eventual project-level summary.
+    const host = root.querySelector("[data-cleaner-table]");
+    if (host) host.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">No files in this project yet.</div>';
+  }
+}
+
+// Paint the project + file labels, the meta line, and the cleanness
+// widget from the active project + active file. All fields fall back
+// to "—" when missing so the user can tell what's not yet loaded.
+function _renderSandboxHeader(root, proj, activeFile, files) {
+  const txt = (sel, val) => {
+    const el = root.querySelector(sel);
+    if (el) el.textContent = (val == null || val === "") ? "—" : val;
+  };
+  txt("[data-cleaner-proj-name]", proj?.name);
+  txt("[data-cleaner-file-name]",
+      activeFile ? (activeFile.display_name || activeFile.filename) : null);
+
+  // Meta line: "N files · stage: clean · last modified …"
+  const meta = [];
+  if (files?.length != null) {
+    meta.push(`${files.length} file${files.length === 1 ? "" : "s"}`);
+  }
+  if (proj?.stage) meta.push(`stage: ${proj.stage}`);
+  if (proj?.status && proj.status !== "active") meta.push(proj.status);
+  txt("[data-cleaner-proj-meta]", meta.join(" · "));
+
+  // Cleanness widget — file-level if a file is active, project-level
+  // otherwise. Width-driven fill (clamped 0–100).
+  const pct = activeFile?.cleanness_pct ?? proj?.cleanness_pct ?? null;
+  txt("[data-cleaner-cleanness-lbl]",
+      activeFile ? "File cleanness" : "Project cleanness");
+  txt("[data-cleaner-cleanness-pct]",
+      pct != null ? `${Math.round(pct)}%` : "—");
+  const fill = root.querySelector("[data-cleaner-cleanness-fill]");
+  if (fill) {
+    const w = pct != null ? Math.max(0, Math.min(100, Math.round(pct))) : 0;
+    fill.style.width = `${w}%`;
+  }
+}
+
+// Paint the file-tab strip — one .rp-rtp-tab per file in the active
+// project, between the Overview tab and the trailing + add wrap. The
+// active file's tab gets .active. Clicking a tab navigates the hash
+// (router re-mounts with the new ?file=). data-cleanness drives the
+// header widget when controls.js's spActivateTab is later wired to
+// keep the file-tab as the source-of-truth for cleanness; for now
+// our header paint runs once per mount with the URL-resolved file.
+function _renderSandboxFileTabs(root, files, activeFile) {
+  const strip = root.querySelector("[data-cleaner-file-tabs]");
+  if (!strip) return;
+  // Wipe previously-rendered file tabs (keep Overview + the + add wrap).
+  strip.querySelectorAll(".rp-rtp-tab:not([data-is-overview])")
+       .forEach((t) => t.remove());
+  const addWrap = strip.querySelector(".rp-tab-add-wrap");
+  // Filter out files closed via × — STATE.hiddenFiles survives across
+  // mounts via prefs.cleaner_hidden_files, so a closed tab stays
+  // closed across page refresh. Hidden files are listed in the
+  // open-file picker so the user can re-open them.
+  const hidden = STATE.hiddenFiles || new Set();
+  const visible = files.filter((f) => !hidden.has(f.redpash_id));
+  visible.forEach((file) => {
+    const isActive = activeFile && activeFile.redpash_id === file.redpash_id;
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "rp-rtp-tab" + (isActive ? " active" : "");
+    tab.setAttribute("data-file-id", file.redpash_id);
+    if (file.cleanness_pct != null) {
+      tab.setAttribute("data-cleanness", String(Math.round(file.cleanness_pct)));
+    }
+    tab.setAttribute(
+      "onclick",
+      `location.hash='#/cleaner?file=${encodeURIComponent(file.redpash_id)}'`,
+    );
+    const name = file.display_name || file.filename || "(unnamed)";
+    // × calls cleanerHideFileTab — the live handler that already
+    // updates STATE.hiddenFiles, persists prefs.cleaner_hidden_files,
+    // switches to a neighbour if the closed tab was active, and (via
+    // _repaintSandboxStrips inside it) re-renders this strip from the
+    // updated set. Sandbox's generic spDeleteTab (controls.js) only
+    // DOM-removed without persisting; live's handler is the source of
+    // truth and now drives the sandbox UI too.
+    tab.innerHTML =
+        '<i class="bi bi-file-earmark-text"></i>'
+      + '<span class="rp-rtp-tab-name">' + _escHtml(name) + '</span>'
+      + '<span class="rp-rtp-tab-x" title="Close this tab"'
+      + ' onclick="event.stopPropagation();cleanerHideFileTab(\''
+      +   _escAttr(file.redpash_id) + '\')">'
+      +   '<i class="bi bi-x"></i>'
+      + '</span>';
+    if (addWrap) strip.insertBefore(tab, addWrap);
+    else         strip.appendChild(tab);
+  });
+}
+
+// Paint the file's data into the redtable mount. Fetches /files/:rid
+// (for column metadata) and /files/:rid/page?page=1&size=25 (for rows),
+// builds a plain <table class="rp-rt-table"> with all visible columns
+// + all returned rows. First milestone — no pagination control yet,
+// no sort/filter wiring; clicking a column header is a no-op. The
+// columns picker / sort chain / pagination land in the next pass.
+async function _paintSandboxTable(root, activeFile) {
+  const host = root.querySelector("[data-cleaner-table]");
+  if (!host) return;
+  host.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">Loading…</div>';
+
+  let detail, pageRes;
+  try {
+    [detail, pageRes] = await Promise.all([
+      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}`),
+      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?page=1&size=25`),
+    ]);
+  } catch (err) {
+    console.error("[cleaner] file/page fetch failed", err);
+    host.innerHTML = `<div class="rp-form-meta" style="padding:1rem;color:var(--red, #c33)">Couldn't load file: ${_escHtml(err.body?.error ?? err.message ?? "unknown")}</div>`;
+    return;
+  }
+
+  const columns = detail.columns ?? [];
+  const rows    = pageRes.rows  ?? [];
+  const total   = pageRes.total ?? rows.length;
+  const start   = ((pageRes.page ?? 1) - 1) * (pageRes.size ?? rows.length) + 1;
+  const end     = start + rows.length - 1;
+
+  const theadHtml = "<tr>"
+    + columns.map((c) =>
+        `<th class="rp-rt-th-sortable">${_escHtml(c.name)} <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>`
+      ).join("")
+    + "</tr>";
+
+  const tbodyHtml = rows.map((row) =>
+    "<tr>" + columns.map((_c, i) => {
+      const v = row[i];
+      return `<td>${_escHtml(v ?? "")}</td>`;
+    }).join("") + "</tr>"
+  ).join("");
+
+  host.innerHTML = `<table class="rp-rt-table"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>`;
+
+  // Populate the toolbar's Columns picker from the file's columns_meta.
+  // One .rp-dd-checkbox per column, all checked by default (column hide
+  // toggling lands later — currently the checkboxes are inert).
+  _populateColsPicker(root, columns);
+
+  // Paging info — server time too, useful for quick perf signal.
+  const info = root.querySelector("[data-cleaner-rows-info]");
+  if (info) {
+    if (rows.length) {
+      info.textContent = `Showing ${start}–${end} of ${total} rows` +
+        (pageRes.ms != null ? ` · ${pageRes.ms} ms` : "");
+    } else {
+      info.textContent = "0 rows";
+    }
+  }
+}
+
+// The render in _renderSandboxProjectTabs duplicates the leading
+// strip.querySelectorAll(".rp-rt-proj-tab").forEach(remove) cleanup so
+// it's safe to call standalone — useful for later state-only switching.
+
+// Paint the sandbox project-tab strip from state. Drops every existing
+// .rp-rt-proj-tab (sandbox demo + previous render) and emits one fresh
+// tab per pid in openList, inserted before the trailing + wrap so the
+// add-affordance always sits at the right. The active tab gets .active;
+// each tab's onclick navigates the hash to its project — re-triggering
+// the router → mountSandbox with the new active. The × per-tab calls
+// the sandbox's spDeleteTab (local DOM removal); the pref-level close
+// (drop from openList + persist) lands as part of the close-tab wiring
+// in the next milestone.
+function _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid) {
+  strip.querySelectorAll(".rp-rt-proj-tab").forEach((t) => t.remove());
+  const addWrap = strip.querySelector(".rp-tab-add-wrap");
+  // openList IS the persisted list (STATE.openProjects, saved as
+  // prefs.cleaner_open_projects), so a closed project tab stays
+  // closed across mounts.
+  openList.forEach((pid) => {
+    const proj = projectsByPid.get(pid);
+    if (!proj) return;
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "rp-rt-proj-tab" + (pid === activePid ? " active" : "");
+    tab.setAttribute("data-sp-project-key", pid);
+    tab.setAttribute(
+      "onclick",
+      `location.hash='#/cleaner?project=${encodeURIComponent(pid)}'`,
+    );
+    // × calls cleanerCloseProject — the live handler that drops the
+    // pid from STATE.openProjects, persists prefs.cleaner_open_projects,
+    // switches to a neighbour if the closed tab was active (which
+    // triggers cleanerSwitchProject → _repaintSandboxStrips), or just
+    // re-renders both strips if the closed tab wasn't active.
+    tab.innerHTML =
+        '<i class="bi bi-folder2-open"></i>'
+      + '<span class="rp-rt-proj-tab-name">' + _escHtml(proj.name) + '</span>'
+      + '<span class="rp-rt-proj-tab-x" title="Close this tab"'
+      + ' onclick="event.stopPropagation();cleanerCloseProject(\''
+      +   _escAttr(pid) + '\')">'
+      +   '<i class="bi bi-x"></i>'
+      + '</span>';
+    if (addWrap) strip.insertBefore(tab, addWrap);
+    else         strip.appendChild(tab);
+  });
+}
+
+// Paint the open-project picker grid from the user's projects list,
+// filtered to those NOT currently in openList. Each card is a button
+// that calls spOpenProjectFromPicker(rid) on click — closes the modal
+// and navigates to that project (the router re-runs mountSandbox which
+// hydrates the new project's data). Empty state means "all open".
+function _populateOpenProjectPicker(root, projects, openList) {
+  const grid = root.querySelector("[data-cleaner-project-picker]");
+  if (!grid) return;
+  const openSet = new Set(openList);
+  const closed  = (projects || []).filter((p) => !openSet.has(p.redpash_id));
+  if (!closed.length) {
+    grid.innerHTML =
+      '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
+      + 'All your projects are already open as tabs.'
+      + '</div>';
+    return;
+  }
+  grid.innerHTML = closed.map((p) => {
+    const meta = [];
+    if (p.file_count != null) {
+      meta.push(`${p.file_count} file${p.file_count === 1 ? "" : "s"}`);
+    }
+    if (p.stage)                 meta.push(`stage: ${_escHtml(p.stage)}`);
+    if (p.cleanness_pct != null) meta.push(`${Math.round(p.cleanness_pct)}% clean`);
+    return ''
+      + '<button type="button" class="rp-pick-card"'
+      + ' onclick="spOpenProjectFromPicker(\'' + p.redpash_id + '\')">'
+      +   '<i class="bi bi-folder2-open rp-pick-ico"></i>'
+      +   '<div class="rp-pick-body">'
+      +     '<div class="rp-pick-name">' + _escHtml(p.name) + '</div>'
+      +     '<div class="rp-pick-meta">' + _escHtml(meta.join(" · ")) + '</div>'
+      +   '</div>'
+      + '</button>';
+  }).join("");
+}
+
+// Paint the toolbar's Columns picker — one .rp-dd-checkbox per column
+// (DB order from the file's columns_meta). Checked = visible. Hide /
+// reorder toggling isn't wired yet; for now this is a structural mirror
+// of the sandbox's static demo so the dropdown opens to real columns
+// instead of an empty rectangle.
+function _populateColsPicker(root, columns) {
+  const host = root.querySelector("[data-cleaner-cols-picker]");
+  if (!host) return;
+  if (!columns || !columns.length) {
+    host.innerHTML = '<div class="rp-form-meta" style="padding:0.5rem;font-style:italic">No columns.</div>';
+    return;
+  }
+  host.innerHTML = columns.map((c) =>
+    '<label class="rp-dd-checkbox"><input type="checkbox" checked /> '
+    + _escHtml(c.name)
+    + '</label>'
+  ).join("");
+}
+
+// Card-click handler — close the picker first (so the page redraw
+// doesn't happen with the overlay still up), then navigate. The router
+// re-runs the cleaner mount which adds this pid to openList, persists,
+// and renders the new active tab.
+window.spOpenProjectFromPicker = function (pid) {
+  if (typeof window.closeModal === "function") {
+    window.closeModal('open-project');
+  }
+  location.hash = '#/cleaner?project=' + encodeURIComponent(pid);
+};
+
+// Paint the open-file picker. Mirrors _populateOpenProjectPicker:
+// reads STATE.files (or refetched list), filters to files currently
+// HIDDEN as tabs (i.e. closeable from picker = re-openable), and
+// renders one card per file. Empty state when nothing is closed.
+function _populateOpenFilePicker(root, files, hiddenSet) {
+  const grid = root.querySelector("[data-cleaner-file-picker]");
+  if (!grid) return;
+  const hidden = (files || []).filter((f) => hiddenSet.has(f.redpash_id));
+  if (!hidden.length) {
+    grid.innerHTML =
+      '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
+      + 'All files in this project are already open as tabs.'
+      + '</div>';
+    return;
+  }
+  grid.innerHTML = hidden.map((f) => {
+    const name = f.display_name || f.filename || f.redpash_id;
+    const meta = [];
+    if (f.row_count != null) meta.push(`${f.row_count.toLocaleString()} rows`);
+    if (f.col_count != null) meta.push(`${f.col_count} cols`);
+    if (f.cleanness_pct != null) meta.push(`${Math.round(f.cleanness_pct)}% clean`);
+    if (f.file_size_bytes != null) {
+      const kb = f.file_size_bytes / 1024;
+      meta.push(kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`);
+    }
+    return ''
+      + '<button type="button" class="rp-pick-card"'
+      + ' onclick="spOpenFileFromPicker(\'' + f.redpash_id + '\')">'
+      +   '<i class="bi bi-file-earmark-text rp-pick-ico"></i>'
+      +   '<div class="rp-pick-body">'
+      +     '<div class="rp-pick-name">' + _escHtml(name) + '</div>'
+      +     '<div class="rp-pick-meta">' + _escHtml(meta.join(" · ")) + '</div>'
+      +   '</div>'
+      + '</button>';
+  }).join("");
+}
+
+// File picker card click — closes the modal, then re-activates the
+// file via cleanerActivateTab. That handler un-hides the file (drops
+// from STATE.hiddenFiles + persists the pref + re-renders the strip)
+// and runs the fetch / paint pipeline. No URL navigation needed since
+// the project doesn't change.
+window.spOpenFileFromPicker = function (rid) {
+  if (typeof window.closeModal === "function") {
+    window.closeModal('open-file');
+  }
+  if (typeof window.cleanerActivateTab === "function") {
+    window.cleanerActivateTab(rid);
+  } else {
+    // Defensive — fall back to URL nav if the tab handler isn't ready.
+    location.hash = '#/cleaner?file=' + encodeURIComponent(rid);
+  }
+};
+
+// Reuse the new-project modal as the "add files to current project"
+// flow. Closes the open-file picker (if open), then opens new-project
+// pre-filled with the active project's name (locked, so the user can't
+// retype). spCleanerCreateProject's loop POSTs each file with that
+// name; ensure_named_project upserts so all files land in the same
+// project regardless of how many uploads we make.
+window.spAddFilesToCurrentProject = function () {
+  if (typeof window.closeModal === "function") {
+    window.closeModal('open-file');
+  }
+  const pname = STATE.project?.name || "";
+  window.spOpenNewProjectModal?.(pname);
+};
+
+// Sandbox tab close handlers (spSandboxCloseFileTab /
+// spSandboxCloseProjectTab) used to live here. They were redundant
+// with the live handlers (cleanerHideFileTab / cleanerCloseProject)
+// which already own STATE + persistence; the sandbox renderers now
+// call those directly. The visual re-paint of the sandbox strips is
+// handled inside the live handlers via _repaintSandboxStrips (a
+// closure-scoped helper inside mount()) so both old and sandbox
+// markup stay in sync from a single source of truth.
+
+// proj-tabs + handler — re-fetch /api/projects + repopulate the picker
+// before opening the modal. Without this the picker shows whatever
+// closed projects existed at page-mount time; closing a tab then
+// hitting + would leave the just-closed project missing because the
+// picker doesn't refresh. STATE.openProjects is the source of truth
+// for which projects are currently tabbed; everything else is closed.
+window.spOpenProjectPicker = async function () {
+  const root = document.getElementById("page-cleaner");
+  if (!root) return;
+  try {
+    const res = await api.get("/projects");
+    const projects = res.items ?? [];
+    _populateOpenProjectPicker(root, projects, STATE.openProjects);
+  } catch (err) {
+    console.error("[cleaner] /projects refetch failed", err);
+  }
+  window.openModal && window.openModal("open-project");
+};
+
+// file-tabs + handler — mirrors spOpenProjectPicker. Re-fetches the
+// active project's file list so newly-uploaded files (or files closed
+// since mount) show up correctly, then opens the picker. Falls back
+// to STATE.files if the refetch fails so the picker isn't blank just
+// because the network blipped.
+window.spOpenFilePicker = async function () {
+  const root = document.getElementById("page-cleaner");
+  if (!root) return;
+  const pid = STATE.activeProjectId;
+  let files = STATE.files || [];
+  if (pid) {
+    try {
+      const res = await api.get(`/projects/${encodeURIComponent(pid)}/files`);
+      files = res.items ?? [];
+      STATE.files = files;
+    } catch (err) {
+      console.error("[cleaner] /projects/:rid/files refetch failed", err);
+    }
+  }
+  _populateOpenFilePicker(root, files, STATE.hiddenFiles ?? new Set());
+  window.openModal && window.openModal("open-file");
+};
+
+// Update the file-drop label as the user picks files (replaces the
+// "Drop CSV/TSV/Excel files…" placeholder with picked filenames).
+// Inline onchange on the hidden <input type="file" multiple> wires here.
+// Single file → show name; multiple → "N files: a.csv, b.csv, …".
+window.__npFileLabel = function (inp) {
+  if (!inp) return;
+  const lbl = document.querySelector("[data-cleaner-np-droplbl]");
+  if (!lbl) return;
+  const files = inp.files ? Array.from(inp.files) : [];
+  if (!files.length) {
+    lbl.textContent = "Drop CSV / TSV / Excel files, or click to browse";
+    return;
+  }
+  if (files.length === 1) {
+    lbl.textContent = files[0].name;
+    return;
+  }
+  const names = files.map((f) => f.name).join(", ");
+  lbl.textContent = `${files.length} files: ${names}`;
+};
+
+// Open the new-project modal with a clean slate. Without resetting,
+// a second visit shows the previous name + file + any error line —
+// confusing if the user dismissed an attempt and came back to start
+// over. Also wires drag-and-drop on the .rp-obj-drop-zone (binding
+// per-open is fine since the markup is static; idempotent flag avoids
+// double-binding).
+//
+// Optional `presetName` pre-fills the project name and disables the
+// input — used by the file-tabs upload flow ("add files to current
+// project") where the project is already known and shouldn't be
+// retyped. spCleanerCreateProject sends whatever value is in the
+// name field, so backend ensure_named_project upserts into the same
+// project regardless.
+window.spOpenNewProjectModal = function (presetName) {
+  const modal = document.getElementById("rp-modal-new-project");
+  if (!modal) return;
+  const name   = modal.querySelector("#np-name");
+  const desc   = modal.querySelector("#np-desc");
+  const file   = modal.querySelector("#np-file");
+  const status = modal.querySelector("[data-cleaner-np-status]");
+  const submit = modal.querySelector("[data-cleaner-np-submit]");
+  if (name) {
+    name.value    = presetName || "";
+    name.disabled = !!presetName;
+    name.title    = presetName ? `Uploading into "${presetName}"` : "";
+  }
+  if (desc)   desc.value = "";
+  if (file)   file.value = "";
+  if (status) { status.hidden = true; status.textContent = ""; }
+  if (submit) submit.disabled = false;
+  window.__npFileLabel?.(file);
+
+  // Drop-zone bind — assigns the dropped file to the hidden input so
+  // the submit handler reads it from the same place as the click-to-
+  // browse path. preventDefault on dragover is required to allow drop.
+  const drop = modal.querySelector("[data-cleaner-np-drop]");
+  if (drop && !drop.__npBound) {
+    drop.__npBound = true;
+    drop.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      drop.classList.add("is-dragover");
+    });
+    drop.addEventListener("dragleave", () => drop.classList.remove("is-dragover"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("is-dragover");
+      const dropped = e.dataTransfer?.files;
+      if (!dropped || !dropped.length || !file) return;
+      const dt = new DataTransfer();
+      for (const f of dropped) dt.items.add(f);
+      file.files = dt.files;
+      window.__npFileLabel?.(file);
+    });
+  }
+
+  window.openModal && window.openModal("new-project");
+};
+
+// "Create project" submit — gather name + file, POST a multipart to
+// /api/files/upload with project_name set. Backend's ensure_named_project
+// upserts the project row on demand. On success, close the modal and
+// navigate to the new file (which lands the user in the cleaner with
+// the project + file freshly active). Description input is captured but
+// not persisted yet (ensure_named_project doesn't take one; would need
+// a follow-up PATCH /api/projects/:rid).
+window.spCleanerCreateProject = async function (btn) {
+  const modal = document.getElementById("rp-modal-new-project");
+  if (!modal) return;
+  const nameInp   = modal.querySelector("#np-name");
+  const fileInp   = modal.querySelector("#np-file");
+  const statusEl  = modal.querySelector("[data-cleaner-np-status]");
+  const setStatus = (msg, isError) => {
+    if (!statusEl) return;
+    statusEl.hidden = !msg;
+    statusEl.textContent = msg || "";
+    statusEl.style.color = isError ? "var(--red, #c33)" : "var(--muted)";
+  };
+
+  const name  = (nameInp?.value || "").trim();
+  const files = fileInp?.files ? Array.from(fileInp.files) : [];
+  if (!name) {
+    setStatus("Pick a project name.", true);
+    nameInp?.focus();
+    return;
+  }
+  if (!files.length) {
+    setStatus("Pick at least one file — projects are created with their first file.", true);
+    return;
+  }
+
+  // Disable the submit while in flight so a double-click can't fire
+  // duplicate uploads.
+  if (btn) btn.disabled = true;
+
+  // Backend /files/upload takes ONE file per request — but
+  // ensure_named_project upserts by name, so subsequent uploads with
+  // the same project_name land in the same project. POST each file
+  // serially (concurrent uploads of the same project_name would race
+  // the upsert and could double-create). Track the first response so
+  // we can resolve the project_redpash_id for navigation, and collect
+  // failures to report at the end without blocking the rest.
+  const results = [];
+  const failures = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    setStatus(`Uploading ${i + 1}/${files.length}: ${f.name}…`, false);
+    const fd = new FormData();
+    fd.append("project_name", name);
+    fd.append("file", f, f.name);
+    try {
+      const res = await api.post("/files/upload", fd);
+      results.push(res);
+    } catch (err) {
+      console.error("[cleaner] upload failed for", f.name, err);
+      failures.push({ name: f.name, msg: err.body?.error ?? err.message ?? "unknown" });
+    }
+  }
+
+  if (!results.length) {
+    // Every file failed — keep the modal open so the user can retry.
+    setStatus(
+      "No file uploaded. " + failures.map((f) => `${f.name}: ${f.msg}`).join("; "),
+      true,
+    );
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  if (typeof window.closeModal === "function") {
+    window.closeModal("new-project");
+  }
+  // Single-file success → land in that file's cleaner view.
+  // Multi-file (or unknown file rid) → land on the project so the
+  // user sees the file-tabs strip with all the new files.
+  const first = results[0];
+  const firstRid = first?.summary?.redpash_id;
+  const pid      = first?.summary?.project_redpash_id;
+  if (results.length === 1 && firstRid) {
+    location.hash = "#/cleaner?file=" + encodeURIComponent(firstRid);
+  } else if (pid) {
+    location.hash = "#/cleaner?project=" + encodeURIComponent(pid);
+  } else if (firstRid) {
+    location.hash = "#/cleaner?file=" + encodeURIComponent(firstRid);
+  }
+  if (failures.length) {
+    // Partial success — let the user know some files didn't make it.
+    toast.error?.(`${failures.length} file(s) failed: ${failures.map((f) => f.name).join(", ")}`);
+  }
+  if (btn) btn.disabled = false;
+};

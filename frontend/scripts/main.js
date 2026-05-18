@@ -383,22 +383,45 @@ window.rpRestoreBarPositions = () => {
 };
 
 // ─── Modal open/close ───────────────────────────────────────────
-// Mirrors redpash-components/js/modal.js. Multiple surfaces (landing,
-// home) compose .modal-overlay elements; we own the toggle here so
-// inline onclick="openModal('login')" works regardless of which page
-// is currently mounted.
-window.openModal = (id) => {
-  document.querySelectorAll(".modal-overlay.open").forEach((o) => {
-    if (o.id !== `modal-${id}`) o.classList.remove("open");
+// Two id conventions coexist in the codebase:
+//   • Library / auth modals — id="modal-{key}" (.modal-overlay)
+//     Used by landing/home/profile (login, contact, etc.).
+//   • Sandbox cleaner modals — id="rp-modal-{key}" (.rp-modal-overlay)
+//     Used by the cleaner page (open-project, new-project, tool-*).
+//
+// We accept both — look up rp-modal-{key} first (sandbox is the active
+// page when we care about modals from cleaner code), fall back to
+// modal-{key} for the legacy callers. Same for the close-others sweep
+// at top: it walks both class families so opening a cleaner modal
+// also dismisses any stale landing/contact overlay (and vice versa).
+//
+// This used to be a single-id helper that overwrote controls.js's
+// sandbox openModal. Since module scripts run after deferred scripts,
+// the override silently broke every cleaner sandbox modal — opening
+// hit getElementById("modal-open-project") which never exists.
+window.openModal = (key) => {
+  const sandboxId = `rp-modal-${key}`;
+  const legacyId  = `modal-${key}`;
+  document.querySelectorAll(".modal-overlay.open, .rp-modal-overlay.open").forEach((o) => {
+    if (o.id !== sandboxId && o.id !== legacyId) o.classList.remove("open");
   });
-  document.getElementById(`modal-${id}`)?.classList.add("open");
+  const el = document.getElementById(sandboxId) || document.getElementById(legacyId);
+  el?.classList.add("open");
 };
-window.closeModal = (id) => {
-  document.getElementById(`modal-${id}`)?.classList.remove("open");
+window.closeModal = (key) => {
+  if (!key) {
+    // Bare close — dismiss every open overlay (Esc handler, etc.).
+    document.querySelectorAll(".modal-overlay.open, .rp-modal-overlay.open")
+      .forEach((o) => o.classList.remove("open"));
+    return;
+  }
+  document.getElementById(`rp-modal-${key}`)?.classList.remove("open");
+  document.getElementById(`modal-${key}`)?.classList.remove("open");
 };
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  document.querySelectorAll(".modal-overlay.open").forEach((o) => o.classList.remove("open"));
+  document.querySelectorAll(".modal-overlay.open, .rp-modal-overlay.open")
+    .forEach((o) => o.classList.remove("open"));
 });
 
 // ─── Theme toggle ───────────────────────────────────────────────

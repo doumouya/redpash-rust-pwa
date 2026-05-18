@@ -1,0 +1,98 @@
+<!-- Rename column — mirrors modal-tool-rename (live app cleaner.html
+     lines 597-612). Column dropdown + new name input. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-rename"
+     onclick="closeModal('tool-rename')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-pencil-square"></i> Rename column</h2>
+        <div class="rp-modal-sub">Renames the header in place; downstream references update.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-rename')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- Flagged columns — surfaces names with dots, mixed case, or
+         cryptic abbreviations so the user sees what likely needs
+         renaming before scrolling the dropdown. Live app will fetch
+         the flag list + reasons from the column-quality scan. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Flagged columns — likely need renaming</span>
+      <div class="rp-scroll-list">
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>Assistance.ou.Administratif</span>
+          <span class="rp-form-meta">dots · long · mixed case</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>Matricule.de.traitement</span>
+          <span class="rp-form-meta">dots · long</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>TOP.D.R</span>
+          <span class="rp-form-meta">dots · cryptic abbrev</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>Type.d.energie</span>
+          <span class="rp-form-meta">dots · mixed case</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>Cause.intervention</span>
+          <span class="rp-form-meta">dot</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span>date.ouverture</span>
+          <span class="rp-form-meta">dot</span>
+        </div>
+        <div class="rp-hist-detail rp-form-meta">…8 more (mostly dot-separated)</div>
+      </div>
+      <div class="rp-form-meta" style="margin-top:0.375rem">
+        <span class="rp-view-chip" style="cursor:pointer" onclick="closeModal('tool-rename');openModal('tool-snake', this)"><i class="bi bi-braces"></i>Most flags would be handled by Snake_case all</span>
+      </div>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Column to rename</span>
+      <select class="rp-input" data-sp-col>
+        <option>Numero_dossier_ID</option>
+        <option>Client</option>
+        <option>Formule</option>
+        <option>date.ouverture</option>
+        <option>heure.ouverture</option>
+        <option selected>Matricule.de.traitement</option>
+        <option>Cause.intervention</option>
+        <option>date.de.survenance</option>
+        <option>Type.d.energie</option>
+        <option>Outil.d.assistance</option>
+        <option>Assistance.ou.Administratif</option>
+        <option>TOP.D.R</option>
+        <option>TOP.VR</option>
+        <option>TOP.Rappat.valide</option>
+        <option>TOP.Poursuite</option>
+        <option>TOP.Recup</option>
+        <option>TOP.Autres.Garanties</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">New name</span>
+      <input type="text" class="rp-input" data-sp-new-name placeholder="Enter new column name…" />
+    </label>
+
+    <!-- Live preview — spPreviewRename reads the column + new-name
+         inputs and paints the single before/after into
+         [data-sp-preview]. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl rp-lbl-between">
+        Preview
+        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewRename(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
+      </span>
+      <div data-sp-preview>
+        <div class="rp-preview-line rp-form-meta">Pick a column, type the new name, then click Compute.</div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-rename')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-rename')">Apply rename</button>
+    </div>
+  </div>
+</div>

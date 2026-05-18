@@ -1,0 +1,77 @@
+<!-- Inspect dataset — overall audit of the file plus a ranked list of
+     recommended cleanup steps, each linking to its tool modal. The
+     projected-cleanness chip shows the gain if every suggestion is
+     applied. Live app's _populateToolModal will fetch real stats +
+     suggestions from a /api/files/:rid/inspect endpoint; the click
+     handlers already match the tool-* rp-modal IDs. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-inspect"
+     onclick="closeModal('tool-inspect')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-lg" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-clipboard-data"></i> Inspect dataset</h2>
+        <div class="rp-modal-sub">Snapshot of the file + recommended cleanup steps with their estimated cleanness gain.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-inspect')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- Overall stats — chips, same pattern as the dedup / fill /
+         droprows headers. -->
+    <div class="rp-form-meta" style="margin-bottom:0.625rem">
+      <span class="rp-view-chip"><i class="bi bi-stack"></i>500 rows · 17 cols</span>
+      <span class="rp-view-chip"><i class="bi bi-dash-circle"></i>159 nulls</span>
+      <span class="rp-view-chip"><i class="bi bi-copy"></i>12 duplicates</span>
+      <span class="rp-view-chip"><i class="bi bi-exclamation-diamond"></i>62 sentinels</span>
+      <span class="rp-view-chip"><i class="bi bi-tag"></i>4 mixed-type</span>
+    </div>
+
+    <!-- Ranked suggestions — each row opens its tool rp-modal in
+         popover mode (this row becomes the anchor). Items are
+         ordered by estimated cleanness gain desc. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Recommended cleanup steps</span>
+      <div style="display:flex;flex-direction:column;gap:0.25rem">
+        <button type="button" class="rp-suggest" onclick="closeModal('tool-inspect');openModal('tool-invalid', this)">
+          <i class="bi bi-wrench-adjustable"></i>
+          <span class="rp-suggest-lbl">Fix 62 sentinel values (<code>#??!</code>, <code>N/A</code>, <code>--</code>)</span>
+          <span class="rp-suggest-gain">+6%</span>
+        </button>
+        <button type="button" class="rp-suggest" onclick="closeModal('tool-inspect');openModal('tool-droprows', this)">
+          <i class="bi bi-file-minus"></i>
+          <span class="rp-suggest-lbl">Drop 47 fully-empty rows</span>
+          <span class="rp-suggest-gain">+5%</span>
+        </button>
+        <button type="button" class="rp-suggest" onclick="closeModal('tool-inspect');openModal('tool-dates', this)">
+          <i class="bi bi-calendar3"></i>
+          <span class="rp-suggest-lbl">Format 2 date columns (date.ouverture, date.de.survenance)</span>
+          <span class="rp-suggest-gain">+3%</span>
+        </button>
+        <button type="button" class="rp-suggest" onclick="closeModal('tool-inspect');openModal('tool-dedup', this)">
+          <i class="bi bi-copy"></i>
+          <span class="rp-suggest-lbl">Remove 12 duplicate rows</span>
+          <span class="rp-suggest-gain">+2%</span>
+        </button>
+        <button type="button" class="rp-suggest" onclick="closeModal('tool-inspect');openModal('tool-snake', this)">
+          <i class="bi bi-braces"></i>
+          <span class="rp-suggest-lbl">Snake_case 17 headers</span>
+          <span class="rp-suggest-gain">+1%</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Projected gain — current cleanness vs estimated after all
+         suggested steps applied. Live app shows a running estimate
+         as the user dismisses individual suggestions. -->
+    <div class="rp-form-meta" style="margin-top:0.625rem;display:flex;align-items:center;gap:0.5rem">
+      <span class="rp-form-lbl" style="margin:0">Cleanness</span>
+      <span class="rp-view-chip">Now 78%</span>
+      <i class="bi bi-arrow-right" style="color:var(--muted)"></i>
+      <span class="rp-view-chip" style="background:var(--active-bg);color:var(--bg)">After all: 94%</span>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-inspect')">Close</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-inspect')"><i class="bi bi-magic"></i> Apply all 5 steps</button>
+    </div>
+  </div>
+</div>

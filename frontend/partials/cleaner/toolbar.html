@@ -1,0 +1,128 @@
+<!-- File-view toolbar. Buttons call into controls.js:
+       spToggle('cleaner-filter-panel') — funnel opens / closes the
+                                          left panel; close button in
+                                          the panel itself calls the
+                                          same helper.
+       spSetMode(this)                  — mode triplet (edit/select/
+                                          delete), one active at a time;
+                                          re-click to clear.
+       spToggleActive(this)             — single-button toggles (row-
+                                          numbers, open-links, sync).
+       spToggle('cleaner-tools-panel')  — right tools panel. -->
+<div class="rp-rt-toolbar">
+  <!-- Filter funnel is file-scoped (predicate filter on row data).
+       Overview filters by typing in the search input — no structured
+       filter needed. data-file-scope hides this on Overview. -->
+  <button class="rp-btn" title="Filter"
+          data-file-scope
+          data-sp-panel-trigger="cleaner-filter-panel"
+          onclick="spToggle('cleaner-filter-panel')">
+    <i class="bi bi-funnel"></i>
+  </button>
+  <input class="rp-rt-search" type="search" placeholder="Search rows…" />
+
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit" title="Edit mode" onclick="spSetMode(this)">
+    <i class="bi bi-pencil"></i>
+  </button>
+  <!-- Order is Edit / Select / [chip] / Delete. Select-mode produces
+       the selection (chip updates live), Delete-mode IS the delete
+       action — no separate bulk-delete button; clicking Delete with
+       a non-zero selection deletes that batch. One trash icon, not
+       two. data-count drives the chip's visibility (hidden at 0). -->
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select" title="Select mode" onclick="spSetMode(this)">
+    <i class="bi bi-check2-square"></i>
+  </button>
+  <span class="rp-rt-sel-chip" data-count="0"><i class="bi bi-check2-square"></i> 0 selected</span>
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this)">
+    <i class="bi bi-trash"></i>
+  </button>
+
+  <!-- Refresh — animation only (no real DB hit). Live app will swap
+       the handler for an actual data refetch. -->
+  <button class="rp-btn" title="Refresh" onclick="spRefresh(this)">
+    <i class="bi bi-arrow-clockwise"></i>
+  </button>
+
+  <!-- Row numbers — toggles the # gutter column. Default on. Drops
+       .is-hide-rownums on the panel when off; CSS hides the rownum
+       th + td (file table only — Overview has no rownum column). -->
+  <button type="button" class="rp-btn is-active" title="Show row numbers" aria-pressed="true" onclick="spToggleRowNums(this)">
+    <i class="bi bi-list-ol"></i>
+  </button>
+
+  <!-- Report + Dashboard — anchors to the future pages, open in a
+       new tab (rel="noopener" for the standard security hygiene).
+       Bare hrefs for now; the live app will append the active file /
+       project in query string. -->
+  <a class="rp-btn" href="./report.html" target="_blank" rel="noopener"
+     title="New report from this file (opens in new tab)">
+    <i class="bi bi-bar-chart-fill"></i>
+  </a>
+  <a class="rp-btn" href="./dashboard.html" target="_blank" rel="noopener"
+     title="New dashboard for this project (opens in new tab)">
+    <i class="bi bi-grid-1x2-fill"></i>
+  </a>
+
+  <!-- Compute cleanness — single-spin animation as click feedback;
+       no real DB hit, no infinite loading state. Live app will swap
+       for the actual cleanness pipeline call. -->
+  <button class="rp-btn" title="Compute cleanness for this file" onclick="spClean(this)">
+    <i class="bi bi-magic"></i>
+  </button>
+  <button class="rp-btn" title="Clear score for this file">
+    <i class="bi bi-clipboard-minus"></i>
+  </button>
+
+  <div class="rp-dd-wrap">
+    <button class="rp-rt-pill-btn" title="Rows per page" onclick="spDdToggle(this)">
+      <span data-sp-rows-label>50</span><span class="rp-rt-pill-unit"> rows</span>
+      <i class="bi bi-chevron-down"></i>
+    </button>
+    <div class="rp-dd-menu" role="menu">
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10)">10 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 25)">25 rows</div>
+      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 50)">50 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100)">100 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250)">250 rows</div>
+    </div>
+  </div>
+
+  <!-- Columns picker — checkbox per column, listed in DB order (the
+       backend's canonical schema order). User can hide / show via the
+       checkboxes and (in the live app) drag to reorder. The Reset
+       button restores DB order + makes all columns visible — that's
+       the escape hatch when a user rearranges past the point of
+       remembering what the default was. Mockup checks are inert;
+       Pass D toggles real STATE.hiddenCols + repaints the table. -->
+  <div class="rp-dd-wrap">
+    <button class="rp-btn" title="Columns" onclick="spDdToggle(this)">
+      <i class="bi bi-layout-three-columns"></i>
+    </button>
+    <div class="rp-dd-menu" role="menu" style="min-width:8.5rem">
+      <button type="button" class="rp-dd-reset" title="Restore DB order + show all columns"
+              onclick="spColsReset(this)">
+        <i class="bi bi-arrow-counterclockwise"></i> Reset to DB order
+      </button>
+      <!-- One .rp-dd-checkbox per column, painted by JS from the
+           active file's columns_meta. Order = DB order; checked = visible. -->
+      <div data-cleaner-cols-picker></div>
+    </div>
+  </div>
+
+  <!-- Sync — links search + rows-per-page across the project's file
+       tabs. Toggles is-sync-on on the panel; CSS outlines the synced
+       fields so the linkage reads. Live app will wire the actual
+       propagation when changes fire on a synced field. -->
+  <button type="button" class="rp-btn" title="Sync search + rows-per-page across file tabs" onclick="spToggleSync(this)">
+    <i class="bi bi-link-45deg"></i>
+  </button>
+
+  <!-- Tools panel is file-scoped (operates on the active file's rows /
+       columns / dtypes). Hidden on Overview where no file is selected. -->
+  <button class="rp-btn" title="Cleaning tools" style="margin-left:auto"
+          data-file-scope
+          data-sp-panel-trigger="cleaner-tools-panel"
+          onclick="spToggle('cleaner-tools-panel')">
+    <i class="bi bi-tools"></i>
+  </button>
+</div>

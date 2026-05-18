@@ -1,0 +1,64 @@
+<!-- Remove duplicates — mirrors modal-tool-dedup in the live app
+     (cleaner.html lines 808-831). Detect-by mode picks the dedup
+     key; stats + samples populate from /api/files/:rid/dedup. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-dedup"
+     onclick="closeModal('tool-dedup')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-copy"></i> Remove duplicates</h2>
+        <div class="rp-modal-sub">Drop rows that repeat across the chosen key columns.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-dedup')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Detect duplicates by</span>
+      <select class="rp-input">
+        <option selected>All columns (full-row dedup)</option>
+        <option>Numero_dossier_ID</option>
+        <option>Matricule.de.traitement</option>
+        <option>Cause.intervention</option>
+      </select>
+    </label>
+
+    <div class="rp-form-meta">
+      <span class="rp-view-chip"><i class="bi bi-copy"></i>12 duplicate rows across 5 groups</span>
+    </div>
+
+    <!-- Sample groups — the live app's _populateToolModal fills this
+         from /api/files/:rid/dedup. Each group header lists the key
+         + count; rows beneath show row # · the key cols. Three
+         groups + a partial fourth to hint the list scrolls. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Sample duplicate groups</span>
+      <div class="rp-scroll-list">
+        <div>
+          <div class="rp-hist-group-hdr">D1000006 · 3 rows</div>
+          <div class="rp-hist-detail rp-form-meta">row 7 · D1000006 · GRDF · Fuite compteur · 13/04/2025</div>
+          <div class="rp-hist-detail rp-form-meta">row 42 · D1000006 · GRDF · Fuite compteur · 13/04/2025</div>
+          <div class="rp-hist-detail rp-form-meta">row 88 · D1000006 · GRDF · Fuite compteur · 13/04/2025</div>
+        </div>
+        <div>
+          <div class="rp-hist-group-hdr">D1000018 · 2 rows</div>
+          <div class="rp-hist-detail rp-form-meta">row 15 · D1000018 · TotalEnergies · Disjoncteur HS · 22/03/2024</div>
+          <div class="rp-hist-detail rp-form-meta">row 73 · D1000018 · TotalEnergies · Disjoncteur HS · 22/03/2024</div>
+        </div>
+        <div>
+          <div class="rp-hist-group-hdr">D1000027 · 2 rows</div>
+          <div class="rp-hist-detail rp-form-meta">row 29 · D1000027 · EDF · Surtension · 05/11/2023</div>
+          <div class="rp-hist-detail rp-form-meta">row 61 · D1000027 · EDF · Surtension · 05/11/2023</div>
+        </div>
+        <div>
+          <div class="rp-hist-group-hdr">D1000044 · 2 rows</div>
+          <div class="rp-hist-detail rp-form-meta">row 51 · D1000044 · Enedis · Câble sectionné · 18/09/2024</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-dedup')">Close</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-dedup')">Remove duplicates</button>
+    </div>
+  </div>
+</div>

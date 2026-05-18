@@ -1,0 +1,61 @@
+<!-- Split column — mirrors modal-tool-split (live app cleaner.html
+     lines 710-726). Column + separator + new column names. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-split"
+     onclick="closeModal('tool-split')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-scissors"></i> Split column</h2>
+        <div class="rp-modal-sub">Divide one column into multiple by a separator.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-split')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- Flagged columns — columns whose values reliably contain the
+         current separator are the best candidates. Demo lists the
+         date columns (which use "/" in DD/MM/YYYY). -->
+    <div class="rp-form-meta" style="margin-bottom:0.375rem">
+      <span class="rp-view-chip"><i class="bi bi-check2"></i>date.ouverture · 100% contain /</span>
+      <span class="rp-view-chip"><i class="bi bi-check2"></i>date.de.survenance · 100% contain /</span>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Column to split</span>
+      <select class="rp-input" data-sp-col>
+        <option selected>date.ouverture</option>
+        <option>Cause.intervention</option>
+        <option>Client</option>
+        <option>Type.d.energie</option>
+        <option>Formule</option>
+      </select>
+    </label>
+
+    <div class="rp-2col">
+      <label class="rp-form-row">
+        <span class="rp-form-lbl">Separator</span>
+        <input type="text" class="rp-input" data-sp-sep value="/" />
+      </label>
+      <label class="rp-form-row">
+        <span class="rp-form-lbl">New column names (comma-sep.)</span>
+        <input type="text" class="rp-input" placeholder="col_a, col_b, col_c" />
+      </label>
+    </div>
+
+    <!-- Live preview — spPreviewSplit reads the column + separator and
+         splits each demo row's value. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl rp-lbl-between">
+        Preview
+        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewSplit(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
+      </span>
+      <div data-sp-preview>
+        <div class="rp-preview-line rp-form-meta">Pick a column + separator then click Compute.</div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-split')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-split')">Split &amp; add columns</button>
+    </div>
+  </div>
+</div>

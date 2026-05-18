@@ -1,0 +1,62 @@
+<!-- Cleaner header — file-scoped workspace controls. Page chrome
+     (back arrow + Profile / Docs / Theme) lives one row up in
+     .rp-rt-topbar; this row stays focused on the active project +
+     file (title, meta, cleanness, undo / redo / history / export /
+     saved-settings / add file). JS populates the project + file
+     labels, cleanness widget, and undo/redo enabled state from the
+     live API; "—" placeholders mean "loading" / "no file picked".
+     Data hooks:
+       [data-cleaner-proj-name]     — current project name (left-of-dash title)
+       [data-cleaner-file-name]     — active file display name (right-of-dash title)
+       [data-cleaner-proj-meta]     — meta line ("3 files · last modified …")
+       [data-cleaner-cleanness-lbl] — "File cleanness" / "Project cleanness"
+       [data-cleaner-cleanness-fill]— width-driven progress bar fill
+       [data-cleaner-cleanness-pct] — formatted percentage text
+       [data-sp-undo] / [data-sp-redo] — buttons _spSyncUndoRedoButtons drives -->
+<div class="rp-rt-header">
+  <h2 class="rp-rt-title">
+    <i class="bi bi-folder2-open"></i>
+    <span data-cleaner-proj-name>—</span>
+    <span class="rp-rt-title-sep">—</span>
+    <i class="bi bi-file-earmark-text"></i>
+    <span class="rp-rt-title-fname" data-cleaner-file-name
+          onclick="if (this.isContentEditable) event.stopPropagation()">—</span>
+  </h2>
+
+  <div class="rp-rtp-hdr-info">
+    <div class="rp-rtp-hdr-meta" data-cleaner-proj-meta>—</div>
+  </div>
+
+  <div class="rp-rt-hdr-actions">
+    <div class="rp-rtp-overall">
+      <span class="rp-rtp-overall-lbl" data-cleaner-cleanness-lbl>File cleanness</span>
+      <div class="rp-rtp-overall-bar">
+        <div class="rp-rtp-overall-fill" data-cleaner-cleanness-fill style="width:0%"></div>
+      </div>
+      <span class="rp-rtp-overall-pct" data-cleaner-cleanness-pct>—</span>
+    </div>
+
+    <button class="rp-btn" title="Undo (Ctrl+Z)"
+            data-sp-undo onclick="spUndo(this)" disabled>
+      <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
+    <button class="rp-btn" title="Redo (Ctrl+Shift+Z)"
+            data-sp-redo onclick="spRedo(this)" disabled>
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <button class="rp-btn" title="View history"
+            onclick="openModal('history')">
+      <i class="bi bi-clock-history"></i>
+    </button>
+    <button class="rp-btn" title="Export current view">
+      <i class="bi bi-download"></i>
+    </button>
+    <button class="rp-btn" title="See what's saved per tab"
+            onclick="openModal('saved-settings')">
+      <i class="bi bi-sliders"></i>
+    </button>
+    <button class="rp-btn" aria-label="Add file to project" title="Add file">
+      <i class="bi bi-plus"></i>
+    </button>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+<!-- Save view as new file — quick rp-modal triggered by the header's
+     "Save" button. The current view (visible columns + active
+     filters + sort + selection) gets persisted as a NEW file in the
+     project. Inert in the mockup; Pass D will POST to the backend
+     and open the new file as a tab on success. -->
+<div class="rp-modal-overlay" id="rp-modal-save-view"
+     onclick="closeModal('save-view')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl">Save view as new file</h2>
+        <div class="rp-modal-sub">Persists what's currently visible — applied filters, hidden columns, sort — into a new file in this project.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('save-view')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">New file name</span>
+      <input type="text" class="rp-input" value="raw_dossier_500_sentinels_v2.csv"
+             onkeydown="if (event.key==='Enter') { event.preventDefault(); closeModal('save-view'); }" />
+    </label>
+
+    <div class="rp-form-meta">
+      <span class="rp-view-chip"><i class="bi bi-layout-three-columns"></i>14/17</span>
+      <span class="rp-view-chip"><i class="bi bi-stack"></i>504 rows</span>
+      <span class="rp-view-chip"><i class="bi bi-funnel-fill"></i>2 filters</span>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('save-view')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('save-view')">
+        <i class="bi bi-cloud-arrow-up"></i> Save
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,76 @@
+<!-- Cleaner page composition root. Mounted by cleaner.html via a single
+     data-include; everything else (header, toolbar, table, panels) is
+     a sibling fragment included from here. Child paths are relative to
+     THIS file, not to the document — that's the contract include.js
+     enforces.
+
+     Single-active-project model: the projects strip up top swaps WHICH
+     project is loaded (state-level, not DOM-swap), so header / file-tabs
+     / table / overview are single generic containers populated by JS
+     from the active project's API data. Hardcoded sandbox "sentinel"
+     and "clients-clean" partials are gone — see partials/cleaner/{header,
+     file-tabs,table,overview}.html for the generic skeletons. -->
+<!-- Page chrome — back arrow on the left, profile / docs / theme cluster
+     on the right. Sandbox-canonical structure: a slim row above the
+     redtable panel so .rp-rt-header below stays focused on the active
+     file + workspace controls. -->
+<div class="rp-rt-topbar">
+  <a class="rp-btn" href="#/objects" aria-label="Back to Objects" title="Back to Objects">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h1 class="rp-rt-page-title"><i class="bi bi-magic"></i> Cleaner</h1>
+  <a class="rp-btn" href="#/profile" style="margin-left:auto"
+     aria-label="Profile" title="Profile">
+    <i class="bi bi-person-circle"></i>
+  </a>
+  <a class="rp-btn" href="#/docs"
+     aria-label="Docs" title="Docs">
+    <i class="bi bi-book"></i>
+  </a>
+  <button class="rp-btn" aria-label="Toggle theme" title="Toggle theme"
+          onclick="spToggleTheme()">
+    <i class="bi bi-moon" data-sp-theme-icon></i>
+  </button>
+</div>
+
+<div class="rp-rt-panel">
+  <div data-include="./proj-tabs.html"></div>
+  <div data-include="./header.html"></div>
+  <div data-include="./file-tabs.html"></div>
+  <div data-include="./toolbar.html"></div>
+
+  <div class="rp-rt-body">
+    <div data-include="./filter-panel.html"></div>
+    <div data-include="./table.html"></div>
+    <div data-include="./overview.html"></div>
+    <div data-include="./tools-panel.html"></div>
+
+    <!-- Modals mount INSIDE .rp-rt-body so the overlay covers only the
+         body region — toolbar / tabs / header above stay clickable. -->
+    <div data-include="./modals/cast-confirm.html"></div>
+    <div data-include="./modals/saved-settings.html"></div>
+    <div data-include="./modals/save-view.html"></div>
+    <div data-include="./modals/open-project.html"></div>
+    <div data-include="./modals/open-file.html"></div>
+    <div data-include="./modals/new-project.html"></div>
+    <div data-include="./modals/history.html"></div>
+
+    <div data-include="./modals/tool-dedup.html"></div>
+    <div data-include="./modals/tool-fill.html"></div>
+    <div data-include="./modals/tool-invalid.html"></div>
+    <div data-include="./modals/tool-dates.html"></div>
+    <div data-include="./modals/tool-droprows.html"></div>
+    <div data-include="./modals/tool-inspect.html"></div>
+    <div data-include="./modals/tool-rename.html"></div>
+    <div data-include="./modals/tool-snake.html"></div>
+    <div data-include="./modals/tool-replacenames.html"></div>
+    <div data-include="./modals/tool-changecase.html"></div>
+    <div data-include="./modals/tool-dropcols.html"></div>
+    <div data-include="./modals/tool-split.html"></div>
+    <div data-include="./modals/tool-joinco.html"></div>
+    <div data-include="./modals/tool-removetext.html"></div>
+    <div data-include="./modals/tool-find.html"></div>
+    <div data-include="./modals/tool-replacetext.html"></div>
+    <div data-include="./modals/tool-unwrap.html"></div>
+  </div>
+</div>

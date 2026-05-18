@@ -38,93 +38,829 @@
 @import "/vendor/redpash-components/components/col-order.css";
 @import "/vendor/redpash-components/components/file-review.css";
 
-/* ── File-tab close (×) + add (+) controls ─────────────────────────
- * Mirror of `.obj-tab-x` / `.obj-tab-add` on the Objects page so the
- * cleaner's file tab strip supports the same close-and-re-add affordance.
- * Use case: a 17-file project where the user doesn't want every file as
- * a tab. Hidden file RIDs persist via prefs.cleaner_hidden_files. */
-.rp-rtp-tab-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  margin-left: 0.0625rem;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .12s, background .12s, color .12s;
-}
-.rp-rtp-tab:hover .rp-rtp-tab-x,
-.rp-rtp-tab.active .rp-rtp-tab-x { opacity: 0.7; }
-.rp-rtp-tab-x:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--red) 22%, transparent);
-  color: var(--red);
-}
-.rp-rtp-tab-x .bi { font-size: 0.8125rem; opacity: 1; }
+/* Sandbox prerelease — glass icon button + unified tab-strip styling.
+   .rp-btn (glass icon button) and .rp-tab-add-* (shared add affordance)
+   are sandbox-only — additive imports. proj-tabs.css + file-tabs.css
+   provide the canonical tab styling now that the local cleaner.css
+   .rp-rt-proj-tab* / .rp-rtp-tab-add* blocks were trimmed in the
+   sandbox visual cutover. */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/proj-tabs.css";
+@import "/vendor/redpash-components/components/file-tabs.css";
+/* Sandbox modal vocabulary (.rp-modal-overlay / .rp-modal / .rp-modal-hdr
+   / .rp-form-row / .rp-pick-grid / .rp-obj-drop-zone). Cleaner partials
+   use the rp- prefixed convention; neither live's /styles/components/modal.css
+   nor the vendored .modal-overlay define these selectors, so without this
+   the cleaner modals render unstyled and stay invisible (display:none default
+   never flips to display:flex on .open). */
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+/* Sandbox toolbar-dropdown vocabulary (.rp-dd-wrap / .rp-dd-menu /
+   .rp-dd-item / .rp-dd-reset / .rp-dd-checkbox). Lives only in sandbox
+   main.css — without this the rows-per-page pill, columns picker, and
+   future date-format dropdown all render with an unstyled menu (no
+   panel bg / no visible items / wrong positioning). */
+@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
+/* Sandbox filter side-panel + predicate builder (.rp-rt-filter-panel,
+   .rp-rt-filter-{inner,content,hdr,footer}, .rp-rt-fb-* row family).
+   Slide-in shell shared with .rp-rtp-tools so the tools panel reuses
+   the same off-canvas mechanic. Vendored library's filter-by.css doesn't
+   define these. */
+@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
+/* Sandbox tools side-panel content (.rp-rtp-tools-top,
+   .rp-rtp-ct-{grid,btn,btn-lbl}, .rp-rtp-dtype-* + badges,
+   .rp-rtp-applied-item, .rp-rtp-join-* family). Slide-in shell is
+   already vendored above via filter-panel-sandbox.css. */
+@import "/vendor/redpash-components/components/tools-panel-sandbox.css";
 
-.rp-rtp-tab-add-wrap { position: relative; display: inline-flex; align-items: center; }
-.rp-rtp-tab-add {
+/* ── Page-cleaner layout chain ───────────────────────────────────────
+   Matches the sandbox model: body flex → .rp-app flex:1 → #page-cleaner
+   flex:1+column → topbar (content height) + .rp-rt-panel (flex:1).
+   The vendored redtable.css ships .rp-rt-panel as position:absolute /
+   inset:0 / z-index:1100 (so it slides in as an overlay in the live-app
+   layout); inside the cleaner page we want it inline so the topbar above
+   stays visible. Same reset .rp-rt-panel--embedded provides — applied
+   here as a scoped descendant rule so the markup stays sandbox-true
+   (just .rp-rt-panel, no modifier). */
+#page-cleaner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Sandbox workspace gradient (Midnight Cobalt dark / Arctic Blue light).
+     Inlined here instead of importing tokens-gradient.css so we don't
+     accidentally override the live --bg / --accent / --surface tokens
+     across this page. Live's --grad-clean (vendor/components/gradients.css)
+     has different values; we'll consolidate once the sandbox tokens
+     become the canonical set. background-attachment: fixed pins it to
+     the viewport so scrolling doesn't repaint it. */
+  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+  background-attachment: fixed;
+}
+html[data-theme="light"] #page-cleaner {
+  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+  background-attachment: fixed;
+}
+#page-cleaner .rp-rt-panel {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  animation: none;
+}
+
+/* ── Body + table scroll plumbing — sandbox absolute model ──────────
+   Vendored .rp-rt-body is flex-row with overflow:hidden, and
+   .rp-rt-table-wrap is flex:1 + overflow-y:auto. Our include.js wraps
+   each loaded partial in a <div data-included>, so the actual scroll
+   targets (.rp-rt-table-wrap, .rp-rt-paging) aren't direct flex
+   children of .rp-rt-body — `flex: 1` doesn't reach them and the
+   wrap stays content-sized → no scroll either direction.
+   Sandbox sidesteps this by making .rp-rt-body the positioning
+   context and absolute-positioning its scroll panes. The data-included
+   wrappers become inert (block, no size); the table-wrap escapes them
+   via absolute positioning anchored to .rp-rt-body. Filter / tools
+   panels (when wired) overlay the same way. */
+#page-cleaner .rp-rt-body {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: block;
+}
+#page-cleaner .rp-rt-table-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--rt-pager-h);
+  overflow: auto;
+  padding: 0;
+}
+/* Pager strip — pinned to bottom of .rp-rt-body, sits OVER the
+   table-wrap (which leaves room for it via bottom: var(--rt-pager-h)).
+   Full sandbox styling: frosted text-tone wash, hairline border-top,
+   tabular-nums for the row counter, glass-pill page buttons. */
+#page-cleaner .rp-rt-pager {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--rt-pager-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-top: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  z-index: 5;
+}
+html[data-theme="light"] #page-cleaner .rp-rt-pager {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-pager {
+    background: color-mix(in srgb, var(--text) 3%, transparent);
+  }
+}
+#page-cleaner .rp-rt-rows-info {
+  font-variant-numeric: tabular-nums;
+  padding: 0;
+}
+#page-cleaner .rp-rt-pages {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.1875rem;
+}
+/* Page buttons — circular glass pills (same recipe as .rp-btn).
+   Supports both .active (sandbox) and .on (legacy library) naming. */
+#page-cleaner .rp-rt-pg {
   width: 1.75rem;
   height: 1.75rem;
-  margin-left: 0.25rem;
-  border: none;
-  border-radius: 0.4375rem;
-  background: transparent;
-  color: var(--muted);
+  padding: 0;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 50%;
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  color: color-mix(in srgb, var(--text) 75%, transparent);
+  font: 0.6875rem inherit;
   cursor: pointer;
-  transition: color .12s, background .12s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
+  transition: background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
 }
-.rp-rtp-tab-add:hover:not(:disabled) {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+html[data-theme="light"] #page-cleaner .rp-rt-pg {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
 }
-.rp-rtp-tab-add:disabled { opacity: 0.3; cursor: default; }
+#page-cleaner .rp-rt-pg:hover:not(:disabled):not(.active):not(.on) {
+  background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+}
+#page-cleaner .rp-rt-pg.active,
+#page-cleaner .rp-rt-pg.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+#page-cleaner .rp-rt-pg:disabled { opacity: 0.35; cursor: not-allowed; }
+#page-cleaner .rp-rt-pg .bi { font-size: 0.6875rem; }
+#page-cleaner .rp-rt-pg-ellipsis,
+#page-cleaner .rp-rt-pg-gap {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  padding: 0 0.125rem;
+  user-select: none;
+}
 
-/* position:fixed so the menu escapes .rp-rtp-tabs' overflow-y:hidden
-   (needed for horizontal-only scroll). cleanerToggleAddMenu sets
-   top/left at click time, anchored under the "+" button. */
-.rp-rtp-tab-add-menu {
-  position: fixed;
-  z-index: 300;
-  min-width: 14rem;
-  max-height: 20rem;
-  overflow-y: auto;
-  padding: 0.3125rem;
-  background: var(--surface);
-  border: 0.0625rem solid var(--over0);
-  border-radius: 0.5rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+/* ── Table head — sticky band + sandbox typography ─────────────────
+   Vendored redtable.css gives .rp-rt-table thead th the right text
+   sizing (0.6875rem / 600 / uppercase / 0.05em letter-spacing) but
+   doesn't make the head sticky, and its background falls through to
+   transparent — scrolled body rows show through.
+
+   Sandbox adds: position: sticky over an opaque surface band. Default
+   uses --surface; the dark explicit variant lifts it to --over0 so the
+   band sits one step above the panel body. Color: text@40% inactive →
+   text@65% on dark (more legible on the darker surface).
+
+   Mirror dark as the cleaner default; re-apply light through both
+   explicit data-theme="light" and prefers-color-scheme: light. */
+#page-cleaner .rp-rt-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--over0);
+  z-index: 5;
 }
-.rp-rtp-tab-add-menu[hidden] { display: none; }
-.rp-rtp-tab-add-item {
+#page-cleaner .rp-rt-table thead th {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+  border-bottom: 0.0625rem solid var(--border);
+  user-select: none;
+}
+html[data-theme="light"] #page-cleaner .rp-rt-table thead {
+  background: var(--surface);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-table thead th {
+  color: color-mix(in srgb, var(--text) 40%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-table thead {
+    background: var(--surface);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rt-table thead th {
+    color: color-mix(in srgb, var(--text) 40%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+}
+
+/* ── Sandbox-aligned root font-size ──────────────────────────────────
+   Sandbox sets `html { font-size: 112.5% }` (18px root) and uses rems
+   throughout. Live's main.css sets `body { font-size: 14px }` (~22%
+   smaller). This per-page rule bumps the root while cleaner.css is
+   loaded so vendored sandbox CSS (proj-tabs / file-tabs / glass-btn)
+   computes at the intended pixel sizes. #page-cleaner re-sets its own
+   font-size to 1rem so the body's 14px override doesn't bleed back in. */
+html { font-size: 112.5%; }
+#page-cleaner {
+  font-size: 1rem;
+  /* Sandbox body font — Open Sans Light 300 with system fallbacks
+     (matches tokens-gradient.css's --font-body). Live's --rp-font is
+     SF/Inter/Roboto; this scopes the swap to the cleaner page only. */
+  font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 300;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* ── Sandbox token redefinition for the cleaner workspace ─────────
+     Redefining the bare token names at #page-cleaner scope cascades
+     them to every descendant — vendored sandbox CSS (glass-btn,
+     proj-tabs, file-tabs) using var(--text) / var(--over0) / etc.
+     resolves to the sandbox slate-cobalt palette instead of live's
+     catppuccin. Inline-style overrides on <html> (main.js's accent
+     writer) don't penetrate a descendant scope's redefinition, so
+     this stays clean without !important. */
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --over0:     #273549;
+  --over1:     #334155;
+  --text:      #e2e8f0;
+  --sub:       #94a3b8;
+  --muted:     #64748b;
+  --border:    #334155;
+  --hover:     #273549;
+  --selected:  #334155;
+  --accent:    #60a5fa;
+  --active-bg: #60a5fa;
+  /* Sandbox geometry tokens used by absolute-positioned panes
+     (.rp-rt-pager / .rp-rt-paging at the bottom of .rp-rt-body). */
+  --rt-pager-h: 2rem;
+  /* Mirror through the --rp-* alias layer so cleaner.css's own rules
+     (and any app sheet that reads --rp-*) pick up sandbox values too. */
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
+}
+html[data-theme="light"] #page-cleaner {
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --over0:     #dbeafe;
+  --over1:     #bfdbfe;
+  --text:      #1e3a5f;
+  --sub:       #2e5796;
+  --muted:     #6b82b8;
+  --border:    #bfdbfe;
+  --hover:     #dbeafe;
+  --selected:  #bfdbfe;
+  --accent:    #2563eb;
+  --active-bg: #1e3a5f;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner {
+    --bg:        #f0f4ff;
+    --surface:   #ffffff;
+    --over0:     #dbeafe;
+    --over1:     #bfdbfe;
+    --text:      #1e3a5f;
+    --sub:       #2e5796;
+    --muted:     #6b82b8;
+    --border:    #bfdbfe;
+    --hover:     #dbeafe;
+    --selected:  #bfdbfe;
+    --accent:    #2563eb;
+    --active-bg: #1e3a5f;
+  }
+}
+
+/* ── Bootstrap Icons inherit parent font-size ────────────────────────
+   /vendor/redpash-components/reset.css line 36 sets a global
+   `i.bi { font-size: 1.25rem }` default. That selector's specificity
+   (0,0,1,1) beats `.rp-btn { font-size }` (0,0,1,0), so icons inside
+   buttons / titles / tabs ignore their container's font-size and stay
+   at 1.25rem regardless. Sandbox standalone doesn't load reset.css,
+   so its icons naturally inherit (button = 0.9rem icon, h1 = 1.1875rem
+   icon, etc.). Restore the inheritance scoped to the cleaner page —
+   anywhere a specific .bi rule (e.g. proj-tabs.css's
+   `.rp-rt-proj-tab-x .bi { font-size: 1.25rem }`) has higher
+   specificity (0,0,2,0), that rule still wins. */
+/* Reset library reset.css's i.bi defaults (font-size: 1.25rem; display:
+   inline-flex; line-height: 1) to behave like a plain <i>. Specificity
+   stays 0,0,1,1 to MATCH reset.css (cleaner.css loads later → wins by
+   source order); explicit per-context rules like
+   `.rp-rt-proj-tab-x .bi { font-size: 1.25rem }` keep their higher
+   specificity (0,0,2,0 > 0,0,1,1) and continue to set explicit icon
+   sizes where the design calls for them (× close buttons, etc.).
+   Note: cleaner.css is per-page loaded, so this rule only affects the
+   cleaner page even though it has no #page-cleaner prefix. */
+i.bi {
+  font-size: inherit;
+  display: inline;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+/* Sandbox forces every form element to inherit the parent's full font
+   (size, line-height, family, weight) — without this rule, buttons +
+   inputs keep browser-default font properties, which renders content
+   inside them slightly smaller than sandbox and shrinks the computed
+   height of any element sized by its content (e.g. .rp-rt-pill-btn
+   on Chrome's 13.33px default vs body's 18px Open Sans).
+
+   Bare-tag selector (not #page-cleaner scoped): cleaner.css is loaded
+   only on the cleaner page via data-page-css, so it's already scoped
+   at the file level. Scoping it again with #page-cleaner lifted the
+   specificity to (1,0,1) which beat sandbox's class rules like
+   .rp-rt-fb-val { font-size: 0.6875rem } — forcing the filter
+   panel's value input back to 18px Open Sans. Matching sandbox's bare
+   selector (specificity 0,0,1) lets every .rp-rt-fb-* class with
+   font-size win cleanly. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Glass icon button — sandbox sizes ───────────────────────────────
+   Live's /styles/components/buttons.css defines .rp-btn as a 36px text
+   button (loaded globally via main.css). Sandbox's glass-btn.css
+   defines it as a 2.5rem icon-only pill (loaded via cleaner.css @import).
+   Source order puts sandbox last so it should win — but to make the
+   intent explicit and survive any future re-order, scope the sizes
+   here with higher specificity (#page-cleaner .rp-btn). Mirrors the
+   three size variants in sandbox glass-btn.css. */
+#page-cleaner .rp-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 0.9rem;
+  padding: 0;
+  border-radius: 3rem;
+}
+#page-cleaner .rp-rt-header .rp-btn,
+#page-cleaner .rp-rt-filter-panel .rp-btn,
+#page-cleaner .rp-rtp-tools .rp-btn,
+#page-cleaner .rp-modal-hdr .rp-btn {
+  width: 1.875rem;
+  height: 1.875rem;
+  font-size: 0.8125rem;
+}
+#page-cleaner .rp-rt-toolbar .rp-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.9375rem;
+}
+
+/* ── Glass button hover — theme-aware (single blue theme + paper) ────
+   Sandbox glass-btn.css ships three hover recipes:
+     - Default (no theme prefix): heavy accent tint (35% wash + full
+       accent border). Used when theme is unspecified.
+     - html[data-theme="light"]: subtle accent — surface-tinted bg
+       with accent border (60%) + accent text + soft accent glow.
+     - html[data-theme="dark"]: agnostic white wash — no accent
+       involvement so it stays neutral when only blue is in play.
+
+   Live runs html[data-theme="system"], so neither the light nor the
+   dark explicit-theme rule matches. The default heavy-accent recipe
+   would apply for both OS modes — which is too loud on system-dark
+   (we want agnostic white) and slightly off for system-light (we
+   want the subtle sandbox light recipe).
+
+   Bridge via prefers-color-scheme mirrors. Explicit html[data-theme]
+   selectors don't need overriding here — sandbox's rules already win
+   for those cases since #page-cleaner just adds id specificity. */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-cleaner .rp-btn:hover {
+    background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+    box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-btn:hover {
+    background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    color: var(--accent);
+    box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+/* ── Panel-trigger active state — system-theme variants ──────────────
+   Sandbox glass-btn.css ships three :has() recipes for when a panel
+   trigger's panel is open: a default (accent-tinted), a light variant,
+   and a dark variant (pure-white wash). The light/dark variants key
+   off html[data-theme="light|dark"] so they never match live's
+   data-theme="system" — leaving the default to handle both OS modes.
+   Mirror sandbox's light + dark recipes here for data-theme="system"
+   via prefers-color-scheme, so the funnel/wrench look identical to
+   sandbox under either OS preference. Same selector shape (body:has)
+   as the vendored rule so specificity tracks. */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] body:has(#cleaner-filter-panel.open) .rp-btn[data-sp-panel-trigger="cleaner-filter-panel"],
+  html[data-theme="system"] body:has(#cleaner-tools-panel.open)  .rp-btn[data-sp-panel-trigger="cleaner-tools-panel"],
+  html[data-theme="system"] body:has(#objects-filter-panel.open) .rp-btn[data-sp-panel-trigger="objects-filter-panel"] {
+    background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+    box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] body:has(#cleaner-filter-panel.open) .rp-btn[data-sp-panel-trigger="cleaner-filter-panel"],
+  html[data-theme="system"] body:has(#cleaner-tools-panel.open)  .rp-btn[data-sp-panel-trigger="cleaner-tools-panel"],
+  html[data-theme="system"] body:has(#objects-filter-panel.open) .rp-btn[data-sp-panel-trigger="objects-filter-panel"] {
+    background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    color: var(--accent);
+    box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+/* ── Title colors — match sandbox palette ────────────────────────────
+   Live's --rp-text is catppuccin (#cdd6f4 dark / #4c4f69 light).
+   Sandbox uses slate (#e2e8f0 dark / #1e3a5f light) which pairs with
+   the cobalt / arctic gradient. Override both the topbar h1 and the
+   header h2 so the type matches sandbox without redefining the whole
+   token. */
+#page-cleaner .rp-rt-page-title,
+#page-cleaner .rp-rt-title { color: #e2e8f0; }
+html[data-theme="light"] #page-cleaner .rp-rt-page-title,
+html[data-theme="light"] #page-cleaner .rp-rt-title { color: #1e3a5f; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-page-title,
+  html[data-theme="system"] #page-cleaner .rp-rt-title { color: #1e3a5f; }
+}
+
+/* ── Topbar bg + spacing — match sandbox ─────────────────────────────
+   Live's main.css gives the topbar gap: 0.625rem and asymmetric
+   padding (0.875rem 1.25rem 0.625rem). Sandbox uses gap: 0.75rem and
+   symmetric padding (0.75rem 1.25rem). Same frosted bg recipe (rgba
+   black/white per theme) so the wash darkens / lightens with the
+   gradient underneath. Live runs `data-theme="system"`, so we mirror
+   the explicit-theme rule with a prefers-color-scheme media query
+   for the system case. */
+#page-cleaner .rp-rt-topbar {
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--rp-text) 8%, transparent);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-topbar {
+  background: rgba(255, 255, 255, 0.28);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-topbar {
+    background: rgba(255, 255, 255, 0.28);
+  }
+}
+
+/* ── Project-tabs strip + tabs ───────────────────────────────────────
+   Now that #page-cleaner redefines the bare tokens to sandbox values,
+   var(--over0) / var(--surface) / etc. resolve correctly inside this
+   scope. But the vendored proj-tabs.css's theme overrides key off
+   html[data-theme="dark"] / html[data-theme="light"] which never match
+   live's data-theme="system" — so its default rules apply regardless
+   of OS preference, leaving the dark-mode tab too-dark (default uses
+   var(--bg), sandbox dark uses var(--over0)).
+
+   Mirror the sandbox dark recipe as the default (dark is the common
+   case here), then re-apply the light recipe through both explicit
+   data-theme="light" and prefers-color-scheme: light when system is
+   in play. */
+#page-cleaner .rp-rt-proj-tabs {
+  background: var(--surface);
+  border-bottom: 0.0313rem solid var(--border);
+}
+#page-cleaner .rp-rt-proj-tab {
+  background: var(--over0);
+}
+#page-cleaner .rp-rt-proj-tab:hover,
+#page-cleaner .rp-rt-proj-tab.active {
+  background: var(--over1);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-proj-tabs {
+  background: var(--over0);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-proj-tab {
+  background: var(--bg);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-proj-tab:hover {
+  background: var(--surface);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-proj-tab.active {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-proj-tabs {
+    background: var(--over0);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab {
+    background: var(--bg);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab:hover {
+    background: var(--surface);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab.active {
+    background: var(--over0);
+  }
+}
+
+/* ── Header bar + internals — sandbox values ─────────────────────────
+   Vendored redtable.css gives the bare .rp-rt-header a big padding
+   (1.25rem 1.5rem 0.875rem) and no background — its design assumed a
+   .rp-rtp wrapper that scoped the smaller, frosted version in
+   redtable-pro.css. We don't use the .rp-rtp wrapper (sandbox doesn't
+   either) so we re-apply the sandbox-pro values inline here. Same
+   approach for .rp-rt-title (vendored is too big at 1.0625rem/700;
+   sandbox is 0.875rem/600 with flex layout for the icon + dash + filename),
+   .rp-rtp-hdr-info / -meta (the muted meta line),
+   .rp-rt-hdr-actions (margin-left:auto to right-pin the action cluster),
+   .rp-rtp-overall (cleanness widget — vendored omits the fill background
+   so the bar reads empty without this). */
+#page-cleaner .rp-rt-header {
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  flex-wrap: wrap;
+}
+html[data-theme="light"] #page-cleaner .rp-rt-header {
+  background: rgba(255, 255, 255, 0.36);
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-header {
+    background: rgba(255, 255, 255, 0.36);
+    border-bottom-color: rgba(0, 0, 0, 0.07);
+  }
+}
+
+#page-cleaner .rp-rt-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  width: 100%;
-  padding: 0.4375rem 0.5rem;
-  border: none;
-  border-radius: 0.3125rem;
-  background: transparent;
   color: var(--text);
-  font: inherit;
-  font-size: 0.8125rem;
-  text-align: left;
-  cursor: pointer;
+  /* Vendored .rp-rt-title sets flex:1 which pushes the meta + actions
+     to the far right; sandbox uses .rp-rtp-hdr-info as the flex:1 spacer
+     instead so the title hugs its content. Reset flex here. */
+  flex: 0 0 auto;
 }
-.rp-rtp-tab-add-item:hover { background: var(--over0); }
-.rp-rtp-tab-add-item .bi { font-size: 0.9375rem; opacity: 0.85; }
-.rp-rtp-tab-add-empty {
-  padding: 0.4375rem 0.5rem;
+#page-cleaner .rp-rt-title .bi { font-size: 0.8125rem; }
+#page-cleaner .rp-rt-title-sep {
   color: var(--muted);
-  font-size: 0.75rem;
+  margin: 0 0.125rem;
+}
+#page-cleaner .rp-rt-title-fname {
+  display: inline-block;
+  padding: 0 0.1875rem;
+  border: var(--line, 0.0625rem) dashed transparent;
+}
+
+#page-cleaner .rp-rtp-hdr-info {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+#page-cleaner .rp-rtp-hdr-meta {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
+}
+
+#page-cleaner .rp-rt-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-left: auto;
+}
+
+/* Cleanness widget (file or project) — vendored omits the fill bg + tweaks
+   the bar background, so the bar reads empty without re-declaring. */
+#page-cleaner .rp-rtp-overall {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+#page-cleaner .rp-rtp-overall-lbl {
+  font-size: 0.6875rem;
+  color: var(--sub);
+  white-space: nowrap;
+}
+#page-cleaner .rp-rtp-overall-bar {
+  width: 4.5rem;
+  height: 0.25rem;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.125rem;
+  overflow: hidden;
+}
+#page-cleaner .rp-rtp-overall-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0.125rem;
+  transition: width 0.4s ease;
+}
+#page-cleaner .rp-rtp-overall-pct {
+  font-size: 0.71875rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* File-tab close (×) + add (+) — local block trimmed in favour of the
+   vendored sandbox file-tabs.css (× sized to 1.75rem, the larger
+   sandbox value) + the shared .rp-tab-add-wrap / .rp-tab-add styles
+   from proj-tabs.css. The old .rp-rtp-tab-add-* dropdown rules were
+   dead code from before file-tabs + was converted to a modal trigger. */
+
+/* ── Toolbar bar + key internals — sandbox values ──────────────────
+   Vendored redtable.css gives .rp-rt-toolbar generous padding (0.75rem
+   1.5rem) and no background. Sandbox uses a frosted band (rgba black/
+   white per theme), tighter padding (0.4375rem 0.5rem), 0.25rem gap,
+   flex-wrap on so multi-row toolbars don't overflow horizontally.
+   The internals (.rp-rt-search pill, .rp-rt-pill-btn dropdown trigger,
+   .rp-rt-sel-chip count badge) also live in sandbox main.css, not in
+   either vendored sheet — re-state them here scoped to #page-cleaner. */
+#page-cleaner .rp-rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  width: 100%;
+}
+html[data-theme="light"] #page-cleaner .rp-rt-toolbar {
+  background: rgba(255, 255, 255, 0.24);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-toolbar {
+    background: rgba(255, 255, 255, 0.24);
+  }
+}
+
+/* Search — frosted pill, flex:1 (eats remaining toolbar slack). */
+#page-cleaner .rp-rt-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55em 1em;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 3rem;
+  color: var(--text);
+  font: 0.875rem inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-cleaner .rp-rt-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+#page-cleaner .rp-rt-search::placeholder {
+  color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+html[data-theme="light"] #page-cleaner .rp-rt-search,
+html[data-theme="light"] #page-cleaner .rp-rt-pill-btn {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rt-search,
+  html[data-theme="system"] #page-cleaner .rp-rt-pill-btn {
+    background: var(--over0);
+  }
+}
+
+/* Pill dropdown trigger (rows-per-page / columns picker / date-format).
+   Frosted pill, same surface family as .rp-rt-search. */
+#page-cleaner .rp-rt-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 3rem;
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font: 0.75rem inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#page-cleaner .rp-rt-pill-btn:hover {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+#page-cleaner .rp-rt-pill-btn.is-active,
+#page-cleaner .rp-rt-pill-btn.rp-rt-active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+#page-cleaner .rp-rt-pill-btn .bi-chevron-down { font-size: 0.625rem; opacity: 0.6; }
+#page-cleaner .rp-rt-pill-unit { color: inherit; opacity: 0.55; }
+
+/* Selection chip — visible only in select mode with count > 0. */
+#page-cleaner .rp-rt-sel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.1875rem 0.5rem;
+  background: var(--active-bg);
+  color: var(--bg);
+  border-radius: var(--radius);
+  font-size: 0.6875rem;
+}
+#page-cleaner .rp-rt-panel:not(.is-mode-select) .rp-rt-sel-chip,
+#page-cleaner .rp-rt-sel-chip[data-count="0"] {
+  display: none;
+}
+
+/* ── File-tabs strip + tab theme variants ───────────────────────────
+   Same situation as proj-tabs: vendored file-tabs.css ships
+   html[data-theme="dark"] / html[data-theme="light"] overrides that
+   never match live's data-theme="system". Mirror the sandbox dark
+   recipe as the cleaner default; re-apply light through both explicit
+   data-theme="light" and prefers-color-scheme.
+
+   Sandbox file-tabs elevation stack:
+     dark:  rgba(0,0,0,0.22) strip < --surface tab < --over0 hover/active
+     light: rgba(255,255,255,0.35) strip < --bg tab < --surface hover / --over0 active
+
+   The strip is a frosted wash (translucent black / white), distinct from
+   proj-tabs which uses a solid --surface / --over0 fill. */
+#page-cleaner .rp-rtp-tabs {
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid var(--border);
+}
+#page-cleaner .rp-rtp-tab {
+  background: var(--surface);
+}
+#page-cleaner .rp-rtp-tab:hover,
+#page-cleaner .rp-rtp-tab.active {
+  background: var(--over0);
+}
+html[data-theme="light"] #page-cleaner .rp-rtp-tabs {
+  background: rgba(255, 255, 255, 0.35);
+}
+html[data-theme="light"] #page-cleaner .rp-rtp-tab {
+  background: var(--bg);
+}
+html[data-theme="light"] #page-cleaner .rp-rtp-tab:hover {
+  background: var(--surface);
+}
+html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-cleaner .rp-rtp-tabs {
+    background: rgba(255, 255, 255, 0.35);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rtp-tab {
+    background: var(--bg);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rtp-tab:hover {
+    background: var(--surface);
+  }
+  html[data-theme="system"] #page-cleaner .rp-rtp-tab.active {
+    background: var(--over0);
+  }
 }
 
 /* Full-bleed shell from body[data-chrome="full"] in main.css. This page
@@ -239,163 +975,12 @@
    header. Hide it to keep the toolbar header focused. */
 #page-cleaner.overview-active .rp-rtp-overall { display: none; }
 
-/* ── Project tabs (panel-header level) ───────────────────────────
-   Multiple opened projects live as tabs at the very top of the
-   .rp-rt-panel — the cleaner equivalent of the Objects-page tab
-   strip. Each tab snapshots + restores its own STATE slice on
-   switch (no fetch). Inactive tabs are muted; the active tab gets
-   an accent rim that matches the file-tab vocabulary below it. */
-.rp-rt-proj-tabs {
-  display: flex;
-  align-items: end;
-  padding: 0.375rem 0.5rem 0;
-  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 6%, transparent);
-  background: color-mix(in srgb, var(--text) 2%, transparent);
-}
-.rp-rt-proj-tabs-inner {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-}
-.rp-rt-proj-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.3125rem 0.625rem;
-  border-radius: 0.5rem 0.5rem 0 0;
-  background: transparent;
-  border: 0.0625rem solid transparent;
-  border-bottom: 0;
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  max-width: 14rem;
-  transition: background 0.15s, color 0.15s;
-}
-.rp-rt-proj-tab:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-}
-.rp-rt-proj-tab.active {
-  background: var(--surface);
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
-  color: var(--accent);
-  box-shadow: 0 -0.125rem 0 0 var(--accent) inset;
-}
-.rp-rt-proj-tab .bi-folder2-open {
-  font-size: 0.8125rem;
-  opacity: 0.8;
-}
-.rp-rt-proj-tab-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rp-rt-proj-tab-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 50%;
-  opacity: 0;
-  color: var(--muted);
-  margin-left: 0.125rem;
-  transition: opacity 0.15s, background 0.15s;
-}
-.rp-rt-proj-tab:hover .rp-rt-proj-tab-x,
-.rp-rt-proj-tab.active .rp-rt-proj-tab-x { opacity: 0.7; }
-.rp-rt-proj-tab-x:hover {
-  opacity: 1 !important;
-  background: color-mix(in srgb, var(--red) 18%, transparent);
-  color: var(--red);
-}
-.rp-rt-proj-tab-x .bi { font-size: 0.6875rem; }
-
-/* "+" project picker — mirrors the file-tab add menu pattern. Pure
-   CSS hover-open (the inline outside-click handler in cleaner.js
-   that hides .rp-rtp-tab-add-menu also catches this since both use
-   `hidden`-toggle conventions). */
-.rp-rt-proj-add-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  margin-left: 0.25rem;
-}
-.rp-rt-proj-add {
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.rp-rt-proj-add:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.rp-rt-proj-add-menu {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 250;
-  min-width: 14rem;
-  max-height: 18rem;
-  overflow-y: auto;
-  background: var(--surface);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: 0.5rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.4);
-  padding: 0.25rem;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-0.25rem);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-/* Open state — JS adds .open via _bindProjAddHover with a 180ms grace
-   timer so the menu survives the gap between the + trigger and the
-   panel (pure CSS :hover is unreliable across an absolutely-positioned
-   panel; same pattern the library's .rp-rt-cols-dd uses). */
-.rp-rt-proj-add-wrap:hover .rp-rt-proj-add-menu,
-.rp-rt-proj-add-menu.open {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-.rp-rt-proj-add-hdr {
-  padding: 0.3125rem 0.5rem;
-  font-size: 0.5938rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: color-mix(in srgb, var(--text) 30%, transparent);
-}
-.rp-rt-proj-add-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  color: color-mix(in srgb, var(--text) 80%, transparent);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.rp-rt-proj-add-item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
-.rp-rt-proj-add-item .bi { color: var(--accent); }
-.rp-rt-proj-add-empty {
-  padding: 0.5rem;
-  font-size: 0.6875rem;
-  color: var(--muted);
-  font-style: italic;
-}
+/* Project tabs — styled by the vendored sandbox proj-tabs.css imported
+   above. The local .rp-rt-proj-tab* / .rp-rt-proj-add-* rules that used
+   to live here were dropped in the sandbox visual cutover so the
+   sandbox glass look wins without specificity battles. The cleaner +
+   button is now a modal trigger using the shared .rp-tab-add-wrap /
+   .rp-tab-add classes (also in the vendored sandbox CSS). */
 
 /* Flex chain fix — without `min-width: 0`, the .rp-rt-body row flex
    container won't let .rp-rt-table-wrap shrink past its content's
@@ -673,281 +1258,38 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
  * · ✕) plus an Apply button at the bottom. JS in cleaner.js owns the
  * predicate list state.
  * ─────────────────────────────────────────────────────────────────── */
-.rp-rt-filter-panel {
-  flex-shrink: 0;
-  width: 0;
-  overflow: hidden;
-  border-right: 0.0312rem solid var(--over0);
-  transition: width .28s cubic-bezier(.4, 0, .2, 1);
-}
-.rp-rt-filter-panel.open {
-  width: 16rem;
-}
-.rp-rt-filter-inner {
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  min-width: 16rem;   /* lock the inner width so children don't reflow during the slide */
-}
-.rp-rt-filter-hdr {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 0.0312rem solid var(--over0);
-  margin-bottom: 0.375rem;
-}
+/* Filter-panel block trimmed — the local rules used a width-animation
+   (.rp-rt-filter-panel { width: 0 } → 16rem on .open) instead of the
+   sandbox transform slide (translateX(-100%) → 0). They also set
+   .rp-rt-fb-row to an accent wash instead of the sandbox glass-card
+   look. All the canonical styling now lives in vendored
+   /vendor/redpash-components/components/filter-panel-sandbox.css
+   (imported at the top of this file). */
 
-/* AND/OR pill toggle — ported from the Objects-page filter panel so
-   the two pages read the same. Replaces the older AND/OR radio
-   buttons. cleanerSetCombo flips .is-active on click. */
-.rp-rt-fb-op-toggle {
-  display: flex;
-  width: 100%;
-  height: 1.875rem;
-  border: 0.0625rem solid var(--text);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.rp-rt-fb-op-toggle button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  color: var(--sub, #a6adc8);
-  font: inherit;
-  font-size: 0.7188rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .12s, color .12s;
-}
-.rp-rt-fb-op-toggle button.is-active {
-  background: var(--accent);
-  color: var(--rp-text-inverse, #fff);
-}
+/* Leftover from when the tools panel used .rp-rtp-tool-sect[-chevron].
+   Sandbox markup uses the shared .rp-rt-panel-sect[-chevron] family,
+   so this rule no longer matches anything. Accordion convention
+   (chevron ▼ collapsed → ▲ open via 180deg) is in the vendored
+   filter-panel-sandbox.css now. */
 
-/* Predicate row — same chrome as the Objects-page row: a bordered
-   glass card laid out as a flex column. Children, in order:
-     row 1 .rp-rt-fb-rm       — × button, top-right via align-self
-     row 2 .rp-rt-fb-selects  — col + op selects in a 50/50 grid
-     row 3 .rp-rt-fb-val      — value input
-   Native <select>/<input> kept (vs. Objects' custom dropdowns). */
-.rp-rt-fb-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.375rem;
-  /* Faint accent wash so the row visually echoes the active AND/OR
-     pill above it (both share var(--accent)). Transparent felt
-     disconnected from the combinator selection. */
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border: 0.0625rem solid var(--text);
-  border-radius: 0.4375rem;
-  transition: background .12s;
-}
-.rp-rt-fb-row:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-.rp-rt-fb-selects {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.25rem;
-}
-.rp-rt-fb-row select,
-.rp-rt-fb-row input {
-  width: 100%;
-  height: 1.75rem;
-  box-sizing: border-box;
-  font-size: 0.6875rem;
-  padding: 0.25rem 0.375rem;
-  background: transparent;
-  border: 0.0625rem solid var(--text);
-  border-radius: 0.25rem;
-  color: var(--text);
-  transition: background .12s, border-color .12s;
-}
-/* Hover / focus pick up the same accent the active row uses — without
-   this, the native UA grey hover/focus background sneaks through and
-   reads disconnected from the row's accent wash. */
-.rp-rt-fb-row select:hover,
-.rp-rt-fb-row input:hover,
-.rp-rt-fb-row select:focus,
-.rp-rt-fb-row input:focus,
-#cleaner-filter-apply:not(:disabled):hover,
-#cleaner-filter-apply:not(:disabled):focus {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  outline: none;
-}
+/* Tools-panel content rules (rp-rtp-ct-{grid,btn,btn-lbl}, rp-rtp-join-*,
+   rp-rtp-dtype-*) trimmed — the live overrides forced a 1-column grid
+   with horizontal pill buttons (vs. sandbox's 2-col compact chip grid)
+   and re-declared the join family with different paddings + flex
+   widths. Sandbox is the canonical layout: 2-col chips, glass-tinted,
+   accent on hover. All recipes now live in vendored
+   /vendor/redpash-components/components/tools-panel-sandbox.css. */
+/* .rp-rt-fb-rm + .rp-rt-filter-footer trimmed — these were the live
+   recipes (× as a flex child via align-self: flex-end; footer with a
+   var(--over0) hairline). Sandbox positions × absolutely in the row's
+   top-right corner (revealed on row hover) and gives the footer a
+   matching glass-tinted top border. Both now come from vendored
+   filter-panel-sandbox.css. */
 
-/* Cleaning Tools sit on the RIGHT of the table; collapsed chevron
-   should point ▶ toward the panel's outer edge, not ◀ into the table.
-   Library default (-90deg = ◀) is correct for the left-side Filter
-   panel — kept; this override scopes to the right-side panel only. */
-#cleaner-tools-panel .rp-rtp-tool-sect:not(.open) .rp-rtp-tool-sect-chevron {
-  transform: rotate(90deg);
-}
-
-/* Cleaning-tools button cluster — restyle from the library's 2-col
-   circular-icon grid to a single column of horizontal pill buttons
-   with icon + label. Two reasons: (1) the panel was bottom-heavy with
-   empty space, (2) icon-only buttons require a hover-tooltip read to
-   identify each tool — labels make the action discoverable at a glance.
-   Scoped to #cleaner-tools-panel so the library demo isn't affected. */
-#cleaner-tools-panel .rp-rtp-ct-grid {
-  grid-template-columns: 1fr;
-  gap: 0.25rem;
-  justify-items: stretch;
-}
-#cleaner-tools-panel .rp-rtp-ct-btn {
-  width: 100%;
-  height: auto;
-  min-height: 2rem;
-  border-radius: 0.4375rem;
-  padding: 0.4375rem 0.625rem;
-  justify-content: flex-start;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-}
-#cleaner-tools-panel .rp-rtp-ct-btn .bi {
-  font-size: 0.9375rem;
-  flex-shrink: 0;
-}
-#cleaner-tools-panel .rp-rtp-ct-btn-lbl {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── Joins panel — candidate list ────────────────────────────────
-   GET /api/files/:rid/joins paints into #cleaner-join-body via
-   _renderJoinsPanel. One section per other-file, with a stack of
-   clickable candidate rows: this_col ↔ other_col + similarity score.
-   Clicking a row POSTs the join + switches to the newly-created
-   file (cleanerCreateJoin). Scores colour-coded: ≥80 green, ≥50
-   yellow, else muted. */
-.rp-rtp-join-file {
-  margin-top: 0.5rem;
-}
-.rp-rtp-join-file-hdr {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--text);
-  padding: 0.25rem 0.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-.rp-rtp-join-file-hdr .bi { color: var(--muted); font-size: 0.75rem; }
-.rp-rtp-join-items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1875rem;
-}
-.rp-rtp-join-item {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.1875rem;
-  padding: 0.375rem 0.5rem;
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
-  border-radius: 0.4375rem;
-  cursor: pointer;
-  color: var(--text);
-  font-size: 0.6875rem;
-  transition: background 0.12s, border-color 0.12s;
-}
-.rp-rtp-join-item:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.rp-rtp-join-item.is-busy {
-  opacity: 0.55;
-  pointer-events: none;
-}
-.rp-rtp-join-cols {
-  display: flex;
-  align-items: center;
-  gap: 0.3125rem;
-  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
-}
-.rp-rtp-join-col {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  padding: 0.0625rem 0.3125rem;
-  border-radius: 0.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 7rem;
-  white-space: nowrap;
-}
-.rp-rtp-join-cols .bi {
-  color: var(--muted);
-  font-size: 0.6875rem;
-  flex-shrink: 0;
-}
-.rp-rtp-join-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.6rem;
-  color: var(--muted);
-}
-.rp-rtp-join-score {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.rp-rtp-join-score[data-score]                  { color: var(--muted); }
-.rp-rtp-join-score[data-score^="5"],
-.rp-rtp-join-score[data-score^="6"],
-.rp-rtp-join-score[data-score^="7"]             { color: #e5b300; }
-.rp-rtp-join-score[data-score^="8"],
-.rp-rtp-join-score[data-score^="9"],
-.rp-rtp-join-score[data-score="100"]            { color: var(--green); }
-.rp-rt-fb-row .rp-rt-fb-rm {
-  align-self: flex-end;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0.7;
-  font-size: 0.6875rem;
-  padding: 0;
-  transition: opacity .12s, background .12s, color .12s;
-}
-.rp-rt-fb-row .rp-rt-fb-rm:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--red) 22%, transparent);
-  color: var(--red);
-}
-
-/* The value input toggles to a date input when op = before/after, or
-   hides entirely when op = is_null/not_null. JS adds the right class. */
+/* JS-controlled: when op = is_null/not_null the value input hides.
+   Sandbox doesn't ship this rule (no op-dependent affordance there) —
+   keep it here since the live engine drives it. */
 .rp-rt-fb-row.rp-rt-fb-no-value .rp-rt-fb-val { display: none; }
-
-.rp-rt-filter-footer {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: auto;
-  padding-top: 0.5rem;
-  border-top: 0.0312rem solid var(--over0);
-}
 
 /* Active state lives in main.css now (.rp-rt-icon-btn.is-active using
    --rp-accent so it follows the user's theme override). The duplicate

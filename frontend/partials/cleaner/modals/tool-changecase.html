@@ -1,0 +1,52 @@
+<!-- Change case — mirrors modal-tool-changecase (live app cleaner.html
+     lines 652-672). Column dropdown + case mode. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-changecase"
+     onclick="closeModal('tool-changecase')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-fonts"></i> Change case</h2>
+        <div class="rp-modal-sub">Transform string values' casing.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-changecase')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Column</span>
+      <select class="rp-input" data-sp-col>
+        <option>Client</option>
+        <option>Formule</option>
+        <option selected>Cause.intervention</option>
+        <option>Type.d.energie</option>
+        <option>Outil.d.assistance</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Target case</span>
+      <select class="rp-input" data-sp-case-mode>
+        <option value="lower">lowercase</option>
+        <option value="upper">UPPERCASE</option>
+        <option value="title" selected>Title Case</option>
+      </select>
+    </label>
+
+    <!-- Live preview — spPreviewChangeCase reads the selected column,
+         pulls its distinct values from SP_DEMO_DISTINCT, applies the
+         target case, and paints into [data-sp-preview]. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl rp-lbl-between">
+        Preview
+        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewChangeCase(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
+      </span>
+      <div data-sp-preview>
+        <div class="rp-preview-line rp-form-meta">Pick a column + target case then click Compute.</div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-changecase')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-changecase')">Apply</button>
+    </div>
+  </div>
+</div>

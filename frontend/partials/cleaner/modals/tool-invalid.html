@@ -1,0 +1,61 @@
+<!-- Fix invalid values — mirrors modal-tool-invalid (live app
+     cleaner.html lines 857-937). Sentinel checklist + ad-hoc input
+     + scope + replacement mode. The "learned sentinels" persist
+     across files in the live app (prefs.learned_sentinels). -->
+<div class="rp-modal-overlay" id="rp-modal-tool-invalid"
+     onclick="closeModal('tool-invalid')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-wrench-adjustable"></i> Fix invalid values</h2>
+        <div class="rp-modal-sub">Scans every string column for sentinel placeholders (N/A, ?, —, null, …) and lists what's actually in your file.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-invalid')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="rp-form-row">
+      <div class="rp-form-lbl rp-lbl-between">
+        <span>Sentinels found in this file</span>
+        <span style="display:flex;gap:0.25rem">
+          <button type="button" class="btn btn-ghost btn-sm">All</button>
+          <button type="button" class="btn btn-ghost btn-sm">None</button>
+        </span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.1875rem">
+        <label class="rp-dd-checkbox"><input type="checkbox" checked /> <code>#??!</code> <small style="color:var(--muted)">(62 hits in 4 cols)</small></label>
+        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>N/A</code> <small style="color:var(--muted)">(11 hits in 2 cols)</small></label>
+        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>—</code> <small style="color:var(--muted)">(7 hits)</small></label>
+        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>unknown</code> <small style="color:var(--muted)">(3 hits)</small></label>
+      </div>
+    </div>
+
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Don't see it? Add a custom value</span>
+      <div style="display:flex;gap:0.25rem">
+        <input type="text" class="rp-input" placeholder="e.g. ??? or ----" style="flex:1" />
+        <button type="button" class="btn btn-ghost btn-sm"><i class="bi bi-plus-lg"></i> Add</button>
+      </div>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Scope</span>
+      <select class="rp-input">
+        <option selected>All string columns</option>
+        <option>A single column…</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Replace with</span>
+      <select class="rp-input">
+        <option selected>Empty (null)</option>
+        <option>A custom value…</option>
+      </select>
+    </label>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-invalid')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-invalid')">Fix values</button>
+    </div>
+  </div>
+</div>

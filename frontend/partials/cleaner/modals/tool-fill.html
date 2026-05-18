@@ -1,0 +1,82 @@
+<!-- Fill missing values — mirrors modal-tool-fill (live app
+     cleaner.html lines 833-855). Column + fill method + value. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-fill"
+     onclick="closeModal('tool-fill')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-pencil-fill"></i> Fill missing values</h2>
+        <div class="rp-modal-sub">Replace null cells in the chosen column.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-fill')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- Null-count summary + per-column breakdown so the user can
+         see at a glance which columns need the most filling before
+         picking one from the select below. Sorted by null count desc;
+         live app's _populateToolModal will fetch the real counts and
+         wire each row to pre-select that column. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl">Nulls in this file</span>
+      <div class="rp-form-meta" style="margin-bottom:0.375rem">
+        <span class="rp-view-chip"><i class="bi bi-dash-circle"></i>159 nulls across 8,500 cells (1.9%)</span>
+      </div>
+      <div class="rp-scroll-list">
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Cause.intervention</span><span class="rp-form-meta">47</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Outil.d.assistance</span><span class="rp-form-meta">38</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Assistance.ou.Administratif</span><span class="rp-form-meta">23</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Type.d.energie</span><span class="rp-form-meta">18</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>TOP.D.R</span><span class="rp-form-meta">12</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>TOP.Recup</span><span class="rp-form-meta">9</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Numero_dossier_ID</span><span class="rp-form-meta">5</span>
+        </div>
+        <div class="rp-hist-detail" style="display:flex;justify-content:space-between;cursor:pointer">
+          <span>Matricule.de.traitement</span><span class="rp-form-meta">4</span>
+        </div>
+        <div class="rp-hist-detail rp-form-meta">…9 more columns with 0 nulls</div>
+      </div>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Column</span>
+      <select class="rp-input">
+        <option>Numero_dossier_ID</option>
+        <option selected>Cause.intervention</option>
+        <option>Type.d.energie</option>
+        <option>Outil.d.assistance</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Fill method</span>
+      <select class="rp-input">
+        <option value="value" selected>Replace with a fixed value</option>
+        <option value="forward">Forward fill (previous row)</option>
+        <option value="mode">Most frequent value</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Value</span>
+      <input type="text" class="rp-input" placeholder="fill value…" />
+    </label>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-fill')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-fill')">Fill nulls</button>
+    </div>
+  </div>
+</div>

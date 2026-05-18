@@ -1,0 +1,17 @@
+<!-- File table — structural wrapper only. The redtable engine
+     (scripts/redtable/index.js in the live app) renders the full
+     <table> from /api/files/:rid/page response data into
+     [data-cleaner-table]. Pagination row at the bottom likewise gets
+     populated from the response's total + page meta.
+     Render contract:
+       JS replaces [data-cleaner-table] innerHTML with a complete
+       <table class="rp-rt-table"> on every page / sort / filter change.
+       Page info goes into [data-cleaner-rows-info]; page buttons into
+       [data-cleaner-rows-pages]. -->
+<div class="rp-rt-table-wrap" data-cleaner-table>
+  <!-- redtable engine paints here -->
+</div>
+<div class="rp-rt-pager">
+  <span class="rp-rt-rows-info" data-cleaner-rows-info>—</span>
+  <span class="rp-rt-pages" data-cleaner-rows-pages></span>
+</div>

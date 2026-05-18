@@ -1,0 +1,55 @@
+<!-- Remove text — mirrors modal-tool-removetext (live app cleaner.html
+     lines 753-767). Column + pattern; strips matches from values. -->
+<div class="rp-modal-overlay" id="rp-modal-tool-removetext"
+     onclick="closeModal('tool-removetext')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-eraser"></i> Remove text</h2>
+        <div class="rp-modal-sub">Strip a word or pattern from string values.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-removetext')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <!-- Flagged columns — top candidates that contain common sentinel
+         / boilerplate patterns. Live app surfaces the highest-impact
+         columns based on actual cell counts. -->
+    <div class="rp-form-meta" style="margin-bottom:0.375rem">
+      <span class="rp-view-chip"><i class="bi bi-exclamation-diamond"></i>62 cells contain <code>#??!</code></span>
+      <span class="rp-view-chip"><i class="bi bi-tag"></i>Formule starts with "Formule " in 100% of rows</span>
+    </div>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Column</span>
+      <select class="rp-input" data-sp-col>
+        <option selected>Cause.intervention</option>
+        <option>Type.d.energie</option>
+        <option>Outil.d.assistance</option>
+        <option>Formule</option>
+        <option>Client</option>
+      </select>
+    </label>
+
+    <label class="rp-form-row">
+      <span class="rp-form-lbl">Pattern to remove</span>
+      <input type="text" class="rp-input" data-sp-find placeholder="word, phrase or regex…" />
+    </label>
+
+    <!-- Live preview — spPreviewRemoveText strips the pattern from
+         the column's distinct sample values. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl rp-lbl-between">
+        Preview
+        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewRemoveText(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
+      </span>
+      <div data-sp-preview>
+        <div class="rp-preview-line rp-form-meta">Type a pattern then click Compute.</div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-removetext')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-removetext')">Apply to column</button>
+    </div>
+  </div>
+</div>

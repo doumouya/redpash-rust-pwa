@@ -6,8 +6,12 @@
 
 # ── Secrets ───────────────────────────────────────────────────────
 # Real env file with DATABASE_URL + OAuth credentials. .env.example is
-# tracked as the template.
+# tracked as the template. /backend/.env is a symlink (env-swap.sh
+# flips it between .env.main / .env.prerelease per branch); both
+# variants carry secrets and stay untracked.
 /backend/.env
+/backend/.env.main
+/backend/.env.prerelease
 .env
 .env.local
 

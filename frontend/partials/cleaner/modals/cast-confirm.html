@@ -1,0 +1,37 @@
+<!-- Sample rp-modal — proves the open / close + Esc / overlay-click
+     pattern. Wired from the header's "Saved settings" button (which
+     in Pass D would open the real saved-settings inspector; here it
+     just opens this stand-in). Esc closes; overlay click closes;
+     × button closes; "Apply cast" closes too. -->
+<div class="rp-modal-overlay" id="rp-modal-cast-confirm"
+     onclick="closeModal('cast-confirm')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl">Confirm cast</h2>
+        <div class="rp-modal-sub">Three values can't be parsed as date — they'll become null.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('cast-confirm')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div>
+      <div style="font-size:0.6875rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.375rem">
+        Values that will become null
+      </div>
+      <pre style="background:var(--hover);padding:0.5rem 0.625rem;border-radius:var(--radius-sm);border:var(--line) solid var(--border);font-family:ui-monospace,'JetBrains Mono',Consolas,monospace;font-size:0.75rem;margin:0;white-space:pre;overflow:auto">
+"N/A"
+"in transit"
+"???"
+</pre>
+    </div>
+
+    <div style="font-size:0.6875rem;color:var(--muted)">
+      Undoable from the toolbar if it lands badly.
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('cast-confirm')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('cast-confirm')">Apply cast</button>
+    </div>
+  </div>
+</div>

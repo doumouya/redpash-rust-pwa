@@ -1,0 +1,44 @@
+<!-- Replace in names — mirrors modal-tool-replacenames (live app
+     cleaner.html lines 633-650). Find + Replace inputs (column
+     headers only — not cell values). -->
+<div class="rp-modal-overlay" id="rp-modal-tool-replacenames"
+     onclick="closeModal('tool-replacenames')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-sm" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-tag"></i> Replace in names</h2>
+        <div class="rp-modal-sub">Find &amp; replace a character across all column names.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('tool-replacenames')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="rp-2col">
+      <label class="rp-form-row">
+        <span class="rp-form-lbl">Find</span>
+        <input type="text" class="rp-input" data-sp-find value="." />
+      </label>
+      <label class="rp-form-row">
+        <span class="rp-form-lbl">Replace with</span>
+        <input type="text" class="rp-input" data-sp-replace value="_" />
+      </label>
+    </div>
+
+    <!-- Live preview — spPreviewReplaceNames reads SP_DEMO_COLS,
+         applies the current Find/Replace inputs, and paints into
+         [data-sp-preview]. -->
+    <div class="rp-form-row">
+      <span class="rp-form-lbl rp-lbl-between">
+        Preview
+        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewReplaceNames(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
+      </span>
+      <div data-sp-preview>
+        <div class="rp-preview-line rp-form-meta">Set Find / Replace then click Compute to preview against the current column list.</div>
+      </div>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tool-replacenames')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('tool-replacenames')">Apply</button>
+    </div>
+  </div>
+</div>
