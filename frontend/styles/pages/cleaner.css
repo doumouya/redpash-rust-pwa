@@ -280,14 +280,9 @@ html[data-theme="light"] #page-cleaner .rp-rt-table thead th {
   }
 }
 
-/* ── Sandbox-aligned root font-size ──────────────────────────────────
-   Sandbox sets `html { font-size: 112.5% }` (18px root) and uses rems
-   throughout. Live's main.css sets `body { font-size: 14px }` (~22%
-   smaller). This per-page rule bumps the root while cleaner.css is
-   loaded so vendored sandbox CSS (proj-tabs / file-tabs / glass-btn)
-   computes at the intended pixel sizes. #page-cleaner re-sets its own
-   font-size to 1rem so the body's 14px override doesn't bleed back in. */
-html { font-size: 112.5%; }
+/* Root font-size (112.5% = 18px) is set globally in main.css. #page-cleaner
+   re-sets its own font-size to 1rem so the body's 14px override doesn't
+   bleed back in via inheritance. */
 #page-cleaner {
   font-size: 1rem;
   /* Sandbox body font — Open Sans Light 300 with system fallbacks
@@ -1651,6 +1646,21 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   display: block;
   width: 100%;
 }
+
+/* AND/OR combinator toggle — library uses `flex: 1` (= flex-shrink: 1)
+   on each button + `overflow: hidden` on the container. When the
+   panel narrows past the buttons' intrinsic size, that combo lets
+   them get clipped vertically (height visibly shrinks) instead of
+   preserving natural padding-driven height like the Add Predicate
+   button (which is `inline-flex`, content-sized, freestanding —
+   nothing to squeeze it). Override flex to `1 1 50%` for symmetric
+   widths + flex-shrink: 0 so the buttons hold their natural height.
+   min-width: 0 lets the 50% basis win over the implicit content
+   min-width. */
+.rp-rt-fb-op-toggle button {
+  flex: 1 0 50%;
+  min-width: 0;
+}
 .rp-rt-fb-dd-btn {
   display: flex;
   align-items: center;
@@ -1804,6 +1814,30 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
 }
 .rp-view-chip i { font-size: 0.75rem; }
 .rp-view-chip sup { font-size: 0.5625rem; opacity: 0.8; }
+/* Saved-filter delete (×) — inline button inside each .rp-view-chip
+   on the saved-settings modal. Hidden-by-default opacity bump so the
+   chips don't read as "actionable" at rest; fades in on hover, inverts
+   to red on hover-of-self for the "destructive" affordance. Wired to
+   cleanerDeleteSavedFilter(rid, idx) — see the inline onclick in
+   cleanerOpenSavedSettings's chip painter. */
+.rp-view-chip-x {
+  background: none;
+  border: 0;
+  margin-left: 0.125rem;
+  padding: 0 0.1875rem;
+  font-size: 0.8125rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text) 50%, transparent);
+  cursor: pointer;
+  border-radius: 0.1875rem;
+  opacity: 0.5;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.rp-view-chip:hover .rp-view-chip-x { opacity: 1; }
+.rp-view-chip-x:hover {
+  color: var(--red, #c33);
+  background: color-mix(in srgb, var(--red, #c33) 14%, transparent);
+}
 .rp-view-rm {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);

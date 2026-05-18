@@ -56,9 +56,16 @@
              Predicate button uses cleanerFbAddPredicate (replaces sandbox
              spFbAddPredicate's clone+selectedIndex reset, which doesn't
              know about our custom widgets). -->
+        <!-- × uses cleanerFbRmPredicate (NOT sandbox spFbRmPredicate)
+             so the LAST predicate row can also be removed — matches
+             legacy _cleanerFilterRowRemove. Sandbox's "keep one as
+             scaffold" rule was for the demo; live users need to be
+             able to empty the panel completely (the visual "no rows"
+             is the only signal that the panel is disconnected from
+             the file's applied filter state). -->
         <div class="rp-rt-fb-row">
           <button class="rp-rt-fb-rm" title="Remove predicate"
-                  onclick="event.stopPropagation();spFbRmPredicate(this)">
+                  onclick="event.stopPropagation();cleanerFbRmPredicate(this)">
             <i class="bi bi-x"></i>
           </button>
           <div class="rp-dd-wrap rp-rt-fb-col" data-fb-col data-value="">

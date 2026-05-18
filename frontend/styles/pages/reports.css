@@ -31,8 +31,7 @@
 @import "/vendor/redpash-components/components/filter-panel-sandbox.css";
 @import "/vendor/redpash-components/components/objects-sandbox.css";
 
-/* ── Sandbox-aligned root font-size (matches cleaner / objects) ──── */
-html { font-size: 112.5%; }
+/* Root font-size (112.5% = 18px) is set globally in main.css. */
 
 #page-reports {
   flex: 1;

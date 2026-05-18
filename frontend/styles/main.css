@@ -92,6 +92,14 @@
    overflow + flex chrome — that's shell.css, opt-in per page) and
    the app's brand font/colors. */
 html, body { height: 100%; }
+/* Sandbox-aligned root font-size (18px). The library and sandbox-ported
+   pages (cleaner/objects/reports/profile) size everything in `rem`, so
+   the root needs to land at 18px for the intended pixel sizes. Set
+   globally here so pages don't each re-declare it (used to be duplicated
+   across four page CSS files). Pre-sandbox pages (home/landing/settings/
+   docs/dashboards) inherit it too — anything sized in `rem` there scales
+   ~12.5% larger; absolute-px sizing is unaffected. */
+html { font-size: 112.5%; }
 body {
   background: var(--rp-bg);
   color: var(--rp-text);

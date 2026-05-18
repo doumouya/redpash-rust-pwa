@@ -38,13 +38,9 @@
 @import "/vendor/redpash-components/components/filter-panel-sandbox.css";
 @import "/vendor/redpash-components/components/objects-sandbox.css";
 
-/* ── Sandbox-aligned root font-size ──────────────────────────────────
-   Same pattern as cleaner.css — sandbox computes at 18px root via
-   `html { font-size: 112.5% }`. Live's main.css sets body to 14px
-   (~22% smaller); this per-page rule restores 18px while objects.css
-   is loaded. #page-objects re-sets its own font-size to 1rem so the
-   body's 14px override doesn't bleed back in via inheritance. */
-html { font-size: 112.5%; }
+/* Root font-size (112.5% = 18px) is set globally in main.css.
+   #page-objects re-sets its own font-size to 1rem (below) so the body's
+   14px override doesn't bleed back in via inheritance. */
 
 /* Full-bleed shell from body[data-chrome="full"] (set in main.js before
    this CSS loads). The page fills the route container and stacks its

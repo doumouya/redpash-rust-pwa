@@ -5247,11 +5247,22 @@ function _installSandboxLiveHandlers(root) {
           const name   = f.display_name || f.filename || rid;
           const active = rid === STATE.rid;
 
-          // Filters group — one chip per saved filter name, else default.
+          // Filters group — one chip per saved filter name (with a × to
+          // delete via cleanerDeleteSavedFilter), else placeholder. Index
+          // is the array position so the delete handler can splice the
+          // right entry without name-matching (handles future duplicate
+          // names safely). event.stopPropagation() on the × so a click
+          // on it doesn't bubble up to a future "click chip = load filter"
+          // handler that would re-open / overwrite the draft.
           const savedList = Array.isArray(savedFilters[rid]) ? savedFilters[rid] : [];
+          const eRid = _escAttr(rid);
           const filterChips = savedList.length
-            ? savedList.map((sf) =>
-                `<span class="rp-view-chip">${_escHtml(sf.name || "(unnamed)")}</span>`
+            ? savedList.map((sf, i) =>
+                `<span class="rp-view-chip">`
+                + `${_escHtml(sf.name || "(unnamed)")}`
+                + `<button class="rp-view-chip-x" title="Delete this saved filter"`
+                + ` onclick="event.stopPropagation();cleanerDeleteSavedFilter('${eRid}', ${i})">×</button>`
+                + `</span>`
               ).join("")
             : '<span class="rp-view-default">No saved filters</span>';
 
@@ -5885,9 +5896,20 @@ function _installSandboxLiveHandlers(root) {
         pred.value = raw.split(",").map((s) => s.trim()).filter(Boolean);
         if (!pred.value.length) continue;
       } else if (op === "between") {
+        // Two comma-separated NUMERIC endpoints. Legacy parses both
+        // to Number + drops the predicate when either is NaN; backend
+        // also accepts strings (val_f64 fallback), but matching legacy
+        // exactly so anything that breaks here breaks on both paths.
         const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
         if (parts.length !== 2) continue;
-        pred.value = parts;
+        pred.value = parts.map((s) => Number(s));
+        if (pred.value.some(Number.isNaN)) continue;
+      } else if (op === "gt" || op === "gte" || op === "lt" || op === "lte") {
+        // Numeric comparison — convert to Number client-side so the
+        // payload reads as a number not a string (matches legacy).
+        const n = Number(raw);
+        if (Number.isNaN(n) || raw.trim() === "") continue;
+        pred.value = n;
       } else {
         const v = raw.trim();
         if (!v) continue;
@@ -5957,28 +5979,93 @@ function _installSandboxLiveHandlers(root) {
     window.toast?.success?.(`Saved filter "${name}".`);
   };
 
-  // Clear — empty all predicate rows back down to a single fresh-empty
-  // seed (matches the post-mount state). Removes all but the first,
-  // then resets the first's dropdowns + value input. Doesn't touch
-  // STATE.savedFilters or the combinator toggle.
-  window.cleanerClearFilterDraft = (btn) => {
+  // Per-row × button — remove the predicate row unconditionally. Sandbox
+  // spFbRmPredicate preserves the last row as an empty scaffold (sandbox
+  // demo never had an empty-state); legacy _cleanerFilterRowRemove (live
+  // app) just removes the row regardless of how many remain. Matching
+  // legacy so users CAN end up with an empty panel — important because
+  // the visual "no predicates" is the only way to tell the panel is
+  // disconnected from the applied filter state.
+  window.cleanerFbRmPredicate = (btn) => {
+    if (!btn) return;
+    btn.closest(".rp-rt-fb-row")?.remove();
+  };
+
+  // Delete a saved filter from STATE.savedFilters[rid] + persist the
+  // updated map. Called from the × button on each chip in the
+  // saved-settings modal (rendered by cleanerOpenSavedSettings). Idx
+  // is the array position so duplicate names (future-proofing) splice
+  // the right entry. Re-calls cleanerOpenSavedSettings to repaint —
+  // modal stays open, just the chip disappears.
+  window.cleanerDeleteSavedFilter = (rid, idx) => {
+    if (!rid || typeof STATE.savedFilters !== "object") return;
+    const list = STATE.savedFilters[rid];
+    if (!Array.isArray(list)) return;
+    const i = Number(idx);
+    if (!Number.isInteger(i) || i < 0 || i >= list.length) return;
+    const removed = list[i]?.name || "(unnamed)";
+    list.splice(i, 1);
+    if (!list.length) delete STATE.savedFilters[rid];
+    window.rpSavePref?.("cleaner_saved_filters", STATE.savedFilters);
+    if (typeof window.cleanerOpenSavedSettings === "function") {
+      window.cleanerOpenSavedSettings();
+    }
+    window.toast?.success?.(`Deleted "${removed}".`);
+  };
+
+  // Clear — wipes the panel draft AND surgically un-applies every
+  // filter_rows step on the active file via POST /clear-filters.
+  // Single round-trip; backend flips applied=false for every matching
+  // step regardless of position, so a filter buried under later
+  // operations (filter_columns, renames, sort, …) still clears. This
+  // is the fix for the "stacked filters can't be undone via Eraser"
+  // case that stranded the resources.csv file earlier — Eraser used
+  // to only reset the draft, leaving the applied steps intact.
+  //
+  // Two-phase: (1) DOM reset of the predicate rows back to one
+  // fresh-empty seed; (2) if any filter_rows steps are currently
+  // applied, POST + pipe envelope through _afterHistory so the table
+  // re-paints with the un-filtered frame. Phase 1 runs even with no
+  // active file (panel is on Overview = a no-op anyway).
+  window.cleanerClearFilterDraft = async (btn) => {
     const panel = root.querySelector("#cleaner-filter-panel");
     const rows  = panel?.querySelector(".rp-rt-fb-rows");
-    if (!rows) return;
-    const all = [...rows.querySelectorAll(".rp-rt-fb-row")];
-    all.slice(1).forEach((r) => r.remove());
-    const first = rows.querySelector(".rp-rt-fb-row");
-    if (first) {
-      first.querySelectorAll("input").forEach((i) => { i.value = ""; });
-      first.querySelectorAll(".rp-dd-wrap").forEach((wrap) => {
-        wrap.dataset.value = "";
-        const lbl = wrap.querySelector("[data-dd-lbl]");
-        if (lbl) {
-          lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
-        }
-        wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
-        wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
-      });
+    if (rows) {
+      const all = [...rows.querySelectorAll(".rp-rt-fb-row")];
+      all.slice(1).forEach((r) => r.remove());
+      const first = rows.querySelector(".rp-rt-fb-row");
+      if (first) {
+        first.querySelectorAll("input").forEach((i) => { i.value = ""; });
+        first.querySelectorAll(".rp-dd-wrap").forEach((wrap) => {
+          wrap.dataset.value = "";
+          const lbl = wrap.querySelector("[data-dd-lbl]");
+          if (lbl) {
+            lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+          }
+          wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+          wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+        });
+      }
+    }
+
+    if (!STATE.rid) return;
+    const appliedFilterCount = (STATE.steps ?? [])
+      .filter((s) => s.applied === true && (s.kind === "filter_rows" || s.op_kind === "filter_rows"))
+      .length;
+    if (appliedFilterCount === 0) return;  // draft wipe was the whole job
+
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const env = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/clear-filters`, {},
+      );
+      await _afterHistory(env, `Cleared ${appliedFilterCount} applied filter${appliedFilterCount === 1 ? "" : "s"}`);
+    } catch (err) {
+      window.toast?.error?.(`Clear filters failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
     }
   };
 
