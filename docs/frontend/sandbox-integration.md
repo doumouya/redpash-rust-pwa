@@ -232,45 +232,53 @@ adding a sandbox-only one).
 
 | Bucket | Count | Status |
 |---|---|---|
-| Defined in `_installSandboxLiveHandlers` only | 12 | New / renamed during sandbox migration |
-| Defined in BOTH `_wireGlobals` and `_installSandboxLiveHandlers` | 12 | **Migrated.** Same name in both; sandbox wins for cleaner page mounts. Legacy version stays for revertability |
-| Defined in `_wireGlobals` only | 43 | **Still to migrate** (literally — though several have functionally-equivalent sandbox handlers under a different name; see "Functional renames" below) |
+| Defined in `_installSandboxLiveHandlers` only | 13 | New / renamed during sandbox migration |
+| Defined in BOTH `_wireGlobals` and `_installSandboxLiveHandlers` | 19 | **Migrated.** Same name in both; sandbox wins for cleaner page mounts. Legacy version stays for revertability |
+| Defined in `_wireGlobals` only | 36 | **Still to migrate** (literally — though several have functionally-equivalent sandbox handlers under a different name; see "Functional renames" below) |
 
 Not counted here (not a `window.cleaner*` assignment): the **cell-edit
 dispatcher** in `_installSandboxLiveHandlers` (once-guarded
 document-level `focusin`/`focusout` pair) — supersedes legacy
 `cleanerCellEdit`.
 
-### Sandbox-only (12)
+### Sandbox-only (13)
 
 | Sandbox handler | New / renamed from | Notes |
 |---|---|---|
 | `cleanerOpenSavedSettings` | renamed from `cleanerShowSaved` | Saved-settings rp-modal painter |
 | `cleanerOpenHistory` | **new** | History rp-modal painter |
-| `cleanerRefresh` | **new** | Toolbar refresh — repaint via `_paintSandboxTable` |
-| `cleanerToggleSync` | renamed from `cleanerToggleLink` | Persists `STATE.linkToolbar` |
+| `cleanerRefresh` | **new** | Toolbar refresh — repaint via `_paintSandboxTable`. 600ms minimum spin so cached fetches don't flash invisibly. |
+| `cleanerToggleSync` | renamed from `cleanerToggleLink` | Persists `STATE.linkToolbar`; flashes `.cleaner-synced-glow` on synced controls. |
 | `cleanerOpenReportForFile` | renamed from `cleanerNewReportFromFile` | `window.open(#/reports?new=1&source=…)` |
 | `cleanerOpenDashboardForProject` | renamed from `cleanerNewDashboardFromFile` | `window.open(#/dashboards?new=1&project=…)` |
 | `cleanerScoreFile` | renamed from `cleanerScoreThisFile` | POST `/files/:rid/cleanness` → `_afterHistory` |
-| `cleanerClearScore` | renamed from `cleanerClearThisFile` | DELETE `/files/:rid/cleanness` → `_afterHistory` |
 | `cleanerSelectAllRows` | renamed from `cleanerSelectAll` | Master checkbox handler |
 | `cleanerMaybeBulkDelete` | renamed from `cleanerBulkDelete` | No-op if empty selection; POST `drop_rows` otherwise |
 | `cleanerRowClick` | renamed from `cleanerRowSelect` (broader scope — now a mode-aware row dispatcher, not just checkbox toggle) | Single `<tr>` dispatcher: select-mode toggles, delete-mode POSTs `drop_rows` for that row, edit/no-mode no-op. Checkbox has no onclick (native toggle bubbles up, handler re-syncs `cb.checked`). |
 | `cleanerSetPageSize` | **new** (≠ legacy `cleanerSetPage`, which is page-nav) | `STATE.pageSize` + `_paintSandboxTable` refetch |
+| `cleanerFbDdPick` | **new** | Commits a filter predicate dropdown's picked value into `wrap.dataset.value` + label + closes `.rp-dd-menu`. Pairs with the custom-dropdown conversion (see Migration progress log). |
+| `cleanerFbAddPredicate` | replaces sandbox `spFbAddPredicate` | Clones the seed predicate row + resets the custom dropdowns (data-value + label + .is-selected + close menu) — sandbox's clone reset only knew how to handle native `<select>`. |
 
-### Migrated (12 — same name in both)
+### Migrated (19 — same name in both)
 
 | Handler | Notes |
 |---|---|
 | `cleanerActivateTab` | Click a file tab. Paints header from cached `STATE.files` for snappy feel, then `_paintSandboxTable` corrects from `detail.summary`. |
 | `cleanerAddFile` | Opens new-project modal pre-filled with current project name. |
+| `cleanerApplyFilter` | POSTs `filter_rows` step + pipes the envelope through `_afterHistory`. Reads predicates from each `.rp-rt-fb-row`'s `data-fb-col` / `data-fb-op` wraps + `[data-fb-val]` input. |
+| `cleanerClearFilterDraft` | Empties the filter panel back to one fresh-empty seed row — doesn't undo an applied filter (use the toolbar's Undo button for that). |
 | `cleanerCloseProject` | × on project tab. Refuses to close the only remaining tab. Calls `_reprojPicker()`. |
 | `cleanerExport` | GET `/:rid/export` → blob → `<a download>`. |
 | `cleanerHideFileTab` | × on file tab. Adds to `STATE.hiddenFiles`, persists, calls `_refilePicker()`. |
 | `cleanerOpenProject` | Picker → push onto `STATE.openProjects` + switch. |
 | `cleanerRedo` | POST `/redo`, pipe envelope through `_afterHistory`. |
+| `cleanerSaveFilter` | Prompts for a name + persists into `STATE.savedFilters[rid]` + `cleaner_saved_filters` pref. Shows up in the Saved-settings modal next time it opens. |
+| `cleanerSetCombo` | Single-active toggle on the AND/OR pair (`.rp-rt-fb-op-toggle`). |
+| `cleanerSetPage` | Page navigation. Sets `STATE.page` + re-paints; pager-button onclicks call this. |
 | `cleanerShowFileTab` | Re-show a hidden file tab. |
+| `cleanerSortBy` | Sort cycle on column-header click. Shift+click chains; alt+shift removes. Persists to `cleaner_sorts` pref; backend `/page` takes the JSON-encoded `sorts` param. |
 | `cleanerSwitchProject` | Active-project flip with snapshot save/restore. |
+| `cleanerToggleCol` | Hide / show column from the toolbar's columns picker; persists to `cleaner_hidden_cols` pref. Min-1 guard refuses to hide the last visible column. |
 | `cleanerToggleRowNums` | Persists `STATE.showRowNums` via `rpSavePref`. |
 | `cleanerToggleRowOpen` | Persists `STATE.showOpenLinks` + toggles panel class. |
 | `cleanerUndo` | POST `/undo`, pipe envelope through `_afterHistory`. |
@@ -291,7 +299,7 @@ revertability.
 | `cleanerNewReportFromFile` | `cleanerOpenReportForFile` |
 | `cleanerNewDashboardFromFile` | `cleanerOpenDashboardForProject` |
 | `cleanerScoreThisFile` | `cleanerScoreFile` |
-| `cleanerClearThisFile` | `cleanerClearScore` |
+| `cleanerClearThisFile` | — **dropped** (Clear button removed from toolbar; backend's `hydrate` auto-recomputes cleanness on cache miss + writes it back, so "clear" never persists. Reintroducing it needs a backend change to make `hydrate` respect an explicit NULL.) |
 | `cleanerSelectAll` | `cleanerSelectAllRows` |
 | `cleanerBulkDelete` | `cleanerMaybeBulkDelete` |
 | `cleanerRowSelect` | `cleanerRowClick` (broadened to mode-aware row dispatcher; per-row delete on click in delete mode now lands via the same handler) |
@@ -303,9 +311,9 @@ revertability.
   `cleanerToggleToolSect`, `cleanerToolInvalidScope`,
   `cleanerToolInvalidMode`, `cleanerToolInvalidSelectAll`,
   `cleanerToolInvalidAddExtra`
-- **Filters** (8): `cleanerAddFilterRow`, `cleanerClearFilterDraft`,
-  `cleanerSaveFilter`, `cleanerLoadSavedFilter`, `cleanerDeleteSavedFilter`,
-  `cleanerCreateJoin`, `cleanerSetCombo`, `cleanerApplyFilter`
+- **Filters** (4): `cleanerAddFilterRow` (sandbox uses
+  `cleanerFbAddPredicate` instead), `cleanerLoadSavedFilter`,
+  `cleanerDeleteSavedFilter`, `cleanerCreateJoin`
 - **Dedup** (1): `cleanerDedupModeChanged`
 - **Rows / selection** (2): `cleanerClearSelection` (mostly covered by
   the master-checkbox unchecked path), `cleanerRowDelete` (legacy
@@ -314,15 +322,15 @@ revertability.
   a single global index — no need to migrate `_applyDropRows` /
   `_absoluteIndex` since `cleanerMaybeBulkDelete` already handles
   the POST and `_paintSandboxTable` emits global indices directly)
-- **Columns** (8): `cleanerColDragStart`, `cleanerColDragOver`,
-  `cleanerColDragLeave`, `cleanerColDragEnd`, `cleanerColDrop`,
-  `cleanerSortBy`, `cleanerBuildColsDropdown`, `cleanerToggleCol`
+- **Columns** (6): `cleanerColDragStart`, `cleanerColDragOver`,
+  `cleanerColDragLeave`, `cleanerColDragEnd`, `cleanerColDrop` (sandbox
+  uses the generic `_bindDragReorder` + a `dragend` listener that
+  snapshots DOM order into `STATE.openProjects` / `STATE.colOrder`),
+  `cleanerBuildColsDropdown` (sandbox uses `_populateColsPicker`)
 - **Cell** (1): `cleanerCellEdit` — **superseded** by the cell-edit
   dispatcher in `_installSandboxLiveHandlers`. Safe to drop with
   the rest of `_wireGlobals`.
-- **Page / toolbar** (2): `cleanerSetPage` (pagination button click —
-  not the same as rows-per-page; `cleanerSetPageSize` covers the
-  latter), `cleanerToggleAddMenu`
+- **Page / toolbar** (1): `cleanerToggleAddMenu`
 - **Page actions** (2): `cleanerBack`, `cleanerSave`
 
 ---
@@ -393,6 +401,10 @@ the underlying code may have moved on since the entry was written).
 | Early-bail on missing sandbox hooks | ✅ | ✅ | ➖ |
 | Anchor `.rp-btn` `text-decoration: none` | ✅ | ✅ | ✅ |
 | `vertical-align: middle` on inline-flex action cells | ➖ | ✅ | ➖ |
+| Mount-snapshot cache-then-correct (sessionStorage) | ✅ | 🔄 | ➖ |
+| Native `<select>` → custom `.rp-dd-wrap` widget | ✅ (filter rows) | 🔄 | ➖ |
+| Drag-reorder persistence via doc-level `dragend` | ✅ | 🔄 | ➖ |
+| Minimum-spin floor on fast async ops | ✅ (refresh 600ms) | 🔄 | ➖ |
 
 ### Pattern: page-level shell + `rpInclude` (cleaner + objects)
 
@@ -575,6 +587,180 @@ which for icon-only content sits at the bottom edge. **Fix
 (in `objects-sandbox.css`)**: explicit `vertical-align: middle` on
 `.rp-rt-actions` AND `.rp-btn-xs`. Apply the same recipe to any
 new per-row action cluster.
+
+### Pattern: mount snapshot (sessionStorage cache-then-correct)
+
+*Cleaner ✅ ([cleaner.js `_CLEANER_MOUNT_SNAPSHOT_KEY`](../../frontend/scripts/pages/cleaner.js)) — extend to objects when its mount path gets the same flash on reload.*
+
+Reload felt slow because `mountSandbox` runs N sequential fetches
+(`/projects` → `/projects/:pid/files` → `/files/:rid` + `/page`)
+before painting any chrome — user sees empty strips + "—" placeholders
+for ~500-1000ms even though they're returning to the same view they
+just had.
+
+Fix: snapshot the chrome `STATE` slice (`projectMeta`, `openProjects`,
+`activeProjectId`, `files`, active `rid`, `summary`) to `sessionStorage`
+at end of `mountSandbox` + `cleanerActivateTab` + `cleanerSwitchProject`.
+At top of next `mountSandbox` (after handlers install + sync), read
+the snapshot, restore `STATE`, paint project tabs + file tabs + header
+synchronously **before** the fetches start. Fetches run in parallel
+and overwrite within a few hundred ms (the standard `_paintSandboxTable`
+correction-pass picks up any drift).
+
+**Discipline:**
+- **Per-mount overwrite** is the invalidation — no TTL, no per-resource
+  cache busting. Every successful mount snapshots fresh truth.
+- **URL hash match guard** — restore only when `snap.hashUrl ===
+  location.hash`. Different URL = different project/file → fall
+  through to normal fetch flow (don't paint stale).
+- **`sessionStorage` scope** (per tab + origin) avoids cross-user
+  pollution on shared machines; closed tab kills the snapshot.
+- **Table contents NOT snapshotted** — too big to serialize for
+  5k-row pages (~5MB), and the rows go stale fastest. Table body
+  shows "Loading…" placeholder until `_paintSandboxTable`'s fetch
+  resolves. Separate "table window" cache lands later (config-driven
+  prefetch of 10k rows = 2 pages at max page size).
+
+### Pattern: native `<select>` → custom `.rp-dd-wrap` widget
+
+*Cleaner ✅ filter predicate rows ([filter-panel.html](../../frontend/partials/cleaner/filter-panel.html), [cleanerFbDdPick / cleanerFbAddPredicate](../../frontend/scripts/pages/cleaner.js)) — mirror anywhere the open popup needs to match the toolbar's frosted-glass treatment.*
+
+Native `<select>` popups are OS-rendered — `.rp-dd-menu.open` styling
+(frosted glass + opacity transition) only applies to the custom
+`.rp-dd-wrap` widget used by the toolbar dropdowns. To get the
+matching look on form selects, convert the markup:
+
+```html
+<!-- before: native -->
+<select class="rp-rt-fb-col" data-fb-col>
+  <option value="">Column…</option>
+  <option value="...">...</option>
+</select>
+
+<!-- after: custom -->
+<div class="rp-dd-wrap rp-rt-fb-col" data-fb-col data-value="">
+  <button type="button" class="rp-rt-fb-dd-btn" onclick="spDdToggle(this)">
+    <span data-dd-lbl>Column…</span>
+    <i class="bi bi-chevron-down"></i>
+  </button>
+  <div class="rp-dd-menu" role="menu">
+    <!-- .rp-dd-item per option, painted by JS -->
+  </div>
+</div>
+```
+
+**Contract changes when converting:**
+- **Chosen value** moves from `select.value` to `wrap.dataset.value`.
+  Apply-time readers (`_collectFilterDraft` etc.) read the new
+  location.
+- **Visible label** lives in `[data-dd-lbl]` inside the trigger
+  button — pickers update both the data attr and the label text.
+- **Item click** needs a custom handler (`cleanerFbDdPick`) that
+  sets `wrap.dataset.value` + label + marks `.rp-dd-item.is-selected`
+  + closes the menu.
+- **Clone reset** for "Add row" handlers can't reuse sandbox
+  `spFbAddPredicate`'s `select.selectedIndex = 0` — needs a
+  custom handler (`cleanerFbAddPredicate`) that resets `data-value`
+  + label + clears `.is-selected` + closes any open menu.
+- **CSS** for the trigger button (`.rp-rt-fb-dd-btn`) needs the same
+  glass recipe the library applies to form selects, with chevron
+  laid out via `display: flex; justify-content: space-between`.
+
+Inside a transformed parent (filter panel slide-in), the menu's
+`position: fixed` will land 1m below the trigger — see the next
+gotcha for the scoped-override fix.
+
+### Pattern: drag-reorder persistence via doc-level `dragend`
+
+*Cleaner ✅ project tabs + column headers — mirror anywhere the user can drag-reorder elements whose order needs to outlive the session.*
+
+Two implementation models for tab/column reorder persistence:
+
+1. **Objects-style: inline `ondrop` per tab + state array as source of
+   truth.** `spDropObjectTab` splices `window.spObjectTabs` + persists
+   + re-renders. Works because the state is sandbox-owned.
+2. **Cleaner-style: generic `_bindDragReorder` (controls.js) handles
+   the visual DOM reorder, then a document-level `dragend` listener
+   snapshots the new DOM order back into `STATE` + persists.** Better
+   fit for module-scope state — one listener catches any drag-end
+   regardless of which strip or table it happened in.
+
+Cleaner's model (in `_installSandboxLiveHandlers`, once-guarded):
+
+```js
+document.addEventListener("dragend", () => {
+  // Project tabs: walk .rp-rt-proj-tabs-inner, read each tab's
+  // data-sp-project-key into new STATE.openProjects + rpSavePref.
+  // Column headers: walk thead, read each th's text into
+  // STATE.colOrder + rpSavePref.
+});
+```
+
+**Discipline:**
+- **Compare before write** — only update STATE + persist when the
+  new order actually differs (avoids spurious persists on no-op
+  drags / clicks).
+- **Use existing prefs** when possible (`cleaner_open_projects`
+  already existed for "which projects are open"; reorder just changes
+  the array order in-place).
+- **File-tab reorder is in-session only** — would need a new
+  per-project pref structure (`cleaner_file_tab_order = { pid: [rid] }`)
+  to persist across reload. Out of scope for the first cut.
+
+### Gotcha: backend `hydrate()` auto-recomputes cleanness on cache miss
+
+*Cleaner: Clear button + `cleanerClearScore` handler dropped from toolbar — no clean fix without backend changes.*
+
+`db::clear_file_cleanness` writes `cleanness_pct = NULL` in the DB +
+invalidates `state.files` cache. But the very next read triggers
+`hydrate()` ([files.rs:1130+](../../backend/crates/api/src/routes/files.rs)),
+which **always recomputes cleanness** on cache miss + writes it back
+to the DB. So a "clear" never persists — it survives only as long
+as the in-memory cache stays empty (single tick).
+
+Frontend symptom: user clicks Clear → backend returns `cleanness_pct:
+null` → header briefly shows "—" → `_paintSandboxTable`'s subsequent
+`/files/:rid` fetch hits `hydrate` → recomputed cleanness reappears
+within ~100ms. User sees the score "didn't clear".
+
+Workaround: drop the Clear button. Reintroducing it needs a backend
+change to make `hydrate` either:
+- Skip the recompute when DB has explicit NULL, OR
+- Persist a separate "user_cleared" flag that hydrate respects.
+
+### Gotcha: filter panel `transform` creates CB for fixed dropdowns
+
+*Cleaner ✅ ([cleaner.css `.rp-rt-filter-panel .rp-dd-menu`](../../frontend/styles/pages/cleaner.css)) — same root cause as the `.rp-rt-panel` slide-in trap, scoped to the filter panel.*
+
+After converting native `<select>` to custom `.rp-dd-wrap` widgets
+in the filter panel's predicate rows, the dropdowns opened ~1m
+below their triggers. Root cause: `.rp-rt-filter-panel` has
+`transform: translateX(-100%)` for its slide-in animation
+([filter-panel-sandbox.css](../../redpash-components/components/filter-panel-sandbox.css)),
+which makes the panel a **containing block** for `position: fixed`
+descendants. `spDdToggle`'s `_positionDdCenter` writes viewport-coord
+inline `top`/`left` — the menu interprets them as panel-relative,
+landing at panel-top + 300px instead of viewport-top.
+
+**Fix** (scoped to filter panel only — toolbar dropdowns work fine
+because the cleaner panel already has `animation: none; transform:
+none`):
+
+```css
+.rp-rt-filter-panel .rp-dd-menu {
+  position: absolute !important;       /* not fixed */
+  top: calc(100% + 0.25rem) !important; /* below the wrap */
+  left: 0 !important;
+  right: auto !important;
+  min-width: 100%;
+}
+```
+
+`!important` is needed because `_positionDdCenter` writes inline
+`top`/`left` that beat external CSS specificity. `.rp-dd-wrap` is
+already `position: relative` per library, so absolute positioning
+hangs the menu off the wrap correctly. Same trick works for any
+custom-dropdown widget that ends up inside a transformed parent.
 
 ---
 
