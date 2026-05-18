@@ -4759,6 +4759,91 @@ function _escAttr(s) { return _escHtml(s); }
 //   • Wire toolbar mode triplet + selection chip to STATE.
 //   • Bridge the sandbox filter panel to live's filters/panel.js engine.
 //   • Bridge each sandbox tool modal to its scripts/cleaner/tools/* dispatcher.
+
+// ── Mount snapshot — cache-then-correct for page reload ──────────────
+// sessionStorage-backed snapshot of the chrome STATE (project tabs,
+// file tabs, header, active file/project ids). Read at the top of
+// mountSandbox to paint immediately from the last-good state, then
+// the standard fetch flow runs and overwrites with fresh data.
+// "Snappy effect, no cache war" — per-mount overwrite, no per-resource
+// invalidation, no TTL. sessionStorage scope (per tab + origin) avoids
+// cross-user pollution on shared machines.
+//
+// Restore guard: only paint when the snapshot's hashUrl matches the
+// CURRENT location.hash. Different URL = different project/file →
+// fall through to normal fetch flow.
+//
+// Table contents (rows + pagination) are NOT snapshotted — they're
+// the slow part to serialize + go stale fastest. Table host shows
+// "Loading…" until _paintSandboxTable's fetch resolves.
+const _CLEANER_MOUNT_SNAPSHOT_KEY = "rp.cleaner.mount.snapshot.v1";
+
+function _readMountSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(_CLEANER_MOUNT_SNAPSHOT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function _writeMountSnapshot() {
+  try {
+    sessionStorage.setItem(_CLEANER_MOUNT_SNAPSHOT_KEY, JSON.stringify({
+      ts: Date.now(),
+      hashUrl: location.hash,
+      projects: STATE.projectMeta instanceof Map ? [...STATE.projectMeta.values()] : [],
+      openProjects: Array.isArray(STATE.openProjects) ? STATE.openProjects : [],
+      activeProjectId: STATE.activeProjectId ?? null,
+      files: Array.isArray(STATE.files) ? STATE.files : [],
+      activeFileRid: STATE.rid ?? null,
+      summary: STATE.summary ?? null,
+    }));
+  } catch {}
+}
+
+function _maybeRestoreMountSnapshot(root, strip) {
+  const snap = _readMountSnapshot();
+  if (!snap || snap.hashUrl !== location.hash) return false;
+
+  // Restore STATE from snapshot — the standard fetch flow below will
+  // overwrite within a few hundred ms with fresh data. projectMeta
+  // rebuilds from the serialized projects array.
+  if (Array.isArray(snap.projects)) {
+    STATE.projectMeta = new Map(snap.projects.map((p) => [p.redpash_id, p]));
+  }
+  if (Array.isArray(snap.openProjects)) STATE.openProjects = snap.openProjects;
+  if (snap.activeProjectId) STATE.activeProjectId = snap.activeProjectId;
+  if (Array.isArray(snap.files)) STATE.files = snap.files;
+  if (snap.activeProjectId && STATE.projectMeta) {
+    STATE.project = STATE.projectMeta.get(snap.activeProjectId) ?? null;
+  }
+  STATE.rid = snap.activeFileRid ?? null;
+  if (snap.summary) STATE.summary = snap.summary;
+
+  // Paint chrome from the restored STATE. Project tabs strip needs the
+  // open list ordered (already in snap.openProjects); file tabs +
+  // header read STATE.files and the resolved activeFile.
+  if (STATE.projectMeta && STATE.openProjects?.length && STATE.activeProjectId) {
+    _renderSandboxProjectTabs(strip, STATE.projectMeta, STATE.openProjects, STATE.activeProjectId);
+  }
+  const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+  if (STATE.project) {
+    _renderSandboxHeader(root, STATE.project, activeFile, STATE.files || []);
+  }
+  if (Array.isArray(STATE.files)) {
+    _renderSandboxFileTabs(root, STATE.files, activeFile);
+  }
+  // Body: show overview pane if no active file, else flip to table
+  // (whose contents stay at "Loading…" until _paintSandboxTable lands).
+  if (activeFile) {
+    _showSandboxTable(root);
+  } else {
+    _showSandboxOverview(root);
+    _paintSandboxOverview(root);
+  }
+  return true;
+}
+
 async function mountSandbox(root, ctx, strip) {
   // Drop sandbox demo data FIRST — before any awaits or early returns.
   // The sandbox cleaner partials ship hardcoded "sentinel" / "Clients
@@ -4787,7 +4872,14 @@ async function mountSandbox(root, ctx, strip) {
   // populated per-file by the (legacy, not yet ported) _loadFilePrefs;
   // init it empty here so the per-file accumulation has a place to land.
   STATE.linkToolbar   = ctx?.session?.prefs?.cleaner_link_toolbar  === true;
-  STATE.showRowNums   = ctx?.session?.prefs?.cleaner_show_row_nums === true;
+  // Row numbers default ON (unset pref → on). Matches the sandbox
+  // toolbar's hardcoded `class="rp-btn is-active"` default so first
+  // mount has the button state + STATE + panel class all aligned.
+  // User opts OUT via the toggle; only an explicit `false` pref reads
+  // as off. Legacy mount() used `=== true` (default off); we diverge
+  // intentionally so the button doesn't appear lit while rownums are
+  // hidden on first mount with no pref set.
+  STATE.showRowNums   = ctx?.session?.prefs?.cleaner_show_row_nums !== false;
   STATE.showOpenLinks = ctx?.session?.prefs?.cleaner_show_open_links !== false;
   const sf = ctx?.session?.prefs?.cleaner_saved_filters;
   STATE.savedFilters  = (sf && typeof sf === "object" && !Array.isArray(sf))
@@ -4801,6 +4893,37 @@ async function mountSandbox(root, ctx, strip) {
   const savedPageSize = Number(ctx?.session?.prefs?.cleaner_page_size);
   STATE.pageSize = savedPageSize > 0 ? savedPageSize : _OV_DEFAULT_PAGE_SIZE;
   STATE.page = 1;
+  // Hidden columns — global pref (applies across all files). Mismatched
+  // names (column hidden in file A but absent in file B) silently no-op
+  // when _paintSandboxTable filters. Per-file persistence is a future
+  // upgrade (legacy uses _saveFilePrefs's STATE.filePrefs Map, which is
+  // in-memory only across page refresh anyway).
+  const savedHiddenCols = ctx?.session?.prefs?.cleaner_hidden_cols;
+  STATE.hiddenCols = new Set(Array.isArray(savedHiddenCols) ? savedHiddenCols : []);
+  // Column order — array of column NAMES in the user's chosen order.
+  // _paintSandboxTable sorts columns by this list at paint time, so a
+  // drag-drop reorder survives page refresh. Unknown column names
+  // (file schema doesn't have them) silently no-op; new columns added
+  // since the order was saved land at the end of the table.
+  const savedColOrder = ctx?.session?.prefs?.cleaner_col_order;
+  STATE.colOrder = Array.isArray(savedColOrder) ? savedColOrder.slice() : [];
+  // Column widths — { colName: px } applied as inline `width` / `min-width`
+  // on each data <th> in _paintSandboxTable. Persisted via
+  // cleaner_col_widths pref by _clColResizeUp (module-scope helper
+  // reused via a sandbox-aware ctx that calls rpSavePref).
+  const savedColWidths = ctx?.session?.prefs?.cleaner_col_widths;
+  STATE.colWidths = (savedColWidths && typeof savedColWidths === "object" && !Array.isArray(savedColWidths))
+    ? { ...savedColWidths } : {};
+  // Sort chain — array of { col, dir } entries; first key is primary,
+  // remaining break ties. cleanerSortBy mutates this on header clicks
+  // (shift+click chains, plain click cycles asc→desc→asc). Backend's
+  // /page endpoint takes it as a JSON string in the `sorts` query
+  // param. Persisted via cleaner_sorts pref.
+  const savedSorts = ctx?.session?.prefs?.cleaner_sorts;
+  STATE.sorts = Array.isArray(savedSorts)
+    ? savedSorts.filter((k) => k && typeof k.col === "string" && (k.dir === "asc" || k.dir === "desc"))
+                .map((k) => ({ col: k.col, dir: k.dir }))
+    : [];
   // Row selection (global row indices). Cleared on every paint —
   // pagination / step apply / refresh all reset selection by design
   // (legacy did the same; absolute indices would point at the wrong
@@ -4813,6 +4936,24 @@ async function mountSandbox(root, ctx, strip) {
   // composite onclicks (spActivateTab(this);cleanerActivateTab('FID')
   // etc.) throw "cleanerActivateTab is not defined" on the first click.
   _installSandboxLiveHandlers(root);
+
+  // Sync toolbar toggle states from STATE → DOM. The partial's
+  // hardcoded `class="rp-btn is-active"` defaults match the
+  // default-ON pref convention, but a user with an explicit OFF
+  // pref needs the button + panel class flipped at mount, otherwise
+  // first click reads "the button is ON, click to turn OFF" while
+  // STATE already says OFF — the click then doubly-flips them out
+  // of sync. Done after handlers install + before paint.
+  _syncToolbarToggleStates(root);
+
+  // Snappy paint — restore the last-good chrome from the sessionStorage
+  // snapshot if the URL still matches. STATE gets rehydrated +
+  // project/file tabs + header paint synchronously, so the user sees
+  // their workspace immediately instead of empty strips + "—"
+  // placeholders. The normal fetch flow below runs in parallel and
+  // overwrites with fresh data within a few hundred ms (cache-then-
+  // correct, no per-resource invalidation discipline).
+  _maybeRestoreMountSnapshot(root, strip);
 
   const q          = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const projectRid = q.get("project");
@@ -4934,6 +5075,12 @@ async function mountSandbox(root, ctx, strip) {
   // Without this the buttons sit at their HTML `disabled` default
   // even when there's history to undo on first paint.
   _installSandboxLiveHandlers._syncUndoRedoButtons?.();
+
+  // Snapshot the freshly-mounted chrome state for the NEXT page
+  // refresh's snappy paint. Overwrites the previous snapshot — no
+  // TTL, no per-resource invalidation, the next mount's overwrite IS
+  // the invalidation. See _CLEANER_MOUNT_SNAPSHOT_KEY notes.
+  _writeMountSnapshot();
 }
 
 // Install window.cleaner* handlers used by the sandbox tab onclicks.
@@ -5310,6 +5457,10 @@ function _installSandboxLiveHandlers(root) {
       _showSandboxOverview(root);
       _paintSandboxOverview(root);
     }
+    // STATE.activeProjectId + URL changed — snapshot for the next
+    // mount's snappy paint so a refresh after project-switch restores
+    // to the new project, not the one active at last full mount.
+    _writeMountSnapshot();
   };
 
   // Picker card → open another project. Push onto openProjects + persist,
@@ -5406,6 +5557,10 @@ function _installSandboxLiveHandlers(root) {
     if (activeFile) {
       await _paintSandboxTable(root, activeFile);
     }
+    // STATE.rid + URL changed — snapshot for the next mount's snappy
+    // paint so a refresh mid-session restores to THIS file, not the
+    // one that was active at last full mount.
+    _writeMountSnapshot();
   };
 
   // ── Toolbar wiring (file-view) ───────────────────────────────────
@@ -5452,12 +5607,36 @@ function _installSandboxLiveHandlers(root) {
 
   // Sync toolbar — sandbox flips `.is-sync-on` on the panel via
   // spToggleSync (CSS outlines synced fields). Live half persists
-  // STATE.linkToolbar; the actual propagation across file tabs lands
-  // when search + page-size wiring is migrated and snapshot-skip
-  // logic is added.
+  // STATE.linkToolbar AND flashes the synced controls with the
+  // .cleaner-synced-glow accent pulse (CSS @keyframes already defined
+  // in cleaner.css). Fires on both ON and OFF so the user always sees
+  // which controls the chain-link governs.
+  //
+  // Mirror of legacy _cleanerFlashSynced (cleaner.js:693) but with
+  // sandbox selectors: legacy targets data-rt-rows-label (sandbox
+  // emits data-sp-rows-label) + #cleaner-rownum-btn (sandbox row-nums
+  // button has no id, discriminated via onclick instead — same trick
+  // _syncToolbarToggleStates uses).
+  //
+  // The actual propagation across file tabs (search + page-size
+  // sticking when sync is ON) lands when those handlers are migrated
+  // and the snapshot-skip logic is added.
   window.cleanerToggleSync = () => {
     STATE.linkToolbar = !STATE.linkToolbar;
     window.rpSavePref?.("cleaner_link_toolbar", STATE.linkToolbar);
+    const targets = [
+      root.querySelector(".rp-rt-toolbar .rp-rt-search"),
+      root.querySelector("[data-sp-rows-label]")?.closest(".rp-rt-pill-btn"),
+      root.querySelector('[onclick*="cleanerToggleRowNums"]'),
+    ].filter(Boolean);
+    for (const el of targets) {
+      // Reflow trick: remove class + read offsetWidth to force restart
+      // of the one-shot animation when the class is re-added (CSS
+      // animations don't auto-replay when only the trigger toggles).
+      el.classList.remove("cleaner-synced-glow");
+      void el.offsetWidth;
+      el.classList.add("cleaner-synced-glow");
+    }
   };
 
   // Open-links toggle — panel class gates the report/dashboard anchors
@@ -5513,20 +5692,10 @@ function _installSandboxLiveHandlers(root) {
       btn && (btn.disabled = false);
     }
   };
-  window.cleanerClearScore = async (btn) => {
-    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return; }
-    btn?.classList.add("is-spinning");
-    btn && (btn.disabled = true);
-    try {
-      const summary = await api.delete(`/files/${encodeURIComponent(STATE.rid)}/cleanness`);
-      await _afterHistory({ summary, columns: STATE.columns, steps: STATE.steps }, "Cleanness cleared");
-    } catch (err) {
-      window.toast?.error?.(`Clear failed: ${err.body?.error ?? err.message}`);
-    } finally {
-      btn?.classList.remove("is-spinning");
-      btn && (btn.disabled = false);
-    }
-  };
+  // cleanerClearScore deliberately not defined here — see the
+  // matching comment in toolbar.html where the Clear button used to
+  // live. Short version: clear can't persist while backend's hydrate()
+  // auto-recomputes cleanness on every cache miss + writes it back.
 
   // ── Row selection + bulk delete ──────────────────────────────────
   // STATE.selected is a Set of GLOBAL row indices (page-offset added
@@ -5684,6 +5853,289 @@ function _installSandboxLiveHandlers(root) {
     }
   };
 
+  // Filter-panel draft collector — walks every .rp-rt-fb-row in the
+  // panel, reads each row's column + op (from the .rp-dd-wrap's
+  // data-value, NOT a native select.value — we converted those to
+  // custom dropdowns) + value input, and returns the {combinator,
+  // predicates} payload shape the backend's filter_rows step kind
+  // accepts (steps.rs:101). Op-specific value parsing mirrors legacy
+  // _cleanerCollectDraft: is_null/not_null take no value; in/not_in
+  // split on commas to an array; between expects exactly two
+  // comma-separated endpoints; everything else takes a single string.
+  const _collectFilterDraft = () => {
+    const panel = root.querySelector("#cleaner-filter-panel");
+    if (!panel) return { combinator: "and", predicates: [] };
+    const comboBtn = panel.querySelector("[data-cleaner-fb-combo] button.is-active");
+    const combinator = comboBtn?.dataset.combo === "or" ? "or" : "and";
+    const rows = [...panel.querySelectorAll(".rp-rt-fb-row")];
+    const predicates = [];
+    for (const r of rows) {
+      const colWrap = r.querySelector("[data-fb-col]");
+      const opWrap  = r.querySelector("[data-fb-op]");
+      const column  = colWrap?.dataset.value || "";
+      const op      = opWrap?.dataset.value || "";
+      if (!column || !op) continue;
+      const pred = { column, op };
+      if (op === "is_null" || op === "not_null") {
+        predicates.push(pred);
+        continue;
+      }
+      const raw = (r.querySelector("[data-fb-val]")?.value ?? "");
+      if (op === "in" || op === "not_in") {
+        pred.value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!pred.value.length) continue;
+      } else if (op === "between") {
+        const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (parts.length !== 2) continue;
+        pred.value = parts;
+      } else {
+        const v = raw.trim();
+        if (!v) continue;
+        pred.value = v;
+      }
+      predicates.push(pred);
+    }
+    return { combinator, predicates };
+  };
+
+  // Apply — POST a filter_rows step with the current draft. Backend
+  // appends it to the file's history (undoable like any other step),
+  // re-runs the page query with the filter applied, returns the new
+  // FileEnvelope. _afterHistory mirrors it into STATE + repaints
+  // table + sync undo/redo buttons.
+  window.cleanerApplyFilter = async (btn) => {
+    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return; }
+    const draft = _collectFilterDraft();
+    if (!draft.predicates.length) {
+      window.toast?.info?.("Add at least one predicate to apply.");
+      return;
+    }
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const env = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "filter_rows", params: draft },
+      );
+      const n = draft.predicates.length;
+      await _afterHistory(env, `Filter applied (${n} predicate${n === 1 ? "" : "s"})`);
+    } catch (err) {
+      window.toast?.error?.(`Filter failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
+    }
+  };
+
+  // Save — snapshot the current draft into STATE.savedFilters[rid]
+  // under a user-named key, then persist the whole map to
+  // cleaner_saved_filters pref. Same shape the saved-settings modal
+  // (cleanerOpenSavedSettings) already reads, so a save shows up in
+  // the inspector on next open. Replaces same-name entry instead of
+  // duplicating (idempotent rename = update, matches legacy).
+  window.cleanerSaveFilter = async (btn) => {
+    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return; }
+    const draft = _collectFilterDraft();
+    if (!draft.predicates.length) {
+      window.toast?.info?.("Add at least one predicate to save.");
+      return;
+    }
+    const existing = STATE.savedFilters?.[STATE.rid]?.length ?? 0;
+    const defaultName = `Filter ${existing + 1}`;
+    const name = (window.prompt("Name this filter:", defaultName) ?? "").trim();
+    if (!name) return;
+    if (!STATE.savedFilters || typeof STATE.savedFilters !== "object") {
+      STATE.savedFilters = {};
+    }
+    STATE.savedFilters[STATE.rid] = STATE.savedFilters[STATE.rid] || [];
+    const list = STATE.savedFilters[STATE.rid];
+    const dupIdx = list.findIndex((f) => f.name === name);
+    const entry  = { name, combinator: draft.combinator, predicates: draft.predicates };
+    if (dupIdx >= 0) list[dupIdx] = entry;
+    else             list.push(entry);
+    window.rpSavePref?.("cleaner_saved_filters", STATE.savedFilters);
+    window.toast?.success?.(`Saved filter "${name}".`);
+  };
+
+  // Clear — empty all predicate rows back down to a single fresh-empty
+  // seed (matches the post-mount state). Removes all but the first,
+  // then resets the first's dropdowns + value input. Doesn't touch
+  // STATE.savedFilters or the combinator toggle.
+  window.cleanerClearFilterDraft = (btn) => {
+    const panel = root.querySelector("#cleaner-filter-panel");
+    const rows  = panel?.querySelector(".rp-rt-fb-rows");
+    if (!rows) return;
+    const all = [...rows.querySelectorAll(".rp-rt-fb-row")];
+    all.slice(1).forEach((r) => r.remove());
+    const first = rows.querySelector(".rp-rt-fb-row");
+    if (first) {
+      first.querySelectorAll("input").forEach((i) => { i.value = ""; });
+      first.querySelectorAll(".rp-dd-wrap").forEach((wrap) => {
+        wrap.dataset.value = "";
+        const lbl = wrap.querySelector("[data-dd-lbl]");
+        if (lbl) {
+          lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+        }
+        wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+        wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+      });
+    }
+  };
+
+  // Filter-panel combinator toggle — single-active pair (AND / OR).
+  // Mirrors legacy cleanerSetCombo (cleaner.js:2571). Future apply
+  // handler reads the chosen value from the .is-active button's
+  // data-combo attr.
+  window.cleanerSetCombo = (btn) => {
+    if (!btn) return;
+    btn.parentElement?.querySelectorAll("button")
+       .forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+  };
+
+  // Filter-panel predicate dropdown — item click commits the chosen
+  // value into the wrap (data-value + visible label), marks the item
+  // .is-selected (clears siblings), closes the .rp-dd-menu. Custom
+  // widget replaces the native <select> so the open popup gets the
+  // sandbox's frosted-glass .rp-dd-menu treatment (which native
+  // <select> popups can't accept across browsers).
+  //
+  // Placeholder fallback: if the user somehow picks an item with
+  // empty data-value (shouldn't happen — items only emit for real
+  // columns/ops), the label resets to "Column…" / "Op…" based on
+  // which wrap kind it sits in.
+  window.cleanerFbDdPick = (item) => {
+    if (!item) return;
+    const wrap = item.closest(".rp-dd-wrap");
+    if (!wrap) return;
+    const value = item.dataset.value ?? "";
+    wrap.dataset.value = value;
+    const lbl = wrap.querySelector("[data-dd-lbl]");
+    if (lbl) {
+      const isCol = wrap.classList.contains("rp-rt-fb-col");
+      lbl.textContent = value
+        ? item.textContent.trim()
+        : (isCol ? "Column…" : "Op…");
+    }
+    wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+    if (value) item.classList.add("is-selected");
+    wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+  };
+
+  // Add Predicate — clones the seed .rp-rt-fb-row (which has the
+  // populated .rp-dd-menu items via _populateFilterPredicates) and
+  // resets the clone to a fresh-empty state: value input cleared,
+  // each .rp-dd-wrap's data-value blanked, label restored to
+  // placeholder, .is-selected wiped, any open menu closed. Replaces
+  // sandbox spFbAddPredicate which only knew how to reset native
+  // <select> (clone.querySelectorAll("select").selectedIndex = 0) —
+  // useless for our custom widgets.
+  window.cleanerFbAddPredicate = (btn) => {
+    if (!btn) return;
+    const panel = btn.closest(".rp-rt-filter-panel");
+    const rows  = panel?.querySelector(".rp-rt-fb-rows");
+    const seed  = rows?.querySelector(".rp-rt-fb-row");
+    if (!rows || !seed) return;
+    const clone = seed.cloneNode(true);
+    clone.querySelectorAll("input").forEach((i) => { i.value = ""; });
+    clone.querySelectorAll(".rp-dd-wrap").forEach((wrap) => {
+      wrap.dataset.value = "";
+      const lbl = wrap.querySelector("[data-dd-lbl]");
+      if (lbl) {
+        lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+      }
+      wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+      wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+    });
+    rows.appendChild(clone);
+  };
+
+  // Column header sort — cycle / chain / remove based on modifier keys.
+  //   • plain click on a column: that column becomes the only sort
+  //     (asc → desc → asc). If multi-sort was active, others are
+  //     dropped — single click = "I want THIS column".
+  //   • shift + click on a NEW column: append it to the chain (asc).
+  //   • shift + click on a column already in the chain: toggle its
+  //     direction.
+  //   • alt + shift + click: remove that column from the chain.
+  // Mirrors legacy cleanerSortBy at cleaner.js:2852 but reaches into
+  // _paintSandboxTable instead of _loadPage. STATE.page resets to 1
+  // since the old offset doesn't make sense at a new ordering.
+  // Persisted via cleaner_sorts pref.
+  window.cleanerSortBy = async (col, ev) => {
+    if (!col || !STATE.rid) return;
+    if (!Array.isArray(STATE.sorts)) STATE.sorts = [];
+    const shift = !!(ev && ev.shiftKey);
+    const alt   = !!(ev && ev.altKey);
+    const idx   = STATE.sorts.findIndex((k) => k.col === col);
+    if (shift) {
+      if (idx >= 0) {
+        if (alt) STATE.sorts.splice(idx, 1);
+        else     STATE.sorts[idx].dir = STATE.sorts[idx].dir === "asc" ? "desc" : "asc";
+      } else {
+        STATE.sorts.push({ col, dir: "asc" });
+      }
+    } else {
+      if (STATE.sorts.length === 1 && STATE.sorts[0].col === col) {
+        STATE.sorts[0].dir = STATE.sorts[0].dir === "asc" ? "desc" : "asc";
+      } else {
+        STATE.sorts = [{ col, dir: "asc" }];
+      }
+    }
+    STATE.page = 1;
+    window.rpSavePref?.("cleaner_sorts", STATE.sorts);
+    const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+    if (activeFile) await _paintSandboxTable(root, activeFile);
+  };
+
+  // Columns picker checkbox toggle — adds / removes the column name
+  // from STATE.hiddenCols (a Set), persists the new set globally via
+  // cleaner_hidden_cols pref, and triggers a repaint so the table
+  // body reflects the filter. Min-1 guard: refuses to hide the last
+  // visible column (would collapse the table to a header-only row);
+  // reverts the checkbox + toasts on misfire.
+  window.cleanerToggleCol = async (cb) => {
+    if (!cb) return;
+    const name = cb.dataset.cleanerCol;
+    if (!name) return;
+    if (!(STATE.hiddenCols instanceof Set)) STATE.hiddenCols = new Set();
+    const totalCols   = Array.isArray(STATE.columns) ? STATE.columns.length : 0;
+    const visibleNow  = totalCols - STATE.hiddenCols.size;
+    if (cb.checked) {
+      STATE.hiddenCols.delete(name);
+    } else {
+      if (visibleNow <= 1) {
+        cb.checked = true;
+        window.toast?.info?.("Keep at least one column visible.");
+        return;
+      }
+      STATE.hiddenCols.add(name);
+    }
+    window.rpSavePref?.("cleaner_hidden_cols", [...STATE.hiddenCols]);
+    // Repaint the table — _paintSandboxTable filters columns by
+    // STATE.hiddenCols. No-op on Overview.
+    if (STATE.rid) {
+      const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+      if (activeFile) await _paintSandboxTable(root, activeFile);
+    }
+  };
+
+  // Pagination — set STATE.page to the clicked button's index, then
+  // re-paint via _paintSandboxTable. Bounds: <1 and >totalPages are
+  // dropped silently (also disabled at the markup level by the prev /
+  // next chevron's `disabled` attr from _buildPagerHtml). Same-page
+  // clicks are no-ops so a click on the active button doesn't
+  // re-fetch.
+  window.cleanerSetPage = async (n) => {
+    if (!STATE.rid) return;
+    const num = Number(n);
+    if (!Number.isFinite(num) || num < 1) return;
+    if (num === STATE.page) return;
+    STATE.page = num;
+    const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+    if (activeFile) await _paintSandboxTable(root, activeFile);
+  };
+
   // Rows-per-page — drives _paintSandboxTable's /page request via
   // STATE.pageSize. Cursor resets to 1 since the old offset doesn't
   // map at a new size. Persisted as a global pref; per-file override
@@ -5700,6 +6152,75 @@ function _installSandboxLiveHandlers(root) {
       if (activeFile) await _paintSandboxTable(root, activeFile);
     }
   };
+
+  // ── Drag-reorder persistence ─────────────────────────────────────
+  // controls.js's generic _bindDragReorder owns the visual reorder
+  // (drags the .rp-rt-proj-tab in the strip, moves the <th> + matching
+  // <td>s in the data table). It does NOT update STATE — refresh would
+  // revert. This document-level dragend listener reads the post-drag
+  // DOM order out of the strip + table, syncs STATE.openProjects /
+  // STATE.colOrder to match, and persists via rpSavePref.
+  //
+  // Mirrors the Objects-page persistence pattern (controls.js
+  // spDropObjectTab + _spSaveObjectTabs) without rewriting tab
+  // markup — Objects tabs use inline ondrop handlers because their
+  // state lives in sandbox-owned window.spObjectTabs; cleaner state
+  // lives in module-scope STATE so a single document listener can
+  // catch any drag-end and snapshot the result.
+  //
+  // Once-guarded — mountSandbox runs per hash change and would
+  // otherwise stack listeners. File-tab order isn't persisted here
+  // (would need a new per-project pref structure cleaner_file_tab_order
+  // { pid: [rid] }); for now file-tab drag survives in-session via
+  // the DOM reorder but reverts on page refresh.
+  if (!_installSandboxLiveHandlers._dragPersistInstalled) {
+    _installSandboxLiveHandlers._dragPersistInstalled = true;
+    document.addEventListener("dragend", () => {
+      // Project tabs — strip lives at .rp-rt-proj-tabs-inner; each
+      // tab carries data-sp-project-key with the pid.
+      const projStrip = root.querySelector(".rp-rt-proj-tabs-inner");
+      if (projStrip) {
+        const newOrder = Array.from(projStrip.querySelectorAll(".rp-rt-proj-tab"))
+          .map((t) => t.getAttribute("data-sp-project-key"))
+          .filter(Boolean);
+        if (newOrder.length) {
+          const same = Array.isArray(STATE.openProjects)
+            && newOrder.length === STATE.openProjects.length
+            && newOrder.every((p, i) => p === STATE.openProjects[i]);
+          if (!same) {
+            STATE.openProjects = newOrder;
+            window.rpSavePref?.("cleaner_open_projects", newOrder);
+          }
+        }
+      }
+      // Data table column headers — each draggable <th> carries no
+      // explicit attr, so we walk the thead and extract the column
+      // name from the text content. Chrome columns (rp-rt-th-mode,
+      // rp-rt-rownum-th) are skipped — same exclusion list the binder
+      // uses to decide draggability.
+      const thead = root.querySelector(".rp-rt-table thead tr");
+      if (thead) {
+        const newCols = Array.from(thead.querySelectorAll(
+          "th:not(.rp-rt-th-mode):not(.rp-rt-rownum-th):not(.rp-rt-th-del)"
+        )).map((th) => {
+          // <th>colname <i class="bi ..."></i></th> — clone, strip
+          // icon child, take trimmed text.
+          const clone = th.cloneNode(true);
+          clone.querySelectorAll(".bi").forEach((i) => i.remove());
+          return clone.textContent.trim();
+        }).filter(Boolean);
+        if (newCols.length) {
+          const same = Array.isArray(STATE.colOrder)
+            && newCols.length === STATE.colOrder.length
+            && newCols.every((n, i) => n === STATE.colOrder[i]);
+          if (!same) {
+            STATE.colOrder = newCols;
+            window.rpSavePref?.("cleaner_col_order", newCols);
+          }
+        }
+      }
+    });
+  }
 
   // Cell-edit dispatcher — POST a set_cell step on focusout of any
   // data cell whose textContent actually changed. Cells are marked
@@ -5774,21 +6295,80 @@ function _installSandboxLiveHandlers(root) {
 // summary). Overview.html ships hidden; table.html ships visible. The
 // two helpers flip which one is on screen. The .rp-rt-pager (file paging
 // footer) hides with the table since paging is per-file.
+// Sync toolbar toggle buttons (row-nums, sync/link, open-links) from
+// STATE → DOM. Sandbox sp* handlers flip the .is-active class + the
+// panel modifier on click, but a fresh mount where the user's pref
+// disagrees with the partial's hardcoded `class="rp-btn is-active"`
+// default needs an explicit one-time sync — otherwise first click
+// flips them OUT of agreement instead of into it. Selector picks
+// the buttons by the live handler name in their onclick (avoids
+// adding new ids to the sandbox partial). Idempotent.
+function _syncToolbarToggleStates(root) {
+  // Row numbers — button toggles .is-active + panel.is-hide-rownums.
+  // STATE.showRowNums is true when rownums are VISIBLE.
+  const rnBtn = root.querySelector('[onclick*="cleanerToggleRowNums"]');
+  if (rnBtn) {
+    const on = STATE.showRowNums !== false;
+    rnBtn.classList.toggle("is-active", on);
+    rnBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel) panel.classList.toggle("is-hide-rownums", !on);
+  }
+  // Sync/link toolbar — button toggles .is-active + panel.is-sync-on.
+  // STATE.linkToolbar is true when sync is ON.
+  const syBtn = root.querySelector('[onclick*="cleanerToggleSync"]');
+  if (syBtn) {
+    const on = STATE.linkToolbar === true;
+    syBtn.classList.toggle("is-active", on);
+    syBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel) panel.classList.toggle("is-sync-on", on);
+  }
+  // Rows-per-page pill label + dropdown's is-selected item — toolbar
+  // partial hardcodes "25" as the visible label, but STATE.pageSize
+  // is loaded from prefs.cleaner_page_size at mount. Without this
+  // sync the user sees "25 rows" on the pill even though the actual
+  // /page fetch used 100 (or whatever they saved), which reads as
+  // "the setting didn't stick" until they expand the dropdown.
+  const sz = Number(STATE.pageSize) || 0;
+  if (sz > 0) {
+    const lbl = root.querySelector("[data-sp-rows-label]");
+    if (lbl) lbl.textContent = sz >= 5000 ? "5k" : String(sz);
+    const dd = lbl?.closest(".rp-dd-wrap")?.querySelector(".rp-dd-menu");
+    if (dd) {
+      dd.querySelectorAll(".rp-dd-item").forEach((it) => {
+        const m = /cleanerSetPageSize\((\d+)\)/.exec(it.getAttribute("onclick") || "");
+        const n = m ? Number(m[1]) : null;
+        it.classList.toggle("is-selected", n === sz);
+      });
+    }
+  }
+}
+
 function _showSandboxOverview(root) {
   const tbl = root.querySelector("[data-cleaner-table]");
   const ov  = root.querySelector("[data-cleaner-overview]");
   const pgr = root.querySelector(".rp-rt-pager");
+  const pnl = root.querySelector(".rp-rt-panel");
   if (tbl) tbl.hidden = true;
   if (ov)  ov.hidden  = false;
   if (pgr) pgr.hidden = true;
+  // CSS rule .rp-rt-panel.is-overview-active [data-file-scope] hides
+  // file-scoped toolbar chrome (search, modes, refresh, compute,
+  // rows-per-page, cols picker, filter, tools panel) when there's no
+  // active file. UI prefs (row-nums, sync) stay visible since they
+  // operate on the page-level state, not the file.
+  if (pnl) pnl.classList.add("is-overview-active");
 }
 function _showSandboxTable(root) {
   const tbl = root.querySelector("[data-cleaner-table]");
   const ov  = root.querySelector("[data-cleaner-overview]");
   const pgr = root.querySelector(".rp-rt-pager");
+  const pnl = root.querySelector(".rp-rt-panel");
   if (tbl) tbl.hidden = false;
   if (ov)  ov.hidden  = true;
   if (pgr) pgr.hidden = false;
+  if (pnl) pnl.classList.remove("is-overview-active");
 }
 
 // Paint the Overview pane — project-level file list (one row per file
@@ -5923,6 +6503,13 @@ function _renderSandboxFileTabs(root, files, activeFile) {
   // Wipe previously-rendered file tabs (keep Overview + the + add wrap).
   strip.querySelectorAll(".rp-rtp-tab:not([data-is-overview])")
        .forEach((t) => t.remove());
+  // Overview tab is preserved across renders (not wiped above) — so any
+  // .active class it picked up from a previous spActivateTab(this) click
+  // sticks. If a file is now active, force-clear .active on Overview to
+  // prevent the "two .active tabs, two blue bottom indicators" glitch.
+  // If no file is active (activeFile == null), Overview SHOULD be active.
+  const overviewTab = strip.querySelector(".rp-rtp-tab[data-is-overview]");
+  if (overviewTab) overviewTab.classList.toggle("active", !activeFile);
   const addWrap = strip.querySelector(".rp-tab-add-wrap");
   // Filter out files closed via × — STATE.hiddenFiles survives across
   // mounts via prefs.cleaner_hidden_files, so a closed tab stays
@@ -5966,6 +6553,13 @@ function _renderSandboxFileTabs(root, files, activeFile) {
     if (addWrap) strip.insertBefore(tab, addWrap);
     else         strip.appendChild(tab);
   });
+  // Re-run spInit so controls.js's _bindDragReorder marks each freshly-
+  // emitted .rp-rt-proj-tab as draggable. Idempotent (dataset guards),
+  // and _spDragHooked prevents stacking the document-level dragstart /
+  // dragover / dragend listeners. Without this call the tabs are only
+  // bound at page-load time (when the strip was empty); dynamic
+  // additions miss the binder.
+  window.spInit?.(strip);
 }
 
 // Paint the file's data into the redtable mount. Fetches /files/:rid
@@ -5984,12 +6578,19 @@ async function _paintSandboxTable(root, activeFile) {
     // Page + size come from STATE so the rows-per-page dropdown +
     // (future) pagination buttons drive the fetch. mountSandbox seeds
     // both from prefs.cleaner_page_size + a 1-page reset; cleanerSetPageSize
-    // updates them on user pick.
-    const pg   = Math.max(1, Number(STATE.page) || 1);
-    const sz   = Math.max(1, Number(STATE.pageSize) || _OV_DEFAULT_PAGE_SIZE);
+    // updates them on user pick. STATE.sorts goes as a JSON-encoded
+    // `sorts` param (backend's PageQuery decodes it).
+    const pg = Math.max(1, Number(STATE.page) || 1);
+    const sz = Math.max(1, Number(STATE.pageSize) || _OV_DEFAULT_PAGE_SIZE);
+    const pageParams = new URLSearchParams();
+    pageParams.set("page", String(pg));
+    pageParams.set("size", String(sz));
+    if (Array.isArray(STATE.sorts) && STATE.sorts.length) {
+      pageParams.set("sorts", JSON.stringify(STATE.sorts));
+    }
     [detail, pageRes] = await Promise.all([
       api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}`),
-      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?page=${pg}&size=${sz}`),
+      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?${pageParams.toString()}`),
     ]);
   } catch (err) {
     console.error("[cleaner] file/page fetch failed", err);
@@ -6062,6 +6663,42 @@ async function _paintSandboxTable(root, activeFile) {
   // click. Bulk-delete fires from the toolbar trash pill (composite
   // onclick: spSetMode(this);cleanerMaybeBulkDelete()), which is the
   // single canonical entry point for "delete selected".
+  // Visible columns = full set minus STATE.hiddenCols (a Set of names),
+  // sorted by STATE.colOrder (the user's drag-reordered column order,
+  // persisted as cleaner_col_order pref). We preserve each visible
+  // column's ORIGINAL index so the body loop can still look up the
+  // right row value — row[] is ordered by the backend's full column
+  // list, not the user's visual order.
+  //
+  // STATE.colOrder may contain names from other files (it's a global
+  // pref); unknown names silently drop out of the sort key, and any
+  // column not in the saved order falls to the end (so new schema
+  // columns become visible without losing the user's prior order).
+  const _hiddenSet = STATE.hiddenCols instanceof Set ? STATE.hiddenCols : new Set();
+  const _colOrderMap = (Array.isArray(STATE.colOrder) && STATE.colOrder.length)
+    ? new Map(STATE.colOrder.map((name, i) => [name, i]))
+    : null;
+  const visibleColumns = columns
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !_hiddenSet.has(c.name))
+    .sort(({ c: a }, { c: b }) => {
+      if (!_colOrderMap) return 0;
+      const ai = _colOrderMap.has(a.name) ? _colOrderMap.get(a.name) : Number.MAX_SAFE_INTEGER;
+      const bi = _colOrderMap.has(b.name) ? _colOrderMap.get(b.name) : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
+
+  // Sort chrome — each TH renders an arrow icon reflecting STATE.sorts:
+  // bi-arrow-up (asc) / bi-arrow-down (desc) / bi-arrow-down-up (no sort).
+  // Multi-sort shows a rank badge (1, 2, 3…) so the user can tell
+  // which key breaks ties. cleanerSortBy(col, event) on click cycles
+  // dir / chains with shift / removes with alt+shift.
+  const sortRank = new Map(
+    (Array.isArray(STATE.sorts) ? STATE.sorts : []).map((k, i) => [k.col, { dir: k.dir, rank: i + 1 }])
+  );
+  const showRanks = sortRank.size > 1;
+  const widths = (STATE.colWidths && typeof STATE.colWidths === "object") ? STATE.colWidths : {};
+
   const theadHtml = "<tr>"
     + '<th class="rp-rt-th-mode">'
     +   '<input type="checkbox" onclick="cleanerSelectAllRows(this)">'
@@ -6070,9 +6707,29 @@ async function _paintSandboxTable(root, activeFile) {
     +   '<i class="bi bi-trash rp-row-trash rp-master-trash"></i>'
     + '</th>'
     + '<th class="rp-rt-rownum-th">#</th>'
-    + columns.map((c) =>
-        `<th class="rp-rt-th-sortable">${_escHtml(c.name)} <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>`
-      ).join("")
+    + visibleColumns.map(({ c }) => {
+        const name   = _escAttr(c.name);
+        const entry  = sortRank.get(c.name);
+        const cls    = `rp-rt-th-sortable${entry ? " rp-rt-sort-th" : ""}`;
+        const arrow  = entry
+          ? ` <i class="bi bi-arrow-${entry.dir === "desc" ? "down" : "up"} rp-rt-sort-ico rp-rt-sort-active"></i>${showRanks ? `<span class="rp-rt-sort-rank">${entry.rank}</span>` : ""}`
+          : ` <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`;
+        const w      = Number(widths[c.name]);
+        const wStyle = Number.isFinite(w) && w > 0
+          ? ` style="width:${w}px;min-width:${w}px"` : "";
+        // data-col carries the canonical column name so _clColResize +
+        // the dragend reorder reader both read from the same source.
+        // .rp-rt-col-resize span is the resize grab handle (CSS-styled
+        // by components/redtable.css); its onclick stopPropagation
+        // prevents the parent TH's sort onclick firing on a no-drag
+        // click. draggable="false" keeps it out of the column-reorder
+        // drag (which fires on the parent TH).
+        return `<th data-col="${name}" class="${cls}"${wStyle}`
+          + ` onclick="cleanerSortBy('${name}', event)">`
+          +   _escHtml(c.name) + arrow
+          +   '<span class="rp-rt-col-resize" onclick="event.stopPropagation()" draggable="false"></span>'
+          + '</th>';
+      }).join("")
     + "</tr>";
 
   // data-row-idx is a GLOBAL row index (page offset added) so the
@@ -6098,7 +6755,11 @@ async function _paintSandboxTable(root, activeFile) {
       +   '<i class="bi bi-trash rp-row-trash"></i>'
       + '</td>'
       + `<td class="rp-rt-rownum-td">${(globalRow + 1).toLocaleString()}</td>`
-      + columns.map((c, i) => {
+      + visibleColumns.map(({ c, i }) => {
+          // i is the column's ORIGINAL index in the full schema —
+          // row[] is ordered by the backend's full column list, not
+          // the visible subset, so we always index into row with the
+          // original i (NOT the visible-list position).
           const v = row[i];
           return `<td data-row-idx="${globalRow}" data-col-name="${_escAttr(c.name)}">${_escHtml(v ?? "")}</td>`;
         }).join("")
@@ -6112,6 +6773,13 @@ async function _paintSandboxTable(root, activeFile) {
   // toggling lands later — currently the checkboxes are inert).
   _populateColsPicker(root, columns);
 
+  // Filter panel — repopulate each predicate row's column + op selects
+  // from the just-loaded STATE.columns (set above). User-selected
+  // values are preserved across repopulates if the column still
+  // exists; a renamed/dropped column silently falls back to the
+  // placeholder. See _populateFilterPredicates JSDoc for the contract.
+  _populateFilterPredicates(root);
+
   // Paging info — server time too, useful for quick perf signal.
   const info = root.querySelector("[data-cleaner-rows-info]");
   if (info) {
@@ -6121,6 +6789,41 @@ async function _paintSandboxTable(root, activeFile) {
     } else {
       info.textContent = "0 rows";
     }
+  }
+
+  // Pagination buttons — totalPages comes directly from pageRes.pages
+  // (backend's Page<T> struct precomputes it from total / size). Falls
+  // back to ceil(total/size) if pages is missing for any reason.
+  // Clamp STATE.page if it overshot (e.g. user was on page 4, applied
+  // a filter that cuts results to 2 pages → STATE.page snaps to 2 so
+  // the active marker shows on the last page instead of being lost).
+  // Re-fetch isn't triggered here; next user navigation handles it.
+  const totPages = Number(pageRes.pages)
+    || Math.max(1, Math.ceil(Number(pageRes.total ?? rows.length) / (Number(pageRes.size) || rows.length || 1)));
+  if (Number(STATE.page) > totPages) STATE.page = totPages;
+  const pagesEl = root.querySelector("[data-cleaner-rows-pages]");
+  if (pagesEl) pagesEl.innerHTML = _buildPagerHtml(STATE.page || 1, totPages);
+
+  // Re-run spInit so controls.js _bindDragReorder marks the freshly-
+  // emitted data <th>s as draggable + stamps data-sp-orig-idx (used
+  // by spColsReset to restore DB order). Idempotent — chrome <th>s
+  // (rp-rt-th-mode, rp-rt-rownum-th) are excluded by the binder.
+  window.spInit?.(root);
+
+  // Bind the per-TH .rp-rt-col-resize grab handles. _clColResize
+  // helpers are module-scope (originally for legacy mount path) and
+  // take a ctx with `.set(name, px)` to persist the new width. The
+  // sandbox ctx writes to STATE.colWidths + the cleaner_col_widths
+  // pref so resizes survive page refresh + tab switches.
+  const _thead = host.querySelector(".rp-rt-table thead");
+  if (_thead && typeof _clInitColResize === "function") {
+    _clInitColResize(_thead, {
+      set(name, px) {
+        if (!STATE.colWidths || typeof STATE.colWidths !== "object") STATE.colWidths = {};
+        STATE.colWidths[name] = px;
+        window.rpSavePref?.("cleaner_col_widths", STATE.colWidths);
+      },
+    });
   }
 }
 
@@ -6185,6 +6888,10 @@ function _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid) {
     if (addWrap) strip.insertBefore(tab, addWrap);
     else         strip.appendChild(tab);
   });
+  // Re-run spInit so controls.js _bindDragReorder marks each freshly-
+  // emitted .rp-rt-proj-tab as draggable. Same idempotency notes as
+  // _renderSandboxFileTabs.
+  window.spInit?.(strip);
 }
 
 // Paint the open-project picker grid from the user's projects list,
@@ -6232,6 +6939,115 @@ function _populateOpenProjectPicker(root, projects, openList) {
 // reorder toggling isn't wired yet; for now this is a structural mirror
 // of the sandbox's static demo so the dropdown opens to real columns
 // instead of an empty rectangle.
+// Pagination button strip — Django-style: ≤7 pages show every page;
+// >7 collapse to [1, …, cur-1, cur, cur+1, …, last] with .rp-rt-pg-gap
+// "…" spans between distant pages. Plus prev / next chevrons that
+// disable at the boundaries. Library CSS already styles the buttons
+// (redtable.css §pagination) — we just emit the markup.
+//
+// Each numeric button has onclick="cleanerSetPage(N)"; the live
+// handler validates + sets STATE.page + repaints. At 1 page we still
+// render a single "1" button (inert / disabled) so the pager strip
+// is visibly present — without it, the chrome looks broken on small
+// files (<= pageSize rows) and there's no way to tell wiring is alive.
+function _buildPagerHtml(curPage, totalPages) {
+  if (totalPages <= 1) {
+    return '<button class="rp-rt-pg on" disabled>1</button>';
+  }
+  const set = new Set([1, totalPages, curPage]);
+  if (curPage > 1) set.add(curPage - 1);
+  if (curPage < totalPages) set.add(curPage + 1);
+  // Near-start / near-end widening — keeps a couple extra pages
+  // visible at the edge for quick hops to page 2 / second-from-last.
+  if (totalPages <= 7) {
+    for (let i = 2; i < totalPages; i++) set.add(i);
+  } else {
+    if (curPage <= 3) { set.add(2); set.add(3); set.add(4); }
+    if (curPage >= totalPages - 2) {
+      set.add(totalPages - 1);
+      set.add(totalPages - 2);
+      set.add(totalPages - 3);
+    }
+  }
+  const sorted = [...set]
+    .filter((n) => n >= 1 && n <= totalPages)
+    .sort((a, b) => a - b);
+  const nums = [];
+  let last = 0;
+  for (const n of sorted) {
+    if (last && n > last + 1) nums.push("gap");
+    nums.push(n);
+    last = n;
+  }
+  const prevDis = curPage <= 1 ? " disabled" : "";
+  const nextDis = curPage >= totalPages ? " disabled" : "";
+  const prev = `<button class="rp-rt-pg rp-rt-pg-nav"${prevDis} onclick="cleanerSetPage(${curPage - 1})" title="Previous page">‹</button>`;
+  const next = `<button class="rp-rt-pg rp-rt-pg-nav"${nextDis} onclick="cleanerSetPage(${curPage + 1})" title="Next page">›</button>`;
+  const middle = nums.map((n) => {
+    if (n === "gap") return '<span class="rp-rt-pg-gap">…</span>';
+    const on = n === curPage ? " on" : "";
+    return `<button class="rp-rt-pg${on}" onclick="cleanerSetPage(${n})">${n}</button>`;
+  }).join("");
+  return prev + middle + next;
+}
+
+// Filter-panel predicate row populator — fills the column + op
+// .rp-dd-menu of every .rp-rt-fb-row in #cleaner-filter-panel with
+// .rp-dd-item children built from STATE.columns / FILTER_OPS. Run
+// after every _paintSandboxTable so column schema changes (cast,
+// drop, rename) propagate into open filter rows.
+//
+// Custom .rp-dd-wrap widgets (not native <select>) — chosen value
+// lives in wrap.dataset.value, visible label in [data-dd-lbl] inside
+// the trigger button. Selected value is preserved across repopulates
+// if it's still a valid choice (column still exists / op still in
+// FILTER_OPS); silently drops to placeholder otherwise.
+//
+// FILTER_OPS is the module-scope 16-op vocabulary mirrored from the
+// backend's Rust filter expression set — same source the legacy
+// _appendFilterRow uses, so sandbox + legacy paths stay in sync.
+function _populateFilterPredicates(root) {
+  const panel = root.querySelector("#cleaner-filter-panel");
+  if (!panel) return;
+  const cols = Array.isArray(STATE.columns) ? STATE.columns : [];
+  const colItems = cols.map((c) => {
+    const v = _escAttr(c.name);
+    const labelMain = _escHtml(c.name);
+    const labelDtype = c.dtype ? ` · ${_escHtml(c.dtype)}` : "";
+    return `<div class="rp-dd-item" data-value="${v}" onclick="cleanerFbDdPick(this)">${labelMain}${labelDtype}</div>`;
+  }).join("");
+  const opItems = FILTER_OPS.map(([v, l]) =>
+    `<div class="rp-dd-item" data-value="${_escAttr(v)}" onclick="cleanerFbDdPick(this)">${_escHtml(l)}</div>`
+  ).join("");
+
+  const _hydrate = (wrap, itemsHtml) => {
+    const menu = wrap.querySelector(".rp-dd-menu");
+    if (!menu) return;
+    menu.innerHTML = itemsHtml;
+    // Mirror is-selected onto whichever item matches the wrap's
+    // currently-chosen value (kept across repopulates). If the saved
+    // value no longer exists in the new options, clear it + reset the
+    // label back to the placeholder.
+    const cur = wrap.dataset.value || "";
+    if (cur) {
+      const hit = menu.querySelector(`.rp-dd-item[data-value="${CSS.escape(cur)}"]`);
+      if (hit) {
+        hit.classList.add("is-selected");
+      } else {
+        // Stale — column was dropped or renamed.
+        wrap.dataset.value = "";
+        const lbl = wrap.querySelector("[data-dd-lbl]");
+        if (lbl) {
+          lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+        }
+      }
+    }
+  };
+
+  panel.querySelectorAll(".rp-rt-fb-row .rp-dd-wrap.rp-rt-fb-col").forEach((wrap) => _hydrate(wrap, colItems));
+  panel.querySelectorAll(".rp-rt-fb-row .rp-dd-wrap.rp-rt-fb-op").forEach((wrap) => _hydrate(wrap, opItems));
+}
+
 function _populateColsPicker(root, columns) {
   const host = root.querySelector("[data-cleaner-cols-picker]");
   if (!host) return;
@@ -6239,11 +7055,19 @@ function _populateColsPicker(root, columns) {
     host.innerHTML = '<div class="rp-form-meta" style="padding:0.5rem;font-style:italic">No columns.</div>';
     return;
   }
-  host.innerHTML = columns.map((c) =>
-    '<label class="rp-dd-checkbox"><input type="checkbox" checked /> '
-    + _escHtml(c.name)
-    + '</label>'
-  ).join("");
+  // Initial checked state reads STATE.hiddenCols so a remounted page
+  // shows persisted hides correctly. data-cleaner-col carries the
+  // column name for cleanerToggleCol to read on click.
+  const hidden = STATE.hiddenCols instanceof Set ? STATE.hiddenCols : new Set();
+  host.innerHTML = columns.map((c) => {
+    const name    = _escAttr(c.name);
+    const checked = hidden.has(c.name) ? "" : " checked";
+    return '<label class="rp-dd-checkbox">'
+      +     `<input type="checkbox" data-cleaner-col="${name}"${checked}`
+      +     ' onclick="cleanerToggleCol(this)" /> '
+      +     _escHtml(c.name)
+      + '</label>';
+  }).join("");
 }
 
 // Card-click handler — close the picker, then use the sandbox add-tab

@@ -14,17 +14,26 @@
       <button class="rp-btn" onclick="closeModal('save-view')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
     </div>
 
+    <!-- Default value populated by JS on open from STATE.summary
+         (active file's display_name + "_v2.csv" or similar suffix);
+         placeholder shown when nothing's prefilled. Hardcoded sandbox
+         demo value (raw_dossier_500_sentinels_v2.csv) was removed —
+         users opening Save view in a fresh session would otherwise
+         see someone else's filename pre-filled. -->
     <label class="rp-form-row">
       <span class="rp-form-lbl">New file name</span>
-      <input type="text" class="rp-input" value="raw_dossier_500_sentinels_v2.csv"
+      <input type="text" class="rp-input" data-cleaner-save-view-name
+             placeholder="new-file-name.csv"
              onkeydown="if (event.key==='Enter') { event.preventDefault(); closeModal('save-view'); }" />
     </label>
 
-    <div class="rp-form-meta">
-      <span class="rp-view-chip"><i class="bi bi-layout-three-columns"></i>14/17</span>
-      <span class="rp-view-chip"><i class="bi bi-stack"></i>504 rows</span>
-      <span class="rp-view-chip"><i class="bi bi-funnel-fill"></i>2 filters</span>
-    </div>
+    <!-- Chips summarise what's about to be saved (visible-cols ratio,
+         row count, filter count). Painted by JS on open from STATE
+         (visibleCols / total cols, pageData.total or filtered count,
+         savedFilters for current rid). Hardcoded sandbox values
+         (14/17, 504 rows, 2 filters) were removed — they'd lie about
+         the actual view being saved. -->
+    <div class="rp-form-meta" data-cleaner-save-view-chips></div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('save-view')">Cancel</button>

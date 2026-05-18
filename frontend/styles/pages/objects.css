@@ -618,6 +618,24 @@ html[data-theme="light"] #page-objects .rp-rt-table tbody tr {
   color: color-mix(in srgb, var(--text) 80%, transparent);
   font-size: 0.9375rem;
   font-weight: 400;
+  /* #page-objects sets line-height: 1.5 globally (Open Sans 300 body
+     rhythm). Inherited into <td>, that lifts each cell to ~1.4rem per
+     text line — combined with rich-content cells (cleanness bar +
+     label, name+icon, action buttons) the visual height busts past
+     the tr's 2.5rem constraint and rows render visibly stretched.
+     Pin the cell line-height to 1.2 so content fits the row; vendored
+     vertical-align: middle re-declared for safety since the per-page
+     override resets to UA default in some browsers. */
+  line-height: 1.2;
+  vertical-align: middle;
+}
+/* The same rule for any nested flex / inline-flex wrapper live's
+   renderTable emits (.rp-obj-name, .rp-obj-clean, .obj-row-open-cell
+   buttons) — clamp the contents' line-box so they don't push the row. */
+#page-objects .rp-rt-table tbody td .rp-obj-name,
+#page-objects .rp-rt-table tbody td .rp-obj-clean,
+#page-objects .rp-rt-table tbody td .rp-obj-badge {
+  line-height: 1.2;
 }
 /* Light mode — full --text ink (matches the title color above); the
    80% mix that suits dark over the cobalt gradient reads as washed
@@ -633,9 +651,15 @@ html[data-theme="light"] #page-objects .rp-rt-table tbody td {
 
 /* Mode column — locked to 1.5rem wide so the icon overlays (select
    circle, delete trash) stay centered. Sandbox sets both min/max +
-   width + overflow:hidden so the cell can't grow with longer icons. */
+   width + overflow:hidden so the cell can't grow with longer icons.
+   The `:not(.obj-row-open-cell)` guard prevents this clamp from
+   hitting live renderTable's leading action cell — that <td> holds
+   3 inline action anchors at 1.75rem each (~5.5rem total wide), and
+   max-width 1.5rem squeezed them into 3 wrapped lines, stretching
+   the row to ~5rem tall. obj-row-open-cell has its own width:1px
+   rule (collapses to content) and white-space:nowrap below. */
 #page-objects .rp-rt-table th.rp-rt-th-mode,
-#page-objects .rp-rt-table tbody td:first-child {
+#page-objects .rp-rt-table tbody td:first-child:not(.obj-row-open-cell) {
   width: 1.5rem;
   min-width: 1.5rem;
   max-width: 1.5rem;

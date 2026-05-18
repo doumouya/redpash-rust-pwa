@@ -1600,6 +1600,115 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
 .rp-btn.is-spinning .bi {
   animation: cleaner-score-spin .7s linear infinite;
 }
+
+/* Row-numbers toggle — sandbox spToggleRowNums drops .is-hide-rownums
+   on the panel when the toolbar button is off. Vendored rule lives in
+   spreadsheet-paper/main.css which the app's import chain doesn't
+   pull, so we mirror it here. color:transparent (rather than display
+   :none) keeps the # cells in flow so the header band stays
+   continuous and column widths don't jump on toggle. */
+.rp-rt-panel.is-hide-rownums .rp-rt-rownum-th,
+.rp-rt-panel.is-hide-rownums .rp-rt-rownum-td {
+  color: transparent;
+}
+
+/* File-scope gating — hide every [data-file-scope] element when the
+   panel is on Overview (no active file). Toolbar buttons that need
+   STATE.rid (search, mode triplet, refresh, report-from-file, compute
+   cleanness, rows-per-page, cols picker, filter, tools panel) carry
+   the attr; UI prefs (row-nums, sync, link-toolbar) and project-scoped
+   actions (Open Dashboard) don't. Sandbox _showSandboxOverview /
+   _showSandboxTable add/remove .is-overview-active on the panel. */
+.rp-rt-panel.is-overview-active [data-file-scope] {
+  display: none;
+}
+
+/* Filter predicate row — op + value share a grid track. Library
+   default is 1fr / 1fr (50/50); cleaner overrides to 3fr / 7fr so
+   the value input — which usually holds longer content than the op
+   label — gets the larger column. min-width: 0 on the children is
+   the standard CSS-grid escape: browsers give children an implicit
+   min-width: auto computed from the widest content, which beats
+   the fr unit and would push the value out of the predicate card. */
+.rp-rt-filter-panel .rp-rt-fb-selects {
+  grid-template-columns: 3fr 7fr;
+}
+.rp-rt-fb-selects > .rp-rt-fb-op,
+.rp-rt-fb-selects > .rp-rt-fb-val {
+  min-width: 0;
+}
+
+/* Custom dropdown widgets inside the predicate row (replaces native
+   <select> so the open popup gets the sandbox's frosted-glass
+   .rp-dd-menu treatment). Library .rp-dd-wrap is inline-flex by
+   default — override to fill the column / grid cell so the col
+   dropdown stays full-width and the op dropdown takes its 3fr slot.
+   .rp-rt-fb-dd-btn is the trigger button — same glass recipe the
+   library applies to .rp-rt-fb-col + .rp-rt-fb-val + .rp-rt-fb-selects
+   select, with a chevron pinned to the right via flex layout. */
+.rp-rt-filter-panel .rp-dd-wrap.rp-rt-fb-col,
+.rp-rt-filter-panel .rp-dd-wrap.rp-rt-fb-op {
+  display: block;
+  width: 100%;
+}
+.rp-rt-fb-dd-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+  width: 100%;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rp-rt-fb-dd-btn:hover {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+.rp-rt-fb-dd-btn:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.rp-rt-fb-dd-btn > [data-dd-lbl] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.rp-rt-fb-dd-btn > .bi {
+  font-size: 0.625rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Predicate dropdown menu positioning override — the library's
+   .rp-dd-menu uses position:fixed + spDdToggle's _positionDdCenter
+   which writes viewport-coordinate inline top/left. Inside the filter
+   panel that breaks: .rp-rt-filter-panel carries transform:translateX(…)
+   for its slide-in (filter-panel-sandbox.css:37) which makes the panel
+   the containing block for any fixed descendant — so the menu's
+   "top: 320px" lands at panel-top + 320px instead of viewport-top,
+   pushing it ~1m below the trigger (same containing-block trap as the
+   .rp-rt-panel animation gotcha documented in sandbox-integration.md).
+   Scope-override: switch to absolute positioning relative to the
+   .rp-dd-wrap parent (already position:relative per library) and zero
+   out the inline coords via !important so _positionDdCenter's writes
+   don't fight the layout. min-width:100% keeps the menu at least as
+   wide as its trigger button. */
+.rp-rt-filter-panel .rp-dd-menu {
+  position: absolute !important;
+  top: calc(100% + 0.25rem) !important;
+  left: 0 !important;
+  right: auto !important;
+  min-width: 100%;
+}
 @keyframes cleaner-score-spin { to { transform: rotate(360deg); } }
 
 /* Sync-toggle "you-are-here" pulse — fires from cleanerToggleLink via

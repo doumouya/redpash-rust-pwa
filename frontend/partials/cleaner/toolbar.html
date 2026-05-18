@@ -19,9 +19,9 @@
           onclick="spToggle('cleaner-filter-panel')">
     <i class="bi bi-funnel"></i>
   </button>
-  <input class="rp-rt-search" type="search" placeholder="Search rows…" />
+  <input class="rp-rt-search" type="search" placeholder="Search rows…" data-file-scope />
 
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit" title="Edit mode" onclick="spSetMode(this)">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit" data-file-scope title="Edit mode" onclick="spSetMode(this)">
     <i class="bi bi-pencil"></i>
   </button>
   <!-- Order is Edit / Select / [chip] / Delete. Select-mode produces
@@ -29,16 +29,16 @@
        action — no separate bulk-delete button; clicking Delete with
        a non-zero selection deletes that batch. One trash icon, not
        two. data-count drives the chip's visibility (hidden at 0). -->
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select" title="Select mode" onclick="spSetMode(this)">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select" data-file-scope title="Select mode" onclick="spSetMode(this)">
     <i class="bi bi-check2-square"></i>
   </button>
-  <span class="rp-rt-sel-chip" data-count="0"><i class="bi bi-check2-square"></i> 0 selected</span>
+  <span class="rp-rt-sel-chip" data-count="0" data-file-scope><i class="bi bi-check2-square"></i> 0 selected</span>
   <!-- Composite: spSetMode flips .is-mode-delete on the panel (and
        animates selected rows out if a selection exists, locally only).
        cleanerMaybeBulkDelete POSTs drop_rows with the selected global
        indices when STATE.selected is non-empty; no-op otherwise so the
        button still works as a plain mode toggle on empty selections. -->
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this);cleanerMaybeBulkDelete()">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" data-file-scope title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this);cleanerMaybeBulkDelete()">
     <i class="bi bi-trash"></i>
   </button>
 
@@ -47,7 +47,7 @@
        the full fetch duration via the broadened CSS rule + re-paints
        via _paintSandboxTable. spRefresh's class removal at 600ms is
        harmless since the live half uses its own .is-spinning. -->
-  <button class="rp-btn" title="Refresh" onclick="spRefresh(this);cleanerRefresh(this)">
+  <button class="rp-btn" data-file-scope title="Refresh" onclick="spRefresh(this);cleanerRefresh(this)">
     <i class="bi bi-arrow-clockwise"></i>
   </button>
 
@@ -62,8 +62,10 @@
        semantic fallback, but the onclick is the source of truth: it
        builds the real hash from STATE.rid / STATE.project and opens
        in a new tab. preventDefault + return false stop the placeholder
-       href from also navigating. -->
+       href from also navigating. Report is per-file (data-file-scope);
+       Dashboard is per-project (stays visible on Overview). -->
   <a class="rp-btn" href="#/reports" target="_blank" rel="noopener"
+     data-file-scope
      title="New report from this file (opens in new tab)"
      onclick="return cleanerOpenReportForFile(event)">
     <i class="bi bi-bar-chart-fill"></i>
@@ -78,32 +80,44 @@
        affordance), cleanerScoreFile POSTs /files/:rid/cleanness and
        refreshes the header widget + file-tab data-cleanness via
        _afterHistory. -->
-  <button class="rp-btn" title="Compute cleanness for this file" onclick="spClean(this);cleanerScoreFile(this)">
+  <button class="rp-btn" data-file-scope title="Compute cleanness for this file" onclick="spClean(this);cleanerScoreFile(this)">
     <i class="bi bi-magic"></i>
   </button>
-  <!-- Clear score — DELETE /files/:rid/cleanness, same refresh path
-       as compute. spClean reused for the spin since the action shape
-       is identical (one icon-button → server round-trip → metadata
-       update). -->
-  <button class="rp-btn" title="Clear score for this file" onclick="spClean(this);cleanerClearScore(this)">
-    <i class="bi bi-clipboard-minus"></i>
-  </button>
+  <!-- Clear score deliberately removed: backend's hydrate() always
+       recomputes cleanness on cache miss + writes it back to the DB
+       (routes/files.rs hydrate line ~1174-1187), so a "clear" never
+       persists — the next /files/:rid call (e.g. from
+       _paintSandboxTable's refresh) reinstates a recomputed value
+       within the same tick. Reintroducing a Clear button requires a
+       backend change to make hydrate respect an explicit NULL in
+       the DB. cleanerClearScore handler dropped alongside since
+       nothing else calls it. -->
 
   <!-- Rows-per-page — composite on each item: spDdSelectRows flips
        the DD's is-selected + writes the visible rows-label; the live
        cleanerSetPageSize updates STATE.pageSize, resets STATE.page to
        1, persists the pref, and re-fetches /page with the new size. -->
-  <div class="rp-dd-wrap">
+  <!-- Rows-per-page — values mirror the legacy cleaner.live.html dropdown
+       (10/25/50/100/500/1500/3000/5000), NOT the Objects-page set
+       (10/25/50/100/250) that this partial accidentally inherited when
+       the dropdown component was copy-pasted. Cleaning workflows hit
+       large CSVs; users want bigger pages. Default selected = 25
+       (matches _OV_DEFAULT_PAGE_SIZE in cleaner.js). _PAGE_SIZE_MAX
+       caps at 5000, so the last option is the "max" label. -->
+  <div class="rp-dd-wrap" data-file-scope>
     <button class="rp-rt-pill-btn" title="Rows per page" onclick="spDdToggle(this)">
-      <span data-sp-rows-label>50</span><span class="rp-rt-pill-unit"> rows</span>
+      <span data-sp-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
       <i class="bi bi-chevron-down"></i>
     </button>
     <div class="rp-dd-menu" role="menu">
       <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10);cleanerSetPageSize(10)">10 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 25);cleanerSetPageSize(25)">25 rows</div>
-      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 50);cleanerSetPageSize(50)">50 rows</div>
+      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 25);cleanerSetPageSize(25)">25 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 50);cleanerSetPageSize(50)">50 rows</div>
       <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100);cleanerSetPageSize(100)">100 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250);cleanerSetPageSize(250)">250 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 500);cleanerSetPageSize(500)">500 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 1500);cleanerSetPageSize(1500)">1500 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 3000);cleanerSetPageSize(3000)">3000 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 5000);cleanerSetPageSize(5000)">5k rows (max)</div>
     </div>
   </div>
 
@@ -114,7 +128,7 @@
        the escape hatch when a user rearranges past the point of
        remembering what the default was. Mockup checks are inert;
        Pass D toggles real STATE.hiddenCols + repaints the table. -->
-  <div class="rp-dd-wrap">
+  <div class="rp-dd-wrap" data-file-scope>
     <button class="rp-btn" title="Columns" onclick="spDdToggle(this)">
       <i class="bi bi-layout-three-columns"></i>
     </button>

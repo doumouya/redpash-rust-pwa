@@ -70,66 +70,40 @@
         </div>
       </div>
 
-      <!-- Data Types — collapsed by default, with coloured badges. -->
+      <!-- Data Types — collapsed by default, with coloured badges.
+           Painted by JS from the active file's columns_meta (dtype per
+           column) into [data-cleaner-dtype-list]. Hardcoded sandbox
+           demo rows (Numero_dossier_ID, Client, date.ouverture, etc.)
+           were removed — they flashed French fake column names every
+           time the user expanded this section. Render contract: one
+           .rp-rtp-dtype-row per column; badge class is .is-text /
+           .is-date / .is-mixed / .is-num matching the dtype family. -->
       <div class="rp-rt-panel-sect" onclick="spToggleSection(this)">
         <span class="rp-rt-panel-sect-lbl">Data Types</span>
         <i class="bi bi-chevron-down rp-rt-panel-sect-chevron"></i>
       </div>
       <div class="rp-rt-panel-sect-body">
-        <div class="rp-rtp-dtype-row">
-          <span class="rp-rtp-dtype-name">Numero_dossier_ID</span>
-          <span class="rp-rtp-dtype-badge is-text">text</span>
-        </div>
-        <div class="rp-rtp-dtype-row">
-          <span class="rp-rtp-dtype-name">Client</span>
-          <span class="rp-rtp-dtype-badge is-text">text</span>
-        </div>
-        <div class="rp-rtp-dtype-row">
-          <span class="rp-rtp-dtype-name">date.ouverture</span>
-          <span class="rp-rtp-dtype-badge is-date">date</span>
-        </div>
-        <div class="rp-rtp-dtype-row">
-          <span class="rp-rtp-dtype-name">date.de.survenance</span>
-          <span class="rp-rtp-dtype-badge is-date">date</span>
-        </div>
-        <div class="rp-rtp-dtype-row">
-          <span class="rp-rtp-dtype-name">TOP.D.R</span>
-          <span class="rp-rtp-dtype-badge is-mixed">mixed</span>
+        <div data-cleaner-dtype-list class="rp-form-meta"
+             style="padding:0.5rem;font-style:italic">
+          Open a file to see column data types.
         </div>
       </div>
 
-      <!-- Join Preparation — collapsed by default. -->
+      <!-- Join Preparation — collapsed by default. Painted by JS into
+           [data-cleaner-join-prep] when the join-detector lands;
+           surfaces probable key columns matched against OTHER files in
+           the same project (column name + match % + match count).
+           Hardcoded sandbox demo rows ("raw_dossier_500_sentinels.csv"
+           + Numero_dossier_ID 98% / Matricule.de.traitement 72%) were
+           removed — they showed fake match scores against a fake file. -->
       <div class="rp-rt-panel-sect" onclick="spToggleSection(this)">
         <span class="rp-rt-panel-sect-lbl">Join Preparation</span>
         <i class="bi bi-chevron-down rp-rt-panel-sect-chevron"></i>
       </div>
       <div class="rp-rt-panel-sect-body">
-        <div class="rp-rtp-join-file">
-          <div class="rp-rtp-join-file-hdr"><i class="bi bi-file-earmark-text"></i> raw_dossier_500_sentinels.csv</div>
-          <div class="rp-rtp-join-items">
-            <button class="rp-rtp-join-item">
-              <span class="rp-rtp-join-cols">
-                <span class="rp-rtp-join-col">Numero_dossier_ID</span>
-                <i class="bi bi-arrow-left-right"></i>
-                <span class="rp-rtp-join-col">Numero_dossier_ID</span>
-              </span>
-              <span class="rp-rtp-join-meta">
-                <span class="rp-rtp-join-score">98%</span>
-                <span class="rp-rtp-join-matches">493 matches</span>
-              </span>
-            </button>
-            <button class="rp-rtp-join-item">
-              <span class="rp-rtp-join-cols">
-                <span class="rp-rtp-join-col">Matricule.de.traitement</span>
-                <i class="bi bi-arrow-left-right"></i>
-                <span class="rp-rtp-join-col">Matricule.de.traitement</span>
-              </span>
-              <span class="rp-rtp-join-meta">
-                <span class="rp-rtp-join-score">72%</span>
-                <span class="rp-rtp-join-matches">362 matches</span>
-              </span>
-            </button>
-          </div>
+        <div data-cleaner-join-prep class="rp-form-meta"
+             style="padding:0.5rem;font-style:italic">
+          Join suggestions across other files in this project land here.
         </div>
       </div>
 
