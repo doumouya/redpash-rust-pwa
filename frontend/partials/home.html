@@ -188,8 +188,29 @@
   <div class="modal-overlay" id="modal-ul-review"
        onclick="closeModal('ul-review')" role="dialog" aria-modal="true">
 
-    <!-- Single-file panel — populated by renderSinglePanel() -->
-    <div class="rp-fr-panel rp-fr-panel--modal" id="ul-review" onclick="event.stopPropagation()">
+    <!-- Sandbox modal shell — wraps both single + multi panels in the
+         same chrome cleaner/objects modals use. The outer .modal-overlay
+         class stays (its position:fixed covers the viewport on home),
+         only the inner shell adopts sandbox vocabulary. Width sized for
+         the file-review's data-density (donut + completeness bars +
+         preview table). file-review.js still finds #ul-review /
+         #ul-review-multi inside this wrapper by id. -->
+    <div class="rp-modal rp-modal--ul-review" onclick="event.stopPropagation()">
+      <div class="rp-modal-hdr">
+        <div>
+          <h2 class="rp-modal-ttl">File review</h2>
+          <div class="rp-modal-sub">Confirm the file analysis before opening in the Data Cleaner.</div>
+        </div>
+        <button class="rp-btn" onclick="closeModal('ul-review')"
+                aria-label="Close" title="Close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <!-- Single-file panel — populated by renderSinglePanel().
+           Dropped rp-fr-panel--modal modifier so the panel doesn't
+           paint its own border/bg/sizing on top of the sandbox shell. -->
+      <div class="rp-fr-panel" id="ul-review" onclick="event.stopPropagation()">
 
       <div class="rp-fr-filebar">
         <div class="rp-fr-file-ico"><i class="bi bi-file-earmark-text"></i></div>
@@ -292,8 +313,10 @@
       </div>
     </div>
 
-    <!-- Multi-file panel — buildMultiModal() fills the tabs / body -->
-    <div class="rp-fr-panel rp-fr-panel--modal" id="ul-review-multi" style="display:none" onclick="event.stopPropagation()">
+    <!-- Multi-file panel — buildMultiModal() fills the tabs / body.
+         Same shell as the single panel above; --modal modifier dropped
+         for the same reason. -->
+    <div class="rp-fr-panel" id="ul-review-multi" style="display:none" onclick="event.stopPropagation()">
 
       <div class="rp-fr-filebar">
         <div class="rp-fr-file-ico"><i class="bi bi-files"></i></div>
@@ -330,7 +353,8 @@
           </button>
         </div>
       </div>
-    </div>
-  </div>
+    </div><!-- /#ul-review-multi -->
+    </div><!-- /.rp-modal sandbox shell -->
+  </div><!-- /.modal-overlay -->
 
 </div>

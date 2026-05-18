@@ -1,0 +1,65 @@
+<!-- New / edit chart modal — spec form for one chart.
+     Fields: chart type, X-axis column, Y-axis column(s), aggregator,
+     optional series-by column, title. Live JS validates against the
+     source file's columns_meta + renders a preview into the dock. -->
+<div class="rp-modal-overlay" id="rp-modal-new-chart"
+     onclick="closeModal('new-chart')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl">Add chart</h2>
+        <div class="rp-modal-sub">Pick a type + the columns to plot. Live preview updates as you fill the form.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('new-chart')"
+              aria-label="Close" title="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="nc-title">Title <span class="rp-form-meta">(optional)</span></label>
+      <input id="nc-title" type="text" class="rp-input" placeholder="e.g. Sales by month" />
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="nc-type">Chart type</label>
+      <select id="nc-type" class="rp-input">
+        <option value="bar">Bar</option>
+        <option value="line">Line</option>
+        <option value="area">Area</option>
+        <option value="pie">Pie</option>
+        <option value="scatter">Scatter</option>
+      </select>
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="nc-x">X-axis column</label>
+      <select id="nc-x" class="rp-input" data-reports-x-picker>
+        <option value="">Pick a source file first</option>
+      </select>
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="nc-y">Y-axis column</label>
+      <select id="nc-y" class="rp-input" data-reports-y-picker>
+        <option value="">Pick a source file first</option>
+      </select>
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="nc-agg">Aggregator <span class="rp-form-meta">(applied per X-axis value)</span></label>
+      <select id="nc-agg" class="rp-input">
+        <option value="sum">Sum</option>
+        <option value="avg">Average</option>
+        <option value="count">Count</option>
+        <option value="min">Min</option>
+        <option value="max">Max</option>
+      </select>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-chart')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('new-chart')">Add chart</button>
+    </div>
+  </div>
+</div>

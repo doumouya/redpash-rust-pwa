@@ -1,0 +1,131 @@
+<!-- Projects table — sandbox sample rows kept for the visual port.
+     Live JS will replace tbody contents from /api/projects when the
+     state wiring lands; [data-objects-table="projects"] is the render
+     hook on .rp-rt-table-wrap. Columns: select | Name | Stage | Status
+     | Cleanness | Files | Modified | Actions. -->
+<div class="rp-rt-table-wrap" data-objects-table="projects">
+  <table class="rp-rt-table">
+    <thead>
+      <tr>
+        <th class="rp-rt-th-mode" style="width:1.5rem">
+          <input type="checkbox" onclick="spSelectAllRows(this)" />
+          <i class="bi bi-circle rp-row-uncheck"></i>
+          <i class="bi bi-check2-circle rp-row-check"></i>
+          <i class="bi bi-trash rp-row-trash rp-master-trash"
+             onclick="spDeleteAllRows(this)" title="Delete all selected"></i>
+        </th>
+        <th class="rp-rt-th-sortable" style="min-width:10rem">
+          Name <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-sortable">
+          Stage <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-sortable">
+          Status <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-sortable" style="min-width:6.5rem">
+          Cleanness <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-sortable">
+          Files <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-sortable">
+          Modified <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>
+        </th>
+        <th class="rp-rt-th-mode" style="width:5rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2-open"></i> sentinel</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--clean">Clean</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Active</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill" style="width:78%"></div></div><span class="rp-obj-clean-pct">78%</span></div></td>
+        <td>3</td><td>2 days ago</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2"></i> Q4 Sales Cleanup</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--import">Import</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--draft">Draft</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill rp-obj-clean-fill--mid" style="width:45%"></div></div><span class="rp-obj-clean-pct">45%</span></div></td>
+        <td>1</td><td>1 week ago</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2-open"></i> Customer onboarding</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--report">Report</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Active</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill rp-obj-clean-fill--hi" style="width:91%"></div></div><span class="rp-obj-clean-pct">91%</span></div></td>
+        <td>5</td><td>yesterday</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2-open"></i> Vendor invoices Q3</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--clean">Clean</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Active</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill rp-obj-clean-fill--mid" style="width:62%"></div></div><span class="rp-obj-clean-pct">62%</span></div></td>
+        <td>4</td><td>3 days ago</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2-open"></i> HR Records 2024</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--publish">Publish</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Active</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill rp-obj-clean-fill--hi" style="width:94%"></div></div><span class="rp-obj-clean-pct">94%</span></div></td>
+        <td>2</td><td>today</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/cleaner"><i class="bi bi-folder2"></i> Suppliers master list</a></td>
+        <td><span class="rp-obj-badge rp-obj-badge--import">Import</span></td>
+        <td><span class="rp-obj-badge rp-obj-badge--draft">Draft</span></td>
+        <td><div class="rp-obj-clean"><div class="rp-obj-clean-bar"><div class="rp-obj-clean-fill rp-obj-clean-fill--lo" style="width:23%"></div></div><span class="rp-obj-clean-pct">23%</span></div></td>
+        <td>1</td><td>2 weeks ago</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open project in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="New report in this project" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+</div>
+
+<div class="rp-rt-paging">
+  <div class="rp-rt-rows-info" data-objects-rows-info>Showing 1–6 of 6 projects</div>
+  <div class="rp-rt-pages" data-objects-pages></div>
+</div>

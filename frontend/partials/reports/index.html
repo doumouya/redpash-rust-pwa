@@ -1,0 +1,64 @@
+<!-- Reports composition root — Stacked layout.
+
+     Topbar: back + title + cleaner / profile / theme.
+     Panel structure:
+       toolbar (source-file selector + chart-type + +Chart + search)
+       body (position: relative, holds two stacked panes split by drag handle)
+         table pane     (absolute top → drag-handle.top, holds rp-rt-table-wrap)
+         drag handle    (absolute, horizontal, draggable)
+         chart dock     (absolute drag-handle.bottom → 0, holds chart cards)
+       modals
+     Drag handle resizes the split via JS (data-reports-split-handle).
+     Both panes contain absolute-positioned scrollers so the redtable
+     and chart dock scroll independently without the page itself
+     scrolling. -->
+
+<div class="rp-rt-topbar">
+  <button class="rp-btn" type="button" aria-label="Back to Home" title="Back to Home"
+          onclick="location.hash='#/home'">
+    <i class="bi bi-arrow-left"></i>
+  </button>
+  <h1 class="rp-rt-page-title"><i class="bi bi-bar-chart-line"></i> Reports</h1>
+  <button class="rp-btn" type="button" aria-label="Open Cleaner" title="Open Cleaner"
+          style="margin-left:auto"
+          onclick="location.hash='#/cleaner'">
+    <i class="bi bi-magic"></i>
+  </button>
+  <a class="rp-btn" href="#/objects" aria-label="Open Objects" title="Open Objects">
+    <i class="bi bi-grid-3x3-gap"></i>
+  </a>
+  <a class="rp-btn" href="#/profile" aria-label="Profile" title="Profile">
+    <i class="bi bi-person-circle"></i>
+  </a>
+  <button class="rp-btn" type="button" aria-label="Toggle theme" title="Toggle theme"
+          onclick="rpToggleTheme?.()">
+    <i class="bi bi-moon" data-sp-theme-icon></i>
+  </button>
+</div>
+
+<div class="rp-rt-panel">
+
+  <div data-include="./toolbar.html"></div>
+
+  <div class="rp-rt-body">
+    <!-- Top pane: redtable showing the source file's rows. -->
+    <div class="rp-reports__table-pane" data-reports-table-pane>
+      <div data-include="./table.html"></div>
+    </div>
+
+    <!-- Drag handle — horizontal divider; JS resizes the split. -->
+    <div class="rp-reports__split-handle" data-reports-split-handle
+         role="separator" aria-orientation="horizontal" aria-label="Resize chart pane"
+         tabindex="0" title="Drag to resize">
+      <i class="bi bi-grip-horizontal"></i>
+    </div>
+
+    <!-- Bottom pane: chart dock with one card per chart. -->
+    <div class="rp-reports__chart-pane" data-reports-chart-pane>
+      <div data-include="./chart-dock.html"></div>
+    </div>
+
+    <!-- Modals — included so openModal can find them anywhere on the page. -->
+    <div data-include="./modals/new-chart.html"></div>
+  </div>
+</div>

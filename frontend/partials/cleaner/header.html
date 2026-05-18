@@ -36,26 +36,52 @@
       <span class="rp-rtp-overall-pct" data-cleaner-cleanness-pct>—</span>
     </div>
 
+    <!-- Undo / Redo — onclick fires the live cleanerUndo / cleanerRedo
+         (POSTs /files/:rid/undo|redo, re-paints header + tabs + table +
+         button state via the sandbox _afterHistory). data-sp-undo /
+         data-sp-redo are selectors _syncUndoRedoButtons uses to set
+         the disabled state from STATE.steps after every history mutation. -->
     <button class="rp-btn" title="Undo (Ctrl+Z)"
-            data-sp-undo onclick="spUndo(this)" disabled>
+            data-sp-undo onclick="cleanerUndo()" disabled>
       <i class="bi bi-arrow-counterclockwise"></i>
     </button>
     <button class="rp-btn" title="Redo (Ctrl+Shift+Z)"
-            data-sp-redo onclick="spRedo(this)" disabled>
+            data-sp-redo onclick="cleanerRedo()" disabled>
       <i class="bi bi-arrow-clockwise"></i>
     </button>
+    <!-- History — cleanerOpenHistory paints the list from STATE.steps
+         (newest first) THEN opens the modal, so the popover always
+         reflects the active file's current history without an extra
+         round-trip. Plain openModal would just show the empty mount
+         on first click. -->
     <button class="rp-btn" title="View history"
-            onclick="openModal('history')">
+            onclick="cleanerOpenHistory()">
       <i class="bi bi-clock-history"></i>
     </button>
-    <button class="rp-btn" title="Export current view">
+    <!-- Export — cleanerExport fetches /files/:rid/export as a blob,
+         triggers a transient <a download> so the browser saves the CSV
+         under the server-suggested filename. data-cleaner-export is
+         the selector the handler uses to add/remove a .is-spinning
+         class while the fetch is in flight. -->
+    <button class="rp-btn" title="Export current view"
+            data-cleaner-export onclick="cleanerExport()">
       <i class="bi bi-download"></i>
     </button>
+    <!-- Saved settings — cleanerOpenSavedSettings paints the per-file
+         inspector list from STATE.savedFilters + STATE.filePrefs then
+         opens the modal, so chips reflect the current snapshot even
+         right after a filter save / mode change. -->
     <button class="rp-btn" title="See what's saved per tab"
-            onclick="openModal('saved-settings')">
+            onclick="cleanerOpenSavedSettings()">
       <i class="bi bi-sliders"></i>
     </button>
-    <button class="rp-btn" aria-label="Add file to project" title="Add file">
+    <!-- Add file — opens the new-project rp-modal with the active
+         project's name pre-filled + locked, so spCleanerCreateProject's
+         upload loop POSTs each file with that name. Backend
+         ensure_named_project upserts so every dropped file lands in
+         the same project regardless of how many uploads we make. -->
+    <button class="rp-btn" aria-label="Add file to project" title="Add file"
+            onclick="cleanerAddFile()">
       <i class="bi bi-plus"></i>
     </button>
   </div>

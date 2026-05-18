@@ -1,0 +1,68 @@
+<!-- Reports table — saved reports list (sandbox sample rows for visual port).
+     Columns: select | Name | Source | Charts | Created | Modified | Actions. -->
+<div class="rp-rt-table-wrap" data-objects-table="reports">
+  <table class="rp-rt-table">
+    <thead>
+      <tr>
+        <th class="rp-rt-th-mode" style="width:1.5rem">
+          <input type="checkbox" onclick="spSelectAllRows(this)" />
+          <i class="bi bi-circle rp-row-uncheck"></i>
+          <i class="bi bi-check2-circle rp-row-check"></i>
+          <i class="bi bi-trash rp-row-trash rp-master-trash"></i>
+        </th>
+        <th class="rp-rt-th-sortable" style="min-width:10rem">Name <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Source <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Charts <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Created <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Modified <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-mode" style="width:5rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/reports"><i class="bi bi-bar-chart-line"></i> Sentinel monthly overview</a></td>
+        <td>sentinel</td><td>3</td><td>3 weeks ago</td><td>yesterday</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open source file in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="Open this report" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/reports"><i class="bi bi-bar-chart-line"></i> Onboarding funnel</a></td>
+        <td>Customer onboarding</td><td>2</td><td>2 weeks ago</td><td>3 days ago</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open source file in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="Open this report" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/reports"><i class="bi bi-bar-chart-line"></i> Q4 invoice breakdown</a></td>
+        <td>Vendor invoices Q3</td><td>5</td><td>1 week ago</td><td>today</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open source file in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="Open this report" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#/reports"><i class="bi bi-bar-chart-line"></i> HR attrition trends</a></td>
+        <td>HR Records 2024</td><td>4</td><td>4 days ago</td><td>today</td>
+        <td class="rp-rt-actions">
+          <a class="rp-btn rp-btn-xs" href="#/cleaner" title="Open source file in cleaner" onclick="event.stopPropagation()"><i class="bi bi-magic"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/reports" title="Open this report" onclick="event.stopPropagation()"><i class="bi bi-bar-chart-fill"></i></a>
+          <a class="rp-btn rp-btn-xs" href="#/dashboards" title="New dashboard for this project" onclick="event.stopPropagation()"><i class="bi bi-grid-1x2-fill"></i></a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<div class="rp-rt-paging">
+  <div class="rp-rt-rows-info" data-objects-rows-info>Showing 1–4 of 4 reports</div>
+  <div class="rp-rt-pages" data-objects-pages></div>
+</div>

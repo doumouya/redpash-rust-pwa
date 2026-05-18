@@ -1,0 +1,68 @@
+<!-- Objects filter panel — same predicate-builder structure as the cleaner panel.
+     Columns are object-level fields (Name, Stage, Status, Cleanness, etc.) —
+     live JS will swap the column choices per active kind when wired. -->
+<div class="rp-rt-filter-panel" id="objects-filter-panel">
+  <div class="rp-rt-filter-inner">
+
+    <!-- Sticky header -->
+    <div class="rp-rt-filter-hdr">
+      <span class="rp-rt-panel-hdr">Filter objects</span>
+      <button class="rp-btn" title="Clear all predicates" style="margin-left:auto"
+              onclick="spClickFx(this)">
+        <i class="bi bi-eraser"></i>
+      </button>
+      <button class="rp-btn" title="Save filter"
+              onclick="spClickFx(this)">
+        <i class="bi bi-floppy"></i>
+      </button>
+      <button class="rp-btn" title="Close panel"
+              onclick="document.getElementById('objects-filter-panel').classList.remove('open')">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <!-- Scrollable content -->
+    <div class="rp-rt-filter-content">
+
+      <div class="rp-rt-fb-op-toggle">
+        <button type="button" class="is-active">AND</button>
+        <button type="button">OR</button>
+      </div>
+
+      <div class="rp-rt-fb-rows">
+        <div class="rp-rt-fb-row">
+          <button class="rp-rt-fb-rm" title="Remove predicate"
+                  onclick="event.stopPropagation();spFbRmPredicate(this)">
+            <i class="bi bi-x"></i>
+          </button>
+          <select class="rp-rt-fb-col">
+            <option value="">Column…</option>
+            <option>Name</option>
+            <option>Stage</option>
+            <option>Status</option>
+            <option>Cleanness</option>
+            <option>Files</option>
+            <option>Created</option>
+            <option>Modified</option>
+          </select>
+          <div class="rp-rt-fb-selects">
+            <select><option value="">Op…</option></select>
+            <input type="text" class="rp-rt-fb-val" placeholder="value" />
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="rp-rt-fb-add" onclick="spFbAddPredicate(this)">
+        <i class="bi bi-plus-lg"></i> Add predicate
+      </button>
+
+    </div><!-- /.rp-rt-filter-content -->
+
+    <div class="rp-rt-filter-footer">
+      <button class="btn btn-ghost btn-sm" onclick="spClickFx(this)">
+        <i class="bi bi-funnel"></i> Apply
+      </button>
+    </div>
+
+  </div>
+</div>

@@ -16,6 +16,12 @@
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
+/* Sandbox modal shell (.rp-modal / .rp-modal-hdr / .rp-modal-ttl) —
+   the file-review modal adopts the sandbox shell to match cleaner +
+   objects modal chrome. The outer #modal-ul-review keeps its
+   .modal-overlay class (position: fixed) so the backdrop covers the
+   viewport on home; only the INNER panel adopts the sandbox shell. */
+@import "/vendor/redpash-components/components/modals-sandbox.css";
 @import "/vendor/redpash-components/components/theme-toggle.css";
 @import "/vendor/redpash-components/components/float-btn.css";
 @import "/vendor/redpash-components/components/avatar.css";
@@ -131,3 +137,40 @@ body:has(#page-home) .rp-page-dots { display: flex; }
 }
 .home-switch-name { font-weight: 600; font-size: 0.875rem; }
 .home-switch-sub  { font-size: 0.75rem; color: var(--muted); }
+
+/* ── File-review modal in sandbox shell ──────────────────────────────
+   The file-review modal (#modal-ul-review) was wrapped in a
+   .rp-modal sandbox shell to match cleaner/objects modal chrome.
+   Three overrides to make the shell host the rp-fr-* internals
+   cleanly:
+
+   1. Width — sandbox default .rp-modal is min(28rem, 92vw); the
+      file-review panel is data-dense (donut + completeness bars +
+      preview table) so it needs the original 56rem max-width.
+   2. Padding + gap zeroed — the .rp-fr-panel internals carry their
+      own filebar / body / cta padding (file-review.css); shell
+      padding would compound and chop horizontal space. gap: 0 too
+      since panels stack tightly.
+   3. .rp-fr-panel chrome neutralized — its `background: var(--surface);
+      border: 0.0625rem solid var(--accent); border-radius: 0.75rem;
+      margin-bottom: 1rem; animation: pop` would paint a second
+      border/bg INSIDE the sandbox shell. Strip it so the shell is
+      the only chrome surface. */
+.rp-modal--ul-review {
+  width: min(56rem, 92vw);
+  max-height: 90vh;
+  padding: 0;
+  gap: 0;
+  overflow-y: auto;
+}
+.rp-modal--ul-review > .rp-modal-hdr {
+  padding: 0.75rem 1.25rem;
+}
+.rp-modal--ul-review > .rp-fr-panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  animation: none;
+  overflow: visible;
+}

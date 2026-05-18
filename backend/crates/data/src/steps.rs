@@ -11,6 +11,10 @@
 //!   drop_columns       params.cols: [string]
 //!   drop_rows          params.indices: [int]
 //!   drop_nulls         params.cols?: [string]   (empty → any-null row)
+//!   set_cell           params.row: int, params.column: string,
+//!                      params.value: string|number|null
+//!                      Replace one cell at (row, column). Cast to the
+//!                      column's dtype; empty/null → NULL cell.
 //!   fill_nulls         params.strategy: "fixed"|"zero"|"forward"
 //!                      params.column?: string
 //!                      params.value?:  string|number  (for fixed)
@@ -197,6 +201,73 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
                 lf.drop_nulls(Some(subset)).collect()
             };
             collected.map_err(DataError::from)
+        }
+
+        // Single-cell mutation — replace the value at (row, column).
+        // params.row: u64 global row index (NOT page-relative — frontend
+        //   adds the page offset before POSTing)
+        // params.column: string column name
+        // params.value: string | number | null  (empty string + null both
+        //   resolve to a NULL cell, matching CSV-import semantics)
+        //
+        // Implementation: build a row-index column on the fly via
+        // int_range, mask the target row with `when(idx == row)`, replace
+        // with the new literal cast to the target column's dtype, leave
+        // every other row untouched via `otherwise(col(target))`. Uses
+        // the same lazy + with_columns pattern as fill_nulls / cast so it
+        // benefits from the existing optimizer + lazy collect path.
+        //
+        // Type coercion is non-strict: if `value` can't be cast to the
+        // column's dtype (e.g. user types "abc" in an int column), the
+        // cell becomes null rather than failing the step. This matches
+        // CSV-import behaviour and keeps a single cell from breaking a
+        // whole undo/redo chain.
+        "set_cell" => {
+            let row = params.get("row").and_then(|v| v.as_u64())
+                .ok_or_else(|| DataError::InvalidSpec(
+                    "set_cell needs params.row: int".into()))? as i64;
+            let column = params.get("column").and_then(|v| v.as_str())
+                .ok_or_else(|| DataError::InvalidSpec(
+                    "set_cell needs params.column: string".into()))?;
+            let height = df.height() as i64;
+            if row < 0 || row >= height {
+                return Err(DataError::InvalidSpec(
+                    format!("set_cell row out of range: {row} (df height {height})")));
+            }
+            // Resolve target column's dtype so the new literal can be
+            // cast appropriately before the when/then merge — Polars
+            // refuses to mix dtypes inside a single column on collect.
+            let dtype = df.column(column).map_err(DataError::from)?.dtype().clone();
+            // `value: null` (or missing key) and empty string both mean
+            // "clear the cell" — keeps the editor UX intuitive: deleting
+            // all text in a contenteditable cell nullifies it.
+            let value_opt = params.get("value").and_then(|v| {
+                if v.is_null() { None }
+                else { Some(json_to_string(v)) }
+            });
+            let is_blank = value_opt.as_deref().map_or(true, str::is_empty);
+
+            let new_value_expr: Expr = if is_blank {
+                lit(NULL).cast(dtype.clone())
+            } else {
+                lit(value_opt.unwrap()).cast(dtype.clone())
+            };
+
+            // Sentinel name for the temporary row-index column — leading
+            // underscores keep it from colliding with a real header. Dropped
+            // before the collect so the returned frame's shape matches the
+            // input.
+            const IDX: &str = "__rp_set_cell_idx";
+            let mask = col(IDX).eq(lit(row as u32));
+            let updated = when(mask)
+                .then(new_value_expr)
+                .otherwise(col(column));
+            df.lazy()
+                .with_row_index(IDX, None)
+                .with_columns([updated.alias(column)])
+                .drop([IDX])
+                .collect()
+                .map_err(DataError::from)
         }
 
         "fill_nulls" => {

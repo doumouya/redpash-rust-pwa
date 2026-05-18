@@ -1,0 +1,50 @@
+<!-- New project modal — name + description + first file import.
+     This is the Objects-page equivalent of the cleaner page's new-project
+     modal. Live wiring will POST /api/files/upload with project_name set
+     (same backend ensure_named_project upsert path). For the visual
+     port the buttons are stubs; the multi-file upload pattern lands
+     when we wire objects.js.
+
+     Sandbox source had no validation / file handling — this version
+     includes the same hooks (data-cleaner-np-*) as cleaner/new-project
+     so spOpenNewProjectModal + spCleanerCreateProject can be re-used
+     if we go that route. -->
+<div class="rp-modal-overlay" id="rp-modal-new-project"
+     onclick="closeModal('new-project')" role="dialog" aria-modal="true">
+  <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
+    <div class="rp-modal-hdr">
+      <div>
+        <h2 class="rp-modal-ttl">New project</h2>
+        <div class="rp-modal-sub">Give your project a name to get started. You can import files right away or add them later.</div>
+      </div>
+      <button class="rp-btn" onclick="closeModal('new-project')"
+              aria-label="Close" title="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="np-name-obj">Project name</label>
+      <input id="np-name-obj" type="text" class="rp-input" placeholder="e.g. Q1 Sales Data" />
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl" for="np-desc-obj">Description <span class="rp-form-meta">(optional)</span></label>
+      <input id="np-desc-obj" type="text" class="rp-input" placeholder="Short description" />
+    </div>
+
+    <div class="rp-form-row">
+      <label class="rp-form-lbl">Import first files <span class="rp-form-meta">(optional — drop several)</span></label>
+      <label class="rp-obj-drop-zone">
+        <input type="file" accept=".csv,.tsv,.xlsx,.xls" multiple style="display:none" />
+        <i class="bi bi-cloud-upload" style="font-size:1.5rem;color:var(--muted)"></i>
+        <span>Drop CSV / TSV / Excel files, or <u>click to browse</u></span>
+      </label>
+    </div>
+
+    <div class="rp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-project')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('new-project')">Create project</button>
+    </div>
+  </div>
+</div>

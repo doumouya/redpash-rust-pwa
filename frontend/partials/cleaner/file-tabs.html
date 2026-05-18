@@ -9,7 +9,13 @@
        each project switch. -->
 <div class="rp-rtp-tabs">
   <div class="rp-rtp-tabs-inner" data-cleaner-file-tabs>
-    <button class="rp-rtp-tab" type="button" data-is-overview onclick="spActivateTab(this)">
+    <!-- Composite onclick: sandbox spActivateTab flips .active visually
+         on this tab + clears it from siblings. Live cleanerActivateTab('')
+         (empty fid sentinel = Overview) clears STATE.rid, swaps body
+         visibility ([data-cleaner-overview] in, [data-cleaner-table] out),
+         repaints the header from project-level data, and paints the
+         file-list overview via _paintSandboxOverview. -->
+    <button class="rp-rtp-tab" type="button" data-is-overview onclick="spActivateTab(this);cleanerActivateTab('')">
       <i class="bi bi-folder2-open"></i>
       <span class="rp-rtp-tab-name">Overview</span>
     </button>

@@ -1,0 +1,80 @@
+<!-- Reports toolbar — source-file selector + search + chart-add.
+     Different shape from the cleaner/objects toolbars because reports
+     don't have row-select / row-delete / edit modes — they're
+     read-only against the source file. Filter funnel kept (reports
+     can filter the source to chart a subset). -->
+<div class="rp-rt-toolbar">
+
+  <!-- Source file picker — pill dropdown listing the user's files.
+       The active file's rows populate the table pane + feed every
+       chart's data. Painted by JS in mountReportsSandbox(). -->
+  <div class="rp-dd-wrap">
+    <button class="rp-rt-pill-btn" title="Source file" onclick="spDdToggle(this)">
+      <i class="bi bi-file-earmark-text" style="font-size:0.75rem;margin-right:0.2rem"></i>
+      <span data-reports-source-label>No file</span>
+      <i class="bi bi-chevron-down"></i>
+    </button>
+    <div class="rp-dd-menu" role="menu" data-reports-source-picker>
+      <div class="rp-dd-item is-selected">No files yet</div>
+    </div>
+  </div>
+
+  <input class="rp-rt-search" type="search" placeholder="Filter rows in source…"
+         data-reports-search />
+
+  <button class="rp-btn" title="Filter"
+          data-sp-panel-trigger="reports-filter-panel"
+          onclick="spToggle('reports-filter-panel')">
+    <i class="bi bi-funnel"></i>
+  </button>
+
+  <button class="rp-btn" title="Refresh source" onclick="spRefresh(this)">
+    <i class="bi bi-arrow-clockwise"></i>
+  </button>
+
+  <div class="rp-dd-wrap">
+    <button class="rp-rt-pill-btn" title="Rows per page" onclick="spDdToggle(this)">
+      <span data-sp-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
+      <i class="bi bi-chevron-down"></i>
+    </button>
+    <div class="rp-dd-menu" role="menu">
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10)">10 rows</div>
+      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 25)">25 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 50)">50 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100)">100 rows</div>
+    </div>
+  </div>
+
+  <!-- Columns picker — checkbox per column from the source file. -->
+  <div class="rp-dd-wrap">
+    <button class="rp-btn" title="Columns" onclick="spDdToggle(this)">
+      <i class="bi bi-layout-three-columns"></i>
+    </button>
+    <div class="rp-dd-menu" role="menu" style="min-width:8.5rem" data-reports-cols-picker>
+      <button type="button" class="rp-dd-reset" title="Restore all columns"
+              onclick="spColsReset(this)">
+        <i class="bi bi-arrow-counterclockwise"></i> Reset
+      </button>
+      <div class="rp-form-meta" style="padding:0.5rem;font-style:italic">No columns.</div>
+    </div>
+  </div>
+
+  <!-- + Chart — opens new-chart modal. Pinned to the right. -->
+  <button class="rp-btn" type="button" aria-label="Add a chart" title="Add a chart"
+          style="margin-left:auto"
+          onclick="openModal('new-chart')">
+    <i class="bi bi-plus-lg"></i>
+  </button>
+
+  <!-- Save / Export the report (config + rendered charts). Save persists
+       to /api/reports; Export downloads the chart canvases. -->
+  <button class="rp-btn" type="button" aria-label="Save report" title="Save report"
+          data-reports-save>
+    <i class="bi bi-floppy"></i>
+  </button>
+  <button class="rp-btn" type="button" aria-label="Export charts as images" title="Export"
+          data-reports-export>
+    <i class="bi bi-download"></i>
+  </button>
+
+</div>

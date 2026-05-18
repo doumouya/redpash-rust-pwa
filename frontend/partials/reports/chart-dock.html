@@ -1,0 +1,65 @@
+<!-- Chart dock — bottom pane below the source table. JS appends one
+     .rp-reports__chart-card per chart in the report; each card has
+     a title bar (chart type + columns + remove ×) and a body holding
+     the <canvas>. Multiple cards lay out horizontally on wide screens,
+     wrapping to multiple rows as needed; vertical scrolling on the
+     pane itself when they overflow.
+
+     Two sample cards kept for the visual port — live JS will replace
+     the inner-grid contents from STATE.charts. -->
+<div class="rp-reports__chart-dock" data-reports-chart-dock>
+
+  <!-- Empty-state — shown when no charts have been added yet. JS
+       hides this once the first chart is rendered. -->
+  <div class="rp-reports__chart-empty" data-reports-chart-empty hidden>
+    <i class="bi bi-bar-chart-line" style="font-size:2rem;color:var(--muted)"></i>
+    <div style="margin-top:0.5rem;color:var(--muted);font-size:0.8125rem">
+      No charts yet. Click <i class="bi bi-plus-lg"></i> in the toolbar to add one.
+    </div>
+  </div>
+
+  <!-- Chart cards — JS render target. Sample cards below show the
+       intended structure: header (type icon + title + columns + ×)
+       + body with <canvas>. -->
+  <div class="rp-reports__chart-grid" data-reports-chart-grid>
+
+    <article class="rp-reports__chart-card">
+      <header class="rp-reports__chart-hdr">
+        <i class="bi bi-bar-chart-fill"></i>
+        <span class="rp-reports__chart-ttl">Sales by month</span>
+        <span class="rp-reports__chart-meta">bar · month × revenue</span>
+        <button class="rp-btn rp-btn-xs" title="Edit chart"
+                style="margin-left:auto"
+                onclick="openModal('new-chart')">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="rp-btn rp-btn-xs" title="Remove chart">
+          <i class="bi bi-x"></i>
+        </button>
+      </header>
+      <div class="rp-reports__chart-body">
+        <canvas class="rp-reports__chart-canvas" width="600" height="220"></canvas>
+      </div>
+    </article>
+
+    <article class="rp-reports__chart-card">
+      <header class="rp-reports__chart-hdr">
+        <i class="bi bi-graph-up"></i>
+        <span class="rp-reports__chart-ttl">Trend (cumulative)</span>
+        <span class="rp-reports__chart-meta">line · date × total</span>
+        <button class="rp-btn rp-btn-xs" title="Edit chart"
+                style="margin-left:auto"
+                onclick="openModal('new-chart')">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="rp-btn rp-btn-xs" title="Remove chart">
+          <i class="bi bi-x"></i>
+        </button>
+      </header>
+      <div class="rp-reports__chart-body">
+        <canvas class="rp-reports__chart-canvas" width="600" height="220"></canvas>
+      </div>
+    </article>
+
+  </div>
+</div>

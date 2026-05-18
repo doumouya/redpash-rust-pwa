@@ -28,6 +28,14 @@
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
+/* Row-mode glyphs (.rp-row-uncheck / -check / -trash, .rp-master-trash)
+   + .rp-rt-th-mode positioning + .is-mode-* fade-in rules. Lives in
+   objects-sandbox.css today (extracted during the Objects port) — cleaner
+   needs the same recipe for its mode column. Dead weight: ~150 lines of
+   .rp-obj-* / .rp-btn-xs / .rp-rt-actions that cleaner doesn't use.
+   Acceptable for now; consolidation into a shared row-mode.css is
+   captured in the migration progress log. */
+@import "/vendor/redpash-components/components/objects-sandbox.css";
 @import "/vendor/redpash-components/components/theme-toggle.css";
 @import "/vendor/redpash-components/components/float-btn.css";
 @import "/vendor/redpash-components/components/badge.css";
@@ -787,14 +795,77 @@ html[data-theme="light"] #page-cleaner .rp-rt-pill-btn {
   color: var(--text);
   border-color: color-mix(in srgb, var(--text) 22%, transparent);
 }
+/* ── Pill-btn active state — theme-aware ───────────────────────────
+   Sandbox ships a single accent-tinted recipe (var(--accent) 20% wash
+   + accent text + accent border). With only blue left, the dark-mode
+   variant of that reads loud — the rest of the toolbar (.rp-rt-search,
+   .rp-rt-pill-btn:hover, .rp-rt-icon-btn) uses agnostic white/text
+   washes, so the active rows-per-page pill is the only blue chip in
+   an otherwise neutral dark toolbar. Mirror the glass-btn pattern:
+   keep sandbox's accent recipe for light (explicit + system-light),
+   swap to an agnostic-white wash for dark (explicit + system-dark). */
 #page-cleaner .rp-rt-pill-btn.is-active,
 #page-cleaner .rp-rt-pill-btn.rp-rt-active {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
 }
+html[data-theme="dark"] #page-cleaner .rp-rt-pill-btn.is-active,
+html[data-theme="dark"] #page-cleaner .rp-rt-pill-btn.rp-rt-active {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-cleaner .rp-rt-pill-btn.is-active,
+  html[data-theme="system"] #page-cleaner .rp-rt-pill-btn.rp-rt-active {
+    background: color-mix(in srgb, #fff 14%, transparent);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+}
 #page-cleaner .rp-rt-pill-btn .bi-chevron-down { font-size: 0.625rem; opacity: 0.6; }
 #page-cleaner .rp-rt-pill-unit { color: inherit; opacity: 0.55; }
+
+/* ── Dropdown items — theme-aware hover + selected state ────────────
+   Vendored dropdowns-sandbox.css drives every .rp-dd-item :hover and
+   .is-selected:hover to `background: var(--active-bg); color: var(--bg)`
+   — and the resting .is-selected just uses `var(--bg)`. Inside
+   #page-cleaner, --active-bg is the cobalt token (the only theme
+   left is blue), so the rows-per-page dropdown's hover + selected
+   states read as solid blue chips in dark mode while the rest of the
+   toolbar stays neutral. Selected-resting also blends invisibly into
+   the dropdown's own background.
+
+   Light mode: keep sandbox's accent recipe (loud-but-correct on a
+   pale surface). Dark mode (explicit + system): swap to an agnostic
+   white wash for hover, and a faint surface tint + accent text for
+   the resting selected marker so it reads as "chosen" without
+   overpowering the menu. */
+#page-cleaner .rp-dd-item.is-selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+html[data-theme="dark"] #page-cleaner .rp-dd-item:hover,
+html[data-theme="dark"] #page-cleaner .rp-dd-item.is-selected:hover {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+}
+html[data-theme="dark"] #page-cleaner .rp-dd-item.is-selected {
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-cleaner .rp-dd-item:hover,
+  html[data-theme="system"] #page-cleaner .rp-dd-item.is-selected:hover {
+    background: color-mix(in srgb, #fff 14%, transparent);
+    color: #fff;
+  }
+  html[data-theme="system"] #page-cleaner .rp-dd-item.is-selected {
+    background: color-mix(in srgb, #fff 8%, transparent);
+    color: #fff;
+  }
+}
 
 /* Selection chip — visible only in select mode with count > 0. */
 #page-cleaner .rp-rt-sel-chip {
@@ -1063,19 +1134,21 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
 .ov-colpick-item:hover { background: var(--over0); }
 
 /* Edit-mode cues on the overview's name + status cells. Reuses the
-   panel's `rp-rt-mode-edit` class so we ride the same toggle path the
-   file-table uses. */
-.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-name {
+   panel's `is-mode-edit` class (sandbox convention from spSetMode in
+   controls.js) so the overview rides the same toggle path the file
+   table uses. The legacy `rp-rt-mode-edit` was the live class name
+   from the cleaner.live.html era — sandbox sticks with `is-mode-*`. */
+.rp-rt-panel.is-mode-edit #cleaner-ov-table .ov-cell-name {
   cursor: text;
 }
-.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-name:hover {
+.rp-rt-panel.is-mode-edit #cleaner-ov-table .ov-cell-name:hover {
   outline: 0.0625rem dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: -0.0625rem;
 }
-.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag {
+.rp-rt-panel.is-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag {
   cursor: pointer;
 }
-.rp-rt-panel.rp-rt-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag:hover {
+.rp-rt-panel.is-mode-edit #cleaner-ov-table .ov-cell-status .rp-tag:hover {
   filter: brightness(1.25);
 }
 
@@ -1177,36 +1250,45 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
 
 /* ━━━━━━━━━━━━━━━━━━ ROW MODES — edit / select / delete ━━━━━━━━━━━━
  *
- * Toolbar toggles (rtToggleMode) flip a class on the panel:
- *   .rp-rt-mode-edit   → cells get a hover affordance (pencil cursor),
- *                        dblclick swaps the cell for an inline input.
- *   .rp-rt-mode-select → leading checkbox column is visible; rows with
- *                        a checked box highlight subtly.
- *   .rp-rt-mode-delete → trailing trash column is visible; clicking
- *                        the trash POSTs a single-row drop_rows step.
+ * Sandbox spSetMode (controls.js) flips an `is-mode-<mode>` class on
+ * plain `.rp-rt-panel` (NOT on `.rp-rt-panel--cleaner` — the BEM
+ * modifier was a live-only convention that doesn't exist in sandbox
+ * markup):
+ *   .is-mode-edit   → cells get a hover affordance (text cursor +
+ *                     dashed accent outline); inline edit on focus
+ *                     via the document-level focusin dispatcher.
+ *   .is-mode-select → first-cell .rp-row-uncheck / .rp-row-check
+ *                     glyphs fade in (overlap pattern); ticked rows
+ *                     highlight; toolbar selection chip becomes
+ *                     visible.
+ *   .is-mode-delete → first-cell .rp-row-trash glyph fades in;
+ *                     clicking it removes the row (with .is-removing
+ *                     animation) and POSTs a drop_rows step.
  *
- * Column visibility is controlled by a `data-mode-col` data attribute on
- * the cells — they're always rendered, but CSS collapses them when the
- * matching mode is off. That way we don't re-render the body on every
- * toggle (Django does the same).
+ * `[data-mode-col]` show/hide rules kept for backward-compat — the
+ * live cleaner _paintTable used separate hidden columns, sandbox
+ * uses the single-cell overlap pattern in .rp-rt-th-mode. If the
+ * cleaner data-table is ever fully sandbox-aligned, drop them.
  * ─────────────────────────────────────────────────────────────────── */
-.rp-rt-panel--cleaner [data-mode-col="select"],
-.rp-rt-panel--cleaner [data-mode-col="delete"] {
+.rp-rt-panel [data-mode-col="select"],
+.rp-rt-panel [data-mode-col="delete"] {
   display: none;
 }
-.rp-rt-panel--cleaner.rp-rt-mode-select [data-mode-col="select"] {
+.rp-rt-panel.is-mode-select [data-mode-col="select"] {
   display: table-cell;
 }
-.rp-rt-panel--cleaner.rp-rt-mode-delete [data-mode-col="delete"] {
+.rp-rt-panel.is-mode-delete [data-mode-col="delete"] {
   display: table-cell;
 }
 
-/* Edit mode — hover cue, pointer, dotted underline on data cells.
-   The cell-edit form is built by JS in _startCellEdit. */
-.rp-rt-panel--cleaner.rp-rt-mode-edit tbody td {
+/* Edit mode — hover cue, pointer, dashed accent outline on data cells.
+   The inline edit is wired through the document-level focusin handler
+   in _installSandboxLiveHandlers (cleaner.js); cell-edit form for the
+   legacy path was built by _startCellEdit (now obsolete). */
+.rp-rt-panel.is-mode-edit tbody td {
   cursor: text;
 }
-.rp-rt-panel--cleaner.rp-rt-mode-edit tbody td:hover {
+.rp-rt-panel.is-mode-edit tbody td:hover {
   outline: 0.0625rem dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: -0.0625rem;
 }
@@ -1222,8 +1304,10 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   outline: none;
 }
 
-/* Selected row tint. */
-.rp-rt-panel--cleaner tbody tr.rp-rt-row-sel {
+/* Selected row tint. Sandbox panel is plain `.rp-rt-panel` (no
+   `--cleaner` BEM modifier); spSetMode flips `is-mode-select` on it
+   and rp-rt-row-sel marks ticked rows. */
+.rp-rt-panel tbody tr.rp-rt-row-sel {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
@@ -1307,18 +1391,20 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
  *                       to show "insert before this column").
  * The actual reorder + POST happens in cleaner.js drop handlers.
  * ─────────────────────────────────────────────────────────────────── */
-.rp-rt-panel--cleaner thead th[draggable="true"] {
+/* Sandbox panel is plain `.rp-rt-panel`. Column drag-to-reorder cues
+   attach to thead th[draggable] cells regardless of mode. */
+.rp-rt-panel thead th[draggable="true"] {
   cursor: grab;
   user-select: none;
 }
-.rp-rt-panel--cleaner thead th[draggable="true"]:active {
+.rp-rt-panel thead th[draggable="true"]:active {
   cursor: grabbing;
 }
-.rp-rt-panel--cleaner thead th.rp-rt-th-drag {
+.rp-rt-panel thead th.rp-rt-th-drag {
   opacity: 0.4;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.rp-rt-panel--cleaner thead th.rp-rt-th-drop {
+.rp-rt-panel thead th.rp-rt-th-drop {
   box-shadow: inset 0.1875rem 0 0 0 var(--accent);
 }
 
@@ -1335,7 +1421,13 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   color: var(--accent);
   border: 0.0625rem solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.rp-rt-panel--cleaner.rp-rt-mode-select .rp-rt-sel-chip[data-has-sel="1"] {
+/* Show the chip when select-mode + at least one row picked. Sandbox
+   convention: `.is-mode-select` on plain `.rp-rt-panel`. The scoped
+   `#page-cleaner .rp-rt-sel-chip` rule earlier (~line 863) already
+   handles the resting display:inline-flex / count="0" hide; this
+   selector is the live-table-only show path that the cleaner data
+   row-mode uses. */
+.rp-rt-panel.is-mode-select .rp-rt-sel-chip[data-has-sel="1"] {
   display: inline-flex;
 }
 
@@ -1496,11 +1588,16 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   display: none;
 }
 
-/* Score / Clear toolbar buttons — spinner during the per-file
-   POST/DELETE /api/files/:rid/cleanness round-trip. Same
-   .is-spinning convention the Objects-page bulk buttons use. */
+/* Score / Clear / Refresh toolbar buttons — spinner runs for the full
+   POST/DELETE/GET round-trip. Legacy IDs scoped the rule before the
+   sandbox port; broadened to `.rp-btn.is-spinning .bi` so the sandbox
+   markup's id-less buttons spin too. Live handlers
+   (cleanerScoreFile / cleanerClearScore / cleanerRefresh) manage
+   add/remove around their await — duration matches actual work, not
+   the sandbox's fixed 600ms one-shot. */
 #cleaner-score-btn.is-spinning .bi,
-#cleaner-clear-score-btn.is-spinning .bi {
+#cleaner-clear-score-btn.is-spinning .bi,
+.rp-btn.is-spinning .bi {
   animation: cleaner-score-spin .7s linear infinite;
 }
 @keyframes cleaner-score-spin { to { transform: rotate(360deg); } }

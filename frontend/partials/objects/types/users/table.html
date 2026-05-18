@@ -1,0 +1,67 @@
+<!-- Users table — sandbox demo rows kept as placeholders until the
+     backend exposes /api/users browse. New type vs live's existing 4.
+     Columns: select | Display name | Username | Email | Plan | Companies
+     | Created | Open. -->
+<div class="rp-rt-table-wrap" data-objects-table="users">
+  <table class="rp-rt-table">
+    <thead>
+      <tr>
+        <th class="rp-rt-th-mode" style="width:1.5rem">
+          <input type="checkbox" onclick="spSelectAllRows(this)" />
+          <i class="bi bi-circle rp-row-uncheck"></i>
+          <i class="bi bi-check2-circle rp-row-check"></i>
+          <i class="bi bi-trash rp-row-trash rp-master-trash"></i>
+        </th>
+        <th class="rp-rt-th-sortable" style="min-width:10rem">Display name <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Username <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Email <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Plan <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Companies <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Created <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-mode" style="width:1.75rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-person-circle"></i> Em Doumouya</a></td>
+        <td><code>em.doumouya.a3f7c2</code></td>
+        <td>em.doumouya@gmail.com</td>
+        <td><span class="rp-obj-badge rp-obj-badge--report">Pro</span></td>
+        <td>2</td><td>4 months ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-person-circle"></i> Alice Martin</a></td>
+        <td><code>alice.martin.9e2b14</code></td>
+        <td>alice.martin@sentinel.co</td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Trial</span></td>
+        <td>1</td><td>2 months ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-person-circle"></i> Bilal R.</a></td>
+        <td><code>bilal.r.5d8f01</code></td>
+        <td>bilal.r@clients-clean.io</td>
+        <td><span class="rp-obj-badge rp-obj-badge--draft">Free</span></td>
+        <td>1</td><td>5 weeks ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-person-circle"></i> Sara K.</a></td>
+        <td><code>sara.k.0c1e83</code></td>
+        <td>sara.k@acme.com</td>
+        <td><span class="rp-obj-badge rp-obj-badge--draft">Free</span></td>
+        <td>0</td><td>3 weeks ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<div class="rp-rt-paging">
+  <div class="rp-rt-rows-info" data-objects-rows-info>Showing 1–4 of 4 users</div>
+  <div class="rp-rt-pages" data-objects-pages></div>
+</div>

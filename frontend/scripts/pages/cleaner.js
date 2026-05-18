@@ -501,10 +501,16 @@ function _loadFilePrefs(root, rid) {
 //       localStorage-keyed globally, not snapshotted)
 function _saveProjectSnapshot(pid) {
   if (!pid) return;
+  // hiddenFiles is intentionally NOT snapshotted — it lives globally
+  // across projects (file rids are unique system-wide; one flat Set
+  // covers every project's closed-tabs choices). Saving per-project
+  // snapshots of it caused stale restores: closing F1 in project A,
+  // switching to B, closing G in B, switching back to A would restore
+  // A's snapshot {F1} and drop G silently. Source of truth is
+  // STATE.hiddenFiles in memory + prefs.cleaner_hidden_files on disk.
   STATE.projectSnapshots.set(pid, {
     project:    STATE.project,
     files:      STATE.files,
-    hiddenFiles: new Set(STATE.hiddenFiles),
     // Active-file slice
     rid:         STATE.rid,
     summary:     STATE.summary,
@@ -539,7 +545,11 @@ function _loadProjectSnapshot(pid) {
   if (!s) return false;
   STATE.project     = s.project ?? null;
   STATE.files       = Array.isArray(s.files) ? s.files : [];
-  STATE.hiddenFiles = s.hiddenFiles instanceof Set ? new Set(s.hiddenFiles) : new Set();
+  // hiddenFiles is global — see _saveProjectSnapshot comment. Leave
+  // STATE.hiddenFiles alone here; it's already loaded from prefs at
+  // mount time and kept current by cleanerHideFileTab /
+  // cleanerShowFileTab. Restoring per-project would drop recent
+  // additions made while a different project was active.
   STATE.rid         = s.rid ?? null;
   STATE.summary     = s.summary ?? null;
   STATE.columns     = Array.isArray(s.columns) ? s.columns : [];
@@ -572,7 +582,12 @@ async function _fetchProjectFresh(pid, opts = {}) {
   const filesRes = await api.get(`/projects/${encodeURIComponent(pid)}/files`)
     .catch(() => ({ items: [] }));
   STATE.files = filesRes.items ?? [];
-  STATE.hiddenFiles = new Set();
+  // Preserve the cross-project hidden-files set — file rids are globally
+  // unique so the same Set works across projects, and clobbering it
+  // here would wipe what mountSandbox just loaded from prefs (the user's
+  // closed-tabs choices would silently revert on every project switch
+  // or page refresh). Default to empty only when nothing's there yet.
+  if (!(STATE.hiddenFiles instanceof Set)) STATE.hiddenFiles = new Set();
   STATE.filePrefs   = new Map();
   STATE.selected    = new Set();
   STATE.page        = 1;
@@ -1406,12 +1421,14 @@ function _wireGlobals(root) {
     window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
   };
 
-  // Repaint both sandbox tab strips from current STATE. Called from
-  // every handler that mutates openProjects / hiddenFiles / activeProjectId
-  // so the sandbox UI stays in sync. The old _renderTabs / _renderProjectTabs
-  // calls in those handlers still run but no-op silently in the sandbox
-  // layout (their target elements #cleaner-tabs-list / #cleaner-project-tabs
-  // don't exist in the sandbox markup).
+  // Full sandbox strip repaint. Kept for recovery / debug use, but
+  // NOT called from the live close/open/switch handlers anymore: the
+  // sandbox helpers (spDeleteTab / spAddProjectTab / spActivateTab)
+  // own the animated DOM transitions on click, and a full repaint
+  // mid-transition would wipe the .is-removing / .is-entering classes
+  // before the CSS animation completed. Live handlers now run STATE
+  // + persistence only; the sandbox helpers wired into the tab markup
+  // handle visual updates. mountSandbox does the only initial render.
   const _repaintSandboxStrips = () => {
     const activeFile = STATE.files.find((f) => f.redpash_id === STATE.rid) || null;
     if (typeof _renderSandboxFileTabs === "function") {
@@ -1427,6 +1444,9 @@ function _wireGlobals(root) {
       _renderSandboxProjectTabs(pstrip, projsByPid, STATE.openProjects, STATE.activeProjectId);
     }
   };
+  // Expose for debug / explicit recovery (e.g. after a malformed STATE
+  // mutation). Not used in the normal click flows.
+  window.__cleanerRepaintSandboxStrips = _repaintSandboxStrips;
 
   // × on a file tab — hide it (keep the file in the project). If the
   // hidden tab was active, fall back to the next visible file, else
@@ -1443,11 +1463,9 @@ function _wireGlobals(root) {
       // Re-render before activating so the activate path sees the new
       // tab strip. cleanerActivateTab("") routes to Overview.
       _renderTabs(root);
-      _repaintSandboxStrips();
       window.cleanerActivateTab(target);
     } else {
       _renderTabs(root);
-      _repaintSandboxStrips();
     }
   };
 
@@ -1459,7 +1477,6 @@ function _wireGlobals(root) {
     _persistHidden();
     root.querySelectorAll(".rp-rtp-tab-add-menu").forEach((m) => m.hidden = true);
     _renderTabs(root);
-    _repaintSandboxStrips();
   };
 
   // Toggle the "+" dropdown. Menu is position:fixed (so it escapes
@@ -1504,7 +1521,12 @@ function _wireGlobals(root) {
       // (rid=null); the user picks a file from the tab strip afterwards.
       await _fetchProjectFresh(pid, { fileRid: null });
     }
-    // Repaint everything that depends on the project switch.
+    // Repaint everything that depends on the project switch. The
+    // sandbox strips do NOT get a full repaint here — spActivateTab
+    // (fired by the tab's onclick) already flipped the active class.
+    // A full repaint would wipe any in-flight .is-entering animation
+    // from a picker-driven spAddProjectTab. Chrome below targets the
+    // header/title/cleanness widget — separate from the strips.
     _renderProjectTabs(root);
     _renderTitle(root);
     _renderHeaderMeta(root);
@@ -1512,10 +1534,6 @@ function _wireGlobals(root) {
     _renderHistoryButtons(root);
     _renderEncodingPicker(root);
     _renderTabs(root);
-    // Sandbox markup uses different selectors — re-render those too so
-    // both file and project strips reflect the switch (active class,
-    // visible-file set, etc.).
-    _repaintSandboxStrips();
     if (STATE.rid) {
       await _loadPage(root);
       _syncToolbarToState(root);
@@ -1554,11 +1572,11 @@ function _wireGlobals(root) {
       const next = STATE.openProjects[i] ?? STATE.openProjects[i - 1];
       STATE.activeProjectId = null;   // force switchProject to refetch / restore
       await window.cleanerSwitchProject(next);
-      // switchProject calls _repaintSandboxStrips on its own via the
-      // patched flow below — no need to re-call here.
     } else {
       _renderProjectTabs(root);
-      _repaintSandboxStrips();
+      // Note: no sandbox strip repaint — the × on the tab was already
+      // handled by spDeleteTab (animated DOM remove). This handler
+      // only owns STATE + persistence.
     }
   };
 
@@ -4750,6 +4768,52 @@ async function mountSandbox(root, ctx, strip) {
   // tabs land below after the API fetch resolves.
   strip.querySelectorAll(".rp-rt-proj-tab").forEach((t) => t.remove());
 
+  // Restore the global "file tabs I've closed" set from server prefs.
+  // The legacy mount() does this around line 178 — sandbox mount must
+  // do it too, otherwise STATE.hiddenFiles starts empty on every
+  // refresh and previously-closed file tabs come back as visible.
+  // File rids are globally unique, so a single flat Set suffices —
+  // a hidden rid from project A won't accidentally match in project B.
+  const savedHidden = ctx?.session?.prefs?.cleaner_hidden_files;
+  STATE.hiddenFiles = new Set(Array.isArray(savedHidden) ? savedHidden : []);
+
+  // Restore the toolbar / saved-filter prefs the legacy mount() loads
+  // around lines 59–74. Without these, the saved-settings modal reads
+  // STATE.savedFilters as undefined → defensive guard falls back to {}
+  // → every file row shows "No saved filters" even when the user has
+  // some saved in their account. Same for filePrefs, linkToolbar, etc.
+  // — they all source from ctx.session.prefs (server-cached at login,
+  // see project_redpash_file_metadata_cache.md). filePrefs is a Map
+  // populated per-file by the (legacy, not yet ported) _loadFilePrefs;
+  // init it empty here so the per-file accumulation has a place to land.
+  STATE.linkToolbar   = ctx?.session?.prefs?.cleaner_link_toolbar  === true;
+  STATE.showRowNums   = ctx?.session?.prefs?.cleaner_show_row_nums === true;
+  STATE.showOpenLinks = ctx?.session?.prefs?.cleaner_show_open_links !== false;
+  const sf = ctx?.session?.prefs?.cleaner_saved_filters;
+  STATE.savedFilters  = (sf && typeof sf === "object" && !Array.isArray(sf))
+    ? { ...sf }
+    : {};
+  if (!(STATE.filePrefs instanceof Map)) STATE.filePrefs = new Map();
+  // Page size + cursor — _paintSandboxTable reads STATE.pageSize / STATE.page
+  // when building the /page request. Pref is a global default; per-file
+  // override piggybacks on filePrefs later. Cursor always resets to 1
+  // on tab switch (paint redoes the URL from STATE.page).
+  const savedPageSize = Number(ctx?.session?.prefs?.cleaner_page_size);
+  STATE.pageSize = savedPageSize > 0 ? savedPageSize : _OV_DEFAULT_PAGE_SIZE;
+  STATE.page = 1;
+  // Row selection (global row indices). Cleared on every paint —
+  // pagination / step apply / refresh all reset selection by design
+  // (legacy did the same; absolute indices would point at the wrong
+  // rows after a drop / shift anyway).
+  STATE.selected = new Set();
+
+  // Install window.cleaner* handlers BEFORE any tab onclick can fire.
+  // The legacy mount() defines them deep in its body (line ~1455), but
+  // mountSandbox returns before that block — so without this call the
+  // composite onclicks (spActivateTab(this);cleanerActivateTab('FID')
+  // etc.) throw "cleanerActivateTab is not defined" on the first click.
+  _installSandboxLiveHandlers(root);
+
   const q          = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const projectRid = q.get("project");
   const fileRid    = q.get("file");
@@ -4812,6 +4876,16 @@ async function mountSandbox(root, ctx, strip) {
     window.rpSavePref("cleaner_open_projects", openList);
   }
 
+  // Mirror the locals into STATE so the window.cleaner* handlers
+  // (installed above by _installSandboxLiveHandlers) can read the
+  // right values. Without this, cleanerCloseProject sees an empty
+  // openProjects and bails (length <= 1 guard), spOpenFilePicker
+  // sees an empty STATE.files and the picker renders blank, etc.
+  STATE.openProjects    = openList;
+  STATE.activeProjectId = activePid;
+  if (!(STATE.projectMeta instanceof Map)) STATE.projectMeta = new Map();
+  for (const [pid, p] of projectsByPid.entries()) STATE.projectMeta.set(pid, p);
+
   _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid);
   _populateOpenProjectPicker(root, projects, openList);
 
@@ -4837,22 +4911,945 @@ async function mountSandbox(root, ctx, strip) {
   if (!activeFile && files.length) activeFile = files[0];
 
   const activeProj = projectsByPid.get(activePid);
+  // Mirror file slice into STATE for the handlers + spOpenFilePicker.
+  STATE.files   = files;
+  STATE.project = activeProj;
+  STATE.rid     = activeFile?.redpash_id ?? null;
+
   _renderSandboxHeader(root, activeProj, activeFile, files);
   _renderSandboxFileTabs(root, files, activeFile);
 
   if (activeFile) {
     await _paintSandboxTable(root, activeFile);
   } else {
-    // No file in the project yet — clear the table mount, leave overview
-    // pane available for the eventual project-level summary.
-    const host = root.querySelector("[data-cleaner-table]");
-    if (host) host.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">No files in this project yet.</div>';
+    // No file in the project (or URL is project-only) — land on the
+    // Overview pane with the project's file list painted, even when
+    // the list is empty (the painter emits a friendly empty state).
+    _showSandboxOverview(root);
+    _paintSandboxOverview(root);
+  }
+
+  // Sync undo / redo button enabled state from the freshly-loaded
+  // STATE.steps (populated by _paintSandboxTable's detail fetch).
+  // Without this the buttons sit at their HTML `disabled` default
+  // even when there's history to undo on first paint.
+  _installSandboxLiveHandlers._syncUndoRedoButtons?.();
+}
+
+// Install window.cleaner* handlers used by the sandbox tab onclicks.
+// The legacy mount() defines these deep in its body (line ~1455) but
+// mountSandbox returns before that block runs — so without installing
+// equivalents here, the composite onclicks emitted by the sandbox
+// renderers throw "cleanerActivateTab is not defined" on first click.
+//
+// Behaviour mirrors the legacy versions (STATE + persistence + sandbox
+// re-paint), minus the legacy `_renderTabs(root)` / `_renderProjectTabs
+// (root)` calls — those write into #cleaner-tabs-list / #cleaner-proj-
+// tabs-list which only exist in the historical cleaner.live.html
+// markup. The sandbox strip is repainted via spActivateTab (visual
+// flip), spDeleteTab (animated remove), spAddProjectTab / spAddFileTab
+// (animated add) — those run alongside via the composite onclick.
+function _installSandboxLiveHandlers(root) {
+  const _persistHidden = () => {
+    window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
+  };
+
+  // Sync [data-sp-undo] / [data-sp-redo] disabled state from STATE.steps.
+  // Backend's ProjectStep.applied tells us whether each step is in the
+  // active cursor (true) or undone-and-waiting-to-redo (false). Used by
+  // mountSandbox on first paint AND after every history mutation
+  // (undo / redo / tool apply) so the buttons never read stale.
+  const _syncUndoRedoButtons = () => {
+    const steps   = Array.isArray(STATE.steps) ? STATE.steps : [];
+    const applied = steps.filter((s) => s.applied === true).length;
+    const undone  = steps.filter((s) => s.applied === false).length;
+    root.querySelectorAll("[data-sp-undo]").forEach((b) => { b.disabled = applied === 0; });
+    root.querySelectorAll("[data-sp-redo]").forEach((b) => { b.disabled = undone  === 0; });
+  };
+  _installSandboxLiveHandlers._syncUndoRedoButtons = _syncUndoRedoButtons;
+
+  // Sandbox-aware post-history refresh — sibling of the legacy
+  // _afterHistory inside mount(), tuned for the sandbox DOM. Backend
+  // POSTs to /undo / /redo / each tool's endpoint return the same
+  // FileEnvelope: { summary, columns, steps }. We mirror those into
+  // STATE, sync the active file's strip entry so its cleanness dot
+  // moves, then re-paint header / file-tabs / table / undo-redo
+  // state. No legacy _renderTabs(root) / _renderHistoryButtons(root)
+  // — those target dead DOM ids in sandbox mode.
+  const _afterHistory = async (envelope, label) => {
+    if (!envelope) return;
+    STATE.summary = envelope.summary;
+    STATE.columns = envelope.columns ?? [];
+    STATE.steps   = envelope.steps   ?? [];
+    if (Array.isArray(STATE.files) && envelope.summary) {
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = envelope.summary;
+    }
+    const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+    const proj       = STATE.project ?? (STATE.projectMeta?.get(STATE.activeProjectId));
+    if (typeof _renderSandboxHeader === "function") {
+      _renderSandboxHeader(root, proj, activeFile, STATE.files || []);
+    }
+    if (typeof _renderSandboxFileTabs === "function") {
+      _renderSandboxFileTabs(root, STATE.files || [], activeFile);
+    }
+    if (activeFile && typeof _paintSandboxTable === "function") {
+      await _paintSandboxTable(root, activeFile);
+    }
+    _syncUndoRedoButtons();
+    if (label && window.toast?.success) window.toast.success(label);
+  };
+
+  // Undo / Redo / Save — POST to backend, hand the FileEnvelope to
+  // _afterHistory. No-op when no file is active (button is disabled
+  // by _syncUndoRedoButtons in that case, but guard anyway in case
+  // someone calls from the console).
+  window.cleanerUndo = async () => {
+    if (!STATE.rid) return;
+    try {
+      const env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/undo`, {});
+      await _afterHistory(env, "Undone");
+    } catch (err) {
+      toast.error(`Undo failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+  window.cleanerRedo = async () => {
+    if (!STATE.rid) return;
+    try {
+      const env = await api.post(`/files/${encodeURIComponent(STATE.rid)}/redo`, {});
+      await _afterHistory(env, "Redone");
+    } catch (err) {
+      toast.error(`Redo failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // + Add file — opens the new-project rp-modal with the active project's
+  // name pre-filled + locked. spOpenNewProjectModal handles the reset
+  // + drop-zone bind. Wrapper exists because inline onclick can only
+  // see window-scoped values — STATE is module-scoped in cleaner.js.
+  window.cleanerAddFile = () => {
+    const name = STATE?.project?.name || "";
+    window.spOpenNewProjectModal?.(name);
+  };
+
+  // Export — GET /:rid/export streams the current view (post step-replay)
+  // as CSV. fetch-as-blob (not navigation) so failures surface as a
+  // toast and the session cookie rides along via credentials:"include".
+  // Server-suggested filename comes from Content-Disposition; falls back
+  // to the in-memory summary name when the header is missing.
+  window.cleanerExport = async () => {
+    if (!STATE.rid) { toast.error("Open a file first."); return; }
+    const btn = root.querySelector("[data-cleaner-export]");
+    btn?.classList.add("is-spinning");
+    try {
+      const res = await fetch(
+        `/api/files/${encodeURIComponent(STATE.rid)}/export`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { msg = (await res.json()).error ?? msg; } catch {}
+        throw new Error(msg);
+      }
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const m  = /filename="?([^"]+)"?/.exec(cd);
+      const stem = (STATE.summary?.display_name ?? STATE.summary?.filename ?? "export")
+        .replace(/\.csv$/i, "");
+      const name = m?.[1] ?? `${stem}.csv`;
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${name}`);
+    } catch (err) {
+      toast.error(`Export failed: ${err.message ?? err}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+    }
+  };
+
+  // Saved-settings rp-modal — read-only per-open-file inspector. One
+  // row per file in STATE.files (visible OR hidden); .is-active on the
+  // row matching STATE.rid. Filters group reads STATE.savedFilters[rid]
+  // (array of named filter envelopes); empty → "No saved filters"
+  // placeholder. Toolbar group surfaces per-file prefs from
+  // STATE.filePrefs (Map keyed by rid) — page size, search query,
+  // sort chain — falling back to the linked / default values when a
+  // file has no per-tab snapshot yet.
+  window.cleanerOpenSavedSettings = () => {
+    const host = root.querySelector("[data-cleaner-saved-settings]");
+    if (host) {
+      const files = Array.isArray(STATE.files) ? STATE.files : [];
+      if (!files.length) {
+        host.innerHTML =
+          '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
+          + 'No open files in this project.'
+          + '</div>';
+      } else {
+        const savedFilters = (STATE.savedFilters && typeof STATE.savedFilters === "object")
+          ? STATE.savedFilters : {};
+        const filePrefs = STATE.filePrefs instanceof Map ? STATE.filePrefs : new Map();
+        host.innerHTML = files.map((f) => {
+          const rid    = f.redpash_id;
+          const name   = f.display_name || f.filename || rid;
+          const active = rid === STATE.rid;
+
+          // Filters group — one chip per saved filter name, else default.
+          const savedList = Array.isArray(savedFilters[rid]) ? savedFilters[rid] : [];
+          const filterChips = savedList.length
+            ? savedList.map((sf) =>
+                `<span class="rp-view-chip">${_escHtml(sf.name || "(unnamed)")}</span>`
+              ).join("")
+            : '<span class="rp-view-default">No saved filters</span>';
+
+          // Toolbar group — page size + search + sort count from this
+          // file's snapshot (or live STATE if it's the active file).
+          const prefs    = filePrefs.get(rid) || {};
+          const pageSize = active ? (STATE.pageSize ?? prefs.pageSize)
+                                  : (prefs.pageSize ?? "—");
+          const q        = active ? (STATE.q ?? prefs.q ?? "") : (prefs.q ?? "");
+          const sorts    = active ? (STATE.sorts ?? prefs.sorts ?? [])
+                                  : (prefs.sorts ?? []);
+          const toolbarChips = [
+            `<span class="rp-view-chip">${_escHtml(String(pageSize))} rows</span>`,
+            q
+              ? `<span class="rp-view-chip">search: ${_escHtml(q)}</span>`
+              : "",
+            Array.isArray(sorts) && sorts.length
+              ? `<span class="rp-view-chip">${sorts.length} sort${sorts.length === 1 ? "" : "s"}</span>`
+              : "",
+          ].filter(Boolean).join("");
+
+          return `
+            <div class="rp-view-row${active ? " is-active" : ""}">
+              <i class="rp-view-icon bi bi-file-earmark-text"></i>
+              <div class="rp-view-body">
+                <div class="rp-view-name">${_escHtml(name)}${active ? ' <span class="rp-view-active">Active</span>' : ""}</div>
+                <div class="rp-view-group">
+                  <span class="rp-view-lbl">Filters:</span> ${filterChips}
+                </div>
+                <div class="rp-view-group">
+                  <span class="rp-view-lbl">Toolbar:</span> ${toolbarChips}
+                </div>
+              </div>
+            </div>`;
+        }).join("");
+      }
+    }
+    if (typeof window.openModal === "function") window.openModal("saved-settings");
+  };
+
+  // History rp-modal — paint the list from STATE.steps (newest first)
+  // and open. Backend ProjectStep shape: { id, op_kind, params, applied,
+  // created_at, … }. Local-cache vs backend-fetched split (.rp-hist-local
+  // marker) lands in a later pass — for now the modal just dumps the
+  // step history we already have in memory from the last /files/:rid
+  // fetch. Revert / Undo-all-local buttons are still inert; clicking
+  // them is a no-op pending the backend reverse-action endpoint.
+  window.cleanerOpenHistory = () => {
+    const host = root.querySelector("[data-cleaner-history-list]");
+    if (host) {
+      const steps = Array.isArray(STATE.steps) ? STATE.steps : [];
+      if (!steps.length) {
+        host.innerHTML =
+          '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
+          + 'No actions yet on this file.'
+          + '</div>';
+      } else {
+        // Newest first — backend returns chronological order; reverse
+        // for display so the most recent action is at the top.
+        const ordered = [...steps].reverse();
+        host.innerHTML = ordered.map((s) => {
+          const ts = s.created_at
+            ? new Date(s.created_at).toLocaleString()
+            : "—";
+          const op = s.op_kind || s.kind || "action";
+          // params is usually an object; stringify briefly for the demo.
+          let detail = "";
+          if (s.params && typeof s.params === "object") {
+            try {
+              detail = Object.entries(s.params)
+                .filter(([, v]) => v != null && v !== "")
+                .slice(0, 4)
+                .map(([k, v]) =>
+                  `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+                .join(" · ");
+            } catch { detail = ""; }
+          }
+          const dim = s.applied === false ? ' style="opacity:0.5"' : "";
+          const tag = s.applied === false
+            ? ' <span style="opacity:0.6;font-style:italic">(undone)</span>'
+            : "";
+          return `
+            <div class="rp-hist-row"${dim}>
+              <i class="bi bi-magic rp-hist-ico"></i>
+              <div class="rp-hist-body">
+                <div class="rp-hist-action">${_escHtml(op)}${tag}</div>
+                <div class="rp-hist-detail">${_escHtml(detail)}</div>
+              </div>
+              <div class="rp-hist-when">${_escHtml(ts)}</div>
+            </div>`;
+        }).join("");
+      }
+    }
+    if (typeof window.openModal === "function") window.openModal("history");
+  };
+
+  // Reactive picker re-populates. Called after every hidden / open
+  // mutation so a modal already on screen reflects the change without
+  // a re-fetch round-trip — the picker grids are built from in-memory
+  // STATE.files / STATE.projectMeta which are guaranteed fresh after
+  // mountSandbox. Client-first UX: no spinner, no API hit, picker
+  // updates same tick as the strip.
+  const _refilePicker = () => {
+    if (typeof _populateOpenFilePicker !== "function") return;
+    _populateOpenFilePicker(root, STATE.files || [], STATE.hiddenFiles || new Set());
+  };
+  const _reprojPicker = () => {
+    if (typeof _populateOpenProjectPicker !== "function") return;
+    const projects = STATE.projectMeta instanceof Map
+      ? [...STATE.projectMeta.values()]
+      : [];
+    _populateOpenProjectPicker(root, projects, STATE.openProjects || []);
+  };
+
+  // × on a file tab — hide it from the strip (file stays in the project).
+  // If the hidden tab was active, switch to the next visible file (or
+  // Overview if no visible files remain).
+  window.cleanerHideFileTab = (fid) => {
+    if (!fid) return;
+    if (!(STATE.hiddenFiles instanceof Set)) STATE.hiddenFiles = new Set();
+    STATE.hiddenFiles.add(fid);
+    _persistHidden();
+    _refilePicker();
+    if (STATE.rid === fid) {
+      const nextVisible = (STATE.files || []).find((f) =>
+        f.redpash_id !== fid && !STATE.hiddenFiles.has(f.redpash_id));
+      const target = nextVisible?.redpash_id ?? "";
+      window.cleanerActivateTab?.(target);
+    }
+  };
+
+  // Picker card → un-hide a closed file. spAddFileTab handles the
+  // animated insertion in the sandbox strip; this handler just owns
+  // the STATE + pref update.
+  window.cleanerShowFileTab = (fid) => {
+    if (!fid) return;
+    if (!(STATE.hiddenFiles instanceof Set)) STATE.hiddenFiles = new Set();
+    STATE.hiddenFiles.delete(fid);
+    _persistHidden();
+    _refilePicker();
+  };
+
+  // Click a project tab — restore its snapshot if cached, else fetch
+  // fresh; update URL via replaceState (NOT a hash change — that would
+  // re-trigger the router and re-mount). spActivateTab on the tab DOM
+  // (fired by composite onclick) handles the .active flip.
+  window.cleanerSwitchProject = async (pid) => {
+    if (!pid || pid === STATE.activeProjectId) return;
+    if (STATE.activeProjectId) _saveProjectSnapshot(STATE.activeProjectId);
+    STATE.activeProjectId = pid;
+    try {
+      history.replaceState(null, "", `#/cleaner?project=${encodeURIComponent(pid)}`);
+    } catch {}
+
+    // Try the in-memory snapshot first (sync). When there's no
+    // snapshot we fall through to _fetchProjectFresh — that's the
+    // path the user feels as "slow". Snappy fix: between setting
+    // STATE.activeProjectId and awaiting the fetch, flip the
+    // header to the new project IMMEDIATELY from cached projectMeta
+    // (loaded by mountSandbox's /projects fetch — has name, stage,
+    // file_count, cleanness_pct) and wipe the file-tab strip + table
+    // so the OLD project's contents don't linger. The correction
+    // pass below then fills in real data once the fetch resolves.
+    const hadSnapshot = _loadProjectSnapshot(pid);
+    if (!hadSnapshot) {
+      const cachedProj = STATE.projectMeta?.get(pid) ?? null;
+      if (cachedProj && typeof _renderSandboxHeader === "function") {
+        // files=null → header reads file_count from cachedProj for
+        // the "N files" meta line (vs files=[] which would render "0 files").
+        _renderSandboxHeader(root, cachedProj, null, null);
+      }
+      if (typeof _renderSandboxFileTabs === "function") {
+        _renderSandboxFileTabs(root, [], null);
+      }
+      const tableHost = root.querySelector("[data-cleaner-table]");
+      if (tableHost) {
+        tableHost.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">Loading…</div>';
+      }
+      await _fetchProjectFresh(pid, { fileRid: null });
+    }
+
+    // Correction pass — paint from STATE (now hydrated either by
+    // snapshot restore or fresh fetch). Sandbox project-tab strip is
+    // NOT repainted here — spActivateTab already flipped .active,
+    // and a full repaint would wipe in-flight .is-entering animations
+    // from picker-driven spAddProjectTab.
+    const activeProj = (STATE.projectMeta && STATE.projectMeta.get(pid)) || STATE.project;
+    const files = STATE.files || [];
+    const activeFile = STATE.rid ? files.find((f) => f.redpash_id === STATE.rid) || null : null;
+    if (typeof _renderSandboxHeader === "function") {
+      _renderSandboxHeader(root, activeProj, activeFile, files);
+    }
+    if (typeof _renderSandboxFileTabs === "function") {
+      _renderSandboxFileTabs(root, files, activeFile);
+    }
+    if (activeFile) {
+      _showSandboxTable(root);
+      await _paintSandboxTable(root, activeFile);
+    } else {
+      // New project has no active file (snapshot was overview-only, or
+      // fresh fetch with no fileRid). Land on overview so the body
+      // isn't showing stale content from the previous project.
+      _showSandboxOverview(root);
+      _paintSandboxOverview(root);
+    }
+  };
+
+  // Picker card → open another project. Push onto openProjects + persist,
+  // then switch to it. No-op if already open.
+  window.cleanerOpenProject = async (pid) => {
+    if (!pid) return;
+    if (!Array.isArray(STATE.openProjects)) STATE.openProjects = [];
+    if (!STATE.openProjects.includes(pid)) {
+      STATE.openProjects.push(pid);
+      window.rpSavePref?.("cleaner_open_projects", STATE.openProjects);
+    }
+    _reprojPicker();
+    if (pid !== STATE.activeProjectId) {
+      await window.cleanerSwitchProject(pid);
+    }
+  };
+
+  // × on a project tab — drop from openProjects + persist. Refuses to
+  // close the only remaining tab (would orphan the page). If the closed
+  // tab was active, switch to a neighbour.
+  window.cleanerCloseProject = async (pid) => {
+    if (!pid) return;
+    if (!Array.isArray(STATE.openProjects) || STATE.openProjects.length <= 1) return;
+    const i = STATE.openProjects.indexOf(pid);
+    if (i < 0) return;
+    STATE.openProjects.splice(i, 1);
+    if (STATE.projectSnapshots) STATE.projectSnapshots.delete(pid);
+    window.rpSavePref?.("cleaner_open_projects", STATE.openProjects);
+    _reprojPicker();
+    if (pid === STATE.activeProjectId) {
+      const next = STATE.openProjects[i] ?? STATE.openProjects[i - 1];
+      STATE.activeProjectId = null;
+      if (next) await window.cleanerSwitchProject(next);
+    }
+  };
+
+  // Click a file tab — paint chrome from the cached STATE.files entry
+  // instantly (snappy feel), then _paintSandboxTable fetches /files/:rid
+  // + /page in parallel and mirrors the fresh summary back. Header gets
+  // a SECOND paint after the fetch so any post-cache cleanness drift
+  // (e.g. a score recompute that ran between mount and tab-switch)
+  // corrects in the same tick. URL via replaceState so the router
+  // doesn't re-mount. Auto-unhides the file if it was previously
+  // × -closed (explicit activate intent overrides the hidden flag).
+  //
+  // Previously this also fetched /files/:rid for STATE.summary +
+  // .columns + .steps — but _paintSandboxTable does that fetch ANYWAY
+  // (it needs detail for columns_meta), and mirrors the same fields
+  // into STATE. The duplicate round-trip is gone; header now updates
+  // synchronously from cache for the snappy feel.
+  window.cleanerActivateTab = async (fid) => {
+    const proj = STATE.project ?? STATE.projectMeta?.get(STATE.activeProjectId);
+    if (!fid) {
+      // Overview — no active file; clear the file-specific slice and
+      // re-paint the chrome that depends on it. Header flips from
+      // "File cleanness" to "Project cleanness" via _renderSandboxHeader's
+      // null-activeFile branch. Body swaps: [data-cleaner-table] hides,
+      // [data-cleaner-overview] shows + gets painted with the file list.
+      try {
+        history.replaceState(null, "", `#/cleaner?project=${encodeURIComponent(STATE.project?.redpash_id ?? STATE.activeProjectId ?? "")}`);
+      } catch {}
+      STATE.rid = null;
+      STATE.summary = null;
+      STATE.columns = [];
+      STATE.steps = [];
+      _showSandboxOverview(root);
+      _paintSandboxOverview(root);
+      if (typeof _renderSandboxHeader === "function") {
+        _renderSandboxHeader(root, proj, null, STATE.files || []);
+      }
+      return;
+    }
+    if (fid === STATE.rid) return;
+    if (STATE.hiddenFiles?.has(fid)) {
+      STATE.hiddenFiles.delete(fid);
+      _persistHidden();
+    }
+    try {
+      history.replaceState(null, "", `#/cleaner?file=${encodeURIComponent(fid)}`);
+    } catch {}
+    STATE.rid = fid;
+    // Coming from Overview → flip body back to the table side BEFORE
+    // _paintSandboxTable runs (otherwise its "Loading…" placeholder
+    // paints into a hidden host and the user sees an empty page).
+    _showSandboxTable(root);
+    // Instant paint from cached file summary (mountSandbox loaded
+    // STATE.files from /api/projects/:rid/files, which carries
+    // cleanness_pct). _paintSandboxTable's post-fetch header repaint
+    // will overwrite with the fresh value a few hundred ms later.
+    const activeFile = (STATE.files || []).find((f) => f.redpash_id === fid) ?? null;
+    if (activeFile && typeof _renderSandboxHeader === "function") {
+      _renderSandboxHeader(root, proj, activeFile, STATE.files || []);
+    }
+    if (activeFile) {
+      await _paintSandboxTable(root, activeFile);
+    }
+  };
+
+  // ── Toolbar wiring (file-view) ───────────────────────────────────
+  // Live halves for the toolbar buttons. Each is paired with a sandbox
+  // sp* handler in toolbar.html via the composite onclick pattern
+  // (sandbox owns DOM affordance / animation, live owns STATE +
+  // persistence + backend). See docs/frontend/sandbox-integration.md.
+
+  // Refresh — re-fetch the active file's current page. Takes the
+  // button so we can flag .is-spinning for the fetch duration; the
+  // broadened .rp-btn.is-spinning .bi CSS rule animates infinitely
+  // while the class is present. No-op on Overview (button is still
+  // clickable but the refetch needs STATE.rid).
+  //
+  // 600ms minimum spin — refresh's two parallel fetches often finish
+  // in <100ms when the data is small/cached, which reads as a flash
+  // rather than "I clicked refresh". Promise.all with a sleep pads
+  // the spin to a consistent floor without slowing slower fetches.
+  // 600ms matches the sandbox spRefresh's original one-shot duration
+  // for visual consistency with other toolbar feedback (spClean too).
+  // Compute / clear cleanness don't need this — the POST/DELETE
+  // round-trip naturally takes long enough.
+  window.cleanerRefresh = async (btn) => {
+    if (!STATE.rid) return;
+    btn?.classList.add("is-spinning");
+    try {
+      const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+      const work = activeFile ? _paintSandboxTable(root, activeFile) : Promise.resolve();
+      const minSpin = new Promise((r) => setTimeout(r, 600));
+      await Promise.all([work, minSpin]);
+    } finally {
+      btn?.classList.remove("is-spinning");
+    }
+  };
+
+  // Row-numbers toggle — sandbox flips `.is-hide-rownums` on the panel
+  // via spToggleRowNums (CSS collapses the # gutter column). Live half
+  // mirrors STATE.showRowNums + persists so the choice survives
+  // refresh / re-mount.
+  window.cleanerToggleRowNums = () => {
+    STATE.showRowNums = !STATE.showRowNums;
+    window.rpSavePref?.("cleaner_show_row_nums", STATE.showRowNums);
+  };
+
+  // Sync toolbar — sandbox flips `.is-sync-on` on the panel via
+  // spToggleSync (CSS outlines synced fields). Live half persists
+  // STATE.linkToolbar; the actual propagation across file tabs lands
+  // when search + page-size wiring is migrated and snapshot-skip
+  // logic is added.
+  window.cleanerToggleSync = () => {
+    STATE.linkToolbar = !STATE.linkToolbar;
+    window.rpSavePref?.("cleaner_link_toolbar", STATE.linkToolbar);
+  };
+
+  // Open-links toggle — panel class gates the report/dashboard anchors
+  // (cleaner-hide-open-links CSS rule). Live half persists the choice.
+  // No sandbox half today; bound as a single live handler.
+  window.cleanerToggleRowOpen = (btn) => {
+    STATE.showOpenLinks = !STATE.showOpenLinks;
+    if (btn) {
+      btn.classList.toggle("is-active", STATE.showOpenLinks);
+      btn.setAttribute("aria-pressed", STATE.showOpenLinks ? "true" : "false");
+    }
+    root.querySelector(".rp-rt-panel")?.classList.toggle("cleaner-hide-open-links", !STATE.showOpenLinks);
+    window.rpSavePref?.("cleaner_show_open_links", STATE.showOpenLinks);
+  };
+
+  // Report / Dashboard anchors — preventDefault on the click, build
+  // the hash with the current file / project, open in a new tab.
+  // anchor_links_new_tab.md memory: every <a href> defaults to a new
+  // tab; window.open with "_blank" matches. Returns false to stop the
+  // anchor's bare href from navigating the current tab too.
+  window.cleanerOpenReportForFile = (ev) => {
+    ev?.preventDefault?.();
+    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return false; }
+    window.open(`#/reports?new=1&source=${encodeURIComponent(STATE.rid)}`, "_blank", "noopener");
+    return false;
+  };
+  window.cleanerOpenDashboardForProject = (ev) => {
+    ev?.preventDefault?.();
+    const pid = STATE.project?.redpash_id ?? STATE.activeProjectId
+              ?? STATE.summary?.project_redpash_id;
+    if (!pid) { window.toast?.info?.("Couldn't resolve the project."); return false; }
+    window.open(`#/dashboards?new=1&project=${encodeURIComponent(pid)}`, "_blank", "noopener");
+    return false;
+  };
+
+  // Compute / clear cleanness — POST + DELETE /files/:rid/cleanness,
+  // both return the updated summary. Wrap into a synthetic envelope
+  // (keeps STATE.columns / .steps untouched — cleanness is metadata,
+  // not a data-frame mutation) and pipe through _afterHistory so the
+  // header widget + file-tab data-cleanness pick up the new pct in the
+  // same paint pass.
+  window.cleanerScoreFile = async (btn) => {
+    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return; }
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const summary = await api.post(`/files/${encodeURIComponent(STATE.rid)}/cleanness`, {});
+      await _afterHistory({ summary, columns: STATE.columns, steps: STATE.steps }, "Cleanness computed");
+    } catch (err) {
+      window.toast?.error?.(`Score failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
+    }
+  };
+  window.cleanerClearScore = async (btn) => {
+    if (!STATE.rid) { window.toast?.info?.("Open a file first."); return; }
+    btn?.classList.add("is-spinning");
+    btn && (btn.disabled = true);
+    try {
+      const summary = await api.delete(`/files/${encodeURIComponent(STATE.rid)}/cleanness`);
+      await _afterHistory({ summary, columns: STATE.columns, steps: STATE.steps }, "Cleanness cleared");
+    } catch (err) {
+      window.toast?.error?.(`Clear failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+      btn && (btn.disabled = false);
+    }
+  };
+
+  // ── Row selection + bulk delete ──────────────────────────────────
+  // STATE.selected is a Set of GLOBAL row indices (page-offset added
+  // in _paintSandboxTable). Source of truth for the chip count and
+  // the bulk-delete drop_rows payload. The DOM .rp-rt-row-sel class
+  // is just visual; STATE.selected is what the backend POST reads.
+
+  // Repaint the selection chip from STATE.selected.size. data-count=0
+  // hides the chip via CSS (.rp-rt-sel-chip[data-count="0"] display:none);
+  // any positive count + .is-mode-select on the panel shows it.
+  const _renderSelChip = () => {
+    const chip = root.querySelector(".rp-rt-sel-chip");
+    if (!chip) return;
+    const n = STATE.selected instanceof Set ? STATE.selected.size : 0;
+    chip.setAttribute("data-count", String(n));
+    chip.innerHTML = `<i class="bi bi-check2-square"></i> ${n} selected`;
+    // Master header checkbox state — checked when ALL rows on the
+    // current page are selected, indeterminate while some are.
+    const headerCb = root.querySelector(".rp-rt-table thead .rp-rt-th-mode input[type='checkbox']");
+    const rowCbs   = root.querySelectorAll(".rp-rt-table tbody .rp-rt-row-chk");
+    if (headerCb && rowCbs.length) {
+      headerCb.checked       = (n === rowCbs.length && rowCbs.length > 0);
+      headerCb.indeterminate = (n > 0 && n < rowCbs.length);
+    }
+  };
+
+  // Row checkbox click — toggles STATE.selected entry + the row's
+  // .rp-rt-row-sel class (CSS uses it for the active-bg inversion +
+  // the check2-circle icon swap). data-ri carries the GLOBAL row
+  // index (set by _paintSandboxTable).
+  // Delete-mode single-row click routing is NOT implemented on the
+  // sandbox path. The sandbox first-cell overlaps a transparent
+  // checkbox (z-index:1, full-cell click target) with decorative
+  // uncheck/check/trash glyphs, so a click anywhere in the cell
+  // toggles the checkbox below regardless of which icon is showing.
+  // In delete mode that reads as "click row to select" instead of
+  // "click row to drop", which is the same complaint live's
+  // implementation had before the legacy _applyDropRows pipeline.
+  //
+  // Sandbox dispatch (spToggleRowSel) routes to spDeleteRow when
+  // is-mode-delete is on the panel. The cleaner-page equivalent
+  // is now wired here directly — we don't need to migrate the
+  // legacy _applyDropRows / _absoluteIndex helpers because:
+  //   1. cleanerMaybeBulkDelete already POSTs drop_rows + pipes
+  //      the envelope through _afterHistory.
+  //   2. _paintSandboxTable emits GLOBAL row indices on every data
+  //      cell (data-row-idx, page-offset added), so single-row
+  //      drop doesn't need _absoluteIndex's page-relative → global
+  //      conversion.
+  //
+  // Wiring shape: _paintSandboxTable puts onclick="cleanerRowClick(this)"
+  // on the <tr>. The mode-cell checkbox has NO onclick of its own —
+  // native toggle bubbles up, cleanerRowClick re-syncs cb.checked to
+  // match the new row state. One dispatcher, three modes:
+  //   • delete mode: POST drop_rows for this row's global index;
+  //     _afterHistory's repaint clears the now-stale row.
+  //   • select mode: toggle .rp-rt-row-sel + STATE.selected + chip,
+  //     force cb.checked to match.
+  //   • edit / no mode: no-op (edit cells handle their own focusin).
+  window.cleanerRowClick = async (row) => {
+    if (!row) return;
+    const panel = row.closest(".rp-rt-panel");
+    if (!panel) return;
+
+    if (panel.classList.contains("is-mode-delete")) {
+      if (!STATE.rid) return;
+      // Undo the native checkbox toggle that fires before the click
+      // bubbles up — keeps the checkbox visually consistent for the
+      // ~50-200ms between POST issue and _afterHistory repaint.
+      const cb0 = row.querySelector(".rp-rt-row-chk");
+      if (cb0) cb0.checked = false;
+      // Any data cell on this row carries the global row index.
+      const dataCell = row.querySelector("td[data-row-idx]");
+      if (!dataCell) return;
+      const ri = parseInt(dataCell.dataset.rowIdx, 10);
+      if (!Number.isFinite(ri)) return;
+      try {
+        const env = await api.post(
+          `/files/${encodeURIComponent(STATE.rid)}/steps`,
+          { kind: "drop_rows", params: { indices: [ri] } },
+        );
+        await _afterHistory(env, "Row dropped");
+      } catch (err) {
+        window.toast?.error?.(`Drop failed: ${err.body?.error ?? err.message}`);
+      }
+      return;
+    }
+
+    if (!panel.classList.contains("is-mode-select")) return;
+
+    // Select mode — toggle this row's selection. Computed from the
+    // CURRENT class (not from cb.checked), so a row-click outside
+    // the checkbox cell flips correctly. cb.checked is then forced
+    // to match, overriding any native auto-toggle that happened
+    // when the click target was the checkbox itself.
+    const cb = row.querySelector(".rp-rt-row-chk");
+    if (!cb) return;
+    const ri = Number(cb.dataset.ri);
+    if (!Number.isFinite(ri)) return;
+    const willBe = !row.classList.contains("rp-rt-row-sel");
+    row.classList.toggle("rp-rt-row-sel", willBe);
+    cb.checked = willBe;
+    if (!(STATE.selected instanceof Set)) STATE.selected = new Set();
+    if (willBe) STATE.selected.add(ri);
+    else        STATE.selected.delete(ri);
+    _renderSelChip();
+  };
+
+  // Master checkbox in the table header — flips all visible-page row
+  // checkboxes + STATE.selected to match. Page-scoped (not cross-page);
+  // selection clears on pagination by design.
+  window.cleanerSelectAllRows = (chk) => {
+    if (!chk) return;
+    const on = !!chk.checked;
+    if (!(STATE.selected instanceof Set)) STATE.selected = new Set();
+    STATE.selected.clear();
+    root.querySelectorAll(".rp-rt-table tbody .rp-rt-row-chk").forEach((cb) => {
+      cb.checked = on;
+      cb.closest("tr")?.classList.toggle("rp-rt-row-sel", on);
+      if (on) {
+        const ri = Number(cb.dataset.ri);
+        if (Number.isFinite(ri)) STATE.selected.add(ri);
+      }
+    });
+    _renderSelChip();
+  };
+
+  // Bulk delete — POST a drop_rows step with the selected global
+  // indices. Called from two places:
+  //   1. The toolbar trash pill (delete-mode click with selection) —
+  //      sandbox spSetMode animates the rows out in parallel.
+  //   2. The in-table master trash (.rp-master-trash in header), only
+  //      visible in delete mode.
+  // No-op when there's no selection (the trash pill is also a plain
+  // mode-flip in that case). STATE.selected is cleared optimistically
+  // so the chip resets immediately; _afterHistory's repaint clears
+  // again as a belt-and-braces.
+  window.cleanerMaybeBulkDelete = async () => {
+    if (!STATE.rid) return;
+    const sel = STATE.selected;
+    if (!(sel instanceof Set) || sel.size === 0) return;
+    const indices = [...sel].map(Number).filter((n) => Number.isFinite(n));
+    if (!indices.length) return;
+    const n = indices.length;
+    STATE.selected.clear();
+    _renderSelChip();
+    try {
+      const env = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        { kind: "drop_rows", params: { indices } },
+      );
+      await _afterHistory(env, `Dropped ${n} row${n === 1 ? "" : "s"}`);
+    } catch (err) {
+      window.toast?.error?.(`Drop failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Rows-per-page — drives _paintSandboxTable's /page request via
+  // STATE.pageSize. Cursor resets to 1 since the old offset doesn't
+  // map at a new size. Persisted as a global pref; per-file override
+  // lands with filePrefs migration. spDdSelectRows (sandbox) flips
+  // the DD's is-selected + writes the rows-label in parallel.
+  window.cleanerSetPageSize = async (n) => {
+    const size = Math.max(1, Math.min(Number(n) || _OV_DEFAULT_PAGE_SIZE, 5000));
+    if (size === STATE.pageSize) return;
+    STATE.pageSize = size;
+    STATE.page = 1;
+    window.rpSavePref?.("cleaner_page_size", size);
+    if (STATE.rid) {
+      const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+      if (activeFile) await _paintSandboxTable(root, activeFile);
+    }
+  };
+
+  // Cell-edit dispatcher — POST a set_cell step on focusout of any
+  // data cell whose textContent actually changed. Cells are marked
+  // editable by controls.js's spSetMode when the edit-mode pill is
+  // active (sets contenteditable="true" on every tbody td). The
+  // dispatcher only acts on cells carrying [data-row-idx] +
+  // [data-col-name] — those are emitted by _paintSandboxTable, so
+  // file-name / project-name / column-header edits flow through
+  // their own (legacy / future) rename paths instead.
+  //
+  // Own dataset key (rpCellPrev) — controls.js's focusout reads
+  // and deletes el.dataset.spPrevText before bubbling to us, so we
+  // can't piggyback on it. Same idea, separate slot.
+  //
+  // document-level listener installed once (guarded by the function
+  // property) — mountSandbox runs on every hash change and would
+  // otherwise stack listeners.
+  if (!_installSandboxLiveHandlers._cellEditInstalled) {
+    _installSandboxLiveHandlers._cellEditInstalled = true;
+
+    const _isDataCell = (el) =>
+      el && el.dataset
+        && el.dataset.rowIdx != null
+        && el.dataset.colName != null;
+
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (!_isDataCell(el)) return;
+      el.dataset.rpCellPrev = el.textContent;
+    });
+
+    document.addEventListener("focusout", async (e) => {
+      const el = e.target;
+      if (!_isDataCell(el))            return;
+      if (el.dataset.rpCellPrev == null) return;
+      const prev = el.dataset.rpCellPrev;
+      delete el.dataset.rpCellPrev;
+      const next = el.textContent;
+      if (prev === next) return;
+      if (!STATE.rid) {
+        el.textContent = prev;
+        return;
+      }
+      const row    = parseInt(el.dataset.rowIdx, 10);
+      const column = el.dataset.colName;
+      if (!Number.isFinite(row) || !column) {
+        el.textContent = prev;
+        return;
+      }
+      try {
+        const env = await api.post(
+          `/files/${encodeURIComponent(STATE.rid)}/steps`,
+          { kind: "set_cell", params: { row, column, value: next } },
+        );
+        await _afterHistory(env, "Cell updated");
+      } catch (err) {
+        // Backend rejected (type cast failed, row out of range, etc).
+        // Roll the cell back so the on-screen value matches the
+        // server's authoritative state and surface why.
+        el.textContent = prev;
+        window.toast?.error(`Edit failed: ${err.body?.error ?? err.message}`);
+      }
+    });
   }
 }
 
 // Paint the project + file labels, the meta line, and the cleanness
 // widget from the active project + active file. All fields fall back
 // to "—" when missing so the user can tell what's not yet loaded.
+// Body visibility toggles — sandbox has TWO .rp-rt-table-wrap siblings:
+// [data-cleaner-table] (file CSV) and [data-cleaner-overview] (project
+// summary). Overview.html ships hidden; table.html ships visible. The
+// two helpers flip which one is on screen. The .rp-rt-pager (file paging
+// footer) hides with the table since paging is per-file.
+function _showSandboxOverview(root) {
+  const tbl = root.querySelector("[data-cleaner-table]");
+  const ov  = root.querySelector("[data-cleaner-overview]");
+  const pgr = root.querySelector(".rp-rt-pager");
+  if (tbl) tbl.hidden = true;
+  if (ov)  ov.hidden  = false;
+  if (pgr) pgr.hidden = true;
+}
+function _showSandboxTable(root) {
+  const tbl = root.querySelector("[data-cleaner-table]");
+  const ov  = root.querySelector("[data-cleaner-overview]");
+  const pgr = root.querySelector(".rp-rt-pager");
+  if (tbl) tbl.hidden = false;
+  if (ov)  ov.hidden  = true;
+  if (pgr) pgr.hidden = false;
+}
+
+// Paint the Overview pane — project-level file list (one row per file
+// in STATE.files). V0: name · stage · rows · cleanness · modified;
+// click a row to open that file as the active tab (composite: sandbox
+// flip + live activate + fetch). Keeps the markup deliberately plain
+// .rp-rt-table — overview-specific chrome (rp-rt-ov-*) lands as the
+// page grows per the feedback_overview_separate_namespace memory.
+//
+// Empty state: project has no files yet → friendly placeholder pointing
+// to the + add affordance. Hidden-file rows are still listed (they're
+// part of the project, just closed as tabs); clicking unhides via
+// cleanerActivateTab's auto-unhide path.
+function _paintSandboxOverview(root) {
+  const host = root.querySelector("[data-cleaner-overview]");
+  if (!host) return;
+  const files = STATE.files || [];
+  if (!files.length) {
+    host.innerHTML = ''
+      + '<div class="rp-form-meta" style="padding:1.5rem;text-align:center;font-style:italic">'
+      +   'No files in this project yet. Use <i class="bi bi-plus-lg"></i> to add one.'
+      + '</div>';
+    return;
+  }
+  const fmtDate = (s) => s ? new Date(s).toLocaleDateString() : "—";
+  const rows = files.map((f) => {
+    const rid       = _escAttr(f.redpash_id);
+    const name      = _escHtml(f.display_name || f.filename || f.redpash_id);
+    const stage     = _escHtml(f.stage || "—");
+    const rowCount  = f.row_count != null ? f.row_count.toLocaleString() : "—";
+    const cleanness = f.cleanness_pct != null ? `${Math.round(f.cleanness_pct)}%` : "—";
+    const modified  = _escHtml(fmtDate(f.updated_at));
+    // Row click → activate that file as the on-screen tab. Use the
+    // sibling .rp-rtp-tab[data-file-id=…] for the sandbox visual flip,
+    // then live cleanerActivateTab does fetch+paint (+ auto-unhide if
+    // the user had × -closed this tab earlier).
+    return ''
+      + `<tr style="cursor:pointer" onclick="`
+      +   `var t=document.querySelector('.rp-rtp-tab[data-file-id=&quot;${rid}&quot;]');`
+      +   `if(t)spActivateTab(t);`
+      +   `cleanerActivateTab('${rid}')`
+      + `">`
+      +   `<td>${name}</td>`
+      +   `<td>${stage}</td>`
+      +   `<td style="text-align:right">${rowCount}</td>`
+      +   `<td style="text-align:right">${cleanness}</td>`
+      +   `<td>${modified}</td>`
+      + `</tr>`;
+  }).join("");
+  host.innerHTML = ''
+    + '<table class="rp-rt-table">'
+    +   '<thead><tr>'
+    +     '<th>Name</th><th>Stage</th>'
+    +     '<th style="text-align:right">Rows</th>'
+    +     '<th style="text-align:right">Cleanness</th>'
+    +     '<th>Modified</th>'
+    +   '</tr></thead>'
+    +   `<tbody>${rows}</tbody>`
+    + '</table>';
+}
+
 function _renderSandboxHeader(root, proj, activeFile, files) {
   const txt = (sel, val) => {
     const el = root.querySelector(sel);
@@ -4863,17 +5860,32 @@ function _renderSandboxHeader(root, proj, activeFile, files) {
       activeFile ? (activeFile.display_name || activeFile.filename) : null);
 
   // Meta line: "N files · stage: clean · last modified …"
+  // Pass files=null when the project's file list hasn't been fetched
+  // yet (cleanerSwitchProject snappy-paint path) — we still want the
+  // count to read sensibly so it falls back to proj.file_count from
+  // the cached projectMeta. files=[] is treated as authoritative "no
+  // files", since that's a real post-fetch state.
   const meta = [];
-  if (files?.length != null) {
+  if (Array.isArray(files)) {
     meta.push(`${files.length} file${files.length === 1 ? "" : "s"}`);
+  } else if (proj?.file_count != null) {
+    meta.push(`${proj.file_count} file${proj.file_count === 1 ? "" : "s"}`);
   }
   if (proj?.stage) meta.push(`stage: ${proj.stage}`);
   if (proj?.status && proj.status !== "active") meta.push(proj.status);
   txt("[data-cleaner-proj-meta]", meta.join(" · "));
 
   // Cleanness widget — file-level if a file is active, project-level
-  // otherwise. Width-driven fill (clamped 0–100).
-  const pct = activeFile?.cleanness_pct ?? proj?.cleanness_pct ?? null;
+  // otherwise. Project-level is the MEAN of the per-file cleanness
+  // values computed client-side from STATE.files (via the `files`
+  // arg). Why client-side: a file's cleanness_pct can change in the
+  // same session (the user just hit Compute Cleanness / Clear); the
+  // backend's proj.cleanness_pct may not have been recomputed since.
+  // Mean from current STATE always matches what the user sees in the
+  // overview file list. Width-driven fill (clamped 0–100).
+  const pct = activeFile
+    ? activeFile.cleanness_pct
+    : _computeProjectMeanCleanness(files);
   txt("[data-cleaner-cleanness-lbl]",
       activeFile ? "File cleanness" : "Project cleanness");
   txt("[data-cleaner-cleanness-pct]",
@@ -4883,6 +5895,19 @@ function _renderSandboxHeader(root, proj, activeFile, files) {
     const w = pct != null ? Math.max(0, Math.min(100, Math.round(pct))) : 0;
     fill.style.width = `${w}%`;
   }
+}
+
+// Mean of per-file cleanness_pct values across the project's files.
+// Files with null / non-finite cleanness are excluded from the mean
+// (they're "not scored yet"), not counted as 0. Returns null when no
+// file has a score yet — header reads that as "—".
+function _computeProjectMeanCleanness(files) {
+  if (!Array.isArray(files) || !files.length) return null;
+  const vals = files
+    .map((f) => Number(f?.cleanness_pct))
+    .filter((v) => Number.isFinite(v));
+  if (!vals.length) return null;
+  return vals.reduce((a, v) => a + v, 0) / vals.length;
 }
 
 // Paint the file-tab strip — one .rp-rtp-tab per file in the active
@@ -4914,24 +5939,28 @@ function _renderSandboxFileTabs(root, files, activeFile) {
     if (file.cleanness_pct != null) {
       tab.setAttribute("data-cleanness", String(Math.round(file.cleanness_pct)));
     }
+    // Composite onclick: sandbox handler flips active class + drives
+    // the cleanness widget visually (instant), then the live handler
+    // does the fetch + STATE update. Avoids the location.hash route
+    // that would re-mount the entire page and drop the animation.
+    const rid = _escAttr(file.redpash_id);
     tab.setAttribute(
       "onclick",
-      `location.hash='#/cleaner?file=${encodeURIComponent(file.redpash_id)}'`,
+      `spActivateTab(this);cleanerActivateTab('${rid}')`,
     );
     const name = file.display_name || file.filename || "(unnamed)";
-    // × calls cleanerHideFileTab — the live handler that already
-    // updates STATE.hiddenFiles, persists prefs.cleaner_hidden_files,
-    // switches to a neighbour if the closed tab was active, and (via
-    // _repaintSandboxStrips inside it) re-renders this strip from the
-    // updated set. Sandbox's generic spDeleteTab (controls.js) only
-    // DOM-removed without persisting; live's handler is the source of
-    // truth and now drives the sandbox UI too.
+    // × — spDeleteTab animates the remove (.is-removing → DOM removal
+    // after 180ms + activates DOM-next sibling). cleanerHideFileTab
+    // runs in parallel and owns the persistence (STATE.hiddenFiles +
+    // pref) + the state-aware "next visible file" switch when the
+    // closed tab was active. _repaintSandboxStrips is NOT called from
+    // there anymore, so the .is-removing animation completes cleanly.
     tab.innerHTML =
         '<i class="bi bi-file-earmark-text"></i>'
       + '<span class="rp-rtp-tab-name">' + _escHtml(name) + '</span>'
       + '<span class="rp-rtp-tab-x" title="Close this tab"'
-      + ' onclick="event.stopPropagation();cleanerHideFileTab(\''
-      +   _escAttr(file.redpash_id) + '\')">'
+      + ' onclick="event.stopPropagation();spDeleteTab(this);cleanerHideFileTab(\''
+      +   rid + '\')">'
       +   '<i class="bi bi-x"></i>'
       + '</span>';
     if (addWrap) strip.insertBefore(tab, addWrap);
@@ -4952,9 +5981,15 @@ async function _paintSandboxTable(root, activeFile) {
 
   let detail, pageRes;
   try {
+    // Page + size come from STATE so the rows-per-page dropdown +
+    // (future) pagination buttons drive the fetch. mountSandbox seeds
+    // both from prefs.cleaner_page_size + a 1-page reset; cleanerSetPageSize
+    // updates them on user pick.
+    const pg   = Math.max(1, Number(STATE.page) || 1);
+    const sz   = Math.max(1, Number(STATE.pageSize) || _OV_DEFAULT_PAGE_SIZE);
     [detail, pageRes] = await Promise.all([
       api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}`),
-      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?page=1&size=25`),
+      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?page=${pg}&size=${sz}`),
     ]);
   } catch (err) {
     console.error("[cleaner] file/page fetch failed", err);
@@ -4962,24 +5997,113 @@ async function _paintSandboxTable(root, activeFile) {
     return;
   }
 
+  // Mirror the active file's slice into STATE so handlers (undo/redo,
+  // tools panel, history modal) read fresh values without re-fetching.
+  // Without this, STATE.steps stays empty on first paint and the
+  // [data-sp-undo] / [data-sp-redo] sync helper would always see a
+  // 0-applied / 0-undone history → buttons permanently disabled.
+  STATE.summary = detail.summary;
+  STATE.columns = detail.columns ?? [];
+  STATE.steps   = detail.steps   ?? [];
+
+  // Mirror the fresh summary into STATE.files so subsequent reads
+  // (file-tabs, picker, header) see the same numbers — cleanness can
+  // recompute server-side between mount and switch. Then re-paint the
+  // header so the widget reflects the up-to-date value (cleanerActivateTab
+  // painted from cache for instant feel; this is the correction pass).
+  if (Array.isArray(STATE.files) && detail.summary) {
+    const idx = STATE.files.findIndex((f) => f.redpash_id === activeFile.redpash_id);
+    if (idx >= 0) STATE.files[idx] = detail.summary;
+  }
+  const _proj = STATE.project ?? STATE.projectMeta?.get(STATE.activeProjectId);
+  if (typeof _renderSandboxHeader === "function") {
+    _renderSandboxHeader(root, _proj, detail.summary, STATE.files || []);
+  }
+
   const columns = detail.columns ?? [];
   const rows    = pageRes.rows  ?? [];
   const total   = pageRes.total ?? rows.length;
+  // Page-relative offset → global row index for each cell. Edit-mode's
+  // focusout dispatcher reads data-row-idx as a GLOBAL index so the
+  // backend set_cell step doesn't have to know about pagination state.
+  const pageNum  = pageRes.page ?? 1;
+  const pageSize = pageRes.size ?? rows.length;
+  const startIdx = (pageNum - 1) * pageSize;
   const start   = ((pageRes.page ?? 1) - 1) * (pageRes.size ?? rows.length) + 1;
   const end     = start + rows.length - 1;
 
+  // Clear stale selection on every paint — pagination / step apply /
+  // refresh all rewrite the tbody; the old indices may no longer map
+  // to the same rows (drop_rows shifts), so we reset to a clean slate.
+  // Reset the chip too (data-count=0 also hides it via the CSS rule
+  // .rp-rt-sel-chip[data-count="0"] { display: none }).
+  if (STATE.selected instanceof Set) STATE.selected.clear();
+  const _chipReset = root.querySelector(".rp-rt-sel-chip");
+  if (_chipReset) {
+    _chipReset.setAttribute("data-count", "0");
+    _chipReset.innerHTML = '<i class="bi bi-check2-square"></i> 0 selected';
+  }
+
+  // Leading mode column — matches the cleaner sandbox convention from
+  // redpash-components/spreadsheet-paper/main.css. ONE rail per row
+  // holding overlapping icons: native checkbox (invisible overlay,
+  // source-of-truth for :checked), .rp-row-uncheck / .rp-row-check
+  // (visible glyphs that fade via :checked sibling + .is-mode-select),
+  // .rp-row-trash (visible in .is-mode-delete). Then rownum, then data.
+  //
+  // controls.js's contenteditable selector
+  //   td:not(.rp-rt-rownum-td):not(:first-child)
+  // still works — :first-child is now the mode column (skipped), the
+  // rownum-td is class-skipped, data cells start at the 3rd column.
+  // Master trash icon is purely visual — matches the Objects markup
+  // convention (two classes `rp-row-trash rp-master-trash`, no onclick).
+  // CSS gives it pointer-events: auto in delete mode, but the master
+  // checkbox above carries z-index: 1 + inset: 0, so it absorbs the
+  // click. Bulk-delete fires from the toolbar trash pill (composite
+  // onclick: spSetMode(this);cleanerMaybeBulkDelete()), which is the
+  // single canonical entry point for "delete selected".
   const theadHtml = "<tr>"
+    + '<th class="rp-rt-th-mode">'
+    +   '<input type="checkbox" onclick="cleanerSelectAllRows(this)">'
+    +   '<i class="bi bi-circle rp-row-uncheck"></i>'
+    +   '<i class="bi bi-check2-circle rp-row-check"></i>'
+    +   '<i class="bi bi-trash rp-row-trash rp-master-trash"></i>'
+    + '</th>'
+    + '<th class="rp-rt-rownum-th">#</th>'
     + columns.map((c) =>
         `<th class="rp-rt-th-sortable">${_escHtml(c.name)} <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>`
       ).join("")
     + "</tr>";
 
-  const tbodyHtml = rows.map((row) =>
-    "<tr>" + columns.map((_c, i) => {
-      const v = row[i];
-      return `<td>${_escHtml(v ?? "")}</td>`;
-    }).join("") + "</tr>"
-  ).join("");
+  // data-row-idx is a GLOBAL row index (page offset added) so the
+  // set_cell step is page-agnostic; data-col-name carries the column
+  // by name (Polars accepts &str). The focusout dispatcher in
+  // _installSandboxLiveHandlers reads both attrs to build the step
+  // payload — without them, the dispatcher can't tell which cell moved.
+  // The mode-column checkbox's data-ri carries the same global index
+  // for cleanerRowClick → STATE.selected → bulk-delete drop_rows.
+  //
+  // <tr onclick="cleanerRowClick(this)"> is the single mode-aware
+  // dispatcher: select-mode toggles selection (mirrors spToggleRowSel),
+  // delete-mode POSTs drop_rows for that row's global index. Checkbox
+  // has NO onclick — native toggle bubbles up, cleanerRowClick
+  // re-syncs cb.checked to the new row state. No double-toggle race.
+  const tbodyHtml = rows.map((row, rowIdx) => {
+    const globalRow = startIdx + rowIdx;
+    return '<tr onclick="cleanerRowClick(this)">'
+      + '<td>'
+      +   `<input type="checkbox" class="rp-rt-row-chk" data-ri="${globalRow}">`
+      +   '<i class="bi bi-circle rp-row-uncheck"></i>'
+      +   '<i class="bi bi-check2-circle rp-row-check"></i>'
+      +   '<i class="bi bi-trash rp-row-trash"></i>'
+      + '</td>'
+      + `<td class="rp-rt-rownum-td">${(globalRow + 1).toLocaleString()}</td>`
+      + columns.map((c, i) => {
+          const v = row[i];
+          return `<td data-row-idx="${globalRow}" data-col-name="${_escAttr(c.name)}">${_escHtml(v ?? "")}</td>`;
+        }).join("")
+      + "</tr>";
+  }).join("");
 
   host.innerHTML = `<table class="rp-rt-table"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>`;
 
@@ -5019,6 +6143,11 @@ function _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid) {
   // openList IS the persisted list (STATE.openProjects, saved as
   // prefs.cleaner_open_projects), so a closed project tab stays
   // closed across mounts.
+  // last-tab guard — `cleanerCloseProject` refuses to drop the only
+  // remaining project (would orphan the page), but `spDeleteTab` would
+  // still animate the DOM remove. Skip the × entirely in that case so
+  // the visual + state can't disagree.
+  const onlyOne = openList.length <= 1;
   openList.forEach((pid) => {
     const proj = projectsByPid.get(pid);
     if (!proj) return;
@@ -5026,23 +6155,33 @@ function _renderSandboxProjectTabs(strip, projectsByPid, openList, activePid) {
     tab.type = "button";
     tab.className = "rp-rt-proj-tab" + (pid === activePid ? " active" : "");
     tab.setAttribute("data-sp-project-key", pid);
+    // Composite onclick: sandbox handler flips .active class + drives
+    // the cleanness widget. Live handler does the heavy lift —
+    // snapshots leaving project's STATE, restores incoming snapshot
+    // (or fetches), repaints header/title/cleanness. URL is updated
+    // via history.replaceState inside switchProject (not a hash
+    // change), so we avoid the router re-mount + animation loss.
+    const epid = _escAttr(pid);
     tab.setAttribute(
       "onclick",
-      `location.hash='#/cleaner?project=${encodeURIComponent(pid)}'`,
+      `spActivateTab(this);cleanerSwitchProject('${epid}')`,
     );
-    // × calls cleanerCloseProject — the live handler that drops the
-    // pid from STATE.openProjects, persists prefs.cleaner_open_projects,
-    // switches to a neighbour if the closed tab was active (which
-    // triggers cleanerSwitchProject → _repaintSandboxStrips), or just
-    // re-renders both strips if the closed tab wasn't active.
+    // × — spDeleteTab animates the remove + activates the next DOM
+    // sibling visually; cleanerCloseProject runs in parallel and
+    // owns the STATE drop + pref persist + (if active) the project
+    // switch fetch. Suppressed when only one tab is open (see onlyOne
+    // above) so the user can't trigger an animated-remove that the
+    // state handler refuses to commit.
+    const xSpan = onlyOne ? "" :
+        '<span class="rp-rt-proj-tab-x" title="Close this tab"'
+      + ' onclick="event.stopPropagation();spDeleteTab(this);cleanerCloseProject(\''
+      +   epid + '\')">'
+      +   '<i class="bi bi-x"></i>'
+      + '</span>';
     tab.innerHTML =
         '<i class="bi bi-folder2-open"></i>'
       + '<span class="rp-rt-proj-tab-name">' + _escHtml(proj.name) + '</span>'
-      + '<span class="rp-rt-proj-tab-x" title="Close this tab"'
-      + ' onclick="event.stopPropagation();cleanerCloseProject(\''
-      +   _escAttr(pid) + '\')">'
-      +   '<i class="bi bi-x"></i>'
-      + '</span>';
+      + xSpan;
     if (addWrap) strip.insertBefore(tab, addWrap);
     else         strip.appendChild(tab);
   });
@@ -5072,9 +6211,13 @@ function _populateOpenProjectPicker(root, projects, openList) {
     }
     if (p.stage)                 meta.push(`stage: ${_escHtml(p.stage)}`);
     if (p.cleanness_pct != null) meta.push(`${Math.round(p.cleanness_pct)}% clean`);
+    // Pass the project name as the second arg so spAddProjectTab
+    // (inside spOpenProjectFromPicker) can de-dupe + label the new
+    // animated tab.
     return ''
       + '<button type="button" class="rp-pick-card"'
-      + ' onclick="spOpenProjectFromPicker(\'' + p.redpash_id + '\')">'
+      + ' onclick="spOpenProjectFromPicker(\'' + p.redpash_id + '\',\''
+      +   _escAttr(p.name) + '\')">'
       +   '<i class="bi bi-folder2-open rp-pick-ico"></i>'
       +   '<div class="rp-pick-body">'
       +     '<div class="rp-pick-name">' + _escHtml(p.name) + '</div>'
@@ -5103,15 +6246,54 @@ function _populateColsPicker(root, columns) {
   ).join("");
 }
 
-// Card-click handler — close the picker first (so the page redraw
-// doesn't happen with the overlay still up), then navigate. The router
-// re-runs the cleaner mount which adds this pid to openList, persists,
-// and renders the new active tab.
-window.spOpenProjectFromPicker = function (pid) {
+// Card-click handler — close the picker, then use the sandbox add-tab
+// helper to animate a new tab into the project strip (.is-entering
+// CSS + de-dupe by name), tag it with the backend pid + state-aware
+// onclicks, then drive the live state path (cleanerOpenProject →
+// switchProject) for STATE + persistence + chrome paint. We DON'T go
+// through location.hash anymore — the router re-mount would clobber
+// the entering animation.
+window.spOpenProjectFromPicker = function (pid, name) {
+  if (!pid) return;
   if (typeof window.closeModal === "function") {
     window.closeModal('open-project');
   }
-  location.hash = '#/cleaner?project=' + encodeURIComponent(pid);
+  const strip = document.querySelector(".rp-rt-proj-tabs-inner");
+  if (strip && typeof window.spAddProjectTab === "function") {
+    // De-dupe: if a tab with this name is already on screen, sandbox
+    // just activates it. Otherwise it inserts a .is-entering tab.
+    const before = strip.querySelectorAll(".rp-rt-proj-tab").length;
+    window.spAddProjectTab(strip, name || pid);
+    const after = strip.querySelectorAll(".rp-rt-proj-tab").length;
+    if (after > before) {
+      // A new tab was inserted (not a de-dupe activate). Find it via
+      // the addWrap's previousElementSibling and tag it with pid +
+      // composite onclicks so subsequent click / × know the backend id.
+      const addWrap = strip.querySelector(".rp-tab-add-wrap");
+      const newTab = addWrap?.previousElementSibling;
+      if (newTab && newTab.classList.contains("rp-rt-proj-tab")) {
+        const epid = _escAttr(pid);
+        newTab.setAttribute("data-sp-project-key", pid);
+        newTab.setAttribute(
+          "onclick",
+          `spActivateTab(this);cleanerSwitchProject('${epid}')`,
+        );
+        const x = newTab.querySelector(".rp-rt-proj-tab-x");
+        if (x) {
+          x.setAttribute(
+            "onclick",
+            `event.stopPropagation();spDeleteTab(this);cleanerCloseProject('${epid}')`,
+          );
+        }
+      }
+    }
+  }
+  // State + fetch — cleanerOpenProject pushes pid into
+  // STATE.openProjects, persists prefs.cleaner_open_projects, then
+  // calls cleanerSwitchProject which restores / fetches the project.
+  if (typeof window.cleanerOpenProject === "function") {
+    window.cleanerOpenProject(pid);
+  }
 };
 
 // Paint the open-file picker. Mirrors _populateOpenProjectPicker:
@@ -5139,9 +6321,13 @@ function _populateOpenFilePicker(root, files, hiddenSet) {
       const kb = f.file_size_bytes / 1024;
       meta.push(kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`);
     }
+    // Pass the file's display name as second arg so spAddFileTab
+    // (inside spOpenFileFromPicker) can de-dupe + label the new
+    // animated tab.
     return ''
       + '<button type="button" class="rp-pick-card"'
-      + ' onclick="spOpenFileFromPicker(\'' + f.redpash_id + '\')">'
+      + ' onclick="spOpenFileFromPicker(\'' + f.redpash_id + '\',\''
+      +   _escAttr(name) + '\')">'
       +   '<i class="bi bi-file-earmark-text rp-pick-ico"></i>'
       +   '<div class="rp-pick-body">'
       +     '<div class="rp-pick-name">' + _escHtml(name) + '</div>'
@@ -5151,20 +6337,50 @@ function _populateOpenFilePicker(root, files, hiddenSet) {
   }).join("");
 }
 
-// File picker card click — closes the modal, then re-activates the
-// file via cleanerActivateTab. That handler un-hides the file (drops
-// from STATE.hiddenFiles + persists the pref + re-renders the strip)
-// and runs the fetch / paint pipeline. No URL navigation needed since
-// the project doesn't change.
-window.spOpenFileFromPicker = function (rid) {
+// File picker card click — close the picker, animate a new tab
+// inserting via spAddFileTab (.is-entering CSS + de-dupe), tag the
+// inserted DOM with the backend rid + state-aware onclicks, then run
+// the live state path: cleanerShowFileTab removes the rid from
+// STATE.hiddenFiles + persists, cleanerActivateTab fetches/paints.
+window.spOpenFileFromPicker = function (rid, name) {
+  if (!rid) return;
   if (typeof window.closeModal === "function") {
     window.closeModal('open-file');
   }
+  const strip = document.querySelector(".rp-rtp-tabs-inner");
+  if (strip && typeof window.spAddFileTab === "function") {
+    const before = strip.querySelectorAll(".rp-rtp-tab:not([data-is-overview])").length;
+    window.spAddFileTab(strip, name || rid);
+    const after = strip.querySelectorAll(".rp-rtp-tab:not([data-is-overview])").length;
+    if (after > before) {
+      // New tab inserted — find it via addWrap's previousElementSibling
+      // and tag with backend rid + composite onclicks.
+      const addWrap = strip.querySelector(".rp-tab-add-wrap");
+      const newTab = addWrap?.previousElementSibling;
+      if (newTab && newTab.classList.contains("rp-rtp-tab")) {
+        const erid = _escAttr(rid);
+        newTab.setAttribute("data-file-id", rid);
+        newTab.setAttribute(
+          "onclick",
+          `spActivateTab(this);cleanerActivateTab('${erid}')`,
+        );
+        const x = newTab.querySelector(".rp-rtp-tab-x");
+        if (x) {
+          x.setAttribute(
+            "onclick",
+            `event.stopPropagation();spDeleteTab(this);cleanerHideFileTab('${erid}')`,
+          );
+        }
+      }
+    }
+  }
+  // Un-hide in STATE + persist (pulls the file back into the visible
+  // set for the next render), then activate + fetch the file.
+  if (typeof window.cleanerShowFileTab === "function") {
+    window.cleanerShowFileTab(rid);
+  }
   if (typeof window.cleanerActivateTab === "function") {
     window.cleanerActivateTab(rid);
-  } else {
-    // Defensive — fall back to URL nav if the tab handler isn't ready.
-    location.hash = '#/cleaner?file=' + encodeURIComponent(rid);
   }
 };
 

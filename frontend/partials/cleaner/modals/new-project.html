@@ -10,16 +10,14 @@
 <div class="rp-modal-overlay" id="rp-modal-new-project"
      onclick="closeModal('new-project')" role="dialog" aria-modal="true">
   <div class="rp-modal rp-modal-md" onclick="event.stopPropagation()">
-    <div class="rp-modal-hdr">
-      <div>
-        <h2 class="rp-modal-ttl">New project</h2>
-        <div class="rp-modal-sub">Name your project and import its first file to create it.</div>
-      </div>
-      <button class="rp-btn" onclick="closeModal('new-project')"
-              aria-label="Close" title="Close">
-        <i class="bi bi-x-lg"></i>
-      </button>
-    </div>
+    <!-- Close × — floated top-right since the header title + subtitle
+         + divider line were dropped on user request (the form below
+         is self-explanatory once the file is dropped). -->
+    <button class="rp-btn" onclick="closeModal('new-project')"
+            aria-label="Close" title="Close"
+            style="position:absolute;top:0.5rem;right:0.5rem">
+      <i class="bi bi-x-lg"></i>
+    </button>
 
     <div class="rp-form-row">
       <label class="rp-form-lbl" for="np-name">Project name</label>
@@ -48,8 +46,14 @@
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('new-project')">Cancel</button>
-      <button class="btn btn-primary" data-cleaner-np-submit
-              onclick="spCleanerCreateProject(this)">Create project</button>
+      <!-- Import — glass icon, same recipe as the topbar / header
+           buttons (.rp-btn). Title says Import because the action
+           is "import this file (and create / upsert the project)". -->
+      <button class="rp-btn" data-cleaner-np-submit
+              title="Import" aria-label="Import"
+              onclick="spCleanerCreateProject(this)">
+        <i class="bi bi-cloud-upload"></i>
+      </button>
     </div>
   </div>
 </div>

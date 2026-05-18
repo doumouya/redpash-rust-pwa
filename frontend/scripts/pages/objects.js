@@ -749,6 +749,16 @@ function _bindColsDdHover(root) {
 // ── Mount ──────────────────────────────────────────────────────────
 export default async function mount(root, ctx) {
   _root = root;
+  // Prerelease (Phase 1): /partials/objects.html is now a thin shell
+  // that data-includes the sandbox subtree at /partials/objects/index.html.
+  // The router's partial-swap doesn't recurse into data-include nodes;
+  // include.js exposes the walker as window.rpInclude. Without this,
+  // the page renders empty (the shell loads but its children never do).
+  // Mirrors the same call inside cleaner.js mount().
+  if (typeof window.rpInclude === "function") {
+    try { await window.rpInclude(root); }
+    catch (err) { console.warn("[objects] rpInclude failed", err); }
+  }
   // The user's tab set comes from their account prefs (seeded on the
   // session at boot). normalizeObjectTabs drops unknown keys and falls
   // back to the full catalog when nothing is saved.
@@ -772,6 +782,20 @@ export default async function mount(root, ctx) {
   // mount — the cleaner page owns this pref's writes.
   const open = ctx?.session?.prefs?.cleaner_open_projects;
   objOpenProjects = new Set(Array.isArray(open) ? open : []);
+
+  // ── Sandbox detection — Phase 2 state wiring ─────────────────────
+  // Sandbox partial emits per-type wrappers ([data-object-type]); the
+  // legacy partial doesn't. When the sandbox markup is on screen, the
+  // legacy renderTable's selectors ([data-rt-tbody], [data-rt-thead])
+  // miss → silent no-op + the hardcoded demo rows stay visible. Branch
+  // to mountObjectsSandbox before _wireGlobals so we don't install
+  // legacy handlers that target dead DOM. See
+  // docs/frontend/sandbox-integration.md for the cleaner playbook
+  // mirrored here.
+  if (root.querySelector("[data-object-type]")) {
+    await mountObjectsSandbox(root, ctx);
+    return;
+  }
 
   _wireGlobals(root);
   _bindColsDdHover(root);
@@ -804,6 +828,27 @@ export default async function mount(root, ctx) {
 // object types not currently shown. Add / remove persist to the account
 // via rpSavePref — see objAddTab / objRemoveTab.
 function _renderTabs(root) {
+  // Prerelease (Phase 1): sandbox owns the type-tab strip visual.
+  // controls.js exposes spRenderObjectTabs which writes
+  // <button class="rp-rt-proj-tab" data-sp-project-key="..."> markup
+  // matching the new objects.css proj-tabs theme overrides. Old
+  // _renderTabs emitted <div class="obj-tab"> which doesn't match
+  // the sandbox styling and would clobber the strip every time the
+  // user added / removed / activated a tab. Delegate so the two
+  // renderers don't fight over #obj-tabs.
+  //
+  // State coupling caveat: sandbox tracks _spActiveObjectKey inside
+  // controls.js; live's currentKind stays stale until we wire
+  // objActivateTab through spActivateObjectType in the next pass.
+  // For the visual port this is fine — clicks update the sandbox
+  // active class + toggle [data-object-type] visibility; live's
+  // per-kind data render isn't wired into the new per-type wrappers
+  // yet so currentKind being stale is a no-op.
+  if (typeof window.spRenderObjectTabs === "function") {
+    window.spRenderObjectTabs(root);
+    return;
+  }
+
   const list = root.querySelector("#obj-tabs");
   if (!list) return;
 
@@ -2022,6 +2067,12 @@ function renderTable(kind) {
   // hook. The <tr> is always a nav target, but the row-click handler
   // bails when a mode is active.
   const tbody = panel.querySelector("[data-rt-tbody]");
+  // Prerelease (Phase 1): sandbox markup uses per-type table-wraps with
+  // plain <tbody> (no data-rt-tbody hook) and sample rows. Live's
+  // renderTable can't find its target — bail so the sandbox samples
+  // stay visible. Real-data wiring will replace tbody contents per kind
+  // via the data-objects-table="<kind>" hook in the table partials.
+  if (!tbody) return;
   if (!slice.length) {
     tbody.innerHTML = `<tr><td colspan="${vCols.length + 3 + (withNum ? 1 : 0)}" style="text-align:center;color:var(--muted);padding:1rem">No ${kind} yet.</td></tr>`;
   } else {
@@ -2786,4 +2837,179 @@ function projectName(projectRid) {
   if (!projectRid) return "—";
   const p = STATE.projects.rows.find((x) => x.redpash_id === projectRid);
   return p?.name ?? projectRid.slice(0, 8);
+}
+
+// ── Phase 2 wiring — sandbox markup ↔ real backend ───────────────────
+// Mirrors cleaner.js's mountSandbox + _installSandboxLiveHandlers +
+// _paintSandboxTable trio. Active when the prerelease objects shell
+// (/partials/objects.html → data-include tree under /partials/objects/)
+// is on screen. See docs/frontend/sandbox-integration.md for the
+// shared discipline (composite onclicks, STATE mirror, dataset-key
+// isolation, once-guarded document listeners).
+//
+// What V0 does:
+//   1. Detect currentKind from URL ?tab=, else first user-pref tab.
+//   2. spActivateObjectType(kind) — sandbox swaps the visible
+//      [data-object-type] wrapper.
+//   3. loadTable(kind) — existing legacy fetcher; populates
+//      STATE[kind].rows.
+//   4. paintObjectsSandboxTable(kind) — writes tbody from STATE rows
+//      into [data-objects-table="kind"] (sandbox's per-type render hook).
+//   5. Doc listener on .rp-rt-proj-tab clicks → load+paint the new kind
+//      (the sandbox's spActivateObjectType swap fires in parallel; live
+//      half adds real data once the fetch resolves).
+//
+// What's deferred to next rounds (mirror the cleaner pass order):
+//   - Sort chain, search input, filter panel
+//   - Row selection + bulk delete (drop_rows-style endpoint per kind)
+//   - Inline edit (dblclick → PATCH)
+//   - Tab × close + picker → spAddObjectTab composite
+//   - Pagination buttons
+async function mountObjectsSandbox(root, ctx) {
+  _installObjectsLiveHandlers(root);
+
+  // Clear sandbox demo rows from EVERY per-type tbody on mount so the
+  // user never sees hardcoded "raw_dossier_500_sentinels.csv" demo data
+  // sitting in the table after switching to an un-loaded tab. Replaced
+  // by a loading placeholder; paintObjectsSandboxTable fills it in
+  // when the kind is activated.
+  root.querySelectorAll("[data-objects-table] tbody").forEach((tb) => {
+    tb.innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">Loading…</td></tr>';
+  });
+
+  // Determine active kind — URL ?tab= wins, else first user-pref tab,
+  // else "projects" as a last-ditch fallback.
+  const q   = new URLSearchParams(location.hash.split("?")[1] ?? "");
+  const tab = q.get("tab");
+  const kind = (objTabs.includes(tab) && tab)
+    || objTabs[0]
+    || "projects";
+
+  // Projects cache is needed by the files schema's Project column.
+  // Prefetch it even when we're landing elsewhere — non-fatal on error.
+  if (kind !== "projects" && objTabs.includes("projects")) {
+    try {
+      const res = await SCHEMAS.projects.fetch();
+      STATE.projects.rows = res.items ?? [];
+    } catch { /* projects column falls back to a rid slice */ }
+  }
+
+  // Trigger the sandbox visibility swap (sets `hidden` on every
+  // [data-object-type] wrapper except `kind`). Then load+paint.
+  if (typeof window.spActivateObjectType === "function") {
+    window.spActivateObjectType(kind);
+  }
+  currentKind = kind;
+  try { history.replaceState(null, "", `#/objects?tab=${kind}`); } catch {}
+  await _objLoadAndPaint(kind);
+}
+
+// Install window.objects* handlers + a doc-level listener for type-tab
+// clicks. Once-guarded so re-mount on hash change doesn't stack
+// listeners (mountObjectsSandbox runs every time the route fires).
+function _installObjectsLiveHandlers(root) {
+  // Public handler — drop straight into onclicks once tabs use a
+  // composite (spActivateObjectType + objectsActivateKind). Also
+  // reusable from the doc listener below.
+  window.objectsActivateKind = async (kind) => {
+    if (!kind || kind === currentKind) return;
+    if (typeof window.spActivateObjectType === "function") {
+      window.spActivateObjectType(kind);
+    }
+    currentKind = kind;
+    try { history.replaceState(null, "", `#/objects?tab=${kind}`); } catch {}
+    await _objLoadAndPaint(kind);
+  };
+
+  if (_installObjectsLiveHandlers._installed) return;
+  _installObjectsLiveHandlers._installed = true;
+
+  // Doc-level delegation on the type-tab strip. spRenderObjectTabs
+  // emits .rp-rt-proj-tab buttons with data-sp-project-key="<kind>"
+  // and inline onclick="spActivateObjectType('kind')" — we hook in
+  // via the click event to add load+paint without rewriting the
+  // sandbox renderer (avoids modifying controls.js). closest()
+  // catches clicks on icon / label children too.
+  //
+  // NO `#obj-tabs` descendant scope on the selector — spActivateObjectType
+  // runs spRenderObjectTabs(document) inline (replaces host.innerHTML),
+  // which DETACHES the originally clicked button before our listener
+  // sees the click. closest() walks the detached chain, so a
+  // descendant-scoped selector ("#obj-tabs ...") never matches.
+  // Discriminator vs cleaner project tabs (same class + data attr):
+  // the value of data-sp-project-key. Object kinds are in SCHEMAS;
+  // cleaner project rids ("PRJ_…") are not.
+  document.addEventListener("click", (ev) => {
+    const tab = ev.target.closest?.(".rp-rt-proj-tab[data-sp-project-key]");
+    if (!tab) return;
+    if (ev.target.closest(".rp-rt-proj-tab-x")) return;
+    const key = tab.getAttribute("data-sp-project-key");
+    if (!key || !SCHEMAS[key]) return;
+    window.objectsActivateKind(key);
+  });
+}
+
+// Fetch + paint helper. loadTable mutates STATE[kind].rows in place;
+// paintObjectsSandboxTable reads from there.
+async function _objLoadAndPaint(kind) {
+  if (!SCHEMAS[kind]) return;
+  const tbody = _root?.querySelector(`[data-objects-table="${kind}"] tbody`);
+  if (tbody) tbody.innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">Loading…</td></tr>';
+  try {
+    const res = await SCHEMAS[kind].fetch();
+    STATE[kind].rows = res.items ?? [];
+  } catch (err) {
+    STATE[kind].rows = [];
+    if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem" colspan="99">${esc(err.body?.error ?? err.message ?? "load failed")}</td></tr>`;
+    return;
+  }
+  // Tab switched while we were fetching — drop the stale paint.
+  if (kind !== currentKind) return;
+  paintObjectsSandboxTable(kind);
+  _paintObjectsSandboxMeta(kind);
+}
+
+// Paint per-type tbody from STATE[kind].rows. V0: uses the schema's
+// visible (non-hidden) columns as the cell layout — column count may
+// not match the partial's hand-tuned thead, browsers handle the
+// overflow gracefully (left-aligns under whatever headers exist). V1
+// will add per-kind sandboxCols hints + rich badges/bars to match the
+// partial visually.
+function paintObjectsSandboxTable(kind) {
+  const tbody = _root?.querySelector(`[data-objects-table="${kind}"] tbody`);
+  if (!tbody) return;
+  const rows = STATE[kind]?.rows ?? [];
+  const cols = (SCHEMAS[kind].columns || []).filter((c) => !c.hidden);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">No ${esc(kind)}.</td></tr>`;
+    return;
+  }
+  // Mode column (checkbox + icons) matches the cleaner sandbox
+  // convention so spSetMode / mode-class CSS in objects-sandbox.css
+  // applies the same uncheck / check / trash fade-in behaviour. Per-row
+  // onclick="spToggleRowSel(this)" mirrors the partial's hardcoded
+  // demo rows so select mode works without per-row wiring this pass.
+  tbody.innerHTML = rows.map((r) => {
+    const rid = esc(r.redpash_id ?? "");
+    return ''
+      + `<tr data-rt-rid="${rid}" onclick="spToggleRowSel(this)">`
+      +   '<td>'
+      +     '<input type="checkbox" />'
+      +     '<i class="bi bi-circle rp-row-uncheck"></i>'
+      +     '<i class="bi bi-check2-circle rp-row-check"></i>'
+      +     '<i class="bi bi-trash rp-row-trash"></i>'
+      +   '</td>'
+      +   cols.map((c) => `<td>${c.render(r)}</td>`).join("")
+      + '</tr>';
+  }).join("");
+}
+
+// Paint the per-type header's row-count meta line. Hits the
+// [data-objects-meta] hook that each per-type header partial exposes
+// (e.g. "<div data-objects-meta>6 projects · 16 files total</div>").
+function _paintObjectsSandboxMeta(kind) {
+  const el = _root?.querySelector(`[data-object-type="${kind}"] [data-objects-meta]`);
+  if (!el) return;
+  const n = STATE[kind]?.rows?.length ?? 0;
+  el.textContent = `${n} ${kind}`;
 }

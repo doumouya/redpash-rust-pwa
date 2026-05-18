@@ -24,15 +24,660 @@
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
 
+/* ── Sandbox-canonical visual vocabulary (objects page port) ────────────
+   Mirrors what cleaner.css imports so the two full-bleed workspaces
+   read the same. glass-btn for .rp-btn; proj-tabs for the type-tab
+   strip; modals-sandbox / dropdowns-sandbox / filter-panel-sandbox for
+   the shared panel + modal + dropdown grammar; objects-sandbox for
+   the per-row badges + cleanness bar + name anchor + row-mode glyphs
+   unique to this page. */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/proj-tabs.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
+@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
+@import "/vendor/redpash-components/components/objects-sandbox.css";
+
+/* ── Sandbox-aligned root font-size ──────────────────────────────────
+   Same pattern as cleaner.css — sandbox computes at 18px root via
+   `html { font-size: 112.5% }`. Live's main.css sets body to 14px
+   (~22% smaller); this per-page rule restores 18px while objects.css
+   is loaded. #page-objects re-sets its own font-size to 1rem so the
+   body's 14px override doesn't bleed back in via inheritance. */
+html { font-size: 112.5%; }
+
 /* Full-bleed shell from body[data-chrome="full"] (set in main.js before
    this CSS loads). The page fills the route container and stacks its
-   own header / tabs / panel. */
+   own header / tabs / panel. Token redefinition + gradient mirror
+   cleaner.css so both full-bleed workspaces share the cobalt / Arctic
+   Blue palette regardless of the user's saved theme. */
 #page-objects {
   flex: 1;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  font-size: 1rem;
+  font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 300;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Sandbox workspace gradient (Midnight Cobalt). Inlined to avoid
+     importing tokens-gradient.css and accidentally overriding live's
+     own tokens elsewhere. background-attachment: fixed pins it to
+     the viewport so scrolling doesn't repaint. */
+  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+  background-attachment: fixed;
+
+  /* Sandbox token redefinition (dark default). Redefining the bare
+     tokens at #page-objects scope cascades to every descendant so
+     vendored sandbox CSS using var(--text) / var(--over0) / etc.
+     resolves to the slate-cobalt palette instead of live's catppuccin
+     (which made the topbar read as "Rust app red bg"). Inline-style
+     overrides on <html> (main.js's accent writer) don't penetrate a
+     descendant scope's redefinition. */
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --over0:     #273549;
+  --over1:     #334155;
+  --text:      #e2e8f0;
+  --sub:       #94a3b8;
+  --muted:     #64748b;
+  --border:    #334155;
+  --hover:     #273549;
+  --selected:  #334155;
+  --accent:    #60a5fa;
+  --active-bg: #60a5fa;
+  /* Mirror through the --rp-* alias layer so any rule that reads
+     --rp-* (live components) picks up sandbox values too. */
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
+}
+html[data-theme="light"] #page-objects {
+  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --over0:     #dbeafe;
+  --over1:     #bfdbfe;
+  --text:      #1e3a5f;
+  --sub:       #2e5796;
+  --muted:     #6b82b8;
+  --border:    #bfdbfe;
+  --hover:     #dbeafe;
+  --selected:  #bfdbfe;
+  --accent:    #2563eb;
+  --active-bg: #1e3a5f;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects {
+    background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+    --bg:        #f0f4ff;
+    --surface:   #ffffff;
+    --over0:     #dbeafe;
+    --over1:     #bfdbfe;
+    --text:      #1e3a5f;
+    --sub:       #2e5796;
+    --muted:     #6b82b8;
+    --border:    #bfdbfe;
+    --hover:     #dbeafe;
+    --selected:  #bfdbfe;
+    --accent:    #2563eb;
+    --active-bg: #1e3a5f;
+  }
+}
+
+/* Topbar bg + spacing — matches cleaner.css. Frosted rgba wash darkens
+   over the cobalt gradient in dark, lightens over Arctic Blue in
+   light. Live's --rp-* tokens here would read as red — the scoped
+   bg/border-color picks up sandbox values via the redefinition above. */
+#page-objects .rp-rt-topbar {
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--rp-text) 8%, transparent);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+}
+html[data-theme="light"] #page-objects .rp-rt-topbar {
+  background: rgba(255, 255, 255, 0.28);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-topbar {
+    background: rgba(255, 255, 255, 0.28);
+  }
+}
+
+/* Title color — match sandbox slate (live's --rp-text is catppuccin
+   so the title would read greyish-purple over cobalt). */
+#page-objects .rp-rt-page-title,
+#page-objects .rp-rt-title { color: #e2e8f0; }
+html[data-theme="light"] #page-objects .rp-rt-page-title,
+html[data-theme="light"] #page-objects .rp-rt-title { color: #1e3a5f; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-page-title,
+  html[data-theme="system"] #page-objects .rp-rt-title { color: #1e3a5f; }
+}
+
+/* ── Type-tab strip (sandbox proj-tabs reused as the type strip) ─────
+   Vendored proj-tabs.css's theme overrides key off html[data-theme="dark"]
+   / "light", which never match live's data-theme="system" — so under
+   system theme the default rules apply (background: var(--over0) on
+   the strip; tabs have no bg). Mirror the sandbox dark recipe as the
+   default (dark is the common case), then re-apply the light recipe
+   under explicit data-theme="light" AND prefers-color-scheme: light
+   when system is in play. Same shape as #page-cleaner's overrides. */
+#page-objects .rp-rt-proj-tabs {
+  background: var(--surface);
+  border-bottom: 0.0313rem solid var(--border);
+}
+#page-objects .rp-rt-proj-tab {
+  background: var(--over0);
+}
+#page-objects .rp-rt-proj-tab:hover,
+#page-objects .rp-rt-proj-tab.active {
+  background: var(--over1);
+}
+html[data-theme="light"] #page-objects .rp-rt-proj-tabs {
+  background: var(--over0);
+}
+html[data-theme="light"] #page-objects .rp-rt-proj-tab {
+  background: var(--bg);
+}
+html[data-theme="light"] #page-objects .rp-rt-proj-tab:hover {
+  background: var(--surface);
+}
+html[data-theme="light"] #page-objects .rp-rt-proj-tab.active {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-proj-tabs {
+    background: var(--over0);
+  }
+  html[data-theme="system"] #page-objects .rp-rt-proj-tab {
+    background: var(--bg);
+  }
+  html[data-theme="system"] #page-objects .rp-rt-proj-tab:hover {
+    background: var(--surface);
+  }
+  html[data-theme="system"] #page-objects .rp-rt-proj-tab.active {
+    background: var(--over0);
+  }
+}
+
+/* ── Per-type header (mirrors cleaner header) ────────────────────────
+   Vendored redtable.css gives .rp-rt-header big padding (1.25rem
+   1.5rem 0.875rem) and no background — designed for a wrapping .rp-rtp
+   that scoped the sandbox-pro smaller frosted version. Sandbox doesn't
+   use the wrapper either, so re-apply the pro values inline. Same
+   approach for .rp-rt-title (vendored 1.0625rem/700 → sandbox
+   0.875rem/600 flex layout) and .rp-rtp-hdr-info / -meta. */
+/* Padding 0.625rem 1rem matches sandbox source — gives the header
+   natural height ~3.125rem (1.875rem button + 1.25rem padding), same
+   as the toolbar (2.25rem button + 0.875rem padding). Previously I
+   bumped padding + min-height after misreading "cramped" feedback;
+   the right fix was simpler — let header + toolbar both compute to
+   the same content-driven height so they read as a balanced chrome
+   pair. */
+#page-objects .rp-rt-header {
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  flex-wrap: wrap;
+}
+html[data-theme="light"] #page-objects .rp-rt-header {
+  background: rgba(255, 255, 255, 0.36);
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-header {
+    background: rgba(255, 255, 255, 0.36);
+    border-bottom-color: rgba(0, 0, 0, 0.07);
+  }
+}
+
+#page-objects .rp-rt-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  /* Vendored .rp-rt-title sets flex:1 — sandbox uses .rp-rtp-hdr-info
+     as the flex:1 spacer instead so the title hugs its content. */
+  flex: 0 0 auto;
+}
+#page-objects .rp-rt-title .bi { font-size: 0.8125rem; }
+
+#page-objects .rp-rtp-hdr-info {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+#page-objects .rp-rtp-hdr-meta {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
+}
+
+#page-objects .rp-rt-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-left: auto;
+}
+
+/* Header .rp-btn — one rank smaller than the toolbar buttons (matches
+   cleaner's header + side-panel + modal-header recipe). Same source
+   as glass-btn.css's `.rp-rt-header .rp-btn` rule; scoped here to
+   force the smaller size even if the import order shifts. */
+#page-objects .rp-rt-header .rp-btn,
+#page-objects .rp-rt-filter-panel .rp-btn,
+#page-objects .rp-modal-hdr .rp-btn {
+  width: 1.875rem;
+  height: 1.875rem;
+  font-size: 0.8125rem;
+}
+#page-objects .rp-rt-toolbar .rp-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.9375rem;
+}
+
+/* ── Glass button hover — theme-aware (mirrors cleaner) ──────────────
+   Sandbox glass-btn.css default is the heavy 35% accent wash. Under
+   data-theme="system" neither explicit-theme rule (light/dark) matches,
+   so we bridge via prefers-color-scheme. Light = subtle accent
+   (sandbox-light recipe); dark = agnostic white wash (sandbox-dark). */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-objects .rp-btn:hover {
+    background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+    box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-btn:hover {
+    background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    color: var(--accent);
+    box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+/* ── Toolbar bar + frosted band ──────────────────────────────────────
+   Vendored redtable.css gives .rp-rt-toolbar big padding (0.75rem
+   1.5rem) and no background. Sandbox uses a frosted band (rgba
+   black/white per theme), tighter padding (0.4375rem 0.5rem), 0.25rem
+   gap, flex-wrap so multi-row toolbars don't overflow horizontally.
+   Without this scoped block the toolbar reads as overspaced and
+   blends into the header bg. */
+#page-objects .rp-rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  width: 100%;
+}
+html[data-theme="light"] #page-objects .rp-rt-toolbar {
+  background: rgba(255, 255, 255, 0.24);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-toolbar {
+    background: rgba(255, 255, 255, 0.24);
+  }
+}
+
+/* Search — frosted pill, flex:1 (eats remaining toolbar slack).
+   Sandbox source uses `font: 0.875rem inherit` (shorthand) which is
+   technically malformed — `inherit` isn't a valid font-family token,
+   so some browsers fall back to UA default and shrink the placeholder.
+   Use the explicit longhands to make font-size land deterministically
+   while inheriting family + weight from the page (Open Sans 300). */
+#page-objects .rp-rt-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55em 1em;
+  margin: 0;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 3rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-objects .rp-rt-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+#page-objects .rp-rt-search::placeholder {
+  color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+html[data-theme="light"] #page-objects .rp-rt-search,
+html[data-theme="light"] #page-objects .rp-rt-pill-btn {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-search,
+  html[data-theme="system"] #page-objects .rp-rt-pill-btn {
+    background: var(--over0);
+  }
+}
+
+/* Pill dropdown trigger (rows-per-page / date format / columns picker). */
+#page-objects .rp-rt-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 3rem;
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font: 0.75rem inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#page-objects .rp-rt-pill-btn:hover {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+/* Pill-btn active state — same theme-aware pattern as cleaner.
+   Light keeps sandbox's accent recipe; dark goes agnostic white so
+   the active pill doesn't read as a loud blue chip in a neutral
+   toolbar. */
+#page-objects .rp-rt-pill-btn.is-active,
+#page-objects .rp-rt-pill-btn.rp-rt-active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+html[data-theme="dark"] #page-objects .rp-rt-pill-btn.is-active,
+html[data-theme="dark"] #page-objects .rp-rt-pill-btn.rp-rt-active {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-objects .rp-rt-pill-btn.is-active,
+  html[data-theme="system"] #page-objects .rp-rt-pill-btn.rp-rt-active {
+    background: color-mix(in srgb, #fff 14%, transparent);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+}
+#page-objects .rp-rt-pill-btn .bi-chevron-down { font-size: 0.625rem; opacity: 0.6; }
+#page-objects .rp-rt-pill-unit { color: inherit; opacity: 0.55; }
+
+/* Dropdown items (rows-per-page menu, date-format, columns picker).
+   Sandbox uses var(--active-bg) for hover + selected:hover, which
+   inside #page-objects resolves to cobalt — loud blue chip in dark
+   mode. Mirror cleaner's pattern: keep accent for light, swap to
+   white wash for dark. */
+#page-objects .rp-dd-item.is-selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+html[data-theme="dark"] #page-objects .rp-dd-item:hover,
+html[data-theme="dark"] #page-objects .rp-dd-item.is-selected:hover {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+}
+html[data-theme="dark"] #page-objects .rp-dd-item.is-selected {
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-objects .rp-dd-item:hover,
+  html[data-theme="system"] #page-objects .rp-dd-item.is-selected:hover {
+    background: color-mix(in srgb, #fff 14%, transparent);
+    color: #fff;
+  }
+  html[data-theme="system"] #page-objects .rp-dd-item.is-selected {
+    background: color-mix(in srgb, #fff 8%, transparent);
+    color: #fff;
+  }
+}
+
+/* Selection chip — visible only in select mode with count > 0. */
+#page-objects .rp-rt-sel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.1875rem 0.5rem;
+  background: var(--active-bg);
+  color: var(--bg);
+  border-radius: 0.4375rem;
+  font-size: 0.6875rem;
+}
+#page-objects .rp-rt-panel:not(.is-mode-select) .rp-rt-sel-chip,
+#page-objects .rp-rt-sel-chip[data-count="0"] {
+  display: none;
+}
+
+/* ── Vendored .rp-rt-panel reset (same as cleaner port) ───────────────
+   redtable.css ships `.rp-rt-panel { position: absolute; inset: 0;
+   z-index: 1100 }` so it slides in as an overlay in the live-app
+   layout. Inside #page-objects we want it inline so the topbar above
+   stays visible and clickable. .rp-rt-panel--embedded already exists
+   as a modifier with these resets; applying them via scoped descendant
+   keeps the markup sandbox-true (just .rp-rt-panel, no modifier). */
+#page-objects .rp-rt-panel {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  /* Vendored .rp-rt-panel ships
+       `animation: rp-rt-slide-in 0.22s ... both`
+     whose @keyframes go `transform: translateX(4%) → none`. The
+     transient transform during the slide-in creates a containing
+     block for any position:fixed descendant. Toolbar dropdowns
+     (.rp-dd-menu) compute top/left in VIEWPORT coords via
+     getBoundingClientRect, then write them as inline style; when
+     the menu's containing block is the panel (not the viewport),
+     those coords land panel-relative and the menu appears ~3cm
+     below the trigger (≈ topbar + proj-tabs + header height).
+     Cleaner's override does the same disable for the same reason. */
+  animation: none;
+  transform: none;
+}
+
+/* ── Body + table layout — sandbox absolute model ────────────────────
+   Vendored .rp-rt-body is `display: flex; flex-direction: row` and
+   .rp-rt-table-wrap has `padding: 0 1.5rem 1.5rem` (1.5rem bottom).
+   Sandbox makes .rp-rt-body the positioning context and absolute-
+   positions table-wrap so it fills the body cleanly (no internal
+   padding swallowing space, no row-flex with the include wrappers
+   competing for layout). Each visible [data-object-type] block fills
+   the body via natural flow; the per-type table-wrap floats over it
+   anchored to the body's edges with only the paging strip reserved
+   at the bottom. */
+#page-objects .rp-rt-body {
+  position: relative;
+  display: block;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+#page-objects .rp-rt-table-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 2rem;          /* reserve room for the paging strip below */
+  overflow: auto;
+  padding: 0;
+}
+#page-objects .rp-rt-paging {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-top: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* ── Per-type table (rp-rt-table) — sandbox values ────────────────────
+   Vendored redtable.css gives:
+     - tbody tr { height: 3rem }  (sandbox = 2.5rem, tighter rhythm)
+     - tbody td { color text@80%; padding 0 0.75rem }  (no font-size,
+       no weight — sandbox sets 0.9375rem / 400)
+     - thead with no sticky bg in theme-system  (sandbox sets sticky
+       with theme-aware bg)
+   Mirror sandbox's recipe so the table reads the same density and
+   the sticky header stays opaque against scrolling rows. */
+#page-objects .rp-rt-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--over0);
+  z-index: 5;
+}
+#page-objects .rp-rt-table thead th {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+  border-bottom: 0.0625rem solid var(--border);
+  user-select: none;
+}
+html[data-theme="light"] #page-objects .rp-rt-table thead {
+  background: var(--surface);
+}
+html[data-theme="light"] #page-objects .rp-rt-table thead th {
+  color: color-mix(in srgb, var(--text) 40%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-table thead {
+    background: var(--surface);
+  }
+  html[data-theme="system"] #page-objects .rp-rt-table thead th {
+    color: color-mix(in srgb, var(--text) 40%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+}
+
+/* Body row + cell — sandbox tighter rhythm + slightly bigger cell
+   text (0.9375rem / 400 vs vendored unspecified inheriting 0.8125rem).
+   Sandbox bumps the row hairline from 5% → 10% in dark mode so the
+   grid lines stay visible against the cobalt-tinted surface; light
+   keeps 5% which reads fine on the pastel paper. Live runs
+   data-theme="system", so the explicit-dark selector doesn't match —
+   we bridge with the dark default + prefers-color-scheme. */
+#page-objects .rp-rt-table tbody tr {
+  height: 2.5rem;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+html[data-theme="light"] #page-objects .rp-rt-table tbody tr {
+  border-bottom-color: color-mix(in srgb, var(--text) 5%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-table tbody tr {
+    border-bottom-color: color-mix(in srgb, var(--text) 5%, transparent);
+  }
+}
+#page-objects .rp-rt-table tbody td {
+  padding: 0 0.75rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+/* Light mode — full --text ink (matches the title color above); the
+   80% mix that suits dark over the cobalt gradient reads as washed
+   grey on the pastel surface. */
+html[data-theme="light"] #page-objects .rp-rt-table tbody td {
+  color: var(--text);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-objects .rp-rt-table tbody td {
+    color: var(--text);
+  }
+}
+
+/* Mode column — locked to 1.5rem wide so the icon overlays (select
+   circle, delete trash) stay centered. Sandbox sets both min/max +
+   width + overflow:hidden so the cell can't grow with longer icons. */
+#page-objects .rp-rt-table th.rp-rt-th-mode,
+#page-objects .rp-rt-table tbody td:first-child {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  max-width: 1.5rem;
+  overflow: hidden;
+}
+
+/* Sort header — pointer cursor + faint hover band. .rp-rt-sort-ico
+   is faded by default; explicit asc/desc states (live JS will toggle
+   class) bump opacity to 1. */
+#page-objects .rp-rt-th-sortable { cursor: pointer; user-select: none; }
+#page-objects .rp-rt-th-sortable:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+#page-objects .rp-rt-sort-ico {
+  opacity: 0.5;
+  font-size: 0.6875rem;
+  margin-left: 0.25rem;
+}
+
+/* Bootstrap-icons reset: vendored /vendor/redpash-components/reset.css
+   forces `i.bi { font-size: 1.25rem }` globally, beating per-context
+   sizing (button icons, badges, sortable arrows). Sandbox lets icons
+   inherit from their container. Bare-tag selector — objects.css only
+   loads on this page so it's already file-scoped. */
+i.bi {
+  font-size: inherit;
+  display: inline;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+/* Form-element font reset — without this, buttons/inputs keep
+   browser-default font (~13.33px) instead of body's 18px Open Sans.
+   That made the entire objects page render small ("ctrl - 20 times"
+   effect). Bare-tag selector keeps specificity low so per-element
+   class rules (.rp-rt-fb-val { font-size: 0.6875rem }) win cleanly. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }
 
 /* Page header (.rp-rt-topbar + .rp-rt-page-title) lives in main.css —
@@ -216,69 +861,46 @@ html[data-theme="light"] .obj-tab.active        { color: #1e1e2e; }
   min-height: 0;
 }
 
-/* ━━━━━━━━━━━━━━━━━━ GLASS OVERLAYS — match the cleaner page ━━━━━━━━
- *
- * Mirrors `.rp-rtp .rp-rt-header` / `.rp-rtp-tabs` / `.rp-rtp .rp-rt-toolbar`
- * (redtable-pro.css). Same opacities so the two workspaces — Objects and
- * Cleaner — read as the same surface treatment over the gradient page
- * background. Without these, the Objects page chrome reads as
- * transparent slabs over the page tint; the cleaner page's frosted
- * strips are the canonical look. */
-#page-objects .rp-rt-header {
-  padding: 0.5rem 1rem;
-  background: rgba(0, 0, 0, 0.18);
-  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 8%, transparent);
-}
-html[data-theme="light"] #page-objects .rp-rt-header {
-  background: rgba(255, 255, 255, 0.22);
-  border-bottom-color: rgba(0, 0, 0, 0.07);
-}
-
-#page-objects .rp-rt-toolbar {
-  background: rgba(0, 0, 0, 0.1);
-  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
-}
-html[data-theme="light"] #page-objects .rp-rt-toolbar {
-  background: rgba(255, 255, 255, 0.12);
-}
+/* Old glass-overlay block (pre-sandbox port) trimmed — it re-declared
+   .rp-rt-header / .rp-rt-toolbar with different padding (0.5rem vs
+   sandbox's 0.625rem) and different opacities. Source order put it
+   AFTER the new sandbox-aligned blocks above (~line 229 / 328), so
+   it was winning silently and making the header shorter than the
+   toolbar. Sandbox values now live in the upper blocks alone. */
 
 /* ━━━━━━━━━━━━━━━━━━ ROW MODES — edit / select / delete ━━━━━━━━━━━━
  *
- * Ported from the Cleaner page (styles/pages/cleaner.css). objToggleMode
- * flips a `rp-rt-mode-<mode>` class on the panel:
- *   .rp-rt-mode-select → leading checkbox column appears; ticked rows
- *                        highlight; toolbar selection chip + bulk-delete.
- *   .rp-rt-mode-delete → trailing trash column appears; per-row delete.
- *   .rp-rt-mode-edit   → editable cells get a hover affordance; dblclick
- *                        swaps the cell for an inline input (text edit)
- *                        or opens the builder (reports / dashboards).
+ * Sandbox's spSetMode (controls.js) flips an `is-mode-<mode>` class on
+ * the .rp-rt-panel (NOT the legacy `rp-rt-mode-<mode>` from the
+ * objects.live.html era):
+ *   .is-mode-select → first-cell .rp-row-uncheck / .rp-row-check
+ *                     glyphs fade in; ticked rows highlight; toolbar
+ *                     selection chip + bulk-delete.
+ *   .is-mode-delete → first-cell .rp-row-trash glyph fades in; per-row
+ *                     delete via overlap with the same chrome cell.
+ *   .is-mode-edit   → editable cells get a hover-dashed-outline
+ *                     affordance; inline edit on focus.
  *
- * The leading / trailing cells carry a `data-mode-col` attribute and are
- * ALWAYS emitted by renderTable — CSS collapses them when the matching
- * mode is off, so toggling a mode never re-renders the table body. */
-#page-objects .rp-rt-panel [data-mode-col="select"],
-#page-objects .rp-rt-panel [data-mode-col="delete"] {
-  display: none;
-}
-#page-objects .rp-rt-panel.rp-rt-mode-select [data-mode-col="select"] {
-  display: table-cell;
-}
-#page-objects .rp-rt-panel.rp-rt-mode-delete [data-mode-col="delete"] {
-  display: table-cell;
-}
+ * The leading checkbox / circle / trash icons live in the SAME
+ * .rp-rt-th-mode first cell (sandbox single-cell overlap pattern),
+ * with CSS controlling which glyph is opacity:1 per mode — no
+ * separate hidden columns to swap. Show/hide rules for those overlay
+ * glyphs live in /vendor/redpash-components/components/objects-sandbox.css. */
 
 /* Edit mode — only cells the schema marks editable (data-edit-type) get
-   the cue; the rest stay inert. */
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type] {
+   the cue; the rest stay inert. Sandbox tables use [data-edit-type]
+   for opt-in editable cells; live renderTable will set the attribute
+   per schema field. */
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type] {
   cursor: text;
 }
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type="open"],
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type="bool"],
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type="enum"],
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type="select"] {
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type="open"],
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type="bool"],
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type="enum"],
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type="select"] {
   cursor: pointer;
 }
-#page-objects .rp-rt-panel.rp-rt-mode-edit tbody td[data-edit-type]:hover {
+#page-objects .rp-rt-panel.is-mode-edit tbody td[data-edit-type]:hover {
   outline: 0.0625rem dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: -0.0625rem;
 }

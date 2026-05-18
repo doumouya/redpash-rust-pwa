@@ -1,529 +1,499 @@
-/* Reports — list + builder layout. */
+/* ────────────────── Reports page — stacked layout (sandbox port).
+ *
+ * Topbar above .rp-rt-panel. Panel stacks toolbar + .rp-rt-body. Body
+ * is the positioning context for two split panes (table on top, chart
+ * dock on bottom) and the horizontal drag handle between them. JS
+ * resizes the split via inline style on [data-reports-table-pane] +
+ * [data-reports-chart-pane]; CSS holds the absolute-position
+ * geometry that keeps both panes scrolling independently.
+ *
+ * Same chrome family as /cleaner and /objects — back arrow + page
+ * title in topbar; .rp-rt-panel content; sandbox vocabulary throughout.
+ * Previous Phase-3 builder CSS lives at reports.live.css for reference.
+ * ──────────────────────────────────────────────────────────────────── */
 
-.rp-reports { display: flex; flex-direction: column; gap: 16px; }
+@import "/vendor/redpash-components/shell.css";
 
-.rp-reports__head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.rp-reports__head h1 { margin: 0; font-size: 20px; }
-.rp-reports__head-actions { margin-left: auto; display: inline-flex; gap: 8px; }
+@import "/vendor/redpash-components/components/typography.css";
+@import "/vendor/redpash-components/components/button.css";
+@import "/vendor/redpash-components/components/form.css";
+@import "/vendor/redpash-components/components/card.css";
+@import "/vendor/redpash-components/components/modal.css";
+@import "/vendor/redpash-components/components/auth-modals.css";
+@import "/vendor/redpash-components/components/redtable.css";
+@import "/vendor/redpash-components/components/redtable-pro.css";
 
-/* Favorite star — outlined by default, filled when toggled on. */
-.rp-fav {
-  width: 28px; height: 28px;
-  border: 1px solid var(--rp-border);
-  border-radius: 999px;
-  background: var(--rp-surface);
-  color: var(--rp-border-strong);
-  font-size: 16px; line-height: 1;
-  cursor: pointer;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
-}
-.rp-fav:hover { color: var(--rp-text-muted); border-color: var(--rp-text-muted); }
-.rp-fav.is-on {
-  color: #e5b300;          /* warm gold so favorites pop visually */
-  border-color: #e5b300;
-  background: rgba(229, 179, 0, 0.08);
-}
+/* Sandbox-canonical visual vocabulary (mirrors cleaner.css / objects.css). */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/proj-tabs.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
+@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
+@import "/vendor/redpash-components/components/objects-sandbox.css";
 
-.rp-reports__title-input {
-  height: 36px;
+/* ── Sandbox-aligned root font-size (matches cleaner / objects) ──── */
+html { font-size: 112.5%; }
+
+#page-reports {
   flex: 1;
-  min-width: 200px;
-  max-width: 360px;
-  font-weight: 600;
-  font-size: 14px;
-}
-.rp-reports__folder-input {
-  height: 36px;
-  flex: 0 0 180px;
-  max-width: 220px;
-  font-size: 13px;
-}
-
-/* List page — folder grouping */
-.rp-reports__folder { margin: 0 0 24px; }
-.rp-reports__folder-title {
-  margin: 16px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--rp-text);
-}
-.rp-reports__folder-title:first-child { margin-top: 0; }
-
-/* Builder layout — charts (left) · preview (center) · tools (right).
-   Charts now live on the left (replacing the old filter panel — the
-   filter moved into the right tools as a section). */
-.rp-reports__editor {
-  display: grid;
-  grid-template-columns: 280px 1fr 320px;
-  gap: 16px;
-  align-items: start;
-}
-@media (max-width: 1280px) {
-  .rp-reports__editor { grid-template-columns: 1fr 320px; }
-  .rp-reports__col-charts { display: none; }
-}
-@media (max-width: 900px) {
-  .rp-reports__editor { grid-template-columns: 1fr; }
-  .rp-reports__spec  { display: none; }
-}
-.rp-reports__col-charts,
-.rp-reports__spec,
-.rp-reports__preview { min-width: 0; }
-.rp-reports__col-charts {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 12px;
-}
-.rp-reports__col-charts section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.rp-reports__col-charts section > header {
-  font-size: 12px; color: var(--rp-text-muted);
-  text-transform: uppercase; letter-spacing: .04em;
-}
-.rp-reports__col-charts section > header h2 { margin: 0; font-size: 12px; font-weight: 700; }
-
-/* Saved-chart list rows — clickable label + remove button. */
-.rp-reports__chart-list { display: flex; flex-direction: column; gap: 4px; }
-.rp-reports__chart-list-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px;
-  align-items: center;
-}
-.rp-reports__chart-list-edit {
-  text-align: left;
-  padding: 6px 8px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit; font-size: 12px;
-  cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.rp-reports__chart-list-edit:hover { border-color: var(--rp-accent); color: var(--rp-accent); }
-.rp-reports__chart-list-rm {
-  width: 24px; height: 24px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text-muted);
-  cursor: pointer;
-}
-.rp-reports__chart-list-rm:hover { color: var(--rp-danger); border-color: var(--rp-danger); }
-
-/* Chart-config modal — narrow dialog with form rows. */
-.rp-modal__dialog--sm { max-width: 420px; }
-.rp-reports__chart-modal-row {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-}
-.rp-reports__chart-modal-row > span { color: var(--rp-text-muted); }
-.rp-reports__chart-modal-row select,
-.rp-reports__chart-modal-row input[type="text"],
-.rp-reports__chart-modal-row input:not([type="checkbox"]) {
-  width: 100%;
-  height: 30px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit; font-size: 13px;
-  min-width: 0;
-}
-.rp-reports__chart-modal-row--checkbox {
-  grid-template-columns: auto 1fr;
-}
-
-/* Top-N controls — compact inline rows. */
-.rp-reports__topn { display: flex; flex-direction: column; gap: 8px; }
-.rp-reports__topn-row {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--rp-text);
-}
-.rp-reports__topn-row > span { color: var(--rp-text-muted); }
-.rp-reports__topn-row input,
-.rp-reports__topn-row select {
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
-}
-.rp-reports__topn-row input[type="number"] { width: 64px; }
-
-/* Window functions — alias / fn / col / % / × on one row, partition
-   chips on the wrap below. */
-.rp-reports__windows { display: flex; flex-direction: column; gap: 8px; }
-.rp-reports__window-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr) auto auto;
-  gap: 4px;
-  align-items: center;
-}
-.rp-reports__window-row select,
-.rp-reports__window-row input:not([type="checkbox"]) {
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
-}
-.rp-reports__window-partitions {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-  font-size: 12px;
-}
-.rp-reports__window-partitions .rp-chip {
-  cursor: pointer;
-  opacity: 0.6;
-}
-.rp-reports__window-partitions .rp-chip.is-on {
-  opacity: 1;
-  background: var(--rp-accent-soft);
-  border-color: var(--rp-accent);
-  color: var(--rp-accent-strong);
-}
-
-/* Value-window controls — order_by + offset on a wrap row beneath
-   the main grid (full-width like the partition chips). */
-.rp-reports__window-value-row {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-.rp-reports__window-value-row select,
-.rp-reports__window-value-row input {
-  height: 26px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-}
-.rp-reports__window-value-row input[type="number"] { width: 60px; }
-.rp-reports__spec-head {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rp-border);
-  background: var(--rp-surface-2);
-  margin: -12px -12px 12px;
-  border-radius: var(--rp-radius) var(--rp-radius) 0 0;
-}
-.rp-reports__spec-head h2 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  color: var(--rp-text-muted);
-}
-
-.rp-reports__spec {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 12px;
-}
-.rp-reports__spec section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.rp-reports__spec section > header {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  font-size: 12px; color: var(--rp-text-muted);
-  text-transform: uppercase; letter-spacing: .04em;
-}
-.rp-reports__spec section > header h2 { margin: 0; font-size: 12px; font-weight: 700; flex: 0 0 auto; }
-/* Inputs in a section header (e.g. the "+ add column" picker) flow to a
-   new line when long option labels would otherwise overflow the panel. */
-.rp-reports__spec section > header > .rp-tools__input { flex: 1 1 100%; }
-
-.rp-reports__chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
-.rp-reports__toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 13px;
-  color: var(--rp-text);
-  cursor: pointer;
-}
-.rp-reports__section-title {
-  margin: 16px 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--rp-text-muted);
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-.rp-reports__section-title:first-child { margin-top: 0; }
-.rp-reports__aggs  { display: flex; flex-direction: column; gap: 6px; }
-.rp-reports__agg {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
-  gap: 4px;
-  align-items: center;
-}
-.rp-reports__agg select,
-.rp-reports__agg input {
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
-}
-
-/* Chart-type picker — icon buttons that each create a chart of that
-   kind. Style adapted from clarna-django's `.ct-btn` viz picker:
-   vertical icon-over-label, accent tint on hover. Auto-fit so adding
-   a kind doesn't require a layout change. */
-.rp-ct-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-  gap: 6px;
-}
-
-/* Collapsible category sections. Each is a <details> wrapping a
-   .rp-ct-grid of icon buttons. Empty bodies stay clickable so users
-   can preview the section heading without needing populated icons. */
-.rp-reports__chart-cats { display: flex; flex-direction: column; gap: 4px; }
-.rp-ct-cat {
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
+  position: relative;
   overflow: hidden;
+  font-size: 1rem;
+  font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 300;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+  background-attachment: fixed;
+
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --over0:     #273549;
+  --over1:     #334155;
+  --text:      #e2e8f0;
+  --sub:       #94a3b8;
+  --muted:     #64748b;
+  --border:    #334155;
+  --hover:     #273549;
+  --selected:  #334155;
+  --accent:    #60a5fa;
+  --active-bg: #60a5fa;
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
 }
-.rp-ct-cat > summary {
+html[data-theme="light"] #page-reports {
+  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --over0:     #dbeafe;
+  --over1:     #bfdbfe;
+  --text:      #1e3a5f;
+  --sub:       #2e5796;
+  --muted:     #6b82b8;
+  --border:    #bfdbfe;
+  --hover:     #dbeafe;
+  --selected:  #bfdbfe;
+  --accent:    #2563eb;
+  --active-bg: #1e3a5f;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports {
+    background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+    --bg:        #f0f4ff;
+    --surface:   #ffffff;
+    --over0:     #dbeafe;
+    --over1:     #bfdbfe;
+    --text:      #1e3a5f;
+    --sub:       #2e5796;
+    --muted:     #6b82b8;
+    --border:    #bfdbfe;
+    --hover:     #dbeafe;
+    --selected:  #bfdbfe;
+    --accent:    #2563eb;
+    --active-bg: #1e3a5f;
+  }
+}
+
+/* ── Topbar (frosted band, slate title) ────────────────────────────── */
+#page-reports .rp-rt-topbar {
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--rp-text) 8%, transparent);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+}
+html[data-theme="light"] #page-reports .rp-rt-topbar { background: rgba(255, 255, 255, 0.28); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-topbar { background: rgba(255, 255, 255, 0.28); }
+}
+#page-reports .rp-rt-page-title { color: #e2e8f0; }
+html[data-theme="light"] #page-reports .rp-rt-page-title { color: #1e3a5f; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-page-title { color: #1e3a5f; }
+}
+
+/* ── Vendored .rp-rt-panel reset (same as cleaner / objects).
+   Drop position:absolute + slide-in animation so the panel sits
+   inline and doesn't trap fixed-position descendants. */
+#page-reports .rp-rt-panel {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  animation: none;
+  transform: none;
+}
+
+/* ── Body — positioning context for the two stacked panes + handle. */
+#page-reports .rp-rt-body {
+  position: relative;
+  display: block;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Two stacked panes — default split 60% table / 40% chart dock.
+   JS rewrites the inline `height` / `top` on these when the user
+   drags the handle. */
+#page-reports .rp-reports__table-pane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60%;
+  overflow: hidden;
+  display: block;
+}
+#page-reports .rp-reports__chart-pane {
+  position: absolute;
+  top: 60%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  display: block;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border-top: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+/* Table scroller absolute inside the top pane (cleaner / objects
+   pattern) so the table scrolls without the page itself scrolling. */
+#page-reports .rp-reports__table-pane .rp-rt-table-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 2rem;
+  overflow: auto;
+  padding: 0;
+}
+#page-reports .rp-reports__table-pane .rp-rt-paging {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2rem;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
-  list-style: none;
-  background: var(--rp-surface-2);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--rp-text);
+  justify-content: space-between;
+  padding: 0 1rem;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-top: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 0.6875rem;
+  color: var(--muted);
 }
-.rp-ct-cat > summary::-webkit-details-marker { display: none; }
-.rp-ct-cat > summary::before {
-  content: "▸";
-  display: inline-block;
-  width: 10px;
-  color: var(--rp-text-muted);
-  transition: transform 100ms ease;
+
+/* ── Drag handle — horizontal divider straddling the split. 8px tall
+   click target; grip icon hints at draggability. JS sets .is-dragging
+   while the user holds + drags so we keep the accent highlight. */
+#page-reports .rp-reports__split-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(60% - 0.25rem);
+  height: 0.5rem;
+  z-index: 10;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text) 25%, transparent);
+  font-size: 0.875rem;
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
 }
-.rp-ct-cat[open] > summary::before { transform: rotate(90deg); }
-.rp-ct-cat[open] > summary { border-bottom: 1px solid var(--rp-border); }
-.rp-ct-cat > .rp-ct-grid { padding: 8px; }
-/* Empty category — shrink padding + add a "no buttons yet" affordance. */
-.rp-ct-cat > .rp-ct-grid:empty {
-  padding: 8px 10px;
-  font-size: 12px;
-  color: var(--rp-text-muted);
+#page-reports .rp-reports__split-handle:hover,
+#page-reports .rp-reports__split-handle:focus {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  outline: none;
 }
-.rp-ct-cat > .rp-ct-grid:empty::before {
-  content: "Empty — add icon buttons here.";
+#page-reports .rp-reports__split-handle.is-dragging {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
-.rp-ct-btn {
+
+/* ── Chart dock — empty state + grid of cards. */
+#page-reports .rp-reports__chart-dock {
+  padding: 0.75rem;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+#page-reports .rp-reports__chart-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 48px;
-  padding: 6px 4px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text-muted);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  transition: border-color 100ms ease, color 100ms ease, background 100ms ease;
+  text-align: center;
+  padding: 2rem 1rem;
 }
-.rp-ct-btn svg { width: 20px; height: 20px; }
-.rp-ct-btn:hover {
-  border-color: var(--rp-accent);
-  color: var(--rp-accent);
-  background: var(--rp-accent-soft);
-}
-.rp-ct-btn:focus-visible {
-  outline: 2px solid var(--rp-accent);
-  outline-offset: 2px;
+#page-reports .rp-reports__chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 0.75rem;
 }
 
-/* Charts editor — one row per chart in the tools panel. */
-.rp-reports__charts-editor { display: flex; flex-direction: column; gap: 6px; }
-.rp-reports__chart-row {
-  display: grid;
-  grid-template-columns: minmax(0, .7fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
-  gap: 4px;
-  align-items: center;
-}
-/* Modifier checkboxes (smooth / donut) wrap to a row beneath the
-   field grid; span the full width so they don't sit awkwardly in one
-   column. */
-.rp-reports__chart-modifiers {
-  grid-column: 1 / -1;
+/* Chart card — frosted glass + title bar + canvas body. */
+#page-reports .rp-reports__chart-card {
   display: flex;
-  gap: 12px;
-  padding-left: 2px;
-  font-size: 12px;
-  color: var(--rp-text-muted);
+  flex-direction: column;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
 }
-.rp-reports__chart-modifiers .rp-reports__toggle { font-size: 12px; }
-.rp-reports__chart-row select,
-.rp-reports__chart-row input {
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
+#page-reports .rp-reports__chart-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.4375rem 0.625rem;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  font-size: 0.75rem;
+  color: var(--text);
 }
-
-/* Charts in the preview pane — auto-flow grid so multiple charts
-   wrap into rows without per-chart layout config. */
-.rp-reports__charts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 12px;
+#page-reports .rp-reports__chart-hdr > .bi { font-size: 0.875rem; color: var(--accent); }
+#page-reports .rp-reports__chart-ttl {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.rp-reports__chart {
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 8px;
-  min-height: 260px;
+#page-reports .rp-reports__chart-meta {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.rp-reports__preview {
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 12px;
-  min-height: 200px;
+#page-reports .rp-reports__chart-body {
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.rp-reports__preview-meta { margin-bottom: 8px; font-size: 12px; }
-.rp-reports__preview-scroll {
-  overflow: auto;
-  max-height: 70vh;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-}
-.rp-reports__preview-table {
+#page-reports .rp-reports__chart-canvas {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 13px;
+  height: auto;
+  max-height: 14rem;
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  border-radius: 0.375rem;
 }
-.rp-reports__preview-table thead th {
+
+/* ── Toolbar (frosted band, sandbox values). */
+#page-reports .rp-rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  width: 100%;
+}
+html[data-theme="light"] #page-reports .rp-rt-toolbar { background: rgba(255, 255, 255, 0.24); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-toolbar { background: rgba(255, 255, 255, 0.24); }
+}
+#page-reports .rp-rt-toolbar .rp-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.9375rem;
+}
+
+/* Search — frosted pill, flex:1 to eat slack. */
+#page-reports .rp-rt-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55em 1em;
+  margin: 0;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 3rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-reports .rp-rt-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+#page-reports .rp-rt-search::placeholder {
+  color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+html[data-theme="light"] #page-reports .rp-rt-search,
+html[data-theme="light"] #page-reports .rp-rt-pill-btn { background: var(--over0); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-search,
+  html[data-theme="system"] #page-reports .rp-rt-pill-btn { background: var(--over0); }
+}
+
+/* Pill dropdown trigger (source-file picker, rows-per-page). */
+#page-reports .rp-rt-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 3rem;
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#page-reports .rp-rt-pill-btn:hover {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+#page-reports .rp-rt-pill-btn .bi-chevron-down { font-size: 0.625rem; opacity: 0.6; }
+#page-reports .rp-rt-pill-unit { color: inherit; opacity: 0.55; }
+
+/* Dropdown items — theme-aware hover + selected. */
+#page-reports .rp-dd-item.is-selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+html[data-theme="dark"] #page-reports .rp-dd-item:hover,
+html[data-theme="dark"] #page-reports .rp-dd-item.is-selected:hover {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+}
+html[data-theme="dark"] #page-reports .rp-dd-item.is-selected {
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-reports .rp-dd-item:hover,
+  html[data-theme="system"] #page-reports .rp-dd-item.is-selected:hover {
+    background: color-mix(in srgb, #fff 14%, transparent);
+    color: #fff;
+  }
+  html[data-theme="system"] #page-reports .rp-dd-item.is-selected {
+    background: color-mix(in srgb, #fff 8%, transparent);
+    color: #fff;
+  }
+}
+
+/* ── Glass button hover — theme-aware bridge for system mode. */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-reports .rp-btn:hover {
+    background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+    box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-btn:hover {
+    background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    color: var(--accent);
+    box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+/* ── Bootstrap-icons reset + form-element font reset (matches the
+   cleaner / objects port — undo vendored reset.css's i.bi 1.25rem
+   default + UA-default form font). */
+i.bi {
+  font-size: inherit;
+  display: inline;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Source-file table — sandbox values mirrored from objects.css. */
+#page-reports .rp-rt-table thead {
   position: sticky;
   top: 0;
-  background: var(--rp-surface-2);
-  border-bottom: 1px solid var(--rp-border);
-  padding: 6px 10px;
-  text-align: left;
-  white-space: nowrap;
+  background: var(--over0);
+  z-index: 5;
+}
+#page-reports .rp-rt-table thead th {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+  border-bottom: 0.0625rem solid var(--border);
+  user-select: none;
 }
-.rp-reports__sort-th { cursor: pointer; user-select: none; }
-.rp-reports__sort-th:hover { background: var(--rp-surface); }
-.rp-reports__preview-table tbody td {
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--rp-border);
-  white-space: nowrap;
+html[data-theme="light"] #page-reports .rp-rt-table thead { background: var(--surface); }
+html[data-theme="light"] #page-reports .rp-rt-table thead th {
+  color: color-mix(in srgb, var(--text) 40%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
-.rp-reports__preview-row { cursor: pointer; }
-.rp-reports__preview-row:hover td { background: var(--rp-surface-2); }
-
-/* Matrix table — row totals sticky on the right, value cells right-aligned. */
-.rp-reports__matrix-table .rp-num { text-align: right; font-variant-numeric: tabular-nums; }
-.rp-reports__matrix-rowtotal {
-  background: var(--rp-surface-2);
-  font-weight: 600;
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-table thead { background: var(--surface); }
+  html[data-theme="system"] #page-reports .rp-rt-table thead th {
+    color: color-mix(in srgb, var(--text) 40%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--text) 8%, transparent);
+  }
 }
-
-/* Excel-style group cells in the details table — span all members + show count. */
-.rp-reports__details-table .rp-reports__group-cell {
-  background: var(--rp-surface-2);
-  font-weight: 600;
-  vertical-align: top;
-  border-right: 1px solid var(--rp-border);
+#page-reports .rp-rt-table tbody tr {
+  height: 2.5rem;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
 }
-.rp-reports__group-count {
-  color: var(--rp-text-muted);
-  font-weight: 500;
-  font-size: 11px;
+html[data-theme="light"] #page-reports .rp-rt-table tbody tr {
+  border-bottom-color: color-mix(in srgb, var(--text) 5%, transparent);
 }
-
-.rp-reports__total-row td {
-  position: sticky;
-  bottom: 0;
-  background: var(--rp-accent-soft);
-  color: var(--rp-accent-strong);
-  font-weight: 700;
-  border-top: 2px solid var(--rp-accent);
-  padding: 6px 10px;
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-table tbody tr {
+    border-bottom-color: color-mix(in srgb, var(--text) 5%, transparent);
+  }
 }
-
-/* Inline Sub-Total rows (between groups in row-details view). */
-.rp-reports__subtotal-row td {
-  background: var(--rp-surface-2);
-  font-weight: 600;
-  color: var(--rp-text);
-  padding: 4px 10px;
-  border-top: 1px solid var(--rp-border-strong);
+#page-reports .rp-rt-table tbody td {
+  padding: 0 0.75rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  font-size: 0.9375rem;
+  font-weight: 400;
 }
-.rp-reports__subtotal-label {
-  text-align: right;
-  color: var(--rp-text-muted);
-  font-style: italic;
+html[data-theme="light"] #page-reports .rp-rt-table tbody td { color: var(--text); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-rt-table tbody td { color: var(--text); }
 }
-.rp-reports__subtotal-value { color: var(--rp-accent-strong); }
-
-/* Grand-total inline row — same shape as Sub-Total, stronger accent. */
-.rp-reports__grand-row td {
-  position: sticky;
-  bottom: 0;
-  background: var(--rp-accent-soft);
-  color: var(--rp-accent-strong);
-  font-weight: 700;
-  border-top: 2px solid var(--rp-accent);
+#page-reports .rp-rt-th-sortable { cursor: pointer; user-select: none; }
+#page-reports .rp-rt-th-sortable:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
-.rp-reports__grand-row .rp-reports__subtotal-label { color: var(--rp-accent-strong); font-style: normal; }
+#page-reports .rp-rt-sort-ico {
+  opacity: 0.5;
+  font-size: 0.6875rem;
+  margin-left: 0.25rem;
+}

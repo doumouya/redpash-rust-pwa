@@ -1,0 +1,54 @@
+<!-- Companies table — sandbox demo rows kept as placeholders until
+     the backend exposes /api/companies. New type vs live's existing
+     4 — read-only browse in dev. Columns: select | Name | Slug | My
+     role | Members | Created | Open. -->
+<div class="rp-rt-table-wrap" data-objects-table="companies">
+  <table class="rp-rt-table">
+    <thead>
+      <tr>
+        <th class="rp-rt-th-mode" style="width:1.5rem">
+          <input type="checkbox" onclick="spSelectAllRows(this)" />
+          <i class="bi bi-circle rp-row-uncheck"></i>
+          <i class="bi bi-check2-circle rp-row-check"></i>
+          <i class="bi bi-trash rp-row-trash rp-master-trash"></i>
+        </th>
+        <th class="rp-rt-th-sortable" style="min-width:10rem">Name <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Slug <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">My role <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Members <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-sortable">Created <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i></th>
+        <th class="rp-rt-th-mode" style="width:1.75rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-buildings"></i> Sentinel Energy</a></td>
+        <td><code>sentinel-energy-a3f7c2</code></td>
+        <td><span class="rp-obj-badge rp-obj-badge--report">Owner</span></td>
+        <td>12</td><td>3 months ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-buildings"></i> Clients Clean Co.</a></td>
+        <td><code>clients-clean-9e2b14</code></td>
+        <td><span class="rp-obj-badge rp-obj-badge--active">Admin</span></td>
+        <td>5</td><td>6 weeks ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+      <tr onclick="spToggleRowSel(this)">
+        <td><input type="checkbox" /><i class="bi bi-circle rp-row-uncheck"></i><i class="bi bi-check2-circle rp-row-check"></i><i class="bi bi-trash rp-row-trash"></i></td>
+        <td><a class="rp-obj-name" href="#"><i class="bi bi-buildings"></i> Acme Vendors</a></td>
+        <td><code>acme-vendors-5d8f01</code></td>
+        <td><span class="rp-obj-badge rp-obj-badge--clean">Member</span></td>
+        <td>3</td><td>2 weeks ago</td>
+        <td><button class="rp-btn rp-btn-xs" onclick="event.stopPropagation()"><i class="bi bi-arrow-right"></i></button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<div class="rp-rt-paging">
+  <div class="rp-rt-rows-info" data-objects-rows-info>Showing 1–3 of 3 companies</div>
+  <div class="rp-rt-pages" data-objects-pages></div>
+</div>

@@ -1,0 +1,83 @@
+<!-- Objects composition root. Mirrors sandbox partials/objects/index.html.
+
+     Active type wrappers use data-object-type="<kind>" — the type-tab
+     strip toggles `hidden` on each sibling to swap which kind's header
+     + table is visible. spActivateObjectType (controls.js) drives the
+     swap; live's objects.js will read currentKind from the same flag.
+
+     Modals live inside .rp-rt-body so the overlay covers only the body
+     region — topbar + type-tabs stay accessible above. -->
+
+<div class="rp-rt-topbar">
+  <button class="rp-btn" type="button" aria-label="Back to Home" title="Back to Home"
+          onclick="location.hash='#/home'">
+    <i class="bi bi-arrow-left"></i>
+  </button>
+  <h1 class="rp-rt-page-title"><i class="bi bi-grid-3x3-gap"></i> Objects</h1>
+  <button class="rp-btn" type="button" aria-label="Open Cleaner" title="Open Cleaner"
+          style="margin-left:auto"
+          onclick="location.hash='#/cleaner'">
+    <i class="bi bi-magic"></i>
+  </button>
+  <a class="rp-btn" href="#/profile" aria-label="Profile" title="Profile">
+    <i class="bi bi-person-circle"></i>
+  </a>
+  <button class="rp-btn" type="button" aria-label="Toggle theme" title="Toggle theme"
+          onclick="rpToggleTheme?.()">
+    <i class="bi bi-moon" data-sp-theme-icon></i>
+  </button>
+</div>
+
+<div class="rp-rt-panel">
+
+  <!-- Object type tabs — Projects | Files | Reports | Dashboards | Companies | Users | + -->
+  <div data-include="./proj-tabs.html"></div>
+
+  <!-- Per-type headers — only one visible at a time. -->
+  <div data-object-type="projects">
+    <div data-include="./types/projects/header.html"></div>
+  </div>
+  <div data-object-type="files" hidden>
+    <div data-include="./types/files/header.html"></div>
+  </div>
+  <div data-object-type="reports" hidden>
+    <div data-include="./types/reports/header.html"></div>
+  </div>
+  <div data-object-type="dashboards" hidden>
+    <div data-include="./types/dashboards/header.html"></div>
+  </div>
+  <div data-object-type="companies" hidden>
+    <div data-include="./types/companies/header.html"></div>
+  </div>
+  <div data-object-type="users" hidden>
+    <div data-include="./types/users/header.html"></div>
+  </div>
+
+  <div data-include="./toolbar.html"></div>
+
+  <div class="rp-rt-body">
+    <div data-include="./filter-panel.html"></div>
+
+    <!-- Per-type tables — same swap pattern as headers. -->
+    <div data-object-type="projects">
+      <div data-include="./types/projects/table.html"></div>
+    </div>
+    <div data-object-type="files" hidden>
+      <div data-include="./types/files/table.html"></div>
+    </div>
+    <div data-object-type="reports" hidden>
+      <div data-include="./types/reports/table.html"></div>
+    </div>
+    <div data-object-type="dashboards" hidden>
+      <div data-include="./types/dashboards/table.html"></div>
+    </div>
+    <div data-object-type="companies" hidden>
+      <div data-include="./types/companies/table.html"></div>
+    </div>
+    <div data-object-type="users" hidden>
+      <div data-include="./types/users/table.html"></div>
+    </div>
+
+    <div data-include="./modals/new-project.html"></div>
+  </div>
+</div>

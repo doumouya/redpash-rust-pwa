@@ -33,57 +33,77 @@
     <i class="bi bi-check2-square"></i>
   </button>
   <span class="rp-rt-sel-chip" data-count="0"><i class="bi bi-check2-square"></i> 0 selected</span>
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this)">
+  <!-- Composite: spSetMode flips .is-mode-delete on the panel (and
+       animates selected rows out if a selection exists, locally only).
+       cleanerMaybeBulkDelete POSTs drop_rows with the selected global
+       indices when STATE.selected is non-empty; no-op otherwise so the
+       button still works as a plain mode toggle on empty selections. -->
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this);cleanerMaybeBulkDelete()">
     <i class="bi bi-trash"></i>
   </button>
 
-  <!-- Refresh — animation only (no real DB hit). Live app will swap
-       the handler for an actual data refetch. -->
-  <button class="rp-btn" title="Refresh" onclick="spRefresh(this)">
+  <!-- Refresh — composite: spRefresh kicks the sandbox 600ms one-shot
+       (instant click feedback), cleanerRefresh adds .is-spinning for
+       the full fetch duration via the broadened CSS rule + re-paints
+       via _paintSandboxTable. spRefresh's class removal at 600ms is
+       harmless since the live half uses its own .is-spinning. -->
+  <button class="rp-btn" title="Refresh" onclick="spRefresh(this);cleanerRefresh(this)">
     <i class="bi bi-arrow-clockwise"></i>
   </button>
 
-  <!-- Row numbers — toggles the # gutter column. Default on. Drops
-       .is-hide-rownums on the panel when off; CSS hides the rownum
-       th + td (file table only — Overview has no rownum column). -->
-  <button type="button" class="rp-btn is-active" title="Show row numbers" aria-pressed="true" onclick="spToggleRowNums(this)">
+  <!-- Row numbers — composite: spToggleRowNums flips is-active +
+       drops .is-hide-rownums on the panel (CSS hides the # gutter);
+       cleanerToggleRowNums persists STATE.showRowNums to prefs. -->
+  <button type="button" class="rp-btn is-active" title="Show row numbers" aria-pressed="true" onclick="spToggleRowNums(this);cleanerToggleRowNums()">
     <i class="bi bi-list-ol"></i>
   </button>
 
-  <!-- Report + Dashboard — anchors to the future pages, open in a
-       new tab (rel="noopener" for the standard security hygiene).
-       Bare hrefs for now; the live app will append the active file /
-       project in query string. -->
-  <a class="rp-btn" href="./report.html" target="_blank" rel="noopener"
-     title="New report from this file (opens in new tab)">
+  <!-- Report + Dashboard — anchors carry a placeholder href as the
+       semantic fallback, but the onclick is the source of truth: it
+       builds the real hash from STATE.rid / STATE.project and opens
+       in a new tab. preventDefault + return false stop the placeholder
+       href from also navigating. -->
+  <a class="rp-btn" href="#/reports" target="_blank" rel="noopener"
+     title="New report from this file (opens in new tab)"
+     onclick="return cleanerOpenReportForFile(event)">
     <i class="bi bi-bar-chart-fill"></i>
   </a>
-  <a class="rp-btn" href="./dashboard.html" target="_blank" rel="noopener"
-     title="New dashboard for this project (opens in new tab)">
+  <a class="rp-btn" href="#/dashboards" target="_blank" rel="noopener"
+     title="New dashboard for this project (opens in new tab)"
+     onclick="return cleanerOpenDashboardForProject(event)">
     <i class="bi bi-grid-1x2-fill"></i>
   </a>
 
-  <!-- Compute cleanness — single-spin animation as click feedback;
-       no real DB hit, no infinite loading state. Live app will swap
-       for the actual cleanness pipeline call. -->
-  <button class="rp-btn" title="Compute cleanness for this file" onclick="spClean(this)">
+  <!-- Compute cleanness — composite: spClean spins the icon (sandbox
+       affordance), cleanerScoreFile POSTs /files/:rid/cleanness and
+       refreshes the header widget + file-tab data-cleanness via
+       _afterHistory. -->
+  <button class="rp-btn" title="Compute cleanness for this file" onclick="spClean(this);cleanerScoreFile(this)">
     <i class="bi bi-magic"></i>
   </button>
-  <button class="rp-btn" title="Clear score for this file">
+  <!-- Clear score — DELETE /files/:rid/cleanness, same refresh path
+       as compute. spClean reused for the spin since the action shape
+       is identical (one icon-button → server round-trip → metadata
+       update). -->
+  <button class="rp-btn" title="Clear score for this file" onclick="spClean(this);cleanerClearScore(this)">
     <i class="bi bi-clipboard-minus"></i>
   </button>
 
+  <!-- Rows-per-page — composite on each item: spDdSelectRows flips
+       the DD's is-selected + writes the visible rows-label; the live
+       cleanerSetPageSize updates STATE.pageSize, resets STATE.page to
+       1, persists the pref, and re-fetches /page with the new size. -->
   <div class="rp-dd-wrap">
     <button class="rp-rt-pill-btn" title="Rows per page" onclick="spDdToggle(this)">
       <span data-sp-rows-label>50</span><span class="rp-rt-pill-unit"> rows</span>
       <i class="bi bi-chevron-down"></i>
     </button>
     <div class="rp-dd-menu" role="menu">
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10)">10 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 25)">25 rows</div>
-      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 50)">50 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100)">100 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250)">250 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10);cleanerSetPageSize(10)">10 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 25);cleanerSetPageSize(25)">25 rows</div>
+      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 50);cleanerSetPageSize(50)">50 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100);cleanerSetPageSize(100)">100 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250);cleanerSetPageSize(250)">250 rows</div>
     </div>
   </div>
 
@@ -109,11 +129,11 @@
     </div>
   </div>
 
-  <!-- Sync — links search + rows-per-page across the project's file
-       tabs. Toggles is-sync-on on the panel; CSS outlines the synced
-       fields so the linkage reads. Live app will wire the actual
-       propagation when changes fire on a synced field. -->
-  <button type="button" class="rp-btn" title="Sync search + rows-per-page across file tabs" onclick="spToggleSync(this)">
+  <!-- Sync — composite: spToggleSync flips is-sync-on on the panel
+       (CSS outlines synced fields); cleanerToggleSync persists
+       STATE.linkToolbar. Cross-tab propagation of search/page-size
+       lands when those handlers are migrated. -->
+  <button type="button" class="rp-btn" title="Sync search + rows-per-page across file tabs" onclick="spToggleSync(this);cleanerToggleSync()">
     <i class="bi bi-link-45deg"></i>
   </button>
 
