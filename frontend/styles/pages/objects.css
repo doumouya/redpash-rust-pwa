@@ -566,6 +566,14 @@ html[data-theme="light"] #page-objects .rp-rt-table tbody tr {
      override resets to UA default in some browsers. */
   line-height: 1.2;
   vertical-align: middle;
+  /* Single-line cells — matches the library's thead nowrap behavior.
+     Without this, files-tab long filenames ("raw_dossier_500_sentinels
+     .csv") wrap to two lines and push the row to ~6rem (2× projects-
+     tab rows). With nowrap the column widens until it hits the table-
+     wrap's right edge; .rp-rt-table-wrap already scrolls horizontally
+     (overflow: auto from the absolute-positioning model above) so wide
+     content stays accessible. */
+  white-space: nowrap;
 }
 /* The same rule for any nested flex / inline-flex wrapper live's
    renderTable emits (.rp-obj-name, .rp-obj-clean, .obj-row-open-cell
