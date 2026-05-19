@@ -3278,6 +3278,28 @@ function _installObjectsLiveHandlers(root) {
     _paintObjectsSandboxMeta(currentKind);
   };
 
+  // Topbar "Open Cleaner" button — routes to the user's most-recently-
+  // updated project so the cleaner mounts on real data instead of a
+  // blank "needs ?project=… or ?file=…" toast. Reads STATE.projects.rows
+  // (mountObjectsSandbox always prefetches /projects via getCached,
+  // so this is populated regardless of which kind-tab is active);
+  // falls back to bare #/cleaner if the list is truly empty (new
+  // account, no uploads yet).
+  //
+  // Sort is defensive — backend's list_projects orders by updated_at
+  // DESC, but a copy + re-sort is cheap and keeps the right answer if
+  // that ever changes.
+  window.objectsOpenCleaner = () => {
+    const rows = (STATE.projects?.rows || []).slice();
+    rows.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    const top = rows[0];
+    if (top?.redpash_id) {
+      location.hash = `#/cleaner?project=${encodeURIComponent(top.redpash_id)}`;
+    } else {
+      location.hash = "#/cleaner";
+    }
+  };
+
   // Toolbar refresh button — companion to sandbox spRefresh. spRefresh
   // adds .is-refreshing for a 600ms one-shot spin; this fires the
   // actual /list refetch via getCached.fresh (rewrites the localStorage

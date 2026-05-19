@@ -14,9 +14,13 @@
     <i class="bi bi-arrow-left"></i>
   </button>
   <h1 class="rp-rt-page-title"><i class="bi bi-grid-3x3-gap"></i> Objects</h1>
+  <!-- objectsOpenCleaner picks the user's most-recently-updated project
+       from the already-loaded STATE.projects.rows so the cleaner mounts
+       on real data instead of toasting "needs ?project=… or ?file=…".
+       Bare #/cleaner stays the fallback for empty accounts. -->
   <button class="rp-btn" type="button" aria-label="Open Cleaner" title="Open Cleaner"
           style="margin-left:auto"
-          onclick="location.hash='#/cleaner'">
+          onclick="objectsOpenCleaner()">
     <i class="bi bi-magic"></i>
   </button>
   <a class="rp-btn" href="#/profile" aria-label="Profile" title="Profile">
