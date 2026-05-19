@@ -3256,19 +3256,36 @@ function _wireGlobals(root) {
 // resizes (drop-cols' checklist height jumps after _populateToolModal
 // fills it asynchronously on some browsers).
 function _positionToolModal(toolId, btn) {
-  const overlay = document.getElementById(`modal-${toolId}`);
-  const modal   = overlay?.querySelector(".modal");
+  // Dual lookup: sandbox uses `rp-modal-${toolId}` + `.rp-modal`; legacy
+  // uses `modal-${toolId}` + `.modal`. Same dual-lookup convention as
+  // _populateToolModal. Without this, sandbox tool modals always centered
+  // over the table (default flex centering of .rp-modal-overlay) instead
+  // of floating next to the tools panel — the table got covered, user
+  // lost spatial context.
+  const overlay = document.getElementById(`rp-modal-${toolId}`)
+              ?? document.getElementById(`modal-${toolId}`);
+  const modal   = overlay?.querySelector(".rp-modal, .modal");
   if (!modal) return;
+
   // No anchor (e.g. opening from the inspect→snake chain) → recenter
-  // by clearing the inline overrides; the library's flex centering
-  // takes over.
+  // by clearing the inline overrides + dropping is-popover; the
+  // library's flex centering takes over.
   if (!btn) {
+    overlay.classList.remove("is-popover");
     modal.style.position = "";
     modal.style.left     = "";
     modal.style.top      = "";
     modal.style.margin   = "";
     return;
   }
+
+  // Popover mode — sandbox modal overlay drops its dim backdrop +
+  // changes its flex alignment to top-left so the modal can free-float
+  // next to the anchor (modals-sandbox.css `.rp-modal-overlay.is-popover`).
+  // Library comment on that rule: "Matches the live cleaner's tool-modal
+  // pattern: table behind STAYS VISIBLE so the user keeps spatial context."
+  overlay.classList.add("is-popover");
+
   const rect = btn.getBoundingClientRect();
   const gap  = 12;
   modal.style.position = "fixed";
@@ -3277,6 +3294,9 @@ function _positionToolModal(toolId, btn) {
     const vpW = window.innerWidth, vpH = window.innerHeight;
     const mw  = modal.offsetWidth  || 400;
     const mh  = modal.offsetHeight || 300;
+    // Anchor to the LEFT of the trigger button (since the tools panel
+    // sits on the right edge). Fall back to the right side if there
+    // isn't room on the left. Clamp to viewport edges.
     let left = rect.left - mw - gap;
     if (left < gap) left = rect.right + gap;
     left = Math.max(gap, Math.min(left, vpW - mw - gap));
