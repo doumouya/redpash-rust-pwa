@@ -1200,6 +1200,29 @@ html[data-theme="light"] .obj-tab.active        { color: #1e1e2e; }
   color: var(--text, #cdd6f4);
 }
 .rp-rt-fb-dd-item.rp-rt-dd-selected { color: var(--accent, #b3001b); }
+
+/* Predicate dropdown menu positioning override — same containing-block
+   trap as on the cleaner page (cleaner.css ~1789). The library's
+   .rp-dd-menu is position:fixed and spDdToggle's _positionDdCenter
+   writes viewport-coordinate inline top/left. Inside the filter panel
+   that breaks: .rp-rt-filter-panel carries transform:translateX(…)
+   for its slide-in, which makes the panel itself the containing block
+   for any fixed descendant — so the menu's "top: 320px" lands at
+   panel-top + 320px instead of viewport-top, pushing it ~1m below the
+   trigger.
+   Scope-override: switch to absolute positioning relative to the
+   .rp-dd-wrap parent (already position:relative per library) and zero
+   out the inline coords via !important so _positionDdCenter's writes
+   don't fight the layout. min-width:100% keeps the menu at least as
+   wide as its trigger button. Same rule as the cleaner-side override
+   for the same reason. */
+.rp-rt-filter-panel .rp-dd-menu {
+  position: absolute !important;
+  top: calc(100% + 0.25rem) !important;
+  left: 0 !important;
+  right: auto !important;
+  min-width: 100%;
+}
 /* ✕ remove — row 1, a small round button at the top-right (over the op
    dropdown). Styled like the active tab's × (.obj-tab-x). */
 .rp-rt-fb-rm {
