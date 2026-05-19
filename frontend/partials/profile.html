@@ -52,6 +52,8 @@
            right pane to the matching <section id="section-...">. No JS
            needed; CSS :target highlights the active link. -->
       <nav class="rp-profile__rail" aria-label="Profile sections">
+        <!-- Account group — who you are + what you have + how you sign in. -->
+        <div class="rp-profile__rail-group-hdr">Account</div>
         <a class="rp-profile__rail-link" href="#section-personal">
           <i class="bi bi-person"></i><span>Personal info</span>
         </a>
@@ -61,24 +63,21 @@
         <a class="rp-profile__rail-link" href="#section-plan">
           <i class="bi bi-rocket-takeoff"></i><span>Plan &amp; Billing</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-connected">
-          <i class="bi bi-link-45deg"></i><span>Connected accounts</span>
+        <a class="rp-profile__rail-link" href="#section-signin">
+          <i class="bi bi-shield-lock"></i><span>Sign-in</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-security">
-          <i class="bi bi-shield-lock"></i><span>Security</span>
-        </a>
+
+        <!-- Settings group — global app preferences. -->
+        <div class="rp-profile__rail-group-hdr">Settings</div>
         <a class="rp-profile__rail-link" href="#section-appearance">
           <i class="bi bi-palette"></i><span>Appearance</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-objects">
-          <i class="bi bi-grid-3x3-gap"></i><span>Objects page</span>
+        <a class="rp-profile__rail-link" href="#section-defaults">
+          <i class="bi bi-sliders"></i><span>Defaults</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-data">
-          <i class="bi bi-database"></i><span>Data &amp; Export</span>
-        </a>
-        <a class="rp-profile__rail-link" href="#section-cleaner">
-          <i class="bi bi-magic"></i><span>Cleaner page</span>
-        </a>
+
+        <!-- System group — meta + irreversible. -->
+        <div class="rp-profile__rail-group-hdr">System</div>
         <a class="rp-profile__rail-link" href="#section-about">
           <i class="bi bi-info-circle"></i><span>About</span>
         </a>
@@ -295,13 +294,17 @@
           </div>
         </section>
 
-        <!-- ─── Connected accounts ─────────────────────────────────── -->
-        <section id="section-connected" class="rp-profile__section">
+        <!-- ─── Sign-in (connected accounts + security) ───────────────
+             Merged from the separate #section-connected + #section-security
+             so all "how you authenticate" controls sit in one card with
+             two subsection headers. -->
+        <section id="section-signin" class="rp-profile__section">
           <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Connected accounts</h2>
-            <div class="rp-profile__section-sub">Sign-in providers RedPash can use. Google active; others coming soon.</div>
+            <h2 class="rp-profile__section-ttl">Sign-in</h2>
+            <div class="rp-profile__section-sub">Providers, password, and session controls.</div>
           </header>
           <div class="rp-profile__card">
+            <h3 class="rp-profile__subhdr">Connected accounts</h3>
             <div class="rp-profile__conn">
               <div class="rp-profile__conn-icon">
                 <svg class="rp-brand-svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
@@ -344,16 +347,10 @@
               </div>
               <span class="rp-soon">Soon</span>
             </div>
-          </div>
-        </section>
 
-        <!-- ─── Security ───────────────────────────────────────────── -->
-        <section id="section-security" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Security</h2>
-            <div class="rp-profile__section-sub">Sign-in + session controls. Most items land alongside billing in Phase 6.</div>
-          </header>
-          <div class="rp-profile__card">
+            <div class="rp-set-divider rp-profile__subdivider"></div>
+
+            <h3 class="rp-profile__subhdr">Security</h3>
             <div class="rp-set-row">
               <div class="rp-set-lbl">
                 <div class="rp-set-title">Password</div>
@@ -453,13 +450,18 @@
           </div>
         </section>
 
-        <!-- ─── Objects-page settings ──────────────────────────────── -->
-        <section id="section-objects" class="rp-profile__section">
+        <!-- ─── Defaults (file handling + objects-page + cleaner-page) ────
+             Merged from #section-data + #section-objects + #section-cleaner
+             so every "what should the app do by default" knob sits in one
+             card with three subsection headers. Reduces rail-link count
+             and keeps related defaults adjacent. -->
+        <section id="section-defaults" class="rp-profile__section">
           <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Objects page</h2>
-            <div class="rp-profile__section-sub">Which object types show as tabs + per-tab saved views.</div>
+            <h2 class="rp-profile__section-ttl">Defaults</h2>
+            <div class="rp-profile__section-sub">File handling defaults, per-page settings, and shared vocabulary.</div>
           </header>
           <div class="rp-profile__card">
+            <h3 class="rp-profile__subhdr">Objects page</h3>
             <div class="rp-set-row rp-set-row--col">
               <div class="rp-set-lbl">
                 <div class="rp-set-title">Object tabs</div>
@@ -482,16 +484,10 @@
               </div>
               <div id="settings-views-list" class="rp-views-list"></div>
             </div>
-          </div>
-        </section>
 
-        <!-- ─── Data & Export ──────────────────────────────────────── -->
-        <section id="section-data" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Data &amp; Export</h2>
-            <div class="rp-profile__section-sub">Defaults applied when opening files + downloading cleaned data.</div>
-          </header>
-          <div class="rp-profile__card">
+            <div class="rp-set-divider rp-profile__subdivider"></div>
+
+            <h3 class="rp-profile__subhdr">File handling</h3>
             <div class="rp-set-row rp-set-row--col">
               <div class="rp-set-lbl">
                 <div class="rp-set-title">Default CSV delimiter</div>
@@ -534,16 +530,10 @@
                 <button type="button" class="rp-set-opt"        data-value="json" title="Array of records"><i class="bi bi-filetype-json bi-sm"></i> JSON</button>
               </div>
             </div>
-          </div>
-        </section>
 
-        <!-- ─── Cleaner-page settings ──────────────────────────────── -->
-        <section id="section-cleaner" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Cleaner page</h2>
-            <div class="rp-profile__section-sub">Sentinel vocabulary + community-share toggle.</div>
-          </header>
-          <div class="rp-profile__card">
+            <div class="rp-set-divider rp-profile__subdivider"></div>
+
+            <h3 class="rp-profile__subhdr">Cleaner page</h3>
             <div class="rp-set-row rp-set-row--col">
               <div class="rp-set-lbl">
                 <div class="rp-set-title">Your sentinel values</div>
@@ -566,6 +556,7 @@
             </div>
           </div>
         </section>
+        <!-- ─── (end Defaults section — merged data + objects + cleaner) ─── -->
 
         <!-- ─── About ──────────────────────────────────────────────── -->
         <section id="section-about" class="rp-profile__section">

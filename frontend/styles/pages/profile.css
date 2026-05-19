@@ -164,21 +164,33 @@ html[data-theme="light"] .rp-profile__rail { background: rgba(255, 255, 255, 0.2
 /* Active rail item — driven by :has(:target) so the link whose href
    matches the section currently anchored by the URL hash highlights
    accent. JS-free. Modern browsers (Chrome 105+, Safari 15.4+,
-   FF 121+); older browsers just lose the active highlight. */
+   FF 121+); older browsers just lose the active highlight. The 8
+   section IDs match the rail entries below: 11→8 mergers (connected +
+   security → signin; data + objects + cleaner → defaults). */
 .rp-profile__layout:has(#section-personal:target)    .rp-profile__rail-link[href="#section-personal"],
 .rp-profile__layout:has(#section-usage:target)       .rp-profile__rail-link[href="#section-usage"],
 .rp-profile__layout:has(#section-plan:target)        .rp-profile__rail-link[href="#section-plan"],
-.rp-profile__layout:has(#section-connected:target)   .rp-profile__rail-link[href="#section-connected"],
-.rp-profile__layout:has(#section-security:target)    .rp-profile__rail-link[href="#section-security"],
+.rp-profile__layout:has(#section-signin:target)      .rp-profile__rail-link[href="#section-signin"],
 .rp-profile__layout:has(#section-appearance:target)  .rp-profile__rail-link[href="#section-appearance"],
-.rp-profile__layout:has(#section-objects:target)     .rp-profile__rail-link[href="#section-objects"],
-.rp-profile__layout:has(#section-data:target)        .rp-profile__rail-link[href="#section-data"],
-.rp-profile__layout:has(#section-cleaner:target)     .rp-profile__rail-link[href="#section-cleaner"],
+.rp-profile__layout:has(#section-defaults:target)    .rp-profile__rail-link[href="#section-defaults"],
 .rp-profile__layout:has(#section-about:target)       .rp-profile__rail-link[href="#section-about"],
 .rp-profile__layout:has(#section-danger:target)      .rp-profile__rail-link[href="#section-danger"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
+
+/* Rail group headers — small caps text labels for "Account / Settings /
+   System" cluster headings. Not interactive; just visual grouping. */
+.rp-profile__rail-group-hdr {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+  padding: 0.875rem 0.875rem 0.375rem;
+  user-select: none;
+}
+.rp-profile__rail-group-hdr:first-child { padding-top: 0.125rem; }
 
 .rp-profile__rail-link--danger { color: var(--red, #f87171); }
 .rp-profile__rail-link--danger:hover {
@@ -742,12 +754,9 @@ textarea {
 .rp-profile__layout:has(#section-personal:target)    .rp-profile__rail-link[href="#section-personal"]::before,
 .rp-profile__layout:has(#section-usage:target)       .rp-profile__rail-link[href="#section-usage"]::before,
 .rp-profile__layout:has(#section-plan:target)        .rp-profile__rail-link[href="#section-plan"]::before,
-.rp-profile__layout:has(#section-connected:target)   .rp-profile__rail-link[href="#section-connected"]::before,
-.rp-profile__layout:has(#section-security:target)    .rp-profile__rail-link[href="#section-security"]::before,
+.rp-profile__layout:has(#section-signin:target)      .rp-profile__rail-link[href="#section-signin"]::before,
 .rp-profile__layout:has(#section-appearance:target)  .rp-profile__rail-link[href="#section-appearance"]::before,
-.rp-profile__layout:has(#section-objects:target)     .rp-profile__rail-link[href="#section-objects"]::before,
-.rp-profile__layout:has(#section-data:target)        .rp-profile__rail-link[href="#section-data"]::before,
-.rp-profile__layout:has(#section-cleaner:target)     .rp-profile__rail-link[href="#section-cleaner"]::before,
+.rp-profile__layout:has(#section-defaults:target)    .rp-profile__rail-link[href="#section-defaults"]::before,
 .rp-profile__layout:has(#section-about:target)       .rp-profile__rail-link[href="#section-about"]::before,
 .rp-profile__layout:has(#section-danger:target)      .rp-profile__rail-link[href="#section-danger"]::before {
   background: var(--accent);
@@ -758,30 +767,36 @@ textarea {
   background: color-mix(in srgb, var(--red) 60%, transparent);
 }
 
-/* Section-group separators in the rail — sentinel-spaced dividers
-   before the appearance / about / danger blocks. */
-.rp-profile__rail-link[href="#section-appearance"],
-.rp-profile__rail-link[href="#section-about"],
-.rp-profile__rail-link[href="#section-danger"] {
-  margin-top: 0.4375rem;
-}
-.rp-profile__rail-link[href="#section-appearance"]::after,
-.rp-profile__rail-link[href="#section-about"]::after,
-.rp-profile__rail-link[href="#section-danger"]::after {
-  content: "";
-  position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
-  top: -0.25rem;
-  height: 0.0313rem;
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-}
+/* (Old section-group separators removed — the .rp-profile__rail-group-hdr
+   labels above the affected links handle grouping explicitly now.) */
 
-/* ── Pane — slightly more breathing room, max-width for legibility. */
+/* ── Pane — tighter rhythm for the merged 8-section layout (was 11).
+   2-col grid on wider viewports so short sections (usage / plan /
+   about / danger) sit side-by-side. Identity / signin / appearance
+   / defaults span both columns via .rp-profile__section--wide. */
 .rp-profile__pane {
-  padding: 1.5rem 1.75rem 3rem;
+  padding: 1.25rem 1.75rem 2.5rem;
 }
-.rp-profile__section { margin: 0 auto 1.75rem; }
+.rp-profile__section { margin: 0 0 1.25rem; max-width: none; }
+@media (min-width: 60rem) {
+  .rp-profile__pane > .rp-profile__section { max-width: none; }
+  /* Switch the pane's interior to a 2-col grid where wide sections
+     auto-span. Done by grouping sections into a CSS subgrid? — simpler:
+     make the pane itself a grid and tag wide sections to span 2 cols.
+     Sections in source order pack into the 12-col-equivalent flow. */
+  .rp-profile__pane {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 1.5rem;
+    align-content: start;
+  }
+  .rp-profile__pane > .rp-profile__section { margin: 0; }
+  /* Long-form sections span both columns. */
+  #section-personal, #section-signin,
+  #section-appearance, #section-defaults {
+    grid-column: 1 / -1;
+  }
+}
 
 /* Section header — accent dot before the title + tighter sub. */
 .rp-profile__section-hdr {
@@ -802,10 +817,33 @@ textarea {
    internal padding rhythm. The plan + danger cards override below. */
 .rp-profile__card {
   position: relative;
-  padding: 1rem 1.125rem;
+  padding: 0.875rem 1rem;
   border-radius: 0.75rem;
   box-shadow: 0 0.125rem 0.875rem rgba(0, 0, 0, 0.12);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+/* ── Subsection heading (h3) inside a merged section card. Used by
+   the Sign-in (Connected accounts / Security) and Defaults (Objects
+   page / File handling / Cleaner page) cards. Reads as a quiet label
+   above each group, not as a competing h2. */
+.rp-profile__subhdr {
+  margin: 0.125rem 0 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+  user-select: none;
+}
+.rp-profile__subhdr:not(:first-child) { margin-top: 0.5rem; }
+
+/* The divider between two subsections is heavier than the row-to-row
+   divider so the subsection break reads. */
+.rp-profile__subdivider {
+  height: 0.0625rem;
+  background: color-mix(in srgb, var(--text) 14%, transparent) !important;
+  margin: 1rem 0 0.5rem !important;
 }
 .rp-profile__card::before {
   content: "";
