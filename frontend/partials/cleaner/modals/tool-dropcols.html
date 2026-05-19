@@ -13,19 +13,29 @@
 
     <div class="rp-form-row">
       <span class="rp-form-lbl">Select columns to drop</span>
-      <div style="display:flex;flex-direction:column;gap:0.1875rem">
-        <label class="rp-dd-checkbox"><input type="checkbox" /> Numero_dossier_ID</label>
-        <label class="rp-dd-checkbox"><input type="checkbox" /> Client</label>
-        <label class="rp-dd-checkbox"><input type="checkbox" checked /> Matricule.de.traitement</label>
-        <label class="rp-dd-checkbox"><input type="checkbox" checked /> Outil.d.assistance</label>
-        <label class="rp-dd-checkbox"><input type="checkbox" /> TOP.D.R</label>
-        <label class="rp-dd-checkbox"><input type="checkbox" checked /> TOP.Autres.Garanties</label>
+      <!-- [data-tool-checklist] is the render hook for _populateToolModal —
+           on every cleanerOpenTool('tool-dropcols', btn) call, this div's
+           innerHTML is replaced with one <label> containing
+           <input type="checkbox" data-tool-col="<colname>"> per STATE.columns
+           entry. The previous hardcoded French sample labels never showed
+           real columns + had no data-tool-col attrs, so _readToolPayload's
+           cols() picked up nothing. Placeholder content below shows when
+           no file is open. -->
+      <div data-tool-checklist
+           style="display:flex;flex-direction:column;gap:0.1875rem;max-height:18rem;overflow-y:auto">
+        <div class="rp-form-meta" style="padding:0.5rem;font-style:italic">
+          Open a file to load its columns.
+        </div>
       </div>
     </div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-dropcols')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-dropcols')">Drop columns</button>
+      <!-- cleanerApplyTool: reads ticked [data-tool-col] checkboxes via
+           _readToolPayload, POSTs { kind: "drop_columns", params: { cols } },
+           pipes the response through the standard re-render + toast.
+           Closes the modal optimistically. -->
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-dropcols')">Drop columns</button>
     </div>
   </div>
 </div>

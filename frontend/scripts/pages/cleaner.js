@@ -3294,7 +3294,13 @@ function _positionToolModal(toolId, btn) {
 //   [data-tool-sub]        — subtitle ("filename · N rows")
 // Per-tool tweaks (preview tables, dedup mode select) happen after.
 function _populateToolModal(toolId) {
-  const modal = document.getElementById(`modal-${toolId}`);
+  // Dual lookup: sandbox modals use `rp-modal-${toolId}` id; legacy
+  // modals use `modal-${toolId}`. Same dual-lookup convention as
+  // window.openModal in main.js. Without this, sandbox-ported tool
+  // modals open with their hardcoded French sample columns instead
+  // of the actual file's columns.
+  const modal = document.getElementById(`rp-modal-${toolId}`)
+             ?? document.getElementById(`modal-${toolId}`);
   if (!modal) return;
 
   const subText = `${STATE.summary?.display_name ?? STATE.summary?.filename ?? "—"} · ${(STATE.summary?.row_count ?? 0).toLocaleString()} rows`;
