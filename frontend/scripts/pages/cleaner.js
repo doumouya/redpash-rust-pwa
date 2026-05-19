@@ -5164,6 +5164,130 @@ function _installSandboxLiveHandlers(root) {
     _positionToolModal(toolId, btn);
   };
 
+  // ── Tool dispatcher + invalid-tool helpers + dedup-mode change.
+  //
+  // Same bodies as the legacy copies in _wireGlobals (lines ~2058-2297).
+  // mountSandbox skips _wireGlobals, so every commit button on a tool
+  // modal (cleanerApplyTool), the All/None/scope/mode/add controls
+  // inside the fix-invalid modal, and the dedup-mode <select> all
+  // need these handlers installed on the sandbox path too. Without
+  // this, clicking "Apply" on any tool modal silently no-ops because
+  // window.cleanerApplyTool is undefined.
+  //
+  // Closures over `root` work because _installSandboxLiveHandlers
+  // takes root from mountSandbox in the same way _wireGlobals does.
+  window.cleanerToolInvalidScope = (sel) => {
+    const modal = sel.closest(".rp-modal-overlay, .modal-overlay");
+    const field = modal?.querySelector("[data-tool-invalid-col-field]");
+    if (field) field.hidden = sel.value !== "one";
+  };
+  window.cleanerToolInvalidMode = (sel) => {
+    const modal = sel.closest(".rp-modal-overlay, .modal-overlay");
+    const field = modal?.querySelector("[data-tool-invalid-value-field]");
+    if (field) field.hidden = sel.value !== "custom";
+  };
+  window.cleanerToolInvalidSelectAll = (on) => {
+    const modal = document.getElementById("rp-modal-tool-invalid")
+               ?? document.getElementById("modal-tool-invalid");
+    modal?.querySelectorAll("[data-tool-sentinel]").forEach((c) => { c.checked = !!on; });
+  };
+  window.cleanerToolInvalidAddExtra = async (inputEl) => {
+    if (!inputEl) return;
+    const raw = String(inputEl.value || "");
+    const canon = raw.trim().toLowerCase();
+    if (!canon) return;
+    const modal = inputEl.closest(".rp-modal-overlay, .modal-overlay");
+    if (!modal) return;
+    inputEl.value = "";
+    if (_toolInvalidAdhoc.has(canon) || STATE.learnedSentinels?.has(canon)) {
+      const existing = modal.querySelector(`[data-tool-sentinel="${CSS.escape(raw.trim())}"]`);
+      if (existing) {
+        existing.checked = true;
+        const lbl = existing.closest("label");
+        if (lbl) { lbl.style.transition = "background .2s"; lbl.style.background = "color-mix(in srgb,var(--accent) 12%,transparent)"; setTimeout(() => { lbl.style.background = ""; }, 600); }
+      }
+      return;
+    }
+    _toolInvalidAdhoc.add(canon);
+    await _refreshSentinelList(modal, { preserve: true });
+    const surfaced = modal.querySelector(`[data-tool-sentinel]`)
+      && [...modal.querySelectorAll("[data-tool-sentinel]")]
+            .some((c) => c.dataset.toolSentinel.trim().toLowerCase() === canon);
+    if (!surfaced) {
+      _toolInvalidAdhoc.delete(canon);
+      toast.info(`No cells matched "${raw.trim()}" in this file.`);
+    }
+  };
+
+  window.cleanerApplyTool = async (toolId) => {
+    if (!STATE.summary) return;
+
+    // First-time consent gate for the fix-invalid tool. Same logic as
+    // the legacy copy — see _wireGlobals (lines ~2220-2250) for the
+    // detailed reasoning.
+    if (toolId === "tool-invalid" && STATE.shareSentinels == null) {
+      const modal  = document.getElementById("rp-modal-tool-invalid")
+                  ?? document.getElementById("modal-tool-invalid");
+      const picked = [...(modal?.querySelectorAll("[data-tool-sentinel]:checked") ?? [])]
+        .map((c) => c.dataset.toolSentinel);
+      const newToUser = picked.find((s) => {
+        const canon = String(s).trim().toLowerCase();
+        return canon
+          && !SENTINELS_BUILTIN.has(canon)
+          && !STATE.learnedSentinels.has(canon);
+      });
+      if (newToUser) {
+        const choice = await _askSentinelConsent(newToUser);
+        if (choice === "cancel") return;
+        STATE.shareSentinels = (choice === "accept");
+        try {
+          await api.patch("/me", { prefs: { share_sentinels: STATE.shareSentinels } });
+        } catch (err) {
+          toast.error(`Couldn't save sharing choice: ${err.body?.error ?? err.message}`);
+          STATE.shareSentinels = null;
+          return;
+        }
+      }
+    }
+
+    const payload = _readToolPayload(toolId);
+    if (!payload) return;
+
+    window.closeModal(toolId);
+
+    try {
+      const res = await api.post(
+        `/files/${encodeURIComponent(STATE.rid)}/steps`,
+        payload,
+      );
+      STATE.summary = res.summary;
+      STATE.columns = res.columns ?? [];
+      STATE.steps   = res.steps   ?? [];
+      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
+      if (idx >= 0) STATE.files[idx] = res.summary;
+      _renderTitle(root);
+      _renderHeaderMeta(root);
+      _renderOverallCleanness(root);
+      _renderHistoryButtons(root);
+      _renderAppliedList(root);
+      _renderDtypeList(root);
+      _renderTabs(root);
+      await _loadPage(root);
+
+      const op = res.last_op ?? {};
+      const delta = op.rows_after != null && op.rows_before != null
+        ? (op.rows_after - op.rows_before) : null;
+      const note = delta != null && delta !== 0
+        ? `${delta > 0 ? "+" : ""}${delta.toLocaleString()} rows`
+        : (op.cells_changed != null ? `${op.cells_changed.toLocaleString()} cells` : "applied");
+      toast.success(`${payload.kind} · ${note}`);
+    } catch (err) {
+      toast.error(`Apply failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  window.cleanerDedupModeChanged = () => _refreshDedupPreview(root);
+
   const _persistHidden = () => {
     window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
   };

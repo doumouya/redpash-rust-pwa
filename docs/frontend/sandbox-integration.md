@@ -405,6 +405,9 @@ the underlying code may have moved on since the entry was written).
 | Native `<select>` → custom `.rp-dd-wrap` widget | ✅ (filter rows) | 🔄 | ➖ |
 | Drag-reorder persistence via doc-level `dragend` | ✅ | 🔄 | ➖ |
 | Minimum-spin floor on fast async ops | ✅ (refresh 600ms) | 🔄 | ➖ |
+| Tool-modal wiring (`cleanerOpenTool` + `cleanerApplyTool` end-to-end) | ✅ | ➖ | ➖ |
+| Unified tool-modal positioning (panel-anchored, 30rem slot) | ✅ | ➖ | ➖ |
+| Joins panel mount-point selector | ✅ | ➖ | ➖ |
 
 ### Pattern: page-level shell + `rpInclude` (cleaner + objects)
 
@@ -907,6 +910,122 @@ calls `skipWaiting()` + activate handler deletes the old caches.
 Two reloads to actually take effect (first reload installs+activates
 new SW; second reload uses it). Skip the dance with
 Cmd/Ctrl+Shift+R (hard reload bypasses SW for that fetch).
+
+---
+
+## Cleaning-tool modal wiring — 2026-05-19
+
+The 17 tool modals in `partials/cleaner/modals/tool-*.html` were
+visually complete but functionally inert — every commit button just
+called `closeModal('tool-X')`, form inputs used `data-sp-*` attrs the
+live reader doesn't read, and column pickers showed hardcoded French
+sample names instead of the file's actual columns. The backend
+dispatcher (`cleanerApplyTool` + `_readToolPayload`) was
+production-ready; only the markup-to-handler wiring was missing.
+
+This wiring sweep landed the full end-to-end path: panel button →
+`cleanerOpenTool` populates the modal from `STATE.columns` and opens
+it anchored to the tools panel → user fills the form → commit button
+fires `cleanerApplyTool` → `_readToolPayload` collects values via
+`[data-tool-*]` selectors → POST `/files/:rid/steps` → backend replays
+the step → response flows through `_afterHistory`-equivalent
+re-render (`_renderTitle` / `_renderHeaderMeta` / `_renderOverallCleanness`
+/ `_renderHistoryButtons` / `_renderAppliedList` / `_renderDtypeList`
+/ `_renderTabs` / `_loadPage`) → toast.
+
+### Pattern: tool-modal three-layer disconnect
+
+*Cleaner ✅ — apply the same recipe to any new tool added later.*
+
+When a sandbox-ported modal "doesn't work," check these three layers
+in order. Any one of them breaks the whole flow silently:
+
+| Layer | Symptom of break | Where it lives |
+|---|---|---|
+| **Modal open** | Panel button does nothing, or modal opens with hardcoded sample columns | `partials/cleaner/tools-panel.html` button `onclick` must call `cleanerOpenTool('tool-X', this)` (NOT `openModal`). cleanerOpenTool gates on `STATE.summary`, calls `_populateToolModal`, then `openModal`, then `_positionToolModal`. |
+| **Form contract** | Modal opens with real columns but commit button validation toast says "Pick a column" / "Cannot be empty" / etc. | Modal `<input>` / `<select>` / mount points must use `data-tool-*` attributes matching what `_readToolPayload(toolId)` reads. `data-sp-*` from the sandbox demo is NOT read. Generic mount points: `[data-tool-cols]` (single-col select, auto-painted), `[data-tool-checklist]` (multi-col list, auto-painted), `[data-tool-find]` / `-replace` / `-value` / `-new-name` / `-sep` / `-into` (text inputs), `[data-tool-case-mode]` / `-fill-mode` / `-date-fmt` / `-date-incomplete` / `-invalid-scope` / `-invalid-mode` / `-dedup-mode` (selects). |
+| **Commit dispatch** | Commit button is wired but does nothing in console — no toast, no XHR. | Button must call `cleanerApplyTool('tool-X')` and that handler must be installed on the **sandbox** path. Same trap as `cleanerOpenTool` earlier — handlers defined inside `_wireGlobals` (legacy) never reach the sandbox mount. Re-install in `_installSandboxLiveHandlers`. |
+
+### Gotcha: tool handlers were legacy-only
+
+*Cleaner ✅ — already fixed for cleanerOpenTool / cleanerApplyTool /
+cleanerToolInvalidScope/Mode/SelectAll/AddExtra / cleanerDedupModeChanged.
+Re-check any new tool-related handler you add.*
+
+The legacy `_wireGlobals(root)` installer (lines ~1234-3140 in
+`cleaner.js`) is full of `window.cleanerX = …` definitions that the
+sandbox path never reaches because `mountSandbox` skips _wireGlobals
+entirely. Every time a tool-modal button references a
+`cleaner*` handler in inline `onclick`, double-check it's also installed
+inside `_installSandboxLiveHandlers`. The Migrated handler audit
+section above is the source of truth for what's on each path; tool-
+related handlers (cleanerOpenTool, cleanerApplyTool, cleanerCastColumn,
+cleanerSkipCast, cleanerRevertSkipCast, cleanerDedupModeChanged,
+cleanerToolInvalidScope/Mode/SelectAll/AddExtra) are explicitly
+mirrored on the sandbox path.
+
+The bodies are byte-identical copies — closures over `root` work
+because `_installSandboxLiveHandlers` takes the same `root` parameter
+as `_wireGlobals`. Top-level helpers the handlers call
+(`_populateToolModal` / `_readToolPayload` / `_positionToolModal` /
+`_renderTitle` / `_loadPage` / etc.) are module-scoped functions, so
+they're always accessible regardless of which installer ran.
+
+### Pattern: unified tool-modal positioning
+
+*Cleaner ✅ ([cleaner.js `_positionToolModal`](../../frontend/scripts/pages/cleaner.js)) — apply to any panel-anchored modal family.*
+
+Tool modals open in a single fixed slot (left edge of the tools panel,
+top-aligned to the panel) regardless of which button in the panel
+grid the user clicked. Implementation:
+
+- `cleanerOpenTool` calls `_positionToolModal(toolId, btn)`.
+- `_positionToolModal` finds the modal overlay via dual lookup
+  (`rp-modal-${toolId}` || `modal-${toolId}`) and the inner panel
+  (`.rp-modal` || `.modal`).
+- Adds `.is-popover` to the overlay — drops the dim backdrop, aligns
+  to top-left of the parent body (library's
+  `.rp-modal-overlay.is-popover` in `modals-sandbox.css`).
+- Reads `.rp-rtp-tools.getBoundingClientRect()` (the tools panel, not
+  the button) so every tool lands in the SAME slot regardless of
+  which button was clicked. Falls back to button rect if the panel
+  isn't found.
+- Anchors to LEFT of the panel edge with a 12px gap. Clamps to
+  viewport.
+- All tool modals also share a unified `width: min(30rem, 92vw)` via
+  CSS scoped to `#page-cleaner .rp-modal-overlay.is-popover .rp-modal`
+  in `cleaner.css`. Per-modal `rp-modal-{sm,md,lg}` sizing classes are
+  overridden so the slot doesn't "breathe" between tools.
+
+The "no anchor button" branch (e.g. the inspect-suggestion chain
+where one tool modal opens another with no anchor) clears the
+`.is-popover` class so the modal recenters and the dim backdrop comes
+back — that flow is a deliberate "navigation" affordance, not a
+spatial-context one.
+
+### Gotcha: dual modal-id lookup needed everywhere
+
+*Cleaner ✅ ([cleaner.js `_populateToolModal`, `_positionToolModal`, `_readToolPayload`, `_refreshDedupPreview`, `cleanerToolInvalidSelectAll`, the consent gate in `cleanerApplyTool`](../../frontend/scripts/pages/cleaner.js)) — re-grep after every modal port.*
+
+Sandbox modals use `id="rp-modal-${toolId}"` (rp- prefix). Legacy
+modals use `id="modal-${toolId}"`. Any function that looks up a
+modal by id needs to try BOTH:
+
+```js
+const m = document.getElementById(`rp-modal-${toolId}`)
+       ?? document.getElementById(`modal-${toolId}`);
+```
+
+Same dual-lookup pattern as `window.openModal` itself in main.js.
+Without this, the sandbox markup is silently invisible to the function,
+which then either no-ops (silent) or fails an `if (!m) return null`
+guard. Symptom is usually "modal renders fine but the action does
+nothing."
+
+The handler that caught this latest: `_readToolPayload` was looking up
+`modal-${toolId}` and returning `null` for every sandbox tool modal,
+so every commit button silently failed. The fix is one line per
+lookup; the affected functions are listed above.
 
 ---
 
