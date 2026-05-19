@@ -133,7 +133,11 @@ html[data-theme="light"] #page-reports .rp-rt-page-title { color: #1e3a5f; }
   overflow: auto;
   padding: 0;
 }
-#page-reports .rp-reports__table-pane .rp-rt-paging {
+/* Pager strip — matches cleaner.css's #page-cleaner .rp-rt-pager
+   visual treatment so reports / cleaner read as the same family.
+   Pinned to bottom of the table pane, sits OVER the table-wrap
+   (which leaves room for it via `bottom: 2rem`). */
+#page-reports .rp-reports__table-pane .rp-rt-pager {
   position: absolute;
   left: 0;
   right: 0;
@@ -142,11 +146,30 @@ html[data-theme="light"] #page-reports .rp-rt-page-title { color: #1e3a5f; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 1rem;
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  border-top: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-top: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   font-size: 0.6875rem;
   color: var(--muted);
+  z-index: 5;
+}
+html[data-theme="light"] #page-reports .rp-reports__table-pane .rp-rt-pager {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-reports .rp-reports__table-pane .rp-rt-pager {
+    background: color-mix(in srgb, var(--text) 3%, transparent);
+  }
+}
+#page-reports .rp-reports__table-pane .rp-rt-rows-info {
+  font-variant-numeric: tabular-nums;
+  padding: 0;
+}
+#page-reports .rp-reports__table-pane .rp-rt-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
 }
 
 /* ── Drag handle — horizontal divider straddling the split. 8px tall
