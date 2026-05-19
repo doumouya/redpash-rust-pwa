@@ -352,19 +352,25 @@ body[data-chrome="full"] {
   flex-direction: column;
   transition: background 0.25s, color 0.25s;
   -webkit-font-smoothing: antialiased;
-  /* Leave room for the iPhone home indicator / Android gesture bar
-     / Firefox devtools-emulated bottom chrome. Without this, anything
-     absolutely-positioned at `bottom: 0` of a body descendant (e.g.
-     the cleaner pager pinned to .rp-rt-body's bottom) sits behind
-     that safe-area chrome and gets clipped. The top safe-area is
-     handled per-element on the topbars (.rp-rt-topbar / .rp-topbar);
-     bottom is uniform across full-bleed pages so apply it globally
-     on the body. Fixed-position bars (.rp-float-bar--b*) have their
-     own safe-area-bottom override and aren't in body's flow, so this
-     doesn't compound for them. */
-  padding-bottom: var(--rp-sai-bottom);
 }
 html:has(body[data-chrome="full"]) { overflow: hidden; }
+
+/* Universal margin/padding zero — scoped to full-bleed pages so
+   non-full-bleed surfaces (docs especially) keep browser-default
+   spacing on raw <h1>/<p>/<ul> content. Mirrors what shell.css
+   carried before I hoisted only its body chrome into main.css.
+   Without this rule the topbar's <h1> inherits UA default margin
+   (~21px top/bottom on most browsers), creating asymmetric visible
+   gaps inside the chrome strips.
+
+   :where() pins the selector specificity to 0,0,0,0 (matching
+   shell.css's bare `*`) so any class-based padding rule
+   (.rp-btn { padding: 0 14px }, .rp-rt-toolbar { padding: ... }, etc.)
+   still wins — this rule only beats UA defaults, not authored styles. */
+:where(body[data-chrome="full"]) :where(*, *::before, *::after) {
+  margin: 0;
+  padding: 0;
+}
 body[data-chrome="full"] .rp-app {
   padding: 0;
   min-height: 0;
