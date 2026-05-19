@@ -1154,6 +1154,47 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
   border-top-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
+/* ── tool-inspect suggestions list (.rp-suggest) ────────────────────
+   Ported from redpash-front-end/main.css:2263+. The class was sandbox-
+   only — the tool-inspect modal uses it but the live app never carried
+   the rules, so suggestion buttons rendered with UA defaults. In dark
+   mode that meant white-on-white (the body's light --text inherited
+   into the unstyled button while the UA bg stayed light). Token-driven
+   so it theme-switches via the body[data-chrome="full"] palette. */
+#page-cleaner .modal-overlay .rp-suggest {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4375rem 0.625rem;
+  background: var(--hover);
+  border: 0.0625rem solid var(--over1, var(--border));
+  border-radius: 0.375rem;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+#page-cleaner .modal-overlay .rp-suggest:hover {
+  background: var(--active-bg);
+  color: var(--bg);
+}
+#page-cleaner .modal-overlay .rp-suggest > .bi:first-child {
+  font-size: 0.875rem;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+#page-cleaner .modal-overlay .rp-suggest:hover > .bi:first-child {
+  color: var(--bg);
+}
+#page-cleaner .modal-overlay .rp-suggest-lbl  { flex: 1 1 auto; }
+#page-cleaner .modal-overlay .rp-suggest-gain {
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Light theme — derived from --bg so it tracks the user's chosen
    palette. Was a hardcoded mint-to-sky gradient (`#e3ffe7` →
    `#d9e7ff`) inherited from the demo's clean-workspace theme. */
