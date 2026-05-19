@@ -330,7 +330,7 @@ export default async function mount(root, ctx) {
     _renderAppliedList(root);
     _renderDtypeList(root);
     _renderEncodingPicker(root);
-    // Async fetch — fire-and-forget; paints into #cleaner-join-body
+    // Async fetch — fire-and-forget; paints into [data-cleaner-join-prep]
     // when the response lands. Skipped when no active file or <2 files.
     _renderJoinsPanel(root).catch(() => {});
 
@@ -3877,7 +3877,12 @@ function _renderAppliedList(root) {
 // /joins and land on the newly-created joined file. Fetch is skipped
 // when the project has fewer than 2 files (nothing to join against).
 async function _renderJoinsPanel(root) {
-  const box = root.querySelector("#cleaner-join-body");
+  // Mount point: [data-cleaner-join-prep] in partials/cleaner/tools-panel.html.
+  // The handler previously looked for #cleaner-join-body which never
+  // existed in the sandbox partial — selector mismatch made the
+  // function silently no-op on every call, and the user saw the static
+  // "Join suggestions … land here" placeholder forever.
+  const box = root.querySelector("[data-cleaner-join-prep]");
   if (!box) return;
   if (!STATE.rid) {
     box.innerHTML = `<div class="rp-rtp-dtype-empty">Open a file to detect joins.</div>`;
