@@ -72,20 +72,24 @@ and match without pulling in opinionated body chrome they don't want:
   load globally on any consuming app — these prevent app-side element
   selectors (`a:hover {…}`, etc.) from leaking into library components
   that use those elements. **Always loaded.**
-- **`shell.css`** — **opt-in** body chrome + universal margin/padding
+- **`shell.css`** — opinionated body chrome + universal margin/padding
   zero: `html, body { height: 100%; overflow: hidden }`,
   `body { display: flex; flex-direction: column; font-size: 0.8125rem }`,
-  `*, *::before, *::after { margin: 0; padding: 0 }`. Opinionated —
-  apps with raw `<h1>` / `<p>` / `<ul>` content that relies on
-  browser-default spacing should NOT load this globally.
+  `*, *::before, *::after { margin: 0; padding: 0 }`. The redpash-app
+  **does not import `shell.css`** any longer — these rules are inlined
+  into `frontend/styles/main.css` scoped to `body[data-chrome="full"]`
+  (see *Full-bleed pages* below) so they apply only when the active
+  route opts in. Apps with raw `<h1>` / `<p>` / `<ul>` content that
+  relies on browser-default spacing should NOT load `shell.css`
+  globally either.
 
 Loading matrix:
 
 | Surface | tokens | reset | shell |
 |---|---|---|---|
 | redpash-demo (`redpash-demo/index.html`) | ✓ | ✓ | ✓ |
-| redpash-app `main.css` (global) | ✓ | ✓ | — |
-| redpash-app `pages/landing.css` (per-page) | (inherited) | (inherited) | ✓ |
+| redpash-app `main.css` (global) | ✓ | ✓ | — (inlined under `body[data-chrome="full"]`) |
+| redpash-app per-page CSS | (inherited) | (inherited) | (inherited via `[data-chrome="full"]`) |
 
 ### Full-bleed pages: the `body[data-chrome]` attribute
 
@@ -113,30 +117,50 @@ flips — no waiting on per-page CSS:
 
 ```css
 body[data-chrome="full"] #topbar { display: none; }
+body[data-chrome="full"] {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.25s, color 0.25s;
+  -webkit-font-smoothing: antialiased;
+}
+html:has(body[data-chrome="full"]) { overflow: hidden; }
 body[data-chrome="full"] .rp-app {
   padding: 0; min-height: 0;
   flex: 1; display: flex; flex-direction: column;
 }
 
-/* Brand accent also re-binds to the library's catppuccin blue on
-   full-bleed surfaces, because home-screen.css / hero.css / auth-modals.css
-   compose var(--accent) expecting the library palette. The rest of
-   the app keeps RedPash red. */
-body[data-chrome="full"]                          { --accent: #89b4fa; }
-html[data-theme="light"] body[data-chrome="full"] { --accent: #4f8ef7; }
-@media (prefers-color-scheme: light) { html[data-theme="system"] body[data-chrome="full"] { --accent: #4f8ef7; } }
-@media (prefers-color-scheme: dark)  { html[data-theme="system"] body[data-chrome="full"] { --accent: #89b4fa; } }
+/* Slate-cobalt / Arctic-blue token palette — applied to every full-
+   bleed page (landing / home / cleaner / objects / reports / profile).
+   The library's catppuccin tokens stay for non-full-bleed pages (e.g.
+   settings, docs). Light theme + system-light @media overrides set
+   the same tokens to the Arctic-blue values; see main.css for the
+   full block (~70 lines, omitted here). */
+body[data-chrome="full"] {
+  --bg:      #0f172a;
+  --surface: #1e293b;
+  --text:    #e2e8f0;
+  --accent:  #60a5fa;   /* cobalt, replaces the library default */
+  /* --over0, --over1, --sub, --muted, --border, --hover, --selected,
+     --active-bg + the --rp-* alias mirrors all rebind here. */
+}
+
+/* App page background — single shared gradient, theme-switched via
+   --rp-bg-app (also defined in main.css). Each full-bleed page
+   references it once: `background: var(--rp-bg-app)`. */
 ```
 
-Per-page CSS (`landing.css`, `home.css`) is now free to focus on
-**inside-the-page** layout. Page-level shell decisions belong in
-`main.css` keyed off `[data-chrome]`.
+Per-page CSS (`landing.css`, `home.css`, `cleaner.css`, …) is now free
+to focus on **inside-the-page** layout. Page-level shell decisions
+(body chrome, palette, page-bg gradient) belong in `main.css` keyed
+off `[data-chrome]`.
 
 Adding a new full-bleed surface: set `chrome: "full"` on its route
-and you're done — topbar hides, gutter zeroes, accent flips to
-library blue, all from the single attribute. If a future full-bleed
-page actually wants RedPash red, override `--accent` locally inside
-its root selector.
+and you're done — topbar hides, gutter zeroes, slate-cobalt palette
+applies, all from the single attribute. If a future full-bleed page
+needs different tokens, override them locally inside its root
+selector (specificity `#page-X` 0,1,0,0 beats `body[data-chrome]`
+0,0,1,1).
 
 ### Layering discipline (what goes where)
 
@@ -167,13 +191,30 @@ even when discipline slips.
 
 ### Integration in the RedPash app (active)
 
-`frontend/styles/main.css` does the alias-layer wiring:
+`frontend/styles/main.css` does the alias-layer wiring + hoists the
+sandbox components every full-bleed page used to import per-page:
 
 ```css
 @import "/vendor/redpash-components/tokens.css";
+@import "/vendor/redpash-components/reset.css";
+@import "/vendor/redpash-components/components/backgrounds.css";
 
+/* Sandbox components that own a base selector the whole app shares.
+   Hoisted here so the .rp-btn / .rp-modal base has a single source
+   of truth (used to be re-imported by every full-bleed page CSS). */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+
+/* App-owned component sheets — these reference --rp-*. buttons.css
+   and modal.css now hold only what the library doesn't: the
+   --primary/--ghost/--danger/--sm button modifiers and the
+   <dialog>-glue for ui/modal.js's openModal(). */
 @import "/styles/components/buttons.css";
-/* …other app component sheets… */
+@import "/styles/components/topbar.css";
+@import "/styles/components/toast.css";
+@import "/styles/components/modal.css";
+@import "/styles/components/filters.css";
+@import "/styles/components/forms.css";
 
 :root {
   /* App brand override — library's catppuccin --accent → RedPash red. */
@@ -195,6 +236,12 @@ even when discipline slips.
   --rp-accent-soft:   #f7d6dc;
   --rp-accent-strong: #7a0013;
   /* …etc… */
+
+  /* App page-bg gradient — slate-cobalt dark / Arctic-blue light.
+     Theme-switched via overrides under html[data-theme="light"]
+     and @media (prefers-color-scheme: light) html[data-theme="system"].
+     Each full-bleed page references it once. */
+  --rp-bg-app: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
 }
 ```
 
@@ -209,8 +256,32 @@ After the alias layer is in place:
 - Library-authored CSS imported into the app references `var(--bg)`
   natively — works because the library's `tokens.css` defined them.
 - The library's brand palette flows into the app via the alias layer;
-  the app overrides the brand `--accent` to RedPash red so both
-  library and app components render in brand.
+  the app overrides the brand `--accent` to RedPash red so app
+  components (topbar, redtable chrome, modifier buttons) render in
+  brand. Full-bleed pages then rebind `--accent` to cobalt blue
+  (`#60a5fa`) via the `body[data-chrome="full"]` palette block so
+  library-composed surfaces (hero gradients, social button hovers,
+  modal accents) read as the sandbox's slate-cobalt theme.
+
+### Per-page CSS contract
+
+Each `frontend/styles/pages/X.css` now contains **only page-specific
+layout / chrome / per-page customizations**. Hoisted to `main.css`
+and never re-imported per-page:
+
+- `shell.css` body chrome (overflow/flex/smoothing) — applies via
+  `body[data-chrome="full"]`.
+- `glass-btn.css` (`.rp-btn` base) and `modals-sandbox.css`
+  (`.rp-modal` base) — load globally.
+- Slate-cobalt / Arctic-blue token palette (`--bg`, `--surface`,
+  `--text`, `--accent`, …) — bound on `body[data-chrome="full"]`.
+- App page-bg gradient — `var(--rp-bg-app)` token.
+- Root `html { font-size: 112.5% }` — set once globally.
+
+Adding a new sandbox-style page: scaffold it as `chrome: "full"` and
+the chrome + palette + gradient + button/modal base all apply
+automatically. Per-page CSS only needs the layout for that page's
+unique geometry.
 
 ### Class names
 
@@ -219,23 +290,25 @@ Library components name **primitives bare** (`.btn`, `.modal`,
 `.rp-rt-*`, `.rp-social-btn`); the app's own classes are `rp-`-prefixed
 too. **No rename in either direction.**
 
-Naming collisions to watch (same class, different definition):
+Naming-collision history (resolved during the import-layer cleanup):
 
-| Class | Library | App |
+| Class | Owner now | Previously also defined in |
 |---|---|---|
-| `.rp-btn` | `components/button.css` | `frontend/styles/components/buttons.css` |
-| `.rp-modal` | — (library modal is bare `.modal` / `.rp-modal--glass`) | `frontend/styles/components/modal.css` |
+| `.rp-btn` (base + states) | library `components/glass-btn.css` (hoisted globally via `main.css`) | app `frontend/styles/components/buttons.css` — base stripped, only `--primary`/`--ghost`/`--danger`/`--sm` modifiers remain |
+| `.rp-modal` (base + overlay) | library `components/modals-sandbox.css` (hoisted globally via `main.css`) | app `frontend/styles/components/modal.css` — legacy `.rp-modal__head/__title/__body/__close/__actions` BEM stripped; only `dialog.rp-modal--glass` `<dialog>`-glue + `.modal-actions` remain |
 
 The library's primitives use **bare** names (`.modal`, `.btn`, `.badge`)
 per its "un-prefixed primitive" convention; only its composed variants
-are `rp-`-prefixed (`.rp-modal--glass`, `.rp-rt-*`). So `.rp-modal` is
-App-only — no true collision — but the two modal *systems* coexist:
+are `rp`-prefixed (`.rp-modal--glass`, `.rp-rt-*`). The two modal
+*systems* still coexist:
 
 - **`scripts/ui/modal.js` `openModal()`** — migrated to the library
   glass modal (`<dialog class="rp-modal--glass">` + `.modal`, styled by
   `auth-modals.css`). The preferred helper for new modals; the
   `dialog.rp-modal--glass` glue in `styles/components/modal.css` just
   neutralises the `<dialog>` UA box.
-- **`.rp-modal`** (`frontend/styles/components/modal.css`) — the App's
-  older native-`<dialog>` modal, still used by the Cleaner tool modals
-  and the Reports chart modal. Retire per-surface as they migrate.
+- **`.rp-modal-overlay` + `.rp-modal` + `.rp-modal-hdr` / `.rp-modal-ttl`**
+  (library `modals-sandbox.css`, loaded globally) — the sandbox
+  modal recipe used by every cleaner tool modal, every objects /
+  reports modal, and the file-review modal on home. The legacy app
+  BEM (`.rp-modal__head` / `__title` / …) is gone from live code.

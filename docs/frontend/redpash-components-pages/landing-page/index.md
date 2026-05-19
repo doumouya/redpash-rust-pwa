@@ -37,8 +37,6 @@ PWA assets used by the install flow:
 Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/landing.css). All under `/vendor/redpash-components/`, served by the api crate's [`ServeDir` mount](../../../../backend/crates/api/src/routes/mod.rs).
 
 ```css
-@import "/vendor/redpash-components/shell.css";       /* opt-in body chrome */
-
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/hero.css";
 @import "/vendor/redpash-components/components/cta-btn.css";
@@ -55,9 +53,12 @@ Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/land
 ```
 
 The library's `tokens.css` + defensive `reset.css` are pulled in
-globally from [`main.css`](../../../../frontend/styles/main.css); the
-opinionated `shell.css` (full-viewport body chrome) is opt-in here
-because the rest of the app needs normal page scroll. See
+globally from [`main.css`](../../../../frontend/styles/main.css), along
+with `glass-btn.css` (`.rp-btn` base) and `modals-sandbox.css`
+(`.rp-modal` base). The body chrome (full-viewport flex column +
+hidden overflow) used to come from `shell.css` imported here — it's
+now inlined in `main.css` scoped to `body[data-chrome="full"]`, which
+this route triggers via its `chrome: "full"` flag in `ROUTES`. See
 [design.md](../../design.md) for the layering discipline.
 
 ---

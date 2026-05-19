@@ -24,7 +24,7 @@ the stat buttons, the bottom-left float bar, and the minitable rows.
 | [`partials/home.html`](../../../../frontend/partials/home.html) | Markup. One `.hs-card` dashboard card + float bars + top-left avatar + contact / file-review modals. |
 | [`styles/pages/home.css`](../../../../frontend/styles/pages/home.css) | Library `@import`s (home-screen / minitable / stat-strip / upload-zone / card / modal / avatar / float-btn …) + avatar size bump + minitable placeholder rows. |
 | [`scripts/pages/home.js`](../../../../frontend/scripts/pages/home.js) | Dashboard data load + minitable / stat-strip renderers + the upload → file-review → confirm flow. Inline-onclick globals (`homeOpenReview`, `homeUploadConfirm`, `homeUpload`, `doLogout`, `doContact`). |
-| [`scripts/main.js`](../../../../frontend/scripts/main.js) (shell) | Route flagged `chrome: "full"` → main.css hides topbar / zeroes `.rp-app` gutter / re-binds `--accent` to library blue. |
+| [`scripts/main.js`](../../../../frontend/scripts/main.js) (shell) | Route flagged `chrome: "full"` → main.css hides topbar, zeroes `.rp-app` gutter, applies the slate-cobalt token palette (`--bg`/`--surface`/`--text`/`--accent`/… bound under `body[data-chrome="full"]`), and sets the page-bg gradient via `var(--rp-bg-app)`. |
 
 ---
 

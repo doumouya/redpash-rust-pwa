@@ -762,6 +762,152 @@ already `position: relative` per library, so absolute positioning
 hangs the menu off the wrap correctly. Same trick works for any
 custom-dropdown widget that ends up inside a transformed parent.
 
+## CSS import-layer cleanup — 2026-05-19
+
+Phase 0 / 1 / 2 of a structural sweep that removed the per-page CSS
+duplication that made the sandbox port's selector cascades drift
+page-to-page. The pre-cleanup picture: every full-bleed page
+(`landing` / `home` / `cleaner` / `objects` / `reports` / `profile`)
+re-imported `shell.css` + `glass-btn.css` + `modals-sandbox.css`
+itself, re-declared the same slate-cobalt token block ×3 (dark +
+pinned-light + system-light @media), and hardcoded the same page-bg
+gradient — and `.rp-btn` was defined twice (library glass-btn +
+app `buttons.css`), `.rp-modal` was defined twice (library
+modals-sandbox + app `modal.css` BEM). Symptom: buttons looked
+different on settings vs cleaner, modals looked different on
+reports.live vs cleaner, and `--accent` was catppuccin sky on
+landing/home but cobalt blue on cleaner/objects.
+
+### Pattern: hoist shared library components to main.css
+
+*All full-bleed pages ✅ — apply the same recipe to any future
+sandbox-style page.*
+
+When two CSS files define the same base selector — e.g. app's
+`styles/components/buttons.css` `.rp-btn` and library's
+`components/glass-btn.css` `.rp-btn` — whichever loads later wins,
+and load order is per-page (different pages import different files).
+The cleanup: pick a side per selector, hoist the winning version to
+`main.css`, and strip the colliding declarations from the other side
+(keep only what's unique).
+
+For `.rp-btn` and `.rp-modal` the library versions are canonical;
+the app files now hold only their unique modifiers:
+
+```css
+/* main.css — single source of truth */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/styles/components/buttons.css";  /* only --primary/--ghost/--danger/--sm */
+@import "/styles/components/modal.css";    /* only dialog.rp-modal--glass + .modal-actions */
+```
+
+Page CSS files no longer `@import` either. Page-scoped overrides
+(`#page-cleaner .rp-btn { … }`) still win because their specificity
+(0,1,0,1) beats the global rule (0,0,1,0).
+
+### Pattern: inline shell.css's body chrome under `body[data-chrome="full"]`
+
+*All full-bleed pages ✅ — adopt the same pattern if a new page
+needs full-viewport chrome.*
+
+The library's `shell.css` was originally documented as "opt-in
+per-page (landing only)" but every sandbox-ported page started
+@importing it. The combination — `*, *::before, *::after { margin:
+0; padding: 0 }` + `html, body { overflow: hidden }` + `body {
+display: flex; flex-direction: column }` — broke any non-sandbox
+page that imported it transitively and forced every full-bleed page
+to remember to load it.
+
+Hoisted into `main.css`, scoped to the existing `body[data-chrome=
+"full"]` attribute the router already sets:
+
+```css
+body[data-chrome="full"] {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.25s, color 0.25s;
+  -webkit-font-smoothing: antialiased;
+}
+html:has(body[data-chrome="full"]) { overflow: hidden; }
+```
+
+`:has()` scopes the html-element overflow to full-bleed pages only,
+so pre-sandbox pages (settings / docs / dashboards / not-found)
+keep browser-default scroll. The library's `reset.css` already
+handles the universal margin/padding zero globally, so that part
+of shell.css doesn't need to be re-inlined.
+
+### Pattern: theme-aware tokens as single source of truth
+
+*All full-bleed pages ✅ — use a token whenever a value duplicates
+across pages.*
+
+Each of cleaner / objects / reports / profile used to hardcode the
+same `linear-gradient(160deg, #020b18 0%, …)` gradient as `background:`
+on its page root, plus a parallel light-mode override (`html[data-
+theme="light"] #page-X`) with the Arctic-blue version, plus the
+`@media (prefers-color-scheme: light) html[data-theme="system"]
+#page-X` for system-mode-light. That's 3 gradient declarations × 4
+pages = 12 occurrences of two distinct gradients.
+
+Replaced with a single token in `main.css`:
+
+```css
+:root {
+  --rp-bg-app: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+}
+html[data-theme="light"]                                       { --rp-bg-app: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%); }
+@media (prefers-color-scheme: light) { html[data-theme="system"] { --rp-bg-app: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%); } }
+```
+
+Each page now references the token once:
+`background: var(--rp-bg-app);`. Theme switching is a single
+variable swap; no per-page rule needs to know about themes.
+
+Same pattern applied to the 20-token slate-cobalt palette
+(`--bg`, `--surface`, `--over0`, `--over1`, `--text`, `--sub`,
+`--muted`, `--border`, `--hover`, `--selected`, `--accent`,
+`--active-bg` + the 8 `--rp-*` alias mirrors). The block lives under
+`body[data-chrome="full"]` in `main.css` with parallel light /
+system-light overrides. Page-specific extras (cleaner's
+`--rt-pager-h`, profile's `--red`/`--green`/`--yellow`) stay
+scoped to their page CSS — the hoist only covers the shared core.
+
+### Pattern: catppuccin `--accent` fold-in
+
+*All full-bleed pages ✅.*
+
+`main.css` carried a small `--accent: #89b4fa` rebind block scoped
+to `body[data-chrome="full"]` — a workaround for library surfaces
+(hero gradients, social-button hovers, auth-modals) that compose
+`var(--accent)` expecting the catppuccin sky. After the cleanup the
+slate-cobalt palette block (above) already binds `--accent: #60a5fa`
+at the same scope. Deleted the rebind; the four sandbox-ported
+pages always had a higher-specificity cobalt override that beat the
+catppuccin rebind, so the only places it was visible were landing
+and home — moving them to cobalt is intentional and matches the
+"all full-bleed pages share one palette" goal.
+
+### Gotcha: service-worker `cacheFirst` masks CSS changes
+
+*All pages ✅ — bump `CACHE_VERSION` whenever `main.css` or any
+hoisted-global import changes.*
+
+The service-worker (`frontend/service-worker.js`) uses `cacheFirst`
+for static assets and **discards the revalidate fetch** (despite
+its "stale-while-revalidate" comment). Without a `CACHE_VERSION`
+bump, the new `main.css` sits behind a stale cached copy in the
+user's browser indefinitely. The user can't see CSS edits even
+after a hard refresh until the SW is updated.
+
+Bump `CACHE_VERSION` (`v418` → `v419` etc.) and the install handler
+calls `skipWaiting()` + activate handler deletes the old caches.
+Two reloads to actually take effect (first reload installs+activates
+new SW; second reload uses it). Skip the dance with
+Cmd/Ctrl+Shift+R (hard reload bypasses SW for that fetch).
+
 ---
 
 ## Re-running the handler audit

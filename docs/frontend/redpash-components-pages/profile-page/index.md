@@ -6,16 +6,27 @@ order: 13
 
 # Profile + Settings page (`#/profile`)
 
-Full-bleed 2-step scroll-snap page composing the redpash-components
-library. Mirrors `redpash-components/redpash-demo`'s `#page-home`
-visual pattern (float bars, step-dots, hero-gradient step cards) but
-holds the **profile** content on step 1 and the **settings** content
-on step 2 — both ported from `clarna-django/templates/app.html`
-(`#page-profile` + `#page-settings`).
+Full-bleed sandbox-chrome page composing the redpash-components
+library. The page is a **topbar + `.rp-rt-panel` with a left-rail
+section index and a right-pane scrolling column of glass cards** —
+mirrors the cleaner / objects / reports chrome family. Profile and
+Settings content live as 11 sections in the same scrolling pane,
+linked via plain `href="#section-…"` anchors. No step machinery, no
+IntersectionObserver — the active rail item is driven by CSS
+`:has(:target)`.
+
+The previous design (`hs-card` two-step scroll-snap, mirroring
+`redpash-demo`'s `#page-home`) is preserved as
+[`partials/profile.live.html`](../../../../frontend/partials/profile.live.html) +
+[`styles/pages/profile.live.css`](../../../../frontend/styles/pages/profile.live.css)
+for reference. Same JS bindings (`id="profile-*"` / `id="settings-*"`
+hooks) — `profile.js` continues to drive both versions without
+modification.
 
 `/settings` is still a separate route today for direct linking; it
 falls through to the old minimal page. The intent over time is to
-have it scroll into step 2 of `/profile` automatically.
+have it scroll into the matching `#section-…` of `/profile`
+automatically.
 
 ---
 
@@ -23,127 +34,154 @@ have it scroll into step 2 of `/profile` automatically.
 
 | File | Role |
 |---|---|
-| [`partials/profile.html`](../../../../frontend/partials/profile.html) | Markup. Two `.hs-card` step cards inside a single `.home-steps` container, plus float bars + step-dots + contact modal. |
-| [`styles/pages/profile.css`](../../../../frontend/styles/pages/profile.css) | Library `@import`s + scoped overrides that turn the cards into a frosted-glass family matching the corner float buttons; plan-card / connected-account / avatar-edit / edit-mode-toggle page-specific styles; avatar size bump matching the home page. |
-| [`scripts/pages/profile.js`](../../../../frontend/scripts/pages/profile.js) | Load `/me` + counts, populate identity + form + connections + settings-step account row. IntersectionObserver for the step-dot sync. Inline-onclick globals. |
-| [`scripts/main.js`](../../../../frontend/scripts/main.js) (shell) | Route flagged `chrome: "full"` → main.css hides topbar / zeroes `.rp-app` gutter / re-binds `--accent` to library catppuccin blue. |
+| [`partials/profile.html`](../../../../frontend/partials/profile.html) | Markup. Topbar (back to objects + page title + profile/docs/theme cluster) → `.rp-rt-panel` containing `.rp-profile__layout` = left `.rp-profile__rail` (11 anchor links + Docs/Contact footer) + right `.rp-profile__pane` (11 stacked `<section id="section-…">`). Contact modal at the end. |
+| [`styles/pages/profile.css`](../../../../frontend/styles/pages/profile.css) | Page-only layout: topbar reset, rail (sticky/scrollable section index with `:target`-driven active state), pane (scroll container), section card (frosted-glass surface), stat strip / plan card / connected accounts / theme switcher / avatar / about / glass-button hover tweaks. Library `@import`s (typography / button / form / card / modal / settings-card / stat-strip / theme-toggle / avatar / badge). |
+| [`scripts/pages/profile.js`](../../../../frontend/scripts/pages/profile.js) | Load `/me` + counts, populate identity + form + connections + settings rows. Inline-onclick globals. Same handlers as the live snapshot. No scroll-snap / IntersectionObserver needed any more — section visibility is native `href="#section-…"` scroll-jump. |
+| [`scripts/main.js`](../../../../frontend/scripts/main.js) (shell) | Route flagged `chrome: "full"` → main.css hides topbar, zeroes `.rp-app` gutter, applies the slate-cobalt token palette (`--bg`/`--surface`/`--text`/`--accent`/… bound under `body[data-chrome="full"]`), and sets the page-bg gradient via `var(--rp-bg-app)`. |
 
 ---
 
-## The 2 steps
+## Layout
 
-| Step | Title | Card class | `data-step` | Content |
-|---|---|---|---|---|
-| 1 | Profile | `.hs-import` (blue gradient) | `1` | 2-column: Personal info + Security cards (left) · Usage stats strip + Plan & Billing + Connected accounts cards (right). A red-bordered Log out / Delete-account card sits full-width below the grid (no section heading). |
-| 2 | Settings | `.hs-report` (purple gradient) | `2` | 2-column: Appearance card (left — theme switcher + topbar/footer position pickers + language pills) · Data & Export card (right — delimiter / encoding / export format). About card full-width below the grid. |
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  ←  ▤ Profile                          👤  📖  🌗                   │  rp-rt-topbar
+├──────────────────┬──────────────────────────────────────────────────┤
+│ ⏵ Personal info  │  ┌──────────────────────────────────────────┐    │
+│   Usage          │  │  Personal info                           │    │
+│   Plan & Billing │  │  ─────────────────                       │    │
+│   Connected      │  │  [avatar] Display name · Email · Plan    │    │
+│   Security       │  │  Display name [_________]                │    │
+│   Appearance     │  │  Username     [_________] (readonly)     │    │
+│   Objects page   │  │  …                                       │    │
+│   Data & Export  │  └──────────────────────────────────────────┘    │
+│   Cleaner page   │                                                  │
+│   About          │  ┌──────────────────────────────────────────┐    │
+│ ⚠ Danger zone    │  │  Usage                                   │    │
+│ ─                │  │  ─────────                               │    │
+│   📖 Docs        │  │  [stat strip: projects · files · …]      │    │
+│   ✉ Contact      │  └──────────────────────────────────────────┘    │
+│                  │                                                  │
+│  rp-profile__    │  rp-profile__pane                                │
+│  rail            │  (scrollable; sections are anchor targets)       │
+└──────────────────┴──────────────────────────────────────────────────┘
+```
 
-Each `.hs-card`'s `height` is overridden to `auto` inside `#page-profile`
-so the cards grow to fit their content (the demo's default 100svh
-would cap and force a nested scroll inside `.rp-set-page` — clunky
-when we want a single outer scroll surface).
+**Topbar** — back arrow → `#/objects`, magic-icon page title
+("Profile"), profile/docs/theme cluster on the right. Same recipe as
+cleaner / objects / reports.
+
+**Left rail** (`.rp-profile__rail`) — 11 `<a class="rp-profile__rail-link" href="#section-…">`
+links + a `.rp-profile__rail-foot` with two `--muted` items (Docs link +
+Contact button that triggers `openModal('contact')`). The danger zone
+link carries `--danger` modifier so its active/hover states pull red
+instead of accent.
+
+Active highlighting is **pure CSS** — `.rp-profile__rail-link:has(href="#section-…")`
+matched against `body:has(:target)` lights the right item. No JS
+sync needed; clicking a rail link sets `:target` natively. The
+sticky positioning keeps the rail in view as the right pane scrolls.
+
+**Right pane** (`.rp-profile__pane`) — single scroll surface. Each
+`<section id="section-…">` is a `.rp-profile__section` containing a
+`.rp-profile__section-hdr` (h2 + sub) and a `.rp-profile__card` body.
+Sections appear in rail order.
+
+---
+
+## The 11 sections
+
+| Section id | Rail icon | Content |
+|---|---|---|
+| `personal` | `bi-person` | Personal info form (avatar, display name, username, email, job title, organisation, use case). Identity row + edit-mode lock — see below. |
+| `usage` | `bi-bar-chart` | `.rp-stat-strip` (4 tiles: Projects · Files · Reports · Dashboards), each a button that deep-links into `/objects?tab=…`. |
+| `plan` | `bi-rocket-takeoff` | Plan & billing — name + sub + upgrade button + checked feature list (`.rp-profile__plan*`). |
+| `connected` | `bi-link-45deg` | Connected accounts — Google (live) / Microsoft / Apple / Facebook (stub) row layout (`.rp-profile__conn`). |
+| `security` | `bi-shield-lock` | Password change (stub — OAuth-only), 2FA (stub), active sessions (stub). |
+| `appearance` | `bi-palette` | Theme switcher (`.rp-theme-sw`), topbar position picker, footer position picker, language pills. |
+| `objects` | `bi-grid-3x3-gap` | Objects-page settings (saved tab views, default sort, etc.). |
+| `data` | `bi-database` | Data & Export — default CSV delimiter / encoding / export format pill groups. |
+| `cleaner` | `bi-magic` | Cleaner-page settings (saved filter views, default tools panel, …). |
+| `about` | `bi-info-circle` | Wordmark + version + Docs / Vision / Getting-started links. |
+| `danger` | `bi-exclamation-triangle` | Log out + Delete account. Card border is `var(--red)`-tinted; rail link uses `--danger` modifier. |
+
+Each section uses the same `.rp-set-*` class family the live snapshot
+used (forms, rows, dividers, labels, inputs, pill groups) so the
+existing `profile.js` data-binding code (`id="profile-*"` /
+`id="settings-*"` hooks) works without changes.
 
 ---
 
 ## Library components composed
 
 ```css
-@import "/vendor/redpash-components/shell.css";          /* opt-in body chrome */
-
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/button.css";
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/theme-toggle.css";
-@import "/vendor/redpash-components/components/float-btn.css";
 @import "/vendor/redpash-components/components/avatar.css";
-@import "/vendor/redpash-components/components/page-dots.css";
-@import "/vendor/redpash-components/components/home-screen.css";
-@import "/vendor/redpash-components/components/settings-card.css";
+@import "/vendor/redpash-components/components/theme-toggle.css";
+@import "/vendor/redpash-components/components/badge.css";
 @import "/vendor/redpash-components/components/stat-strip.css";
+@import "/vendor/redpash-components/components/settings-card.css";
 ```
+
+`tokens.css`, `reset.css`, `glass-btn.css` (`.rp-btn` base), and
+`modals-sandbox.css` (`.rp-modal` base) are loaded globally via
+[`main.css`](../../../../frontend/styles/main.css). The full-bleed
+body chrome (no topbar / flex column / hidden overflow) + the
+slate-cobalt token palette also live there, keyed off
+`body[data-chrome="full"]`. This page no longer needs the per-page
+`@import shell.css` or `@import glass-btn.css` it used to carry. See
+[design.md](../../design.md) for the layering discipline.
 
 The `settings-card.css` component holds every "settings page primitive"
-the page uses: `.rp-set-page` / `.rp-set-grid` / `.rp-set-col` /
-`.rp-set-sh` / `.rp-card` / `.rp-set-row` / `.rp-set-row--col` /
-`.rp-set-lbl` / `.rp-set-title` / `.rp-set-sub` / `.rp-set-divider` /
-`.rp-set-input` / `.rp-set-input-wrap` / `.rp-set-input-link` /
+the page uses: `.rp-set-row` / `.rp-set-lbl` / `.rp-set-title` /
+`.rp-set-sub` / `.rp-set-divider` / `.rp-set-input` / `.rp-set-input-wrap` /
 `.rp-set-opt-grp` / `.rp-set-opt` / `.rp-set-opt--soon` / `.rp-soon` /
 `.rp-set-acct-row` / `.rp-set-about` / `.rp-set-about-links` /
-`.rp-set-sh--danger` / `.rp-card--danger` / `.rp-btn--danger-fill` /
-`.rp-theme-sw` / `.rp-theme-btn`.
+`.rp-theme-sw` / `.rp-theme-btn`. Live snapshot's `.rp-set-page` /
+`.rp-set-grid` / `.rp-set-col` / `.rp-set-sh` scaffolding is **gone** —
+the rail + pane layout replaces it.
 
 ---
 
-## Scoped overrides
+## Page-specific BEM (`.rp-profile__*`)
 
-The library defaults assume `.rp-set-page` is a standalone scroll
-container (`height: 85dvh; overflow-y: auto`) and `.rp-card` is a
-40%-tinted-over0 glass surface. For this 2-step composition we want:
+Bespoke classes in `profile.html` + `profile.css`:
 
-```css
-/* Single outer scroll surface — .home-steps. Cards grow to content. */
-#page-profile .hs-card {
-  height: auto; min-height: 100svh;
-  align-items: stretch; justify-content: flex-start;
-  padding-top: 4rem; padding-bottom: 4rem;
-}
-#page-profile .rp-set-page {
-  width: 90%; max-width: none;
-  height: auto; overflow: visible;
-  margin: 0 auto; padding: 0;
-}
+- **`.rp-profile__layout`** — flex row, left rail + right pane.
+- **`.rp-profile__rail`** — sticky vertical nav, ~14rem wide, holds the
+  11 section links. `:has(:target)` drives the active state.
+- **`.rp-profile__rail-link`** — anchor inside the rail (icon +
+  label). Hover pulls a soft accent wash; active (`:has(:target)`)
+  paints a slim accent bar on the left + bumps the bg to a stronger
+  accent tint. `--danger` variant flips to red for the danger-zone
+  link; `--muted` variant softens the docs/contact footer items.
+- **`.rp-profile__rail-foot`** — bottom-pinned cluster inside the rail
+  for the Docs link + Contact button.
+- **`.rp-profile__pane`** — the right column, single scroll surface.
+- **`.rp-profile__section`** — block-level anchor target. Each one is
+  ~24rem-min-width and grows to its content.
+- **`.rp-profile__section-hdr`** — h2 + sub headline above each card.
+- **`.rp-profile__section-ttl`** / **`.rp-profile__section-sub`** —
+  type styles for the section header.
+- **`.rp-profile__card`** — frosted-glass body (matches the cleaner /
+  objects panel chrome; 10% white tint dark / 50% white tint light, 18%
+  white border, 0.75rem backdrop blur, soft shadow). The legacy
+  `.rp-card` from `settings-card.css` is no longer used here.
+- **`.rp-profile__section--danger`** — section variant: the card border
+  is `var(--red)`-tinted.
+- **`.rp-profile__plan*`** / **`.rp-profile__conn*`** / **`.rp-profile__rid`** /
+  **`.rp-profile__edit-toggle`** / **`.rp-avatar-edit`** — section-internal
+  bits carried over from the live snapshot (plan-card body, connected-
+  account row, monospace Account ID, identity-row pencil button, avatar
+  camera overlay). Promote to library if a second consumer appears.
 
-/* High-contrast frosted-glass cards (matches the corner float buttons
-   in the redpash-app: 10% white tint + 18% white border + 0.75rem
-   backdrop blur + soft shadow). */
-#page-profile .rp-card {
-  background: rgba(255, 255, 255, 0.10);
-  border: 0.0938rem solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(0.75rem);
-  -webkit-backdrop-filter: blur(0.75rem);
-  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
-}
-html[data-theme="light"] #page-profile .rp-card {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(30, 30, 46, 0.12);
-}
-/* Danger card — same body, red border. */
-#page-profile .rp-card--danger {
-  border-color: color-mix(in srgb, var(--red) 45%, rgba(255, 255, 255, 0.18));
-}
-```
-
-The `.rp-stat-strip` Usage row inherits the library's own glass
-recipe so the row, the plan card, the security card, and the
-connected-accounts card all read as one glass family.
-
----
-
-## Bespoke (page-specific) markup blocks
-
-A few structures aren't in the library and live in `profile.html` +
-`profile.css`:
-
-- **`.rp-profile__plan` / `.rp-profile__plan-top` /
-  `.rp-profile__plan-features`** — the plan card body: name + sub +
-  upgrade button on top, checked feature list below.
-- **`.rp-profile__conn`** — row layout for connected accounts
-  (Google / Microsoft / Apple / Facebook) with a brand-colored icon,
-  name, detail, and state pill on the right.
-- **`.rp-profile__edit-toggle`** — the pencil button in the identity
-  row (see "Edit-mode lock" below). Active state pulls the accent
-  through the frosted-glass shell.
-- **`.rp-profile__rid`** — monospace styling for the Account ID
-  readonly input.
-- **`.rp-avatar-edit`** — the small camera overlay button positioned
-  bottom-right on the avatar.
-
-Usage shows up as a **library `.rp-stat-strip`** row (4 cells:
-Projects · Files · Reports · Dashboards). Each cell is a `<button>`
-that navigates back to `#/home` with `sessionStorage["home-step"]`
-pre-set to the matching step.
+The `.rp-stat-strip` Usage row inherits the library's own glass recipe
+so the row and the surrounding glass cards all read as one family.
 
 ---
 
@@ -152,7 +190,7 @@ pre-set to the matching step.
 `#profile-avatar.rp-avatar--xl` is bumped to **4rem narrow / 4.5rem
 desktop** (the library `--xl` default is 3.75rem) so the user's
 "you mark" stays the same scale as the home page's `#home-avatar`.
-Photo or initials behavior is otherwise identical to home.
+Photo or initials behaviour is otherwise identical to home.
 
 ---
 
@@ -169,20 +207,18 @@ Photo or initials behavior is otherwise identical to home.
 | `use_case` | ✅ | `.rp-set-opt-grp` pill group | One of: operational / research / reporting / other. PATCHed. |
 | `redpash_id` | — | text input (readonly, monospace) | Copy-to-clipboard button via `profileCopyId()`. |
 | `plan` | — | green pill in identity header | Read-only; values: free / trial / pro. |
-| `locale` | — | — | Lives on **step 2** (Appearance → Language), not in Personal info. |
-| `prefs` | — | — | Lives in Settings step; profile doesn't touch it. |
+| `locale` | — | — | Lives in the Appearance section (Language), not in Personal info. |
+| `prefs` | — | — | Lives in the Data & Export / Cleaner / Objects sections; Personal info doesn't touch them. |
 
 Single `PATCH /api/me` on form submit sends only the four editable
 fields. Library's `.rp-set-input` recipe (translucent dark / cream
 light + accent focus ring + muted readonly variant) renders both
-states cleanly — the recipe was promoted upstream into
-`redpash-components/components/settings-card.css` so every future
-settings/profile-style page gets it automatically.
+states cleanly.
 
 ### Edit-mode lock
 
 Personal-info fields are **read-only by default**. Two circular
-glass `.rp-float-btn`s sit on the right side of the identity row:
+glass `.rp-btn`s sit on the right side of the identity row:
 
 - **Edit toggle** (`#profile-edit-toggle`, `.rp-profile__edit-toggle`,
   pencil icon) — flips the form's `.is-editing` class via
@@ -211,44 +247,43 @@ re-enables.
 
 ---
 
-## Step 2 — Settings
+## Appearance section
 
-**Left col — Appearance**:
+**Theme** — `.rp-theme-sw` with three `.rp-theme-btn`s
+(`light` / `system` / `dark`). Click calls `rpSetTheme(t)` (owned by
+`main.js` shell) which sets `<html data-theme>`, animates the icon
+swap (spin-out → swap bi-sun-fill ↔ bi-moon-fill → spin-in), and
+persists to `localStorage["redpash-theme"]`. A `MutationObserver`
+re-syncs the `.active` state when the user uses the topbar toggle
+instead of the 3-state switch. Each button carries a `data-theme`
+attribute and the **active state pulls a matching color** — Light =
+`var(--yellow)`, System = `var(--accent)`, Dark = `var(--purple)`.
+This per-theme color mapping lives in
+`redpash-components/components/theme-toggle.css` so every consumer
+picks it up.
 
-- **Theme** — `.rp-theme-sw` with three `.rp-theme-btn`s
-  (`light` / `system` / `dark`). Click calls
-  `rpSetTheme(t)` (owned by `main.js` shell) which sets
-  `<html data-theme>`, animates the icon swap (spin-out → swap
-  bi-sun-fill ↔ bi-moon-fill → spin-in), and persists to
-  `localStorage["redpash-theme"]`. A `MutationObserver` re-syncs the
-  `.active` state when the user uses the float-bar toggle instead of
-  the 3-state switch. Each button carries a `data-theme` attribute
-  and the **active state pulls a matching color** — Light = `var(--yellow)`,
-  System = `var(--accent)`, Dark = `var(--purple)`. This per-theme
-  color mapping was promoted upstream into
-  `redpash-components/components/theme-toggle.css` so every consumer
-  picks it up.
-- **Topbar position** — `.rp-set-opt-grp` (id `settings-topbar-pos`)
-  with three `.rp-set-opt`s carrying `bi-align-start` / `bi-align-center`
-  / `bi-align-end` icons + L / C / R labels. Dispatches to
-  `window.rpSetBarPos("top", "l" | "c" | "r")` (owned by `main.js`),
-  which moves every `.rp-float-bar--top*` to the chosen anchor and
-  persists to `localStorage["rp-topbar-pos"]`. Restored on every
-  navigation via `window.rpRestoreBarPositions()` so the choice
-  survives across pages.
-- **Footer position** — same shape, id `settings-footer-pos`,
-  dispatches to `window.rpSetBarPos("bottom", …)`, persists to
-  `localStorage["rp-bottombar-pos"]`. The library now ships all 6
-  anchor classes (`tl / tc / tr / bl / bc / br`) — the missing
-  top-center / bottom-center variants (`--tc` / `--bc`) were promoted
-  upstream into `redpash-components/components/float-btn.css` so
-  this picker exposes the full 3×2 grid.
-- **Language** — `.rp-set-opt-grp` with EN / FR active pills + zh /
-  ru / sw "Soon" stubs. Writes to `localStorage["redpash-lang"]`;
-  doesn't yet PATCH `/api/me`. The landing page's translation table
-  reads this key on next mount.
+**Topbar position** — `.rp-set-opt-grp` (id `settings-topbar-pos`)
+with three `.rp-set-opt`s carrying `bi-align-start` / `bi-align-center`
+/ `bi-align-end` icons + L / C / R labels. Dispatches to
+`window.rpSetBarPos("top", "l" | "c" | "r")` (owned by `main.js`),
+which moves every `.rp-float-bar--top*` to the chosen anchor and
+persists to `localStorage["rp-topbar-pos"]`. Restored on every
+navigation via `window.rpRestoreBarPositions()` so the choice
+survives across pages.
 
-**Right col — Data & Export**:
+**Footer position** — same shape, id `settings-footer-pos`, dispatches
+to `window.rpSetBarPos("bottom", …)`, persists to
+`localStorage["rp-bottombar-pos"]`. The library ships all 6 anchor
+classes (`tl / tc / tr / bl / bc / br`).
+
+**Language** — `.rp-set-opt-grp` with EN / FR active pills + zh / ru /
+sw "Soon" stubs. Writes to `localStorage["redpash-lang"]`; doesn't
+yet PATCH `/api/me`. The landing page's translation table reads this
+key on next mount.
+
+---
+
+## Data & Export section
 
 A small `PREF_GROUPS` table in `profile.js` drives **all three rows**:
 each entry pairs a `data-prefs="…"` group with a `localStorage` key
@@ -266,33 +301,8 @@ flips the `.active` pill and writes through.
   `iso-8859-1` / `iso-8859-15` / `windows-1250` / `macintosh`.
   Persisted to `localStorage["rp-default-encoding"]`.
 - **Export format** — CSV / Excel (`xlsx`) / JSON, **all three
-  clickable** (the `.rp-set-opt--soon` lock was removed once the
-  CSV → XLSX / JSON server-side path was confirmed trivial via the
-  existing Polars writers). Persisted to
-  `localStorage["rp-export-format"]`. Read by the cleaner / report
-  export buttons on next mount.
-
-The Usage stat-strip on Step 1 already deep-links into individual
-home steps via `sessionStorage["home-step"]`, so a separate "Account"
-jump card on Step 2 was redundant and was removed.
-
-**Full-width About card** — Wordmark + version + Docs / Vision /
-Getting-started links.
-
----
-
-## Float bars + step-dots
-
-**Top-right** — Theme toggle (`rpToggleTheme`) + Log out (`doLogout`).
-
-**Bottom-left** — Home (`#/home`) · Docs (`#/docs`) · Contact
-(`openModal('contact')`). The redundant Projects / Files buttons
-were removed once the Usage stat-strip on Step 1 picked up the same
-deep-link role via `sessionStorage["home-step"]`.
-
-**Right step-dots** — 2 dots (`bi-person-fill` + `bi-gear-fill`).
-Revealed via `body:has(#page-profile) .rp-page-dots { display: flex }`
-in `profile.css`. IntersectionObserver in JS toggles `.active`.
+  clickable**. Persisted to `localStorage["rp-export-format"]`. Read
+  by the cleaner / report export buttons on next mount.
 
 ---
 
@@ -300,18 +310,21 @@ in `profile.css`. IntersectionObserver in JS toggles `.active`.
 
 | Handler | Source | Behavior |
 |---|---|---|
-| `profileGoTo(step)` | profile.js | Smooth scroll to `.hs-card[data-step="step"]`. |
 | `profilePhotoSelected(input)` | profile.js | Stub — toasts. No `/api/me/avatar` endpoint yet. |
 | `profileUpgrade()` | profile.js | Stub — Phase 6 (Stripe). |
 | `profileDelete()` | profile.js | Stub — Phase 4c+. |
 | `profileCopyId()` | profile.js | `navigator.clipboard.writeText(redpash_id)` + success toast. |
-| `profileToggleEdit()` | profile.js | Flip the edit-mode lock — see "Edit-mode lock" above. |
+| `profileToggleEdit()` | profile.js | Flip the edit-mode lock — see *Edit-mode lock* above. |
 | `doLogout()` | profile.js (defensive) / **main.js** (canonical) | `POST /api/auth/logout` + redirect to `#/landing`. |
 | `doContact()` | profile.js (defensive) | Stub — no `/api/contact` endpoint yet. |
 | `openModal('contact')` / `closeModal('contact')` | **main.js** (shell) | Modal toggle. |
 | `rpToggleTheme()` / `rpSetTheme(t)` | **main.js** (shell) | Theme cycle with icon spin + localStorage persist. |
 | `rpSetBarPos(rail, pos)` / `rpRestoreBarPositions()` | **main.js** (shell) | Move every float bar on `rail` (`"top"` / `"bottom"`) to anchor `pos` (`"l"` / `"c"` / `"r"`). Persists per-rail to `localStorage`. Restored on every nav. Wired here by `wirePosPicker("#settings-topbar-pos", "top", "r")` + `wirePosPicker("#settings-footer-pos", "bottom", "l")` in `profile.js`. |
 | `PREF_GROUPS` restore + click handler | profile.js | Restores delimiter / encoding / export-format pill `.active` state from `localStorage` on mount; writes through on click. |
+
+The previous `profileGoTo(step)` helper (smooth-scroll between the
+two `.hs-card` steps) is **gone**. Section anchors use native
+`href="#section-…"` instead — the browser handles the scroll.
 
 ---
 
@@ -327,8 +340,8 @@ in `profile.css`. IntersectionObserver in JS toggles `.active`.
 | Usage: Dashboards | `GET /api/dashboards` `.items.length` | ✅ live |
 | Connected: Google | `me.email` present → Connected pill | ✅ live |
 | Connected: Microsoft / Apple / Facebook | — | ⛔ stub (Soon) |
-| Theme cycle | `localStorage["redpash-theme"]` | ✅ live (no backend; Settings page will PATCH `prefs.theme` later) |
-| Topbar position | `localStorage["rp-topbar-pos"]` + `window.rpSetBarPos` | ✅ live; restored on every nav via `rpRestoreBarPositions()` |
+| Theme cycle | `localStorage["redpash-theme"]` | ✅ live (no backend; Settings will PATCH `prefs.theme` later) |
+| Topbar position | `localStorage["rp-topbar-pos"]` + `window.rpSetBarPos` | ✅ live; restored on every nav |
 | Footer position | `localStorage["rp-bottombar-pos"]` + `window.rpSetBarPos` | ✅ live; restored on every nav |
 | Language pills | `localStorage["redpash-lang"]` | ✅ live; doesn't yet PATCH `prefs.locale` |
 | Default CSV delimiter | `localStorage["rp-default-delimiter"]` | 🟡 persisted; not yet read by cleaner sidebar |
@@ -349,32 +362,41 @@ in `profile.css`. IntersectionObserver in JS toggles `.active`.
 
 | Class | Owned by |
 |---|---|
-| `.rp-set-*` / `.rp-card` / `.rp-card--danger` / `.rp-soon` / `.rp-theme-*` / `.rp-set-acct-row` / `.rp-set-about*` / `.rp-set-opt*` / `.rp-set-input*` / `.rp-set-fbar` | Library (`components/settings-card.css`) |
-| `.rp-avatar*` / `.rp-page-dots` / `.rp-page-dot` / `.rp-float-bar` / `.rp-float-btn` / `.rp-float-label` / `.hs-card` / `.hs-import` / `.hs-report` / `.home-steps` / `.modal-overlay` / `.modal` / `.rp-modal--glass` / `.btn` / `.btn-primary` / `.form-*` / `.rp-wordmark` / `.rp-r` | Library |
-| `.rp-profile__plan*` / `.rp-profile__conn*` / `.rp-profile__rid` / `.rp-profile__edit-toggle` / `.rp-avatar-edit` (positioning) | This page (bespoke — promote to library if a second consumer appears) |
+| `.rp-set-*` / `.rp-soon` / `.rp-theme-*` / `.rp-set-acct-row` / `.rp-set-about*` / `.rp-set-opt*` / `.rp-set-input*` | Library (`components/settings-card.css`) |
 | `.rp-stat-strip` / `.rp-stat` / `.rp-stat-val` / `.rp-stat-lbl` | Library (`components/stat-strip.css`) — Usage row |
-| `.rp-app` / `.rp-topbar*` / `.rp-btn` / `.rp-modal` / `.rp-field` | App (`frontend/styles/components/`) — none used on this page since the topbar is hidden and forms use library `.rp-set-input` |
+| `.rp-rt-topbar` / `.rp-rt-panel` / `.rp-rt-page-title` | Library / app `main.css` — shared sandbox chrome family |
+| `.rp-btn` / `.rp-modal*` / `.modal` / `.btn` / `.form-*` / `.rp-avatar*` / `.rp-wordmark` / `.rp-r` | Library (loaded globally via `main.css`) |
+| `.rp-profile__layout` / `.rp-profile__rail*` / `.rp-profile__pane` / `.rp-profile__section*` / `.rp-profile__card` / `.rp-profile__plan*` / `.rp-profile__conn*` / `.rp-profile__rid` / `.rp-profile__edit-toggle` / `.rp-avatar-edit` (positioning) | This page (bespoke — promote to library if a second consumer appears) |
+| `.rp-app` / `.rp-topbar*` / `.rp-btn--primary/--ghost/--danger/--sm` / `.rp-field` | App (`frontend/styles/components/`) — none used on this page since the topbar is hidden and forms use library `.rp-set-input` |
 
 No collisions on the profile page.
 
 ---
 
-## Visual differences vs the Django reference
+## Visual differences vs the Django reference / live snapshot
 
 The Django `/profile` (single column on phones, two columns wide) and
 `/settings` (similar) are **separate flat pages** in the Django app.
-The redpash-app **consolidates them into one full-bleed scroll-snap
-page** so the user can flow from profile fields → settings without
-navigating away. The float bars carry the cross-page nav the Django
-sidebar used to do.
+The live snapshot version (`profile.live.html`) consolidated them
+into a 2-step scroll-snap matching the home-page family.
 
-Color treatment also differs:
+The current version drops the scroll-snap in favour of the
+**topbar + rail + pane** sandbox chrome shared with cleaner /
+objects / reports — same family across every authenticated tool
+surface, easier to scan when scrolling 11 sections. The trade-off is
+losing the per-step gradient backdrop (each `.hs-card` had its own
+hero gradient); the slate-cobalt palette + frosted-glass cards keep
+the visual weight via card translucency instead.
+
+Color treatment:
 
 - Django: solid surface cards on the app's red brand.
-- redpash-app: frosted-glass cards on catppuccin-blue / catppuccin-
-  purple gradient step backgrounds (matches the home page family;
+- redpash-app (this version): frosted-glass cards on the slate-cobalt
+  / Arctic-blue palette shared by every full-bleed sandbox page.
   `body[data-chrome="full"]` rebinds `--accent` from RedPash red to
-  library blue so library components render in their intended palette).
+  cobalt blue (`#60a5fa` dark / `#2563eb` light) so library-composed
+  surfaces render in the sandbox palette; the RedPash red is reserved
+  for the wordmark / `.rp-r` brand badge.
 
 ---
 
