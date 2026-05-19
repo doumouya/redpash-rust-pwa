@@ -1154,6 +1154,23 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
   border-top-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
+/* ── Unified width for all popover-opened tool modals ───────────────
+   When _positionToolModal flips a tool modal into `.is-popover` mode
+   (panel-anchored, table-stays-visible), we want every tool to occupy
+   the SAME visual slot regardless of its declared rp-modal-{sm,md,lg}
+   class. Without this, dropcols (sm = 28rem) and inspect (lg = 40rem)
+   would land in different widths at the same anchor point — the slot
+   would visually "breathe" as the user clicks between tools.
+
+   Pinning to 30rem (splits the difference between sm and md) keeps
+   the same slot for every tool. Inspect-chain centered opens (no
+   `.is-popover` class) keep their per-modal sizing because this
+   selector won't match them. */
+#page-cleaner .rp-modal-overlay.is-popover .rp-modal {
+  width: min(30rem, 92vw);
+  max-width: min(30rem, 92vw);
+}
+
 /* ── Dataset audit pill (.rp-rtp-tools-top) — dark-mode base override.
    Library (tools-panel-sandbox.css:22) sets the base bg to
    `color-mix(in srgb, var(--text) 10%, transparent)`. In dark mode
