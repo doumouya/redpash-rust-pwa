@@ -1154,6 +1154,28 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
   border-top-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
+/* ── Dataset audit pill (.rp-rtp-tools-top) — dark-mode base override.
+   Library (tools-panel-sandbox.css:22) sets the base bg to
+   `color-mix(in srgb, var(--text) 10%, transparent)`. In dark mode
+   that's a faint LIGHT wash over the panel; combined with
+   backdrop-filter: blur on this button and the panel's own translucent
+   bg, the composite reads as a near-white pill — pairs with the light
+   --text color the same rule applies and the button looks invisibly
+   white-on-white. The library author added an explicit
+   `html[data-theme="dark"] :hover` rule but forgot the base state.
+   Mirror the library's explicit light-mode rule with an opaque-dark
+   equivalent so the pill carries proper contrast in dark mode. */
+html[data-theme="dark"] #page-cleaner .rp-rtp-tools-top {
+  background: rgba(0, 0, 0, 0.32);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-cleaner .rp-rtp-tools-top {
+    background: rgba(0, 0, 0, 0.32);
+    border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  }
+}
+
 /* ── tool-inspect suggestions list (.rp-suggest) ────────────────────
    Ported from redpash-front-end/main.css:2263+. The class was sandbox-
    only — the tool-inspect modal uses it but the live app never carried
