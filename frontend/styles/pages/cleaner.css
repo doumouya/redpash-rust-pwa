@@ -1166,19 +1166,24 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
    Mirror the library's explicit light-mode rule with an opaque-dark
    equivalent so the pill carries proper contrast in dark mode. */
 html[data-theme="dark"] #page-cleaner .rp-rtp-tools-top {
-  /* Accent-tinted dark bg + accent border — mirrors the light-mode
-     rule's accent border (color-mix(--accent 22%, transparent)) so
-     the pill carries the sandbox blue family in both themes. The bg
-     is a faint accent wash over a darker base; the border lights
-     accent-blue at 35% so it reads as a deliberate accent surface,
-     not a plain dark plate. */
-  background: color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.30));
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Match .rp-rtp-ct-btn's resting pattern — text-tinted neutral
+     (7% bg / 12% border) so the pill reads as the same family as
+     the cleaning-tool grid below it. Accent stays reserved for the
+     :hover state (library already handles that). Drop the
+     backdrop-filter that was painting the bg lighter than expected
+     against the translucent panel — a flat translucent dark wash
+     reads correctly without it. */
+  background: color-mix(in srgb, var(--text) 7%, rgba(0, 0, 0, 0.22));
+  border-color: color-mix(in srgb, var(--text) 14%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme="system"] #page-cleaner .rp-rtp-tools-top {
-    background: color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.30));
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--text) 7%, rgba(0, 0, 0, 0.22));
+    border-color: color-mix(in srgb, var(--text) 14%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
