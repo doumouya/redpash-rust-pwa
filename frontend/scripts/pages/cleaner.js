@@ -5140,6 +5140,22 @@ async function mountSandbox(root, ctx, strip) {
 // flip), spDeleteTab (animated remove), spAddProjectTab / spAddFileTab
 // (animated add) — those run alongside via the composite onclick.
 function _installSandboxLiveHandlers(root) {
+  // ── Tool modal opener — populate + position + open in one shot.
+  //
+  // Same body as the legacy copy inside _wireGlobals (line ~2047), but
+  // mountSandbox bypasses _wireGlobals entirely, so without this the
+  // sandbox path's tool-panel buttons fire `cleanerOpenTool('tool-X',
+  // this)` against an undefined global → ReferenceError on every click.
+  //
+  // _populateToolModal + _positionToolModal are top-level functions, no
+  // closure over `root` required.
+  window.cleanerOpenTool = (toolId, btn) => {
+    if (!STATE.summary) { toast.error("Open a file first."); return; }
+    _populateToolModal(toolId);
+    window.openModal(toolId);
+    _positionToolModal(toolId, btn);
+  };
+
   const _persistHidden = () => {
     window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
   };
