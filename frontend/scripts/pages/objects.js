@@ -309,9 +309,15 @@ const SCHEMAS = {
     icon:     "bi-bar-chart-fill",
     path:     "/reports",
     columns:  [
-      // edit:open — dblclick the Title cell in edit mode opens the
-      // report builder (full spec editing lives there).
-      { key: "title",       label: "Title",    render: (r) => esc(r.title),
+      // Title renders as an anchor to the report — matches the
+      // projects/files `name` pattern. The sandbox row painter wires
+      // the <tr> to objectsToggleRowSel (select/delete only — no nav
+      // branch), so without an anchor cell the row has nothing to
+      // click. target=_blank + stopPropagation mirror the projects
+      // Name cell. edit:open still works — dblclick in edit mode opens
+      // the builder; the anchor only intercepts single click.
+      { key: "title",       label: "Title",
+        render: (r) => `<a class="obj-cell-link" href="#/reports?id=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.title)}</a>`,
         edit: { type: "open" } },
       { key: "folder",      label: "Folder",   render: (r) => esc(r.folder ?? "—") },
       // is_favorite / is_public — bool toggles in edit mode (PATCH the
@@ -354,9 +360,13 @@ const SCHEMAS = {
     icon:     "bi-grid-1x2-fill",
     path:     "/dashboards",
     columns:  [
-      // edit:open — dblclick the Title cell opens the dashboard builder
-      // (full template + widget editing lives there).
-      { key: "title",       label: "Title",    render: (r) => esc(r.title),
+      // Title renders as an anchor to the dashboard — same pattern as
+      // the Reports tab + the projects/files Name cell. Without the
+      // anchor the row has nothing clickable (the sandbox <tr> handler
+      // covers select/delete modes only). dblclick still opens the
+      // builder via edit:open.
+      { key: "title",       label: "Title",
+        render: (r) => `<a class="obj-cell-link" href="#/dashboards?id=${esc(r.redpash_id)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(r.title)}</a>`,
         edit: { type: "open" } },
       { key: "folder",      label: "Folder",   render: (r) => esc(r.folder ?? "—") },
       // is_favorite / is_public — bool toggles in edit mode (PATCH the
