@@ -1182,8 +1182,13 @@ html[data-theme="dark"] #page-cleaner .rp-rtp-tools-top {
    the rules, so suggestion buttons rendered with UA defaults. In dark
    mode that meant white-on-white (the body's light --text inherited
    into the unstyled button while the UA bg stayed light). Token-driven
-   so it theme-switches via the body[data-chrome="full"] palette. */
-#page-cleaner .modal-overlay .rp-suggest {
+   so it theme-switches via the body[data-chrome="full"] palette.
+
+   The previous fix scoped under `.modal-overlay` (legacy) but the
+   sandbox tool modals are `.rp-modal-overlay` (rp- prefix). Scope to
+   #page-cleaner directly so both conventions match — the class is
+   bespoke to the tool-inspect suggestions list, no risk of bleed. */
+#page-cleaner .rp-suggest {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1198,20 +1203,20 @@ html[data-theme="dark"] #page-cleaner .rp-rtp-tools-top {
   text-align: left;
   cursor: pointer;
 }
-#page-cleaner .modal-overlay .rp-suggest:hover {
+#page-cleaner .rp-suggest:hover {
   background: var(--active-bg);
   color: var(--bg);
 }
-#page-cleaner .modal-overlay .rp-suggest > .bi:first-child {
+#page-cleaner .rp-suggest > .bi:first-child {
   font-size: 0.875rem;
   color: var(--muted);
   flex: 0 0 auto;
 }
-#page-cleaner .modal-overlay .rp-suggest:hover > .bi:first-child {
+#page-cleaner .rp-suggest:hover > .bi:first-child {
   color: var(--bg);
 }
-#page-cleaner .modal-overlay .rp-suggest-lbl  { flex: 1 1 auto; }
-#page-cleaner .modal-overlay .rp-suggest-gain {
+#page-cleaner .rp-suggest-lbl  { flex: 1 1 auto; }
+#page-cleaner .rp-suggest-gain {
   flex: 0 0 auto;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
