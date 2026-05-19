@@ -352,6 +352,17 @@ body[data-chrome="full"] {
   flex-direction: column;
   transition: background 0.25s, color 0.25s;
   -webkit-font-smoothing: antialiased;
+  /* Leave room for the iPhone home indicator / Android gesture bar
+     / Firefox devtools-emulated bottom chrome. Without this, anything
+     absolutely-positioned at `bottom: 0` of a body descendant (e.g.
+     the cleaner pager pinned to .rp-rt-body's bottom) sits behind
+     that safe-area chrome and gets clipped. The top safe-area is
+     handled per-element on the topbars (.rp-rt-topbar / .rp-topbar);
+     bottom is uniform across full-bleed pages so apply it globally
+     on the body. Fixed-position bars (.rp-float-bar--b*) have their
+     own safe-area-bottom override and aren't in body's flow, so this
+     doesn't compound for them. */
+  padding-bottom: var(--rp-sai-bottom);
 }
 html:has(body[data-chrome="full"]) { overflow: hidden; }
 body[data-chrome="full"] .rp-app {
