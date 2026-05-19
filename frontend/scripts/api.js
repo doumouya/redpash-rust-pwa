@@ -61,10 +61,102 @@ function safeJson(text) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+// ─────────────── localStorage SWR helpers ───────────────
+//
+// Phase 1 (Tier 1 A/B) — see docs/frontend/suggestion-localstorage.md.
+// Pattern: read the parsed JSON from localStorage synchronously while
+// kicking off a fresh GET in parallel. Caller paints cached immediately
+// (instant first frame), then awaits fresh for the correction pass.
+//
+//   const { cached, fresh } = api.getCached("/projects");
+//   if (cached) paint(cached);     // sync; no flicker on warm cache
+//   const live = await fresh;
+//   paint(live);                   // overwrite with authoritative data
+//
+// Invalidation = overwrite-on-fetch (`fresh` writes the cache on resolve).
+// Manual `invalidateCached` exists for the asymmetric cases: PATCH /me
+// changes prefs server-side, so rpSavePref clears the /me cache so the
+// next read fetches.
+//
+// Cache key derivation: `rp-cache-${version}${path}` — version bump is
+// the schema-migration safety valve (mirrors the SW CACHE_VERSION
+// pattern). Callers can override with opts.key for custom derivation
+// like `(rid, updated_at)` envelope keys later in Phase 1 C.
+const _CACHE_VERSION = "v1";
+
+function _cacheKey(path, opts) {
+  if (opts?.key) return opts.key;
+  const v = opts?.version ?? _CACHE_VERSION;
+  return `rp-cache-${v}${path}`;
+}
+
+function _readCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function _writeCache(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch {} // quota exceeded, private mode, etc. — non-fatal
+}
+
+// Returns `{ cached, fresh }`. cached is sync-readable (null if no
+// entry yet); fresh is the network promise that also writes the cache
+// on success. Doesn't catch — caller decides what to do on fetch error
+// (typically falling back to the cached value already painted).
+function getCached(path, opts = {}) {
+  const key    = _cacheKey(path, opts);
+  const cached = _readCache(key);
+  const fresh  = request("GET", path, undefined, opts).then((data) => {
+    _writeCache(key, data);
+    return data;
+  });
+  return { cached, fresh };
+}
+
+// Drop a cached entry. Used by callers that mutate the resource via
+// PATCH/POST/DELETE and need the next read to fetch (e.g. rpSavePref
+// after PATCH /me). For overwrite-on-fetch lists this is rarely
+// needed — the next list read will overwrite naturally.
+function invalidateCached(path, opts = {}) {
+  const key = _cacheKey(path, opts);
+  try { localStorage.removeItem(key); } catch {}
+}
+
+// Phase 1 / Tier 2 E — idle pre-warm. Each page calls this after its
+// own primary content has painted, listing the other pages' list
+// endpoints. requestIdleCallback fires when the browser would otherwise
+// be doing nothing, so the warm-up doesn't compete with user
+// interaction. Failures are swallowed — pre-warm is best-effort.
+//
+// Usage:
+//   api.prewarm(["/files", "/users"]);  // after Home finishes
+//   api.prewarm(["/projects", "/reports", "/dashboards"]);  // after Reports
+//
+// On browsers without requestIdleCallback (older Safari) we fall back
+// to setTimeout — close enough; the cost is a tiny delay before the
+// idle fetch fires.
+function prewarm(paths, opts = {}) {
+  if (!Array.isArray(paths) || !paths.length) return;
+  const schedule = typeof window !== "undefined" && typeof window.requestIdleCallback === "function"
+    ? window.requestIdleCallback.bind(window)
+    : (cb) => setTimeout(cb, 200);
+  schedule(() => {
+    for (const p of paths) {
+      try { getCached(p, opts).fresh.catch(() => {}); } catch {}
+    }
+  });
+}
+
 export const api = {
   get:    (p, opts)    => request("GET",    p, undefined, opts),
   post:   (p, b, opts) => request("POST",   p, b, opts),
   patch:  (p, b, opts) => request("PATCH",  p, b, opts),
   put:    (p, b, opts) => request("PUT",    p, b, opts),
   delete: (p, opts)    => request("DELETE", p, undefined, opts),
+  getCached,
+  invalidateCached,
+  prewarm,
 };

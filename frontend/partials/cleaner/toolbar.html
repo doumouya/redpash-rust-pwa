@@ -8,7 +8,15 @@
                                           re-click to clear.
        spToggleActive(this)             — single-button toggles (row-
                                           numbers, open-links, sync).
-       spToggle('cleaner-tools-panel')  — right tools panel. -->
+       spToggle('cleaner-tools-panel')  — right tools panel.
+     Scope attrs:
+       data-file-scope     — visible only when a file tab is active
+                             (hidden on Overview via the
+                             .rp-rt-panel.is-overview-active rule).
+       data-overview-scope — visible on Overview too. CSS rule on
+                             Overview hides every toolbar direct
+                             child WITHOUT this attr, so any new
+                             button is hidden-on-Overview by default. -->
 <div class="rp-rt-toolbar">
   <!-- Filter funnel is file-scoped (predicate filter on row data).
        Overview filters by typing in the search input — no structured
@@ -19,9 +27,16 @@
           onclick="spToggle('cleaner-filter-panel')">
     <i class="bi bi-funnel"></i>
   </button>
-  <input class="rp-rt-search" type="search" placeholder="Search rows…" data-file-scope />
+  <!-- Search + mode triplet are dual-scope: they work on file rows in
+       file view and on the project's file list in Overview.
+       cleanerSearch dispatches by panel mode — STATE.ovSearch in
+       Overview (client-side filter on display_name/filename), STATE.q
+       in file view (server-side /page?q= lands when wired). -->
+  <input class="rp-rt-search" type="search" placeholder="Search rows…"
+         data-overview-scope
+         oninput="cleanerSearch(this.value)" />
 
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit" data-file-scope title="Edit mode" onclick="spSetMode(this)">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit" data-overview-scope title="Edit mode" onclick="spSetMode(this)">
     <i class="bi bi-pencil"></i>
   </button>
   <!-- Order is Edit / Select / [chip] / Delete. Select-mode produces
@@ -29,16 +44,16 @@
        action — no separate bulk-delete button; clicking Delete with
        a non-zero selection deletes that batch. One trash icon, not
        two. data-count drives the chip's visibility (hidden at 0). -->
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select" data-file-scope title="Select mode" onclick="spSetMode(this)">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select" data-overview-scope title="Select mode" onclick="spSetMode(this)">
     <i class="bi bi-check2-square"></i>
   </button>
-  <span class="rp-rt-sel-chip" data-count="0" data-file-scope><i class="bi bi-check2-square"></i> 0 selected</span>
+  <span class="rp-rt-sel-chip" data-count="0" data-overview-scope><i class="bi bi-check2-square"></i> 0 selected</span>
   <!-- Composite: spSetMode flips .is-mode-delete on the panel (and
        animates selected rows out if a selection exists, locally only).
        cleanerMaybeBulkDelete POSTs drop_rows with the selected global
        indices when STATE.selected is non-empty; no-op otherwise so the
        button still works as a plain mode toggle on empty selections. -->
-  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" data-file-scope title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this);cleanerMaybeBulkDelete()">
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete" data-overview-scope title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this);cleanerMaybeBulkDelete()">
     <i class="bi bi-trash"></i>
   </button>
 

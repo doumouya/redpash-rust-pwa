@@ -7,10 +7,15 @@
     <div class="rp-rtp-hdr-meta" data-objects-meta>16 files across 6 projects</div>
   </div>
   <div class="rp-rt-hdr-actions">
-    <button class="rp-btn" title="Export current view as CSV">
+    <button class="rp-btn" title="Export current view as CSV"
+            onclick="objExport()">
       <i class="bi bi-download"></i>
     </button>
-    <button class="rp-btn" title="Import new file">
+    <!-- Files schema has no addAction/addHref, so objAdd falls through
+         to _objOpenUploadModal — the programmatic dropzone + project
+         picker that hits /api/files/upload with project_name (the
+         backend's ensure_named_project upsert handles new-vs-existing). -->
+    <button class="rp-btn" title="Import new file" onclick="objAdd()">
       <i class="bi bi-plus"></i>
     </button>
   </div>

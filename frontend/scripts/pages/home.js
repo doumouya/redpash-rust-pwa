@@ -240,7 +240,11 @@ export default async function mount(root, ctx) {
       // (Escape during route change) and land back on /home expecting
       // to see what they just uploaded.
       try {
-        const proj = await api.get("/projects").catch(() => ({ items: [] }));
+        // Post-upload refresh — re-fetch through getCached so the
+        // localStorage cache is rewritten before the next mount reads it.
+        // Without this, the SWR pattern at boot would paint stale
+        // counts for one frame before the network correction.
+        const proj = await api.getCached("/projects").fresh.catch(() => ({ items: [] }));
         homeData.projects = proj.items ?? [];
         renderStep1Cards();
         renderStats();
@@ -315,21 +319,46 @@ export default async function mount(root, ctx) {
   };
 
   // ── Initial data load ──────────────────────────────────────────
-  // The dashboard needs: projects (recent-projects minitable + the
-  // latest-files lookup + the Projects/Files stats) and reports +
-  // dashboards (the Published stat). All three fetched in parallel;
-  // each falls back to an empty list so one failure doesn't blank
-  // the whole dashboard.
+  // SWR via api.getCached (Phase 1 A): localStorage cache from the
+  // last visit paints synchronously while fresh GETs run in parallel.
+  // Cold cache → same single-paint shape as before; warm cache →
+  // dashboard renders instantly with last-known counts, then a
+  // correction pass replaces them.
+  //
+  // Three lists fetched independently; each falls back to an empty
+  // list on network failure so one failure doesn't blank the dashboard.
+  const pCache = api.getCached("/projects");
+  const rCache = api.getCached("/reports");
+  const dCache = api.getCached("/dashboards");
+
+  const _applyLists = (projects, reports, dashboards) => {
+    homeData.projects   = projects?.items   ?? [];
+    homeData.reports    = reports?.items    ?? [];
+    homeData.dashboards = dashboards?.items ?? [];
+    renderStep1Cards();
+    renderStats();
+  };
+
+  // Synchronous first paint from cache — only if at least one slice
+  // has a cached value (else falls through to the network paint below
+  // without an empty-state flash).
+  if (pCache.cached || rCache.cached || dCache.cached) {
+    _applyLists(pCache.cached, rCache.cached, dCache.cached);
+  }
+
+  // Correction pass — await all three, swallow per-list errors so a
+  // single failure doesn't blank the whole dashboard.
   const [projects, reports, dashboards] = await Promise.all([
-    api.get("/projects").catch(() => ({ items: [] })),
-    api.get("/reports").catch(() => ({ items: [] })),
-    api.get("/dashboards").catch(() => ({ items: [] })),
+    pCache.fresh.catch(() => ({ items: [] })),
+    rCache.fresh.catch(() => ({ items: [] })),
+    dCache.fresh.catch(() => ({ items: [] })),
   ]);
-  homeData.projects   = projects.items   ?? [];
-  homeData.reports    = reports.items    ?? [];
-  homeData.dashboards = dashboards.items ?? [];
-  renderStep1Cards();
-  renderStats();
+  _applyLists(projects, reports, dashboards);
+
+  // Tier 2 E — idle pre-warm the other pages' list endpoints so the
+  // user's next click on Objects / Reports / Dashboards paints
+  // instantly from cache. /me is already on a separate cache (Tier 1 B).
+  api.prewarm(["/files", "/users", "/companies"]);
 }
 
 // ── Step 1 cards ───────────────────────────────────────────────────

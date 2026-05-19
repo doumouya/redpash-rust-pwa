@@ -63,24 +63,29 @@ export function mount(root) {
 
   newBtn.addEventListener("click", () => { location.hash = "#/dashboards?new=1"; });
 
+  // Tier 2 E — warm the other pages' list caches in the background so
+  // navigating away from the dashboard list paints instantly.
+  // showList itself fetches /dashboards via SWR; loadProjectReports
+  // (the builder path) warms /projects + /reports on demand. The rest
+  // pre-warms here.
+  api.prewarm(["/projects", "/files", "/reports", "/users", "/companies"]);
+
   // ─── List ──────────────────────────────────────────────
-  async function showList() {
-    listView.hidden = false;
-    builderView.hidden = true;
-    listBody.innerHTML = `<p class="rp-muted">Loading…</p>`;
-    try {
-      const res = await api.get("/dashboards");
-      if (!res.items?.length) {
-        listBody.innerHTML = `<p class="rp-muted">No dashboards yet. Click <strong>New dashboard</strong> to start.</p>`;
-        return;
-      }
-      const groups = new Map();
-      for (const d of res.items) {
-        const key = d.folder?.trim() ? d.folder : "";
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(d);
-      }
-      listBody.innerHTML = Array.from(groups.entries()).map(([folder, items]) => `
+  // SWR (Phase 1 A): paint from cached /dashboards first if available,
+  // then await fresh for the correction pass. Cold cache shows
+  // "Loading…" once; subsequent mounts see the folder groups instantly.
+  function _paintDashboardsList(items) {
+    if (!items?.length) {
+      listBody.innerHTML = `<p class="rp-muted">No dashboards yet. Click <strong>New dashboard</strong> to start.</p>`;
+      return;
+    }
+    const groups = new Map();
+    for (const d of items) {
+      const key = d.folder?.trim() ? d.folder : "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(d);
+    }
+    listBody.innerHTML = Array.from(groups.entries()).map(([folder, items]) => `
         <section class="rp-reports__folder">
           <h2 class="rp-reports__folder-title">${folder ? "📁 " + esc(folder) : "Uncategorised"} <span class="rp-muted">· ${items.length}</span></h2>
           <table class="rp-project-files">
@@ -104,32 +109,57 @@ export function mount(root) {
           </table>
         </section>
       `).join("");
+  }
 
-      listBody.addEventListener("click", async (e) => {
-        const favBtnEl = e.target.closest("[data-fav]");
-        if (favBtnEl) {
-          const did = favBtnEl.dataset.fav;
-          const on  = favBtnEl.classList.contains("is-on");
-          favBtnEl.classList.toggle("is-on");
-          try {
-            await api.post(`/dashboards/${encodeURIComponent(did)}/favorite`, { value: !on });
-            showList();
-          } catch (err) {
-            favBtnEl.classList.toggle("is-on");
-            toast.error(err.message ?? String(err));
-          }
-          return;
-        }
-        const delBtnEl = e.target.closest("[data-del-row]");
-        if (!delBtnEl) return;
-        if (!confirm("Delete this dashboard?")) return;
+  // Click delegation — re-attached after every paint since the previous
+  // listener (added with { once: true }) self-removes on first fire.
+  function _attachDashboardsListHandlers() {
+    listBody.addEventListener("click", async (e) => {
+      const favBtnEl = e.target.closest("[data-fav]");
+      if (favBtnEl) {
+        const did = favBtnEl.dataset.fav;
+        const on  = favBtnEl.classList.contains("is-on");
+        favBtnEl.classList.toggle("is-on");
         try {
-          await api.delete(`/dashboards/${encodeURIComponent(delBtnEl.dataset.delRow)}`);
+          await api.post(`/dashboards/${encodeURIComponent(did)}/favorite`, { value: !on });
           showList();
-        } catch (err) { toast.error(err.message ?? String(err)); }
-      }, { once: true });
+        } catch (err) {
+          favBtnEl.classList.toggle("is-on");
+          toast.error(err.message ?? String(err));
+        }
+        return;
+      }
+      const delBtnEl = e.target.closest("[data-del-row]");
+      if (!delBtnEl) return;
+      if (!confirm("Delete this dashboard?")) return;
+      try {
+        await api.delete(`/dashboards/${encodeURIComponent(delBtnEl.dataset.delRow)}`);
+        showList();
+      } catch (err) { toast.error(err.message ?? String(err)); }
+    }, { once: true });
+  }
+
+  async function showList() {
+    listView.hidden = false;
+    builderView.hidden = true;
+
+    const { cached, fresh } = api.getCached("/dashboards");
+    if (cached?.items) {
+      _paintDashboardsList(cached.items);
+      _attachDashboardsListHandlers();
+    } else {
+      listBody.innerHTML = `<p class="rp-muted">Loading…</p>`;
+    }
+
+    try {
+      const res = await fresh;
+      _paintDashboardsList(res.items ?? []);
+      _attachDashboardsListHandlers();
     } catch (err) {
-      listBody.innerHTML = `<p class="rp-muted">Couldn't load dashboards: ${esc(err.message ?? String(err))}</p>`;
+      if (!cached) {
+        listBody.innerHTML = `<p class="rp-muted">Couldn't load dashboards: ${esc(err.message ?? String(err))}</p>`;
+      }
+      // else: keep the cached paint + listener; retry on next showList.
     }
   }
 
@@ -202,12 +232,15 @@ export function mount(root) {
   }
 
   async function loadProjectReports() {
+    // Write-through SWR — getCached.fresh writes the localStorage cache
+    // on success so subsequent showList / Profile mounts pick up the
+    // newly-warm values via api.getCached read.
     try {
-      const projects = await api.get("/projects");
+      const projects = await api.getCached("/projects").fresh;
       const def = projects.items?.[0];
       if (!def) { projectReports = []; return; }
       project = project ?? def.redpash_id;
-      const reports = await api.get("/reports");
+      const reports = await api.getCached("/reports").fresh;
       projectReports = (reports.items ?? []).filter((r) => r.project_redpash_id === project);
     } catch (err) {
       console.error("[dashboards] reports fetch failed", err);
@@ -216,8 +249,10 @@ export function mount(root) {
   }
 
   async function refreshFolderList() {
+    // Write-through SWR — write the /dashboards cache so showList's
+    // SWR paint stays current after a fold rename / delete.
     try {
-      const res = await api.get("/dashboards");
+      const res = await api.getCached("/dashboards").fresh;
       const set = new Set();
       (res.items ?? []).forEach((d) => { if (d.folder) set.add(d.folder); });
       knownFolders = Array.from(set).sort();
@@ -531,7 +566,9 @@ export function mount(root) {
   }
 
   async function firstProjectId() {
-    const projects = await api.get("/projects");
+    // Write-through SWR — keeps the /projects cache warm for cross-page
+    // first-paint via api.getCached read elsewhere.
+    const projects = await api.getCached("/projects").fresh;
     return projects.items?.[0]?.redpash_id ?? null;
   }
 

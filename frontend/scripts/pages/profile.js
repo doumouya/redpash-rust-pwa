@@ -80,13 +80,23 @@ export default async function mount(root) {
   }
 
   // ── Load /me + populate Step 1 ─────────────────────────────────
-  let me;
-  try { me = await api.get("/me"); }
-  catch (err) { toast.error("Failed to load profile."); return; }
-
-  populateIdentity(root, me);
-  populateForm(root, me);
-  populateConnections(root, me);
+  // SWR — paint from cache instantly, then await fresh and re-paint.
+  // Cold cache → falls through to the network paint without an empty
+  // state flash. PATCH /me invalidates the cache (see save handler
+  // below) so coming back to /profile after a save re-fetches.
+  const _hydrate = (me) => {
+    populateIdentity(root, me);
+    populateForm(root, me);
+    populateConnections(root, me);
+  };
+  const { cached, fresh } = api.getCached("/me");
+  let me = cached;
+  if (me) _hydrate(me);
+  try { me = await fresh; _hydrate(me); }
+  catch (err) {
+    if (!cached) { toast.error("Failed to load profile."); return; }
+    // else: keep the cached paint; next mount retries the fetch.
+  }
 
   // Form starts locked — user must click the pencil toggle to edit.
   setEditMode(root, false);
@@ -115,6 +125,10 @@ export default async function mount(root) {
     btn.disabled = true;
     try {
       const updated = await api.patch("/me", body);
+      // PATCH /me returns UserProfile (no global_sentinels); invalidate
+      // so the next loadSession (or /profile mount) re-fetches a full
+      // MeResponse rather than serving the stale cache.
+      api.invalidateCached("/me");
       // Refresh identity header inline so name changes show without remount.
       root.querySelector("#profile-id-name").textContent  = updated.display_name ?? updated.username ?? "—";
       toast.success("Profile saved.");
@@ -232,6 +246,11 @@ export default async function mount(root) {
 
   // ── Usage stats (fire-and-forget) ──────────────────────────────
   loadUsage(root).catch(() => {});
+
+  // Tier 2 E — idle pre-warm. loadUsage already covers projects/
+  // reports/dashboards; warm the rest so navigating to Objects /
+  // Reports source-picker / Companies feels instant.
+  api.prewarm(["/files", "/users", "/companies"]);
 }
 
 // Cleanness vocabulary card — chip list of personal sentinels + a
@@ -576,19 +595,33 @@ function syncThemeActive(root) {
 }
 
 async function loadUsage(root) {
+  // SWR (Phase 1 A) — paint usage counts from cache instantly, then
+  // correct from fresh. animateNumber is idempotent; running it twice
+  // with the same value is a no-op, with different values it animates
+  // the delta cleanly so the correction pass feels natural.
+  const pCache = api.getCached("/projects");
+  const rCache = api.getCached("/reports");
+  const dCache = api.getCached("/dashboards");
+
+  const _apply = (projects, reports, dashboards) => {
+    const proj  = projects?.items    ?? [];
+    const rep   = reports?.items     ?? [];
+    const dash  = dashboards?.items  ?? [];
+    const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
+    animateNumber(root.querySelector("#profile-usage-projects"),   proj.length);
+    animateNumber(root.querySelector("#profile-usage-files"),      fileCount);
+    animateNumber(root.querySelector("#profile-usage-reports"),    rep.length);
+    animateNumber(root.querySelector("#profile-usage-dashboards"), dash.length);
+  };
+
+  if (pCache.cached || rCache.cached || dCache.cached) {
+    _apply(pCache.cached, rCache.cached, dCache.cached);
+  }
+
   const [projects, reports, dashboards] = await Promise.allSettled([
-    api.get("/projects"),
-    api.get("/reports"),
-    api.get("/dashboards"),
+    pCache.fresh, rCache.fresh, dCache.fresh,
   ]);
-  const proj  = projects.value?.items   ?? [];
-  const rep   = reports.value?.items    ?? [];
-  const dash  = dashboards.value?.items ?? [];
-  const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
-  animateNumber(root.querySelector("#profile-usage-projects"),   proj.length);
-  animateNumber(root.querySelector("#profile-usage-files"),      fileCount);
-  animateNumber(root.querySelector("#profile-usage-reports"),    rep.length);
-  animateNumber(root.querySelector("#profile-usage-dashboards"), dash.length);
+  _apply(projects.value, reports.value, dashboards.value);
 }
 
 // Lock / unlock the personal-info card.

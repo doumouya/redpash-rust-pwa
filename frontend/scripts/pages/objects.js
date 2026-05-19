@@ -180,7 +180,11 @@ const SCHEMAS = {
     label:    "Projects",
     title:    "My Projects",
     icon:     "bi-folder2-open",
-    fetch:    () => api.get("/projects"),
+    // path is the GET endpoint for SWR (api.getCached). Used by both
+    // loadTable + _objLoadAndPaint for cache-then-correct paints, and
+    // by the post-mutation prefetch sites which write through .fresh
+    // to keep the cache warm. Phase 1 A — docs/frontend/suggestion-localstorage.md.
+    path:     "/projects",
     columns:  [
       // name + description are inline-editable (type:"text" → PATCH
       // /api/projects/:rid via the schema saveEdit below).
@@ -246,7 +250,7 @@ const SCHEMAS = {
     label:    "Files",
     title:    "My Files",
     icon:     "bi-file-earmark-text",
-    fetch:    () => api.get("/files"),
+    path:     "/files",
     columns:  [
       // edit:text — dblclick the File cell in edit mode → inline rename
       // (PATCH display_name via the schema's saveEdit below). Anchor
@@ -303,7 +307,7 @@ const SCHEMAS = {
     label:    "Reports",
     title:    "My Reports",
     icon:     "bi-bar-chart-fill",
-    fetch:    () => api.get("/reports"),
+    path:     "/reports",
     columns:  [
       // edit:open — dblclick the Title cell in edit mode opens the
       // report builder (full spec editing lives there).
@@ -348,7 +352,7 @@ const SCHEMAS = {
     label:    "Dashboards",
     title:    "My Dashboards",
     icon:     "bi-grid-1x2-fill",
-    fetch:    () => api.get("/dashboards"),
+    path:     "/dashboards",
     columns:  [
       // edit:open — dblclick the Title cell opens the dashboard builder
       // (full template + widget editing lives there).
@@ -390,7 +394,7 @@ const SCHEMAS = {
     label:    "Companies",
     title:    "Companies",
     icon:     "bi-building",
-    fetch:    () => api.get("/companies"),
+    path:     "/companies",
     columns:  [
       // CompanySummary flattens the company record, so name / slug /
       // timestamps sit alongside member_count + my_role. name / slug /
@@ -430,7 +434,7 @@ const SCHEMAS = {
     label:    "Users",
     title:    "Users",
     icon:     "bi-people-fill",
-    fetch:    () => api.get("/users"),
+    path:     "/users",
     columns:  [
       // display_name / username / email / plan are inline-editable via
       // PATCH /api/users/:rid (sparse). username carries a UNIQUE
@@ -577,8 +581,15 @@ let objViews = {};
 // page reload (the cleaner is the source of truth for the open set).
 let objOpenProjects = new Set();
 function _objDerivedStatus(row) {
+  // Archived wins — the user just picked Archive in the inline editor;
+  // showing "Active" because the project happens to be open in the
+  // cleaner would look like the change didn't persist. Raw status
+  // (the DB value) is the source of truth when it's archived; "active"
+  // is only derived when raw is neither archived nor anything else
+  // explicit.
+  const raw = String(row?.status ?? "").toLowerCase();
+  if (raw === "archived") return "archived";
   if (objOpenProjects.has(row?.redpash_id)) return "active";
-  if (String(row?.status ?? "").toLowerCase() === "archived") return "archived";
   return "draft";
 }
 
@@ -641,7 +652,16 @@ function _objFlashSaved() {
 
 window.objExport = () => {
   const kind = currentKind;
-  const rows = STATE[kind].filtered;          // current view, all pages
+  // Sandbox path doesn't populate STATE[kind].filtered (that's a legacy
+  // renderTable side-effect that runs the search/predicate sort+slice);
+  // its initial value from freshState() is `[]` (a truthy-but-empty
+  // array), so `??` falls through to it. Pick whichever array has
+  // content: filtered when the legacy path filled it, rows otherwise.
+  // Sandbox search filter wiring is a future pass.
+  const st = STATE[kind] || {};
+  const rows = (st.filtered && st.filtered.length)
+    ? st.filtered
+    : (st.rows || []);
   if (!rows.length) { toast.info("Nothing to export."); return; }
   const cols = _visibleOrderedCols(kind);
   // RFC-4180-ish: quote any cell containing a comma / quote / newline.
@@ -812,14 +832,26 @@ export default async function mount(root, ctx) {
   // from STATE.projects.rows. Prefetch projects even if we're landing
   // on a different tab so the Project column resolves. (Skipped when
   // the user has removed the Projects tab — the column falls back to a
-  // RID slice, which is acceptable.)
+  // RID slice, which is acceptable.) Uses getCached so cached values
+  // satisfy the lookup synchronously while fresh runs in parallel.
   if (start !== "projects" && objTabs.includes("projects")) {
+    const { cached, fresh } = api.getCached(SCHEMAS.projects.path);
+    if (cached?.items) STATE.projects.rows = cached.items;
     try {
-      const res = await SCHEMAS.projects.fetch();
+      const res = await fresh;
       STATE.projects.rows = res.items ?? [];
     } catch { /* non-fatal — the column falls back to a RID slice */ }
   }
   await objActivateTab(start);
+
+  // Tier 2 E — pre-warm every OTHER schema's list so switching tabs
+  // hits cache instantly. The active tab + the projects fallback both
+  // ran above; everything else is fair game.
+  const prewarmKinds = Object.keys(SCHEMAS)
+    .filter((k) => k !== start && k !== "projects");
+  if (prewarmKinds.length) {
+    api.prewarm(prewarmKinds.map((k) => SCHEMAS[k].path));
+  }
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────
@@ -1741,7 +1773,19 @@ function _wireGlobals(root) {
     if (schema.addAction) {
       try {
         const ok = await schema.addAction();
-        if (ok) { toast.success("Created."); await loadTable(currentKind); }
+        if (ok) {
+          toast.success("Created.");
+          // Refresh via the appropriate path. Sandbox mount uses
+          // _objLoadAndPaint (per-type tbody host); legacy uses
+          // loadTable (.rp-rt-panel [data-rt-tbody]). Both call into
+          // SCHEMAS[kind].path through getCached.fresh, so the cache
+          // gets warmed either way.
+          if (typeof _objLoadAndPaint === "function") {
+            await _objLoadAndPaint(currentKind);
+          } else if (typeof loadTable === "function") {
+            await loadTable(currentKind);
+          }
+        }
       } catch (err) {
         toast.error(`Create failed: ${err.body?.error ?? err.message}`);
       }
@@ -1877,14 +1921,27 @@ function _wireGlobals(root) {
 async function loadTable(kind) {
   const schema = SCHEMAS[kind];
   const tbody  = _root.querySelector(".rp-rt-panel [data-rt-tbody]");
-  if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>`;
+
+  // SWR (Phase 1 A) — paint from cache instantly if available, then
+  // await fresh for the correction pass. Only show "Loading…" on a
+  // cold cache so warm-cache paths don't flash.
+  const { cached, fresh } = api.getCached(schema.path);
+  if (cached?.items) {
+    STATE[kind].rows = cached.items;
+    if (kind === currentKind) renderTable(kind);
+  } else if (tbody) {
+    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem">Loading…</td></tr>`;
+  }
   try {
-    const res = await schema.fetch();
+    const res = await fresh;
     STATE[kind].rows = res.items ?? [];
   } catch (err) {
-    STATE[kind].rows = [];
-    if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem">${esc(err.body?.error ?? err.message)}</td></tr>`;
-    return;
+    if (!cached) {
+      STATE[kind].rows = [];
+      if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem">${esc(err.body?.error ?? err.message)}</td></tr>`;
+      return;
+    }
+    // else: keep the cached paint; correction will retry on next mount.
   }
   // Switched tabs mid-fetch? Drop the stale render.
   if (kind !== currentKind) return;
@@ -2782,11 +2839,22 @@ function _objOpenUploadModal() {
     if (!ok) return;
     // Refresh the projects cache (the files schema resolves project
     // names from it) and re-render the active tab so the new rows show.
+    // Goes through getCached.fresh so the localStorage cache is rewritten
+    // — next mount's SWR paint sees the post-mutation state.
     try {
-      const res = await SCHEMAS.projects.fetch();
+      const res = await api.getCached(SCHEMAS.projects.path).fresh;
       STATE.projects.rows = res.items ?? [];
     } catch { /* non-fatal — the Project column falls back to a RID slice */ }
-    await loadTable(currentKind);
+    // Refresh via the appropriate path. Sandbox mount uses
+    // _objLoadAndPaint (per-type tbody host); legacy uses loadTable
+    // (.rp-rt-panel [data-rt-tbody]). Previously this only called
+    // loadTable, so sandbox users had to manually refresh after
+    // uploading.
+    if (typeof _objLoadAndPaint === "function") {
+      await _objLoadAndPaint(currentKind);
+    } else if (typeof loadTable === "function") {
+      await loadTable(currentKind);
+    }
   }
 }
 
@@ -2901,6 +2969,18 @@ async function mountObjectsSandbox(root, ctx) {
   }
   currentKind = kind;
   try { history.replaceState(null, "", `#/objects?tab=${kind}`); } catch {}
+  // Populate the columns picker for the initial kind — objectsActivateKind
+  // does this on subsequent switches, but the first mount goes straight
+  // to _objLoadAndPaint without firing objectsActivateKind.
+  if (typeof window.objectsBuildColsDropdown === "function") {
+    window.objectsBuildColsDropdown(kind);
+  }
+  // Filter panel — paint one empty predicate row with the active
+  // kind's column dropdown options. Same reasoning as the cols picker
+  // above: first mount skips objectsActivateKind.
+  if (typeof window.objectsBuildFilterPanel === "function") {
+    window.objectsBuildFilterPanel(kind);
+  }
   await _objLoadAndPaint(kind);
 }
 
@@ -2918,7 +2998,809 @@ function _installObjectsLiveHandlers(root) {
     }
     currentKind = kind;
     try { history.replaceState(null, "", `#/objects?tab=${kind}`); } catch {}
+
+    // Tab-isolation reset — the toolbar (search input, mode buttons,
+    // selection chip) lives on the shared `.rp-rt-panel`, so without
+    // this every tab switch carried the previous tab's state into the
+    // new view (edit-mode chrome on every row, stale search value,
+    // selection count from another kind). Legacy `objActivateTab`
+    // does the equivalent reset at line ~942; this is the sandbox
+    // mirror.
+    //
+    // STATE[kind] keeps its own per-tab slice (rows, sorts, page,
+    // pageSize) — we ONLY reset the volatile toolbar bits (search,
+    // mode, selection). Saved-view restores happen elsewhere.
+    const st = STATE[kind];
+    if (st) {
+      st.search = "";
+      st.mode   = null;
+      if (st.selected instanceof Set) st.selected.clear();
+    }
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel) {
+      panel.dataset.rt = kind;
+      // Mode classes — sandbox uses `is-mode-*` (controls.js spSetMode),
+      // legacy uses `rp-rt-mode-*`. Drop both so neither sticks.
+      panel.classList.remove(
+        "is-mode-edit", "is-mode-select", "is-mode-delete",
+        "rp-rt-mode-edit", "rp-rt-mode-select", "rp-rt-mode-delete",
+      );
+      panel.querySelectorAll("[data-sp-mode], .rp-rt-icon-btn[data-rt-mode]").forEach((b) => {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-pressed", "false");
+      });
+      const search = panel.querySelector(".rp-rt-search");
+      if (search) {
+        search.value = "";
+        search.placeholder = `Search ${kind}…`;
+      }
+      const chip = panel.querySelector(".rp-rt-sel-chip");
+      if (chip) {
+        chip.setAttribute("data-count", "0");
+        chip.innerHTML = '<i class="bi bi-check2-square"></i> 0 selected';
+      }
+      // Rows-per-page — the dropdown label + is-selected item both
+      // live on the shared toolbar, so without resetting them every
+      // tab switch carried the previous kind's number forward.
+      // Saved-view per-kind value wins (objSave persists rowsPerPage
+      // per tab); falls back to the 25 default. Sandbox uses
+      // [data-sp-rows-label] + .rp-dd-item.is-selected (legacy uses
+      // [data-rt-rows-label] + .rp-rt-dd-selected — different
+      // conventions, only the sandbox path runs here).
+      const rowsLbl = panel.querySelector("[data-sp-rows-label]");
+      if (rowsLbl && st) {
+        const rpp = OBJ_ROWS_OPTS.includes(objViews[kind]?.rowsPerPage)
+          ? objViews[kind].rowsPerPage
+          : 25;
+        st.rowsPerPage = rpp;
+        rowsLbl.textContent = String(rpp);
+        rowsLbl.closest(".rp-dd-wrap")
+          ?.querySelectorAll(".rp-dd-item")
+          .forEach((i) => i.classList.toggle("is-selected",
+            i.textContent.trim() === `${rpp} rows`));
+      }
+      // Date format — saved per-tab via objSave's `dateFmt` field;
+      // a saved value wins, else the module-global `dateFmt` (last
+      // explicit user choice) carries over. Mirrors the rows-per-
+      // page block above for consistency.
+      const savedFmt = objViews[kind]?.dateFmt;
+      if (savedFmt && _DATE_FMT_LABEL[savedFmt]) dateFmt = savedFmt;
+      const dfLabel = panel.querySelector("[data-sp-datefmt-label]");
+      if (dfLabel) {
+        dfLabel.textContent = _DATE_FMT_LABEL[dateFmt];
+        dfLabel.closest(".rp-dd-wrap")
+          ?.querySelectorAll(".rp-dd-item")
+          .forEach((i) => i.classList.toggle("is-selected",
+            i.textContent.trim() === _DATE_FMT_LABEL[dateFmt]));
+      }
+      // Columns picker — rebuild the dropdown items from the new
+      // schema. _ensureColState seeds STATE[kind].colOrder + .visibleCols
+      // from objViews if a saved view exists, else from schema defaults.
+      // Called eagerly so the next dropdown open reads the right list;
+      // also re-fired on every spDdToggle of the Columns button for
+      // late-loaded saved views.
+      if (typeof window.objectsBuildColsDropdown === "function") {
+        window.objectsBuildColsDropdown(kind);
+      }
+      // Filter — reset on tab switch (columns differ per kind, so
+      // stale predicates would point at columns the new tab doesn't
+      // have). objectsClearFilter wipes objPredicates + objCombinator
+      // AND repaints the panel rows; we built it inside the same
+      // path so the dropdown options are kind-correct on entry.
+      if (typeof window.objectsClearFilter === "function") {
+        window.objectsClearFilter();
+      } else if (typeof window.objectsBuildFilterPanel === "function") {
+        window.objectsBuildFilterPanel(kind);
+      }
+    }
+
     await _objLoadAndPaint(kind);
+  };
+
+  // Expose the active kind for inline onclick handlers that need to
+  // pass it without re-reading currentKind directly (currentKind is
+  // module-private). Used by the toolbar Columns button's composite
+  // onclick to rebuild the dropdown on every open.
+  window.objectsActiveKind = () => currentKind;
+
+  // ── Filter panel (sandbox) ────────────────────────────────────────
+  //
+  // Reuses the legacy predicate engine (objPredicates / objCombinator
+  // module state, _objRowMatchesFilter / _objEvalPredicate / _objColValue
+  // helpers, OBJ_FILTER_OPS catalog). Sandbox-specific bits are the
+  // panel selectors ([data-objects-filter-rows], [data-objects-filter-combo])
+  // and the repaint target (paintObjectsSandboxTable instead of
+  // legacy renderTable).
+  //
+  // One <select> per dropdown for now — native pulldown, kind-aware
+  // options. The legacy panel uses custom button+menu dropdowns
+  // (_objFbDropdown) for styling parity with the toolbar pills; the
+  // sandbox stays on native selects for simplicity. Same data-fb-*
+  // attribute contract so objectsApplyFilter reads identically.
+
+  // Picker for the column / op .rp-dd-wrap dropdowns. Mirrors cleaner's
+  // cleanerFbDdPick: writes the picked value to the wrap's data-value,
+  // updates the label, marks the chosen item is-selected, closes the
+  // menu. objectsApplyFilter reads wrap.dataset.value at apply-time.
+  window.objectsFbDdPick = (item) => {
+    if (!item) return;
+    const wrap = item.closest(".rp-dd-wrap");
+    if (!wrap) return;
+    const value = item.dataset.value ?? "";
+    wrap.dataset.value = value;
+    const lbl = wrap.querySelector("[data-dd-lbl]");
+    if (lbl) {
+      const isCol = wrap.classList.contains("rp-rt-fb-col");
+      lbl.textContent = value ? item.textContent.trim() : (isCol ? "Column…" : "Op…");
+    }
+    wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+    if (value) item.classList.add("is-selected");
+    wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+    // If we just picked an op, sync the value input's type / placeholder
+    // via the legacy row-changed helper (writes a hidden input on the
+    // wrap so _objFilterRowChanged's "find data-fb-op" lookup still works).
+    if (wrap.classList.contains("rp-rt-fb-op")) {
+      const row = wrap.closest(".rp-rt-fb-row");
+      const inp = row?.querySelector("[data-fb-val]");
+      if (inp && typeof _objFilterRowChanged === "function") _objFilterRowChanged(inp);
+    }
+  };
+
+  // Build a single predicate row matching cleaner's sandbox markup —
+  // .rp-dd-wrap dropdowns (button + .rp-dd-menu popup) opened via
+  // spDdToggle, items emit onclick="objectsFbDdPick(this)". Wraps
+  // carry data-fb-col / data-fb-op (the read-by selector) + data-value
+  // (the picked value). objectsApplyFilter reads wrap.dataset.value
+  // instead of a hidden input.
+  //
+  // Value input wrapped in .rp-rt-fb-val-wrap with a sibling
+  // [data-fb-val-menu] for the per-column distinct-values autocomplete
+  // (legacy _objShowValSuggestions handles the menu paint).
+  const _objectsFilterRowHtml = (kind, idx) => {
+    const cols = SCHEMAS[kind]?.columns ?? [];
+    const colItems = cols.map((c) =>
+      `<div class="rp-dd-item" data-value="${esc(c.key)}" onclick="objectsFbDdPick(this)">${esc(c.label)}</div>`).join("");
+    const opItems = OBJ_FILTER_OPS.map(([v, l]) =>
+      `<div class="rp-dd-item" data-value="${esc(v)}" onclick="objectsFbDdPick(this)">${esc(l)}</div>`).join("");
+    return `<div class="rp-rt-fb-row" data-objects-filter-idx="${idx}">`
+      + `<button class="rp-rt-fb-rm" title="Remove predicate"`
+      + ` onclick="event.stopPropagation();objectsRemovePredicate(this)">`
+      + `<i class="bi bi-x"></i></button>`
+      + `<div class="rp-dd-wrap rp-rt-fb-col" data-fb-col data-value="">`
+      +   `<button type="button" class="rp-rt-fb-dd-btn" onclick="spDdToggle(this)">`
+      +     `<span data-dd-lbl>Column…</span>`
+      +     `<i class="bi bi-chevron-down"></i>`
+      +   `</button>`
+      +   `<div class="rp-dd-menu" role="menu">${colItems}</div>`
+      + `</div>`
+      + `<div class="rp-rt-fb-selects">`
+      +   `<div class="rp-dd-wrap rp-rt-fb-op" data-fb-op data-value="">`
+      +     `<button type="button" class="rp-rt-fb-dd-btn" onclick="spDdToggle(this)">`
+      +       `<span data-dd-lbl>Op…</span>`
+      +       `<i class="bi bi-chevron-down"></i>`
+      +     `</button>`
+      +     `<div class="rp-dd-menu" role="menu">${opItems}</div>`
+      +   `</div>`
+      +   `<div class="rp-rt-fb-val-wrap">`
+      +     `<input type="text" class="rp-rt-fb-val" data-fb-val placeholder="value"`
+      +     ` oninput="_objFbValInput(this)" onfocus="_objFbValInput(this)" />`
+      +     `<div class="rp-rt-fb-dd-menu" data-fb-val-menu></div>`
+      +   `</div>`
+      + `</div>`
+      + `</div>`;
+  };
+
+  // Paint a single empty predicate row into the panel — called on
+  // initial mount + every tab switch (columns differ per kind, so
+  // stale dropdown options would mismatch).
+  window.objectsBuildFilterPanel = (kind) => {
+    kind = kind || currentKind;
+    if (!kind || !SCHEMAS[kind]) return;
+    const host = root.querySelector("[data-objects-filter-rows]");
+    if (!host) return;
+    host.innerHTML = _objectsFilterRowHtml(kind, 0);
+  };
+
+  window.objectsAddPredicate = () => {
+    const host = root.querySelector("[data-objects-filter-rows]");
+    if (!host || !currentKind) return;
+    const idx = host.querySelectorAll(".rp-rt-fb-row").length;
+    host.insertAdjacentHTML("beforeend", _objectsFilterRowHtml(currentKind, idx));
+  };
+
+  window.objectsRemovePredicate = (btn) => {
+    const row = btn?.closest(".rp-rt-fb-row");
+    if (!row) return;
+    row.remove();
+    // Keep at least one empty row so the panel never collapses to "no
+    // predicates"; the user can clear via the eraser button instead.
+    const host = root.querySelector("[data-objects-filter-rows]");
+    if (host && !host.querySelector(".rp-rt-fb-row")) {
+      host.insertAdjacentHTML("beforeend", _objectsFilterRowHtml(currentKind, 0));
+    }
+  };
+
+  window.objectsSetFilterCombo = (btn) => {
+    const wrap = btn?.closest("[data-objects-filter-combo]");
+    if (!wrap) return;
+    wrap.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b === btn));
+  };
+
+  // Read predicates from the panel + apply. Mirrors legacy objApplyFilter
+  // (line ~2525) but reads from the sandbox panel selectors and repaints
+  // via paintObjectsSandboxTable. Honours every op in OBJ_FILTER_OPS
+  // (eq, neq, contains, in, gt/lte, between, before/after, is_null,
+  // not_null, etc.) through the shared _objEvalPredicate helper.
+  window.objectsApplyFilter = () => {
+    if (!currentKind) return;
+    const host = root.querySelector("[data-objects-filter-rows]");
+    const rows = host ? [...host.querySelectorAll(".rp-rt-fb-row")] : [];
+    const comboBtn = root.querySelector("[data-objects-filter-combo] button.is-active");
+    objCombinator = comboBtn?.dataset.combo === "or" ? "or" : "and";
+    const preds = [];
+    rows.forEach((r) => {
+      // .rp-dd-wrap carries the picked value in data-value (cleaner-
+      // sandbox convention); fall back to a child input.value for
+      // anything that's still a native <select>/<input> (shouldn't
+      // happen now but cheap belt-and-suspenders).
+      const colWrap = r.querySelector("[data-fb-col]");
+      const opWrap  = r.querySelector("[data-fb-op]");
+      const column  = colWrap?.dataset?.value ?? colWrap?.value ?? "";
+      const op      = opWrap?.dataset?.value  ?? opWrap?.value  ?? "";
+      if (!column || !op) return;
+      const pred = { column, op };
+      if (op === "is_null" || op === "not_null") { preds.push(pred); return; }
+      const raw = r.querySelector("[data-fb-val]")?.value ?? "";
+      if (op === "in" || op === "not_in") {
+        pred.value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!pred.value.length) return;
+      } else if (op === "between") {
+        const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (parts.length !== 2) return;
+        pred.value = parts.map(Number);
+        if (pred.value.some(Number.isNaN)) return;
+      } else if (["gt", "gte", "lt", "lte"].includes(op)) {
+        const n = Number(raw);
+        if (raw === "" || Number.isNaN(n)) return;
+        pred.value = n;
+      } else {
+        if (raw === "") return;
+        pred.value = raw;
+      }
+      preds.push(pred);
+    });
+    objPredicates = preds;
+    paintObjectsSandboxTable(currentKind);
+    _paintObjectsSandboxMeta(currentKind);
+  };
+
+  // Toolbar search — mirrors the legacy `objSearch` (line ~1125) but
+  // repaints via paintObjectsSandboxTable and ALSO paints an
+  // autocomplete menu of distinct values from the kind's "primary"
+  // column (schema.columns[0]) matching the typed query. Same UX as
+  // the predicate value input's suggestion popover.
+  //
+  // STATE[currentKind].search drives the row filter through
+  // _objMatchesSearch (already kind-agnostic). Tab switch clears it
+  // via objectsActivateKind (the per-tab reset block above).
+  window.objectsSearchInput = (inp) => {
+    if (!inp || !currentKind) return;
+    const q = String(inp.value || "").toLowerCase().trim();
+    const st = STATE[currentKind];
+    if (st) st.search = q;
+    // Repaint with the new search applied.
+    paintObjectsSandboxTable(currentKind);
+    _paintObjectsSandboxMeta(currentKind);
+    // Suggestion menu — distinct values from the kind's first column
+    // (Name / File / Title / etc.) that match the query. Same shape
+    // as _objShowValSuggestions for predicate values.
+    const menu = root.querySelector("[data-objects-search-menu]");
+    if (!menu) return;
+    const cols = SCHEMAS[currentKind]?.columns ?? [];
+    const primaryKey = cols[0]?.key;
+    if (!primaryKey) { menu.classList.remove("open"); return; }
+    const seen = new Set();
+    for (const r of (st?.rows ?? [])) {
+      const v = _objColValue(currentKind, primaryKey, r);
+      if (v == null || v === "") continue;
+      seen.add(String(v));
+      if (seen.size >= 50) break;
+    }
+    const all = [...seen].sort();
+    const matches = q ? all.filter((v) => v.toLowerCase().includes(q)) : all;
+    if (!matches.length) { menu.classList.remove("open"); return; }
+    menu.innerHTML = matches.map((v) =>
+      `<div class="rp-rt-fb-dd-item" onmousedown="event.preventDefault();objectsSearchPick(this)">${esc(v)}</div>`
+    ).join("");
+    if (!menu.classList.contains("open")) {
+      // Position under the input — same approach as _objFbPositionMenu
+      // for the value-suggestion menu.
+      const r = inp.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.left  = `${r.left}px`;
+      menu.style.top   = `${r.bottom + 2}px`;
+      menu.style.width = `${r.width}px`;
+      menu.classList.add("open");
+    }
+  };
+
+  window.objectsSearchPick = (item) => {
+    const search = root.querySelector(".rp-rt-search");
+    const menu   = root.querySelector("[data-objects-search-menu]");
+    if (!search) return;
+    search.value = item.textContent;
+    menu?.classList.remove("open");
+    // Re-fire the input handler so the row filter applies + STATE.search
+    // syncs to the picked value.
+    window.objectsSearchInput(search);
+  };
+
+  window.objectsClearFilter = () => {
+    objPredicates = [];
+    objCombinator = "and";
+    if (currentKind) window.objectsBuildFilterPanel(currentKind);
+    const wrap = root.querySelector("[data-objects-filter-combo]");
+    wrap?.querySelectorAll("button").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.combo === "and"));
+    if (currentKind) {
+      paintObjectsSandboxTable(currentKind);
+      _paintObjectsSandboxMeta(currentKind);
+    }
+  };
+
+  // Outside-click dismissal for the value-suggestion menu (the
+  // [data-fb-val-menu] inside .rp-rt-fb-val-wrap). The col/op
+  // .rp-dd-menu dropdowns are handled by controls.js's generic
+  // .rp-dd-menu.open closer (line ~1888); we just need to cover the
+  // legacy val-menu which uses its own positioning. Function-property
+  // flag prevents stacking on re-mount.
+  if (!_installObjectsLiveHandlers._fbOutsideClickWired) {
+    _installObjectsLiveHandlers._fbOutsideClickWired = true;
+    document.addEventListener("click", (e) => {
+      // Value-suggestion menu (predicate row) — close when click leaves
+      // its wrap.
+      if (!e.target.closest(".rp-rt-fb-val-wrap")) {
+        document.querySelectorAll("[data-fb-val-menu].open")
+          .forEach((m) => m.classList.remove("open"));
+      }
+      // Toolbar search suggestion menu — same logic, different wrap.
+      if (!e.target.closest(".rp-rt-search-wrap")) {
+        document.querySelectorAll("[data-objects-search-menu].open")
+          .forEach((m) => m.classList.remove("open"));
+      }
+    });
+  }
+
+  // Sandbox columns picker — paint .rp-dd-checkbox items into the
+  // [data-sp-cols-picker] mount point from SCHEMAS[kind].columns,
+  // respecting STATE[kind].visibleCols for the initial check state.
+  // Called from objectsActivateKind on tab switch + on every dropdown
+  // open (handles late-load saved-view rehydration without re-tracking
+  // dirty state).
+  window.objectsBuildColsDropdown = (kind) => {
+    kind = kind || currentKind;
+    if (!kind || !SCHEMAS[kind]) return;
+    const host = root.querySelector("[data-sp-cols-picker]");
+    if (!host) return;
+    _ensureColState(kind);
+    const st     = STATE[kind];
+    const byKey  = Object.fromEntries(SCHEMAS[kind].columns.map((c) => [c.key, c]));
+    host.innerHTML = (st.colOrder || []).map((k) => {
+      const col = byKey[k];
+      if (!col) return "";
+      const checked = st.visibleCols.has(k) ? " checked" : "";
+      return `<label class="rp-dd-checkbox">`
+           +   `<input type="checkbox" data-sp-col-toggle="${esc(k)}"${checked}`
+           +   ` onchange="objectsToggleCol(this)" />`
+           +   ` ${esc(col.label)}`
+           + `</label>`;
+    }).join("");
+  };
+
+  // Auto-persist the current tab's column state to objViews so that
+  // toggling / reordering / resetting in the Columns dropdown survives
+  // a page refresh. Snapshots only the column-related bits + the
+  // user's rowsPerPage / dateFmt / sorts at the moment of the change
+  // so they stick alongside. rpSavePref writes to prefs.objects_views
+  // on the account (fire-and-forget).
+  const _persistObjViewCols = (kind) => {
+    if (!kind || !STATE[kind]) return;
+    const st = STATE[kind];
+    if (!st.colOrder || !st.visibleCols) return;
+    objViews[kind] = {
+      ...(objViews[kind] || {}),
+      colOrder:    [...st.colOrder],
+      visibleCols: [...st.visibleCols],
+    };
+    window.rpSavePref?.("objects_views", objViews);
+  };
+
+  // Checkbox change — adds / removes a column from STATE[kind].visibleCols
+  // and repaints the table. Min-1 guard: refusing the last visible
+  // column would collapse the table; revert the checkbox + toast.
+  window.objectsToggleCol = (cb) => {
+    const kind = currentKind;
+    if (!kind || !cb) return;
+    const st  = STATE[kind];
+    const key = cb.dataset.spColToggle;
+    if (!key) return;
+    if (cb.checked) {
+      st.visibleCols.add(key);
+    } else {
+      if (st.visibleCols.size <= 1) {
+        cb.checked = true;
+        window.toast?.info?.("Keep at least one column visible.");
+        return;
+      }
+      st.visibleCols.delete(key);
+    }
+    _persistObjViewCols(kind);
+    paintObjectsSandboxTable(kind);
+  };
+
+  // Reset to schema default — all non-hidden columns visible, schema
+  // order. Clears any saved-view override of visibleCols/colOrder.
+  // Re-paints the dropdown + table.
+  window.objectsResetCols = () => {
+    const kind = currentKind;
+    if (!kind || !SCHEMAS[kind]) return;
+    const cols = SCHEMAS[kind].columns;
+    const st   = STATE[kind];
+    st.colOrder    = cols.map((c) => c.key);
+    st.visibleCols = new Set(cols.filter((c) => !c.hidden).map((c) => c.key));
+    _persistObjViewCols(kind);
+    window.objectsBuildColsDropdown(kind);
+    paintObjectsSandboxTable(kind);
+  };
+
+  // Row click in sandbox tables — sandbox spToggleRowSel handles the
+  // visual flip (CSS .rp-rt-row-sel class) but doesn't touch
+  // STATE[kind].selected. Without that, objBulkDelete sees an empty
+  // selection and the master/Delete-mode flows look "visually deleted"
+  // but never POST. This companion mirrors the legacy row-click into
+  // STATE so the live path has the rids it needs.
+  //
+  // Reads currentKind + the tr's data-rt-rid. After mutation, repaints
+  // the toolbar selection chip count. Idempotent — defensive against
+  // stale clicks when STATE[kind] hasn't been seeded.
+  // Master checkbox companion. spSelectAllRows handles the visual
+  // tick-all-rows + class flip; this mirrors that into STATE[kind].selected
+  // so bulk delete + the chip count are in sync.
+  window.objectsSelectAllRows = (cb) => {
+    if (!cb || !currentKind) return;
+    const on = !!cb.checked;
+    const st = STATE[currentKind];
+    if (!st) return;
+    if (!(st.selected instanceof Set)) st.selected = new Set();
+    st.selected.clear();
+    if (on) {
+      root.querySelectorAll(`[data-objects-table="${currentKind}"] tbody tr[data-rt-rid]`)
+        .forEach((tr) => {
+          const rid = tr.dataset.rtRid;
+          if (rid) st.selected.add(rid);
+        });
+    }
+    const chip = root.querySelector(".rp-rt-sel-chip");
+    if (chip) {
+      const n = st.selected.size;
+      chip.setAttribute("data-count", String(n));
+      chip.innerHTML = `<i class="bi bi-check2-square"></i> ${n} selected`;
+    }
+  };
+
+  window.objectsToggleRowSel = (tr) => {
+    if (!tr || !currentKind) return;
+    const rid = tr.dataset.rtRid;
+    if (!rid) return;
+    const st = STATE[currentKind];
+    if (!st) return;
+    if (!(st.selected instanceof Set)) st.selected = new Set();
+
+    const panel  = root.querySelector(".rp-rt-panel");
+    const schema = SCHEMAS[currentKind];
+    // Delete mode + row click → fire the real backend delete. spDeleteRow
+    // ran first via the composite onclick (animated the row out + pushed
+    // undo); we follow up with /api DELETE so the row stays gone after
+    // refresh. Same path as objBulkDelete but for a single rid.
+    //
+    // Schema-level guards: canDelete (kind supports delete at all),
+    // canDeleteRow (default project / read-only rows can't go).
+    if (panel?.classList.contains("is-mode-delete") && schema?.canDelete && schema.deleteOne) {
+      if (schema.canDeleteRow) {
+        const row = (st.rows || []).find((r) => r.redpash_id === rid);
+        if (row && !schema.canDeleteRow(row)) {
+          window.toast?.info?.("This row can't be deleted.");
+          return;
+        }
+      }
+      st.selected.delete(rid);
+      schema.deleteOne(rid)
+        .then(() => _objLoadAndPaint(currentKind))
+        .catch((err) => {
+          window.toast?.error?.(`Delete failed: ${err.body?.error ?? err.message}`);
+        });
+      return;
+    }
+
+    // Select-mode default — mirror spToggleRowSel's visual flip into
+    // STATE so the chip count + objBulkDelete read the truth.
+    if (tr.classList.contains("rp-rt-row-sel")) st.selected.add(rid);
+    else                                         st.selected.delete(rid);
+    const chip = root.querySelector(".rp-rt-sel-chip");
+    if (chip) {
+      const n = st.selected.size;
+      chip.setAttribute("data-count", String(n));
+      chip.innerHTML = `<i class="bi bi-check2-square"></i> ${n} selected`;
+    }
+  };
+
+  // Delete-mode toolbar button's live companion. spSetMode handles the
+  // visual "animate rows out + push undo" path when in delete mode with
+  // a selection; this fires the actual DELETE on the backend, which is
+  // what the user expected when they reported "delete comes back at
+  // refresh" — previously the visual was a lie.
+  //
+  // Guards against the no-selection case (toolbar Delete with empty
+  // selection is a plain mode-toggle, not an action). objBulkDelete
+  // reads STATE[kind].selected which objectsToggleRowSel above keeps
+  // in sync, so by the time we get here the rids are real.
+  window.objectsMaybeBulkDelete = () => {
+    const st = STATE[currentKind];
+    if (!st || !(st.selected instanceof Set) || st.selected.size === 0) return;
+    if (typeof window.objBulkDelete === "function") {
+      // Fire-and-forget — objBulkDelete is async + handles its own
+      // toast / refresh. Don't await on the click handler.
+      window.objBulkDelete();
+    }
+  };
+
+  // Sandbox-path objBulkDelete — same shape as the legacy copy
+  // (_wireGlobals line ~1585) but refreshes via _objLoadAndPaint so
+  // the per-type tbody host gets repainted. Sandbox path bypasses
+  // _wireGlobals entirely, so without this re-install the live delete
+  // is a no-op + the user sees "visual delete, refresh restores it".
+  window.objBulkDelete = async () => {
+    const kind = currentKind, schema = SCHEMAS[kind];
+    if (!schema?.canDelete) { toast.info(`Bulk delete isn't supported on ${kind} yet.`); return; }
+    let ids = [...(STATE[kind]?.selected || [])];
+    if (!ids.length) return;
+    let skipped = 0;
+    if (schema.canDeleteRow) {
+      const before = ids.length;
+      ids = ids.filter((rid) => {
+        const row = STATE[kind].rows.find((r) => r.redpash_id === rid);
+        return !row || schema.canDeleteRow(row);
+      });
+      skipped = before - ids.length;
+    }
+    if (!ids.length) {
+      toast.info("Nothing to delete — the default project can't be removed.");
+      return;
+    }
+    const noun = kind === "files" ? "file" : kind.slice(0, -1);
+    if (!confirm(`Delete ${ids.length} ${noun}${ids.length !== 1 ? "s" : ""}?`)) return;
+    let ok = 0, fail = 0;
+    for (const rid of ids) {
+      try { await schema.deleteOne(rid); ok++; } catch { fail++; }
+    }
+    STATE[kind].selected.clear();
+    // Repaint the chip + clear visible row-sel classes that spSetMode's
+    // earlier animation might have left behind.
+    const chip = root.querySelector(".rp-rt-sel-chip");
+    if (chip) {
+      chip.setAttribute("data-count", "0");
+      chip.innerHTML = '<i class="bi bi-check2-square"></i> 0 selected';
+    }
+    await _objLoadAndPaint(kind);
+    toast.success(`Deleted ${ok}`
+      + (fail ? ` (${fail} failed)` : "")
+      + (skipped ? ` — ${skipped} skipped (default project)` : "")
+      + ".");
+  };
+
+  // Header Add button dispatcher — same body as the legacy _wireGlobals
+  // copy (line ~1759). Sandbox path bypasses _wireGlobals so we
+  // re-install here. schema.addAction (companies prompt + POST),
+  // schema.addHref (reports/dashboards nav to ?new=1), or fall through
+  // to the programmatic upload modal (projects/files).
+  window.objAdd = async () => {
+    const schema = SCHEMAS[currentKind];
+    if (schema.addAction) {
+      try {
+        const ok = await schema.addAction();
+        if (ok) {
+          toast.success("Created.");
+          if (typeof _objLoadAndPaint === "function") {
+            await _objLoadAndPaint(currentKind);
+          }
+        }
+      } catch (err) {
+        toast.error(`Create failed: ${err.body?.error ?? err.message}`);
+      }
+      return;
+    }
+    if (schema.addHref) { location.hash = schema.addHref; return; }
+    if (typeof _objOpenUploadModal === "function") _objOpenUploadModal();
+  };
+
+  // Sandbox inline cell edit. Port of legacy objCellEdit (line ~1631)
+  // with two adaptations: reads is-mode-edit (sandbox) instead of
+  // rp-rt-mode-edit (legacy), and refreshes via _objLoadAndPaint
+  // (per-type tbody host) instead of loadTable (legacy [data-rt-tbody]).
+  //
+  // Edit types: text / bool / enum match the legacy version. select +
+  // open are deferred — they're entity-picker / handoff flows that
+  // pull more sandbox-specific wiring (option lists, modal positioning).
+  // Both fall through to a toast for now so the user knows they're not
+  // forgotten.
+  window.objectsCellEdit = (td) => {
+    const panel = root.querySelector(".rp-rt-panel");
+    if (!panel?.classList.contains("is-mode-edit")) return;
+    if (!td || !currentKind) return;
+    const kind   = currentKind;
+    const schema = SCHEMAS[kind];
+    const rid    = td.dataset.rid;
+    const type   = td.dataset.editType;
+    const field  = td.dataset.editField;
+    if (!rid || !field || !schema?.saveEdit) return;
+    if (td.querySelector("input, select")) return; // already editing
+
+    if (type === "text") {
+      const oldVal = td.textContent.trim();
+      const input  = document.createElement("input");
+      input.type  = "text";
+      input.className = "rp-rt-cell-input";
+      input.value = oldVal;
+      td.textContent = "";
+      td.appendChild(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const restore = () => _objLoadAndPaint(kind);
+      const commit  = async () => {
+        if (done) return;
+        done = true;
+        const newVal = input.value.trim();
+        if (newVal === oldVal) { restore(); return; }
+        try {
+          await schema.saveEdit(rid, field, newVal);
+          // Invalidate the localStorage list cache so the SWR-cached
+          // paint inside _objLoadAndPaint can't briefly serve the
+          // pre-edit row before fresh resolves. Cache gets rewritten
+          // by the fresh fetch that follows, so the next mount also
+          // sees the post-edit state.
+          api.invalidateCached?.(schema.path);
+          // Refresh BEFORE the toast so the SWR cache is overwritten
+          // with the fresh value before the user has a chance to refresh
+          // and observe stale data.
+          await _objLoadAndPaint(kind);
+          window.toast?.success?.("Saved.");
+        } catch (err) {
+          restore();
+          window.toast?.error?.(`Save failed: ${err.body?.error ?? err.message}`);
+        }
+      };
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter")  { e.preventDefault(); input.blur(); }
+        if (e.key === "Escape") { done = true; restore(); }
+      });
+      return;
+    }
+
+    if (type === "bool") {
+      const oldVal = td.textContent.trim() === "Yes";
+      const sel = document.createElement("select");
+      sel.className = "rp-rt-cell-input";
+      sel.innerHTML = `<option value="true">Yes</option><option value="false">No</option>`;
+      sel.value = oldVal ? "true" : "false";
+      td.textContent = "";
+      td.appendChild(sel);
+      sel.focus();
+      let done = false;
+      const restore = () => _objLoadAndPaint(kind);
+      const commit  = async () => {
+        if (done) return;
+        done = true;
+        const newVal = sel.value === "true";
+        if (newVal === oldVal) { restore(); return; }
+        try {
+          await schema.saveEdit(rid, field, newVal);
+          // Invalidate the localStorage list cache so the SWR-cached
+          // paint inside _objLoadAndPaint can't briefly serve the
+          // pre-edit row before fresh resolves. Cache gets rewritten
+          // by the fresh fetch that follows, so the next mount also
+          // sees the post-edit state.
+          api.invalidateCached?.(schema.path);
+          // Refresh BEFORE the toast so the SWR cache is overwritten
+          // with the fresh value before the user has a chance to refresh
+          // and observe stale data.
+          await _objLoadAndPaint(kind);
+          window.toast?.success?.("Saved.");
+        } catch (err) {
+          restore();
+          window.toast?.error?.(`Save failed: ${err.body?.error ?? err.message}`);
+        }
+      };
+      sel.addEventListener("change", commit);
+      sel.addEventListener("blur",   commit);
+      sel.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { done = true; restore(); }
+      });
+      return;
+    }
+
+    if (type === "enum") {
+      const col  = schema.columns.find((c) => c.edit?.field === field);
+      const opts = col?.edit?.options ?? [];
+      const row  = STATE[kind].rows.find((r) => r.redpash_id === rid);
+      const oldVal = row?.[field];
+      const sel = document.createElement("select");
+      sel.className = "rp-rt-cell-input";
+      sel.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+      sel.value = oldVal;
+      td.textContent = "";
+      td.appendChild(sel);
+      sel.focus();
+      let done = false;
+      const restore = () => _objLoadAndPaint(kind);
+      const commit  = async () => {
+        if (done) return;
+        done = true;
+        const newVal = sel.value;
+        if (!newVal || newVal === oldVal) { restore(); return; }
+        try {
+          await schema.saveEdit(rid, field, newVal);
+          // Invalidate the localStorage list cache so the SWR-cached
+          // paint inside _objLoadAndPaint can't briefly serve the
+          // pre-edit row before fresh resolves. Cache gets rewritten
+          // by the fresh fetch that follows, so the next mount also
+          // sees the post-edit state.
+          api.invalidateCached?.(schema.path);
+          // Refresh BEFORE the toast so the SWR cache is overwritten
+          // with the fresh value before the user has a chance to refresh
+          // and observe stale data.
+          await _objLoadAndPaint(kind);
+          window.toast?.success?.("Saved.");
+        } catch (err) {
+          restore();
+          window.toast?.error?.(`Save failed: ${err.body?.error ?? err.message}`);
+        }
+      };
+      sel.addEventListener("change", commit);
+      sel.addEventListener("blur",   commit);
+      sel.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { done = true; restore(); }
+      });
+      return;
+    }
+
+    // select / open — pending sandbox-specific wiring (entity picker
+    // modal, builder handoff). Falls through with an informative toast
+    // so the user knows the click landed.
+    window.toast?.info?.(`Editing ${type} cells isn't wired on this view yet — try the legacy mount.`);
+  };
+
+  // Sandbox-aware date-format setter — toolbar.html's dropdown items
+  // call this with the format key. Legacy `objSetDateFmt` (line ~1379)
+  // targets the legacy markup conventions (.rp-rt-dd-item, [data-rt-
+  // datefmt-label]); the sandbox uses .rp-dd-item + [data-sp-datefmt-
+  // label], so we need a sandbox companion. Both share the same
+  // module-global `dateFmt` + repaint via _objLoadAndPaint /
+  // paintObjectsSandboxTable.
+  window.objectsSetDateFmt = (item, fmt) => {
+    if (!_DATE_FMT_LABEL[fmt]) return;
+    dateFmt = fmt;
+    const dd = item.closest(".rp-dd-menu");
+    dd?.querySelectorAll(".rp-dd-item").forEach((i) => i.classList.remove("is-selected"));
+    item.classList.add("is-selected");
+    const label = root.querySelector("[data-sp-datefmt-label]");
+    if (label) label.textContent = _DATE_FMT_LABEL[fmt];
+    dd?.classList.remove("open");
+    // Repaint the active tab so date cells re-render with the new format.
+    if (typeof paintObjectsSandboxTable === "function" && currentKind) {
+      paintObjectsSandboxTable(currentKind);
+    }
   };
 
   if (_installObjectsLiveHandlers._installed) return;
@@ -2951,17 +3833,34 @@ function _installObjectsLiveHandlers(root) {
 
 // Fetch + paint helper. loadTable mutates STATE[kind].rows in place;
 // paintObjectsSandboxTable reads from there.
+//
+// SWR (Phase 1 A) — sandbox path mirror of loadTable above. Same
+// cache-then-correct shape so tab switches feel instant on warm cache.
 async function _objLoadAndPaint(kind) {
   if (!SCHEMAS[kind]) return;
+  const schema = SCHEMAS[kind];
   const tbody = _root?.querySelector(`[data-objects-table="${kind}"] tbody`);
-  if (tbody) tbody.innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">Loading…</td></tr>';
+
+  const { cached, fresh } = api.getCached(schema.path);
+  if (cached?.items) {
+    STATE[kind].rows = cached.items;
+    if (kind === currentKind) {
+      paintObjectsSandboxTable(kind);
+      _paintObjectsSandboxMeta(kind);
+    }
+  } else if (tbody) {
+    tbody.innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">Loading…</td></tr>';
+  }
   try {
-    const res = await SCHEMAS[kind].fetch();
+    const res = await fresh;
     STATE[kind].rows = res.items ?? [];
   } catch (err) {
-    STATE[kind].rows = [];
-    if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem" colspan="99">${esc(err.body?.error ?? err.message ?? "load failed")}</td></tr>`;
-    return;
+    if (!cached) {
+      STATE[kind].rows = [];
+      if (tbody) tbody.innerHTML = `<tr><td style="text-align:center;color:var(--red);padding:1rem" colspan="99">${esc(err.body?.error ?? err.message ?? "load failed")}</td></tr>`;
+      return;
+    }
+    // else: keep the cached paint; correction will retry on next mount.
   }
   // Tab switched while we were fetching — drop the stale paint.
   if (kind !== currentKind) return;
@@ -2976,10 +3875,73 @@ async function _objLoadAndPaint(kind) {
 // will add per-kind sandboxCols hints + rich badges/bars to match the
 // partial visually.
 function paintObjectsSandboxTable(kind) {
-  const tbody = _root?.querySelector(`[data-objects-table="${kind}"] tbody`);
+  const wrap  = _root?.querySelector(`[data-objects-table="${kind}"]`);
+  const thead = wrap?.querySelector("thead");
+  const tbody = wrap?.querySelector("tbody");
   if (!tbody) return;
-  const rows = STATE[kind]?.rows ?? [];
-  const cols = (SCHEMAS[kind].columns || []).filter((c) => !c.hidden);
+  // Apply the toolbar search filter + predicate filter when active.
+  // Both run via legacy helpers (_objMatchesSearch / _objRowMatchesFilter)
+  // — kind-agnostic, read STATE[kind].search + global objPredicates /
+  // objCombinator. No filter → render all rows untouched.
+  const allRows = STATE[kind]?.rows ?? [];
+  const searchQ = String(STATE[kind]?.search || "").trim().toLowerCase();
+  const filtersActive = objPredicates.length && kind === currentKind;
+  const rows = (searchQ || filtersActive)
+    ? allRows.filter((r) => {
+        if (searchQ && !_objMatchesSearch(kind, r, searchQ)) return false;
+        if (filtersActive && !_objRowMatchesFilter(r, kind)) return false;
+        return true;
+      })
+    : allRows;
+  // Honour the per-tab columns picker — _visibleOrderedCols reads
+  // STATE[kind].visibleCols + .colOrder so the table reflects what
+  // objectsToggleCol / objectsResetCols just changed. Falls back to
+  // the schema's natural !hidden filter when state isn't seeded yet
+  // (defensive — _ensureColState should always have run first).
+  _ensureColState(kind);
+  const cols = _visibleOrderedCols(kind);
+
+  // Dynamic thead — paint headers from the same `cols` list so column
+  // count and order ALWAYS match the body. Previously each per-type
+  // partial (types/<kind>/table.html) shipped a hand-coded <thead>
+  // with the schema's default columns; toggling a column off in the
+  // picker shrank the body but left the header stale.
+  //
+  // Sort chevrons render as decoration only for now — click wiring
+  // (objectsSortBy companion to legacy objSortBy) is a separate pass.
+  // Mode column (leading checkbox + uncheck/check/trash icons) is
+  // emitted always; CSS gates visibility by panel mode class.
+  if (thead) {
+    const heads = cols.map((c) =>
+      `<th data-rt-col="${esc(c.key)}" class="rp-rt-th-sortable">`
+      + `${esc(c.label)} <i class="bi bi-arrow-down-up rp-rt-sort-ico"></i>`
+      + `</th>`,
+    ).join("");
+    // Master checkbox composite — spSelectAllRows handles the visual
+    // tick-all + class flip on each row; objectsSelectAllRows mirrors
+    // into STATE[kind].selected so the live delete has all rids.
+    // Master trash composite — spDeleteAllRows animates + undo,
+    // objectsMaybeBulkDelete fires the real DELETE for the now-selected
+    // rows. (spDeleteAllRows fades all visible regardless of selection;
+    // the live delete only acts on what's in STATE[kind].selected, so
+    // the master trash is "delete selected after master-check" — the
+    // user clicks master-check first to populate selection.)
+    thead.innerHTML = `<tr>`
+      +   `<th class="rp-rt-th-mode" style="width:1.5rem">`
+      +     `<input type="checkbox" onclick="spSelectAllRows(this);objectsSelectAllRows(this)" />`
+      +     `<i class="bi bi-circle rp-row-uncheck"></i>`
+      +     `<i class="bi bi-check2-circle rp-row-check"></i>`
+      +     `<i class="bi bi-trash rp-row-trash rp-master-trash" onclick="spDeleteAllRows(this);objectsMaybeBulkDelete()" title="Delete all selected"></i>`
+      +   `</th>`
+      +   heads
+      + `</tr>`;
+  }
+
+  if (!cols.length) {
+    // Min-1 guard in objectsToggleCol should prevent this, but be safe.
+    tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">No columns selected.</td></tr>`;
+    return;
+  }
   if (!rows.length) {
     tbody.innerHTML = `<tr><td style="text-align:center;color:var(--muted);padding:1rem;font-style:italic" colspan="99">No ${esc(kind)}.</td></tr>`;
     return;
@@ -2991,15 +3953,34 @@ function paintObjectsSandboxTable(kind) {
   // demo rows so select mode works without per-row wiring this pass.
   tbody.innerHTML = rows.map((r) => {
     const rid = esc(r.redpash_id ?? "");
+    // Composite onclick — spToggleRowSel handles the visual class flip,
+    // objectsToggleRowSel mirrors that into STATE[kind].selected so the
+    // backend delete (objBulkDelete) has the rids it needs.
     return ''
-      + `<tr data-rt-rid="${rid}" onclick="spToggleRowSel(this)">`
+      + `<tr data-rt-rid="${rid}" onclick="spToggleRowSel(this);objectsToggleRowSel(this)">`
       +   '<td>'
       +     '<input type="checkbox" />'
       +     '<i class="bi bi-circle rp-row-uncheck"></i>'
       +     '<i class="bi bi-check2-circle rp-row-check"></i>'
       +     '<i class="bi bi-trash rp-row-trash"></i>'
       +   '</td>'
-      +   cols.map((c) => `<td>${c.render(r)}</td>`).join("")
+      +   cols.map((c) => {
+          // Columns with an `edit` spec get an ondblclick + data attrs
+          // so objectsCellEdit (in edit mode) can swap the cell for an
+          // input/select and commit via schema.saveEdit. Non-editable
+          // cells render as plain <td> — spSetMode skips the
+          // contenteditable blanket on Objects panels entirely (it
+          // detects the [data-object-type] descendant), so we don't
+          // need a per-cell opt-out attribute.
+          if (c.edit) {
+            return `<td ondblclick="objectsCellEdit(this)"`
+              + ` data-rid="${rid}"`
+              + ` data-edit-field="${esc(c.edit.field ?? "")}"`
+              + ` data-edit-type="${esc(c.edit.type ?? "")}">`
+              + `${c.render(r)}</td>`;
+          }
+          return `<td>${c.render(r)}</td>`;
+        }).join("")
       + '</tr>';
   }).join("");
 }

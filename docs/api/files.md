@@ -19,20 +19,54 @@ steps, undo / redo, snapshot, detect & apply joins.
 
 ---
 
+## `GET /api/files`
+
+Every file the session user owns, across **all** their projects. Powers
+the home page's "My Files" step and the Objects-page Files tab when
+showing the user's full inventory. No pagination — file counts per user
+are bounded today; switch to keyset paging if that ever stops being true.
+
+```jsonc
+200 OK
+{
+  "items": [ /* FileSummary[] — see objects/file.md */ ]
+}
+```
+
+Sort: `updated_at DESC` (most-recently-touched first).
+
+### Errors
+
+| Status | `kind`            | When |
+|--------|-------------------|------|
+| 401    | `unauthenticated` | OAuth enabled, no session |
+| 500    | `db`              | Postgres unreachable |
+
+---
+
 ## `POST /api/files/upload`
 
 Multipart upload. Detects encoding (chardetng), parses with Polars,
-inserts a `project_files` row in the **uploader's default project**
-(creating it if needed via `ensure_default_project`).
+inserts a `project_files` row in the destination project (see the
+`project_name` field below; falls back to the user's default project,
+creating it via `ensure_default_project` when none exists).
+
+**Excel auto-convert.** If the filename ends in `.xlsx`, `.xls`,
+`.xlsm`, `.xlsb`, or `.ods`, the bytes are routed through
+`data::parse::xlsx_to_csv` (calamine, first sheet only) and rewritten as
+CSV before the standard pipeline takes over. The stored bytes are CSV,
+the stored encoding is `utf-8`, and the DB row keeps the original
+filename for display.
 
 **Body limit:** 256 MiB (`DefaultBodyLimit` + per-field `MAX_UPLOAD_BYTES` recheck).
 
 ### Fields
 
-| Field   | Required | Type      | Notes |
-|---------|----------|-----------|-------|
-| `file`  | yes      | file part | The CSV bytes. Filename is captured from the multipart header. |
-| `tld`   | no       | text      | TLD hint for the encoding detector (`fr`, `ch`, …). Improves Latin-1 vs UTF-8 disambiguation. |
+| Field          | Required | Type      | Notes |
+|----------------|----------|-----------|-------|
+| `file`         | yes      | file part | The CSV bytes (or `.xlsx` / `.xls` / `.xlsm` / `.xlsb` / `.ods` — auto-converted to CSV before parsing). Filename is captured from the multipart header. |
+| `tld`          | no       | text      | TLD hint for the encoding detector (`fr`, `ch`, …). Improves Latin-1 vs UTF-8 disambiguation. |
+| `project_name` | no       | text      | When present and non-empty, routes the upload into a named project via `ensure_named_project` (find-or-create, case-sensitive name match, `is_default=false`). When absent, falls through to the user's default `Workspace`. |
 
 ### Response
 
@@ -213,18 +247,48 @@ The handler:
 
 ### Step kinds
 
-| `kind`          | What it does | Cell-diff tracked? |
-|-----------------|--------------|--------------------|
-| `drop_columns`  | Remove columns by name | — |
-| `rename_column` | Rename one column | — |
-| `drop_rows`     | Drop rows by absolute index | — |
-| `drop_nulls`    | Drop rows with nulls in given columns | — |
-| `fill_nulls`    | Fill nulls with a constant or strategy | yes |
-| `replace_text`  | Find / replace in string column(s) | yes |
-| `change_case`   | upper / lower / title-case | yes |
-| `fix_invalid`   | Replace one-or-more sentinel values with a constant or NULL across one column, an explicit list, or every string column. Accepts `sentinels: [string]` + optional `columns: [string]` + optional `replacement`; legacy `{column, sentinel}` shape still honoured for old `project_steps` rows. | yes |
-| `cast`          | Cast a column to `int` / `float` / `bool` / `date` / `string` (best-effort, nulls failures) | yes |
-| `unwrap_csv`    | Re-parse a CSV whose every cell came in wrapped in quotes (preamble row, escaped commas, etc.) — see below | — |
+The cleaner's full vocabulary — 18 kinds, grouped here by what they
+mutate. The complete authoritative param shape for each one lives in
+the module-level doc-comment of [`crates/data/src/steps.rs`](../../backend/crates/data/src/steps.rs);
+the table below is the field-by-field summary.
+
+#### Column-shape
+
+| `kind`               | `params` | Effect | Cell-diff? |
+|----------------------|----------|--------|------------|
+| `drop_columns`       | `{ cols: [string] }` | Remove the listed columns. | — |
+| `filter_columns`     | `{ cols: [string] }` | Keep only the listed columns, in the order given. | — |
+| `rename_column`      | `{ from: string, to: string }` | Rename one column. | — |
+| `snake_case_columns` | `{}` | Snake-case every header (trim, lowercase, split CamelCase, collapse `[ -./]` to `_`). | — |
+| `replace_in_names`   | `{ find: string, replace?: string }` | Find / replace inside every column name. | — |
+| `join_columns`       | `{ col1, col2, sep?, new_name? }` | Concatenate two columns with `sep` (default `" "`); drops the two sources. | — |
+| `split_column`       | `{ column, sep?, keep_original? }` | Split on `sep` (default `,`) into `column_1`, `column_2`, … (up to 10 parts). Drops the source unless `keep_original`. | — |
+
+#### Row-shape
+
+| `kind`         | `params` | Effect | Cell-diff? |
+|----------------|----------|--------|------------|
+| `drop_rows`    | `{ indices: [int] }` | Drop rows by **absolute** index (frontend adds page offset before POSTing). | — |
+| `drop_nulls`   | `{ cols?: [string] }` | Drop rows where ANY column (or any listed column) is null. | — |
+| `filter_rows`  | `{ combinator: "and"\|"or", predicates: [{column, op, value?, case_sensitive?}] }` | Tree-predicate row filter — undoable like every other step. **Ops:** `eq` · `neq` · `in` · `not_in` · `contains` · `starts_with` · `ends_with` · `gt` · `gte` · `lt` · `lte` · `between` · `before` · `after` · `is_null` · `not_null`. See [`POST /:rid/clear-filters`](#post-apifilesridclear-filters) for the eraser. | — |
+
+#### Cell-value
+
+| `kind`         | `params` | Effect | Cell-diff? |
+|----------------|----------|--------|------------|
+| `set_cell`     | `{ row: int (global), column, value: string\|number\|null }` | Replace one cell. `null` / empty string → NULL. Non-strict cast (incompatible value → null). | — |
+| `fill_nulls`   | `{ strategy: "fixed"\|"zero"\|"forward", column?, value? (for fixed) }` | Replace nulls. `column?` absent → apply to every column. | yes |
+| `cast`         | `{ column, dtype: "int"\|"float"\|"str"\|"bool"\|"date"\|"datetime"\|"time" }` | Coerce one column. Best-effort: unparseable values become null. Use [`/cast-preview`](#post-apifilesridcast-preview) to see what would null first. Date/datetime/time from `str` use multi-format parsers. | yes |
+| `change_case`  | `{ mode: "lower"\|"upper" }` | Recase every string column. Title-case not yet wired (Polars 0.43 omits the helper). | yes |
+| `replace_text` | `{ column, find, replace?, is_regex? }` | Find/replace inside string values (`is_regex: true` enables regex). | yes |
+| `fix_invalid`  | `{ sentinels: [string], columns?: [string], replacement?: string\|null }` | Replace listed sentinel values with `replacement` (default NULL) across listed columns (or every string column when omitted). Cast-to-string comparison so numeric sentinels (`"999"`) match. **Legacy** `{column, sentinel}` shape still honoured. | yes |
+| `format_dates` | `{ column, fmt?, on_incomplete?: "null"\|"drop"\|"keep" }` | Multi-format parse to Date, then strftime back to `fmt` (default ISO). `on_incomplete` controls unparseable rows. | yes |
+
+#### Rescue
+
+| `kind`        | `params` | Effect | Cell-diff? |
+|---------------|----------|--------|------------|
+| `unwrap_csv`  | `{}` | Re-parse a CSV whose every row came in wrapped in quotes (one-column DataFrame). See defensive-unquote note below. **Refuses** to run on a DF with >1 column — it's already unwrapped. | — |
 
 Cell-diff tracked steps report `cells_changed` in the response so the
 frontend can toast "filled 47 nulls" / "replaced 12 cells". Structural
@@ -280,6 +344,38 @@ envelope as `GET /api/files/:rid`.
   "steps":   [ /* updated history */ ]
 }
 ```
+
+---
+
+## `POST /api/files/:rid/clear-filters`
+
+Surgically un-apply **every** `filter_rows` step on the file, regardless
+of position in history. Built for the cleaner's eraser button: plain
+undo only walks the topmost step, so a `filter_rows` step buried under
+later operations (renames, casts, …) was unreachable. The matching rows
+have their `applied` bit flipped to `false`; rows aren't deleted, and
+non-`filter_rows` steps stay applied.
+
+Returns the same envelope as `GET /api/files/:rid`. The frontend uses
+this to drop its page cache + repaint.
+
+```jsonc
+200 OK
+{
+  "summary": { /* … */ },
+  "columns": [ /* … */ ],
+  "steps":   [ /* updated history — filter_rows entries now applied: false */ ]
+}
+```
+
+Once flipped, redo won't pick them back up (redo picks the lowest-
+ordinal undone step, and the eraser's targets become permanently undone
+unless re-applied via the Applied panel).
+
+| Status | `kind`            | When |
+|--------|-------------------|------|
+| 401    | `unauthenticated` | OAuth enabled, no session |
+| 404    | `not_found`       | File RID missing or owned by another user |
 
 ---
 
@@ -432,6 +528,44 @@ POST /api/files/:rid/snapshot
   "steps":   []
 }
 ```
+
+---
+
+## `GET /api/files/:rid/export`
+
+Stream the current view (post step-replay, post-filter) as a
+downloadable CSV. Unlike `snapshot`, this writes **nothing** to disk
+and creates no new `project_files` row — it's a pure
+materialise-and-hand-back.
+
+The download filename is derived from `display_name` (or `filename`),
+trimmed of `.csv`, with control chars / quotes / path separators /
+newlines replaced by `_`, then re-suffixed with `.csv`.
+
+```
+GET /api/files/FIL_…/export
+```
+
+```
+200 OK
+Content-Type: text/csv; charset=utf-8
+Content-Disposition: attachment; filename="dossiers_export_cleaned.csv"
+
+<csv bytes>
+```
+
+> **Memory note.** The CSV is materialised in-memory before send. With
+> the 256 MiB upload cap and post-step text inflation, a single export
+> can be several hundred MiB resident. Acceptable for single-user dev;
+> if exports start failing at scale, switch to a streaming body
+> (`Body::from_stream` over a `tokio::io::DuplexStream` or a temp
+> file).
+
+| Status | `kind`            | When |
+|--------|-------------------|------|
+| 401    | `unauthenticated` | OAuth enabled, no session |
+| 404    | `not_found`       | File RID missing or owned by another user |
+| 500    | `internal`        | Polars CSV writer failed |
 
 ---
 

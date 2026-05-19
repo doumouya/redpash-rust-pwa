@@ -7,10 +7,14 @@
     <div class="rp-rtp-hdr-meta" data-objects-meta>4 users</div>
   </div>
   <div class="rp-rt-hdr-actions">
-    <button class="rp-btn" title="Export list">
+    <button class="rp-btn" title="Export list"
+            onclick="objExport()">
       <i class="bi bi-download"></i>
     </button>
-    <button class="rp-btn" title="New user">
+    <!-- New-user creation is dev-only today (Phase 4 OAuth handles
+         real account minting); the button stays for visual parity
+         with the other tabs but has no destination yet. -->
+    <button class="rp-btn" title="New user (dev-only, not wired yet)" disabled>
       <i class="bi bi-plus"></i>
     </button>
   </div>

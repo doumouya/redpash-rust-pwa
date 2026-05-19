@@ -245,10 +245,14 @@ step to `applied = false`; redo flips the first un-applied step to
 | `db::list_files_in_project(project_rid)` | List files in a project (for `GET /projects/:rid/files`) |
 | `db::update_file_meta(rid, display_name, project_redpash_id, encoding, delimiter)` | Sparse PATCH update — rename / move to another project / set encoding / set delimiter. COALESCE per field; re-fetches via `find_file` for the joined stage |
 | `db::update_file_columns(rid, columns, row_count, col_count, cleanness)` | After applied steps |
-| `db::list_steps(file_rid)` | All steps in `ordinal` order |
-| `db::insert_step(file_rid, kind, params)` | Append a step |
-| `db::set_applied(step_rid, applied)` | Flip the bit for undo/redo |
-| `db::delete_file(rid)` | DELETE row + cascade `project_steps` |
+| `db::list_steps(file_rid)` | All steps in `ordinal` order (applied + undone) |
+| `db::insert_step(file_rid, kind, params)` | Append a step (clears the redo stack first — new step branches from the live cursor) |
+| `db::undo_last(file_rid)` / `redo_next(file_rid)` | Flip the top-of-stack `applied` bit |
+| `db::clear_steps_of_kind(file_rid, kind)` | Surgically un-apply every step of `kind` (powers `/clear-filters`); rows aren't deleted, redo won't pick them up |
+| `db::clear_file_cleanness(rid)` | NULL the score (dev/test convenience for `DELETE /cleanness`) |
+| `db::list_user_files(owner_rid)` | All files the owner has across every project — powers `GET /api/files` + Home "My Files" |
+| `db::list_files_in_project_except(project, exclude_rid)` | (rid, title) pairs for join detection |
+| `db::delete_file(rid)` | DELETE row + cascade `project_steps` + dependent `reports` |
 
 ---
 
@@ -256,48 +260,63 @@ step to `applied = false`; redo flips the first un-applied step to
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/files/upload` | multipart `file` (+ optional `tld` hint). Lands in session user's default project. 256 MiB body limit. |
+| GET | `/api/files` | Every file the session user owns, across all projects — Home "My Files" |
+| POST | `/api/files/upload` | multipart `file` (+ optional `tld` hint, `project_name` to find-or-create a named project). Lands in the named project, else the user's default. **Excel auto-convert:** `.xlsx`/`.xls`/`.xlsm`/`.xlsb`/`.ods` → CSV (first sheet, calamine). 256 MiB body limit. |
 | GET | `/api/files/:rid` | `FileEnvelope { summary, columns, steps }` |
 | PATCH | `/api/files/:rid` | Sparse metadata edit — `display_name`, `project_redpash_id` (move to another owned project), `encoding`, `delimiter`. See [api/files.md](../api/files.md#patch-apifilesrid). |
 | DELETE | `/api/files/:rid` | Remove the file (cascades to `project_steps` + `reports`); unlinks the blob. |
 | GET | `/api/files/:rid/page` | Paged rows — see `PageQuery` |
 | POST | `/api/files/:rid/steps` | Apply a step — body `{ kind, params }` |
+| POST | `/api/files/:rid/cast-preview` | Dry-run a `cast` step — returns would-null count + sample source values for the confirm prompt |
 | POST | `/api/files/:rid/undo` · `/redo` | Walk the step cursor |
+| POST | `/api/files/:rid/clear-filters` | Surgically un-apply every `filter_rows` step regardless of position (eraser button) |
 | POST | `/api/files/:rid/encoding` | Override detected encoding — body `{ encoding }` |
 | GET | `/api/files/:rid/dedup` | Duplicate-row counts (full-row + per-PK) |
+| GET | `/api/files/:rid/uniques` | Per-column unique-value counts (used by the filter panel's value-autocomplete) |
+| GET | `/api/files/:rid/sentinels` | Scan every string column for sentinel values + caller's `?extra=` set — drives the `fix_invalid` modal |
 | GET | `/api/files/:rid/joins` | Detect candidate keys against other files in the project. Query `filters` for filter-aware detection. |
-| POST | `/api/files/:rid/joins` | Apply a join — body `{ other_file_id, this_col, other_col, filters? }` — materialises a new joined CSV as a new `FIL_…` |
+| POST | `/api/files/:rid/joins` | Apply a join — body `{ other_file, this_cols, other_cols, join_type?, name?, filters? }` — streams a new joined CSV straight to disk and persists a new `FIL_…` |
 | POST | `/api/files/:rid/snapshot` | Save the current view as a new file with empty step history |
-| GET | `/api/files/:rid/uniques` | Per-column unique-value counts (used by the report builder to sort low-cardinality columns first) |
+| GET | `/api/files/:rid/export` | Stream the current view as a downloadable CSV. No DB write. |
+| POST | `/api/files/:rid/cleanness` · DELETE | Recompute (against globals ∪ caller's `learned_sentinels`) and persist the score / NULL it out |
 
 ---
 
 ## Step kinds (`StepRequest.kind`)
 
-Dispatched by `data::steps::replay`:
+Dispatched by `data::steps::apply` (and `replay` for the cache-miss
+rebuild). 18 kinds today, grouped by what they mutate. The per-kind
+docstring in [`crates/data/src/steps.rs`](../../backend/crates/data/src/steps.rs)
+is the authoritative param-shape reference; the [Step kinds section in
+api/files.md](../api/files.md#step-kinds) has the same grouped table
+with the same param shapes.
 
-| `kind` | `params` shape | Effect |
-|---|---|---|
-| `drop_duplicates` | `{}` | Drop full-row duplicates |
-| `drop_nulls` | `{ columns?, threshold? }` | Drop rows with too many nulls |
-| `fill_nulls` | `{ strategy: "mean"\|"median"\|"zero"\|"mode"\|"Unknown", column?, value? }` | Replace nulls |
-| `cast` | `{ column, dtype }` | Coerce column to dtype |
-| `rename` | `{ old_name, new_name }` | Rename one column |
-| `drop_column` | `{ column }` | Drop a column |
-| `snake_case` | `{}` | Snake-case all column names |
-| `replace_in_names` | `{ find, replace? }` | Find-replace in column names |
-| `change_case` | `{ mode: "lower"\|"upper" }` | Recase all column values (title-case isn't in Polars 0.43; only lower/upper) |
-| `filter_columns` | `{ columns }` | Keep only the listed columns |
-| `split_column` | `{ column, sep, keep_original }` | Split on separator |
-| `join_columns` | `{ col1, col2, sep, new_name }` | Concatenate two columns |
-| `remove_text` | `{ column, pattern, is_regex }` | Strip matching text |
-| `replace_text` | `{ column, find, replace, is_regex }` | Find-replace within values |
-| `fix_invalid` | `{ column, sentinel, replacement? }` | Replace sentinel ("N/A", "—") |
-| `format_dates` | `{ column, fmt?, on_incomplete }` | Cast to date with flexible source format |
+**Column-shape:** `drop_columns` · `filter_columns` (keep listed) ·
+`rename_column` · `snake_case_columns` · `replace_in_names` ·
+`join_columns` · `split_column`
 
-Adding a new kind: arm in `data::steps::replay`, plus a helper in
-`data::*`, plus a frontend tool module under `scripts/cleaner/tools/`
-+ sidebar wiring.
+**Row-shape:** `drop_rows` (absolute index) · `drop_nulls` ·
+`filter_rows` (predicate tree, 16 ops including `between` / `before` /
+`after` / `in` / `not_in`)
+
+**Cell-value:** `set_cell` · `fill_nulls` (`fixed` / `zero` /
+`forward`) · `cast` (with `/cast-preview` dry-run) · `change_case`
+(`lower` / `upper`; title-case parked on Polars 0.43) · `replace_text`
+· `fix_invalid` (sentinel replace — list of sentinels, list of target
+columns, optional replacement) · `format_dates`
+
+**Rescue:** `unwrap_csv` (re-parse a fully-quoted CSV)
+
+> **Drop-this-row vs delete-this-cell.** `drop_rows` removes whole rows
+> by absolute index; `set_cell` with `value: null` clears one cell to
+> NULL. Both are undoable.
+
+Adding a new kind: arm in `data::steps::apply`, plus a helper in
+`data::*` (or inline if small), plus a frontend tool module under
+`scripts/cleaner/tools/` + sidebar wiring. If the new step is
+cell-level (preserves row count), add its `kind` string to the
+match-arm in `routes::files::add_step` so `cells_changed` gets
+reported in the response envelope.
 
 ---
 
@@ -325,10 +344,12 @@ Adding a new kind: arm in `data::steps::replay`, plus a helper in
   with `project_steps` empty. The new file is independent — undoing
   the original doesn't affect the snapshot.
 - **The on-disk file is immutable.** Cleaning steps never rewrite
-  `<rid>.bin`. To export the cleaned view, the frontend currently
-  takes a snapshot + downloads from `/api/files/:rid/page` row-by-row;
-  a `/api/files/:rid/export` endpoint is on the deferred list.
+  `<rid>.bin`. The cleaned view comes back either as a streamed
+  download ([`GET /api/files/:rid/export`](../api/files.md#get-apifilesridexport),
+  no DB write) or as a new persisted file
+  ([`POST /api/files/:rid/snapshot`](../api/files.md#post-apifilesridsnapshot),
+  fresh `FIL_…` with no step history).
 - **`uploaded_by` is not stored.** The current schema doesn't track
   who uploaded a file (it's implicit via `project_redpash_id →
-  projects.owner_id`). Phase 4c may add an explicit column when
-  multi-user projects ship.
+  projects.owner_id`). When multi-user / company-scoped projects ship,
+  an explicit column may be added.

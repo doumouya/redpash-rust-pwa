@@ -44,6 +44,12 @@ let STATE = {
   pageData:    null,                  // last { rows, total, … } response
   q:           "",                    // toolbar search query
   selected:    new Set(),             // page-relative row indices ticked in select mode
+  // Overview-tab state — the file-list view that shows when no file tab
+  // is active. ovSearch is a client-side substring filter on
+  // display_name/filename; ovSelected holds file rids ticked in
+  // select mode (separate from STATE.selected which is row-scoped).
+  ovSearch:    "",
+  ovSelected:  new Set(),
   filterOpen:  false,                 // funnel side-panel open/closed
   // Chained column sort — primary first, remaining keys break ties.
   // Empty array → no sort header sent → backend uses the frame's
@@ -4892,6 +4898,62 @@ function _escAttr(s) { return _escHtml(s); }
 // "Loading…" until _paintSandboxTable's fetch resolves.
 const _CLEANER_MOUNT_SNAPSHOT_KEY = "rp.cleaner.mount.snapshot.v1";
 
+// Overview-tab state persistence — search filter, selected file rids,
+// and current mode (edit / select / delete) survive a refresh so the
+// user comes back to exactly what they had. sessionStorage scope is
+// intentional: per-tab, dies on close, no cross-machine leakage. The
+// hash-url guard prevents a different project's state from spilling
+// over when the user navigates between cleaner URLs. Written by the
+// cleanerOv* handlers + a MutationObserver on the panel class (which
+// covers mode flips triggered through spSetMode without us having to
+// modify every onclick).
+const _CLEANER_OV_STATE_KEY = "rp.cleaner.overview.state.v1";
+
+function _readOvState() {
+  try {
+    const raw = sessionStorage.getItem(_CLEANER_OV_STATE_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (!snap || snap.hashUrl !== location.hash) return null;
+    return snap;
+  } catch { return null; }
+}
+
+function _writeOvState() {
+  // Only writes while Overview is the active view. Other state changes
+  // (file-view mode flips, view-switch class adjustments) leave the
+  // stashed Overview state alone so coming back to Overview restores
+  // exactly what the user had.
+  try {
+    const panel = document.querySelector(".rp-rt-panel");
+    if (!panel?.classList.contains("is-overview-active")) return;
+    let mode = null;
+    if      (panel.classList.contains("is-mode-edit"))   mode = "edit";
+    else if (panel.classList.contains("is-mode-select")) mode = "select";
+    else if (panel.classList.contains("is-mode-delete")) mode = "delete";
+    sessionStorage.setItem(_CLEANER_OV_STATE_KEY, JSON.stringify({
+      hashUrl:    location.hash,
+      ovSearch:   STATE.ovSearch ?? "",
+      ovSelected: STATE.ovSelected instanceof Set ? [...STATE.ovSelected] : [],
+      ovMode:     mode,
+    }));
+  } catch {}
+}
+
+// Re-apply a stashed mode without re-running spSetMode (which has a
+// "delete + selection = batch delete" side-effect we don't want on
+// restore). Just flips the class + the toolbar button's is-active.
+function _applyOvMode(root, mode) {
+  if (!mode) return;
+  const panel = root.querySelector(".rp-rt-panel");
+  panel?.classList.add(`is-mode-${mode}`);
+  const btn = root.querySelector(`.rp-rt-toolbar [data-sp-mode][data-sp-mode-value="${mode}"]`);
+  if (btn) {
+    btn.classList.add("is-active");
+    btn.setAttribute("aria-pressed", "true");
+  }
+}
+
 function _readMountSnapshot() {
   try {
     const raw = sessionStorage.getItem(_CLEANER_MOUNT_SNAPSHOT_KEY);
@@ -4915,9 +4977,14 @@ function _writeMountSnapshot() {
   } catch {}
 }
 
+// Returns the restored snapshot (truthy) or null. Callers can inspect
+// the returned object to distinguish "user was on Overview" (snap exists
+// + snap.activeFileRid == null) from a fresh entry — the auto-pick
+// logic at the bottom of mountSandbox uses that to decide whether to
+// default to the first file.
 function _maybeRestoreMountSnapshot(root, strip) {
   const snap = _readMountSnapshot();
-  if (!snap || snap.hashUrl !== location.hash) return false;
+  if (!snap || snap.hashUrl !== location.hash) return null;
 
   // Restore STATE from snapshot — the standard fetch flow below will
   // overwrite within a few hundred ms with fresh data. projectMeta
@@ -4955,7 +5022,7 @@ function _maybeRestoreMountSnapshot(root, strip) {
     _showSandboxOverview(root);
     _paintSandboxOverview(root);
   }
-  return true;
+  return snap;
 }
 
 async function mountSandbox(root, ctx, strip) {
@@ -5067,7 +5134,11 @@ async function mountSandbox(root, ctx, strip) {
   // placeholders. The normal fetch flow below runs in parallel and
   // overwrites with fresh data within a few hundred ms (cache-then-
   // correct, no per-resource invalidation discipline).
-  _maybeRestoreMountSnapshot(root, strip);
+  //
+  // Returned snapshot also tells us whether the user was deliberately
+  // on Overview at last write — used below to suppress the
+  // first-file auto-pick on refresh.
+  const restoredSnap = _maybeRestoreMountSnapshot(root, strip);
 
   const q          = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const projectRid = q.get("project");
@@ -5097,9 +5168,16 @@ async function mountSandbox(root, ctx, strip) {
   }
 
   // Hydrate the user's project list (for tab labels + membership check).
+  // Write-through SWR (Phase 1 A) — getCached.fresh writes the
+  // localStorage cache on success so cross-page paints (Home, Objects,
+  // Profile) pick up the warmed list via their api.getCached reads.
+  // Read-side SWR for the cleaner mount itself is deferred: the
+  // sessionStorage mount snapshot already covers intra-session snappy
+  // paint, and the structural refactor to layer localStorage cache on
+  // the cold-cache cross-session path is its own pass.
   let projects = [];
   try {
-    const res = await api.get("/projects");
+    const res = await api.getCached("/projects").fresh;
     projects = res.items ?? [];
   } catch (err) {
     console.error("[cleaner] /projects fetch failed", err);
@@ -5146,9 +5224,14 @@ async function mountSandbox(root, ctx, strip) {
 
   // ── Files for the active project ────────────────────────────────
   // Fetch files, decide active file (URL ?file= wins; else first file).
+  // Write-through SWR — getCached.fresh writes the localStorage cache
+  // for this project's file list so other pages that read the same
+  // key (currently none, but room for future cross-page reuse)
+  // pick up the warmed value. Read-side SWR is deferred along with
+  // the rest of the cleaner mount cold-cache refactor.
   let files = [];
   try {
-    const res = await api.get(`/projects/${encodeURIComponent(activePid)}/files`);
+    const res = await api.getCached(`/projects/${encodeURIComponent(activePid)}/files`).fresh;
     files = res.items ?? [];
   } catch (err) {
     console.error("[cleaner] /projects/:rid/files fetch failed", err);
@@ -5163,7 +5246,12 @@ async function mountSandbox(root, ctx, strip) {
       toast.error(`File not found in this project: ${fileRid}`);
     }
   }
-  if (!activeFile && files.length) activeFile = files[0];
+  // Auto-pick the first file on bare project URLs (e.g. arriving from
+  // Objects), BUT skip the auto-pick when the user was already on
+  // Overview at the last snapshot — refresh should keep them there
+  // rather than yanking them into a file tab.
+  const intendedOverview = restoredSnap != null && restoredSnap.activeFileRid == null;
+  if (!activeFile && !intendedOverview && files.length) activeFile = files[0];
 
   const activeProj = projectsByPid.get(activePid);
   // Mirror file slice into STATE for the handlers + spOpenFilePicker.
@@ -5195,6 +5283,11 @@ async function mountSandbox(root, ctx, strip) {
   // TTL, no per-resource invalidation, the next mount's overwrite IS
   // the invalidation. See _CLEANER_MOUNT_SNAPSHOT_KEY notes.
   _writeMountSnapshot();
+
+  // Tier 2 E — Cleaner already loaded /projects + this project's
+  // /projects/:rid/files; warm the cross-page list endpoints so
+  // jumping out to Home / Objects / Reports / Dashboards is instant.
+  api.prewarm(["/files", "/reports", "/dashboards", "/users", "/companies"]);
 }
 
 // Install window.cleaner* handlers used by the sandbox tab onclicks.
@@ -5393,7 +5486,14 @@ function _installSandboxLiveHandlers(root) {
       _renderSandboxFileTabs(root, STATE.files || [], activeFile);
     }
     if (activeFile && typeof _paintSandboxTable === "function") {
-      await _paintSandboxTable(root, activeFile);
+      // Phase 0 envelope-skip — pass the just-received envelope so
+      // _paintSandboxTable can short-circuit the redundant /files/:rid
+      // GET. The hot-frame cache was already warmed by the POST's
+      // re-hydrate, but skipping the round-trip cuts ~30-100 ms per
+      // mutation + lets the optimistic chrome paint above settle
+      // without racing a fetch resolution. See
+      // docs/frontend/suggestion-localstorage.md (Tier 0 Z).
+      await _paintSandboxTable(root, activeFile, { envelope });
     }
     _syncUndoRedoButtons();
     if (label && window.toast?.success) window.toast.success(label);
@@ -5689,7 +5789,8 @@ function _installSandboxLiveHandlers(root) {
       if (typeof _renderSandboxFileTabs === "function") {
         _renderSandboxFileTabs(root, [], null);
       }
-      const tableHost = root.querySelector("[data-cleaner-table]");
+      const tableHost = root.querySelector("[data-cleaner-table-host]")
+        ?? root.querySelector("[data-cleaner-table]");
       if (tableHost) {
         tableHost.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">Loading…</div>';
       }
@@ -6097,6 +6198,14 @@ function _installSandboxLiveHandlers(root) {
   // so the chip resets immediately; _afterHistory's repaint clears
   // again as a belt-and-braces.
   window.cleanerMaybeBulkDelete = async () => {
+    // Dispatch by panel mode — on Overview, the toolbar Delete button
+    // operates on STATE.ovSelected (file rids → DELETE /files/:rid).
+    // On file view, it operates on STATE.selected (row indices → drop_rows step).
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel?.classList.contains("is-overview-active")) {
+      await window.cleanerOvBulkDelete();
+      return;
+    }
     if (!STATE.rid) return;
     const sel = STATE.selected;
     if (!(sel instanceof Set) || sel.size === 0) return;
@@ -6113,6 +6222,244 @@ function _installSandboxLiveHandlers(root) {
       await _afterHistory(env, `Dropped ${n} row${n === 1 ? "" : "s"}`);
     } catch (err) {
       window.toast?.error?.(`Drop failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // ── Overview file-list wirings ─────────────────────────────────────
+  // The Overview tab paints a project file table whose rows are FILES
+  // (not data rows). The toolbar's search + Edit/Select/Delete triplet
+  // is dual-scope — these handlers operate on STATE.ovSelected /
+  // STATE.ovSearch when the panel carries .is-overview-active.
+
+  // Toolbar search input — dispatched by the partial's oninput. On
+  // Overview, drives STATE.ovSearch + repaints. (File-view search is
+  // currently inert in sandbox; lands when /page?q= wires up.)
+  window.cleanerSearch = (val) => {
+    const term = String(val ?? "");
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel?.classList.contains("is-overview-active")) {
+      STATE.ovSearch = term;
+      _writeOvState();
+      _paintSandboxOverview(root);
+      return;
+    }
+    STATE.q = term;
+    // File-view server-side search lands when /page?q= is wired in.
+  };
+
+  // Row checkbox toggle on the overview file table. Updates
+  // STATE.ovSelected + repaints the chip without a full table rewrite —
+  // the .rp-rt-row-sel class is what CSS keys off for the active-bg.
+  window.cleanerOvRowSelect = (chk) => {
+    if (!chk) return;
+    const rid = chk.dataset.ovRid;
+    if (!rid) return;
+    if (!(STATE.ovSelected instanceof Set)) STATE.ovSelected = new Set();
+    if (chk.checked) STATE.ovSelected.add(rid);
+    else             STATE.ovSelected.delete(rid);
+    chk.closest("tr")?.classList.toggle("rp-rt-row-sel", chk.checked);
+    _renderSelChipShared(root);
+    _writeOvState();
+  };
+
+  // Master header checkbox — flip all visible rows + STATE.ovSelected.
+  window.cleanerOvSelectAll = (chk) => {
+    if (!chk) return;
+    const on = !!chk.checked;
+    if (!(STATE.ovSelected instanceof Set)) STATE.ovSelected = new Set();
+    STATE.ovSelected.clear();
+    root.querySelectorAll('[data-cleaner-overview] tbody .rp-rt-row-chk').forEach((cb) => {
+      cb.checked = on;
+      cb.closest("tr")?.classList.toggle("rp-rt-row-sel", on);
+      if (on) {
+        const rid = cb.dataset.ovRid;
+        if (rid) STATE.ovSelected.add(rid);
+      }
+    });
+    _renderSelChipShared(root);
+    _writeOvState();
+  };
+
+  // Row click dispatcher on the overview table. Modes:
+  //   • delete: confirm + DELETE this file; refresh project files list.
+  //   • select: toggle this file's selection (click outside checkbox).
+  //   • edit  : let the contenteditable name cell handle its own focus.
+  //   • none  : activate this file as the on-screen tab (legacy default).
+  // Stops propagation in select/delete so the row activate doesn't
+  // misfire underneath.
+  window.cleanerOvRowClick = async (tr, evt) => {
+    if (!tr) return;
+    // Clicks on contenteditable name or checkbox handle themselves —
+    // let their native event fire, don't reroute to row activate.
+    if (evt && evt.target) {
+      const t = evt.target;
+      if (t.closest && (t.closest(".rp-rt-ov-name") || t.closest("input[type='checkbox']"))) {
+        return;
+      }
+    }
+    const panel = root.querySelector(".rp-rt-panel");
+    const rid   = tr.dataset.ovRid;
+    if (!rid) return;
+    if (panel?.classList.contains("is-mode-delete")) {
+      if (evt) evt.stopPropagation();
+      await _ovDeleteOne(rid, tr);
+      return;
+    }
+    if (panel?.classList.contains("is-mode-select")) {
+      if (evt) evt.stopPropagation();
+      const cb = tr.querySelector(".rp-rt-row-chk");
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      window.cleanerOvRowSelect(cb);
+      return;
+    }
+    // No mode — activate the file as a tab. Mirrors the old onclick
+    // composite that the previous overview row carried.
+    const stripTab = document.querySelector(`.rp-rtp-tab[data-file-id="${rid}"]`);
+    if (stripTab && typeof window.spActivateTab === "function") {
+      window.spActivateTab(stripTab);
+    }
+    if (typeof window.cleanerActivateTab === "function") {
+      await window.cleanerActivateTab(rid);
+    }
+  };
+
+  // Bulk delete from the Overview file table. Confirms once for the
+  // batch, fires DELETE /files/:rid for each in parallel, then refetches
+  // the project file list + repaints. STATE.files is re-mirrored from
+  // /projects/:rid/files (cheap; the listing endpoint is fast).
+  window.cleanerOvBulkDelete = async () => {
+    const set = STATE.ovSelected;
+    if (!(set instanceof Set) || set.size === 0) return;
+    const ids = [...set];
+    const n   = ids.length;
+    const ok = confirm(`Delete ${n} file${n === 1 ? "" : "s"}? This can't be undone.`);
+    if (!ok) return;
+    STATE.ovSelected.clear();
+    _renderSelChipShared(root);
+    _writeOvState();
+    let failed = 0;
+    await Promise.all(ids.map(async (rid) => {
+      try {
+        await api.delete(`/files/${encodeURIComponent(rid)}`);
+        // Drop the cached envelope so the LRU doesn't hold a tombstone
+        // (and a same-rid re-upload can't paint the old schema). Same
+        // reasoning for the per-page row cache (Tier 2 D).
+        _clearFileEnvelope(rid);
+        _clearPageCacheForRid(rid);
+      } catch (err) { failed += 1; console.warn("[cleaner] delete failed", rid, err); }
+    }));
+    await _refreshProjectFiles();
+    if (failed) {
+      window.toast?.error?.(`Deleted ${n - failed} of ${n} · ${failed} failed`);
+    } else {
+      window.toast?.success?.(`Deleted ${n} file${n === 1 ? "" : "s"}`);
+    }
+  };
+
+  // Single-file delete from delete-mode click. Pulled out so both the
+  // row trash glyph (event bubbles) and a future per-row × use the same
+  // confirm + DELETE + refresh path.
+  const _ovDeleteOne = async (rid, tr) => {
+    if (!rid) return;
+    const f = (STATE.files || []).find((x) => x.redpash_id === rid);
+    const label = f?.display_name || f?.filename || rid;
+    if (!confirm(`Delete "${label}"? This can't be undone.`)) return;
+    if (tr) tr.style.opacity = "0.4";
+    try {
+      await api.delete(`/files/${encodeURIComponent(rid)}`);
+      // Drop the cached envelope + page slices — same reasoning as bulk.
+      _clearFileEnvelope(rid);
+      _clearPageCacheForRid(rid);
+      STATE.ovSelected.delete(rid);
+      _renderSelChipShared(root);
+      await _refreshProjectFiles();
+      window.toast?.success?.(`Deleted "${label}"`);
+    } catch (err) {
+      if (tr) tr.style.opacity = "";
+      window.toast?.error?.(`Delete failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // Inline-rename on the overview name cell. The contenteditable span
+  // calls onfocus/onblur/onkeydown — focus snapshots the original text,
+  // blur PATCHes if changed, Enter commits, Escape cancels.
+  window.cleanerOvNameFocus = (span) => {
+    if (!span) return;
+    span.dataset.ovOrig = span.textContent.trim();
+  };
+  window.cleanerOvNameKeydown = (evt, span) => {
+    if (!evt || !span) return;
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      span.blur();          // commit via onblur
+    } else if (evt.key === "Escape") {
+      evt.preventDefault();
+      span.textContent = span.dataset.ovOrig || "";
+      span.blur();
+    }
+  };
+  window.cleanerOvNameBlur = async (span) => {
+    if (!span) return;
+    const tr = span.closest("tr");
+    const rid = tr?.dataset?.ovRid;
+    const next = span.textContent.trim();
+    const prev = span.dataset.ovOrig || "";
+    if (!rid || next === prev) {
+      span.textContent = prev;
+      return;
+    }
+    if (!next) {
+      span.textContent = prev;
+      window.toast?.error?.("Name can't be empty.");
+      return;
+    }
+    try {
+      const updated = await api.patch(
+        `/files/${encodeURIComponent(rid)}`,
+        { display_name: next },
+      );
+      const idx = STATE.files.findIndex((f) => f.redpash_id === rid);
+      if (idx >= 0) STATE.files[idx] = updated;
+      _paintSandboxOverview(root);
+      window.toast?.success?.(`Renamed to "${updated.display_name || updated.filename}"`);
+    } catch (err) {
+      span.textContent = prev;
+      window.toast?.error?.(`Rename failed: ${err.body?.error ?? err.message}`);
+    }
+  };
+
+  // MutationObserver on the panel — captures mode flips (every spSetMode
+  // change ends up here) without us having to thread cleanerOvNotifyMode
+  // through every toolbar onclick. _writeOvState guards on
+  // .is-overview-active so file-view mode changes leave Overview state
+  // untouched. One observer per mount; the function-property flag keeps
+  // re-mounts from stacking listeners.
+  if (!_installSandboxLiveHandlers._ovStateObserver) {
+    const panel = root.querySelector(".rp-rt-panel");
+    if (panel && typeof MutationObserver === "function") {
+      _installSandboxLiveHandlers._ovStateObserver = true;
+      const obs = new MutationObserver(() => { _writeOvState(); });
+      obs.observe(panel, { attributes: true, attributeFilter: ["class"] });
+    }
+  }
+
+  // Re-fetch /projects/:pid/files and repaint the overview. Used after
+  // bulk + single delete. Falls back to STATE.files if the fetch fails.
+  const _refreshProjectFiles = async () => {
+    const pid = STATE.activeProjectId;
+    if (!pid) return;
+    try {
+      const res = await api.get(`/projects/${encodeURIComponent(pid)}/files`);
+      STATE.files = res.items ?? [];
+      const activeFile = (STATE.files || []).find((f) => f.redpash_id === STATE.rid) ?? null;
+      if (typeof _renderSandboxFileTabs === "function") {
+        _renderSandboxFileTabs(root, STATE.files, activeFile);
+      }
+      _paintSandboxOverview(root);
+    } catch (err) {
+      console.error("[cleaner] refresh files after delete failed", err);
+      _paintSandboxOverview(root);
     }
   };
 
@@ -6698,6 +7045,27 @@ function _showSandboxOverview(root) {
   // active file. UI prefs (row-nums, sync) stay visible since they
   // operate on the page-level state, not the file.
   if (pnl) pnl.classList.add("is-overview-active");
+  // Mode is view-local — entering Overview drops any file-view mode
+  // chrome (and the toolbar's edit/select/delete is-active state)
+  // so the user starts fresh. STATE.selected (file-row indices) is
+  // also dropped since it doesn't apply here. Same shape as
+  // _showSandboxTable below.
+  _resetPanelMode(root);
+  if (STATE.selected instanceof Set) STATE.selected.clear();
+  // Restore the previous Overview session — search filter, ticked
+  // files, and last mode. Survives a refresh (sessionStorage), gets
+  // discarded when the tab closes. Hash-keyed so a different project
+  // doesn't pick up stale state.
+  const ovSnap = _readOvState();
+  if (ovSnap) {
+    if (typeof ovSnap.ovSearch === "string") STATE.ovSearch = ovSnap.ovSearch;
+    if (Array.isArray(ovSnap.ovSelected))    STATE.ovSelected = new Set(ovSnap.ovSelected);
+    if (ovSnap.ovMode)                        _applyOvMode(root, ovSnap.ovMode);
+  }
+  // Sync the shared search input — it persists across views so its
+  // value drifts from STATE.ovSearch unless we push it back here.
+  const searchInp = root.querySelector(".rp-rt-toolbar .rp-rt-search");
+  if (searchInp) searchInp.value = STATE.ovSearch ?? "";
 }
 function _showSandboxTable(root) {
   const tbl = root.querySelector("[data-cleaner-table]");
@@ -6708,6 +7076,32 @@ function _showSandboxTable(root) {
   if (ov)  ov.hidden  = true;
   if (pgr) pgr.hidden = false;
   if (pnl) pnl.classList.remove("is-overview-active");
+  // Mode is view-local — leaving Overview drops its mode chrome and
+  // clears STATE.ovSelected so a file-view session starts clean.
+  _resetPanelMode(root);
+  if (STATE.ovSelected instanceof Set) STATE.ovSelected.clear();
+}
+
+// Single source of truth for "leave whatever mode we were in" — clears
+// the panel's .is-mode-{edit,select,delete} class AND the toolbar's
+// mode-button is-active / aria-pressed state. Called from both
+// _showSandboxOverview and _showSandboxTable so mode never leaks
+// across views.
+function _resetPanelMode(root) {
+  const pnl = root.querySelector(".rp-rt-panel");
+  if (pnl) {
+    pnl.classList.remove("is-mode-edit", "is-mode-select", "is-mode-delete");
+  }
+  root.querySelectorAll(".rp-rt-toolbar [data-sp-mode]").forEach((b) => {
+    b.classList.remove("is-active");
+    b.setAttribute("aria-pressed", "false");
+  });
+  // Reset the selection chip — count is 0 on a fresh-view entry.
+  const chip = root.querySelector(".rp-rt-sel-chip");
+  if (chip) {
+    chip.setAttribute("data-count", "0");
+    chip.innerHTML = '<i class="bi bi-check2-square"></i> 0 selected';
+  }
 }
 
 // Paint the Overview pane — project-level file list (one row per file
@@ -6732,34 +7126,85 @@ function _paintSandboxOverview(root) {
       + '</div>';
     return;
   }
+  // Apply the overview search filter (toolbar input dispatches into
+  // STATE.ovSearch when the panel is on Overview). Case-insensitive
+  // substring on display_name / filename — same UX as Objects file
+  // search. Empty term passes everything through.
+  const q = String(STATE.ovSearch || "").trim().toLowerCase();
+  const visible = q
+    ? files.filter((f) => {
+        const a = String(f.display_name || "").toLowerCase();
+        const b = String(f.filename     || "").toLowerCase();
+        return a.includes(q) || b.includes(q);
+      })
+    : files;
+  if (!visible.length) {
+    host.innerHTML = ''
+      + '<div class="rp-form-meta" style="padding:1.5rem;text-align:center;font-style:italic">'
+      +   `No files match "${_escHtml(q)}".`
+      + '</div>';
+    return;
+  }
+  // Reconcile STATE.ovSelected with the file set — drop ids that no
+  // longer exist (file deleted in another tab, project switched).
+  if (STATE.ovSelected instanceof Set) {
+    const live = new Set(files.map((f) => f.redpash_id));
+    [...STATE.ovSelected].forEach((rid) => { if (!live.has(rid)) STATE.ovSelected.delete(rid); });
+  } else {
+    STATE.ovSelected = new Set();
+  }
   const fmtDate = (s) => s ? new Date(s).toLocaleDateString() : "—";
-  const rows = files.map((f) => {
+  const rows = visible.map((f) => {
     const rid       = _escAttr(f.redpash_id);
     const name      = _escHtml(f.display_name || f.filename || f.redpash_id);
     const stage     = _escHtml(f.stage || "—");
     const rowCount  = f.row_count != null ? f.row_count.toLocaleString() : "—";
     const cleanness = f.cleanness_pct != null ? `${Math.round(f.cleanness_pct)}%` : "—";
     const modified  = _escHtml(fmtDate(f.updated_at));
-    // Row click → activate that file as the on-screen tab. Use the
-    // sibling .rp-rtp-tab[data-file-id=…] for the sandbox visual flip,
-    // then live cleanerActivateTab does fetch+paint (+ auto-unhide if
-    // the user had × -closed this tab earlier).
+    const isSel     = STATE.ovSelected.has(f.redpash_id);
+    // Leading mode column — same chrome convention as file-view rows
+    // (one cell with overlapping checkbox + uncheck/check/trash glyphs).
+    // The CSS rules on .is-mode-select / .is-mode-delete drive visual
+    // state; the row's click bubbles up to cleanerOvRowClick which
+    // dispatches by mode (no-mode → activate tab, select → toggle,
+    // delete → confirm + DELETE).
+    // contenteditable on name is gated by .is-mode-edit (CSS rule);
+    // we always set the attr so toggling modes doesn't require a
+    // repaint. cleanerOvNameBlur PATCHes on commit.
     return ''
-      + `<tr style="cursor:pointer" onclick="`
-      +   `var t=document.querySelector('.rp-rtp-tab[data-file-id=&quot;${rid}&quot;]');`
-      +   `if(t)spActivateTab(t);`
-      +   `cleanerActivateTab('${rid}')`
-      + `">`
-      +   `<td>${name}</td>`
+      + `<tr data-ov-rid="${rid}"${isSel ? ' class="rp-rt-row-sel"' : ''} style="cursor:pointer" onclick="cleanerOvRowClick(this, event)">`
+      +   '<td class="rp-rt-th-mode">'
+      +     `<input type="checkbox" class="rp-rt-row-chk" data-ov-rid="${rid}"${isSel ? " checked" : ""} onchange="cleanerOvRowSelect(this)">`
+      +     '<i class="bi bi-circle rp-row-uncheck"></i>'
+      +     '<i class="bi bi-check2-circle rp-row-check"></i>'
+      +     '<i class="bi bi-trash rp-row-trash"></i>'
+      +   '</td>'
+      +   `<td><span class="rp-rt-ov-name" contenteditable="true"`
+      +     ` data-ov-orig="${_escAttr(f.display_name || f.filename || "")}"`
+      +     ` onfocus="cleanerOvNameFocus(this, event)"`
+      +     ` onblur="cleanerOvNameBlur(this)"`
+      +     ` onkeydown="cleanerOvNameKeydown(event, this)">${name}</span></td>`
       +   `<td>${stage}</td>`
       +   `<td style="text-align:right">${rowCount}</td>`
       +   `<td style="text-align:right">${cleanness}</td>`
       +   `<td>${modified}</td>`
       + `</tr>`;
   }).join("");
+  // Master mode header — same convention as the file-view table:
+  // <input> inside the leading th, click toggles all visible rows.
+  // cleanerOvSelectAll mirrors cleanerSelectAllRows but reads/writes
+  // STATE.ovSelected and the data-ov-rid attrs.
+  const allSelected = visible.length > 0
+    && visible.every((f) => STATE.ovSelected.has(f.redpash_id));
   host.innerHTML = ''
     + '<table class="rp-rt-table">'
     +   '<thead><tr>'
+    +     '<th class="rp-rt-th-mode">'
+    +       `<input type="checkbox"${allSelected ? " checked" : ""} onclick="cleanerOvSelectAll(this)">`
+    +       '<i class="bi bi-circle rp-row-uncheck"></i>'
+    +       '<i class="bi bi-check2-circle rp-row-check"></i>'
+    +       '<i class="bi bi-trash rp-row-trash rp-master-trash"></i>'
+    +     '</th>'
     +     '<th>Name</th><th>Stage</th>'
     +     '<th style="text-align:right">Rows</th>'
     +     '<th style="text-align:right">Cleanness</th>'
@@ -6767,6 +7212,34 @@ function _paintSandboxOverview(root) {
     +   '</tr></thead>'
     +   `<tbody>${rows}</tbody>`
     + '</table>';
+  // Sync the selection chip with STATE.ovSelected (chip is the same
+  // element file-view uses; the helper detects Overview via the panel
+  // class and reads from the right Set).
+  _renderSelChipShared(root);
+}
+
+// Shared chip + master-checkbox updater. Reads from STATE.selected on
+// file view and STATE.ovSelected on Overview. Single helper because the
+// chip DOM is the same element (.rp-rt-sel-chip in the toolbar) and the
+// master header checkbox lives in whichever table is currently painted.
+function _renderSelChipShared(root) {
+  const panel = root.querySelector(".rp-rt-panel");
+  const isOv  = !!panel?.classList.contains("is-overview-active");
+  const set   = isOv ? STATE.ovSelected : STATE.selected;
+  const n     = set instanceof Set ? set.size : 0;
+  const chip  = root.querySelector(".rp-rt-sel-chip");
+  if (chip) {
+    chip.setAttribute("data-count", String(n));
+    chip.innerHTML = `<i class="bi bi-check2-square"></i> ${n} selected`;
+  }
+  // Indeterminate state on the master header checkbox — partial
+  // selection across visible rows is the standard UX hint.
+  const headerCb = root.querySelector(".rp-rt-table thead .rp-rt-th-mode input[type='checkbox']");
+  const rowCbs   = root.querySelectorAll(".rp-rt-table tbody .rp-rt-row-chk");
+  if (headerCb && rowCbs.length) {
+    headerCb.checked       = (n === rowCbs.length && rowCbs.length > 0);
+    headerCb.indeterminate = (n > 0 && n < rowCbs.length);
+  }
 }
 
 function _renderSandboxHeader(root, proj, activeFile, files) {
@@ -6901,16 +7374,334 @@ function _renderSandboxFileTabs(root, files, activeFile) {
   window.spInit?.(strip);
 }
 
+// ─── Per-file envelope cache (Phase 1 C / Tier 1 C) ──────────────
+//
+// Cache `{summary, columns, steps}` per file rid in localStorage so a
+// cold-path file open paints columns + header instantly while the
+// network fetches run in parallel. Keyed by rid; updated_at is the
+// freshness signal — when the live response's updated_at matches the
+// cached one we skip the chrome repaint and only swap the tbody (no
+// header flicker). When it differs we full-repaint with fresh.
+//
+// Storage: localStorage. LRU-capped at 50 entries (~250 KB worst-case
+// per the budget in docs/frontend/suggestion-localstorage.md). The
+// index is a JSON array of rids ordered most-recent-first; eviction
+// drops the tail + its envelope blob in one pass.
+const _FILE_ENV_CACHE_VERSION = "v1";
+const _FILE_ENV_INDEX_KEY     = `rp-cache-${_FILE_ENV_CACHE_VERSION}-file-envelope-index`;
+const _FILE_ENV_MAX           = 50;
+
+function _fileEnvKey(rid) {
+  return `rp-cache-${_FILE_ENV_CACHE_VERSION}-file-envelope-${rid}`;
+}
+
+function _readFileEnvelopeIndex() {
+  try {
+    const raw = localStorage.getItem(_FILE_ENV_INDEX_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function _writeFileEnvelopeIndex(rids) {
+  try { localStorage.setItem(_FILE_ENV_INDEX_KEY, JSON.stringify(rids)); } catch {}
+}
+
+function _readFileEnvelope(rid) {
+  if (!rid) return null;
+  try {
+    const raw = localStorage.getItem(_fileEnvKey(rid));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+// Write + LRU update. The index puts the just-touched rid at the front;
+// when the index grows past the cap, oldest entries (tail) are removed
+// along with their blobs so localStorage doesn't accumulate forever.
+function _writeFileEnvelope(rid, envelope) {
+  if (!rid || !envelope) return;
+  try {
+    localStorage.setItem(_fileEnvKey(rid), JSON.stringify({
+      summary: envelope.summary,
+      columns: envelope.columns,
+      steps:   envelope.steps,
+    }));
+    let idx = _readFileEnvelopeIndex().filter((r) => r !== rid);
+    idx.unshift(rid);
+    if (idx.length > _FILE_ENV_MAX) {
+      const evicted = idx.slice(_FILE_ENV_MAX);
+      idx = idx.slice(0, _FILE_ENV_MAX);
+      for (const ev of evicted) {
+        try { localStorage.removeItem(_fileEnvKey(ev)); } catch {}
+      }
+    }
+    _writeFileEnvelopeIndex(idx);
+  } catch {}
+}
+
+// Drop a file's cached envelope — used when the file is deleted so the
+// LRU isn't holding a tombstone (and the next open of a same-named
+// re-upload can't accidentally paint the old schema). Index is
+// rewritten in the same pass.
+function _clearFileEnvelope(rid) {
+  if (!rid) return;
+  try { localStorage.removeItem(_fileEnvKey(rid)); } catch {}
+  const idx = _readFileEnvelopeIndex().filter((r) => r !== rid);
+  _writeFileEnvelopeIndex(idx);
+}
+
+// Minimal optimistic table shell — column headers from cached columns
+// with a "Loading rows…" placeholder tbody. Fresh paint replaces this
+// inside _paintSandboxTable (full table if updated_at changed, just
+// the tbody if it matched). Visible columns honour STATE.hiddenCols
+// so the cached paint matches what the user last saw.
+function _paintCachedTableShell(host, columns) {
+  const hidden = STATE.hiddenCols instanceof Set ? STATE.hiddenCols : new Set();
+  const visibleCols = (columns ?? []).filter((c) => !hidden.has(c.name));
+  const span = visibleCols.length + 2; // mode col + rownum col
+  const heads = visibleCols.map((c) => `<th>${_escHtml(c.name)}</th>`).join("");
+  host.innerHTML = ''
+    + '<table class="rp-rt-table">'
+    +   '<thead><tr>'
+    +     '<th class="rp-rt-th-mode"></th>'
+    +     '<th class="rp-rt-rownum-th">#</th>'
+    +     heads
+    +   '</tr></thead>'
+    +   `<tbody><tr><td colspan="${span}" style="text-align:center;padding:1rem;color:var(--muted);font-style:italic">Loading rows…</td></tr></tbody>`
+    + '</table>';
+}
+
+// Build the tbody HTML from a columns array + page response. Shared by
+// _paintSandboxTable's main paint (line ~7731 path) and the Tier 2 D
+// cold-path early paint that swaps cached rows into the shell. Pulled
+// out so cached and fresh paths produce identical row markup.
+//
+// Reads from STATE.hiddenCols + STATE.colOrder for visible-column
+// derivation — so the cached row paint respects the user's last
+// column-picker state without re-fetching anything.
+function _buildSandboxTbody(columns, pageRes) {
+  if (!Array.isArray(columns) || !pageRes) return "";
+  const hidden = STATE.hiddenCols instanceof Set ? STATE.hiddenCols : new Set();
+  const colOrderMap = (Array.isArray(STATE.colOrder) && STATE.colOrder.length)
+    ? new Map(STATE.colOrder.map((name, i) => [name, i]))
+    : null;
+  const visibleColumns = columns
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !hidden.has(c.name))
+    .sort(({ c: a }, { c: b }) => {
+      if (!colOrderMap) return 0;
+      const ai = colOrderMap.has(a.name) ? colOrderMap.get(a.name) : Number.MAX_SAFE_INTEGER;
+      const bi = colOrderMap.has(b.name) ? colOrderMap.get(b.name) : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
+
+  const rows     = pageRes.rows ?? [];
+  const pageNum  = pageRes.page ?? 1;
+  const pageSize = pageRes.size ?? rows.length;
+  const startIdx = (pageNum - 1) * pageSize;
+
+  return rows.map((row, rowIdx) => {
+    const globalRow = startIdx + rowIdx;
+    return '<tr onclick="cleanerRowClick(this)">'
+      + '<td>'
+      +   `<input type="checkbox" class="rp-rt-row-chk" data-ri="${globalRow}">`
+      +   '<i class="bi bi-circle rp-row-uncheck"></i>'
+      +   '<i class="bi bi-check2-circle rp-row-check"></i>'
+      +   '<i class="bi bi-trash rp-row-trash"></i>'
+      + '</td>'
+      + `<td class="rp-rt-rownum-td">${(globalRow + 1).toLocaleString()}</td>`
+      + visibleColumns.map(({ c, i }) => {
+          // i is the column's ORIGINAL index in the full schema —
+          // row[] is ordered by the backend's full column list, not
+          // the visible subset, so we always index into row with the
+          // original i (NOT the visible-list position).
+          const v = row[i];
+          return `<td data-row-idx="${globalRow}" data-col-name="${_escAttr(c.name)}">${_escHtml(v ?? "")}</td>`;
+        }).join("")
+      + "</tr>";
+  }).join("");
+}
+
+// ─── Per-(file, page-state) row cache (Phase 1 / Tier 2 D) ─────────
+//
+// Cache /api/files/:rid/page responses keyed by the toolbar state
+// that produced them — same file at the same page/sort/search → cache
+// hit, paint rows from cache instantly. updated_at is part of the key
+// so stale cache always loses a comparison (file mutation bumps the
+// timestamp server-side; the new key is a fresh miss).
+//
+// Storage: localStorage, hard-capped at 1 MB total. A 25-row default
+// page is ~25 KB; a 5k-row page is ~500 KB — so the cap fits ~2 huge
+// pages or ~40 default ones. LRU evicts tail entries on each write
+// until the running total fits.
+//
+// Per the doc: invalidation is automatic via the updated_at key
+// — no manual clear needed on POST /steps / /undo / /redo / /cleanness
+// / PATCH because they all bump updated_at. File DELETE does need a
+// manual purge so the LRU isn't holding tombstones — wired into the
+// Overview delete path below.
+const _PAGE_CACHE_VERSION    = "v1";
+const _PAGE_CACHE_INDEX_KEY  = `rp-cache-${_PAGE_CACHE_VERSION}-page-index`;
+const _PAGE_CACHE_BUDGET     = 1_048_576; // 1 MB total
+const _PAGE_CACHE_KEY_PREFIX = `rp-cache-${_PAGE_CACHE_VERSION}-page::`;
+
+// Renamed from _pageCacheKey to avoid clashing with the legacy
+// in-memory _pageCache helper at the top of the file (~line 404), which
+// is still in scope on the legacy mount path. In strict module mode
+// JS treats the duplicate declaration as a SyntaxError, blocking the
+// entire module from loading.
+function _pageRowsCacheKey(rid, updatedAt, state) {
+  const s = Array.isArray(state.sorts) && state.sorts.length ? JSON.stringify(state.sorts) : "";
+  const q = String(state.q ?? "");
+  const p = Number(state.page) || 1;
+  const z = Number(state.pageSize) || _OV_DEFAULT_PAGE_SIZE;
+  return `${_PAGE_CACHE_KEY_PREFIX}${rid}::${updatedAt}::${s}::${q}::${p}::${z}`;
+}
+
+function _readPageCacheIndex() {
+  try {
+    const raw = localStorage.getItem(_PAGE_CACHE_INDEX_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function _writePageCacheIndex(entries) {
+  try { localStorage.setItem(_PAGE_CACHE_INDEX_KEY, JSON.stringify(entries)); } catch {}
+}
+
+function _readPageCache(key) {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+// Write the page response and update the LRU index. Single-entry budget
+// gate (skip if response alone exceeds 1 MB — rare but defensive) and
+// total-budget eviction (drop tail entries until the sum fits).
+function _writePageCache(key, response) {
+  if (!key || !response?.rows) return;
+  let serialized;
+  try { serialized = JSON.stringify(response); } catch { return; }
+  const bytes = serialized.length * 2; // UTF-16 rough size
+  if (bytes > _PAGE_CACHE_BUDGET) return;
+
+  let idx = _readPageCacheIndex().filter((e) => e.key !== key);
+  idx.unshift({ key, bytes });
+  let total = idx.reduce((s, e) => s + (e.bytes || 0), 0);
+  while (total > _PAGE_CACHE_BUDGET && idx.length > 1) {
+    const oldest = idx.pop();
+    total -= oldest.bytes || 0;
+    try { localStorage.removeItem(oldest.key); } catch {}
+  }
+  try { localStorage.setItem(key, serialized); }
+  catch { return; }     // quota error — skip, leave index as-is
+  _writePageCacheIndex(idx);
+}
+
+// Drop every cached page slice for a given file rid. Called when the
+// file itself is deleted; updated_at-keyed staleness is enough for
+// every other mutation.
+function _clearPageCacheForRid(rid) {
+  if (!rid) return;
+  const idx = _readPageCacheIndex();
+  const keep = [];
+  const prefix = `${_PAGE_CACHE_KEY_PREFIX}${rid}::`;
+  for (const e of idx) {
+    if (e.key.startsWith(prefix)) {
+      try { localStorage.removeItem(e.key); } catch {}
+    } else {
+      keep.push(e);
+    }
+  }
+  _writePageCacheIndex(keep);
+}
+
 // Paint the file's data into the redtable mount. Fetches /files/:rid
 // (for column metadata) and /files/:rid/page?page=1&size=25 (for rows),
 // builds a plain <table class="rp-rt-table"> with all visible columns
 // + all returned rows. First milestone — no pagination control yet,
 // no sort/filter wiring; clicking a column header is a no-op. The
 // columns picker / sort chain / pagination land in the next pass.
-async function _paintSandboxTable(root, activeFile) {
-  const host = root.querySelector("[data-cleaner-table]");
+//
+// opts.envelope — when the caller already holds a fresh FileEnvelope
+// (e.g. _afterHistory just received `{summary, columns, steps}` from a
+// mutating POST), pass it here to short-circuit the /files/:rid GET.
+// The page payload is still fetched, since the envelope carries no
+// rows. Mirrors reports.js's `needColumns` pattern.
+//
+// Phase 1 C — when neither opts.envelope nor opts.skipEnvCache is set,
+// the cold path also reads `_readFileEnvelope(rid)` and paints chrome
+// from cache while the fetches run. Fresh response is written back to
+// the cache for next time. updated_at comparison lets us skip the
+// thead+chrome repaint when the cache turned out to be current.
+//
+// docs/frontend/suggestion-localstorage.md "Tier 0 Z" (envelope-skip)
+// + "Tier 1 C" (per-file envelope cache keyed by updated_at).
+async function _paintSandboxTable(root, activeFile, opts = {}) {
+  // [data-cleaner-table-host] is the inner paint area; the outer
+  // .rp-rt-table-wrap carries [data-cleaner-table] for show/hide and
+  // hosts the wrapped-CSV banner as a sibling above the host. Falling
+  // back to [data-cleaner-table] keeps this safe if the partial reverts.
+  const host = root.querySelector("[data-cleaner-table-host]")
+    ?? root.querySelector("[data-cleaner-table]");
   if (!host) return;
-  host.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">Loading…</div>';
+
+  // Tier 1 C cold-path SWR — read cached envelope by rid. When present,
+  // mirror it into STATE early and paint header + a minimal column
+  // shell ("Loading rows…" tbody) so the user sees the schema instantly
+  // while /files/:rid + /page run in parallel. opts.envelope (Phase 0)
+  // wins over cache since it's already authoritative.
+  //
+  // Tier 2 D layered on top — if a /page cache entry also matches the
+  // current toolbar state (rid + updated_at + sorts + q + page + size),
+  // build the real tbody from cached rows and swap it into the shell.
+  // No "Loading rows…" flash, no waiting for /page on warm cache.
+  const fileRid = activeFile?.redpash_id ?? null;
+  let cachedEnv = null;
+  let cachedPage = null;
+  let earlyPainted = false;
+  let cachedPagePainted = false;
+  if (!opts.envelope && fileRid && !opts.skipEnvCache) {
+    cachedEnv = _readFileEnvelope(fileRid);
+    if (cachedEnv && cachedEnv.summary && cachedEnv.columns) {
+      STATE.summary = cachedEnv.summary;
+      STATE.columns = cachedEnv.columns ?? [];
+      STATE.steps   = cachedEnv.steps   ?? [];
+      if (Array.isArray(STATE.files) && cachedEnv.summary) {
+        const _idx = STATE.files.findIndex((f) => f.redpash_id === fileRid);
+        if (_idx >= 0) STATE.files[_idx] = cachedEnv.summary;
+      }
+      const _proj = STATE.project ?? STATE.projectMeta?.get(STATE.activeProjectId);
+      if (typeof _renderSandboxHeader === "function") {
+        _renderSandboxHeader(root, _proj, cachedEnv.summary, STATE.files || []);
+      }
+      _paintCachedTableShell(host, cachedEnv.columns);
+      earlyPainted = true;
+
+      // Tier 2 D — try to paint cached rows into the shell. Only when
+      // both env + page caches agree on updated_at AND the current
+      // STATE matches the cached page's params (key encodes all of them).
+      const _envUpdAt = cachedEnv.summary.updated_at;
+      if (_envUpdAt) {
+        cachedPage = _readPageCache(_pageRowsCacheKey(fileRid, _envUpdAt, STATE));
+        if (cachedPage?.rows) {
+          const cachedTbody = _buildSandboxTbody(cachedEnv.columns, cachedPage);
+          const tbodyEl = host.querySelector(".rp-rt-table tbody");
+          if (tbodyEl) {
+            tbodyEl.innerHTML = cachedTbody;
+            STATE.pageData = cachedPage;
+            cachedPagePainted = true;
+          }
+        }
+      }
+    }
+  }
+  if (!earlyPainted) {
+    host.innerHTML = '<div class="rp-form-meta" style="padding:1rem;font-style:italic">Loading…</div>';
+  }
 
   let detail, pageRes;
   try {
@@ -6927,14 +7718,51 @@ async function _paintSandboxTable(root, activeFile) {
     if (Array.isArray(STATE.sorts) && STATE.sorts.length) {
       pageParams.set("sorts", JSON.stringify(STATE.sorts));
     }
-    [detail, pageRes] = await Promise.all([
-      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}`),
-      api.get(`/files/${encodeURIComponent(activeFile.redpash_id)}/page?${pageParams.toString()}`),
-    ]);
+    const rid = encodeURIComponent(activeFile.redpash_id);
+    const pagePromise = api.get(`/files/${rid}/page?${pageParams.toString()}`);
+    if (opts.envelope) {
+      // Envelope short-circuit — caller (e.g. _afterHistory) just got
+      // fresh summary/columns/steps from a mutating POST and the hot-
+      // frame cache is warm but still worth not pinging again. Reuse
+      // those fields verbatim; we still need /page for the row slice.
+      detail = opts.envelope;
+      pageRes = await pagePromise;
+    } else {
+      // Cold path — initial mount, tab switch, manual refresh. Both
+      // fetches in parallel; slower one wins.
+      [detail, pageRes] = await Promise.all([
+        api.get(`/files/${rid}`),
+        pagePromise,
+      ]);
+    }
   } catch (err) {
     console.error("[cleaner] file/page fetch failed", err);
-    host.innerHTML = `<div class="rp-form-meta" style="padding:1rem;color:var(--red, #c33)">Couldn't load file: ${_escHtml(err.body?.error ?? err.message ?? "unknown")}</div>`;
+    // Tier 1 C — when an early cache-shell paint succeeded, keep it
+    // visible instead of wiping with an error placeholder. The user
+    // still sees their last-known schema + chrome; manual refresh
+    // retries the fetch. Cold cache → fall back to the error message.
+    if (!earlyPainted) {
+      host.innerHTML = `<div class="rp-form-meta" style="padding:1rem;color:var(--red, #c33)">Couldn't load file: ${_escHtml(err.body?.error ?? err.message ?? "unknown")}</div>`;
+    } else {
+      window.toast?.error?.(`Couldn't refresh: ${err.body?.error ?? err.message ?? "unknown"}`);
+    }
     return;
+  }
+
+  // Write the fresh envelope to the Tier 1 C per-file cache so the
+  // next cold-path open of this file paints instantly. Phase 0
+  // envelope-skip path also benefits — the freshest data lands here
+  // every time. opts.skipEnvCache disables both the read and the write
+  // (escape hatch for callers that don't want cache interference).
+  if (detail && fileRid && !opts.skipEnvCache) {
+    _writeFileEnvelope(fileRid, detail);
+  }
+  // Tier 2 D — write the fresh page response to the row cache, keyed
+  // by (rid, updated_at, sorts, q, page, size). LRU-bound at 1 MB; old
+  // entries evict to make room. Skipped on opts.skipEnvCache and when
+  // updated_at is missing (defensive — every backend response has it).
+  if (pageRes && fileRid && detail?.summary?.updated_at && !opts.skipEnvCache) {
+    _writePageCache(_pageRowsCacheKey(fileRid, detail.summary.updated_at, STATE), pageRes);
   }
 
   // Mirror the active file's slice into STATE so handlers (undo/redo,
@@ -6945,6 +7773,9 @@ async function _paintSandboxTable(root, activeFile) {
   STATE.summary = detail.summary;
   STATE.columns = detail.columns ?? [];
   STATE.steps   = detail.steps   ?? [];
+  // Mirror the page payload too — _detectWrappedCsv reads STATE.pageData.rows
+  // to confirm the 1-column file's values actually contain delimiters.
+  STATE.pageData = pageRes;
 
   // Mirror the fresh summary into STATE.files so subsequent reads
   // (file-tabs, picker, header) see the same numbers — cleanness can
@@ -7071,41 +7902,38 @@ async function _paintSandboxTable(root, activeFile) {
       }).join("")
     + "</tr>";
 
-  // data-row-idx is a GLOBAL row index (page offset added) so the
-  // set_cell step is page-agnostic; data-col-name carries the column
-  // by name (Polars accepts &str). The focusout dispatcher in
-  // _installSandboxLiveHandlers reads both attrs to build the step
-  // payload — without them, the dispatcher can't tell which cell moved.
-  // The mode-column checkbox's data-ri carries the same global index
-  // for cleanerRowClick → STATE.selected → bulk-delete drop_rows.
-  //
-  // <tr onclick="cleanerRowClick(this)"> is the single mode-aware
-  // dispatcher: select-mode toggles selection (mirrors spToggleRowSel),
-  // delete-mode POSTs drop_rows for that row's global index. Checkbox
-  // has NO onclick — native toggle bubbles up, cleanerRowClick
-  // re-syncs cb.checked to the new row state. No double-toggle race.
-  const tbodyHtml = rows.map((row, rowIdx) => {
-    const globalRow = startIdx + rowIdx;
-    return '<tr onclick="cleanerRowClick(this)">'
-      + '<td>'
-      +   `<input type="checkbox" class="rp-rt-row-chk" data-ri="${globalRow}">`
-      +   '<i class="bi bi-circle rp-row-uncheck"></i>'
-      +   '<i class="bi bi-check2-circle rp-row-check"></i>'
-      +   '<i class="bi bi-trash rp-row-trash"></i>'
-      + '</td>'
-      + `<td class="rp-rt-rownum-td">${(globalRow + 1).toLocaleString()}</td>`
-      + visibleColumns.map(({ c, i }) => {
-          // i is the column's ORIGINAL index in the full schema —
-          // row[] is ordered by the backend's full column list, not
-          // the visible subset, so we always index into row with the
-          // original i (NOT the visible-list position).
-          const v = row[i];
-          return `<td data-row-idx="${globalRow}" data-col-name="${_escAttr(c.name)}">${_escHtml(v ?? "")}</td>`;
-        }).join("")
-      + "</tr>";
-  }).join("");
+  // tbody — delegated to _buildSandboxTbody so the same row markup
+  // gets produced by the Tier 2 D cold-path early paint and the main
+  // post-fetch paint. See the helper for the wiring comments
+  // (cleanerRowClick dispatch, global row-idx semantics, etc.).
+  const tbodyHtml = _buildSandboxTbody(columns, pageRes);
 
-  host.innerHTML = `<table class="rp-rt-table"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>`;
+  // Tier 1 C + Tier 2 D paint decision tree:
+  //
+  //   envUnchanged && cachedPagePainted   → no DOM update at all.
+  //       Both caches matched fresh's updated_at; the cached row paint
+  //       is identical to what we'd build from pageRes. Skip the swap
+  //       — saves an innerHTML reparse on 5k-row pages.
+  //   envUnchanged && !cachedPagePainted  → swap tbody only.
+  //       Thead from early shell is correct; only the placeholder
+  //       "Loading rows…" needs replacement with real rows.
+  //   else                                → full table repaint.
+  //       Either no early paint, or the file mutated since last open
+  //       (cached updated_at !== fresh) → rebuild thead too.
+  const cachedAt = cachedEnv?.summary?.updated_at;
+  const freshAt  = detail?.summary?.updated_at;
+  const envUnchanged = earlyPainted && cachedAt && cachedAt === freshAt;
+  if (envUnchanged && cachedPagePainted) {
+    // Both caches were current — nothing visual to change. STATE was
+    // already mirrored from cached above; the post-fetch re-mirror to
+    // fresh is a no-op since values match.
+  } else if (envUnchanged) {
+    const existingTbody = host.querySelector(".rp-rt-table tbody");
+    if (existingTbody) existingTbody.innerHTML = tbodyHtml;
+    else host.innerHTML = `<table class="rp-rt-table"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>`;
+  } else {
+    host.innerHTML = `<table class="rp-rt-table"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>`;
+  }
 
   // Populate the toolbar's Columns picker from the file's columns_meta.
   // One .rp-dd-checkbox per column, all checked by default (column hide
@@ -7164,6 +7992,12 @@ async function _paintSandboxTable(root, activeFile) {
       },
     });
   }
+
+  // Wrapped-CSV banner — toggle visibility based on the freshly-mirrored
+  // STATE.columns + STATE.pageData. The banner element lives as a sibling
+  // above [data-cleaner-table-host] in partials/cleaner/table.html so
+  // host.innerHTML wipes above don't touch it.
+  _renderWrappedBanner(root);
 }
 
 // The render in _renderSandboxProjectTabs duplicates the leading

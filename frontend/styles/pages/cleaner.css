@@ -1663,12 +1663,24 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
 
 /* File-scope gating — hide every [data-file-scope] element when the
    panel is on Overview (no active file). Toolbar buttons that need
-   STATE.rid (search, mode triplet, refresh, report-from-file, compute
-   cleanness, rows-per-page, cols picker, filter, tools panel) carry
-   the attr; UI prefs (row-nums, sync, link-toolbar) and project-scoped
-   actions (Open Dashboard) don't. Sandbox _showSandboxOverview /
-   _showSandboxTable add/remove .is-overview-active on the panel. */
+   STATE.rid (filter funnel, refresh, report-from-file, compute
+   cleanness, rows-per-page, cols picker, tools panel) carry the attr;
+   the panels (filter, tools) and the wrapped-CSV banner do too.
+   Sandbox _showSandboxOverview / _showSandboxTable add/remove
+   .is-overview-active on the panel. */
 .rp-rt-panel.is-overview-active [data-file-scope] {
+  display: none;
+}
+
+/* Overview-toolbar allowlist — on Overview, hide every toolbar direct
+   child that doesn't explicitly opt in via data-overview-scope. Lets
+   the search input + Edit/Select/Delete mode triplet stay visible
+   (they'll drive the project file list once that content lands) while
+   suppressing Row-numbers / Dashboard / Sync (which previously showed
+   on Overview because they lacked data-file-scope, but the simpler
+   Overview UX wants them gone). New toolbar buttons added later are
+   hidden-on-Overview by default; opt in by adding data-overview-scope. */
+.rp-rt-panel.is-overview-active .rp-rt-toolbar > :not([data-overview-scope]) {
   display: none;
 }
 

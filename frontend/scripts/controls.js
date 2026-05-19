@@ -267,11 +267,23 @@
       // are user-mutable. All data columns opt in; the row-number
       // gutter and the mode-checkbox col (first td) stay non-editable
       // because they're table chrome, not record fields.
-      panel.querySelectorAll(
-        ".rp-rt-table-wrap .rp-rt-table tbody td:not(.rp-rt-rownum-td):not(:first-child)"
-      ).forEach(function (el) {
-        el.setAttribute("contenteditable", on ? "true" : "false");
-      });
+      //
+      // SKIPPED on the Objects page (detected via the per-type
+      // [data-object-type] wrapper). Objects has a column-level
+      // `edit` spec — each row is a heterogeneous object, not a
+      // homogeneous record, so most cells (badges, counts, dates,
+      // computed values) shouldn't be free-text editable. Per-cell
+      // ondblclick="objectsCellEdit(this)" handles the editable
+      // subset; this avoids the live-app diff where typing into a
+      // badge cell looks like a save but goes nowhere.
+      var isObjectsPanel = !!panel.querySelector("[data-object-type]");
+      if (!isObjectsPanel) {
+        panel.querySelectorAll(
+          ".rp-rt-table-wrap .rp-rt-table tbody td:not(.rp-rt-rownum-td):not(:first-child)"
+        ).forEach(function (el) {
+          el.setAttribute("contenteditable", on ? "true" : "false");
+        });
+      }
     }
   };
 

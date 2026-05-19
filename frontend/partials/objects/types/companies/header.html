@@ -7,10 +7,13 @@
     <div class="rp-rtp-hdr-meta" data-objects-meta>3 companies</div>
   </div>
   <div class="rp-rt-hdr-actions">
-    <button class="rp-btn" title="Export list">
+    <button class="rp-btn" title="Export list"
+            onclick="objExport()">
       <i class="bi bi-download"></i>
     </button>
-    <button class="rp-btn" title="New company">
+    <!-- Companies schema's addAction prompts for a name + POSTs to
+         /api/companies; objAdd refreshes the tab on success. -->
+    <button class="rp-btn" title="New company" onclick="objAdd()">
       <i class="bi bi-plus"></i>
     </button>
   </div>

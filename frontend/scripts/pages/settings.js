@@ -21,14 +21,24 @@ export default async function mount(root) {
   const status = root.querySelector("#settings-status");
   status.textContent = "Loading…";
 
-  let me;
-  try { me = await api.get("/me"); }
-  catch (err) { status.textContent = "Failed to load settings."; return; }
+  // SWR — paint from cache instantly if available, then await fresh
+  // for the correction pass. Cold cache shows "Loading…" until fetch.
+  const _hydrate = (me) => {
+    const prefs = me.prefs ?? {};
+    form.elements.accent.value  = prefs.accent  || DEFAULT_ACCENT;
+    form.elements.density.value = prefs.density || "comfortable";
+  };
 
-  const prefs = me.prefs ?? {};
-  form.elements.accent.value  = prefs.accent  || DEFAULT_ACCENT;
-  form.elements.density.value = prefs.density || "comfortable";
-  status.textContent = "";
+  const { cached, fresh } = api.getCached("/me");
+  let me = cached;
+  if (me) { _hydrate(me); status.textContent = ""; }
+
+  try { me = await fresh; _hydrate(me); status.textContent = ""; }
+  catch (err) {
+    if (!cached) { status.textContent = "Failed to load settings."; return; }
+    // else: keep the cached values painted; correction pass will retry
+    // on the next mount.
+  }
 
   root.querySelector("#settings-accent-reset").addEventListener("click", () => {
     form.elements.accent.value = DEFAULT_ACCENT;
@@ -51,6 +61,9 @@ export default async function mount(root) {
     btn.disabled = true;
     try {
       const updated = await api.patch("/me", body);
+      // PATCH /me returns UserProfile (no global_sentinels); invalidate
+      // so loadSession re-fetches a full MeResponse next time.
+      api.invalidateCached("/me");
       applyAccent(updated.prefs?.accent);
       toast.success("Settings saved.");
     } catch (err) {
@@ -59,4 +72,8 @@ export default async function mount(root) {
       btn.disabled = false;
     }
   });
+
+  // Tier 2 E — Settings only fetches /me; warm the list endpoints so
+  // navigating back out (Home / Objects / Profile) paints instantly.
+  api.prewarm(["/projects", "/files", "/reports", "/dashboards", "/users", "/companies"]);
 }

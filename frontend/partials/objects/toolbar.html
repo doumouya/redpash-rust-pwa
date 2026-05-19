@@ -10,7 +10,16 @@
     <i class="bi bi-funnel"></i>
   </button>
 
-  <input class="rp-rt-search" type="search" placeholder="Search objects…" />
+  <!-- Search input with the same autocomplete grammar as predicate
+       value inputs — wraps the input + a sibling [data-objects-search-menu]
+       (.rp-rt-fb-dd-menu styled) for the distinct-values suggestion popup.
+       objectsSearchInput drives both the row filter (STATE[kind].search +
+       repaint via _objMatchesSearch) and the suggestion menu paint. -->
+  <div class="rp-rt-search-wrap">
+    <input class="rp-rt-search" type="search" placeholder="Search objects…"
+           oninput="objectsSearchInput(this)" onfocus="objectsSearchInput(this)" />
+    <div class="rp-rt-fb-dd-menu" data-objects-search-menu></div>
+  </div>
 
   <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit"
           title="Edit mode" onclick="spSetMode(this)">
@@ -23,8 +32,14 @@
   <span class="rp-rt-sel-chip" data-count="0">
     <i class="bi bi-check2-square"></i> 0 selected
   </span>
+  <!-- Delete-mode button composite: spSetMode handles the visual fade
+       + undo push when there's a selection; objectsMaybeBulkDelete
+       fires the actual /api DELETE so the rows don't reappear on
+       refresh. Empty-selection click is a plain mode toggle (both
+       handlers no-op on empty selection). -->
   <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete"
-          title="Delete mode (acts on selection when one exists)" onclick="spSetMode(this)">
+          title="Delete mode (acts on selection when one exists)"
+          onclick="spSetMode(this);objectsMaybeBulkDelete()">
     <i class="bi bi-trash"></i>
   </button>
 
@@ -47,36 +62,37 @@
   </div>
 
   <div class="rp-dd-wrap">
+    <!-- Date format — `dateFmt` module global drives every cell that
+         renders an ISO date (fmtDate in objects.js). Items call
+         objectsSetDateFmt with the format key (matches _DATE_FMT_LABEL
+         in objects.js); legacy used [data-rt-datefmt-label] + a
+         different markup tree — sandbox uses [data-sp-datefmt-label]. -->
     <button class="rp-rt-pill-btn" title="Date format" onclick="spDdToggle(this)">
       <i class="bi bi-calendar3" style="font-size:0.75rem;margin-right:0.2rem"></i>
-      <span>Relative</span>
+      <span data-sp-datefmt-label>Date &amp; time</span>
       <i class="bi bi-chevron-down"></i>
     </button>
     <div class="rp-dd-menu" role="menu">
-      <div class="rp-dd-item is-selected">Relative</div>
-      <div class="rp-dd-item">Date</div>
-      <div class="rp-dd-item">Date &amp; time</div>
+      <div class="rp-dd-item"             onclick="objectsSetDateFmt(this, 'relative')">Relative</div>
+      <div class="rp-dd-item"             onclick="objectsSetDateFmt(this, 'date')">Date</div>
+      <div class="rp-dd-item is-selected" onclick="objectsSetDateFmt(this, 'datetime')">Date &amp; time</div>
     </div>
   </div>
 
   <div class="rp-dd-wrap">
-    <button class="rp-btn" title="Columns" onclick="spDdToggle(this)">
+    <button class="rp-btn" title="Columns" onclick="spDdToggle(this);objectsBuildColsDropdown(window.objectsActiveKind?.())">
       <i class="bi bi-layout-three-columns"></i>
     </button>
     <div class="rp-dd-menu" role="menu" style="min-width:8.5rem">
       <button type="button" class="rp-dd-reset" title="Restore default columns"
-              onclick="spColsReset(this)">
+              onclick="objectsResetCols()">
         <i class="bi bi-arrow-counterclockwise"></i> Reset to default
       </button>
-      <!-- Live JS will paint per-kind columns here when wired; the
-           sandbox demo's hardcoded labels are a Projects-tab stub. -->
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Name</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Stage</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Status</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Cleanness</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Files</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Created</label>
-      <label class="rp-dd-checkbox"><input type="checkbox" checked /> Modified</label>
+      <!-- Live JS paints per-kind .rp-dd-checkbox items here from the
+           active SCHEMAS[kind].columns + STATE[kind].visibleCols.
+           Rebuilt on every tab switch and every dropdown open so the
+           list always matches the current tab. -->
+      <div data-sp-cols-picker></div>
     </div>
   </div>
 

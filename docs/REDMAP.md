@@ -29,21 +29,25 @@ redpash-app/
 │   │   │       ├── error.rs                AppError + IntoResponse + From<DataError>
 │   │   │       └── routes/
 │   │   │           ├── mod.rs              Router assembly + ServeDir + `ensure_owner` helper
-│   │   │           ├── auth.rs             Google OAuth — /start, /callback, /logout
+│   │   │           ├── auth.rs             Google OAuth — /start, /callback, /logout, /dev-login
 │   │   │           ├── me.rs               GET + PATCH /api/me + resolve_user_rid (shared)
 │   │   │           ├── health.rs           liveness
-│   │   │           ├── projects.rs         list + per-project file list
-│   │   │           ├── files.rs            upload, page, steps, undo/redo, joins, snapshots
-│   │   │           ├── reports.rs          CRUD + /preview + /run + favorite
-│   │   │           └── dashboards.rs       CRUD + favorite
+│   │   │           ├── projects.rs         list + per-project file list + PATCH/DELETE
+│   │   │           ├── files.rs            upload (CSV+Excel), list, page, steps, undo/redo, joins, snapshots, export, sentinels, cleanness, cast-preview, clear-filters
+│   │   │           ├── reports.rs          CRUD + /preview + /run + favorite + PATCH (sparse meta)
+│   │   │           ├── dashboards.rs       CRUD + favorite + PATCH (sparse meta)
+│   │   │           ├── users.rs            dev-permissive directory CRUD
+│   │   │           └── companies.rs        companies + memberships (owner/admin/member); membership IS the access check
 │   │   ├── data/                           Polars-backed compute. No HTTP.
 │   │   │   └── src/
-│   │   │       ├── parse.rs                CSV → DataFrame; apply_filter; date helpers
+│   │   │       ├── parse.rs                CSV → DataFrame; preamble + delimiter sniff; apply_filter; Excel→CSV via calamine
 │   │   │       ├── dtype.rs                column summaries
-│   │   │       ├── steps.rs                replay applied steps; dispatch by kind
+│   │   │       ├── steps.rs                replay applied steps; dispatch by kind (18 kinds)
 │   │   │       ├── group_by.rs             report engine — group/agg/sort/top_n/windows
+│   │   │       ├── stats.rs                cleanness scorer + sentinel scan + unique-value extractor + cell-diff counter
 │   │   │       ├── joins.rs                overlap-coefficient detector
 │   │   │       ├── dedup.rs                full-row + per-PK dedup
+│   │   │       ├── render.rs               markdown → HTML (pulldown-cmark + syntect + gray_matter) for `/api/docs`
 │   │   │       └── encoding.rs             chardetng wrapper + BOM-first
 │   │   └── shared/                         DTOs travelling over the wire
 │   │       └── src/
@@ -53,7 +57,8 @@ redpash-app/
 │   │           ├── filter.rs               FilterNode (Group/Leaf), FilterOp, FilterSpec
 │   │           ├── report.rs               Report, ReportSpec, Aggregation, AggFn, SortSpec, TopNFilter, WindowSpec, ChartSpec
 │   │           ├── dashboard.rs            Dashboard, DashboardSpec, Widget
-│   │           └── user.rs                 UserProfile
+│   │           ├── user.rs                 UserProfile, UserMembership
+│   │           └── company.rs              Company, CompanySummary, CompanyMember
 │   └── migrations/                         sqlx-managed SQL — one per phase
 │
 ├── frontend/
@@ -148,9 +153,9 @@ redpash-app/
 | **DTO** | `shared::step::ProjectStep`, `StepRequest` |
 | **Table** | `project_steps` |
 | **RID prefix** | `STP` |
-| **DB helpers** | `db::list_steps`, `insert_step`, `undo_last`, `redo_next` |
+| **DB helpers** | `db::list_steps`, `insert_step`, `undo_last`, `redo_next`, `clear_steps_of_kind` (surgical un-apply of every step of a given kind — powers `/clear-filters`) |
 | **Replay** | `data::steps::replay(base_df, [(kind, params)])` |
-| **Supported `kind`s** | `drop_columns`, `rename_column`, `drop_rows`, `drop_nulls`, `fill_nulls`, `change_case`, `replace_text`, `fix_invalid` |
+| **Supported `kind`s** | **Column shape:** `drop_columns`, `filter_columns` (keep listed), `rename_column`, `snake_case_columns`, `replace_in_names`, `join_columns`, `split_column`. **Row shape:** `drop_rows` (by index), `drop_nulls`, `filter_rows` (predicate-tree). **Cell value:** `set_cell`, `fill_nulls`, `cast` (with `/cast-preview` dry-run), `change_case`, `replace_text`, `fix_invalid` (sentinel replace), `format_dates`. **Rescue:** `unwrap_csv` (re-parse a fully-wrapped CSV). See [api/files.md](api/files.md#post-apifilesridsteps--apply-a-cleaning-step) for the per-kind param shapes. |
 
 ### Report (`Report`, `ReportSpec`)
 | Layer | Location |
@@ -176,6 +181,18 @@ redpash-app/
 | **Icon → preset** | `ICON_PRESETS` in `scripts/reports/index.js` |
 | **Library** | ECharts 5 (CDN, lazy-loaded via `echarts.js::loadECharts`); ecStat lazy-loaded via `loadECStat` for regression fits |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
+
+### Company (`Company`, `CompanyMember`, `CompanySummary`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::company::Company`, `CompanyMember`, `CompanySummary` |
+| **Table** | `companies` + `company_memberships` (migration 007). `projects.company_id` FK is `ON DELETE SET NULL` so company projects survive a company delete as personal projects. |
+| **RID prefix** | `CMP` (companies); membership rows have a composite PK `(company_id, user_redpash_id)`, no RID |
+| **Roles** | `owner` > `admin` > `member`. owner-only: grant `owner`, delete company, demote/remove last owner. owner+admin: edit metadata, add/remove members. member: read-only. |
+| **DB helpers** | `db::list_companies(user)` (LEFT-JOIN — non-members see the row with `my_role: null`), `get_company`, `company_role` (gate), `company_owner_count` (last-owner guard), `create_company` (TX: company + owner membership in one shot), `update_company`, `delete_company`, `list_company_members`, `add_company_member` (upsert on composite PK), `remove_company_member` |
+| **API** | `GET /api/companies`, `POST /api/companies`, `GET·PATCH·DELETE /:rid`, `GET·POST /:rid/members`, `DELETE /:rid/members/:user_id` |
+| **Dev relaxation** | `PATCH` + `DELETE` membership/role gates currently OFF — any signed-in user can edit/delete any company from the Objects-page Companies tab. Target gates documented in [api/companies.md](api/companies.md). |
+| **Docs** | [`api/companies.md`](api/companies.md) |
 
 ### Dashboard (`Dashboard`, `DashboardSpec`, `Widget`)
 | Layer | Location |
@@ -324,25 +341,43 @@ redpash-app/
 | POST | `/api/auth/logout` | delete session + clear cookie |
 | GET | `/api/projects` | session user's projects |
 | GET | `/api/projects/:rid/files` | files in project |
-| POST | `/api/files/upload` | multipart `file` (+ optional `tld`). Lands in user's default project. |
+| PATCH | `/api/projects/:rid` | sparse: `name` / `description` / `is_default` / `owner_id` / `company_id` / `status` |
+| DELETE | `/api/projects/:rid` | cascades files+steps+reports+dashboards; default project is 400 `is_default` |
+| GET | `/api/files` | every file the session user owns (across all their projects) — powers Home "My Files" |
+| POST | `/api/files/upload` | multipart `file` (+ optional `tld`, `project_name`). Auto-routes into a named or default project; XLSX/XLS/XLSM/XLSB/ODS auto-converted to CSV. |
 | GET | `/api/files/:rid` | summary + columns + steps |
-| GET | `/api/files/:rid/page` | paged rows — `?page&size&sorts&filters&search&col` |
-| POST | `/api/files/:rid/steps` | apply a cleaning step |
+| PATCH | `/api/files/:rid` | sparse: `display_name` / `project_redpash_id` (move) / `encoding` / `delimiter` |
+| DELETE | `/api/files/:rid` | cascade history + reports; evict cache; unlink blob |
+| GET | `/api/files/:rid/page` | paged rows — `?page&size&sorts&filters&q&cols` |
+| POST | `/api/files/:rid/steps` | apply a cleaning step (validates against the cached frame before persisting) |
+| POST | `/api/files/:rid/cast-preview` | dry-run a `cast` step — returns would-null count + sample source values |
 | POST | `/api/files/:rid/undo` · `/redo` | walk the step cursor |
+| POST | `/api/files/:rid/clear-filters` | surgically un-apply every `filter_rows` step (eraser button) |
 | POST | `/api/files/:rid/encoding` | override detected encoding |
 | GET | `/api/files/:rid/dedup` | duplicate counts |
-| GET | `/api/files/:rid/joins` · POST | detect candidate keys / apply a join |
-| POST | `/api/files/:rid/snapshot` | save current view as a new file |
-| GET | `/api/files/:rid/uniques` | per-column unique counts |
+| GET | `/api/files/:rid/uniques` | per-column unique values — filter-panel autocomplete |
+| GET | `/api/files/:rid/sentinels` | scan for sentinel values (`n/a`, `?`, …) + caller's `?extra=` set — `fix_invalid` modal data |
+| GET | `/api/files/:rid/joins` · POST | detect candidate keys (filter-aware) / apply a join (filter-aware, streamed to disk) |
+| POST | `/api/files/:rid/snapshot` | save current view as a new file (no step history) |
+| GET | `/api/files/:rid/export` | stream current view as downloadable CSV (no DB write) |
+| POST | `/api/files/:rid/cleanness` · DELETE | recompute (against globals ∪ user `learned_sentinels`) / null-out the score |
 | GET | `/api/reports` | session user's reports |
-| POST | `/api/reports` | create |
-| POST | `/api/reports/preview` | run a spec — `source_file_id` or `source_report_id` |
-| GET·PUT·DELETE | `/api/reports/:rid` | CRUD |
+| POST | `/api/reports` | create — gated on source file ownership |
+| POST | `/api/reports/preview` | run a spec — polymorphic `source_file_id` or `source_report_id` |
+| GET·PUT·PATCH·DELETE | `/api/reports/:rid` | CRUD + sparse meta PATCH (`title` / `description` / `folder` / `is_favorite` / `is_public`) |
 | POST | `/api/reports/:rid/run` | run the saved spec |
 | POST | `/api/reports/:rid/favorite` | `{value}` |
 | GET | `/api/dashboards` | session user's dashboards |
-| POST · GET · PUT · DELETE | `/api/dashboards`, `/:rid` | CRUD |
+| POST · GET · PUT · PATCH · DELETE | `/api/dashboards`, `/:rid` | CRUD + sparse meta PATCH (same shape as reports) |
 | POST | `/api/dashboards/:rid/favorite` | `{value}` |
+| GET | `/api/users` | every user (with each user's `company_memberships`) — Objects Users tab + owner-reassignment picker |
+| POST · GET · PATCH · DELETE | `/api/users`, `/:rid` | dev-permissive CRUD; `username` UNIQUE → 409 `username_taken` |
+| GET | `/api/companies` | every company w/ caller's `my_role` (null when not a member) + `member_count` |
+| POST | `/api/companies` | create — creator seated as `owner` in one TX; slug suffixed with RID slice (no collision retry) |
+| GET·PATCH·DELETE | `/api/companies/:rid` | read needs membership; PATCH/DELETE currently dev-permissive (target: owner-only delete, owner/admin PATCH) |
+| GET·POST | `/api/companies/:rid/members` | list / upsert (owner-only for `role: owner`); last-owner demotion blocked |
+| DELETE | `/api/companies/:rid/members/:user_id` | leave (self) or remove (owner/admin); last-owner removal blocked |
+| POST | `/api/auth/dev-login` | mint a session for any user RID — gated by `REDPASH_DEV_LOGIN=1`, otherwise 403 |
 | GET | `/api/docs`, `/api/docs/:slug` | rendered markdown |
 
 ---
@@ -388,11 +423,12 @@ redpash-app/
 
 ### Phase progress
 - 1 — Foundation ✅
-- 2 — Cleaner ✅
-- 3 — Reports & Dashboards ✅ (~12 chart kinds + window functions + Top-N + chart-ref widgets)
+- 2 — Cleaner ✅ — 18 step kinds shipped: 7 column-shape ops (`drop_columns`, `filter_columns`, `rename_column`, `snake_case_columns`, `replace_in_names`, `join_columns`, `split_column`), 3 row-shape (`drop_rows`, `drop_nulls`, `filter_rows`), 6 cell-value (`set_cell`, `fill_nulls`, `cast`, `change_case`, `replace_text`, `fix_invalid`, `format_dates`), 1 rescue (`unwrap_csv`). Excel→CSV at upload (calamine). Live cleanness scoring.
+- 3 — Reports & Dashboards ✅ (~13 chart kinds + window functions + Top-N + chart-ref widgets)
 - 4a — Google OAuth flow ✅
 - 4b — Per-user data scoping ✅
 - 4c — Per-resource ownership + Profile/Settings + logout button ✅. Share-link UI for `is_public` toggles still pending.
+- 4d — Multi-tenancy data model ✅ — companies + memberships (`owner` > `admin` > `member`), `projects.company_id` (set/re-scope; clear-to-personal pending), dev-permissive `/api/users` + `/api/companies` CRUD, `REDPASH_DEV_LOGIN` "log in as user" switch, shared-sentinel learning loop (`prefs.learned_sentinels` + `prefs.share_sentinels` consent gate + `global_sentinels` view). **Pending:** company-scoped resource visibility — every owner-scoped endpoint still gates on `projects.owner_id` alone; `project_memberships` exists in schema but isn't read.
 - 5 — Bake frontend into binary, brotli, systemd ⬜
 
 ---

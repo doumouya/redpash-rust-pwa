@@ -1,6 +1,13 @@
-<!-- Objects filter panel — same predicate-builder structure as the cleaner panel.
-     Columns are object-level fields (Name, Stage, Status, Cleanness, etc.) —
-     live JS will swap the column choices per active kind when wired. -->
+<!-- Objects filter panel — predicate builder. Live JS:
+       objectsBuildFilterPanel(kind) — paints per-kind column dropdown
+         options on each tab switch + initial mount.
+       objectsApplyFilter()           — collects predicates, populates
+         objPredicates / objCombinator, repaints via paintObjectsSandboxTable.
+       objectsClearFilter()           — resets predicates + repaints.
+       objectsAddPredicate() / objectsRemovePredicate(btn) — add / remove rows.
+     [data-objects-filter-rows] is the container the JS reads + writes.
+     Each row carries [data-fb-col] (column key) + [data-fb-op] + [data-fb-val]
+     so _objRowMatchesFilter (legacy helper, kind-agnostic) can evaluate. -->
 <div class="rp-rt-filter-panel" id="objects-filter-panel">
   <div class="rp-rt-filter-inner">
 
@@ -8,12 +15,8 @@
     <div class="rp-rt-filter-hdr">
       <span class="rp-rt-panel-hdr">Filter objects</span>
       <button class="rp-btn" title="Clear all predicates" style="margin-left:auto"
-              onclick="spClickFx(this)">
+              onclick="objectsClearFilter()">
         <i class="bi bi-eraser"></i>
-      </button>
-      <button class="rp-btn" title="Save filter"
-              onclick="spClickFx(this)">
-        <i class="bi bi-floppy"></i>
       </button>
       <button class="rp-btn" title="Close panel"
               onclick="document.getElementById('objects-filter-panel').classList.remove('open')">
@@ -24,42 +27,25 @@
     <!-- Scrollable content -->
     <div class="rp-rt-filter-content">
 
-      <div class="rp-rt-fb-op-toggle">
-        <button type="button" class="is-active">AND</button>
-        <button type="button">OR</button>
+      <div class="rp-rt-fb-op-toggle" data-objects-filter-combo>
+        <button type="button" class="is-active" data-combo="and"
+                onclick="objectsSetFilterCombo(this)">AND</button>
+        <button type="button" data-combo="or"
+                onclick="objectsSetFilterCombo(this)">OR</button>
       </div>
 
-      <div class="rp-rt-fb-rows">
-        <div class="rp-rt-fb-row">
-          <button class="rp-rt-fb-rm" title="Remove predicate"
-                  onclick="event.stopPropagation();spFbRmPredicate(this)">
-            <i class="bi bi-x"></i>
-          </button>
-          <select class="rp-rt-fb-col">
-            <option value="">Column…</option>
-            <option>Name</option>
-            <option>Stage</option>
-            <option>Status</option>
-            <option>Cleanness</option>
-            <option>Files</option>
-            <option>Created</option>
-            <option>Modified</option>
-          </select>
-          <div class="rp-rt-fb-selects">
-            <select><option value="">Op…</option></select>
-            <input type="text" class="rp-rt-fb-val" placeholder="value" />
-          </div>
-        </div>
-      </div>
+      <!-- One predicate row is auto-painted by objectsBuildFilterPanel(kind);
+           more can be added via the + button below. -->
+      <div class="rp-rt-fb-rows" data-objects-filter-rows></div>
 
-      <button type="button" class="rp-rt-fb-add" onclick="spFbAddPredicate(this)">
+      <button type="button" class="rp-rt-fb-add" onclick="objectsAddPredicate()">
         <i class="bi bi-plus-lg"></i> Add predicate
       </button>
 
     </div><!-- /.rp-rt-filter-content -->
 
     <div class="rp-rt-filter-footer">
-      <button class="btn btn-ghost btn-sm" onclick="spClickFx(this)">
+      <button class="btn btn-ghost btn-sm" onclick="objectsApplyFilter()">
         <i class="bi bi-funnel"></i> Apply
       </button>
     </div>

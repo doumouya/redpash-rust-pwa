@@ -1168,3 +1168,49 @@ print(f'\nDuplicated handlers: {len(dups)}')
 for n in sorted(dups):
     print('  ' + n + ' -> ' + ', '.join(f'{c}:L{l}' for c,l in dups[n]))
 ```
+
+## localStorage caching + Objects sandbox completion — 2026-05-19
+
+Two parallel passes shipped in one session (SW v418 → v492):
+
+### localStorage caching (Phases 0 / 1 / 2 D / 2 E)
+
+Full plan + per-tier breakdown in [backend/suggestion-localstorage.md](../../backend/suggestion-localstorage.md) "Shipped" section.
+
+- **Phase 0** — `_paintSandboxTable` takes an `opts.envelope` so `_afterHistory` skips the redundant `/files/:rid` GET. Mirrored `reports.js`'s `needColumns` pattern.
+- **Phase 1 A** — `api.getCached(path) → { cached, fresh }` + `api.invalidateCached(path)` helpers, wired into 6 list endpoints across home / profile / objects / reports / dashboards / cleaner.
+- **Phase 1 B** — `/me` SWR in `main.js loadSession` + `settings.js` + `profile.js`; cache invalidates on every `PATCH /me` (rpSavePref + settings save + profile save). PATCH returns `UserProfile` not `MeResponse` so blanket-overwrite isn't safe.
+- **Phase 1 C** — per-file envelope cache keyed by `summary.updated_at`, LRU-capped at 50 entries. `_paintCachedTableShell` paints header + column shell from cache; 3-way decision tree picks no-op / tbody-swap / full-repaint based on `updated_at` match.
+- **Phase 2 D** — per-page row cache keyed by `(rid, updated_at, sorts, q, page, size)`, 1 MB total budget with size-aware LRU eviction. Cold-path early paint pulls cached rows into the shell when both caches hit.
+- **Phase 2 E** — `api.prewarm(paths)` via `requestIdleCallback`, wired into every page mount. Cross-page nav paints from cache.
+
+**Gotcha recovered**: duplicate `function _pageCacheKey` between legacy in-memory cache and new Tier 2 D helper was a parse-time `SyntaxError` in strict-mode modules — blanked the Cleaner page until renamed to `_pageRowsCacheKey`. Captured as feedback memory.
+
+### Objects sandbox completion (tab-isolation + edit/delete/filter/search)
+
+Originally the sandbox path used cleaner-borrowed `spSetMode` (which blanket-flips `contenteditable="true"` on every data cell — correct for cleaner's CSV-record semantics, wrong for Objects' heterogeneous schema-row semantics). Fixed at the root: `spSetMode` now skips the blanket flip when the panel contains `[data-object-type]` (sandbox Objects signature). Per-cell `ondblclick="objectsCellEdit(this)"` covers the actual editable subset.
+
+**Tab isolation** — `objectsActivateKind` now resets the toolbar on every switch: mode classes + button is-active state, search input + STATE[kind].search, rows-per-page label + dropdown selection, date-format pill + is-selected marker, columns picker dropdown rebuilt per-kind, filter panel cleared + rebuilt with the new kind's column dropdown. Saved-view bits (`objViews[kind]`) restore on entry where present.
+
+**Real backend wiring** — replaced sandbox visual-only `spDeleteRow` / `spDeleteAllRows` with real `schema.deleteOne` chains:
+- Row click in delete mode → `objectsToggleRowSel` detects mode, fires per-row `schema.deleteOne(rid)` + refreshes via `_objLoadAndPaint`
+- Master trash + toolbar Delete with selection → `objectsMaybeBulkDelete` → installed sandbox `objBulkDelete` (legacy version lives in `_wireGlobals` which the sandbox bypasses) → real per-rid `schema.deleteOne` + refresh
+- Inline cell edit (text / bool / enum) → `objectsCellEdit` swaps cell for input/select, commits via `schema.saveEdit` (PATCH), invalidates `/list` cache, refreshes via `_objLoadAndPaint`, toast last
+
+**Filter panel** — built `objectsBuildFilterPanel` / `objectsApplyFilter` / `objectsClearFilter` / `objectsAddPredicate` / `objectsRemovePredicate` / `objectsSetFilterCombo` / `objectsFbDdPick`. Dropdown markup matches cleaner-sandbox conventions (`.rp-dd-wrap` + `spDdToggle` + `data-value` on the wrap). Predicate evaluation reuses legacy `_objRowMatchesFilter` / `_objEvalPredicate` / `_objColValue` / `OBJ_FILTER_OPS`. Value input wrapped with `[data-fb-val-menu]` for distinct-values autocomplete (legacy `_objShowValSuggestions`). Toolbar search input wired through `objectsSearchInput` with the same autocomplete grammar (primary-column distinct values + repaint via `_objMatchesSearch`).
+
+**Header chrome** — Export buttons across all 6 per-type headers wired to `objExport()` (patched to fall back to `STATE[kind].rows` when `.filtered` is uninitialised on sandbox). Add buttons dispatch via `objAdd` (installed on sandbox path now, was legacy-only): companies use `addAction` (window.prompt + POST /companies), reports/dashboards use `addHref` navigation, files/projects fall through to `_objOpenUploadModal` (now refreshes via `_objLoadAndPaint` post-upload instead of legacy `loadTable`).
+
+**Columns picker** — `objectsBuildColsDropdown(kind)` paints `.rp-dd-checkbox` items per-kind into `[data-sp-cols-picker]` mount. `paintObjectsSandboxTable` honours `_visibleOrderedCols(kind)` for BOTH thead and tbody (previously only tbody, leading to column-count mismatch when user toggled visibility). Toggle changes auto-persist to `objViews[kind]` via `rpSavePref` so visibility survives refresh.
+
+**Status semantics** — `_objDerivedStatus` priority swap: `archived` (user-set, sticky) wins over `active` (open in cleaner), wins over `draft`. Previously open-in-cleaner overrode archived, so archiving a currently-open project looked like a no-op.
+
+**CSS** — predicate row borders aligned with sandbox library (12% text-mix instead of solid `var(--text)`), `.rp-rt-fb-selects` set to `3fr 7fr` for op/value (matching cleaner), `.rp-rt-search-wrap` flex:1 + min-width:0 so the wrapped search input still fills the toolbar. Local objects.css overrides for `.rp-rt-filter-inner` / `.rp-rt-filter-hdr` / `.rp-rt-fb-op-toggle` removed — sandbox library tokens come through.
+
+**Cleaner Overview tab** — slimmed toolbar to search + Edit/Select/Delete + selection chip via new `data-overview-scope` opt-in attr (everything else in the toolbar hides on Overview); file list table painted with mode-aware row chrome; bulk-delete + inline rename + search filter all wired; `STATE.ovSearch` + `STATE.ovSelected` + mode persisted to `sessionStorage` (`rp.cleaner.overview.state.v1`, hash-keyed); refresh on Overview no longer auto-picks `files[0]` (mount snapshot now signals "intended Overview" so the auto-pick is suppressed).
+
+### Pending follow-ups
+
+- Cleaner proj-tab isolation (the parallel to Objects' work, but at the proj-tabs level — switching projects should clear toolbar state the same way).
+- Sandbox `objectsSortBy` companion to legacy `objSortBy` — thead click cycles asc/desc, repaints via paintObjectsSandboxTable.
+- `select` / `open` edit types in `objectsCellEdit` (file→project move, owner reassign, builder handoff) — currently toast "not wired on this view yet" and fall through.

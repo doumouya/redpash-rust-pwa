@@ -59,29 +59,42 @@ const NOT_FOUND = {
 // will mean "endpoint exists but you're not signed in" and the
 // sentinel goes away.
 let session = null;
-async function loadSession() {
-  try { session = await api.get("/me"); }
-  catch (err) {
-    session = err.status === 404
-      ? { dev: true, username: "dev", display_name: "Dev user" }
-      : null;
-  }
-  // Apply per-user accent override (Settings page) so the brand colour
-  // persists across reloads without a paint flash from re-binding.
-  // Set BOTH custom-properties — app sheets use --rp-accent (alias)
-  // but most pre-existing rules (and library overrides) read --accent
-  // directly. Without overriding --accent too, the user's blue theme
-  // would still paint half the surfaces (active mode buttons, project
-  // tab rims, drag-drop outlines, etc.) RedPash red.
-  const accent = session?.prefs?.accent;
+
+// Apply the parts of the session that affect rendering — accent override
+// + localStorage prefs seed. Called from BOTH the cached and the fresh
+// branch of loadSession so paint settles synchronously when there's
+// a warm cache (no flash from the brand colour binding late).
+function _applySession() {
+  if (!session) return;
+  const accent = session.prefs?.accent;
   if (accent) {
     document.documentElement.style.setProperty("--rp-accent", accent);
     document.documentElement.style.setProperty("--accent",    accent);
   }
-  // Seed localStorage from the account so the synchronous shell
-  // restores (theme, float-bar positions, bg palette) read the user's
-  // SAVED choices — not whatever this browser happened to cache.
-  seedPrefsToLocalStorage(session?.prefs);
+  seedPrefsToLocalStorage(session.prefs);
+}
+
+async function loadSession() {
+  // SWR via api.getCached (Phase 1 B): warm cache → instant theme +
+  // accent paint from localStorage; fresh fetch corrects in the
+  // background. Cold cache → same single-paint shape as the old code,
+  // including the 404→dev-sentinel fallback.
+  const { cached, fresh } = api.getCached("/me");
+  if (cached) {
+    session = cached;
+    _applySession();
+  }
+  try {
+    session = await fresh;
+  } catch (err) {
+    if (!cached) {
+      session = err.status === 404
+        ? { dev: true, username: "dev", display_name: "Dev user" }
+        : null;
+    }
+    // else: keep cached value as the fallback — better stale than blank.
+  }
+  _applySession();
 }
 export function getSession() { return session; }
 
@@ -145,6 +158,11 @@ window.rpSavePref = async (prefsKey, value) => {
   try {
     await api.patch("/me", { prefs: { [prefsKey]: value } });
     if (session && session.prefs) session.prefs[prefsKey] = value;
+    // PATCH /me returns UserProfile (no global_sentinels), so we can't
+    // overwrite the cached MeResponse from the response. Drop the cache
+    // so the next loadSession re-fetches a full envelope. Subsequent
+    // mounts pay one network hit then SWR-paint normally.
+    api.invalidateCached("/me");
   } catch (err) {
     console.warn(`rpSavePref(${prefsKey}) failed:`, err);
   }
