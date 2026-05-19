@@ -16,29 +16,36 @@
 
 <div id="page-profile">
 
-  <!-- ─── Topbar (sandbox chrome family) ──────────────────────────────
-       Back arrow · Profile title · theme toggle · logout. Float bars
-       from the old design are dropped — every action they hosted lives
-       here now (theme toggle, logout) or in the side rail (Home, Docs,
-       Contact). -->
+  <!-- ─── Topbar (trimmed — back arrow + title only) ──────────────────
+       Cluster of right-side actions moved to the .rp-float-bar--tr
+       below so the topbar is lighter and the chrome reads as one
+       glance ("back to home, you're on Profile"). Theme/Logout +
+       page shortcuts live in the float bar; Docs/Contact live in
+       the rail-foot. -->
   <div class="rp-rt-topbar">
     <a class="rp-btn" href="#/home" aria-label="Back to Home" title="Back to Home">
       <i class="bi bi-arrow-left"></i>
     </a>
     <h1 class="rp-rt-page-title"><i class="bi bi-person-circle"></i> Profile</h1>
-    <a class="rp-btn" href="#/cleaner" aria-label="Open Cleaner" title="Open Cleaner"
-       style="margin-left:auto">
+  </div>
+
+  <!-- Top-right float bar — page shortcuts + user actions. Library
+       float-btn.css positions it via .rp-float-bar--tr (fixed, top
+       1.25rem / right 1.75rem, max-folded with safe-area-insets in
+       main.css for iPhone notches in landscape). -->
+  <div class="rp-float-bar rp-float-bar--tr">
+    <a class="rp-float-btn" href="#/cleaner" aria-label="Open Cleaner" title="Open Cleaner">
       <i class="bi bi-magic"></i>
     </a>
-    <a class="rp-btn" href="#/objects" aria-label="Open Objects" title="Open Objects">
+    <a class="rp-float-btn" href="#/objects" aria-label="Open Objects" title="Open Objects">
       <i class="bi bi-grid-3x3-gap"></i>
     </a>
-    <button class="rp-btn" type="button" aria-label="Toggle theme" title="Toggle theme"
-            onclick="rpToggleTheme()">
+    <button class="rp-float-btn" type="button" aria-label="Toggle theme"
+            title="Toggle theme" onclick="rpToggleTheme()">
       <i class="bi bi-moon" data-sp-theme-icon></i>
     </button>
-    <button class="rp-btn" type="button" aria-label="Log out" title="Log out"
-            onclick="doLogout()">
+    <button class="rp-float-btn" type="button" aria-label="Log out"
+            title="Log out" onclick="doLogout()">
       <i class="bi bi-box-arrow-right"></i>
     </button>
   </div>
@@ -104,46 +111,50 @@
            handle unchanged. -->
       <div class="rp-profile__pane">
 
+        <!-- ─── Identity hero (promoted out of #section-personal form) ────
+             "This is you" headline above the section grid. Spans both
+             columns of the 2-col pane grid on wider viewports via CSS.
+             Edit/Save buttons use form=profile-form so they continue
+             driving the form below despite being outside it. -->
+        <div class="rp-profile__hero">
+          <div class="rp-avatar-wrap rp-profile__hero-avatar">
+            <div class="rp-avatar rp-avatar--xl rp-initials rp-photo-av" id="profile-avatar">··</div>
+            <button type="button" class="rp-avatar-edit" aria-label="Upload photo"
+                    onclick="document.getElementById('profile-photo-input').click()">
+              <i class="bi bi-camera-fill"></i>
+            </button>
+            <input id="profile-photo-input" type="file" accept="image/*" style="display:none"
+                   onchange="profilePhotoSelected(this)" />
+          </div>
+          <div class="rp-profile__hero-meta">
+            <h2 class="rp-profile__hero-name" id="profile-id-name">—</h2>
+            <div class="rp-profile__hero-email" id="profile-id-email">—</div>
+            <div class="rp-profile__hero-tags">
+              <span class="rp-soon" id="profile-plan-pill" style="border-style:solid; color:var(--green); border-color:color-mix(in srgb, var(--green) 35%, transparent); background:color-mix(in srgb, var(--green) 12%, transparent)">Free</span>
+              <span class="rp-set-sub" id="profile-joined" style="margin:0"></span>
+            </div>
+          </div>
+          <div class="rp-profile__hero-actions">
+            <button type="button" class="rp-btn" id="profile-edit-toggle"
+                    aria-label="Toggle edit mode" aria-pressed="false" title="Edit mode"
+                    onclick="profileToggleEdit()">
+              <i class="bi bi-pencil-fill"></i>
+            </button>
+            <button type="submit" class="rp-btn" id="profile-save-btn" form="profile-form"
+                    aria-label="Save changes" title="Save changes" disabled>
+              <i class="bi bi-floppy-fill"></i>
+            </button>
+          </div>
+        </div>
+
         <!-- ─── Personal info ──────────────────────────────────────── -->
         <section id="section-personal" class="rp-profile__section">
           <header class="rp-profile__section-hdr">
             <h2 class="rp-profile__section-ttl">Personal info</h2>
-            <div class="rp-profile__section-sub">Your identity + contact details. Click the pencil to enter edit mode; the floppy commits changes.</div>
+            <div class="rp-profile__section-sub">Editable contact + identification fields. Click the pencil in the hero to enter edit mode; the floppy commits changes.</div>
           </header>
 
           <form class="rp-profile__card" id="profile-form" novalidate>
-            <!-- Identity row — avatar + name/email/plan + edit/save. -->
-            <div class="rp-set-row" style="gap: 1rem">
-              <div class="rp-avatar-wrap" style="flex-shrink:0">
-                <div class="rp-avatar rp-avatar--xl rp-initials rp-photo-av" id="profile-avatar">··</div>
-                <button type="button" class="rp-avatar-edit" aria-label="Upload photo"
-                        onclick="document.getElementById('profile-photo-input').click()">
-                  <i class="bi bi-camera-fill"></i>
-                </button>
-                <input id="profile-photo-input" type="file" accept="image/*" style="display:none"
-                       onchange="profilePhotoSelected(this)" />
-              </div>
-              <div class="rp-set-lbl" style="flex:1">
-                <div class="rp-set-title" id="profile-id-name">—</div>
-                <div class="rp-set-sub" id="profile-id-email">—</div>
-                <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.375rem">
-                  <span class="rp-soon" id="profile-plan-pill" style="border-style:solid; color:var(--green); border-color:color-mix(in srgb, var(--green) 35%, transparent); background:color-mix(in srgb, var(--green) 12%, transparent)">Free</span>
-                  <span class="rp-set-sub" id="profile-joined" style="margin:0"></span>
-                </div>
-              </div>
-              <button type="button" class="rp-btn" id="profile-edit-toggle"
-                      aria-label="Toggle edit mode" aria-pressed="false" title="Edit mode"
-                      onclick="profileToggleEdit()" style="flex-shrink:0">
-                <i class="bi bi-pencil-fill"></i>
-              </button>
-              <button type="submit" class="rp-btn" id="profile-save-btn"
-                      aria-label="Save changes" title="Save changes" disabled style="flex-shrink:0">
-                <i class="bi bi-floppy-fill"></i>
-              </button>
-            </div>
-
-            <div class="rp-set-divider"></div>
-
             <div class="rp-set-row">
               <div class="rp-set-lbl"><div class="rp-set-title">Display name</div></div>
               <input id="profile-display-name" name="display_name" type="text"
