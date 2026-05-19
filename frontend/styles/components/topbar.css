@@ -7,8 +7,16 @@
   display: flex;
   align-items: center;
   gap: 24px;
-  height: var(--rp-topbar-h);
-  padding: 0 var(--rp-gutter);
+  /* Grow vertically by safe-area-top so the bar sits below the iPhone
+     notch / iOS status bar when installed as a PWA (paired with
+     apple-mobile-web-app-status-bar-style=black-translucent in
+     index.html). Internal items still center against --rp-topbar-h. */
+  min-height: var(--rp-topbar-h);
+  height: calc(var(--rp-topbar-h) + var(--rp-sai-top));
+  padding-top: var(--rp-sai-top);
+  padding-right: max(var(--rp-gutter), var(--rp-sai-right));
+  padding-bottom: 0;
+  padding-left: max(var(--rp-gutter), var(--rp-sai-left));
   background: var(--rp-surface);
   border-bottom: 1px solid var(--rp-border);
 }

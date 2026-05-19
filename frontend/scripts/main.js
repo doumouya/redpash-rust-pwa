@@ -445,8 +445,27 @@ window.rpSetTheme = (t) => {
   html.classList.add("rp-theme-transitioning");
   setTimeout(() => html.classList.remove("rp-theme-transitioning"), 400);
   html.setAttribute("data-theme", t);
+  // theme-color drives the Android status bar + desktop Chrome titlebar.
+  // Match the slate-cobalt page bg so the system chrome blends with the
+  // topbar (Phase 0/1/2 cleanup palette). Two strategies depending on
+  // mode:
+  //   • pinned light/dark — strip the `media` attribute so the tag
+  //     wins regardless of OS prefers-color-scheme (the second tag in
+  //     index.html with `media=(prefers-color-scheme: light)` still
+  //     lives but loses to this unscoped one).
+  //   • system — restore the `media=(prefers-color-scheme: dark)`
+  //     scope so the two media-scoped <meta>s in index.html auto-track
+  //     the OS theme together.
   const meta = document.getElementById("meta-theme");
-  if (meta) meta.setAttribute("content", t === "light" ? "#4f8ef7" : "#89b4fa");
+  if (meta) {
+    if (t === "system") {
+      meta.setAttribute("media", "(prefers-color-scheme: dark)");
+      meta.setAttribute("content", "#0f172a");
+    } else {
+      meta.removeAttribute("media");
+      meta.setAttribute("content", t === "light" ? "#f0f4ff" : "#0f172a");
+    }
+  }
   try { localStorage.setItem("redpash-theme", t); } catch {}
   window.rpSavePref?.("theme", t);
   _rpSyncToggleIcons(t);
@@ -476,6 +495,21 @@ window.rpToggleTheme = () => {
       }
     }
   } catch {}
+})();
+
+// Detect standalone-mode launch (PWA installed to home screen) and tag
+// <html data-display="standalone"> so CSS can opt into PWA-only tweaks
+// (hide "install RedPash" prompts, tighten chrome that the browser
+// no longer provides, etc.) via html[data-display="standalone"] {...}.
+// matchMedia('(display-mode: standalone)') covers Chrome / Edge /
+// Android; navigator.standalone is the legacy iOS Safari property.
+(() => {
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+  if (standalone) {
+    document.documentElement.setAttribute("data-display", "standalone");
+  }
 })();
 
 // ─── Background palette preview ─────────────────────────────────

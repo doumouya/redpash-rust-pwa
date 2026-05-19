@@ -103,6 +103,54 @@
   --rp-radius-lg:     14px;
   --rp-topbar-h:      56px;
   --rp-gutter:        20px;
+
+  /* iOS / Android safe-area insets — the four env() values resolve
+     to the device's physical insets (iPhone notch, home indicator,
+     landscape side cutouts; Android gesture bar). Pre-cached into
+     --rp-sai-* so individual rules don't have to call env() each
+     time and so a `max(designed-pad, var(--rp-sai-X))` pattern is
+     compact. viewport-fit=cover in index.html unlocks these; without
+     it env() returns 0 even on devices with insets. */
+  --rp-sai-top:    env(safe-area-inset-top, 0px);
+  --rp-sai-right:  env(safe-area-inset-right, 0px);
+  --rp-sai-bottom: env(safe-area-inset-bottom, 0px);
+  --rp-sai-left:   env(safe-area-inset-left, 0px);
+}
+
+/* ── Native-app feel resets ─────────────────────────────────────────
+   Small browser giveaways that make a PWA feel "web". Each kills a
+   specific affordance: */
+html, body {
+  /* No iOS pull-down white rubber-band, no Android pull-to-refresh
+     overscroll on the document root. Scroll containers inside the
+     app (table panes, modal bodies) opt back in if they need it. */
+  overscroll-behavior: none;
+}
+* {
+  /* No iOS blue tap-flash on any element. */
+  -webkit-tap-highlight-color: transparent;
+}
+/* No long-press iOS share menu / no text-selection drag on chrome —
+   scoped to interactive surfaces so users can still select text in
+   table cells, modal bodies, document content. Inputs and contenteditable
+   re-enable user-select via UA defaults. */
+.rp-topbar, .rp-rt-topbar, .rp-rt-header, .rp-rt-toolbar,
+.rp-rt-proj-tabs, .rp-rt-file-tabs, .rp-rt-pager,
+.rp-rt-filter-panel, .rp-rtp-tools,
+.rp-float-bar, .rp-btn, .rp-modal-hdr, .rp-modal-footer {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Re-enable selection on inputs / textareas inside chrome surfaces
+   (search boxes inside the toolbar, etc.). */
+.rp-rt-topbar input, .rp-rt-topbar textarea,
+.rp-rt-toolbar input, .rp-rt-toolbar textarea,
+.rp-rt-filter-panel input, .rp-rt-filter-panel textarea,
+.rp-rtp-tools input, .rp-rtp-tools textarea,
+.rp-modal-hdr input, .rp-modal-hdr textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* App-side body chrome. The universal `*` / anchor / button defaults
@@ -146,7 +194,15 @@ body {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.875rem 1.25rem 0.625rem;
+  /* Pad top by max(designed, safe-area-top) so the topbar sits below
+     the iPhone notch when installed as a PWA. Left/right insets matter
+     in landscape (notch ends up on a side). status-bar-style=black-
+     translucent in index.html makes the bar flow under the iOS status
+     bar; the inset pushes interactive content back into the safe zone. */
+  padding-top:    max(0.875rem, calc(var(--rp-sai-top) + 0.25rem));
+  padding-right:  max(1.25rem,  var(--rp-sai-right));
+  padding-bottom: 0.625rem;
+  padding-left:   max(1.25rem,  var(--rp-sai-left));
   flex-shrink: 0;
 }
 .rp-rt-page-title {
@@ -254,6 +310,26 @@ html[data-theme="light"] .rp-rtp-tools { background: var(--surface); }
   /* Optical nudge — the Savate "R" leans left, so pull it half a hair
      right inside the circle for visual balance. */
   padding-left: 0.04em;
+}
+
+/* ── Float-bar safe-area insets ─────────────────────────────────────
+   Library's float-btn.css positions .rp-float-bar--{tl,tc,tr,bl,bc,br}
+   at a fixed 1.25rem from each edge. On iPhone PWAs the top bars need
+   to clear the notch / status bar; the bottom bars need to clear the
+   home indicator; landscape mode adds left/right insets. max() takes
+   the larger of the designed distance and the safe-area floor so the
+   visual offset is preserved on devices without insets. */
+.rp-float-bar--tl, .rp-float-bar--tc, .rp-float-bar--tr {
+  top: max(1.25rem, calc(var(--rp-sai-top) + 0.5rem));
+}
+.rp-float-bar--bl, .rp-float-bar--bc, .rp-float-bar--br {
+  bottom: max(1.25rem, calc(var(--rp-sai-bottom) + 0.5rem));
+}
+.rp-float-bar--tl, .rp-float-bar--bl {
+  left: max(1.75rem, calc(var(--rp-sai-left) + 0.75rem));
+}
+.rp-float-bar--tr, .rp-float-bar--br {
+  right: max(1.75rem, calc(var(--rp-sai-right) + 0.75rem));
 }
 
 /* Full-bleed shell — opt-in per route via `chrome: "full"` in main.js's

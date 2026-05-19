@@ -6,10 +6,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#b3001b" id="meta-theme" />
+
+  <!-- Theme-color drives the browser-chrome bg (Android status bar +
+       desktop Chrome titlebar). Two `media`-scoped tags let the browser
+       pick the right one for the user's prefers-color-scheme when the
+       app is in `data-theme="system"`. main.js's rpSetTheme() overrides
+       the `id="meta-theme"` tag for pinned light/dark choices.
+       Values match the slate-cobalt page bg so the chrome blends with
+       the topbar, not a different brand color. -->
+  <meta name="theme-color" content="#0f172a" id="meta-theme" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f0f4ff" media="(prefers-color-scheme: light)" />
+
+  <!-- iOS PWA standalone — without these, "Add to Home Screen" on
+       iPhone launches the app in Safari with the URL bar showing.
+       `apple-mobile-web-app-capable=yes` is the iOS-specific opt-in
+       (Safari doesn't read manifest.json for this); `mobile-web-app-
+       capable=yes` is the non-Apple alias picked up by Android.
+       `status-bar-style=black-translucent` makes the iOS status bar
+       transparent so our topbar can flow under it — paired with the
+       `env(safe-area-inset-top)` padding in main.css so interactive
+       chrome stays in the safe zone. -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RedPash" />
+
   <title>RedPash</title>
 
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+  <!-- iOS uses apple-touch-icon for the home-screen icon (doesn't
+       read the manifest's icon array). 192px is the iOS-recommended
+       size and reuses the existing PWA icon. -->
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <link rel="manifest" href="/manifest.json" />
 
   <!-- Savate is the brand wordmark face. Loaded globally so the favicon
