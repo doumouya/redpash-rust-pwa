@@ -352,10 +352,17 @@ body[data-chrome="full"] {
   flex-direction: column;
   transition: background 0.25s, color 0.25s;
   -webkit-font-smoothing: antialiased;
+  /* UA default `body { margin: 8px }` leaks through every browser
+     reset that doesn't explicitly zero it. The library's `reset.css`
+     skips body chrome on purpose; shell.css had a `*` zero rule that
+     covered it, but we don't load shell.css here any more. Pin it
+     directly on the body rule (any selector specificity works since
+     UA defaults are 0,0,0,0 + lower cascade priority). */
+  margin: 0;
 }
 html:has(body[data-chrome="full"]) { overflow: hidden; }
 
-/* Universal margin/padding zero — scoped to full-bleed pages so
+/* Universal margin/padding zero on DESCENDANTS of full-bleed pages so
    non-full-bleed surfaces (docs especially) keep browser-default
    spacing on raw <h1>/<p>/<ul> content. Mirrors what shell.css
    carried before I hoisted only its body chrome into main.css.
@@ -366,7 +373,10 @@ html:has(body[data-chrome="full"]) { overflow: hidden; }
    :where() pins the selector specificity to 0,0,0,0 (matching
    shell.css's bare `*`) so any class-based padding rule
    (.rp-btn { padding: 0 14px }, .rp-rt-toolbar { padding: ... }, etc.)
-   still wins — this rule only beats UA defaults, not authored styles. */
+   still wins — this rule only beats UA defaults, not authored styles.
+
+   Body itself is handled separately above (descendant combinator
+   excludes the host element). */
 :where(body[data-chrome="full"]) :where(*, *::before, *::after) {
   margin: 0;
   padding: 0;
