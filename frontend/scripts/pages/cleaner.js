@@ -3286,21 +3286,33 @@ function _positionToolModal(toolId, btn) {
   // pattern: table behind STAYS VISIBLE so the user keeps spatial context."
   overlay.classList.add("is-popover");
 
-  const rect = btn.getBoundingClientRect();
-  const gap  = 12;
+  // Anchor every tool modal to the TOOLS PANEL'S left edge instead of
+  // the trigger button. Three reasons:
+  //   1. Consistent placement — every tool opens in the same spot
+  //      regardless of which button in the panel grid the user clicked.
+  //   2. Visual stability — the user's eyes don't have to jump around
+  //      between modals (drop-columns vs change-case open in the same
+  //      slot, only contents change).
+  //   3. Robust to button position — if the panel scrolls or a new tool
+  //      button is added, modals still open at the same spot.
+  // Falls back to button coordinates if the tools panel isn't around
+  // (defensive — shouldn't happen on the cleaner page).
+  const panel = document.querySelector(".rp-rtp-tools");
+  const anchorRect = panel?.getBoundingClientRect() ?? btn.getBoundingClientRect();
+  const gap = 12;
   modal.style.position = "fixed";
   modal.style.margin   = "0";
   requestAnimationFrame(() => {
     const vpW = window.innerWidth, vpH = window.innerHeight;
     const mw  = modal.offsetWidth  || 400;
     const mh  = modal.offsetHeight || 300;
-    // Anchor to the LEFT of the trigger button (since the tools panel
-    // sits on the right edge). Fall back to the right side if there
-    // isn't room on the left. Clamp to viewport edges.
-    let left = rect.left - mw - gap;
-    if (left < gap) left = rect.right + gap;
+    // LEFT of panel edge. Fall back to right side only if no room (very
+    // narrow viewport). Clamp to viewport.
+    let left = anchorRect.left - mw - gap;
+    if (left < gap) left = anchorRect.right + gap;
     left = Math.max(gap, Math.min(left, vpW - mw - gap));
-    let top = rect.top;
+    // Top-align to the panel's top edge so all modals share a baseline.
+    let top = anchorRect.top;
     if (top + mh > vpH - gap) top = Math.max(gap, vpH - mh - gap);
     modal.style.left = `${left}px`;
     modal.style.top  = `${top}px`;

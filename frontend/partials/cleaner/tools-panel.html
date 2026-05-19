@@ -18,7 +18,7 @@
     <div class="rp-rtp-tools-content">
 
       <!-- Dataset-level audit — always visible, above any section. -->
-      <button class="rp-rtp-tools-top" onclick="openModal('tool-inspect', this)">
+      <button class="rp-rtp-tools-top" onclick="cleanerOpenTool('tool-inspect', this)">
         <i class="bi bi-clipboard-data"></i>
         <span>Inspect dataset</span>
         <span class="rp-form-meta" style="margin-left:auto">overall audit + cleanup suggestions</span>
@@ -31,12 +31,12 @@
       </div>
       <div class="rp-rt-panel-sect-body open">
         <div class="rp-rtp-ct-grid">
-          <button class="rp-rtp-ct-btn" title="Remove duplicates"   onclick="openModal('tool-dedup',    this)"><i class="bi bi-copy"></i><span class="rp-rtp-ct-btn-lbl">Remove duplicates</span></button>
-          <button class="rp-rtp-ct-btn" title="Fill missing values" onclick="openModal('tool-fill',     this)"><i class="bi bi-pencil-fill"></i><span class="rp-rtp-ct-btn-lbl">Fill missing values</span></button>
-          <button class="rp-rtp-ct-btn" title="Fix invalid values"  onclick="openModal('tool-invalid',  this)"><i class="bi bi-wrench-adjustable"></i><span class="rp-rtp-ct-btn-lbl">Fix invalid values</span></button>
-          <button class="rp-rtp-ct-btn" title="Format dates"        onclick="openModal('tool-dates',    this)"><i class="bi bi-calendar3"></i><span class="rp-rtp-ct-btn-lbl">Format dates</span></button>
-          <button class="rp-rtp-ct-btn" title="Drop empty rows"     onclick="openModal('tool-droprows', this)"><i class="bi bi-file-minus"></i><span class="rp-rtp-ct-btn-lbl">Drop empty rows</span></button>
-          <button class="rp-rtp-ct-btn" title="Unwrap rows"         onclick="openModal('tool-unwrap',   this)"><i class="bi bi-bandaid"></i><span class="rp-rtp-ct-btn-lbl">Unwrap rows</span></button>
+          <button class="rp-rtp-ct-btn" title="Remove duplicates"   onclick="cleanerOpenTool('tool-dedup',    this)"><i class="bi bi-copy"></i><span class="rp-rtp-ct-btn-lbl">Remove duplicates</span></button>
+          <button class="rp-rtp-ct-btn" title="Fill missing values" onclick="cleanerOpenTool('tool-fill',     this)"><i class="bi bi-pencil-fill"></i><span class="rp-rtp-ct-btn-lbl">Fill missing values</span></button>
+          <button class="rp-rtp-ct-btn" title="Fix invalid values"  onclick="cleanerOpenTool('tool-invalid',  this)"><i class="bi bi-wrench-adjustable"></i><span class="rp-rtp-ct-btn-lbl">Fix invalid values</span></button>
+          <button class="rp-rtp-ct-btn" title="Format dates"        onclick="cleanerOpenTool('tool-dates',    this)"><i class="bi bi-calendar3"></i><span class="rp-rtp-ct-btn-lbl">Format dates</span></button>
+          <button class="rp-rtp-ct-btn" title="Drop empty rows"     onclick="cleanerOpenTool('tool-droprows', this)"><i class="bi bi-file-minus"></i><span class="rp-rtp-ct-btn-lbl">Drop empty rows</span></button>
+          <button class="rp-rtp-ct-btn" title="Unwrap rows"         onclick="cleanerOpenTool('tool-unwrap',   this)"><i class="bi bi-bandaid"></i><span class="rp-rtp-ct-btn-lbl">Unwrap rows</span></button>
         </div>
       </div>
 
@@ -47,10 +47,10 @@
       </div>
       <div class="rp-rt-panel-sect-body">
         <div class="rp-rtp-ct-grid">
-          <button class="rp-rtp-ct-btn" title="Rename column"    onclick="openModal('tool-rename',       this)"><i class="bi bi-cursor-text"></i><span class="rp-rtp-ct-btn-lbl">Rename column</span></button>
-          <button class="rp-rtp-ct-btn" title="Snake_case all"   onclick="openModal('tool-snake',        this)"><i class="bi bi-braces"></i><span class="rp-rtp-ct-btn-lbl">Snake_case all</span></button>
-          <button class="rp-rtp-ct-btn" title="Replace in names" onclick="openModal('tool-replacenames', this)"><i class="bi bi-tag"></i><span class="rp-rtp-ct-btn-lbl">Replace in names</span></button>
-          <button class="rp-rtp-ct-btn" title="Change case"      onclick="openModal('tool-changecase',   this)"><i class="bi bi-fonts"></i><span class="rp-rtp-ct-btn-lbl">Change case</span></button>
+          <button class="rp-rtp-ct-btn" title="Rename column"    onclick="cleanerOpenTool('tool-rename',       this)"><i class="bi bi-cursor-text"></i><span class="rp-rtp-ct-btn-lbl">Rename column</span></button>
+          <button class="rp-rtp-ct-btn" title="Snake_case all"   onclick="cleanerOpenTool('tool-snake',        this)"><i class="bi bi-braces"></i><span class="rp-rtp-ct-btn-lbl">Snake_case all</span></button>
+          <button class="rp-rtp-ct-btn" title="Replace in names" onclick="cleanerOpenTool('tool-replacenames', this)"><i class="bi bi-tag"></i><span class="rp-rtp-ct-btn-lbl">Replace in names</span></button>
+          <button class="rp-rtp-ct-btn" title="Change case"      onclick="cleanerOpenTool('tool-changecase',   this)"><i class="bi bi-fonts"></i><span class="rp-rtp-ct-btn-lbl">Change case</span></button>
           <button class="rp-rtp-ct-btn" title="Drop columns"     onclick="cleanerOpenTool('tool-dropcols', this)"><i class="bi bi-dash-square"></i><span class="rp-rtp-ct-btn-lbl">Drop columns</span></button>
         </div>
       </div>
@@ -62,11 +62,11 @@
       </div>
       <div class="rp-rt-panel-sect-body">
         <div class="rp-rtp-ct-grid">
-          <button class="rp-rtp-ct-btn" title="Split column"   onclick="openModal('tool-split',       this)"><i class="bi bi-scissors"></i><span class="rp-rtp-ct-btn-lbl">Split column</span></button>
-          <button class="rp-rtp-ct-btn" title="Join columns"   onclick="openModal('tool-joinco',      this)"><i class="bi bi-link-45deg"></i><span class="rp-rtp-ct-btn-lbl">Join columns</span></button>
-          <button class="rp-rtp-ct-btn" title="Remove text"    onclick="openModal('tool-removetext',  this)"><i class="bi bi-eraser"></i><span class="rp-rtp-ct-btn-lbl">Remove text</span></button>
-          <button class="rp-rtp-ct-btn" title="Find in values" onclick="openModal('tool-find',        this)"><i class="bi bi-search"></i><span class="rp-rtp-ct-btn-lbl">Find in values</span></button>
-          <button class="rp-rtp-ct-btn" title="Replace text"   onclick="openModal('tool-replacetext', this)"><i class="bi bi-arrow-repeat"></i><span class="rp-rtp-ct-btn-lbl">Replace text</span></button>
+          <button class="rp-rtp-ct-btn" title="Split column"   onclick="cleanerOpenTool('tool-split',       this)"><i class="bi bi-scissors"></i><span class="rp-rtp-ct-btn-lbl">Split column</span></button>
+          <button class="rp-rtp-ct-btn" title="Join columns"   onclick="cleanerOpenTool('tool-joinco',      this)"><i class="bi bi-link-45deg"></i><span class="rp-rtp-ct-btn-lbl">Join columns</span></button>
+          <button class="rp-rtp-ct-btn" title="Remove text"    onclick="cleanerOpenTool('tool-removetext',  this)"><i class="bi bi-eraser"></i><span class="rp-rtp-ct-btn-lbl">Remove text</span></button>
+          <button class="rp-rtp-ct-btn" title="Find in values" onclick="cleanerOpenTool('tool-find',        this)"><i class="bi bi-search"></i><span class="rp-rtp-ct-btn-lbl">Find in values</span></button>
+          <button class="rp-rtp-ct-btn" title="Replace text"   onclick="cleanerOpenTool('tool-replacetext', this)"><i class="bi bi-arrow-repeat"></i><span class="rp-rtp-ct-btn-lbl">Replace text</span></button>
         </div>
       </div>
 
