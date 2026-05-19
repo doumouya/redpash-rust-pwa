@@ -1003,6 +1003,56 @@ where one tool modal opens another with no anchor) clears the
 back — that flow is a deliberate "navigation" affordance, not a
 spatial-context one.
 
+### Gotcha: legacy `_render*` family targets dead DOM ids
+
+*Cleaner ✅ — applies to ANY post-mutation refresh you add on the sandbox path.*
+
+This is THE systemic source of "I have to refresh the page before
+the component updates" symptoms. The legacy render family
+(`_renderTitle` / `_renderHeaderMeta` / `_renderHistoryButtons` /
+`_renderTabs` / `_renderOverallCleanness` / `_renderAppliedList` /
+`_renderDtypeList` / `_loadPage`) all target legacy DOM ids
+(`#cleaner-undo`, `#cleaner-redo`, `#cleaner-title`, etc.) that **do
+not exist** in sandbox markup. They each `if (!el) return;` early-bail
+silently when they don't find their target. The state mutation
+SUCCEEDS (STATE.steps gets the new entry, etc.) but no DOM update
+happens — so on next mount the UI looks fresh, but in the same
+session, components like the undo button stay disabled.
+
+The sandbox has a purpose-built `_afterHistory(envelope, label)`
+closure inside `_installSandboxLiveHandlers` ([cleaner.js:5317](../../frontend/scripts/pages/cleaner.js)) that does the right
+thing:
+
+```js
+const _afterHistory = async (envelope, label) => {
+  if (!envelope) return;
+  STATE.summary = envelope.summary;
+  STATE.columns = envelope.columns ?? [];
+  STATE.steps   = envelope.steps   ?? [];
+  // mirror the active file's STATE.files slot…
+  _renderSandboxHeader(root, proj, activeFile, STATE.files || []);
+  _renderSandboxFileTabs(root, STATE.files || [], activeFile);
+  await _paintSandboxTable(root, activeFile);
+  _syncUndoRedoButtons();                  // ← THIS is what enables undo/redo
+  if (label && window.toast?.success) window.toast.success(label);
+};
+```
+
+**Rule:** every POST-then-refresh path on the sandbox should pipe
+the FileEnvelope through `_afterHistory(env, label)`, NOT through
+the legacy render calls. That includes:
+
+- `cleanerApplyTool` (every tool's Apply path)
+- `cleanerUndo` / `cleanerRedo` (already correct)
+- `applyUnwrapCsv` (banner-fix flow — still uses legacy renders,
+  needs migration if it's ever invoked from sandbox)
+- Any cast / encoding / sentinel-learn flow that POSTs a step
+  and expects the chrome to refresh
+
+If you're tempted to call `_renderHistoryButtons(root)` on a sandbox
+path: don't. It targets `#cleaner-undo` / `#cleaner-redo` (legacy
+ids). Use `_syncUndoRedoButtons()` or `_afterHistory(env)` instead.
+
 ### Gotcha: dual modal-id lookup needed everywhere
 
 *Cleaner ✅ ([cleaner.js `_populateToolModal`, `_positionToolModal`, `_readToolPayload`, `_refreshDedupPreview`, `cleanerToolInvalidSelectAll`, the consent gate in `cleanerApplyTool`](../../frontend/scripts/pages/cleaner.js)) — re-grep after every modal port.*

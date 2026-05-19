@@ -3773,6 +3773,14 @@ function _readToolPayload(toolId) {
       // Read-only tools; no apply.
       return null;
     }
+    case "tool-unwrap": {
+      // Backend's unwrap_csv re-parse takes no params (re-runs the
+      // wrapped-CSV detector across the whole file). The straggler
+      // picker + parse-hint selects in the sandbox modal are
+      // aspirational UI; the backend doesn't accept per-row /
+      // per-sep targeting yet, so we ignore those controls.
+      return { kind: "unwrap_csv", params: {} };
+    }
     default: {
       _vErr(`Unknown tool: ${toolId}`);
       return null;
@@ -5260,27 +5268,25 @@ function _installSandboxLiveHandlers(root) {
         `/files/${encodeURIComponent(STATE.rid)}/steps`,
         payload,
       );
-      STATE.summary = res.summary;
-      STATE.columns = res.columns ?? [];
-      STATE.steps   = res.steps   ?? [];
-      const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
-      if (idx >= 0) STATE.files[idx] = res.summary;
-      _renderTitle(root);
-      _renderHeaderMeta(root);
-      _renderOverallCleanness(root);
-      _renderHistoryButtons(root);
-      _renderAppliedList(root);
-      _renderDtypeList(root);
-      _renderTabs(root);
-      await _loadPage(root);
-
+      // Build the toast label here so _afterHistory can show it.
       const op = res.last_op ?? {};
       const delta = op.rows_after != null && op.rows_before != null
         ? (op.rows_after - op.rows_before) : null;
       const note = delta != null && delta !== 0
         ? `${delta > 0 ? "+" : ""}${delta.toLocaleString()} rows`
         : (op.cells_changed != null ? `${op.cells_changed.toLocaleString()} cells` : "applied");
-      toast.success(`${payload.kind} · ${note}`);
+      // Route through sandbox _afterHistory (declared lower in this
+      // function — closure binding resolves at call time). That helper
+      // mirrors the envelope into STATE, re-paints sandbox-aware
+      // header / file-tabs / table, and CRUCIALLY calls
+      // _syncUndoRedoButtons() which targets [data-sp-undo] /
+      // [data-sp-redo]. Previously this code called the legacy
+      // _render* family which only knew about #cleaner-undo /
+      // #cleaner-redo (legacy ids that don't exist in sandbox markup)
+      // — so the undo button stayed disabled until the next full
+      // mount re-synced it. Same root cause for any other component
+      // that "needs a refresh" after a step apply.
+      await _afterHistory(res, `${payload.kind} · ${note}`);
     } catch (err) {
       toast.error(`Apply failed: ${err.body?.error ?? err.message}`);
     }
