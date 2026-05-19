@@ -1583,16 +1583,24 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
   width: 100%;
 }
 
-/* AND/OR combinator toggle — library uses `flex: 1` (= flex-shrink: 1)
-   on each button + `overflow: hidden` on the container. When the
-   panel narrows past the buttons' intrinsic size, that combo lets
-   them get clipped vertically (height visibly shrinks) instead of
-   preserving natural padding-driven height like the Add Predicate
-   button (which is `inline-flex`, content-sized, freestanding —
-   nothing to squeeze it). Override flex to `1 1 50%` for symmetric
-   widths + flex-shrink: 0 so the buttons hold their natural height.
-   min-width: 0 lets the 50% basis win over the implicit content
-   min-width. */
+/* AND/OR combinator toggle — two-axis sizing fix:
+   1. HORIZONTAL: the toggle wrapper is `display: flex` (row). Library
+      buttons use `flex: 1` (= flex-shrink: 1). Override to `1 0 50%`
+      so the pair splits evenly and never crowds the right edge.
+   2. VERTICAL: the WRAPPER itself is a flex item of
+      .rp-rt-filter-content (a flex COLUMN, gap 0.5rem). Without
+      `flex-shrink: 0` on the wrapper, when the panel/viewport shrinks
+      vertically (e.g., Firefox devtools opens at the bottom and eats
+      ~30% of the height) the column flex algorithm shrinks every
+      child proportionally. The toggle wrapper has `overflow: hidden`
+      so its buttons VISIBLY clip — the only block-flex item in the
+      column with that combo. Predicate rows survive because their
+      dropdowns / inputs have intrinsic content that resists shrink;
+      "Add predicate" is `inline-flex`, content-sized, freestanding —
+      nothing to squeeze it. Pin the wrapper's flex-shrink to 0 so
+      it holds its natural padding-driven height; overflow triggers
+      the parent's `overflow-y: auto` scroll instead. */
+.rp-rt-fb-op-toggle { flex-shrink: 0; }
 .rp-rt-fb-op-toggle button {
   flex: 1 0 50%;
   min-width: 0;
