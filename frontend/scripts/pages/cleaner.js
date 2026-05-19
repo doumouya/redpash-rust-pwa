@@ -2067,7 +2067,8 @@ function _wireGlobals(root) {
   };
   // "All" / "None" header buttons on the sentinel checklist.
   window.cleanerToolInvalidSelectAll = (on) => {
-    const modal = document.getElementById("modal-tool-invalid");
+    const modal = document.getElementById("rp-modal-tool-invalid")
+               ?? document.getElementById("modal-tool-invalid");
     modal?.querySelectorAll("[data-tool-sentinel]").forEach((c) => { c.checked = !!on; });
   };
 
@@ -2217,7 +2218,8 @@ function _wireGlobals(root) {
     // before letting the apply continue. The choice is sticky
     // (prefs.share_sentinels) — we never ask again.
     if (toolId === "tool-invalid" && STATE.shareSentinels == null) {
-      const modal  = document.getElementById("modal-tool-invalid");
+      const modal  = document.getElementById("rp-modal-tool-invalid")
+                  ?? document.getElementById("modal-tool-invalid");
       const picked = [...(modal?.querySelectorAll("[data-tool-sentinel]:checked") ?? [])]
         .map((c) => c.dataset.toolSentinel);
       const newToUser = picked.find((s) => {
@@ -3609,7 +3611,12 @@ const SENTINELS_BUILTIN = new Set([
 // Read the modal's inputs into a {kind, params} payload for /steps.
 // Returns null on validation failure (already toasted).
 function _readToolPayload(toolId) {
-  const m = document.getElementById(`modal-${toolId}`);
+  // Dual lookup: sandbox uses rp-modal-${toolId}, legacy uses
+  // modal-${toolId}. Without this every commit button on the sandbox
+  // path would silently return null (modal not found) → no toast,
+  // no API call. Same pattern as _populateToolModal / _positionToolModal.
+  const m = document.getElementById(`rp-modal-${toolId}`)
+         ?? document.getElementById(`modal-${toolId}`);
   if (!m) return null;
   const cols = (sel) => Array.from(m.querySelectorAll(`[data-tool-col]:checked`)).map((c) => c.dataset.toolCol);
   const v    = (sel) => m.querySelector(sel)?.value ?? "";
@@ -3983,7 +3990,8 @@ async function _renderJoinsPanel(root) {
 // has; this gives the user enough info to know how many rows the
 // Remove duplicates click will drop.
 async function _refreshDedupPreview(root) {
-  const m = document.getElementById("modal-tool-dedup");
+  const m = document.getElementById("rp-modal-tool-dedup")
+         ?? document.getElementById("modal-tool-dedup");
   if (!m) return;
   const stats   = m.querySelector("[data-tool-stats]");
   const samples = m.querySelector("[data-tool-dedup-samples]");

@@ -107,7 +107,15 @@
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-unwrap')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-unwrap')"><i class="bi bi-bandaid"></i> Re-run on 5 rows</button>
+      <!-- Wires to the bespoke applyUnwrapCsv() (cleaner.js:2348) which
+           POSTs `unwrap_csv` step with no params — the backend re-parses
+           the whole file. The straggler picker + parse hints above are
+           aspirational sandbox UI; the backend doesn't yet accept
+           per-row / per-sep targeting, so those controls are ignored.
+           Closes the modal optimistically inside applyUnwrapCsv. -->
+      <button class="btn btn-primary" onclick="closeModal('tool-unwrap');applyUnwrapCsv()">
+        <i class="bi bi-bandaid"></i> Re-run unwrap
+      </button>
     </div>
   </div>
 </div>

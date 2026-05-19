@@ -17,45 +17,70 @@
       <div class="rp-form-lbl rp-lbl-between">
         <span>Sentinels found in this file</span>
         <span style="display:flex;gap:0.25rem">
-          <button type="button" class="btn btn-ghost btn-sm">All</button>
-          <button type="button" class="btn btn-ghost btn-sm">None</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cleanerToolInvalidSelectAll(true)">All</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cleanerToolInvalidSelectAll(false)">None</button>
         </span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:0.1875rem">
-        <label class="rp-dd-checkbox"><input type="checkbox" checked /> <code>#??!</code> <small style="color:var(--muted)">(62 hits in 4 cols)</small></label>
-        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>N/A</code> <small style="color:var(--muted)">(11 hits in 2 cols)</small></label>
-        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>—</code> <small style="color:var(--muted)">(7 hits)</small></label>
-        <label class="rp-dd-checkbox"><input type="checkbox" /> <code>unknown</code> <small style="color:var(--muted)">(3 hits)</small></label>
+      <!-- [data-tool-sentinel-list] — _populateToolModal kicks off a
+           sentinel scan when this modal opens; _refreshSentinelList
+           paints one <label> per detected sentinel with
+           <input type="checkbox" data-tool-sentinel="<raw_value>">. -->
+      <div data-tool-sentinel-list
+           style="display:flex;flex-direction:column;gap:0.1875rem;max-height:14rem;overflow-y:auto">
+        <div class="rp-form-meta" style="padding:0.5rem;font-style:italic">
+          Scanning for sentinel values…
+        </div>
       </div>
     </div>
 
     <div class="rp-form-row">
       <span class="rp-form-lbl">Don't see it? Add a custom value</span>
       <div style="display:flex;gap:0.25rem">
-        <input type="text" class="rp-input" placeholder="e.g. ??? or ----" style="flex:1" />
-        <button type="button" class="btn btn-ghost btn-sm"><i class="bi bi-plus-lg"></i> Add</button>
+        <input type="text" class="rp-input" data-tool-invalid-extra
+               placeholder="e.g. ??? or ----" style="flex:1" />
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="cleanerToolInvalidAddExtra(this.previousElementSibling)">
+          <i class="bi bi-plus-lg"></i> Add
+        </button>
       </div>
     </div>
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Scope</span>
-      <select class="rp-input">
-        <option selected>All string columns</option>
-        <option>A single column…</option>
+      <select class="rp-input" data-tool-invalid-scope
+              onchange="cleanerToolInvalidScope(this)">
+        <option value="all" selected>All string columns</option>
+        <option value="one">A single column…</option>
       </select>
+    </label>
+
+    <!-- Single-column picker — hidden when scope=all; cleanerToolInvalidScope
+         flips the `hidden` attribute. -->
+    <label class="rp-form-row" data-tool-invalid-col-field hidden>
+      <span class="rp-form-lbl">Column</span>
+      <select class="rp-input" data-tool-cols></select>
     </label>
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Replace with</span>
-      <select class="rp-input">
-        <option selected>Empty (null)</option>
-        <option>A custom value…</option>
+      <select class="rp-input" data-tool-invalid-mode
+              onchange="cleanerToolInvalidMode(this)">
+        <option value="null" selected>Empty (null)</option>
+        <option value="custom">A custom value…</option>
       </select>
+    </label>
+
+    <!-- Custom-value input — hidden when mode=null; cleanerToolInvalidMode
+         flips `hidden`. -->
+    <label class="rp-form-row" data-tool-invalid-value-field hidden>
+      <span class="rp-form-lbl">Value</span>
+      <input type="text" class="rp-input" data-tool-value
+             placeholder="replacement value…" />
     </label>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-invalid')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-invalid')">Fix values</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-invalid')">Fix values</button>
     </div>
   </div>
 </div>

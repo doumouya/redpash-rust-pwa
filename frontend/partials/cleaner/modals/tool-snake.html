@@ -11,22 +11,20 @@
       <button class="rp-btn" onclick="closeModal('tool-snake')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <!-- Live preview — spPreviewSnake reads SP_DEMO_COLS (sentinel
-         column list), runs the snake_case transform client-side, and
-         paints the before/after pairs into [data-sp-preview]. -->
+    <!-- Live preview — _populateToolModal paints every column's
+         current name + computed snake_case form into the
+         [data-tool-snake-preview] target on every cleanerOpenTool('tool-snake')
+         call. No JS button needed; the preview is fresh on every open. -->
     <div class="rp-form-row">
-      <span class="rp-form-lbl rp-lbl-between">
-        Preview
-        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewSnake(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
-      </span>
-      <div data-sp-preview>
-        <div class="rp-preview-line rp-form-meta">Click Compute to see the result on the current column list.</div>
+      <span class="rp-form-lbl">Preview</span>
+      <div data-tool-snake-preview>
+        <div class="rp-preview-line rp-form-meta">Open a file to see column previews.</div>
       </div>
     </div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-snake')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-snake')">Apply to all columns</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-snake')">Apply to all columns</button>
     </div>
   </div>
 </div>

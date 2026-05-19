@@ -15,51 +15,33 @@
     <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.5rem;align-items:end">
       <label class="rp-form-row">
         <span class="rp-form-lbl">Column A</span>
-        <select class="rp-input" data-sp-col-a>
-          <option selected>Client</option>
-          <option>Formule</option>
-          <option>Cause.intervention</option>
-          <option>Type.d.energie</option>
-        </select>
+        <!-- Both attrs: data-tool-cols (populator fills + pre-selects
+             index 0 for the first .rp-input) + data-tool-col-a
+             (reader gets the value). -->
+        <select class="rp-input" data-tool-cols data-tool-col-a></select>
       </label>
       <div style="padding-bottom:0.4rem;color:var(--muted);font-size:1.125rem">+</div>
       <label class="rp-form-row">
         <span class="rp-form-lbl">Column B</span>
-        <select class="rp-input" data-sp-col-b>
-          <option>Client</option>
-          <option selected>Formule</option>
-          <option>Cause.intervention</option>
-          <option>Type.d.energie</option>
-        </select>
+        <!-- Second select: populator pre-selects index 1. -->
+        <select class="rp-input" data-tool-cols data-tool-col-b></select>
       </label>
     </div>
 
     <div class="rp-2col">
       <label class="rp-form-row">
         <span class="rp-form-lbl">Separator</span>
-        <input type="text" class="rp-input" data-sp-sep value=" - " />
+        <input type="text" class="rp-input" data-tool-sep value=" - " />
       </label>
       <label class="rp-form-row">
         <span class="rp-form-lbl">New column name</span>
-        <input type="text" class="rp-input" placeholder="joined_col" />
+        <input type="text" class="rp-input" data-tool-into placeholder="joined_col" />
       </label>
-    </div>
-
-    <!-- Live preview — spPreviewJoinCo concatenates A + sep + B for
-         each demo row so the user sees the actual joined string. -->
-    <div class="rp-form-row">
-      <span class="rp-form-lbl rp-lbl-between">
-        Preview
-        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewJoinCo(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
-      </span>
-      <div data-sp-preview>
-        <div class="rp-preview-line rp-form-meta">Pick A + B + separator then click Compute.</div>
-      </div>
     </div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-joinco')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-joinco')">Create joined column</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-joinco')">Create joined column</button>
     </div>
   </div>
 </div>

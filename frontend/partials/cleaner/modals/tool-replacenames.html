@@ -15,30 +15,17 @@
     <div class="rp-2col">
       <label class="rp-form-row">
         <span class="rp-form-lbl">Find</span>
-        <input type="text" class="rp-input" data-sp-find value="." />
+        <input type="text" class="rp-input" data-tool-find value="." />
       </label>
       <label class="rp-form-row">
         <span class="rp-form-lbl">Replace with</span>
-        <input type="text" class="rp-input" data-sp-replace value="_" />
+        <input type="text" class="rp-input" data-tool-replace value="_" />
       </label>
-    </div>
-
-    <!-- Live preview — spPreviewReplaceNames reads SP_DEMO_COLS,
-         applies the current Find/Replace inputs, and paints into
-         [data-sp-preview]. -->
-    <div class="rp-form-row">
-      <span class="rp-form-lbl rp-lbl-between">
-        Preview
-        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewReplaceNames(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
-      </span>
-      <div data-sp-preview>
-        <div class="rp-preview-line rp-form-meta">Set Find / Replace then click Compute to preview against the current column list.</div>
-      </div>
     </div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-replacenames')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-replacenames')">Apply</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-replacenames')">Apply</button>
     </div>
   </div>
 </div>

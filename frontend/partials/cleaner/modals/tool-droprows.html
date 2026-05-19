@@ -13,31 +13,23 @@
       <button class="rp-btn" onclick="closeModal('tool-droprows')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <!-- Stats — fully-empty rows (every column null) is the baseline
-         drop count; current selection narrows it to rows where the
-         ticked columns are ALL null. Live app recomputes the
-         selection chip as the user ticks / unticks. -->
-    <div class="rp-form-meta" style="margin-bottom:0.5rem">
-      <span class="rp-view-chip"><i class="bi bi-file-minus"></i>47 fully-empty rows</span>
-      <span class="rp-view-chip"><i class="bi bi-check2-square"></i>12 rows match current selection</span>
-    </div>
-
     <div class="rp-form-row">
-      <span class="rp-form-lbl">Drop rows where ALL of these columns are null. Leave none ticked to require every column. Counts next to each name show that column's null total.</span>
-      <div style="display:flex;flex-direction:column;gap:0.1875rem">
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" /> Numero_dossier_ID</span><span class="rp-form-meta">5</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" checked /> Client</span><span class="rp-form-meta">12</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" /> Cause.intervention</span><span class="rp-form-meta">47</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" checked /> Matricule.de.traitement</span><span class="rp-form-meta">4</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" /> date.ouverture</span><span class="rp-form-meta">12</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" /> Outil.d.assistance</span><span class="rp-form-meta">38</span></label>
-        <label class="rp-dd-checkbox" style="display:flex;justify-content:space-between;align-items:center"><span><input type="checkbox" /> TOP.D.R</span><span class="rp-form-meta">12</span></label>
+      <span class="rp-form-lbl">Drop rows where ALL of these columns are null. Leave none ticked to require EVERY column to be null.</span>
+      <!-- [data-tool-checklist] — _populateToolModal paints one
+           <label><input type="checkbox" data-tool-col="<colname>"> per
+           STATE.columns. _readToolPayload reads the checked ones via
+           the `cols()` helper. -->
+      <div data-tool-checklist
+           style="display:flex;flex-direction:column;gap:0.1875rem;max-height:18rem;overflow-y:auto">
+        <div class="rp-form-meta" style="padding:0.5rem;font-style:italic">
+          Open a file to load its columns.
+        </div>
       </div>
     </div>
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-droprows')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-droprows')">Drop rows</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-droprows')">Drop rows</button>
     </div>
   </div>
 </div>

@@ -13,47 +13,12 @@
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Column</span>
-      <select class="rp-input">
-        <option selected>date.ouverture</option>
-        <option>date.de.survenance</option>
-      </select>
+      <select class="rp-input" data-tool-cols></select>
     </label>
-
-    <!-- Unparseable preview — surface cells that won't survive the
-         cast so the user can decide between null / keep / drop with
-         eyes-open. Live app's _populateToolModal pulls this from a
-         dry-run parse on the chosen column. -->
-    <div class="rp-form-row">
-      <span class="rp-form-lbl">Will become null after cast</span>
-      <div class="rp-form-meta" style="margin-bottom:0.375rem">
-        <span class="rp-view-chip"><i class="bi bi-dash-circle"></i>17 unparseable cells out of 500</span>
-      </div>
-      <div class="rp-scroll-list">
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 7</span><span class="rp-form-meta"><code>#??!</code></span>
-        </div>
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 12</span><span class="rp-form-meta"><code>(empty)</code></span>
-        </div>
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 28</span><span class="rp-form-meta"><code>Q3 2024</code></span>
-        </div>
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 41</span><span class="rp-form-meta"><code>15/13/2024</code></span>
-        </div>
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 56</span><span class="rp-form-meta"><code>--</code></span>
-        </div>
-        <div class="rp-hist-detail" style="display:flex;justify-content:space-between">
-          <span>row 73</span><span class="rp-form-meta"><code>N/A</code></span>
-        </div>
-        <div class="rp-hist-detail rp-form-meta">…11 more</div>
-      </div>
-    </div>
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Target format</span>
-      <select class="rp-input">
+      <select class="rp-input" data-tool-date-fmt>
         <option value="%Y-%m-%d" selected>YYYY-MM-DD (ISO 8601 — recommended)</option>
         <option value="%d/%m/%Y">DD/MM/YYYY</option>
         <option value="%m/%d/%Y">MM/DD/YYYY</option>
@@ -63,7 +28,7 @@
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">When date is incomplete</span>
-      <select class="rp-input">
+      <select class="rp-input" data-tool-date-incomplete>
         <option value="null" selected>Set to null</option>
         <option value="keep">Keep as-is</option>
         <option value="drop">Drop the row</option>
@@ -72,7 +37,7 @@
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-dates')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-dates')">Apply</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-dates')">Apply</button>
     </div>
   </div>
 </div>

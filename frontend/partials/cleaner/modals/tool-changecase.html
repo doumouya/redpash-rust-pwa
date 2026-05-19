@@ -13,40 +13,21 @@
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Column</span>
-      <select class="rp-input" data-sp-col>
-        <option>Client</option>
-        <option>Formule</option>
-        <option selected>Cause.intervention</option>
-        <option>Type.d.energie</option>
-        <option>Outil.d.assistance</option>
-      </select>
+      <select class="rp-input" data-tool-cols></select>
     </label>
 
     <label class="rp-form-row">
       <span class="rp-form-lbl">Target case</span>
-      <select class="rp-input" data-sp-case-mode>
+      <select class="rp-input" data-tool-case-mode>
         <option value="lower">lowercase</option>
         <option value="upper">UPPERCASE</option>
         <option value="title" selected>Title Case</option>
       </select>
     </label>
 
-    <!-- Live preview — spPreviewChangeCase reads the selected column,
-         pulls its distinct values from SP_DEMO_DISTINCT, applies the
-         target case, and paints into [data-sp-preview]. -->
-    <div class="rp-form-row">
-      <span class="rp-form-lbl rp-lbl-between">
-        Preview
-        <button type="button" class="btn btn-ghost btn-sm" onclick="spPreviewChangeCase(this)"><i class="bi bi-arrow-clockwise"></i> Compute</button>
-      </span>
-      <div data-sp-preview>
-        <div class="rp-preview-line rp-form-meta">Pick a column + target case then click Compute.</div>
-      </div>
-    </div>
-
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-changecase')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('tool-changecase')">Apply</button>
+      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-changecase')">Apply</button>
     </div>
   </div>
 </div>
