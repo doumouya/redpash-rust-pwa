@@ -1166,13 +1166,19 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
    Mirror the library's explicit light-mode rule with an opaque-dark
    equivalent so the pill carries proper contrast in dark mode. */
 html[data-theme="dark"] #page-cleaner .rp-rtp-tools-top {
-  background: rgba(0, 0, 0, 0.32);
-  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  /* Accent-tinted dark bg + accent border — mirrors the light-mode
+     rule's accent border (color-mix(--accent 22%, transparent)) so
+     the pill carries the sandbox blue family in both themes. The bg
+     is a faint accent wash over a darker base; the border lights
+     accent-blue at 35% so it reads as a deliberate accent surface,
+     not a plain dark plate. */
+  background: color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.30));
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme="system"] #page-cleaner .rp-rtp-tools-top {
-    background: rgba(0, 0, 0, 0.32);
-    border-color: color-mix(in srgb, var(--text) 22%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.30));
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
 }
 
