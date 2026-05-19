@@ -1053,6 +1053,61 @@ If you're tempted to call `_renderHistoryButtons(root)` on a sandbox
 path: don't. It targets `#cleaner-undo` / `#cleaner-redo` (legacy
 ids). Use `_syncUndoRedoButtons()` or `_afterHistory(env)` instead.
 
+### Pattern: aspirational modal UI vs current backend contract
+
+*Cleaner ✅ — tool-unwrap modal example.*
+
+Some sandbox tool modals were authored against a *future* backend
+contract. tool-unwrap is the canonical example: the partial originally
+shipped with a per-row straggler picker + per-call parse-hint selects
+(separator / quote / escape), but the backend's `unwrap_csv` step at
+[backend/crates/data/src/steps.rs:142+](../../backend/crates/data/src/steps.rs) is whole-file only:
+
+```rust
+"unwrap_csv" => {
+    if df.width() != 1 {
+        return Err(DataError::InvalidSpec(
+            "unwrap_csv only applies to a single-column DataFrame".into()));
+    }
+    // re-emit header + each cell as a line, hand off to parse::parse_text…
+}
+```
+
+No params. Operates on the whole DataFrame. Requires width == 1.
+
+The history:
+
+1. Originally just a banner — `_detectWrappedCsv` checks 1-column +
+   header-contains-sep + ≥70% rows-contain-sep, shows a "Fix this is
+   wrapped" banner. Click → `applyUnwrapCsv` POSTs `unwrap_csv` step.
+2. Tricky file: auto-unwrap split most rows but left "stragglers"
+   (rows where wrap style or sep didn't match the majority). User
+   added a tools-panel button entry point — but the backend wasn't
+   updated, so per-row targeting is aspirational.
+
+**Resolution pattern:** when the backend doesn't yet support what
+the sandbox UI hints at, gate the modal honestly via
+`_populateToolModal`. For tool-unwrap, the modal now paints one of
+two messages based on `STATE.columns.length`:
+
+- 1 column → "This file looks wrapped, click Re-run unwrap." Apply
+  button enabled.
+- N columns → "Already unwrapped — use Replace text / Drop rows for
+  stragglers. Per-row unwrap is future work." Apply button
+  disabled.
+
+Disabling the Apply button keeps the cryptic
+`"unwrap_csv only applies to a single-column DataFrame"` toast from
+appearing when the user clicks on an already-split file. The
+straggler picker + parse-hint selects were removed from the partial
+to avoid making promises the backend can't keep.
+
+**Rule:** when a sandbox modal's form fields can't be sent to the
+backend yet, either remove them or clearly label them as "future".
+Don't wire them as if they're functional — the user will form a
+mental model that breaks the next time they actually click apply
+expecting per-row behavior.
+
 ### Gotcha: dual modal-id lookup needed everywhere
 
 *Cleaner ✅ ([cleaner.js `_populateToolModal`, `_positionToolModal`, `_readToolPayload`, `_refreshDedupPreview`, `cleanerToolInvalidSelectAll`, the consent gate in `cleanerApplyTool`](../../frontend/scripts/pages/cleaner.js)) — re-grep after every modal port.*

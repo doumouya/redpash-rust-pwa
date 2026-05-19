@@ -1,120 +1,58 @@
-<!-- Unwrap rows — mirrors the live app's modal-unwrap-csv (cleaner.html
-     lines 555-579), repurposed as a re-runnable tools-panel entry.
-     The first-detection banner runs the auto-fix once on upload; this
-     rp-modal exposes the same operation so the user can target the
-     STRAGGLERS — rows whose quote style / separator differed from the
-     majority and slipped through the first pass.
+<!-- Unwrap wrapped CSV — second entry point into the auto-unwrap flow.
+     The first detection runs on upload (the wrapped-CSV banner above
+     the table). When that auto-fix produces a clean multi-column
+     frame, the banner disappears. If a tricky file slips through (mix
+     of quote styles, separator drift, escape style), the user can
+     re-trigger the same operation from here.
 
-     The stragglers list is realistic (rows 4 / 10 / 12 / 14 / 15 in
-     raw_dossier_onecol_tricky.csv use backslash-escaped quotes,
-     semicolon separators, no outer quotes, and single quotes
-     respectively). User picks which rows to re-run on. -->
+     Today the backend's `unwrap_csv` step ([backend/crates/data/src/
+     steps.rs:142+]) is whole-file only and requires the frame to
+     still be 1 column wide. Per-row straggler targeting is a future
+     enhancement — see the sandbox-integration.md notes.
+
+     _populateToolModal paints [data-tool-unwrap-status] on every open
+     so the modal accurately reflects whether the current file can be
+     re-unwrapped (1 col) or is already split (multi-col). -->
 <div class="rp-modal-overlay" id="rp-modal-tool-unwrap"
      onclick="closeModal('tool-unwrap')" role="dialog" aria-modal="true">
-  <div class="rp-modal rp-modal-lg" onclick="event.stopPropagation()">
+  <div class="rp-modal" onclick="event.stopPropagation()">
     <div class="rp-modal-hdr">
       <div>
-        <h2 class="rp-modal-ttl"><i class="bi bi-bandaid"></i> Unwrap rows</h2>
-        <div class="rp-modal-sub">Re-run the CSV-unwrap parser on rows that slipped through the initial auto-fix (different quote style, separator, or escape).</div>
+        <h2 class="rp-modal-ttl"><i class="bi bi-bandaid"></i> Unwrap wrapped CSV</h2>
+        <div class="rp-modal-sub">Re-parse a single-column file whose values still contain CSV delimiters into proper columns.</div>
       </div>
       <button class="rp-btn" onclick="closeModal('tool-unwrap')" aria-label="Close" title="Close"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <!-- Stats — total stragglers + how many the first pass already
-         fixed (context for "this is a re-run, not the first try"). -->
-    <div class="rp-form-meta" style="margin-bottom:0.625rem">
-      <span class="rp-view-chip"><i class="bi bi-check2-circle"></i>493 rows fixed on upload</span>
-      <span class="rp-view-chip"><i class="bi bi-exclamation-diamond"></i>7 stragglers left</span>
-    </div>
-
-    <!-- Straggler picker — each row shows its index + the raw single-
-         string content + the detected quirk. Checked by default so
-         "Apply" defaults to "fix everything still broken". -->
+    <!-- Status block — _populateToolModal fills this with one of:
+         (1-col / wrapped) "This file looks wrapped — 1 column, N rows,
+                            header contains a separator. Click Re-run
+                            unwrap to re-parse." → Apply enabled.
+         (multi-col)        "This file is already split into N columns.
+                            Use specific-row tools (replace text, drop
+                            rows) for stragglers." → Apply disabled. -->
     <div class="rp-form-row">
-      <span class="rp-form-lbl">Target rows</span>
-      <div class="rp-scroll-list">
-        <label class="rp-dd-checkbox" style="display:flex;gap:0.4375rem;align-items:flex-start">
-          <input type="checkbox" checked style="margin-top:0.125rem" />
-          <div style="flex:1;min-width:0">
-            <div class="rp-hist-group-hdr">row 4 · backslash-escaped quotes</div>
-            <div class="rp-hist-detail rp-form-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>"D1010002,\"Air Liquide\",\"Formule Essentiel\",\"14/03/2025\",…</code></div>
-          </div>
-        </label>
-        <label class="rp-dd-checkbox" style="display:flex;gap:0.4375rem;align-items:flex-start">
-          <input type="checkbox" checked style="margin-top:0.125rem" />
-          <div style="flex:1;min-width:0">
-            <div class="rp-hist-group-hdr">row 10 · backslash-escaped quotes</div>
-            <div class="rp-hist-detail rp-form-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>"D1010008,\"Enedis\",\"Formule Sérénité\",\"18/12/2026\",…</code></div>
-          </div>
-        </label>
-        <label class="rp-dd-checkbox" style="display:flex;gap:0.4375rem;align-items:flex-start">
-          <input type="checkbox" checked style="margin-top:0.125rem" />
-          <div style="flex:1;min-width:0">
-            <div class="rp-hist-group-hdr">row 12 · semicolon separator</div>
-            <div class="rp-hist-detail rp-form-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>"D1010010;""GRDF"";""Formule Premium"";""#??!"";""19:46"";…</code></div>
-          </div>
-        </label>
-        <label class="rp-dd-checkbox" style="display:flex;gap:0.4375rem;align-items:flex-start">
-          <input type="checkbox" checked style="margin-top:0.125rem" />
-          <div style="flex:1;min-width:0">
-            <div class="rp-hist-group-hdr">row 14 · bare CSV (no outer quotes)</div>
-            <div class="rp-hist-detail rp-form-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>"#??!,Enedis,Formule Essentiel,06/05/2023,03:04,M6870,…</code></div>
-          </div>
-        </label>
-        <label class="rp-dd-checkbox" style="display:flex;gap:0.4375rem;align-items:flex-start">
-          <input type="checkbox" checked style="margin-top:0.125rem" />
-          <div style="flex:1;min-width:0">
-            <div class="rp-hist-group-hdr">row 15 · single-quoted fields</div>
-            <div class="rp-hist-detail rp-form-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>"D1010013,'Suez','Formule Sérénité','18/12/2022',…</code></div>
-          </div>
-        </label>
-        <div class="rp-hist-detail rp-form-meta">…2 more stragglers</div>
+      <div data-tool-unwrap-status>
+        <div class="rp-form-meta" style="padding:0.5rem;font-style:italic">
+          Open a file to see its unwrap status.
+        </div>
       </div>
     </div>
 
-    <!-- Parse hints — let the user nudge the parser if the auto-
-         detection of quote / sep / escape misses. Defaults to "auto"
-         which re-runs the same heuristic; explicit overrides help
-         when the data is too noisy for confident detection. -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem">
-      <label class="rp-form-row">
-        <span class="rp-form-lbl">Separator</span>
-        <select class="rp-input">
-          <option selected>Auto</option>
-          <option>, (comma)</option>
-          <option>; (semicolon)</option>
-          <option>\t (tab)</option>
-        </select>
-      </label>
-      <label class="rp-form-row">
-        <span class="rp-form-lbl">Quote</span>
-        <select class="rp-input">
-          <option selected>Auto</option>
-          <option>" (double)</option>
-          <option>' (single)</option>
-          <option>none</option>
-        </select>
-      </label>
-      <label class="rp-form-row">
-        <span class="rp-form-lbl">Escape</span>
-        <select class="rp-input">
-          <option selected>Auto</option>
-          <option>"" (doubled)</option>
-          <option>\ (backslash)</option>
-        </select>
-      </label>
-    </div>
+    <!-- Future: per-row straggler picker + parse-hint overrides. The
+         backend's unwrap_csv step takes no params today, so these
+         controls don't exist yet. -->
 
     <div class="rp-modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tool-unwrap')">Cancel</button>
-      <!-- Routes through cleanerApplyTool (same path as every other
-           tool) which POSTs the unwrap_csv step + pipes the envelope
-           through _afterHistory so undo/redo + header / file-tabs /
-           table all re-sync. The straggler picker + parse hints
-           above are aspirational sandbox UI; the backend doesn't
-           accept per-row/per-sep targeting yet (the tool-unwrap case
-           in _readToolPayload ignores those controls). -->
-      <button class="btn btn-primary" onclick="cleanerApplyTool('tool-unwrap')">
+      <!-- cleanerApplyTool('tool-unwrap') → _readToolPayload returns
+           { kind: "unwrap_csv", params: {} } → POST /files/:rid/steps.
+           Backend errors with "only applies to a single-column
+           DataFrame" if width != 1; that surfaces as a toast.
+           _populateToolModal disables this button when the file is
+           already multi-column so we avoid the round-trip. -->
+      <button class="btn btn-primary" data-tool-unwrap-apply
+              onclick="cleanerApplyTool('tool-unwrap')">
         <i class="bi bi-bandaid"></i> Re-run unwrap
       </button>
     </div>

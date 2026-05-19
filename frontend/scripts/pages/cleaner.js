@@ -3390,6 +3390,61 @@ function _populateToolModal(toolId) {
     _refreshDedupPreview(document);
   }
 
+  // tool-unwrap — paint status + enable/disable apply based on column
+  // count. Backend's unwrap_csv step only works on 1-column frames
+  // ([backend/crates/data/src/steps.rs:142+]); when the file is
+  // already multi-column we keep the modal open as an explainer but
+  // disable the Apply button so the user doesn't get a cryptic
+  // backend error. Per-row straggler targeting is future work; this
+  // status block reflects current capability honestly.
+  if (toolId === "tool-unwrap") {
+    const status = modal.querySelector("[data-tool-unwrap-status]");
+    const apply  = modal.querySelector("[data-tool-unwrap-apply]");
+    const nCols  = cols.length;
+    const nRows  = STATE.summary?.row_count ?? 0;
+    if (status && apply) {
+      if (nCols === 1) {
+        const colName = cols[0]?.name ?? "";
+        const hasSep  = /[,;\t|]/.test(colName);
+        status.innerHTML = `
+          <div class="rp-view-chip" style="margin-bottom:0.375rem">
+            <i class="bi bi-exclamation-diamond"></i>
+            This file is 1 column wide × ${nRows.toLocaleString()} rows
+          </div>
+          <div class="rp-form-meta">
+            Header: <code>${_escHtml(colName.slice(0, 80))}${colName.length > 80 ? "…" : ""}</code>
+          </div>
+          <div class="rp-form-meta" style="margin-top:0.375rem">
+            ${hasSep
+              ? "The header contains a delimiter, which is the strongest signal the file is wrapped. Click below to re-parse it into proper columns."
+              : "Header doesn't contain an obvious delimiter — the re-parse may not produce multiple columns. Try anyway only if you know the file is wrapped."}
+          </div>
+        `;
+        apply.disabled = false;
+      } else {
+        status.innerHTML = `
+          <div class="rp-view-chip" style="margin-bottom:0.375rem">
+            <i class="bi bi-check2-circle"></i>
+            Already split into ${nCols} columns
+          </div>
+          <div class="rp-form-meta">
+            This file is no longer wrapped. The whole-file unwrap step
+            only applies to 1-column frames; running it now would
+            error.
+          </div>
+          <div class="rp-form-meta" style="margin-top:0.375rem">
+            For specific rows that look wrong (mixed quote styles,
+            different separator), use <strong>Replace text</strong> /
+            <strong>Drop rows</strong> on those individual rows. Per-row
+            straggler targeting from this modal is future work — the
+            backend doesn't accept row-scoped unwrap params yet.
+          </div>
+        `;
+        apply.disabled = true;
+      }
+    }
+  }
+
   // tool-invalid — reset scope / mode toggles to their hidden defaults,
   // clear the ad-hoc additions from the previous open, and kick off
   // the sentinel scan (with the user's learned set merged in as
