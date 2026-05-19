@@ -12,7 +12,8 @@
  * Previous Phase-3 builder CSS lives at reports.live.css for reference.
  * ──────────────────────────────────────────────────────────────────── */
 
-@import "/vendor/redpash-components/shell.css";
+/* shell.css's body chrome lives in main.css now (scoped to
+   body[data-chrome="full"]); no per-page import needed. */
 
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/button.css";
@@ -23,10 +24,10 @@
 @import "/vendor/redpash-components/components/redtable.css";
 @import "/vendor/redpash-components/components/redtable-pro.css";
 
-/* Sandbox-canonical visual vocabulary (mirrors cleaner.css / objects.css). */
-@import "/vendor/redpash-components/components/glass-btn.css";
+/* Sandbox-canonical visual vocabulary (mirrors cleaner.css / objects.css).
+   .rp-btn (glass-btn.css) + .rp-modal (modals-sandbox.css) load globally
+   via main.css. */
 @import "/vendor/redpash-components/components/proj-tabs.css";
-@import "/vendor/redpash-components/components/modals-sandbox.css";
 @import "/vendor/redpash-components/components/dropdowns-sandbox.css";
 @import "/vendor/redpash-components/components/filter-panel-sandbox.css";
 @import "/vendor/redpash-components/components/objects-sandbox.css";
@@ -46,7 +47,7 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+  background: var(--rp-bg-app);
   background-attachment: fixed;
 
   --bg:        #0f172a;
@@ -71,7 +72,7 @@
   --rp-accent:        var(--accent);
 }
 html[data-theme="light"] #page-reports {
-  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+  /* background is set globally via --rp-bg-app theme-switch in main.css */
   --bg:        #f0f4ff;
   --surface:   #ffffff;
   --over0:     #dbeafe;
@@ -87,7 +88,7 @@ html[data-theme="light"] #page-reports {
 }
 @media (prefers-color-scheme: light) {
   html[data-theme="system"] #page-reports {
-    background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+    /* background is set globally via --rp-bg-app theme-switch in main.css */
     --bg:        #f0f4ff;
     --surface:   #ffffff;
     --over0:     #dbeafe;

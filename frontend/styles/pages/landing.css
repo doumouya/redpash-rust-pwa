@@ -17,13 +17,9 @@
  * file is the home for the welcome-page bespoke styling.
  * ────────────────────────────────────────────────────────────────────── */
 
-/* Library shell — opt-in body chrome (flex column, hidden overflow,
-   demo body font-size + family) + universal margin/padding zero.
-   The defensive part of reset.css (anchor/button defaults) already
-   loaded globally via main.css. The router removes this <link> on
-   navigation away from /landing, so the body-flex + universal margin
-   reset only applies while the landing is mounted. */
-@import "/vendor/redpash-components/shell.css";
+/* Body chrome (flex column + hidden overflow) is set in main.css under
+   body[data-chrome="full"]; this page is `chrome: "full"` in ROUTES so
+   it picks it up automatically. No per-page shell.css import needed. */
 
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/hero.css";

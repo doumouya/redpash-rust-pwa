@@ -1,14 +1,12 @@
 /* ────────────────── Home page — mirrors redpash-demo #page-home.
  *
  * Composes the library's home-screen + redtable + stat-strip + minitable
- * + upload-zone + avatar + page-dots + float-btn components. The opt-in
- * shell.css is loaded here too so the body becomes a flex column with
- * hidden overflow (each step card mounts its own scroll container).
- * Router removes this <link> on navigation away, restoring the app's
- * normal body chrome.
+ * + upload-zone + avatar + page-dots + float-btn components. Body chrome
+ * (flex column + hidden overflow, formerly from shell.css) is set in
+ * main.css under body[data-chrome="full"]. Each step card mounts its
+ * own scroll container. The .rp-modal sandbox shell used by the
+ * file-review modal also loads globally via main.css.
  * ──────────────────────────────────────────────────────────────────── */
-
-@import "/vendor/redpash-components/shell.css";
 
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/button.css";
@@ -16,12 +14,6 @@
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
-/* Sandbox modal shell (.rp-modal / .rp-modal-hdr / .rp-modal-ttl) —
-   the file-review modal adopts the sandbox shell to match cleaner +
-   objects modal chrome. The outer #modal-ul-review keeps its
-   .modal-overlay class (position: fixed) so the backdrop covers the
-   viewport on home; only the INNER panel adopts the sandbox shell. */
-@import "/vendor/redpash-components/components/modals-sandbox.css";
 @import "/vendor/redpash-components/components/theme-toggle.css";
 @import "/vendor/redpash-components/components/float-btn.css";
 @import "/vendor/redpash-components/components/avatar.css";

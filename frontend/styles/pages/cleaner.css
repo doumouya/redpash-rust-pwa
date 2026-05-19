@@ -21,7 +21,8 @@
  * tools panel toggle state.
  * ─────────────────────────────────────────────────────────────────────── */
 
-@import "/vendor/redpash-components/shell.css";
+/* shell.css's body chrome lives in main.css now (scoped to
+   body[data-chrome="full"]); no per-page import needed. */
 
 @import "/vendor/redpash-components/components/typography.css";
 @import "/vendor/redpash-components/components/button.css";
@@ -46,22 +47,13 @@
 @import "/vendor/redpash-components/components/col-order.css";
 @import "/vendor/redpash-components/components/file-review.css";
 
-/* Sandbox prerelease — glass icon button + unified tab-strip styling.
-   .rp-btn (glass icon button) and .rp-tab-add-* (shared add affordance)
-   are sandbox-only — additive imports. proj-tabs.css + file-tabs.css
-   provide the canonical tab styling now that the local cleaner.css
-   .rp-rt-proj-tab* / .rp-rtp-tab-add* blocks were trimmed in the
-   sandbox visual cutover. */
-@import "/vendor/redpash-components/components/glass-btn.css";
+/* Sandbox tab-strip styling — proj-tabs.css + file-tabs.css provide the
+   canonical tab styling now that the local cleaner.css .rp-rt-proj-tab*
+   / .rp-rtp-tab-add* blocks were trimmed in the sandbox visual cutover.
+   .rp-btn base + .rp-modal sandbox vocabulary load globally via
+   main.css; no per-page imports needed. */
 @import "/vendor/redpash-components/components/proj-tabs.css";
 @import "/vendor/redpash-components/components/file-tabs.css";
-/* Sandbox modal vocabulary (.rp-modal-overlay / .rp-modal / .rp-modal-hdr
-   / .rp-form-row / .rp-pick-grid / .rp-obj-drop-zone). Cleaner partials
-   use the rp- prefixed convention; neither live's /styles/components/modal.css
-   nor the vendored .modal-overlay define these selectors, so without this
-   the cleaner modals render unstyled and stay invisible (display:none default
-   never flips to display:flex on .open). */
-@import "/vendor/redpash-components/components/modals-sandbox.css";
 /* Sandbox toolbar-dropdown vocabulary (.rp-dd-wrap / .rp-dd-menu /
    .rp-dd-item / .rp-dd-reset / .rp-dd-checkbox). Lives only in sandbox
    main.css — without this the rows-per-page pill, columns picker, and
@@ -95,17 +87,10 @@
   display: flex;
   flex-direction: column;
   /* Sandbox workspace gradient (Midnight Cobalt dark / Arctic Blue light).
-     Inlined here instead of importing tokens-gradient.css so we don't
-     accidentally override the live --bg / --accent / --surface tokens
-     across this page. Live's --grad-clean (vendor/components/gradients.css)
-     has different values; we'll consolidate once the sandbox tokens
-     become the canonical set. background-attachment: fixed pins it to
-     the viewport so scrolling doesn't repaint it. */
-  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
-  background-attachment: fixed;
-}
-html[data-theme="light"] #page-cleaner {
-  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+     Token --rp-bg-app (main.css) carries the slate-cobalt / Arctic-blue
+     gradient and theme-switches itself. background-attachment: fixed
+     pins it to the viewport so scrolling doesn't repaint it. */
+  background: var(--rp-bg-app);
   background-attachment: fixed;
 }
 #page-cleaner .rp-rt-panel {

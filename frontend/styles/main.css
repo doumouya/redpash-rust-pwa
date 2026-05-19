@@ -23,8 +23,9 @@
 /* Library defensive resets — anchor / button / .bi defaults + universal
    box-sizing + margin/padding reset. Loading globally lets us drop the
    app's own element selectors (`a { … }`, etc.) that historically
-   leaked into library components like .rp-brand-mark. The body-chrome
-   half lives in shell.css and is opt-in per page (landing only). */
+   leaked into library components like .rp-brand-mark. Body-chrome rules
+   (flex-column body + overflow:hidden) live below scoped to
+   body[data-chrome="full"] — previously came from shell.css per-page. */
 @import "/vendor/redpash-components/reset.css";
 
 /* Library background utilities — .rp-bg-import / .rp-bg-clean / .rp-bg-report
@@ -34,7 +35,18 @@
    per-page CSS can opt in with just the class — no per-page @import. */
 @import "/vendor/redpash-components/components/backgrounds.css";
 
-/* App-owned component sheets — these reference --rp-*. */
+/* Sandbox component sheets that own a base selector the whole app
+   shares. Hoisted out of per-page CSS so the .rp-btn / .rp-modal base
+   has a single source of truth and pages don't fight each other on
+   cascade order. Page-specific tweaks in pages/*.css still win because
+   they load after main.css. */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+
+/* App-owned component sheets — these reference --rp-*. buttons.css and
+   modal.css now hold only what the library doesn't: button variant
+   modifiers (--primary/--ghost/--danger/--sm) and the glue for
+   ui/modal.js's openModal() <dialog>. */
 @import "/styles/components/buttons.css";
 @import "/styles/components/topbar.css";
 @import "/styles/components/toast.css";
@@ -71,6 +83,13 @@
   --rp-bg-step-clean:   var(--bg-step-clean);
   --rp-bg-step-report:  var(--bg-step-report);
   --rp-bg-step-publish: var(--bg-step-publish);
+
+  /* App page background — slate-cobalt gradient shared by every sandbox-
+     ported full-bleed page (#page-cleaner / #page-objects / #page-reports
+     / #page-profile). Defined once here so the gradient doesn't have to
+     be duplicated × 3 (dark + html[data-theme=light] + system-light @media)
+     across every page CSS. Theme variants overridden below. */
+  --rp-bg-app: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
 
   /* App-only tokens — no library counterpart, defined here directly. */
   --rp-accent-soft:   #f7d6dc;
@@ -241,8 +260,24 @@ html[data-theme="light"] .rp-rtp-tools { background: var(--surface); }
    ROUTES table. Router writes `<body data-chrome="full">` BEFORE the
    per-page CSS link starts downloading, so there's no FOUC of the
    default app gutter / topbar before the partial mounts. Used by
-   /landing and /home (their float bars take over chrome duties). */
+   landing / home / cleaner / objects / reports / profile.
+
+   The body-chrome rules below (flex-column body, overflow:hidden, font
+   smoothing, theme-toggle transition) used to come from the library's
+   shell.css imported by each page CSS. Hoisted here so all full-bleed
+   pages share the same chrome without per-page imports — and so
+   pre-sandbox pages (settings/docs/dashboards/not-found) keep
+   browser-default scroll on body. :has() scopes html overflow to
+   full-bleed pages only. */
 body[data-chrome="full"] #topbar { display: none; }
+body[data-chrome="full"] {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.25s, color 0.25s;
+  -webkit-font-smoothing: antialiased;
+}
+html:has(body[data-chrome="full"]) { overflow: hidden; }
 body[data-chrome="full"] .rp-app {
   padding: 0;
   min-height: 0;
@@ -265,6 +300,12 @@ body[data-chrome="full"]                                                   { --a
 html[data-theme="light"] body[data-chrome="full"]                          { --accent: #4f8ef7; }
 @media (prefers-color-scheme: light) { html[data-theme="system"] body[data-chrome="full"] { --accent: #4f8ef7; } }
 @media (prefers-color-scheme: dark)  { html[data-theme="system"] body[data-chrome="full"] { --accent: #89b4fa; } }
+
+/* App page background — light-theme override of --rp-bg-app. Defaults to
+   the dark slate-cobalt gradient in :root above; here we swap it to the
+   pale Arctic-blue gradient under both pinned-light and system-light. */
+html[data-theme="light"]                                       { --rp-bg-app: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%); }
+@media (prefers-color-scheme: light) { html[data-theme="system"] { --rp-bg-app: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%); } }
 
 /* Palette preview — when the user toggles Preview ON in Settings, the
    page's background surface is repainted with the chosen gradient from
