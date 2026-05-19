@@ -177,8 +177,11 @@ async function mount(route, app, params) {
 function currentPath() {
   // Strip query params — those are read by individual pages (e.g. the
   // cleaner reads `?file=FIL_…`) but route resolution is path-only.
+  // Bare in-page anchors (`#section-foo` — no leading slash) are NOT
+  // route paths; fall back to the default route so resolve() doesn't
+  // hit NOT_FOUND on cold-load when someone deep-links to a section.
   const h = location.hash.replace(/^#/, "").split("?")[0];
-  return h || (session ? "/home" : "/landing");
+  return (h && h.startsWith("/")) ? h : (session ? "/home" : "/landing");
 }
 
 // Path resolution with `:param` pattern support. Static routes (no
@@ -591,7 +594,18 @@ window.rpRestoreBgPreview = () => {
 })();
 
 // ─── Boot ───────────────────────────────────────────────────────
-window.addEventListener("hashchange", navigate);
+// Bail on bare in-page anchors (`#section-foo` from rail links in
+// profile, or any future hash-jump within a partial). Those don't
+// start with `#/` and aren't route changes — let the browser handle
+// native scroll-into-view + CSS :target paint the active link. Without
+// this guard, clicking the profile rail's `href="#section-personal"`
+// triggers navigate() → resolves "section-personal" against ROUTES →
+// no match → NOT_FOUND swaps in, dumping the user off the page.
+window.addEventListener("hashchange", () => {
+  const h = location.hash;
+  if (h && !h.startsWith("#/")) return;
+  navigate();
+});
 (async () => {
   await loadSession();
   await navigate();
