@@ -279,69 +279,12 @@ html[data-theme="light"] #page-cleaner .rp-rt-table thead th {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ── Sandbox token redefinition for the cleaner workspace ─────────
-     Redefining the bare token names at #page-cleaner scope cascades
-     them to every descendant — vendored sandbox CSS (glass-btn,
-     proj-tabs, file-tabs) using var(--text) / var(--over0) / etc.
-     resolves to the sandbox slate-cobalt palette instead of live's
-     catppuccin. Inline-style overrides on <html> (main.js's accent
-     writer) don't penetrate a descendant scope's redefinition, so
-     this stays clean without !important. */
-  --bg:        #0f172a;
-  --surface:   #1e293b;
-  --over0:     #273549;
-  --over1:     #334155;
-  --text:      #e2e8f0;
-  --sub:       #94a3b8;
-  --muted:     #64748b;
-  --border:    #334155;
-  --hover:     #273549;
-  --selected:  #334155;
-  --accent:    #60a5fa;
-  --active-bg: #60a5fa;
+  /* Slate-cobalt token palette (--bg / --surface / --text / --accent /
+     ...) is hoisted to body[data-chrome="full"] in main.css. Below is
+     the cleaner-specific extras only. */
   /* Sandbox geometry tokens used by absolute-positioned panes
      (.rp-rt-pager / .rp-rt-paging at the bottom of .rp-rt-body). */
   --rt-pager-h: 2rem;
-  /* Mirror through the --rp-* alias layer so cleaner.css's own rules
-     (and any app sheet that reads --rp-*) pick up sandbox values too. */
-  --rp-bg:            var(--bg);
-  --rp-surface:       var(--surface);
-  --rp-surface-2:     var(--over0);
-  --rp-border:        var(--over1);
-  --rp-border-strong: var(--over1);
-  --rp-text:          var(--text);
-  --rp-text-muted:    var(--muted);
-  --rp-accent:        var(--accent);
-}
-html[data-theme="light"] #page-cleaner {
-  --bg:        #f0f4ff;
-  --surface:   #ffffff;
-  --over0:     #dbeafe;
-  --over1:     #bfdbfe;
-  --text:      #1e3a5f;
-  --sub:       #2e5796;
-  --muted:     #6b82b8;
-  --border:    #bfdbfe;
-  --hover:     #dbeafe;
-  --selected:  #bfdbfe;
-  --accent:    #2563eb;
-  --active-bg: #1e3a5f;
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] #page-cleaner {
-    --bg:        #f0f4ff;
-    --surface:   #ffffff;
-    --over0:     #dbeafe;
-    --over1:     #bfdbfe;
-    --text:      #1e3a5f;
-    --sub:       #2e5796;
-    --muted:     #6b82b8;
-    --border:    #bfdbfe;
-    --hover:     #dbeafe;
-    --selected:  #bfdbfe;
-    --accent:    #2563eb;
-    --active-bg: #1e3a5f;
-  }
 }
 
 /* ── Bootstrap Icons inherit parent font-size ────────────────────────

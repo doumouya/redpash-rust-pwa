@@ -68,67 +68,8 @@
   background: var(--rp-bg-app);
   background-attachment: fixed;
 
-  /* Sandbox token redefinition (dark default). Redefining the bare
-     tokens at #page-objects scope cascades to every descendant so
-     vendored sandbox CSS using var(--text) / var(--over0) / etc.
-     resolves to the slate-cobalt palette instead of live's catppuccin
-     (which made the topbar read as "Rust app red bg"). Inline-style
-     overrides on <html> (main.js's accent writer) don't penetrate a
-     descendant scope's redefinition. */
-  --bg:        #0f172a;
-  --surface:   #1e293b;
-  --over0:     #273549;
-  --over1:     #334155;
-  --text:      #e2e8f0;
-  --sub:       #94a3b8;
-  --muted:     #64748b;
-  --border:    #334155;
-  --hover:     #273549;
-  --selected:  #334155;
-  --accent:    #60a5fa;
-  --active-bg: #60a5fa;
-  /* Mirror through the --rp-* alias layer so any rule that reads
-     --rp-* (live components) picks up sandbox values too. */
-  --rp-bg:            var(--bg);
-  --rp-surface:       var(--surface);
-  --rp-surface-2:     var(--over0);
-  --rp-border:        var(--over1);
-  --rp-border-strong: var(--over1);
-  --rp-text:          var(--text);
-  --rp-text-muted:    var(--muted);
-  --rp-accent:        var(--accent);
-}
-html[data-theme="light"] #page-objects {
-  /* background is set globally via --rp-bg-app theme-switch in main.css */
-  --bg:        #f0f4ff;
-  --surface:   #ffffff;
-  --over0:     #dbeafe;
-  --over1:     #bfdbfe;
-  --text:      #1e3a5f;
-  --sub:       #2e5796;
-  --muted:     #6b82b8;
-  --border:    #bfdbfe;
-  --hover:     #dbeafe;
-  --selected:  #bfdbfe;
-  --accent:    #2563eb;
-  --active-bg: #1e3a5f;
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] #page-objects {
-    /* background is set globally via --rp-bg-app theme-switch in main.css */
-    --bg:        #f0f4ff;
-    --surface:   #ffffff;
-    --over0:     #dbeafe;
-    --over1:     #bfdbfe;
-    --text:      #1e3a5f;
-    --sub:       #2e5796;
-    --muted:     #6b82b8;
-    --border:    #bfdbfe;
-    --hover:     #dbeafe;
-    --selected:  #bfdbfe;
-    --accent:    #2563eb;
-    --active-bg: #1e3a5f;
-  }
+  /* Slate-cobalt token palette is hoisted to body[data-chrome="full"]
+     in main.css. Page-bg gradient + body-chrome rules from there too. */
 }
 
 /* Topbar bg + spacing — matches cleaner.css. Frosted rgba wash darkens

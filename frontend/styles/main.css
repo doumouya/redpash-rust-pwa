@@ -286,20 +286,82 @@ body[data-chrome="full"] .rp-app {
   flex-direction: column;
 }
 
-/* Brand accent on full-bleed pages.
-   App-wide we rebind --accent to RedPash red (in :root above). But the
-   library's full-bleed surfaces (landing hero, home-screen Step 1
-   "import" tint, auth-modal social-button hovers, etc.) compose
-   var(--accent) expecting the library's catppuccin blue. Re-binding
-   it on body[data-chrome="full"] gives every full-bleed page the
-   library palette in one place; the rest of the app (topbar, redtable
-   chrome, cleaner sidebar, etc.) keeps the brand red.
-   The other step tints in home-screen.css use their own named tokens
-   (--green / --purple / --red), so this override doesn't affect them. */
-body[data-chrome="full"]                                                   { --accent: #89b4fa; }
-html[data-theme="light"] body[data-chrome="full"]                          { --accent: #4f8ef7; }
-@media (prefers-color-scheme: light) { html[data-theme="system"] body[data-chrome="full"] { --accent: #4f8ef7; } }
-@media (prefers-color-scheme: dark)  { html[data-theme="system"] body[data-chrome="full"] { --accent: #89b4fa; } }
+/* ── Slate-cobalt / Arctic-blue token palette — full-bleed pages ──────
+   Redefining the bare token names (--bg / --surface / --text / ...) at
+   the body[data-chrome="full"] scope cascades sandbox values to every
+   descendant — vendored sandbox CSS (glass-btn, proj-tabs, modals-
+   sandbox, redtable-pro, ...) using var(--text) / var(--over0) / etc.
+   resolves to the slate-cobalt palette instead of the library's
+   catppuccin. The --rp-* mirrors echo this through the alias layer so
+   app sheets reading --rp-* pick up sandbox values too.
+
+   Previously each of cleaner/objects/reports/profile re-declared an
+   identical block × 3 (dark + html[data-theme="light"] + system-light
+   @media). Hoisted here so landing / home pick up the same palette
+   without duplication. Page-specific extras (cleaner's --rt-pager-h,
+   profile's --red/--green/--yellow) stay scoped to their page CSS. */
+body[data-chrome="full"] {
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --over0:     #273549;
+  --over1:     #334155;
+  --text:      #e2e8f0;
+  --sub:       #94a3b8;
+  --muted:     #64748b;
+  --border:    #334155;
+  --hover:     #273549;
+  --selected:  #334155;
+  --accent:    #60a5fa;
+  --active-bg: #60a5fa;
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
+}
+html[data-theme="light"] body[data-chrome="full"] {
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --over0:     #dbeafe;
+  --over1:     #bfdbfe;
+  --text:      #1e3a5f;
+  --sub:       #2e5796;
+  --muted:     #6b82b8;
+  --border:    #bfdbfe;
+  --hover:     #dbeafe;
+  --selected:  #bfdbfe;
+  --accent:    #2563eb;
+  --active-bg: #1e3a5f;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] body[data-chrome="full"] {
+    --bg:        #f0f4ff;
+    --surface:   #ffffff;
+    --over0:     #dbeafe;
+    --over1:     #bfdbfe;
+    --text:      #1e3a5f;
+    --sub:       #2e5796;
+    --muted:     #6b82b8;
+    --border:    #bfdbfe;
+    --hover:     #dbeafe;
+    --selected:  #bfdbfe;
+    --accent:    #2563eb;
+    --active-bg: #1e3a5f;
+  }
+}
+
+/* Brand accent on full-bleed pages: now driven by the slate-cobalt
+   palette block above (--accent: #60a5fa dark / #2563eb light).
+   App-wide :root rebinds --accent to RedPash red; the body[data-chrome=
+   "full"] palette overrides it back to blue so library surfaces (hero
+   gradients, social button hovers, etc.) read as designed. The previous
+   catppuccin #89b4fa / #4f8ef7 rebinds lived here and were only ever
+   visible on landing / home (the four sandbox-ported pages had a
+   higher-specificity cobalt override that always won). Folding into
+   the hoisted palette makes every full-bleed page consistent. */
 
 /* App page background — light-theme override of --rp-bg-app. Defaults to
    the dark slate-cobalt gradient in :root above; here we swap it to the
