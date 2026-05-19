@@ -3278,6 +3278,33 @@ function _installObjectsLiveHandlers(root) {
     _paintObjectsSandboxMeta(currentKind);
   };
 
+  // Toolbar refresh button — companion to sandbox spRefresh. spRefresh
+  // adds .is-refreshing for a 600ms one-shot spin; this fires the
+  // actual /list refetch via getCached.fresh (rewrites the localStorage
+  // cache so the next mount paints the post-refresh state) and routes
+  // through _objLoadAndPaint so the table repaints. Uses .is-spinning
+  // (infinite) for the duration of the work + a 600ms minimum so
+  // a snappy localhost fetch still feels like a refresh, not a flash.
+  window.objectsRefresh = async (btn) => {
+    if (!currentKind) return;
+    btn?.classList.add("is-spinning");
+    const schema = SCHEMAS[currentKind];
+    const minSpin = new Promise((r) => setTimeout(r, 600));
+    try {
+      // Force a fresh fetch (write-through) + repaint. _objLoadAndPaint
+      // reads getCached.fresh internally, which always hits the
+      // network, so this is a real round-trip not a cache replay.
+      const work = schema?.path
+        ? api.getCached(schema.path).fresh.then(() => _objLoadAndPaint(currentKind))
+        : _objLoadAndPaint(currentKind);
+      await Promise.all([work, minSpin]);
+    } catch (err) {
+      window.toast?.error?.(`Refresh failed: ${err.body?.error ?? err.message}`);
+    } finally {
+      btn?.classList.remove("is-spinning");
+    }
+  };
+
   // Toolbar search — mirrors the legacy `objSearch` (line ~1125) but
   // repaints via paintObjectsSandboxTable and ALSO paints an
   // autocomplete menu of distinct values from the kind's "primary"

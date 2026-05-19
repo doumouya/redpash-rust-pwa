@@ -43,7 +43,11 @@
     <i class="bi bi-trash"></i>
   </button>
 
-  <button class="rp-btn" title="Refresh" onclick="spRefresh(this)">
+  <!-- Refresh — composite: spRefresh kicks the sandbox 600ms one-shot
+       (instant click feedback), objectsRefresh adds .is-spinning for
+       the full fetch duration + force-refreshes the kind's list cache
+       through getCached.fresh, then repaints via _objLoadAndPaint. -->
+  <button class="rp-btn" title="Refresh" onclick="spRefresh(this);objectsRefresh(this)">
     <i class="bi bi-arrow-clockwise"></i>
   </button>
 

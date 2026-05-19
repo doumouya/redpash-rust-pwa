@@ -520,6 +520,32 @@ html[data-bg-preview="on"][data-bg-palette="publish"] #page-objects  { backgroun
   50%      { transform: scale(1.05); opacity: 1;   }
 }
 
+/* Refresh / spinning button feedback.
+   - `.is-refreshing` is the sandbox spRefresh one-shot — added for
+     600ms, runs a single rotation. Used for buttons whose handler is
+     pure visual feedback (no awaitable backend work yet).
+   - `.is-spinning` is the live-handler variant — added at the start
+     of an await, removed when the fetch resolves. Infinite loop so
+     the spin keeps going as long as the work takes. Cleaner +
+     Objects refresh / score / etc. all use this when they await
+     real I/O.
+   Mirrors redpash-front-end/main.css ~601; ported here so any
+   `.rp-btn` on any page gets the animation for free. */
+@keyframes rp-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.rp-rt-icon-btn.is-refreshing .bi,
+.rp-btn.is-refreshing .bi {
+  display: inline-block;
+  animation: rp-spin 0.6s ease-in-out;
+}
+.rp-rt-icon-btn.is-spinning .bi,
+.rp-btn.is-spinning .bi {
+  display: inline-block;
+  animation: rp-spin 0.7s linear infinite;
+}
+
 /* Filter-panel button feedback animations. One-shot classes flashed by
    the eraser / save / apply handlers via `_rpAnimOnce` — reflow +
    animationend removal lets repeat clicks re-fire. */
