@@ -10,7 +10,7 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     routing::get,
     Json, Router,
 };
@@ -38,7 +38,9 @@ struct MeResponse {
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/", get(get_me).patch(patch_me))
+    Router::new()
+        .route("/", get(get_me).patch(patch_me))
+        .route("/avatar", get(get_avatar))
 }
 
 async fn get_me(
@@ -126,6 +128,82 @@ async fn patch_me(
     }
 
     Ok(Json(user))
+}
+
+/// `GET /api/me/avatar` — server-side proxy for the current user's
+/// OAuth avatar. Google's `lh3.googleusercontent.com` serves images
+/// without permissive CORP headers, so Firefox blocks them as opaque
+/// cross-origin resources (OBR) when used as a CSS `background-image`.
+/// Proxying through our own origin sidesteps the issue and lets us
+/// cache the bytes in-process.
+///
+/// 404 when the user has no avatar_url. 502 when the upstream fetch
+/// fails or returns a non-image. Cached forever (until restart) on
+/// the first successful hit; the cache key is the avatar URL itself
+/// so a future avatar rotation triggers a fresh fetch.
+async fn get_avatar(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+) -> Result<([(header::HeaderName, String); 2], Vec<u8>), AppError> {
+    let user_rid = resolve_user_rid(&state, &headers).await?;
+    let user = db::find_user_by_id(&state.db, &user_rid)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
+    let url = user.avatar_url
+        .ok_or_else(|| AppError::not_found("no_avatar", "user has no avatar"))?;
+
+    if let Some(entry) = state.avatars.get(&url) {
+        let (bytes, ct) = entry.value();
+        return Ok((
+            [
+                (header::CONTENT_TYPE, ct.clone()),
+                (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
+            ],
+            bytes.clone(),
+        ));
+    }
+
+    let resp = state.http.get(&url).send().await
+        .map_err(|e| AppError {
+            status:  StatusCode::BAD_GATEWAY,
+            kind:    "avatar_fetch_failed",
+            message: e.to_string(),
+        })?;
+    if !resp.status().is_success() {
+        return Err(AppError {
+            status:  StatusCode::BAD_GATEWAY,
+            kind:    "avatar_fetch_failed",
+            message: format!("upstream returned {}", resp.status()),
+        });
+    }
+    let content_type = resp.headers().get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("image/jpeg")
+        .to_string();
+    if !content_type.starts_with("image/") {
+        return Err(AppError {
+            status:  StatusCode::BAD_GATEWAY,
+            kind:    "avatar_fetch_failed",
+            message: format!("non-image content-type: {content_type}"),
+        });
+    }
+    let bytes = resp.bytes().await
+        .map_err(|e| AppError {
+            status:  StatusCode::BAD_GATEWAY,
+            kind:    "avatar_fetch_failed",
+            message: e.to_string(),
+        })?
+        .to_vec();
+    state.avatars.insert(url.clone(), (bytes.clone(), content_type.clone()));
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "private, max-age=86400".to_string()),
+        ],
+        bytes,
+    ))
 }
 
 /// Coerce a `prefs.learned_sentinels` JSON value into a deduped Vec

@@ -54,7 +54,8 @@ export default async function mount(root, ctx) {
       .toUpperCase() || "··";
     if (session.avatar_url) {
       avatar.classList.remove("rp-initials");
-      avatar.style.backgroundImage = `url("${session.avatar_url}")`;
+      // Server-side proxy — see profile.js for the Firefox OBR rationale.
+      avatar.style.backgroundImage = `url("/api/me/avatar")`;
       avatar.textContent = "";
       // Accessibility — keep the human-readable label as aria-label
       // since the photo replaces the visible initials.

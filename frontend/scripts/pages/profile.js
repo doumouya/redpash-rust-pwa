@@ -547,7 +547,11 @@ function populateIdentity(root, me) {
   const av = root.querySelector("#profile-avatar");
   const initials = initialsFrom(me.display_name ?? me.username);
   if (me.avatar_url) {
-    av.style.backgroundImage = `url("${me.avatar_url}")`;
+    // Server-side proxy — Firefox OBR blocks lh3.googleusercontent.com
+    // when used as a CSS background-image. /api/me/avatar fetches +
+    // caches the bytes server-side, so the browser sees a same-origin
+    // image and skips the CORP check.
+    av.style.backgroundImage = `url("/api/me/avatar")`;
     av.textContent = "";
   } else {
     av.textContent = initials;

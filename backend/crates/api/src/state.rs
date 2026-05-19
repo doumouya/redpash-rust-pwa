@@ -50,6 +50,12 @@ pub struct AppState {
     pub dev_user:        Arc<String>,
     pub oauth:           Option<Arc<OAuthConfig>>,
     pub http:            reqwest::Client,
+    /// Cache of fetched avatar bytes keyed by source URL. Google's
+    /// `lh3.googleusercontent.com` returns opaque responses to the
+    /// browser (Firefox OBR), so `/api/me/avatar` proxies them
+    /// server-side. Values are `(bytes, content_type)`. Lost on
+    /// restart — refilled on first hit.
+    pub avatars:         Arc<DashMap<String, (Vec<u8>, String)>>,
     /// When true, `POST /api/auth/dev-login` mints a session for ANY
     /// user by RID with no credentials — powers the Home header's
     /// "log in as user" switcher for testing owner-scoped flows.
@@ -124,6 +130,7 @@ impl AppState {
                 .timeout(Duration::from_secs(10))
                 .build()
                 .expect("reqwest client init"),
+            avatars: Arc::new(DashMap::new()),
             dev_login,
         })
     }
