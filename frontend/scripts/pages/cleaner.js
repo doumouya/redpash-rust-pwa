@@ -1392,6 +1392,12 @@ function _wireGlobals(root) {
       _renderDtypeList(root);
     _renderTabs(root);
     await _loadPage(root);
+    // Drop the projects-list cache so the Objects page picks up the
+    // parent project's auto-unarchived status on its next mount. The
+    // backend's insert_step flips archived → draft inside the same
+    // tx so any step on a file inside an archived project unarchives
+    // it (see backend/crates/api/src/db.rs::insert_step).
+    api.invalidateCached?.("/projects");
     toast.success(label);
   };
   window.cleanerUndo = async () => {
@@ -5494,6 +5500,12 @@ function _installSandboxLiveHandlers(root) {
       await _paintSandboxTable(root, activeFile, { envelope });
     }
     _syncUndoRedoButtons();
+    // Drop the projects-list cache so the Objects page picks up the
+    // parent project's auto-unarchived status on its next mount. The
+    // backend's insert_step flips archived → draft inside the same
+    // tx so any step on a file inside an archived project unarchives
+    // it (see backend/crates/api/src/db.rs::insert_step).
+    api.invalidateCached?.("/projects");
     if (label && window.toast?.success) window.toast.success(label);
   };
 

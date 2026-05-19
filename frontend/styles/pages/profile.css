@@ -254,20 +254,18 @@ html[data-theme="light"] .rp-profile__rail { background: rgba(255, 255, 255, 0.2
   line-height: 1.4;
 }
 
-/* Section card — frosted glass surface containing the existing
-   .rp-set-row / .rp-set-divider data blocks. */
+/* Sections are cardless — content sits directly on the rp-rt-panel
+   surface, structured by the section header's accent bar + row
+   dividers. .rp-profile__card is kept as a class hook (profile.js
+   targets `form.rp-profile__card`) but reduced to a transparent
+   block container. */
 .rp-profile__card {
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 0.625rem;
-  padding: 0.875rem 1rem;
-  backdrop-filter: blur(0.5rem);
-  -webkit-backdrop-filter: blur(0.5rem);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 form.rp-profile__card { display: block; }
-.rp-profile__card--danger {
-  border-color: color-mix(in srgb, var(--red, #f87171) 35%, transparent);
-}
 
 /* ── Settings rows (kept rp-set-* class family so profile.js bindings
    continue to work). Sandbox tokens applied to the existing recipe. */
@@ -395,35 +393,36 @@ form.rp-profile__card { display: block; }
   white-space: nowrap;
 }
 
-/* ── Stat strip (usage tiles) ────────────────────────────────────── */
+/* ── Stat strip (usage tiles) — cardless to match the rest of the
+   page. 2x2 grid stays compact inside the Usage section's 1-of-3
+   column slot; tiles carry no bg or border, just the number + label
+   stack. Hairline column rule between left/right tiles + row gap
+   are the only visible chrome. */
 #page-profile .rp-stat-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 0.875rem;
+  row-gap: 0.625rem;
 }
 #page-profile .rp-stat {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.1875rem;
-  padding: 0.75rem 0.875rem;
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: 0.5rem;
+  gap: 0.125rem;
+  padding: 0.125rem 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 0.12s, border-color 0.12s;
-}
-#page-profile .rp-stat:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 #page-profile .rp-stat-val {
   font-size: 1.5rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 #page-profile .rp-stat-lbl {
   font-size: 0.6875rem;
@@ -682,16 +681,15 @@ textarea {
   color: inherit;
 }
 
-/* ── Views / Sentinels lists — profile.js paints into them; minimal
-   frame so the empty state isn't bare against the section card. */
-#page-profile #settings-views-list,
+/* ── Sentinels list — profile.js paints chips into this container.
+   The views list (.rp-views-list) gets its 3-up grid layout from
+   styles/main.css; nothing needed here for it. */
 #page-profile #settings-sentinels-list {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   width: 100%;
 }
-#page-profile .rp-views-list:empty::before,
 #page-profile .rp-sentinels-list:empty::before {
   content: "Nothing here yet.";
   font-size: 0.71875rem;
@@ -770,28 +768,23 @@ textarea {
 /* (Old section-group separators removed — the .rp-profile__rail-group-hdr
    labels above the affected links handle grouping explicitly now.) */
 
-/* ── Pane — tighter rhythm for the merged 8-section layout (was 11).
-   2-col grid on wider viewports so short sections (usage / plan /
-   about / danger) sit side-by-side. Identity / signin / appearance
-   / defaults span both columns via .rp-profile__section--wide. */
+/* ── Pane — 3-col grid on wider viewports. Long-form sections
+   (personal / signin / appearance / defaults) span all 3 cols; the
+   short ones (usage / plan / about / danger) sit one-per-column so
+   the page reads as a single dashboard surface instead of a stack
+   of boxed cards. */
 .rp-profile__pane {
   padding: 1.25rem 1.75rem 2.5rem;
 }
 .rp-profile__section { margin: 0 0 1.25rem; max-width: none; }
 @media (min-width: 60rem) {
-  .rp-profile__pane > .rp-profile__section { max-width: none; }
-  /* Switch the pane's interior to a 2-col grid where wide sections
-     auto-span. Done by grouping sections into a CSS subgrid? — simpler:
-     make the pane itself a grid and tag wide sections to span 2 cols.
-     Sections in source order pack into the 12-col-equivalent flow. */
   .rp-profile__pane {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.25rem 1.5rem;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem 2rem;
     align-content: start;
   }
-  .rp-profile__pane > .rp-profile__section { margin: 0; }
-  /* Long-form sections span both columns. */
+  .rp-profile__pane > .rp-profile__section { margin: 0; max-width: none; }
   #section-personal, #section-signin,
   #section-appearance, #section-defaults {
     grid-column: 1 / -1;
@@ -813,20 +806,13 @@ textarea {
   border-left-color: color-mix(in srgb, var(--red) 60%, transparent);
 }
 
-/* ── Section card — top-edge accent line + hover lift + tighter
-   internal padding rhythm. The plan + danger cards override below. */
-.rp-profile__card {
-  position: relative;
-  padding: 0.875rem 1rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 0.125rem 0.875rem rgba(0, 0, 0, 0.12);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
+/* (No section-card chrome — sections are cardless. The hover/lift
+   block previously here was removed when the cards were dropped.) */
 
-/* ── Subsection heading (h3) inside a merged section card. Used by
+/* ── Subsection heading (h3) inside a merged section. Used by
    the Sign-in (Connected accounts / Security) and Defaults (Objects
-   page / File handling / Cleaner page) cards. Reads as a quiet label
-   above each group, not as a competing h2. */
+   page / File handling / Cleaner page) groups. Reads as a quiet label
+   above each cluster, not as a competing h2. */
 .rp-profile__subhdr {
   margin: 0.125rem 0 0.625rem;
   font-size: 0.6875rem;
@@ -845,40 +831,26 @@ textarea {
   background: color-mix(in srgb, var(--text) 14%, transparent) !important;
   margin: 1rem 0 0.5rem !important;
 }
-.rp-profile__card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 1rem;
-  right: 1rem;
-  height: 0.0625rem;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 45%, transparent) 30%,
-    color-mix(in srgb, var(--accent) 45%, transparent) 70%,
-    transparent
-  );
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.rp-profile__card:hover {
-  transform: translateY(-0.0625rem);
-  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.18);
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
-}
-.rp-profile__card:hover::before { opacity: 1; }
 
-/* Plan card — premium feel: subtle accent gradient border via mask
-   trick (transparent inner content + accent ring). */
-#section-plan .rp-profile__card {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 8%, var(--surface)),
-    color-mix(in srgb, var(--surface) 75%, transparent)
-  );
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+/* Sign-in section: Connected accounts (left) + Security (right) share
+   the same row at wider viewports. Below 50rem they stack so the
+   provider rows and the security toggles each get full width. */
+.rp-profile__signin-grid { display: block; }
+@media (min-width: 50rem) {
+  .rp-profile__signin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 2rem;
+    align-items: start;
+  }
 }
+.rp-profile__signin-col { min-width: 0; }
+.rp-profile__signin-col > .rp-profile__subhdr:first-child { margin-top: 0; }
+/* (Cardless layout — no top-edge accent line, no hover lift, no
+   plan-card gradient, no danger-card red bg. Each section's left
+   accent bar in .rp-profile__section-hdr carries the structural
+   cue now. The plan-name gradient text below stays as the visual
+   accent for the Plan section.) */
 #page-profile .rp-profile__plan-name {
   background: linear-gradient(
     90deg,
@@ -892,14 +864,8 @@ textarea {
   font-weight: 700;
 }
 
-/* Danger card — warning glow on hover, retains red edge. */
-.rp-profile__card--danger {
-  background: color-mix(in srgb, var(--red) 8%, var(--surface));
-}
-.rp-profile__card--danger:hover {
-  border-color: color-mix(in srgb, var(--red) 55%, transparent);
-  box-shadow: 0 0.25rem 1.25rem color-mix(in srgb, var(--red) 18%, transparent);
-}
+/* (Danger card box removed. The red accent now lives on the
+   .rp-profile__section--danger section header's left bar.) */
 
 /* ── Identity / hero row inside Personal info — bigger, more deliberate. */
 #section-personal form.rp-profile__card > .rp-set-row:first-child {
@@ -971,20 +937,16 @@ textarea {
   box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* ── Stat tiles — gradient bg + accent number on hover. */
-#page-profile .rp-stat {
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--text) 8%, transparent),
-    color-mix(in srgb, var(--text) 3%, transparent)
-  );
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
-}
-#page-profile .rp-stat:hover {
-  transform: translateY(-0.0938rem);
-}
+/* ── Stat tiles — hover lights the number in accent. No bg/border/
+   transform: the cardless surface is what makes the section read as
+   "stats" instead of "buttons". The label gets a faint accent tint
+   on hover too so the eye knows the whole tile is the click target. */
 #page-profile .rp-stat:hover .rp-stat-val { color: var(--accent); }
-#page-profile .rp-stat-val { transition: color 0.15s; }
+#page-profile .rp-stat:hover .rp-stat-lbl {
+  color: color-mix(in srgb, var(--accent) 70%, var(--muted));
+}
+#page-profile .rp-stat-val,
+#page-profile .rp-stat-lbl { transition: color 0.15s; }
 
 /* ── Connected accounts — uniform icon bg + hover state. */
 #page-profile .rp-profile__conn {

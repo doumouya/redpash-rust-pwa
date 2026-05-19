@@ -594,6 +594,18 @@
     return OBJECT_TAB_KEYS.slice();
   }
   function _spLoadObjectTabs() {
+    // When the live app has pre-seeded spObjectTabs from server-side
+    // prefs (objects.js sets window.spObjectTabsFromPrefs before
+    // rpInclude → spInit fires), trust that and skip the localStorage
+    // read. The localStorage store is the sandbox-only fallback and
+    // goes stale the moment the user drags pills on the Profile
+    // /Settings page (which writes prefs, not localStorage).
+    if (window.spObjectTabsFromPrefs && Array.isArray(window.spObjectTabs)) {
+      if (window.spObjectTabs.indexOf(_spActiveObjectKey) === -1) {
+        _spActiveObjectKey = window.spObjectTabs[0];
+      }
+      return;
+    }
     var raw = null;
     try {
       var s = localStorage.getItem(OBJECT_TABS_LS_KEY);
@@ -604,10 +616,25 @@
       _spActiveObjectKey = window.spObjectTabs[0];
     }
   }
+  // Persist the current tab order. When the live app is loaded, route
+  // through rpSavePref so the user's account (and in-memory session)
+  // sees the same array Profile/Settings reads from. localStorage is
+  // a fallback for the standalone sandbox where rpSavePref isn't
+  // defined. Either path also fires window.objOnTabsChanged so the
+  // live objects.js module can mirror its own `objTabs` reference and
+  // stay aligned with the sandbox state.
   function _spSaveObjectTabs() {
-    try {
-      localStorage.setItem(OBJECT_TABS_LS_KEY, JSON.stringify(window.spObjectTabs));
-    } catch (_) {}
+    var snapshot = window.spObjectTabs.slice();
+    if (typeof window.rpSavePref === "function") {
+      window.rpSavePref("objects_tabs", snapshot);
+    } else {
+      try {
+        localStorage.setItem(OBJECT_TABS_LS_KEY, JSON.stringify(snapshot));
+      } catch (_) {}
+    }
+    if (typeof window.objOnTabsChanged === "function") {
+      try { window.objOnTabsChanged(snapshot); } catch (_) {}
+    }
   }
 
   // Render the strip from spObjectTabs. Each tab carries inline drag

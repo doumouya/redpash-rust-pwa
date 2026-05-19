@@ -56,12 +56,17 @@
       <span data-sp-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
       <i class="bi bi-chevron-down"></i>
     </button>
+    <!-- Composite onclick: spDdSelectRows = sandbox visual (label + tick);
+         objectsSetRows = live state (STATE[kind].rowsPerPage + repaint
+         + persist to prefs.objects_views via _persistObjView). Without
+         the live half, picking a new rows-per-page was visual-only and
+         Profile/Settings would still show the previous saved view. -->
     <div class="rp-dd-menu" role="menu">
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10)">10 rows</div>
-      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 25)">25 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 50)">50 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100)">100 rows</div>
-      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250)">250 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 10);objectsSetRows(this, 10)">10 rows</div>
+      <div class="rp-dd-item is-selected" onclick="spDdSelectRows(this, 25);objectsSetRows(this, 25)">25 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 50);objectsSetRows(this, 50)">50 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 100);objectsSetRows(this, 100)">100 rows</div>
+      <div class="rp-dd-item"             onclick="spDdSelectRows(this, 250);objectsSetRows(this, 250)">250 rows</div>
     </div>
   </div>
 

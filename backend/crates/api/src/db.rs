@@ -1257,6 +1257,25 @@ pub async fn insert_step(
     .fetch_one(&mut *tx)
     .await?;
 
+    // Implicit unarchive: any cleaning activity on a file inside an
+    // archived project means the user is no longer "done with it" —
+    // flip the parent project's status back to 'draft' so the Objects
+    // page derived status (archived > active > draft) re-evaluates and
+    // shows it as Active (since opening the cleaner puts it in the
+    // user's open-projects set). No-op when the project isn't
+    // archived. Runs in-tx so the step + the unarchive land together.
+    sqlx::query(
+        "UPDATE projects
+         SET status = 'draft', updated_at = now()
+         WHERE redpash_id = (
+             SELECT project_redpash_id FROM project_files WHERE redpash_id = $1
+         )
+         AND status = 'archived'",
+    )
+    .bind(file_rid)
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
     Ok(row.into())
 }

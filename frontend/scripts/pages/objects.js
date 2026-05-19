@@ -769,6 +769,24 @@ function _bindColsDdHover(root) {
 // ── Mount ──────────────────────────────────────────────────────────
 export default async function mount(root, ctx) {
   _root = root;
+  // The user's tab set comes from their account prefs (seeded on the
+  // session at boot). normalizeObjectTabs drops unknown keys and falls
+  // back to the full catalog when nothing is saved.
+  //
+  // Computed BEFORE rpInclude so we can seed window.spObjectTabs (the
+  // sandbox tab-strip state in controls.js) up front: include.js
+  // synchronously calls spInit during the walk, which paints the
+  // strip from spObjectTabs. Without the early seed, spInit reads
+  // stale localStorage and the user sees a flash of the wrong order
+  // before our mount handler overrides it.
+  objTabs = normalizeObjectTabs(ctx?.session?.prefs?.objects_tabs);
+  window.spObjectTabs = [...objTabs];
+  // Tell controls.js the sandbox strip is now prefs-driven so spInit's
+  // _spLoadObjectTabs skips its localStorage fallback. Without this
+  // flag, the include walk would clobber the seed above with a stale
+  // localStorage read before our spActivateObjectType call repaints.
+  window.spObjectTabsFromPrefs = true;
+
   // Prerelease (Phase 1): /partials/objects.html is now a thin shell
   // that data-includes the sandbox subtree at /partials/objects/index.html.
   // The router's partial-swap doesn't recurse into data-include nodes;
@@ -779,10 +797,6 @@ export default async function mount(root, ctx) {
     try { await window.rpInclude(root); }
     catch (err) { console.warn("[objects] rpInclude failed", err); }
   }
-  // The user's tab set comes from their account prefs (seeded on the
-  // session at boot). normalizeObjectTabs drops unknown keys and falls
-  // back to the full catalog when nothing is saved.
-  objTabs = normalizeObjectTabs(ctx?.session?.prefs?.objects_tabs);
 
   // Saved per-tab view configs. A plain object keyed by kind — drop
   // anything that isn't shaped like one so a corrupt pref can't break
@@ -2940,6 +2954,23 @@ function projectName(projectRid) {
 async function mountObjectsSandbox(root, ctx) {
   _installObjectsLiveHandlers(root);
 
+  // Bridge Objects → Profile/Settings: when the user drags / removes /
+  // adds a tab inside the Objects page strip, controls.js calls
+  // _spSaveObjectTabs which routes through rpSavePref (so the change
+  // reaches the backend + session.prefs) AND fires this callback so
+  // our `objTabs` module reference stays aligned with spObjectTabs.
+  // Without the callback, subsequent objTabs.includes(...) checks
+  // inside this page would read a stale array.
+  //
+  // The reverse direction (Settings → Objects strip) is wired earlier
+  // in mount() by seeding spObjectTabs from objTabs BEFORE rpInclude
+  // runs, since spInit fires inside the include walk.
+  window.objOnTabsChanged = (newTabs) => {
+    if (!Array.isArray(newTabs)) return;
+    objTabs.length = 0;
+    objTabs.push(...newTabs);
+  };
+
   // Clear sandbox demo rows from EVERY per-type tbody on mount so the
   // user never sees hardcoded "raw_dossier_500_sentinels.csv" demo data
   // sitting in the table after switching to an un-loaded tab. Replaced
@@ -3450,20 +3481,27 @@ function _installObjectsLiveHandlers(root) {
     }).join("");
   };
 
-  // Auto-persist the current tab's column state to objViews so that
-  // toggling / reordering / resetting in the Columns dropdown survives
-  // a page refresh. Snapshots only the column-related bits + the
-  // user's rowsPerPage / dateFmt / sorts at the moment of the change
-  // so they stick alongside. rpSavePref writes to prefs.objects_views
-  // on the account (fire-and-forget).
-  const _persistObjViewCols = (kind) => {
+  // Auto-persist the current tab's full view state to objViews so that
+  // every toolbar tweak (columns, rows-per-page, date format, sort)
+  // survives a page refresh AND shows up on the Profile/Settings
+  // "Saved tab views" list without the user having to click an
+  // explicit "Save view" button. Snapshot shape matches what
+  // window.objSave writes so the two paths stay interchangeable.
+  // rpSavePref writes to prefs.objects_views on the account
+  // (fire-and-forget; in-memory session.prefs is updated synchronously).
+  const _persistObjView = (kind) => {
     if (!kind || !STATE[kind]) return;
     const st = STATE[kind];
     if (!st.colOrder || !st.visibleCols) return;
     objViews[kind] = {
-      ...(objViews[kind] || {}),
       colOrder:    [...st.colOrder],
       visibleCols: [...st.visibleCols],
+      rowsPerPage: st.rowsPerPage,
+      showRowNums: objShowRowNums,
+      dateFmt:     dateFmt,
+      sorts:       Array.isArray(st.sorts) && st.sorts.length
+                     ? st.sorts.map((k) => ({ col: k.col, dir: k.dir }))
+                     : null,
     };
     window.rpSavePref?.("objects_views", objViews);
   };
@@ -3487,7 +3525,7 @@ function _installObjectsLiveHandlers(root) {
       }
       st.visibleCols.delete(key);
     }
-    _persistObjViewCols(kind);
+    _persistObjView(kind);
     paintObjectsSandboxTable(kind);
   };
 
@@ -3501,7 +3539,7 @@ function _installObjectsLiveHandlers(root) {
     const st   = STATE[kind];
     st.colOrder    = cols.map((c) => c.key);
     st.visibleCols = new Set(cols.filter((c) => !c.hidden).map((c) => c.key));
-    _persistObjViewCols(kind);
+    _persistObjView(kind);
     window.objectsBuildColsDropdown(kind);
     paintObjectsSandboxTable(kind);
   };
@@ -3854,6 +3892,27 @@ function _installObjectsLiveHandlers(root) {
     if (typeof paintObjectsSandboxTable === "function" && currentKind) {
       paintObjectsSandboxTable(currentKind);
     }
+    // Snapshot the full view so prefs.objects_views reflects the new
+    // dateFmt — Profile/Settings reads from there to render the
+    // "Saved tab views" summary chips.
+    _persistObjView(currentKind);
+  };
+
+  // Sandbox companion to spDdSelectRows — controls.js only updates the
+  // label + selected class. Wire the actual state mutation + repaint
+  // + persist here so picking a new "N rows" entry survives a refresh
+  // and shows up on Profile's Saved tab views. Bound from toolbar.html
+  // as a composite: onclick="spDdSelectRows(this, N);objectsSetRows(this, N)".
+  window.objectsSetRows = (item, n) => {
+    if (!currentKind || !STATE[currentKind]) return;
+    const num = Number(n);
+    if (!OBJ_ROWS_OPTS.includes(num)) return;
+    STATE[currentKind].rowsPerPage = num;
+    STATE[currentKind].page = 1;
+    if (typeof paintObjectsSandboxTable === "function") {
+      paintObjectsSandboxTable(currentKind);
+    }
+    _persistObjView(currentKind);
   };
 
   if (_installObjectsLiveHandlers._installed) return;
