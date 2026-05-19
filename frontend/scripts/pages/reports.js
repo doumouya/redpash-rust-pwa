@@ -95,9 +95,15 @@ async function mountReportsSandbox(root, ctx) {
   // matches STATE on first paint (the static partial says "25").
   _syncRowsLabel(root);
 
-  // URL → starting file.
+  // URL → starting report + file. Contract mirrors Cleaner
+  // (?project=…&file=…): Reports opens at a report id +, optionally,
+  // an explicit source file. `?id=` is accepted as a legacy alias for
+  // `?report=`. When a report is named the file is implied by its
+  // source_file_id unless `?file=` overrides.
   const q = new URLSearchParams(location.hash.split("?")[1] ?? "");
-  const initialFileId = q.get("file");
+  const initialReportId = q.get("report") || q.get("id") || null;
+  const initialFileId   = q.get("file");
+  STATE.reportId = initialReportId;   // remembered for URL canonicalisation
 
   // Mount snapshot — paint cached picker label fast, before the fetch
   // resolves. Table body shows the partial's "Pick a source file…" until
@@ -130,14 +136,30 @@ async function mountReportsSandbox(root, ctx) {
 
   _renderReportsPicker(root);
 
-  // Decide active file. URL ?file= wins when it names a file we can see;
-  // otherwise default to the first owned file. When the URL named a file
-  // we can't see (deleted / not owned), silently fall back rather than
-  // 404-ing — same forgiving behavior as the cleaner's URL handler.
-  const urlValid = initialFileId && STATE.files.some((f) => f.redpash_id === initialFileId);
-  const activeId = urlValid
-    ? initialFileId
-    : (STATE.files[0]?.redpash_id ?? null);
+  // When ?report= is set, fetch the report so its source_file_id can
+  // drive the active file (and title / spec land on STATE for handlers
+  // that need them). A missing / non-owned report degrades quietly to
+  // the file-only path below.
+  if (initialReportId) {
+    try {
+      STATE.report = await api.get(`/reports/${encodeURIComponent(initialReportId)}`);
+    } catch (err) {
+      console.warn("[reports] fetch /reports/:id failed", err);
+    }
+  }
+
+  // Decide active file. Order of preference:
+  //   1. ?file= when it names a file we can see
+  //   2. the loaded report's source_file_id (when ?file= is absent)
+  //   3. first owned file (blank-landing fallback)
+  // A URL file we can't see (deleted / not owned) silently falls
+  // through rather than 404-ing — same forgiving behaviour as Cleaner.
+  const urlFileValid    = initialFileId && STATE.files.some((f) => f.redpash_id === initialFileId);
+  const reportFileId    = STATE.report?.source_file_id;
+  const reportFileValid = reportFileId && STATE.files.some((f) => f.redpash_id === reportFileId);
+  const activeId = urlFileValid    ? initialFileId
+                 : reportFileValid ? reportFileId
+                 :                   (STATE.files[0]?.redpash_id ?? null);
 
   if (!activeId) {
     _renderReportsEmptyState(root, "No files yet — upload one from the Home page.");
@@ -155,11 +177,16 @@ async function mountReportsSandbox(root, ctx) {
 
   _snapshotForMount();
 
-  // Push the active file to the URL when the user landed without one, so
-  // a reload reopens the same source (and the snapshot's hashUrl guard
-  // hits on the next mount).
-  if (!initialFileId && activeId) {
-    history.replaceState(null, "", `#/reports?file=${encodeURIComponent(activeId)}`);
+  // Canonicalise the URL — write back `?report=` (when known) + `?file=`
+  // (the active source) so a reload reopens exactly this report+file
+  // pair. Skip the write when nothing changed (avoids a redundant
+  // history entry on every mount of an already-canonical URL).
+  const _params = new URLSearchParams();
+  if (initialReportId) _params.set("report", initialReportId);
+  if (activeId)        _params.set("file",   activeId);
+  const _canonical = `#/reports${_params.toString() ? "?" + _params.toString() : ""}`;
+  if (_canonical !== location.hash) {
+    history.replaceState(null, "", _canonical);
   }
 
   // Tier 2 E — Reports already loaded /files; warm the other lists
@@ -202,7 +229,13 @@ function _installReportsLiveHandlers(root) {
     root.querySelectorAll("[data-reports-source-picker] .rp-dd-item").forEach((el) => {
       el.classList.toggle("is-selected", el.dataset.fileId === fileId);
     });
-    history.replaceState(null, "", `#/reports?file=${encodeURIComponent(fileId)}`);
+    // Preserve ?report= across a source-file swap so a reload keeps
+    // the report context. STATE.reportId is set at mount when the URL
+    // carried a report.
+    const _p = new URLSearchParams();
+    if (STATE.reportId) _p.set("report", STATE.reportId);
+    _p.set("file", fileId);
+    history.replaceState(null, "", `#/reports?${_p.toString()}`);
     await _afterFileChange();
   };
 

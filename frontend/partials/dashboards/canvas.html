@@ -1,0 +1,103 @@
+<!-- Dashboard canvas — grid of tiles. Each tile hosts either an
+     IMPORTED CHART (from /reports), a stat number, a list, a text
+     block, or an image. Dashboards layout these widgets — they don't
+     build the charts themselves; chart authoring lives on /reports.
+
+     JS paints tiles from STATE.widgets[slotId] into [data-dashboards-grid].
+     Sample tiles below illustrate the four common kinds. -->
+<div class="rp-dashboards__canvas" data-dashboards-canvas>
+
+  <!-- Empty state. -->
+  <div class="rp-dashboards__empty" data-dashboards-empty hidden>
+    <i class="bi bi-grid-1x2" style="font-size:2.5rem;color:var(--muted);opacity:0.6"></i>
+    <div class="rp-dashboards__empty-ttl">No dashboard loaded</div>
+    <div class="rp-dashboards__empty-sub">Pick a template from the toolbar to start, then bind charts from your reports to each slot.</div>
+    <button class="btn btn-primary btn-sm" type="button" onclick="openModal('new-dashboard')">
+      <i class="bi bi-plus-lg"></i> New dashboard
+    </button>
+  </div>
+
+  <!-- Grid host — Hero + pair template for the visual port. -->
+  <div class="rp-dashboards__grid" data-dashboards-grid
+       style="grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; grid-gap: 0.75rem">
+
+    <!-- Hero tile — chart imported from a report. The header's
+         "From: <report>" line clarifies the origin; clicking the link
+         icon opens that chart in /reports for editing. -->
+    <article class="rp-dashboards__tile" data-slot="hero" style="grid-row: span 2">
+      <header class="rp-dashboards__tile-hdr">
+        <i class="bi bi-bar-chart-fill"></i>
+        <span class="rp-dashboards__tile-ttl">Monthly revenue</span>
+        <span class="rp-dashboards__tile-meta">
+          <a href="#/reports?chart=CHT_sample1" title="Edit on Reports page"
+             onclick="event.stopPropagation()">
+            <i class="bi bi-arrow-up-right"></i> Sentinel
+          </a>
+        </span>
+        <button class="rp-btn rp-btn-xs" title="Configure slot"
+                style="margin-left:auto"
+                data-sp-panel-trigger="dashboards-tools-window"
+                onclick="spToggle('dashboards-tools-window')">
+          <i class="bi bi-sliders"></i>
+        </button>
+        <button class="rp-btn rp-btn-xs" title="Remove from dashboard">
+          <i class="bi bi-x"></i>
+        </button>
+      </header>
+      <div class="rp-dashboards__tile-body">
+        <canvas class="rp-dashboards__tile-canvas" width="540" height="320"
+                data-echarts-id="bar-simple" data-chart-id="CHT_sample1"></canvas>
+      </div>
+    </article>
+
+    <!-- Stat tile — single big number. Native widget (not from /reports). -->
+    <article class="rp-dashboards__tile" data-slot="kpi-1">
+      <header class="rp-dashboards__tile-hdr">
+        <i class="bi bi-graph-up-arrow"></i>
+        <span class="rp-dashboards__tile-ttl">Active projects</span>
+        <span class="rp-dashboards__tile-meta">stat</span>
+        <button class="rp-btn rp-btn-xs" title="Configure slot"
+                style="margin-left:auto"
+                data-sp-panel-trigger="dashboards-tools-window"
+                onclick="spToggle('dashboards-tools-window')">
+          <i class="bi bi-sliders"></i>
+        </button>
+        <button class="rp-btn rp-btn-xs" title="Remove from dashboard">
+          <i class="bi bi-x"></i>
+        </button>
+      </header>
+      <div class="rp-dashboards__tile-body rp-dashboards__tile-body--stat">
+        <div class="rp-dashboards__stat-val">14</div>
+        <div class="rp-dashboards__stat-delta rp-dashboards__stat-delta--up">
+          <i class="bi bi-arrow-up-right"></i> +3 vs last month
+        </div>
+      </div>
+    </article>
+
+    <!-- List tile — recent files. Native widget. -->
+    <article class="rp-dashboards__tile" data-slot="kpi-2">
+      <header class="rp-dashboards__tile-hdr">
+        <i class="bi bi-clock-history"></i>
+        <span class="rp-dashboards__tile-ttl">Recent files</span>
+        <span class="rp-dashboards__tile-meta">list</span>
+        <button class="rp-btn rp-btn-xs" title="Configure slot"
+                style="margin-left:auto"
+                data-sp-panel-trigger="dashboards-tools-window"
+                onclick="spToggle('dashboards-tools-window')">
+          <i class="bi bi-sliders"></i>
+        </button>
+        <button class="rp-btn rp-btn-xs" title="Remove from dashboard">
+          <i class="bi bi-x"></i>
+        </button>
+      </header>
+      <div class="rp-dashboards__tile-body rp-dashboards__tile-body--list">
+        <ul class="rp-dashboards__list">
+          <li><i class="bi bi-file-earmark-text"></i> raw_dossier_500_sentinels.csv <span class="rp-dashboards__list-meta">2d</span></li>
+          <li><i class="bi bi-file-earmark-text"></i> clients_clean_export.csv <span class="rp-dashboards__list-meta">3d</span></li>
+          <li><i class="bi bi-file-earmark-spreadsheet"></i> Q4_invoices.xlsx <span class="rp-dashboards__list-meta">1w</span></li>
+        </ul>
+      </div>
+    </article>
+
+  </div>
+</div>

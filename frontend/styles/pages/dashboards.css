@@ -1,213 +1,719 @@
-/* Dashboards — list + builder layout.
+/* ────────────────── Dashboards page — full canvas + floating tools.
+ *
+ * Topbar above .rp-rt-panel. Panel = toolbar + body. Body is the
+ * positioning context for two children:
+ *   • .rp-dashboards__canvas — fills the body, CSS-grid laid out per
+ *     template, scrollable on overflow.
+ *   • .rp-dashboards__tools-window — position: absolute, anchored
+ *     bottom-right by default; draggable via dashboards.js writing
+ *     inline top/left on the [data-dashboards-tools-drag] header.
+ *
+ * Same chrome family as cleaner / objects / reports / profile.
+ * Previous list+builder CSS lives at dashboards.live.css for reference.
+ * ──────────────────────────────────────────────────────────────────── */
 
-   Mirrors the reports page's 3-column shell but trades the filter column
-   for a single editor column, since dashboards aggregate many widgets
-   each with their own implicit filter. */
+@import "/vendor/redpash-components/shell.css";
 
-.rp-dashboards { display: flex; flex-direction: column; gap: 16px; }
+@import "/vendor/redpash-components/components/typography.css";
+@import "/vendor/redpash-components/components/button.css";
+@import "/vendor/redpash-components/components/form.css";
+@import "/vendor/redpash-components/components/card.css";
+@import "/vendor/redpash-components/components/modal.css";
+@import "/vendor/redpash-components/components/auth-modals.css";
+@import "/vendor/redpash-components/components/redtable.css";
+@import "/vendor/redpash-components/components/redtable-pro.css";
 
-.rp-dashboards__head {
+/* Sandbox-canonical visual vocabulary. */
+@import "/vendor/redpash-components/components/glass-btn.css";
+@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
+@import "/vendor/redpash-components/components/objects-sandbox.css";
+
+/* ── Sandbox-aligned root font-size (matches the family). */
+html { font-size: 112.5%; }
+
+#page-dashboards {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  font-size: 1rem;
+  font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 300;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  background: linear-gradient(160deg, #020b18 0%, #0b1a35 45%, #0f1a45 100%);
+  background-attachment: fixed;
+
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --over0:     #273549;
+  --over1:     #334155;
+  --text:      #e2e8f0;
+  --sub:       #94a3b8;
+  --muted:     #64748b;
+  --border:    #334155;
+  --hover:     #273549;
+  --selected:  #334155;
+  --accent:    #60a5fa;
+  --active-bg: #60a5fa;
+  --red:       #f87171;
+  --green:     #34d399;
+  --yellow:    #fbbf24;
+  --rp-bg:            var(--bg);
+  --rp-surface:       var(--surface);
+  --rp-surface-2:     var(--over0);
+  --rp-border:        var(--over1);
+  --rp-border-strong: var(--over1);
+  --rp-text:          var(--text);
+  --rp-text-muted:    var(--muted);
+  --rp-accent:        var(--accent);
+}
+html[data-theme="light"] #page-dashboards {
+  background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --over0:     #dbeafe;
+  --over1:     #bfdbfe;
+  --text:      #1e3a5f;
+  --sub:       #2e5796;
+  --muted:     #6b82b8;
+  --border:    #bfdbfe;
+  --hover:     #dbeafe;
+  --selected:  #bfdbfe;
+  --accent:    #2563eb;
+  --active-bg: #1e3a5f;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-dashboards {
+    background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 55%, #e0e7ff 100%);
+    --bg:        #f0f4ff;
+    --surface:   #ffffff;
+    --over0:     #dbeafe;
+    --over1:     #bfdbfe;
+    --text:      #1e3a5f;
+    --sub:       #2e5796;
+    --muted:     #6b82b8;
+    --border:    #bfdbfe;
+    --hover:     #dbeafe;
+    --selected:  #bfdbfe;
+    --accent:    #2563eb;
+    --active-bg: #1e3a5f;
+  }
+}
+
+/* ── Topbar (frosted band, slate title) ────────────────────────────── */
+#page-dashboards .rp-rt-topbar {
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--rp-text) 8%, transparent);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+}
+html[data-theme="light"] #page-dashboards .rp-rt-topbar { background: rgba(255, 255, 255, 0.28); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-dashboards .rp-rt-topbar { background: rgba(255, 255, 255, 0.28); }
+}
+#page-dashboards .rp-rt-page-title {
+  color: #e2e8f0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+#page-dashboards .rp-rt-page-title > .bi {
+  color: var(--accent);
+  margin-right: 0.125rem;
+  opacity: 0.85;
+}
+html[data-theme="light"] #page-dashboards .rp-rt-page-title { color: #1e3a5f; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-dashboards .rp-rt-page-title { color: #1e3a5f; }
+}
+
+/* ── Vendored .rp-rt-panel reset (same as the rest of the family). */
+#page-dashboards .rp-rt-panel {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  animation: none;
+  transform: none;
+}
+
+/* ── Body = positioning context for canvas + floating tools window. */
+#page-dashboards .rp-rt-body {
+  position: relative;
+  display: block;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Toolbar (frosted band, sandbox values). */
+#page-dashboards .rp-rt-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.25rem;
+  padding: 0.4375rem 0.5rem;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
+  flex-shrink: 0;
   flex-wrap: wrap;
-}
-.rp-dashboards__head h1 { margin: 0; font-size: 20px; }
-
-/* ─── Builder shell — preview (left) · tools (right) ───────────── */
-.rp-dashboards__editor {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 16px;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .rp-dashboards__editor { grid-template-columns: 1fr; }
-}
-
-.rp-dashboards__preview {
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 12px;
-  min-height: 480px;
-  min-width: 0;
-}
-
-.rp-dashboards__tools {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 12px;
-  min-width: 0;
-}
-.rp-dashboards__tools section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-.rp-dashboards__tools section > header {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--rp-text-muted);
-  text-transform: uppercase; letter-spacing: .04em;
-}
-.rp-dashboards__tools section > header h2 {
-  margin: 0; font-size: 12px; font-weight: 700;
-}
-
-/* ─── Preview grid — driven by inline grid-template-* from JS ──── */
-.rp-dash-grid {
-  display: grid;
-  gap: 12px;
   width: 100%;
-  /* Cap row height so very tall templates don't blow up the page. */
-  min-height: 480px;
+}
+html[data-theme="light"] #page-dashboards .rp-rt-toolbar { background: rgba(255, 255, 255, 0.24); }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-dashboards .rp-rt-toolbar { background: rgba(255, 255, 255, 0.24); }
+}
+#page-dashboards .rp-rt-toolbar .rp-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.9375rem;
+}
+#page-dashboards .rp-rt-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55em 1em;
+  margin: 0;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 3rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-dashboards .rp-rt-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+#page-dashboards .rp-rt-search::placeholder {
+  color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+#page-dashboards .rp-rt-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 3rem;
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#page-dashboards .rp-rt-pill-btn:hover {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+#page-dashboards .rp-rt-pill-btn .bi-chevron-down { font-size: 0.625rem; opacity: 0.6; }
+
+/* ── Canvas — fills the body, scrolls on overflow. */
+.rp-dashboards__canvas {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem 2rem;
+  box-sizing: border-box;
 }
 
-.rp-dash-cell {
-  position: relative;
+/* Empty state — shown when no template / no widgets. */
+.rp-dashboards__empty {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  padding: 10px;
-  min-width: 0;
-  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  gap: 0.5rem;
+}
+.rp-dashboards__empty-ttl {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.rp-dashboards__empty-sub {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  max-width: 28rem;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Grid — JS sets template-columns/rows inline per template. */
+.rp-dashboards__grid {
+  display: grid;
+  grid-gap: 0.75rem;
+  min-height: 100%;
+}
+
+/* Tile — chart / stat / list / text host. */
+.rp-dashboards__tile {
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.625rem;
+  overflow: hidden;
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+  box-shadow: 0 0.125rem 0.875rem rgba(0, 0, 0, 0.12);
+  min-height: 8rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.rp-dashboards__tile:hover {
+  transform: translateY(-0.0625rem);
+  box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.18);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.rp-dashboards__tile-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.4375rem 0.625rem;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  font-size: 0.75rem;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.rp-dashboards__tile-hdr > .bi { font-size: 0.875rem; color: var(--accent); }
+.rp-dashboards__tile-ttl {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-dashboards__tile-meta {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-dashboards__tile-body {
+  flex: 1;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
-.rp-dash-cell__empty {
-  display: grid;
-  place-items: center;
+.rp-dashboards__tile-canvas {
   width: 100%;
   height: 100%;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  border: 1px dashed var(--rp-border-strong);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface-2);
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  border-radius: 0.375rem;
 }
 
-/* ─── Slot editor (one <details> per template slot) ────────────── */
-.rp-dash-slot {
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-.rp-dash-slot > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  list-style: none;
-  background: var(--rp-surface-2);
-  border-bottom: 1px solid transparent;
-  font-size: 13px;
-}
-.rp-dash-slot > summary::-webkit-details-marker { display: none; }
-.rp-dash-slot[open] > summary { border-bottom-color: var(--rp-border); }
-.rp-dash-slot__name { font-weight: 600; }
-.rp-dash-slot__kind { margin-left: auto; font-size: 12px; }
-
-.rp-dash-slot__body {
-  display: flex;
+/* Stat tile body — big number + delta. */
+.rp-dashboards__tile-body--stat {
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-}
-
-.rp-dash-slot__row {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-.rp-dash-slot__row > span { color: var(--rp-text-muted); }
-.rp-dash-slot__row select,
-.rp-dash-slot__row input,
-.rp-dash-slot__row textarea {
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 12px;
-}
-.rp-dash-slot__row textarea {
-  height: auto;
-  min-height: 80px;
-  padding: 6px;
-  font-family: var(--rp-font-mono);
-  resize: vertical;
-}
-.rp-dash-slot__row--column {
-  grid-template-columns: 1fr;
-  align-items: stretch;
-}
-
-/* ─── Widget visuals ───────────────────────────────────────────── */
-.rp-wkpi {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: flex-start;
-  gap: 6px;
-  padding: 6px 4px;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  gap: 0.25rem;
 }
-.rp-wkpi__label {
-  font-size: 12px;
-  color: var(--rp-text-muted);
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-.rp-wkpi__value {
-  font-size: 32px;
+.rp-dashboards__stat-val {
+  font-size: 2.25rem;
   font-weight: 700;
-  line-height: 1.1;
-  color: var(--rp-text);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1;
+}
+.rp-dashboards__stat-delta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.rp-dashboards__stat-delta--up   { color: var(--green); }
+.rp-dashboards__stat-delta--down { color: var(--red); }
+
+/* List tile body — vertical list of items. */
+.rp-dashboards__tile-body--list {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0.5rem 0.625rem;
+  overflow-y: auto;
+}
+.rp-dashboards__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.rp-dashboards__list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.3125rem 0.4375rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--text) 85%, transparent);
+  border-radius: 0.375rem;
+  transition: background 0.12s;
+}
+.rp-dashboards__list li:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.rp-dashboards__list li .bi {
+  color: var(--muted);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+.rp-dashboards__list-meta {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  color: var(--muted);
 }
 
-.rp-wchart {
+/* ── Floating tools window — draggable, collapsible. */
+.rp-dashboards__tools-window {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  width: min(22rem, calc(100% - 2.5rem));
+  max-height: calc(100% - 2.5rem);
+  z-index: 20;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 0.625rem;
+  box-shadow: 0 0.625rem 2rem rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow 0.18s ease;
+}
+.rp-dashboards__tools-window:not(.open) { display: none; }
+.rp-dashboards__tools-window.is-dragging {
+  box-shadow: 0 0.875rem 2.5rem rgba(0, 0, 0, 0.45);
+  cursor: grabbing;
+}
+
+.rp-dashboards__tools-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.5rem 0.625rem;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+.rp-dashboards__tools-hdr:active { cursor: grabbing; }
+.rp-dashboards__tools-hdr > .bi:first-child {
+  color: var(--accent);
+  font-size: 0.875rem;
+}
+.rp-dashboards__tools-ttl {
+  font-weight: 600;
+}
+
+.rp-dashboards__tools-body {
   flex: 1;
+  overflow-y: auto;
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+.rp-dashboards__tools-window.is-collapsed .rp-dashboards__tools-body { display: none; }
+.rp-dashboards__tools-window.is-collapsed { height: auto; max-height: none; }
+
+.rp-dashboards__tools-sect {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+}
+.rp-dashboards__tools-sect-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.rp-dashboards__tools-sect-hdr > .bi { color: var(--accent); opacity: 0.85; }
+
+/* Slot rows — pick which slot to configure. */
+.rp-dashboards__slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.rp-dashboards__slot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.5rem;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 0.4375rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.rp-dashboards__slot:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text);
+}
+.rp-dashboards__slot.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+.rp-dashboards__slot-key {
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
+}
+.rp-dashboards__slot-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-dashboards__slot > .bi {
+  color: var(--accent);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+/* ── Form rows inside the tools window — mirror modal form vocab. */
+#page-dashboards .rp-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+#page-dashboards .rp-form-lbl {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+#page-dashboards .rp-input {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  color: var(--text);
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.5rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-dashboards .rp-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Reuse the rp-set-opt pill family for widget-kind / chart-type
+   pickers — same look as the profile / modal pickers. */
+#page-dashboards .rp-set-opt-grp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3125rem;
+}
+#page-dashboards .rp-set-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--text) 75%, transparent);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+  font-family: inherit;
+}
+#page-dashboards .rp-set-opt:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+#page-dashboards .rp-set-opt:active { transform: scale(0.96); }
+#page-dashboards .rp-set-opt.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ── Glass button hover — theme-aware bridge for system mode. */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #page-dashboards .rp-btn:hover {
+    background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+    box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-dashboards .rp-btn:hover {
+    background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    color: var(--accent);
+    box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+/* ── Chart gallery (in the tools window + in the +Widget modal) —
+   grid of cards, each a thumbnail SVG + chart title + source report.
+   Click to bind the chart to the active slot. */
+.rp-dashboards__chart-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.4375rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.rp-dashboards__chart-gallery--modal {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  max-height: 22rem;
+}
+.rp-dashboards__chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.5625rem 0.4375rem;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 0.4375rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
+}
+.rp-dashboards__chart-card:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--text);
+  transform: translateY(-0.0625rem);
+}
+.rp-dashboards__chart-card.is-bound {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+}
+.rp-dashboards__chart-card.is-bound::after {
+  content: "in use";
+  position: absolute;
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rp-dashboards__chart-thumb {
+  display: block;
   width: 100%;
-  min-height: 220px;
+  aspect-ratio: 60 / 36;
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  border-radius: 0.3125rem;
+  color: var(--accent);
+  padding: 0.25rem 0.375rem;
+  box-sizing: border-box;
+}
+.rp-dashboards__chart-thumb svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.rp-dashboards__chart-card-ttl {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.rp-dashboards__chart-card-src {
+  font-size: 0.625rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.rp-wtable {
-  flex: 1;
-  overflow: auto;
-  min-width: 0;
+/* ── Tools-section header inline link (e.g. "new chart →"). */
+.rp-dashboards__tools-sect-link {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
 }
-.rp-wtable table { width: 100%; }
+.rp-dashboards__tools-sect-link:hover { text-decoration: underline; }
 
-.rp-wtext {
-  flex: 1;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--rp-text);
-  overflow: auto;
+/* Compact input variant for inline filter fields. */
+#page-dashboards .rp-input--sm {
+  padding: 0.3125rem 0.4375rem;
+  font-size: 0.71875rem;
 }
-.rp-wtext h2 { font-size: 16px; margin: 6px 0; }
-.rp-wtext h3 { font-size: 14px; margin: 6px 0; }
-.rp-wtext p  { margin: 4px 0; }
-.rp-wtext code {
-  font-family: var(--rp-font-mono);
-  background: var(--rp-surface-2);
-  padding: 1px 4px;
-  border-radius: 4px;
-  font-size: 12px;
+
+/* Tile meta — when content is an anchor (chart imported from a
+   report, link to the source). Inherit color so the link doesn't
+   read as a generic blue underline. */
+#page-dashboards .rp-dashboards__tile-meta a {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+}
+#page-dashboards .rp-dashboards__tile-meta a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* ── Bootstrap-icons reset + form-element font reset. */
+i.bi {
+  font-size: inherit;
+  display: inline;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }
