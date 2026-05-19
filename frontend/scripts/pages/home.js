@@ -478,7 +478,7 @@ function renderStep1Cards() {
         if (!files.length) { filesList.innerHTML = `<div class="rp-minitable-empty">No files in this project yet.</div>`; return; }
         filesList.innerHTML = files.map((f) => `
           <a class="rp-minitable-row" href="#/cleaner?file=${encodeURIComponent(f.redpash_id)}">
-            <span class="rp-minitable-name">${esc(f.filename)}</span>
+            <span class="rp-minitable-name">${esc(f.display_name ?? f.filename)}</span>
             <span class="rp-minitable-meta">
               ${scoreChip(f.cleanness_pct)}
               <span class="rp-minitable-dim">${(f.row_count ?? 0).toLocaleString()}r</span>

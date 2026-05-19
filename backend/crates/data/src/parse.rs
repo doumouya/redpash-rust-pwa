@@ -41,6 +41,25 @@ pub fn is_excel_filename(name: &str) -> bool {
         .any(|ext| lower.ends_with(ext))
 }
 
+/// Strip a trailing upload extension from a filename, leaving the stem.
+/// Mirrors the seven upload-accepted extensions (csv / tsv + the Excel
+/// family + ods) — anything else passes through. Used by the upload /
+/// snapshot / join handlers in routes/files.rs to persist
+/// `project_files.filename` as a stem (mig 011), letting `file_type`
+/// own the extension instead of duplicating it inside `filename`.
+/// Borrows: returns a `&str` slice when stripped, the original `&str`
+/// when no extension matched.
+pub fn strip_upload_ext(name: &str) -> &str {
+    const EXTS: &[&str] = &[".csv", ".tsv", ".xlsx", ".xls", ".xlsm", ".xlsb", ".ods"];
+    let lower = name.to_ascii_lowercase();
+    for ext in EXTS {
+        if lower.ends_with(ext) {
+            return &name[..name.len() - ext.len()];
+        }
+    }
+    name
+}
+
 /// Convert an Excel workbook (xlsx / xls / xlsm / xlsb / ods) into a
 /// UTF-8 CSV byte buffer. Reads the **first sheet** only — multi-sheet
 /// workbooks lose their other tabs (same behaviour the Django app

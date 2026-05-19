@@ -54,6 +54,8 @@ never addressed in a URL.
 | `20260521000001_companies.sql`             | `companies`, `company_memberships`, `project_memberships` + `projects.company_id` |
 | `20260522000001_project_stage_status.sql`  | `projects.stage` + `projects.status` (CHECK-constrained) + their indexes |
 | `20260523000001_computed_stages.sql`       | Drops `projects.stage` + `project_files.status`; adds the `file_stages` view (stage is computed, not stored) |
+| `20260524000001_sentinel_submissions.sql`  | `sentinel_submissions` shared-vocab promotion table + `global_sentinels` view |
+| `20260525000001_filename_stem.sql`         | Strips the upload extension off `project_files.filename` / `display_name`; the column now stores the stem and `file_type` owns the extension half (see "filename + file_type contract" below) |
 
 ---
 
@@ -154,6 +156,35 @@ shape stays close to the Django `ProjectFile`.
 > A file's **pipeline stage** is *not* a column — the old
 > `project_files.status` was dropped in mig 009. Stage is computed by
 > the `file_stages` view (below) and exposed as `FileSummary.stage`.
+
+#### `filename` + `file_type` contract (mig 011)
+
+Since mig 011 the upload extension lives **only** in `file_type`;
+`filename` (and `display_name` when set) hold the user-facing **stem**:
+
+| Upload         | `filename` | `file_type` | Reassembled (export)           |
+|----------------|------------|-------------|--------------------------------|
+| `Q4_sales.csv` | `Q4_sales` | `csv`       | `Q4_sales.csv`                 |
+| `data.xlsx`    | `data`     | `csv`       | `data.csv` (converted to CSV)  |
+| `clients.tsv`  | `clients`  | `csv`       | `clients.csv` (always re-emitted) |
+
+**Why**: storing the extension twice (once after the dot in `filename`,
+once in `file_type`) created a UI footgun — every display surface had
+to remember to strip the extension or showed inconsistent text. Worse,
+users rename via inline edit and naturally drop the extension, which
+broke any callsite that assumed `filename` ended in `.csv`. Folding the
+responsibility onto `file_type` makes new tables / labels / toasts
+correct by default.
+
+**Upload + snapshot + join** ([`routes/files.rs`](../../backend/crates/api/src/routes/files.rs))
+all run incoming filenames through `data::parse::strip_upload_ext`
+before persisting. **Export** (`GET /api/files/:rid/export`)
+reassembles the download name as `${filename}.csv` (file_type is always
+`csv` post-conversion).
+
+`storage_path` (line 53 of init) is decoupled — every uploaded file is
+stored on disk as `<rid>.bin` regardless of original extension, so the
+migration never touches the filesystem.
 
 ### `file_stages` (view)
 

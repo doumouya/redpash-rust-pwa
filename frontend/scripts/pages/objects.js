@@ -2255,6 +2255,10 @@ let objCombinator = "and";
 // straight to a row field; the files schema has a few render-only
 // columns whose key ≠ field — handled explicitly here so SCHEMAS stays
 // untouched.
+//
+// Since mig 011, `project_files.filename` already stores the stem (no
+// extension); `file_type` owns the extension. No client-side strip
+// needed — display sites read display_name / filename as-is.
 function _objColValue(kind, key, row) {
   if (kind === "files") {
     if (key === "filename")  return row.display_name ?? row.filename;

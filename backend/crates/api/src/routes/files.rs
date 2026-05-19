@@ -110,7 +110,13 @@ async fn upload(
     let user = super::resolve_user_rid(&state, &headers).await?;
 
     let mut bytes: Option<Vec<u8>> = None;
-    let mut filename = "upload.csv".to_string();
+    // `original_filename` keeps the full upload name (with extension)
+    // so `is_excel_filename` below can route Excel-family uploads
+    // through xlsx_to_csv. The DB-bound `filename` (set just before
+    // insert) is the stripped stem — mig 011 made `project_files.filename`
+    // hold the user-facing name without the extension; `file_type`
+    // owns the extension half.
+    let mut original_filename = "upload.csv".to_string();
     let mut tld_hint:     Option<String> = None;
     let mut project_name: Option<String> = None;
 
@@ -121,7 +127,7 @@ async fn upload(
     {
         match field.name() {
             Some("file") => {
-                if let Some(fname) = field.file_name() { filename = fname.to_string(); }
+                if let Some(fname) = field.file_name() { original_filename = fname.to_string(); }
                 let data = field.bytes().await
                     .map_err(|e| AppError::bad_request("multipart", e.to_string()))?;
                 if data.len() > MAX_UPLOAD_BYTES {
@@ -162,7 +168,7 @@ async fn upload(
     // detection, Polars CSV parser, redtable paging, cleaning steps)
     // treats the file as plain CSV. The DB row keeps the user's
     // original filename for display — only the stored bytes change.
-    let bytes = if data::parse::is_excel_filename(&filename) {
+    let bytes = if data::parse::is_excel_filename(&original_filename) {
         let xbytes = bytes;
         tokio::task::spawn_blocking(move || data::parse::xlsx_to_csv(&xbytes))
             .await
@@ -198,6 +204,11 @@ async fn upload(
     .map_err(|e| AppError::internal("join", e.to_string()))??;
     let (df, encoding, columns, cleanness) = parsed;
 
+    // Strip the upload extension off the DB-stored filename (mig 011).
+    // file_type owns the extension; filename is the user-facing stem.
+    // `data::parse::strip_upload_ext` covers the seven upload-accepted
+    // extensions, falls through for anything else.
+    let filename = data::parse::strip_upload_ext(&original_filename).to_string();
     db::insert_file(
         &state.db, &rid, &project, &filename, &encoding,
         df.height() as u64, df.width() as u32, size, &storage_rel, &columns, cleanness,
@@ -296,9 +307,18 @@ async fn patch_file(
         }
     }
 
+    // Strip any upload extension from display_name (mig 011). The
+    // frontend already strips on its end, but a stale caller could
+    // still send "foo.csv"; defending here keeps the schema invariant
+    // (`project_files.display_name` is a stem) regardless of input.
+    let display_owned: Option<String> = body.display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| data::parse::strip_upload_ext(s).to_string());
     let updated = db::update_file_meta(
         &state.db, &rid,
-        body.display_name.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        display_owned.as_deref(),
         new_project,
         new_encoding,
         body.delimiter.as_deref().filter(|s| !s.is_empty()),
@@ -821,11 +841,18 @@ async fn create_join(
         .map_err(|e| AppError::internal("io", format!("metadata: {e}")))?
         .len();
 
-    let filename = body.name.unwrap_or_else(|| format!(
-        "{}__{}_join.csv",
-        this_entry.summary.filename.trim_end_matches(".csv"),
-        other_entry.summary.filename.trim_end_matches(".csv"),
-    ));
+    // Stem only — mig 011 stores filenames without their extension;
+    // file_type owns the .csv half. Both `this_entry.summary.filename`
+    // and `other_entry.summary.filename` are already stems at read
+    // time; defensive trim covers legacy rows that somehow slipped
+    // through the migration. Body-provided name gets the same trim.
+    let filename = body.name
+        .map(|s| data::parse::strip_upload_ext(&s).to_string())
+        .unwrap_or_else(|| format!(
+            "{}__{}_join",
+            data::parse::strip_upload_ext(&this_entry.summary.filename),
+            data::parse::strip_upload_ext(&other_entry.summary.filename),
+        ));
 
     // Persist metadata — same project as the source file so reports/
     // dashboards built from this project can pick it up.
@@ -913,11 +940,16 @@ async fn snapshot(
         .len();
 
     let project   = entry.summary.project_redpash_id.clone();
-    let base_name = entry.summary.display_name.as_deref()
-        .unwrap_or(&entry.summary.filename)
-        .trim_end_matches(".csv");
-    let filename  = body.name.filter(|s| !s.is_empty())
-        .unwrap_or_else(|| format!("{base_name}_cleaned.csv"));
+    // Stem only (mig 011). Base names are already stripped at read
+    // time; defensive strip covers legacy data + any body-provided
+    // name the caller happened to include an extension on.
+    let base_name = data::parse::strip_upload_ext(
+        entry.summary.display_name.as_deref().unwrap_or(&entry.summary.filename),
+    );
+    let filename  = body.name
+        .filter(|s| !s.is_empty())
+        .map(|s| data::parse::strip_upload_ext(&s).to_string())
+        .unwrap_or_else(|| format!("{base_name}_cleaned"));
 
     db::insert_file(
         &state.db, &new_rid, &project, &filename, "utf-8",

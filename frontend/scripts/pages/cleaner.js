@@ -1267,8 +1267,7 @@ function _wireGlobals(root) {
       // missing or unparseable.
       const cd = res.headers.get("Content-Disposition") ?? "";
       const m  = /filename="?([^"]+)"?/.exec(cd);
-      const stem = (STATE.summary?.display_name ?? STATE.summary?.filename ?? "export")
-        .replace(/\.csv$/i, "");
+      const stem = STATE.summary?.display_name ?? STATE.summary?.filename ?? "export";
       const name = m?.[1] ?? `${stem}.csv`;
 
       const blob = await res.blob();
@@ -1360,8 +1359,7 @@ function _wireGlobals(root) {
   // original (preserving the original's full step history).
   window.cleanerSave = async () => {
     if (!STATE.summary) return;
-    const stem = (STATE.summary.display_name ?? STATE.summary.filename ?? "file")
-      .replace(/\.[^.]+$/, "");
+    const stem = STATE.summary.display_name ?? STATE.summary.filename ?? "file";
     const defaultName = `${stem}_cleaned.csv`;
     const name = prompt("Save current view as a new file:", defaultName);
     if (!name || !name.trim()) return;
@@ -1370,7 +1368,7 @@ function _wireGlobals(root) {
         `/files/${encodeURIComponent(STATE.rid)}/snapshot`,
         { name: name.trim() },
       );
-      toast.success(`Saved ${env.summary.filename}`);
+      toast.success(`Saved ${env.summary.display_name ?? env.summary.filename}`);
       location.hash = `#/cleaner?file=${encodeURIComponent(env.summary.redpash_id)}`;
     } catch (err) {
       toast.error(`Save failed: ${err.body?.error ?? err.message}`);
@@ -5552,8 +5550,7 @@ function _installSandboxLiveHandlers(root) {
       }
       const cd = res.headers.get("Content-Disposition") ?? "";
       const m  = /filename="?([^"]+)"?/.exec(cd);
-      const stem = (STATE.summary?.display_name ?? STATE.summary?.filename ?? "export")
-        .replace(/\.csv$/i, "");
+      const stem = STATE.summary?.display_name ?? STATE.summary?.filename ?? "export";
       const name = m?.[1] ?? `${stem}.csv`;
 
       const blob = await res.blob();

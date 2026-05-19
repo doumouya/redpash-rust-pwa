@@ -9,7 +9,7 @@ order: 2
 **DTO:** `shared::file::FileSummary`, `ColumnMeta`, `PageQuery`, `Row`
 **Table:** `project_files`
 **RID prefix:** `FIL`
-**Migration:** 001 init; 009 computed stages (dropped `status`)
+**Migration:** 001 init; 009 computed stages (dropped `status`); 011 filename-stem (extension lives in `file_type` only)
 
 ---
 
@@ -34,9 +34,9 @@ order. Undo flips a step's `applied` flag; redo flips it back.
 |---|---|---|---|---|---|
 | `redpash_id` | `redpash_id` | `TEXT` PK | NO | — | `FIL_…` |
 | `project_redpash_id` | `project_redpash_id` | `TEXT` FK | NO | — | → `projects.redpash_id` ON DELETE CASCADE |
-| `filename` | `filename` | `TEXT` | NO | — | Original filename (incl. `.csv` extension) |
-| `display_name` | `display_name` | `TEXT` | YES | — | UI label override. Defaults to `filename`. |
-| `file_type` | `file_type` | `TEXT` | NO | `'csv'` | Asset kind. Today only `csv`. Reserved values: `csv_clean`, `png_chart`, `html_report`, `html_dashboard` (Django parity, not yet emitted). |
+| `filename` | `filename` | `TEXT` | NO | — | User-facing **stem** (no extension — mig 011). `file_type` owns the extension half; reassemble as `${filename}.${file_type}` when building download names. |
+| `display_name` | `display_name` | `TEXT` | YES | — | UI label override (also stored without extension). Defaults to `filename`. |
+| `file_type` | `file_type` | `TEXT` | NO | `'csv'` | Asset kind / extension. Today always `csv` (Excel uploads are converted to CSV bytes before insert; `file_type` records the storage format, not the upload extension). Reserved values: `csv_clean`, `png_chart`, `html_report`, `html_dashboard` (Django parity, not yet emitted). |
 | `row_count` | `row_count` | `BIGINT` | YES | — | Row count of the **base** frame. Cached at upload time. |
 | `col_count` | `col_count` | `INTEGER` | YES | — | Column count of the base frame. |
 | `file_size_bytes` | `file_size_bytes` | `BIGINT` | YES | — | Raw bytes on disk. |
