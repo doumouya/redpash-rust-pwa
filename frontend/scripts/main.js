@@ -625,6 +625,15 @@ window.addEventListener("hashchange", () => {
   navigate();
 });
 (async () => {
+  // Pin the initial route's chrome on <body> synchronously — before the
+  // /api/me round-trip — so the boot splash paints with the final
+  // chrome. Otherwise the splash renders un-chromed (default gutter +
+  // body margin) for the whole loadSession() await, then navigate()
+  // flips data-chrome="full" and the page visibly snaps. Both /landing
+  // and /home are chrome:"full", so a bare load (no hash) is unambiguous.
+  const { route: bootRoute } = resolve(currentPath());
+  document.body.dataset.chrome = bootRoute.chrome || "default";
+
   await loadSession();
   await navigate();
 })();
