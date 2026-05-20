@@ -43,7 +43,9 @@ function currentSlug() {
 async function loadSlug(slug, content) {
   content.innerHTML = `<p class="rp-muted">Loading…</p>`;
   try {
-    const html = await fetch(`/api/docs/${encodeURIComponent(slug)}`).then((r) => r.text());
+    // slug is a path-safe doc path (e.g. `api/auth`) — keep the slashes
+    // so the backend's `/api/docs/*slug` wildcard route matches.
+    const html = await fetch(`/api/docs/${slug}`).then((r) => r.text());
     content.innerHTML = html;
   } catch (err) {
     content.innerHTML = `<p class="rp-muted">Failed to load: ${slug}</p>`;

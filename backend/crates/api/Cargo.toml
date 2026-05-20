@@ -33,6 +33,7 @@ chrono             = { workspace = true }
 uuid               = { workspace = true }
 polars             = { workspace = true }
 encoding_rs        = { workspace = true }
+pulldown-cmark     = { workspace = true }
 
 dotenvy            = { workspace = true }
 tracing            = { workspace = true }

@@ -27,6 +27,7 @@ use crate::state::AppState;
 mod auth;
 mod companies;
 mod dashboards;
+mod docs;
 mod files;
 mod health;
 mod me;
@@ -71,6 +72,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/reports",    reports::routes())
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())
+        .nest("/docs",       docs::routes())
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES));
 
