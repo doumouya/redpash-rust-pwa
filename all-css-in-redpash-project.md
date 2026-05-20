@@ -18,25 +18,26 @@ app has **zero `/vendor/` imports**.
 
 ## Status — 2026-05-20
 
-**Done & committed:** Phases 0–2d — **all 41 CSS files internalized.**
-Foundation → `styles/base/`; redtable family → `styles/components/redtable/`;
-everything else → `styles/components/`. Every live page sheet is off
-`/vendor/` (`grep @import.*vendor main.css pages/*.css` → zero). See
-`git log` for commit hashes. Pages verified clean (cold reload, SW
-unregistered) after each phase.
+**Done & committed:** Phases 0–4. **All 41 CSS files + `file-review.js`
+internalized; the `/vendor/redpash-components` ServeDir mount is removed
+from `backend/crates/api/src/routes/mod.rs`.** Foundation → `styles/base/`;
+redtable family → `styles/components/redtable/`; everything else →
+`styles/components/`; `file-review.js` → `styles`-sibling `scripts/`.
+No HTML or JS references `/vendor/`. Backend `cargo check` passes.
+See `git log` for commit hashes; pages verified clean after each phase.
+
+⚠️ The mount removal needs a **backend rebuild + restart** to take effect.
 
 > ⚠️ **After each phase — eyeball the affected pages** (hard-refresh, clean
 > SW). The migration is behaviour-neutral by construction — byte-identical
 > copies, same `@import` order — but a moved-file typo would show as a 404.
 > Next to verify: Home / Profile after 2c, Landing after 2d.
 
-**Remaining:** Phase 4 — internalize `file-review.js` (`index.html:86`, the
-only non-CSS `/vendor/` ref), then remove the `/vendor/redpash-components`
-ServeDir mount from `backend/crates/api/src/routes/mod.rs`. Phase 5 — final
-verify, sweep stale `/vendor/` comment references in CSS, and decide the dead
-`*.live.css` / `*.live.html` backups (delete or repoint). This migration is
-housekeeping — resume it deliberately; don't let it crowd out actual product
-work.
+**Remaining:** Phase 5 — sweep ~6 stale `/vendor/` *comment* references in
+CSS (cosmetic; no functional effect), and decide the dead `*.live.css` /
+`*.live.html` backups: `profile.live.css` still carries 14 real `/vendor/`
+`@import`s but is never loaded by the router — delete the `.live` files or
+repoint them. After that, `grep -rn "/vendor/" frontend/` is fully clean.
 
 ---
 

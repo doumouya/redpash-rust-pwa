@@ -78,16 +78,8 @@ pub fn router(state: AppState) -> Router {
     // baked into the binary via `include_dir!` (Phase 5).
     let frontend = ServeDir::new("../frontend").append_index_html_on_directories(true);
 
-    // redpash-components — generic design-system library (sibling repo).
-    // Mounted at /vendor/redpash-components/ so partials and per-page
-    // CSS can pull library components without copying files in.
-    // The library uses bare token names (--bg, --accent); the app
-    // re-binds them inside per-page scopes (see styles/pages/landing.css).
-    let components = ServeDir::new("../../redpash-components");
-
     Router::new()
         .nest("/api", api)
-        .nest_service("/vendor/redpash-components", components)
         .fallback_service(frontend)
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
