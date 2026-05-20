@@ -2,7 +2,7 @@
 title: Landing page (`#/landing`)
 section: Frontend
 order: 10
-last modified date: 2026-05-19
+last modified date: 2026-05-20
 ---
 
 # Landing page (`#/landing`)
@@ -35,22 +35,22 @@ PWA assets used by the install flow:
 
 ## Library components composed
 
-Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/landing.css). All under `/vendor/redpash-components/`, served by the api crate's [`ServeDir` mount](../../../../backend/crates/api/src/routes/mod.rs).
+Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/landing.css). All internalized under `frontend/styles/` — no external library, no `/vendor/` mount (see [`all-css-in-redpash-project.md`](../../../../all-css-in-redpash-project.md)).
 
 ```css
-@import "/vendor/redpash-components/components/typography.css";
-@import "/vendor/redpash-components/components/hero.css";
-@import "/vendor/redpash-components/components/cta-btn.css";
-@import "/vendor/redpash-components/components/hero-steps.css";
-@import "/vendor/redpash-components/components/eyebrow.css";
-@import "/vendor/redpash-components/components/rotate-prompt.css";
-@import "/vendor/redpash-components/components/float-btn.css";
-@import "/vendor/redpash-components/components/bottom-nav.css";
-@import "/vendor/redpash-components/components/modal.css";
-@import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/theme-toggle.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/form.css";
+@import "/styles/base/typography.css";
+@import "/styles/components/hero.css";
+@import "/styles/components/cta-btn.css";
+@import "/styles/components/hero-steps.css";
+@import "/styles/components/eyebrow.css";
+@import "/styles/components/rotate-prompt.css";
+@import "/styles/components/float-btn.css";
+@import "/styles/components/bottom-nav.css";
+@import "/styles/components/modal-sandbox.css";
+@import "/styles/components/auth-modals.css";
+@import "/styles/components/theme-toggle.css";
+@import "/styles/components/button.css";
+@import "/styles/components/form.css";
 ```
 
 The library's `tokens.css` + defensive `reset.css` are pulled in
@@ -309,7 +309,7 @@ button was removed earlier per design preference.
 
 | Class | Owned by |
 |---|---|
-| `.rp-hero` / `.rp-cta-btn` / `.rp-hero-steps` / `.rp-eyebrow` / `.rp-rotate-prompt` / `.rp-float-bar` / `.rp-float-btn` / `.rp-bottom-nav` / `.rp-modal--glass` / `.rp-wordmark` / `.rp-r` / `.rp-theme-icon` | Library (`/vendor/redpash-components/components/`) |
+| `.rp-hero` / `.rp-cta-btn` / `.rp-hero-steps` / `.rp-eyebrow` / `.rp-rotate-prompt` / `.rp-float-bar` / `.rp-float-btn` / `.rp-bottom-nav` / `.rp-modal--glass` / `.rp-wordmark` / `.rp-r` / `.rp-theme-icon` | `styles/components/` (internalized) |
 | `.rp-brand-mark` / `.rp-bm-rest*` / `.rp-cta-btn--primary::after` shimmer | This page (bespoke — promote to library on second consumer) |
 | `.modal-overlay` / `.modal` / `.btn` / `.btn-primary` / `.form-input` / `.form-label` | Library (**primitive, unprefixed**) |
 | `.rp-modal` / `.rp-btn` / `.rp-field` / `.rp-topbar*` | App (`frontend/styles/components/`) |

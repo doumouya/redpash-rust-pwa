@@ -2,7 +2,7 @@
 title: Profile + Settings page (`#/profile`)
 section: Frontend
 order: 13
-last modified date: 2026-05-19
+last modified date: 2026-05-20
 ---
 
 # Profile + Settings page (`#/profile`)
@@ -116,17 +116,17 @@ existing `profile.js` data-binding code (`id="profile-*"` /
 ## Library components composed
 
 ```css
-@import "/vendor/redpash-components/components/typography.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/form.css";
-@import "/vendor/redpash-components/components/card.css";
-@import "/vendor/redpash-components/components/modal.css";
-@import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/avatar.css";
-@import "/vendor/redpash-components/components/theme-toggle.css";
-@import "/vendor/redpash-components/components/badge.css";
-@import "/vendor/redpash-components/components/stat-strip.css";
-@import "/vendor/redpash-components/components/settings-card.css";
+@import "/styles/base/typography.css";
+@import "/styles/components/button.css";
+@import "/styles/components/form.css";
+@import "/styles/components/card.css";
+@import "/styles/components/modal-sandbox.css";
+@import "/styles/components/auth-modals.css";
+@import "/styles/components/avatar.css";
+@import "/styles/components/theme-toggle.css";
+@import "/styles/components/badge.css";
+@import "/styles/components/stat-strip.css";
+@import "/styles/components/settings-card.css";
 ```
 
 `tokens.css`, `reset.css`, `glass-btn.css` (`.rp-btn` base), and

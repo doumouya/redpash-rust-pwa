@@ -2,7 +2,7 @@
 title: Design tokens
 section: Frontend
 order: 0
-last modified date: 2026-05-19
+last modified date: 2026-05-20
 ---
 
 # Design tokens
@@ -39,24 +39,25 @@ read them; **no component should hard-code a colour**.
 Settings (Phase 4) writes a tiny `<style>` tag to `<head>` rebinding
 `--rp-accent` etc. — no component sheet needs to know.
 
-## Naming convention vs `redpash-components`
+## Token naming: bare names + the `--rp-*` alias layer
 
-The shared design-system library lives at
-`/home/mansa/redpash-components/` and will be consumed by several
-apps (RedPash, future Django builds). It is **deliberately generic**:
+The component CSS was internalized from the old `redpash-components`
+design-system library into `frontend/styles/` (see
+[`all-css-in-redpash-project.md`](../../all-css-in-redpash-project.md)).
+That library used **bare token names**, and the internalized sheets
+keep them — so the convention persists:
 
-- **Library tokens** use **bare names** — `--bg`, `--surface`,
+- **Component tokens** use **bare names** — `--bg`, `--surface`,
   `--accent`, `--text`, `--muted`, `--green`, `--red`, etc. — defined
-  on `:root` in the library's `tokens.css`. Library component sheets
+  on `:root` in `styles/base/tokens.css`. Component sheets
   (`button.css`, `modal.css`, …) reference `var(--bg)` directly.
-- **Each consuming app preserves its own prefix** for its tokens.
-  RedPash uses `--rp-*` (`--rp-bg`, `--rp-accent`, `--rp-surface`,
-  `--rp-text-muted`, …).
+- **App-authored sheets keep the `--rp-*` prefix** — `--rp-bg`,
+  `--rp-accent`, `--rp-surface`, `--rp-text-muted`, …
 
-This means: **never rename either side to match the other**. The
-library has to stay reusable for the next app's naming convention,
-and the app's existing sheets shouldn't be churned every time the
-library refactors.
+This means: **never rename either side to match the other.** They're
+bridged by an alias layer in `main.css` (`--rp-bg: var(--bg);`) — see
+the Integration section below. Bare-named component sheets and
+`--rp-*` app sheets coexist without churn.
 
 ### Library files: `tokens.css` · `reset.css` · `shell.css`
 
@@ -185,7 +186,7 @@ reset.css/shell.css split. To keep it from recurring:
    into a class-based component sheet rather than a global element
    rule.
 
-The library's `reset.css` is the defensive backstop: as long as it
+The `reset.css` (in `styles/base/`) is the defensive backstop: as long as it
 sets the relevant element baseline (`a { color: inherit; text-decoration: none }`),
 app-level element rules can't quietly clobber library components
 even when discipline slips.
@@ -196,15 +197,15 @@ even when discipline slips.
 sandbox components every full-bleed page used to import per-page:
 
 ```css
-@import "/vendor/redpash-components/tokens.css";
-@import "/vendor/redpash-components/reset.css";
-@import "/vendor/redpash-components/components/backgrounds.css";
+@import "/styles/base/tokens.css";
+@import "/styles/base/reset.css";
+@import "/styles/base/backgrounds.css";
 
-/* Sandbox components that own a base selector the whole app shares.
+/* Components that own a base selector the whole app shares.
    Hoisted here so the .rp-btn / .rp-modal base has a single source
    of truth (used to be re-imported by every full-bleed page CSS). */
-@import "/vendor/redpash-components/components/glass-btn.css";
-@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/styles/components/glass-btn.css";
+@import "/styles/components/modals-sandbox.css";
 
 /* App-owned component sheets — these reference --rp-*. buttons.css
    and modal.css now hold only what the library doesn't: the

@@ -2,7 +2,7 @@
 title: Sandbox integration (live wiring playbook)
 section: Frontend
 order: 15
-last modified date: 2026-05-19
+last modified date: 2026-05-20
 ---
 
 # Sandbox integration (live wiring playbook)
@@ -800,8 +800,8 @@ the app files now hold only their unique modifiers:
 
 ```css
 /* main.css — single source of truth */
-@import "/vendor/redpash-components/components/glass-btn.css";
-@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/styles/components/glass-btn.css";
+@import "/styles/components/modals-sandbox.css";
 @import "/styles/components/buttons.css";  /* only --primary/--ghost/--danger/--sm */
 @import "/styles/components/modal.css";    /* only dialog.rp-modal--glass + .modal-actions */
 ```

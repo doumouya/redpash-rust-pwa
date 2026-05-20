@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-19
+last modified date: 2026-05-20
 ---
 
 # RedPash REDMAP
@@ -216,7 +216,7 @@ redpash-app/
 | Asset | Location |
 |---|---|
 | **Partial** | `partials/landing.html` — mirrors `redpash-demo/index.html` (hero, float bars, modals, bottom nav) |
-| **CSS** | `styles/pages/landing.css` — pulls library components from `/vendor/redpash-components/` |
+| **CSS** | `styles/pages/landing.css` — imports components from `styles/base/` + `styles/components/` |
 | **JS** | `scripts/pages/landing.js` — modal open/close, social-login dispatch, theme cycle, i18n setLang, eyebrow typewriter |
 | **Shell hook** | `scripts/main.js` — captures `beforeinstallprompt`; owns `installPWA()` |
 | **Auth start** | Google OAuth via `<a href="/api/auth/google/start">` inside `#modal-login` |
@@ -407,7 +407,7 @@ redpash-app/
 - **Bump `CACHE_VERSION` in `frontend/service-worker.js`** on every frontend-touching commit. The browser will keep serving stale JS otherwise.
 - **Inline style attributes need single quotes** when the value contains `"…"` literals (e.g. `grid-template-areas: "a b" "c d"`). Using `style="…"` terminates at the first inner quote and breaks layout.
 - **Modal pattern**: two coexist, both native `<dialog>` + `showModal()` / `close()` (ESC dispatches `cancel` — handle it to reset state).
-  - `scripts/ui/modal.js` `openModal({title, body, actions})` — the **preferred** helper. Renders the redpash-components **glass modal** (`<dialog class="rp-modal--glass">` shell + `.modal` panel, `auth-modals.css`) — same look as the landing login/contact modals.
+  - `scripts/ui/modal.js` `openModal({title, body, actions})` — the **preferred** helper. Renders the **glass modal** (`<dialog class="rp-modal--glass">` shell + `.modal` panel, `styles/components/auth-modals.css`) — same look as the landing login/contact modals.
   - `<dialog class="rp-modal">` — the App's older modal (`styles/components/modal.css`, `--rp-*` tokens). Still used by the Cleaner tool modals + the Reports chart modal; not for new modals.
 - **History capture hook**: `captureSnapshot()` is called from `previewSoon()`, so every spec-mutating handler that already calls `previewSoon` is automatically covered. Don't push to history from individual handlers.
 
@@ -418,7 +418,7 @@ redpash-app/
 - **`#[serde(rename = "fn")]`** for any `fn_: …` field — `fn` is reserved in Rust but cleanest on the JSON side.
 
 ### Design tokens (library vs app)
-- The **library** (`/home/mansa/redpash-components/`) uses **bare token names** (`--bg`, `--accent`, `--surface`).
+- The internalized component sheets (tokens in `styles/base/tokens.css`) use **bare token names** (`--bg`, `--accent`, `--surface`).
 - The **app** uses **prefixed token names** (`--rp-bg`, `--rp-accent`, `--rp-surface`).
 - **Don't rename either side.** Integration is via an **alias layer** in the app's `main.css`: `--rp-bg: var(--bg);`. See [`frontend/design.md`](frontend/design.md).
 
@@ -436,5 +436,5 @@ redpash-app/
 
 ## Sister projects
 
-- `/home/mansa/redpash-components/` — generic CSS/JS design-system library (see [`frontend/design.md`](frontend/design.md) for integration rules).
+- `/home/mansa/redpash-components/` — the original CSS/JS design-system library. **No longer a dependency** — all CSS was internalized into `frontend/styles/` (2026-05-20; see [`all-css-in-redpash-project.md`](../all-css-in-redpash-project.md)). The directory remains only for the standalone design sandbox.
 - `/home/mansa/streamlit-proj/clarna-django/` — historical Django app. Useful as a reference for behaviours not yet ported (the `md/` tree there maps roughly 1:1 to ours).
