@@ -1,0 +1,119 @@
+/* ━━━━━━━━━━━━━━━━━━ MODAL — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Base modal primitives: overlay, panel, close button, title/sub/divider/link.
+ * Other modal flavors compose on top:
+ *   auth-modals.css   .rp-modal--glass   (deep blue→purple gradient shell)
+ *   tool-modal.css    .tool-modal-*      (data-cleaner tool variant)
+ *
+ * ── State model ──────────────────────────────────────────────────────────────
+ *
+ *   .modal-overlay        Hidden (display:none)
+ *   .modal-overlay.open   Visible (display:flex centered)
+ *
+ *   JS adds/removes .open. Backdrop click handled by inline onclick on the
+ *   overlay; Escape handled globally — see js/modal.js.
+ *
+ * ── Sizing ───────────────────────────────────────────────────────────────────
+ *
+ *   .modal            max-width 25rem  (default)
+ *   .modal.modal-wide max-width 40rem  (forms, contact)
+ *
+ * ── Animation ────────────────────────────────────────────────────────────────
+ *
+ *   @keyframes pop — opacity 0→1 + scale 0.95→1 over 0.18s ease.
+ *   Fires on insertion of .modal.
+ *
+ * Convention note: primitive — un-prefixed names (same convention as .btn,
+ * .form-*, .badge).
+ *
+ * Requires: tokens.css (--surface, --over0, --over1, --muted, --accent,
+ *                       --shadow, --text, --sub)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <div class="modal-overlay" id="modal-example"
+ *       onclick="closeModal('example')" role="dialog" aria-modal="true">
+ *    <div class="modal" onclick="event.stopPropagation()">
+ *      <button class="modal-close" onclick="closeModal('example')" aria-label="Close">
+ *        <i class="bi bi-x-lg bi-sm"></i>
+ *      </button>
+ *      <div class="modal-title">Title</div>
+ *      <div class="modal-sub">Subtitle text.</div>
+ *      <!-- content -->
+ *      <div class="modal-divider"></div>
+ *      <button class="modal-link">
+ *        <i class="bi bi-arrow-right bi-sm"></i> Learn more
+ *      </button>
+ *    </div>
+ *  </div>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(0.125rem);
+  -webkit-backdrop-filter: blur(0.125rem);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 0.0312rem solid var(--over1);
+  border-radius: 0.875rem;
+  padding: 1.75rem 1.75rem 1.5rem;
+  width: 100%;
+  max-width: 25rem;
+  position: relative;
+  box-shadow: var(--shadow);
+  animation: pop 0.18s ease;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.875rem;
+  right: 0.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+.modal-close:hover { background: var(--over0); color: var(--text); }
+
+.modal-title    { font-size: 1.0625rem; font-weight: 600; margin-bottom: 0.25rem; }
+.modal-sub      { font-size: 0.7812rem; color: var(--sub); margin-bottom: 1.25rem; line-height: 1.5; }
+.modal-divider  { height: 0.0312rem; background: var(--over0); margin: 1rem 0; }
+
+.modal-link {
+  font-size: 0.75rem;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  font-family: inherit;
+  padding: 0;
+}
+.modal-link:hover { text-decoration: underline; }
+
+.modal-wide { max-width: 40rem; }

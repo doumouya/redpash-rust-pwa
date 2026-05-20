@@ -16,6 +16,25 @@ app has **zero `/vendor/` imports**.
 
 ---
 
+## Status — 2026-05-20
+
+**Done & committed:** Phase 0 (prep), Phase 1 (foundation → `styles/base/`),
+Phase 2a (redtable family → `styles/components/redtable/`), Phase 2b
+(overlays + controls → `styles/components/`). See `git log` for commit
+hashes. Redtable pages verified clean (cold reload, SW unregistered) after 2a.
+
+> ⚠️ **After each phase — eyeball the affected pages** (hard-refresh, clean
+> SW). The migration is behaviour-neutral by construction — byte-identical
+> copies, same `@import` order — but a moved-file typo would show as a 404.
+> Next to verify: Home / Profile after 2c, Landing after 2d.
+
+**Remaining:** Phase 2c (home/profile family), 2d (landing/marketing),
+Phase 4 (JS + cut the `/vendor` mount), Phase 5 (verify + `/vendor` comment
+sweep). This migration is housekeeping — resume it deliberately; don't let
+it crowd out actual product work.
+
+---
+
 ## Current state (inventory)
 
 ### `frontend/styles/` today

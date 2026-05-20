@@ -15,17 +15,17 @@
 @import "/styles/base/shell.css";
 
 @import "/styles/base/typography.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/form.css";
-@import "/vendor/redpash-components/components/card.css";
-@import "/vendor/redpash-components/components/modal.css";
-@import "/vendor/redpash-components/components/auth-modals.css";
+@import "/styles/components/button.css";
+@import "/styles/components/form.css";
+@import "/styles/components/card.css";
+@import "/styles/components/modal-sandbox.css";
+@import "/styles/components/auth-modals.css";
 @import "/styles/components/redtable/redtable.css";
 @import "/styles/components/redtable/redtable-pro.css";
 
 /* Sandbox-canonical visual vocabulary. */
-@import "/vendor/redpash-components/components/glass-btn.css";
-@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/styles/components/glass-btn.css";
+@import "/styles/components/modals-sandbox.css";
 @import "/styles/components/redtable/dropdowns-sandbox.css";
 @import "/styles/components/redtable/objects-sandbox.css";
 

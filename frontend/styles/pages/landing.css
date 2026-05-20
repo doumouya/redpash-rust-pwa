@@ -27,13 +27,13 @@
 @import "/vendor/redpash-components/components/hero-steps.css";
 @import "/vendor/redpash-components/components/eyebrow.css";
 @import "/vendor/redpash-components/components/rotate-prompt.css";
-@import "/vendor/redpash-components/components/float-btn.css";
+@import "/styles/components/float-btn.css";
 @import "/vendor/redpash-components/components/bottom-nav.css";
-@import "/vendor/redpash-components/components/modal.css";
-@import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/theme-toggle.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/form.css";
+@import "/styles/components/modal-sandbox.css";
+@import "/styles/components/auth-modals.css";
+@import "/styles/components/theme-toggle.css";
+@import "/styles/components/button.css";
+@import "/styles/components/form.css";
 
 /* Full-bleed shell (no topbar, .rp-app becomes a flex column with zero
    padding) is set globally via `body[data-chrome="full"]` in main.css —

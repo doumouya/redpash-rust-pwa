@@ -40,8 +40,8 @@
    has a single source of truth and pages don't fight each other on
    cascade order. Page-specific tweaks in pages/*.css still win because
    they load after main.css. */
-@import "/vendor/redpash-components/components/glass-btn.css";
-@import "/vendor/redpash-components/components/modals-sandbox.css";
+@import "/styles/components/glass-btn.css";
+@import "/styles/components/modals-sandbox.css";
 
 /* App-owned component sheets — these reference --rp-*. buttons.css and
    modal.css now hold only what the library doesn't: button variant

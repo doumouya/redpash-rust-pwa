@@ -1,0 +1,85 @@
+/* ━━━━━━━━━━━━━━━━━━ BADGE — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Compact status chip. Base class `.badge` + one color modifier. Backgrounds
+ * are 14% color-mix tints of the matching semantic token; the text uses the
+ * full saturated color. Result: a chip that reads cleanly in both themes
+ * because the tint and the text color shift together with the palette.
+ *
+ * Variants:
+ *   .b-green     Success, active, live
+ *   .b-accent    Informational, featured
+ *   .b-yellow    Warning, in-progress
+ *   .b-purple    Report, visualization
+ *   .b-red       Error, failed, danger
+ *
+ * Sizing:
+ *   height ~0.9375rem (line-height + padding); font-size 0.625rem, weight 500
+ *   inline-flex so badges sit cleanly next to text
+ *
+ * Convention note: primitive — un-prefixed (same as .btn, .form-*, .modal-*).
+ *
+ * Requires: tokens.css (--green, --accent, --yellow, --purple, --red)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <span class="badge b-green">Active</span>
+ *  <span class="badge b-accent">New</span>
+ *  <span class="badge b-yellow">Pending</span>
+ *  <span class="badge b-purple">Report</span>
+ *  <span class="badge b-red">Error</span>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 0.625rem;
+  font-size: 0.625rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.b-green  { background: color-mix(in srgb, var(--green)  14%, transparent); color: var(--green);  }
+.b-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.b-yellow { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
+.b-purple { background: color-mix(in srgb, var(--purple) 14%, transparent); color: var(--purple); }
+.b-red    { background: color-mix(in srgb, var(--red)    14%, transparent); color: var(--red);    }
+
+
+/* ━━━━━━━━━━━━━━━━━━ LARGER PILL VARIANT ━━━━━━━━━━━━━━━━━━
+ *
+ * `.rp-badge` is a more prominent sibling of `.badge` — pill-shaped,
+ * heavier weight, 1px tinted border. Used inside .rp-minitable rows
+ * to mark a project's pipeline stage (Import / Clean / Report / Publish)
+ * where the smaller `.badge` would read as a label rather than a chip.
+ *
+ *   <span class="rp-badge rp-badge--green">Publish</span>
+ *   <span class="rp-badge rp-badge--yellow">Clean</span>
+ *   <span class="rp-badge rp-badge--accent">Import</span>
+ *   <span class="rp-badge rp-badge--purple">Report</span>
+ *   <span class="rp-badge rp-badge--red">Blocked</span>
+ *   <span class="rp-badge rp-badge--muted">Archived</span>
+ *
+ * Promoted from redpash-demo (demos/index.html) into the library so
+ * consumers don't need to re-copy the recipe. Sibling of `.rp-tag` in
+ * minitable.css (monospace, status-string flavor).
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.rp-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2em 0.55em;
+  border-radius: 3rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rp-badge--green  { background: color-mix(in srgb, var(--green)  15%, transparent); color: var(--green);  border: 0.0625rem solid color-mix(in srgb, var(--green)  30%, transparent); }
+.rp-badge--yellow { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); border: 0.0625rem solid color-mix(in srgb, var(--yellow) 30%, transparent); }
+.rp-badge--red    { background: color-mix(in srgb, var(--red)    15%, transparent); color: var(--red);    border: 0.0625rem solid color-mix(in srgb, var(--red)    30%, transparent); }
+.rp-badge--accent { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border: 0.0625rem solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.rp-badge--purple { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); border: 0.0625rem solid color-mix(in srgb, var(--purple) 30%, transparent); }
+.rp-badge--muted  { background: var(--over0); color: var(--muted); border: 0.0625rem solid var(--over1); }

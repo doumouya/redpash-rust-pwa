@@ -1,0 +1,89 @@
+/* ━━━━━━━━━━━━━━━━━━ FORM — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Form layout + control primitives. Composes with .modal, .card, or any
+ * surface. No wrapper class required unless using a grid layout.
+ *
+ * ── Layout ───────────────────────────────────────────────────────────────────
+ *
+ *   .form-group       Vertical column: label, input, optional helper
+ *   .form-row-2       2-column grid — collapses to 1-col under 33.75rem
+ *
+ * ── Labels ───────────────────────────────────────────────────────────────────
+ *
+ *   .form-label       0.7188rem semi-bold sub color
+ *   .form-opt-lbl     Inline "(optional)" modifier — muted dim
+ *
+ * ── Inputs ───────────────────────────────────────────────────────────────────
+ *
+ *   .form-input       Single-line text/email/number/tel/etc.
+ *   .form-textarea    Multi-line; min-height 5rem, vertical resize
+ *   .form-textarea-xl Tall variant (13.75rem) for long messages
+ *
+ *   Focus: accent border, no outline (no shadow ring on default inputs —
+ *   that's reserved for glass-modal variants).
+ *
+ * Convention note: primitive — un-prefixed names.
+ *
+ * Requires: tokens.css (--bg, --over1, --text, --sub, --muted, --accent)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <div class="form-group">
+ *    <label class="form-label" for="username">
+ *      Username <span class="form-opt-lbl">(optional)</span>
+ *    </label>
+ *    <input class="form-input" id="username" placeholder="…">
+ *  </div>
+ *
+ *  <div class="form-row-2">
+ *    <div class="form-group">…</div>
+ *    <div class="form-group">…</div>
+ *  </div>
+ *
+ *  <div class="form-group">
+ *    <label class="form-label" for="msg">Message</label>
+ *    <textarea class="form-textarea form-textarea-xl" id="msg"></textarea>
+ *  </div>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-label    { font-size: 0.7188rem; font-weight: 500; color: var(--sub); }
+.form-opt-lbl  { color: var(--muted); font-weight: 400; }
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+@media (max-width: 33.75rem) {
+  .form-row-2 { grid-template-columns: 1fr; }
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.5625rem 0.75rem;
+  background: var(--bg);
+  border: 0.0312rem solid var(--over1);
+  border-radius: 0.5rem;
+  color: var(--text);
+  font: 0.8125rem inherit;
+  transition: border-color 0.12s;
+}
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-input::placeholder,
+.form-textarea::placeholder { color: var(--muted); }
+
+.form-textarea    { resize: vertical; min-height: 5rem; }
+.form-textarea-xl { min-height: 13.75rem; }

@@ -1,0 +1,119 @@
+/* ━━━━━━━━━━━━━━━━━━ CARD — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Surface container for grouped content. Two-part structure:
+ *   .card        Outer shell — surface bg, thin border, rounded, clipped
+ *   .card-hdr    Optional header row — title left, action button right
+ *
+ * `.sec-title` is a related but standalone label, used above a section that
+ * doesn't need a full card header (e.g., a sidebar group, an inline list).
+ *
+ * Sizing:
+ *   .card        background var(--surface), border var(--over0),
+ *                border-radius var(--r), overflow hidden
+ *   .card-hdr    padding 0.625rem 0.875rem, bottom border var(--over0),
+ *                font-size 0.75rem, weight 500, color var(--sub)
+ *   .sec-title   font-size 0.7188rem, weight 500, color var(--sub)
+ *
+ * Convention note: primitive — un-prefixed.
+ *
+ * Requires: tokens.css (--surface, --over0, --sub, --r)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <div class="card">
+ *    <div class="card-hdr">
+ *      <span>Section title</span>
+ *      <button class="btn btn-ghost btn-sm">Action</button>
+ *    </div>
+ *    <!-- body content — padded by the consumer if needed -->
+ *  </div>
+ *
+ *  <div class="sec-title">Recent activity</div>
+ *  <ul>…</ul>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.card {
+  background: var(--surface);
+  border: 0.0312rem solid var(--over0);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.card-hdr {
+  padding: 0.625rem 0.875rem;
+  border-bottom: 0.0312rem solid var(--over0);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--sub);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sec-title {
+  font-size: 0.7188rem;
+  font-weight: 500;
+  color: var(--sub);
+  margin-bottom: 0.625rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ GLASS VARIANT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Translucent frosted-glass surface. Uses the **same recipe** as the glass
+ * buttons (.rp-float-btn, .hs-btn-ghost) so all "glass" UI in the library
+ * speaks one visual language: white-tinted background, hairline white
+ * border, soft drop shadow, light backdrop blur.
+ *
+ *   Dark mode  →  color-mix(in srgb, var(--text) 10%, transparent) bg, 0.18 border, 0.2 shadow
+ *   Light mode →  color-mix(in srgb, var(--text) 50%, transparent) bg, dark border, lighter shadow
+ *
+ *   .card.card--glass             Glass card shell
+ *   .card-title                   Optional uppercase top label
+ *   .card-body / --center         Vertical flex body for layout
+ */
+
+.card--glass {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
+  padding: 1.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+html[data-theme="light"] .card--glass {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(30, 30, 46, 0.12);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
+}
+
+/* Small uppercase label for the top of a glass card. */
+.card-title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sub);
+}
+html[data-theme="light"] .card-title {
+  color: var(--muted);
+}
+
+/* Vertical flex body for laying out the card contents. */
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  align-items: flex-start;
+}
+.card-body--center {
+  align-items: center;
+  justify-content: center;
+}

@@ -1,0 +1,364 @@
+/* ━━━━━━━━━━━━━━━━━━ THEME TOGGLE — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Two variants:
+ *
+ *   1. ICON TOGGLE (.rp-theme-toggle)
+ *      A single circular button that shows sun ☀ or moon ☾.
+ *      On click, the icon spins out (scale→0.3, rotate→180°) then a new icon
+ *      spins back in, using a spring cubic-bezier for a satisfying pop.
+ *      Used in the landing float bar, app float bar, sidebar, bottom nav.
+ *
+ *   2. 3-STATE SWITCHER (.rp-theme-sw)
+ *      Three side-by-side buttons: Light / System / Dark.
+ *      JS adds .active to whichever button matches the current setting.
+ *      The newly active icon also gets the spin-in animation.
+ *      Used in the Settings page inside a .rp-set-row.
+ *
+ * State model:
+ *   data-theme="dark"   → dark palette (default)
+ *   data-theme="light"  → light palette
+ *   data-theme="system" → follows prefers-color-scheme media query
+ *
+ *   Persisted in localStorage under "redpash-theme".
+ *
+ * Global transition:
+ *   When the theme changes, html.rp-theme-transitioning is added for 400ms.
+ *   This applies transition: background-color 0.35s, color 0.3s, border-color
+ *   0.3s, box-shadow 0.3s to every element (!important), giving a smooth
+ *   whole-page color fade.
+ *
+ *   GOTCHA: the wildcard !important overrides the icon's opacity/transform
+ *   transitions. Fix with a more-specific rule that reinstates them.
+ *
+ * Requires: tokens.css (--accent, --surface, --sub, --muted, --over0, --shadow-sm)
+ * Requires: Bootstrap Icons (.bi-sun-fill, .bi-moon-fill, .bi-circle-half)
+ *
+ * ── HTML: icon toggle ────────────────────────────────────────────────────────
+ *
+ *  <!-- Standalone icon-only toggle (binary dark ↔ light) -->
+ *  <button class="rp-theme-toggle" id="my-theme-btn"
+ *          aria-label="Toggle theme"
+ *          onclick="rpToggleTheme()">
+ *    <i class="bi bi-sun-fill rp-theme-icon" id="my-theme-icon"></i>
+ *  </button>
+ *
+ *  <!-- Inside a .rp-float-btn (inherits the float-btn shell) -->
+ *  <button class="rp-float-btn" aria-label="Toggle theme" onclick="rpToggleTheme()">
+ *    <i class="bi bi-sun-fill rp-theme-icon"></i>
+ *  </button>
+ *
+ * ── HTML: 3-state switcher ───────────────────────────────────────────────────
+ *
+ *  <!-- Inside a settings row -->
+ *  <div class="rp-theme-sw" role="group" aria-label="Color theme">
+ *    <button class="rp-theme-btn" title="Light"
+ *            onclick="rpSetTheme('light', this)">
+ *      <i class="bi bi-sun-fill"></i>
+ *    </button>
+ *    <button class="rp-theme-btn" title="System"
+ *            onclick="rpSetTheme('system', this)">
+ *      <i class="bi bi-circle-half"></i>
+ *    </button>
+ *    <button class="rp-theme-btn active" title="Dark"
+ *            onclick="rpSetTheme('dark', this)">
+ *      <i class="bi bi-moon-fill"></i>
+ *    </button>
+ *  </div>
+ *
+ * ── HTML: <head> requirements ────────────────────────────────────────────────
+ *
+ *  <!-- Browser chrome color (iOS Safari tab bar, etc.) — updated by JS -->
+ *  <meta name="theme-color" id="meta-theme" content="#89b4fa">
+ *
+ * ── JS ───────────────────────────────────────────────────────────────────────
+ *
+ *  // ── Icon animation ──────────────────────────────────────────────────────
+ *
+ *  // Spin out all .rp-theme-icon elements, swap class, spin in.
+ *  function rpSyncToggleIcons(t) {
+ *    document.querySelectorAll('.rp-theme-icon').forEach(function (icon) {
+ *      icon.style.opacity   = '0';
+ *      icon.style.transform = 'scale(0.3) rotate(180deg)';
+ *      setTimeout(function () {
+ *        // Swap icon: sun for light, moon for dark/system
+ *        icon.className = (t === 'light'
+ *          ? 'bi bi-sun-fill'
+ *          : 'bi bi-moon-fill') + ' rp-theme-icon';
+ *        icon.style.opacity   = '1';
+ *        icon.style.transform = 'scale(1) rotate(0deg)';
+ *      }, 260);  // matches the CSS opacity transition duration
+ *    });
+ *  }
+ *
+ *  // ── Binary toggle (icon button) ──────────────────────────────────────────
+ *
+ *  function rpToggleTheme() {
+ *    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+ *    rpSetTheme(current === 'light' ? 'dark' : 'light', null);
+ *  }
+ *
+ *  // ── Set theme (used by both toggle and 3-state switcher) ─────────────────
+ *
+ *  const _themeColors = { dark: '#89b4fa', light: '#4f8ef7', system: '#89b4fa' };
+ *
+ *  function rpSetTheme(t, btn) {
+ *    const root = document.documentElement;
+ *
+ *    // 1. Add .rp-theme-transitioning for 400ms — triggers global color fade
+ *    root.classList.add('rp-theme-transitioning');
+ *    setTimeout(function () {
+ *      root.classList.remove('rp-theme-transitioning');
+ *    }, 400);
+ *
+ *    // 2. Flip data-theme on <html> — all CSS [data-theme] rules respond
+ *    root.setAttribute('data-theme', t);
+ *
+ *    // 3. Update .active on all 3-state switcher buttons
+ *    document.querySelectorAll('.rp-theme-btn').forEach(function (b) {
+ *      const match = (t === 'light'  && b.querySelector('.bi-sun-fill'))
+ *                 || (t === 'system' && b.querySelector('.bi-circle-half'))
+ *                 || (t === 'dark'   && b.querySelector('.bi-moon-fill'));
+ *      const wasActive = b.classList.contains('active');
+ *      b.classList.toggle('active', !!match);
+ *
+ *      // Animate only the newly activated button
+ *      if (match && !wasActive) {
+ *        const icon = b.querySelector('i');
+ *        if (icon) {
+ *          icon.style.opacity   = '0';
+ *          icon.style.transform = 'scale(0.3) rotate(180deg)';
+ *          setTimeout(function () {
+ *            icon.style.opacity   = '1';
+ *            icon.style.transform = 'scale(1) rotate(0deg)';
+ *          }, 200);
+ *        }
+ *      }
+ *    });
+ *
+ *    // 4. Update browser chrome color
+ *    const meta = document.getElementById('meta-theme');
+ *    if (meta) meta.content = _themeColors[t] || _themeColors.dark;
+ *
+ *    // 5. Persist
+ *    localStorage.setItem('redpash-theme', t);
+ *
+ *    // 6. Animate standalone icon toggles
+ *    rpSyncToggleIcons(t);
+ *  }
+ *
+ *  // ── Boot — runs immediately (before DOMContentLoaded) ────────────────────
+ *
+ *  (function () {
+ *    // Apply persisted theme before first paint to avoid flash
+ *    const t = localStorage.getItem('redpash-theme') || 'dark';
+ *    document.documentElement.setAttribute('data-theme', t);
+ *
+ *    // Sync icons and switcher buttons once DOM is ready
+ *    document.addEventListener('DOMContentLoaded', function () {
+ *      document.querySelectorAll('.rp-theme-icon').forEach(function (icon) {
+ *        icon.className = (t === 'light'
+ *          ? 'bi bi-sun-fill'
+ *          : 'bi bi-moon-fill') + ' rp-theme-icon';
+ *      });
+ *      document.querySelectorAll('.rp-theme-btn').forEach(function (b) {
+ *        const match = (t === 'light'  && b.querySelector('.bi-sun-fill'))
+ *                   || (t === 'system' && b.querySelector('.bi-circle-half'))
+ *                   || (t === 'dark'   && b.querySelector('.bi-moon-fill'));
+ *        b.classList.toggle('active', !!match);
+ *      });
+ *    });
+ *  })();
+ *
+ * ── Animation explained ───────────────────────────────────────────────────────
+ *
+ *  Phase 1 (immediate):
+ *    icon.style.opacity   = '0'
+ *    icon.style.transform = 'scale(0.3) rotate(180deg)'
+ *    → The existing icon vanishes and spins halfway out.
+ *    → Driven by the CSS transition on .rp-theme-icon (0.25s / 0.3s).
+ *
+ *  Phase 2 (after 260ms = opacity fade complete):
+ *    icon.className = new icon class
+ *    icon.style.opacity   = '1'
+ *    icon.style.transform = 'scale(1) rotate(0deg)'
+ *    → The new icon class is swapped in while invisible.
+ *    → Restoring opacity/transform triggers the spin-in CSS transition.
+ *    → cubic-bezier(0.34, 1.56, 0.64, 1) is a spring: slight overshoot then
+ *      settle, giving the icon a satisfying pop.
+ *
+ *  The 3-state switcher uses the same pattern but on the icon inside the
+ *  newly .active button only, with a 200ms phase-2 delay (slightly snappier).
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ GLOBAL COLOR TRANSITION ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Added to <html> for 400ms when the theme changes. Forces a smooth
+ * color fade on every element in the page.
+ *
+ * The !important is intentional — nothing should opt out of the theme
+ * crossfade. The icon exception below restores the spin animation.
+ */
+
+html.rp-theme-transitioning,
+html.rp-theme-transitioning *,
+html.rp-theme-transitioning *::before,
+html.rp-theme-transitioning *::after {
+  transition:
+    background-color 0.35s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease !important;
+}
+
+/*
+ * The wildcard !important above would override the icon's opacity/transform
+ * transitions, killing the spin-in animation during a theme switch.
+ * This more-specific rule reinstates those transitions.
+ *
+ * IMPORTANT: this rule must come AFTER the wildcard rule above so it wins
+ * the specificity battle at equal specificity via source order.
+ */
+
+html.rp-theme-transitioning .rp-theme-icon {
+  transition:
+    opacity 0.25s ease,
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ ICON TOGGLE ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * A standalone circle button — typically used inside .rp-float-btn.
+ * The shell is already provided by rp-float-btn; these styles are for
+ * the icon inside, and an optional bare-button wrapper if needed outside
+ * a float bar.
+ */
+
+.rp-theme-toggle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 0.09375rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rp-theme-toggle:hover {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+html[data-theme="light"] .rp-theme-toggle {
+  border-color: rgba(30, 30, 46, 0.12);
+  background: rgba(255, 255, 255, 0.5);
+  color: rgba(30, 30, 46, 0.75);
+}
+
+/*
+ * The animated icon itself. CSS transitions handle the ease curves;
+ * JS sets the inline opacity/transform for each phase.
+ *
+ * cubic-bezier(0.34, 1.56, 0.64, 1) → spring with slight overshoot,
+ * producing the characteristic "pop" on the spin-in.
+ */
+
+.rp-theme-icon {
+  display: inline-block;
+  font-size: 0.9375rem;
+  transition:
+    opacity 0.25s ease,
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Hover: scale up slightly — don't spin or fade on hover, only on click */
+@media (hover: hover) and (pointer: fine) {
+  .rp-theme-toggle:hover .rp-theme-icon {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ 3-STATE SWITCHER ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * 3 pill buttons for light / system / dark. This switcher lives in the
+ * same Settings card as the .rp-set-opt option-pill groups (language,
+ * delimiter, …), so it MATCHES that treatment rather than using a
+ * segmented-control track — a borderless flex container (like
+ * .rp-set-opt-grp) of bordered transparent pills with accent hover /
+ * active. The buttons are icon-only squares, so the pill radius renders
+ * them circular. See settings-card.css `.rp-set-opt`.
+ *
+ * JS marks the active button with .active and runs the icon spin-in
+ * animation on the newly activated button only.
+ */
+
+.rp-theme-sw {
+  display: flex;
+  gap: 0.3125rem;
+  flex-shrink: 0;
+}
+
+.rp-theme-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 1.25rem;
+  border: 0.09375rem solid var(--over1);
+  background: transparent;
+  color: var(--sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rp-theme-btn i.bi {
+  font-size: 0.9375rem;
+  /* Transitions for the spin-in animation on activation */
+  transition: opacity 0.18s ease, transform 0.22s ease;
+}
+
+.rp-theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rp-theme-btn.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* Per-theme active identity — the sun is warm yellow, the moon a cool
+   purple, system stays on the neutral accent. Applied with the same
+   bordered-pill + tinted-fill treatment as .rp-set-opt.active so the
+   switcher reads as one of the option-pill family. */
+.rp-theme-btn[data-theme="light"].active {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+}
+.rp-theme-btn[data-theme="system"].active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.rp-theme-btn[data-theme="dark"].active {
+  border-color: var(--purple);
+  color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 12%, transparent);
+}

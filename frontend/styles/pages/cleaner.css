@@ -25,10 +25,10 @@
    body[data-chrome="full"]); no per-page import needed. */
 
 @import "/styles/base/typography.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/form.css";
-@import "/vendor/redpash-components/components/card.css";
-@import "/vendor/redpash-components/components/modal.css";
+@import "/styles/components/button.css";
+@import "/styles/components/form.css";
+@import "/styles/components/card.css";
+@import "/styles/components/modal-sandbox.css";
 /* Row-mode glyphs (.rp-row-uncheck / -check / -trash, .rp-master-trash)
    + .rp-rt-th-mode positioning + .is-mode-* fade-in rules. Lives in
    objects-sandbox.css today (extracted during the Objects port) — cleaner
@@ -37,9 +37,9 @@
    Acceptable for now; consolidation into a shared row-mode.css is
    captured in the migration progress log. */
 @import "/styles/components/redtable/objects-sandbox.css";
-@import "/vendor/redpash-components/components/theme-toggle.css";
-@import "/vendor/redpash-components/components/float-btn.css";
-@import "/vendor/redpash-components/components/badge.css";
+@import "/styles/components/theme-toggle.css";
+@import "/styles/components/float-btn.css";
+@import "/styles/components/badge.css";
 @import "/styles/components/redtable/redtable.css";
 @import "/styles/components/redtable/redtable-pro.css";
 @import "/styles/components/redtable/pager.css";

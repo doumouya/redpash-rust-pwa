@@ -11,9 +11,9 @@
    body[data-chrome="full"]); no per-page import needed. */
 
 @import "/styles/base/typography.css";
-@import "/vendor/redpash-components/components/button.css";
-@import "/vendor/redpash-components/components/badge.css";
-@import "/vendor/redpash-components/components/form.css";
+@import "/styles/components/button.css";
+@import "/styles/components/badge.css";
+@import "/styles/components/form.css";
 @import "/styles/components/redtable/redtable.css";
 @import "/styles/components/redtable/redtable-pro.css";
 @import "/styles/components/redtable/pager.css";
@@ -23,8 +23,8 @@
 /* openModal() (ui/modal.js) renders the library glass modal — pull in
    the base modal + the .rp-modal--glass shell (Home already imports
    both; Objects didn't). */
-@import "/vendor/redpash-components/components/modal.css";
-@import "/vendor/redpash-components/components/auth-modals.css";
+@import "/styles/components/modal-sandbox.css";
+@import "/styles/components/auth-modals.css";
 
 /* ── Sandbox-canonical visual vocabulary (objects page port) ────────────
    Mirrors what cleaner.css imports so the two full-bleed workspaces
