@@ -33,12 +33,15 @@ See `git log` for commit hashes; pages verified clean after each phase.
 > copies, same `@import` order — but a moved-file typo would show as a 404.
 > Next to verify: Home / Profile after 2c, Landing after 2d.
 
-**Remaining:** the `/vendor/` comment sweep is done. The **only** file left
-with any `/vendor/` reference is `styles/pages/profile.live.css` — a dead
-`.live` backup never loaded by the router (14 real `@import`s). Decision
-pending: delete the `*.live.css` / `*.live.html` backups, or repoint them.
-Once that's settled, `grep -rn "/vendor/" frontend/` is fully clean and the
-migration is 100% done.
+**✅ COMPLETE.** The dead `.live` backups (3 `*.live.css` + 5 `*.live.html`)
+were deleted. `grep -rn "/vendor/" frontend/` → **zero**. All 41 CSS files +
+`file-review.js` are internalized and git-tracked; the
+`/vendor/redpash-components` mount is gone. The app no longer depends on the
+external `redpash-components/` library in any way.
+
+Remaining (optional, not blocking): a few code comments still mention the
+deleted `*.live.*` files "for reference" — git history preserves that content
+(`git show <commit>:<path>`); sweep those comment mentions whenever.
 
 ---
 
