@@ -46,7 +46,7 @@
 @import "/styles/components/redtable/tool-modal.css";
 @import "/styles/components/redtable/filter-by.css";
 @import "/styles/components/redtable/col-order.css";
-@import "/vendor/redpash-components/components/file-review.css";
+@import "/styles/components/file-review.css";
 
 /* Sandbox tab-strip styling — proj-tabs.css + file-tabs.css provide the
    canonical tab styling now that the local cleaner.css .rp-rt-proj-tab*

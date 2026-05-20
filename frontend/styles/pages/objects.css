@@ -19,7 +19,7 @@
 @import "/styles/components/redtable/pager.css";
 @import "/styles/components/redtable/filter-by.css";
 @import "/styles/components/redtable/col-order.css";
-@import "/vendor/redpash-components/components/upload-zone.css";
+@import "/styles/components/upload-zone.css";
 /* openModal() (ui/modal.js) renders the library glass modal — pull in
    the base modal + the .rp-modal--glass shell (Home already imports
    both; Objects didn't). */

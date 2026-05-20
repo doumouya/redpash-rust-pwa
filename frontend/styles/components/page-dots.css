@@ -1,0 +1,197 @@
+/* ━━━━━━━━━━━━━━━━━━ PAGE DOTS — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Vertical page indicator strip. Fixed to the right edge, vertically
+ * centered. Each item is a button containing an icon; the inactive state
+ * renders as a small filled circle (via ::before), and the active state
+ * cross-fades to reveal the icon while the dot fades out + scales to 0.
+ *
+ * Used on the home screen step cards (e.g. Dashboard / My Projects / My
+ * Reports / My Dashboards).
+ *
+ * Requires: tokens.css (transition only — colors are hardcoded rgba
+ *           because the strip sits on top of full-bleed dark backgrounds)
+ * Requires: Bootstrap Icons (.bi classes)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────
+ *
+ *  <!-- Strip (placed anywhere in the body, outside the scroll container) -->
+ *  <div class="rp-page-dots" id="page-dots" aria-hidden="true">
+ *    <button class="rp-page-dot active" data-step="1" title="Import">
+ *      <i class="bi bi-upload"></i>
+ *    </button>
+ *    <button class="rp-page-dot" data-step="2" title="Clean">
+ *      <i class="bi bi-magic"></i>
+ *    </button>
+ *    <button class="rp-page-dot" data-step="3" title="Report">
+ *      <i class="bi bi-bar-chart-fill"></i>
+ *    </button>
+ *    <button class="rp-page-dot" data-step="4" title="Publish">
+ *      <i class="bi bi-send-fill"></i>
+ *    </button>
+ *  </div>
+ *
+ *  <!-- Each section must carry a matching data-step attribute -->
+ *  <section class="snap-card" data-step="1">…</section>
+ *  <section class="snap-card" data-step="2">…</section>
+ *
+ * ── Show/hide ────────────────────────────────────────────────────────────
+ *
+ *  The strip is display:none by default. Show it on the relevant page
+ *  using a :has() selector tied to your active-page marker:
+ *
+ *    body:has(#page-home.active) .rp-page-dots { display: flex; }
+ *
+ *  Or toggle a class directly:
+ *    document.querySelector('.rp-page-dots').classList.toggle('visible', isHomePage);
+ *
+ * ── JS (IntersectionObserver) ────────────────────────────────────────────
+ *
+ *  let _obs = null;
+ *
+ *  function initPageDots(scrollContainer, selector = '[data-step]') {
+ *    const cards = scrollContainer.querySelectorAll(selector);
+ *    const dots  = document.querySelectorAll('.rp-page-dot[data-step]');
+ *    if (!cards.length || !dots.length) return;
+ *
+ *    // Click → smooth scroll to section
+ *    dots.forEach(dot => {
+ *      dot.onclick = () => {
+ *        const target = scrollContainer.querySelector(`[data-step="${dot.dataset.step}"]`);
+ *        if (target) target.scrollIntoView({ behavior: 'smooth' });
+ *      };
+ *    });
+ *
+ *    // IntersectionObserver → update active dot as user scrolls
+ *    if (_obs) _obs.disconnect();
+ *    _obs = new IntersectionObserver(entries => {
+ *      entries.forEach(entry => {
+ *        if (entry.isIntersecting) {
+ *          const step = entry.target.dataset.step;
+ *          dots.forEach(d => d.classList.toggle('active', d.dataset.step === step));
+ *        }
+ *      });
+ *    }, { root: scrollContainer, threshold: 0.5 });
+ *
+ *    cards.forEach(c => _obs.observe(c));
+ *  }
+ *
+ *  // Call on page activation (re-run each time the page is shown)
+ *  initPageDots(document.querySelector('.home-steps'));
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ STRIP ━━━━━━━━━━━━━━━━━━ */
+
+.rp-page-dots {
+  position: fixed;
+  right: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;           /* hidden by default — show via :has() or .visible */
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  z-index: 900;
+}
+
+/* Convenience class for JS-toggled visibility */
+.rp-page-dots.visible {
+  display: flex;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ DOT BUTTON ━━━━━━━━━━━━━━━━━━ */
+
+.rp-page-dot {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  padding: 0;
+  border: none;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  cursor: pointer;
+  position: relative;
+  color: rgba(255, 255, 255, 0.28);
+  transition: color 0.2s, transform 0.2s;
+}
+
+/* Inactive state: render as a small filled circle (icon hidden).
+   The ::before pseudo holds the dot; the <i> child holds the icon.
+   Only one is visible at a time, and they cross-fade on state change. */
+.rp-page-dot::before {
+  content: '';
+  position: absolute;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentColor;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.rp-page-dot i.bi {
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.rp-page-dot:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Active state: dot fades out, icon fades in. */
+.rp-page-dot.active {
+  color: rgba(255, 255, 255, 0.95);
+  transform: scale(1.25);
+}
+.rp-page-dot.active::before {
+  opacity: 0;
+  transform: scale(0);
+}
+.rp-page-dot.active i.bi {
+  opacity: 1;
+  transform: scale(1);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ LIGHT BACKGROUND VARIANT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Use .rp-page-dots--light when the strip sits on top of a light-colored
+ * background (e.g. light-mode hero cards with pastel gradients).
+ * Inverts the color palette from white-based to dark-based.
+ */
+
+.rp-page-dots--light .rp-page-dot {
+  color: rgba(30, 30, 46, 0.2);
+}
+
+.rp-page-dots--light .rp-page-dot:hover {
+  color: rgba(30, 30, 46, 0.5);
+}
+
+.rp-page-dots--light .rp-page-dot.active {
+  color: rgba(30, 30, 46, 0.9);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ POSITION VARIANTS ━━━━━━━━━━━━━━━━━━ */
+
+/* Left edge (default is right) */
+.rp-page-dots--left {
+  right: auto;
+  left: 1.25rem;
+}
+
+/* Bottom center — horizontal strip for horizontal scroll-snap layouts */
+.rp-page-dots--bottom {
+  right: auto;
+  top: auto;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+}

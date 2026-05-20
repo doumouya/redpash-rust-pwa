@@ -1,0 +1,475 @@
+/* ━━━━━━━━━━━━━━━━━━ HOME SCREEN — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Full-height, full-width scroll-snap screen. Each card occupies exactly
+ * one viewport height. The user scrolls vertically through cards that
+ * snap into place. No page scroll — the container traps all overflow.
+ *
+ * Requires: tokens.css (--accent, --green, --purple, --red, --text, --sub,
+ *                       --muted, --bg, --over0, --topbar-h, --r)
+ * Requires: Bootstrap Icons (.bi classes)
+ * Uses keyframes: slideUp, floatY, shimmer  (defined at bottom of this file)
+ *
+ * ── Overflow strategy ────────────────────────────────────────────────────
+ *
+ *  The app shell is:
+ *    body → display:flex; flex-direction:column; height:100%; overflow:hidden
+ *    #app → flex:1; display:flex; flex-direction:column; min-height:0
+ *    .pages-wrap → flex:1; display:flex; min-height:0; overflow:hidden
+ *    #page-home → flex:1; overflow:hidden; min-height:0; position:relative
+ *    .home-steps → flex:1; overflow-y:auto; scroll-snap-type:y mandatory
+ *
+ *  Every ancestor must have min-height:0 to prevent flex children from
+ *  expanding past the viewport. Without it, .home-steps grows unbounded
+ *  and scroll-snap never fires.
+ *
+ *  100svh (small viewport height) is used on .hs-card instead of 100vh
+ *  to account for Safari's collapsing browser chrome on mobile. On desktop
+ *  svh === vh so there is no difference.
+ *
+ * ── Shell hiding ─────────────────────────────────────────────────────────
+ *
+ *  The home screen replaces the standard topbar and sidebar with floating
+ *  bars (see float-btn.css). The topbar and sidebar are hidden via :has():
+ *
+ *    body:has(#page-home.active) .sidebar    { display: none !important; }
+ *    body:has(#page-home.active) .app-topbar { display: none !important; }
+ *
+ * ── HTML skeleton ────────────────────────────────────────────────────────
+ *
+ *  <div class="page" id="page-home">
+ *
+ *    <!-- floating bars live here — see float-btn.css -->
+ *    <div class="rp-float-bar rp-float-bar--bl">…</div>
+ *    <div class="rp-avatar rp-avatar--float rp-avatar--glass …">?</div>
+ *    <div class="rp-float-bar rp-float-bar--tr">…</div>
+ *
+ *    <!-- page-dots — see page-dots.css -->
+ *    <div class="rp-page-dots" id="page-dots" aria-hidden="true">…</div>
+ *
+ *    <div class="home-steps">
+ *
+ *      <section class="hs-card hs-import" data-step="1">
+ *        <div class="hs-content hs-import-layout">
+ *          <!-- two-column on wide screens, stack on narrow -->
+ *          <div class="hs-import-text">
+ *            <div class="hs-eyebrow hs-eyebrow-import">…</div>
+ *            <h1 class="hs-h1">Headline <em class="hs-em-import">accent.</em></h1>
+ *            <p class="hs-p">Body copy.</p>
+ *            <div class="hs-ctas">
+ *              <button class="hs-btn hs-btn-primary"><i class="bi bi-upload"></i><span class="btn-label">Upload file</span></button>
+ *              <button class="hs-btn hs-btn-ghost"><i class="bi bi-folder2-open"></i><span class="btn-label">My projects</span></button>
+ *            </div>
+ *            <!-- rp-minitable goes here -->
+ *          </div>
+ *          <div class="hs-import-panel">
+ *            <!-- hs-stats + rp-upload-zone go here -->
+ *          </div>
+ *        </div>
+ *        <button class="hs-scroll-hint" onclick="…" aria-label="Next step">
+ *          <i class="bi bi-chevron-down"></i>
+ *        </button>
+ *      </section>
+ *
+ *      <section class="hs-card hs-clean" data-step="2">
+ *        <div class="hs-content">
+ *          <div class="hs-eyebrow hs-eyebrow-clean">…</div>
+ *          <h1 class="hs-h1">…</h1>
+ *          <p class="hs-p">…</p>
+ *          <div class="hs-ctas">…</div>
+ *        </div>
+ *        <button class="hs-scroll-hint" …>…</button>
+ *      </section>
+ *
+ *      <!-- hs-report, hs-publish follow the same pattern -->
+ *
+ *    </div>
+ *  </div>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ PAGE WRAPPER ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * #page-home must trap all overflow so the scroll-snap container
+ * fills exactly the available space without growing the page.
+ * position:relative is the stacking context for fixed-position children
+ * (floating bars, page-dots) that should clip to this screen.
+ */
+#page-home {
+  overflow: hidden;
+  min-height: 0;      /* critical: allows flex child to shrink below content size */
+  position: relative;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ SCROLL CONTAINER ━━━━━━━━━━━━━━━━━━ */
+
+.home-steps {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.home-steps::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ STEP CARDS ━━━━━━━━━━━━━━━━━━ */
+
+.hs-card {
+  height: 100svh;           /* svh = small viewport height — Safari-safe */
+  scroll-snap-align: start;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding-top: var(--topbar-h);  /* clear floating topbar if present */
+}
+
+/* Card backgrounds — the gradients live in tokens.css (per-theme) so any
+   element in any consumer can opt in via var(--bg-step-*) or the .rp-bg-*
+   utility classes from backgrounds.css. The card classes here just bind
+   the same tokens. */
+.hs-import  { background: var(--bg-step-import); }
+.hs-clean   { background: var(--bg-step-clean); }
+.hs-report  { background: var(--bg-step-report); }
+.hs-publish { background: var(--bg-step-publish); }
+
+
+/* ━━━━━━━━━━━━━━━━━━ CONTENT BLOCK ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Centered content container. z-index:2 keeps it above any
+ * decorative background layers placed inside .hs-card.
+ */
+.hs-content {
+  position: relative;
+  z-index: 2;
+  width: 90%;
+  max-width: 42rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ EYEBROW LABEL ━━━━━━━━━━━━━━━━━━ */
+
+.hs-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375em;
+  border-radius: 1.25rem;
+  padding: 0.3em 0.9em;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+  align-self: flex-start;
+  animation: slideUp 0.5s ease both;
+}
+
+.hs-eyebrow-import  { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 0.0312rem solid color-mix(in srgb, var(--accent) 28%, transparent); color: var(--accent); }
+.hs-eyebrow-clean   { background: color-mix(in srgb, var(--green)  12%, transparent); border: 0.0312rem solid color-mix(in srgb, var(--green)  28%, transparent); color: var(--green);  }
+.hs-eyebrow-report  { background: color-mix(in srgb, var(--purple) 12%, transparent); border: 0.0312rem solid color-mix(in srgb, var(--purple) 28%, transparent); color: var(--purple); }
+.hs-eyebrow-publish { background: color-mix(in srgb, var(--red)    12%, transparent); border: 0.0312rem solid color-mix(in srgb, var(--red)    28%, transparent); color: var(--red);    }
+
+
+/* ━━━━━━━━━━━━━━━━━━ HEADLINE ━━━━━━━━━━━━━━━━━━ */
+
+.hs-h1 {
+  font-size: clamp(1.75rem, 4.5vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  margin: 0;
+  color: var(--text);
+  text-shadow: 0 0.125rem 2.5rem color-mix(in srgb, var(--bg) 60%, transparent);
+  animation: slideUp 0.55s 0.08s ease both;
+}
+
+/* Colored <em> spans — inline accent text within headline */
+.hs-em-import  { font-style: normal; color: var(--accent); }
+.hs-em-clean   { font-style: normal; color: var(--green);  }
+.hs-em-report  { font-style: normal; color: var(--purple); }
+.hs-em-publish { font-style: normal; color: var(--red);    }
+
+
+/* ━━━━━━━━━━━━━━━━━━ BODY COPY ━━━━━━━━━━━━━━━━━━ */
+
+.hs-p {
+  font-size: clamp(0.8rem, 1.4vw, 0.9375rem);
+  color: var(--sub);
+  line-height: 1.7;
+  max-width: 34rem;
+  margin: 0;
+  animation: slideUp 0.55s 0.18s ease both;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ CTA BUTTONS ━━━━━━━━━━━━━━━━━━ */
+
+.hs-ctas {
+  display: flex;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  animation: slideUp 0.55s 0.28s ease both;
+}
+
+/*
+ * Icon button that expands to show a text label on hover.
+ * Same expand mechanic as .rp-float-btn — icon hides, label scales in.
+ * Default: 2.75rem circle. Hover: 12rem pill.
+ */
+.hs-btn {
+  position: relative;
+  overflow: hidden;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: 3rem;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hs-btn i.bi {
+  flex-shrink: 0;
+  font-size: 1rem;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.hs-btn .btn-label {
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 500;
+  opacity: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hs-btn:hover                   { width: 12rem; }
+  .hs-btn:hover i.bi              { transform: scale(0); opacity: 0; }
+  .hs-btn:hover .btn-label        { opacity: 1; transform: translateX(-50%) scale(1); transition-delay: 0.18s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-btn, .hs-btn i.bi, .hs-btn .btn-label { transition: none; }
+}
+
+/* Primary — accent→purple gradient + shimmer sweep */
+.hs-btn-primary {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--purple)));
+  color: #fff;
+  box-shadow: 0 0.125rem 1rem color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.hs-btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
+  background-size: 200% 100%;
+  animation: shimmer 3.5s ease-in-out 1s infinite;
+}
+
+/* Per-card primary button color overrides */
+.hs-clean   .hs-btn-primary { background: linear-gradient(135deg, var(--green),  color-mix(in srgb, var(--green)  60%, var(--accent))); box-shadow: 0 0.125rem 1rem color-mix(in srgb, var(--green)  40%, transparent); }
+.hs-report  .hs-btn-primary { background: linear-gradient(135deg, var(--purple), color-mix(in srgb, var(--purple) 55%, var(--accent))); box-shadow: 0 0.125rem 1rem color-mix(in srgb, var(--purple) 40%, transparent); }
+.hs-publish .hs-btn-primary { background: linear-gradient(135deg, var(--red),    color-mix(in srgb, var(--red)    55%, var(--purple))); box-shadow: 0 0.125rem 1rem color-mix(in srgb, var(--red)    40%, transparent); }
+
+/* Ghost — frosted glass */
+.hs-btn-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  border: 0.0938rem solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.15);
+}
+
+.hs-btn-ghost:hover { background: rgba(255, 255, 255, 0.18); }
+
+html[data-theme="light"] .hs-btn-ghost       { background: rgba(255,255,255,0.55); border-color: rgba(30,30,46,0.12); }
+html[data-theme="light"] .hs-btn-ghost:hover { background: rgba(255,255,255,0.75); }
+
+
+/* ━━━━━━━━━━━━━━━━━━ SCROLL HINT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Frosted glass down-arrow button pinned to the bottom-left of each card.
+ * Floats up and down on a loop. Scrolls to the next card on click.
+ * Not shown on the last card.
+ */
+.hs-scroll-hint {
+  position: absolute;
+  bottom: 1.75rem;
+  left: 1.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  border: 0.0938rem solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 1rem;
+  animation: floatY 2.5s ease-in-out infinite;
+  transition: background 0.15s;
+}
+
+.hs-scroll-hint:hover { background: rgba(255, 255, 255, 0.2); }
+
+
+/* ━━━━━━━━━━━━━━━━━━ IMPORT CARD — TWO-COLUMN LAYOUT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Step 1 (Import) has a split layout: text left, upload panel right.
+ * Collapses to single column below 64rem.
+ */
+.hs-import-layout {
+  flex-direction: row;
+  align-items: center;
+  gap: 3rem;
+  max-width: 76rem;
+  width: 92%;
+}
+
+.hs-import-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.hs-import-panel {
+  flex: 0 0 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: slideUp 0.55s 0.35s ease both;
+}
+
+@media (max-width: 63.9375rem) {
+  .hs-import-layout {
+    flex-direction: column;
+    gap: 1.75rem;
+    max-width: 42rem;
+  }
+
+  .hs-import-panel {
+    flex: none;
+    width: 100%;
+  }
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ STATS STRIP ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Frosted glass strip with stat counters. Sits above the upload zone
+ * in .hs-import-panel. Three equal columns separated by hairline dividers.
+ * Stat values are animated via countUp in JS on load (see loadRecentProjects).
+ */
+.hs-stats {
+  display: flex;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  border: 0.0625rem solid rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="light"] .hs-stats {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(30, 30, 46, 0.12);
+  box-shadow: 0 0.125rem 0.875rem rgba(30, 30, 46, 0.08);
+}
+
+.hs-stat {
+  flex: 1;
+  padding: 0.75rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.hs-stat:hover { background: rgba(255, 255, 255, 0.07); }
+
+.hs-stat + .hs-stat {
+  border-left: 0.0625rem solid rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="light"] .hs-stat + .hs-stat {
+  border-left-color: rgba(30, 30, 46, 0.1);
+}
+
+.hs-stat-val {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.hs-stat-lbl {
+  font-size: 0.5938rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sub);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ KEYFRAME ANIMATIONS ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * These three animations are shared with landing.css in RedPash.
+ * Include only once per project — if landing.css is already loaded,
+ * remove these declarations.
+ */
+
+/* Content entrance — elements slide up and fade in */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Scroll hint bob — continuous float */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-0.375rem); }
+}
+
+/* CTA button shimmer sweep */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}

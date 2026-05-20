@@ -1,0 +1,251 @@
+/* ━━━━━━━━━━━━━━━━━━ MINI TABLE — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * A compact list-style table for recent items (projects, files, etc.).
+ * Each row shows a name on the left and a meta cluster on the right.
+ * No <table> element — pure flex rows.
+ *
+ * Requires: tokens.css (--over0, --text, --sub, --muted, --green, --yellow, --red, --accent)
+ *
+ * ── Anatomy ──────────────────────────────────────────────────────────────
+ *
+ *  .rp-minitable               Wrapper — adds top margin when placed below other content
+ *    .rp-minitable-hdr         Section label — uppercase, muted, spaced
+ *    .rp-minitable-list        Row container (populated by JS)
+ *      .rp-minitable-row       One item — clickable, hover fill
+ *        .rp-minitable-name    Name — truncates with ellipsis
+ *        .rp-minitable-meta    Right cluster — flex row of meta chips
+ *          .rp-minitable-score Score — cleanness %, colored by threshold
+ *          .rp-minitable-dim   Dimension — row/col/file count, muted
+ *          .rp-minitable-size  File size, muted
+ *          .badge .b-*         Stage badge — reuses components.css badge system
+ *          .rp-tag .rp-tag-*   Status tag — monospace pill
+ *      .rp-minitable-empty     Shown when list has no items
+ *
+ * ── HTML (static example) ────────────────────────────────────────────────
+ *
+ *  <div class="rp-minitable">
+ *    <div class="rp-minitable-hdr">Recent projects</div>
+ *    <div class="rp-minitable-list" id="recent-list">
+ *
+ *      <div class="rp-minitable-row" onclick="openProject('abc123')">
+ *        <span class="rp-minitable-name">Q4 Sales Data</span>
+ *        <span class="rp-minitable-meta">
+ *          <span class="rp-minitable-score score-hi">94%</span>
+ *          <span class="rp-minitable-dim">3 files</span>
+ *          <span class="badge b-green">Publish</span>
+ *          <span class="rp-tag rp-tag-blue">active</span>
+ *        </span>
+ *      </div>
+ *
+ *      <div class="rp-minitable-row" onclick="openProject('def456')">
+ *        <span class="rp-minitable-name">Customer Survey — March</span>
+ *        <span class="rp-minitable-meta">
+ *          <span class="rp-minitable-score score-mid">71%</span>
+ *          <span class="rp-minitable-dim">1 file</span>
+ *          <span class="badge b-yellow">Clean</span>
+ *          <span class="rp-tag rp-tag-grey">draft</span>
+ *        </span>
+ *      </div>
+ *
+ *    </div>
+ *  </div>
+ *
+ *  <!-- Files variant (row/col counts + size instead of file count) -->
+ *  <div class="rp-minitable">
+ *    <div class="rp-minitable-hdr">Latest files — <span id="proj-name-label"></span></div>
+ *    <div class="rp-minitable-list" id="files-list">
+ *      <div class="rp-minitable-row">
+ *        <span class="rp-minitable-name">sales_data.csv</span>
+ *        <span class="rp-minitable-meta">
+ *          <span class="rp-minitable-score score-hi">92%</span>
+ *          <span class="rp-minitable-dim">12,450r</span>
+ *          <span class="rp-minitable-dim">8c</span>
+ *          <span class="rp-minitable-size">340 KB</span>
+ *          <span class="rp-tag rp-tag-green">ready</span>
+ *        </span>
+ *      </div>
+ *    </div>
+ *  </div>
+ *
+ * ── JS render pattern ────────────────────────────────────────────────────
+ *
+ *  const scoreClass = pct =>
+ *    pct >= 90 ? 'score-hi' : pct >= 60 ? 'score-mid' : 'score-lo';
+ *
+ *  const scoreChip = pct => pct == null ? '' :
+ *    `<span class="rp-minitable-score ${scoreClass(pct)}">${Math.round(pct)}%</span>`;
+ *
+ *  // Project stage → badge class
+ *  const stageClass = { import:'b-accent', clean:'b-yellow', report:'b-purple', publish:'b-green' };
+ *  const stageLabel = { import:'Import',   clean:'Clean',    report:'Report',   publish:'Publish' };
+ *
+ *  // Project status → tag class
+ *  const statusClass = { active:'rp-tag-blue', archived:'rp-tag-grey', draft:'rp-tag-grey' };
+ *
+ *  // File status → tag class
+ *  const fileStatusClass = {
+ *    ready:'rp-tag-green', clean:'rp-tag-green',
+ *    analysing:'rp-tag-blue', cleaning:'rp-tag-blue', queued:'rp-tag-blue', uploading:'rp-tag-blue',
+ *    error:'rp-tag-red'
+ *  };
+ *
+ *  list.innerHTML = items.map(p => `
+ *    <div class="rp-minitable-row" onclick="openProject('${p.id}')">
+ *      <span class="rp-minitable-name">${p.name}</span>
+ *      <span class="rp-minitable-meta">
+ *        ${scoreChip(p.cleanness_pct)}
+ *        <span class="rp-minitable-dim">${p.file_count} file${p.file_count !== 1 ? 's' : ''}</span>
+ *        <span class="badge ${stageClass[p.stage]}">${stageLabel[p.stage]}</span>
+ *        <span class="rp-tag ${statusClass[p.status] || 'rp-tag-grey'}">${p.status}</span>
+ *      </span>
+ *    </div>`).join('');
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ WRAPPER ━━━━━━━━━━━━━━━━━━ */
+
+.rp-minitable {
+  margin-top: 0.75rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ HEADER ━━━━━━━━━━━━━━━━━━ */
+
+.rp-minitable-hdr {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.375rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ ROWS ━━━━━━━━━━━━━━━━━━ */
+
+.rp-minitable-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.625rem;
+  border-radius: 0.5rem;
+  /* Transparent border in the base state so the hover border-color swap
+     doesn't shift the row by 0.03125rem. Mirrors the .rp-set-input recipe
+     on the Profile / Settings page so glass surfaces share one visual
+     language for "interactive translucent element". */
+  border: 0.03125rem solid transparent;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* Hover — translucent fill + hairline border tint, matching the
+   .rp-set-input recipe in settings-card.css. Looks right on both the
+   flat app body and the glass home-step cards. */
+.rp-minitable-row:hover {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+html[data-theme="light"] .rp-minitable-row:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(30, 30, 46, 0.10);
+}
+
+/* Non-clickable rows (files list — no onclick) */
+.rp-minitable-row:not([onclick]) {
+  cursor: default;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ COLUMNS ━━━━━━━━━━━━━━━━━━ */
+
+/* Name — left, truncates */
+.rp-minitable-name {
+  font-size: 0.8125rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Meta cluster — right, never wraps */
+.rp-minitable-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+/* Dimension labels — row/col counts, file count */
+.rp-minitable-dim {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* File size */
+.rp-minitable-size {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Empty state */
+.rp-minitable-empty {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  padding: 0.25rem 0.625rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ CLEANNESS SCORE ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Percentage score showing data quality.
+ * Three thresholds — mirrors the JS logic:
+ *   pct >= 90  → score-hi  (green)
+ *   pct >= 60  → score-mid (yellow)
+ *   pct < 60   → score-lo  (red)
+ */
+
+.rp-minitable-score {
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rp-minitable-score.score-hi  { color: var(--green);  }
+.rp-minitable-score.score-mid { color: var(--yellow); }
+.rp-minitable-score.score-lo  { color: var(--red);    }
+
+
+/* ━━━━━━━━━━━━━━━━━━ STATUS TAGS ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Monospace pill for status strings (active, draft, ready, error, etc.).
+ * Distinct from .badge (which is for stage labels like "Clean", "Publish").
+ *
+ * Use .badge .b-* for workflow stage labels.
+ * Use .rp-tag .rp-tag-* for raw status strings.
+ */
+
+.rp-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15em 0.55em;
+  border-radius: 0.3em;
+  font-family: 'Menlo', 'Consolas', monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.rp-tag-grey   { background: color-mix(in srgb, var(--muted)  15%, transparent); color: var(--muted);  }
+.rp-tag-blue   { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.rp-tag-yellow { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }
+.rp-tag-green  { background: color-mix(in srgb, var(--green)  15%, transparent); color: var(--green);  }
+.rp-tag-red    { background: color-mix(in srgb, var(--red)    15%, transparent); color: var(--red);    }

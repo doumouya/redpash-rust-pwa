@@ -19,11 +19,11 @@
 @import "/styles/components/card.css";
 @import "/styles/components/modal-sandbox.css";
 @import "/styles/components/auth-modals.css";
-@import "/vendor/redpash-components/components/avatar.css";
+@import "/styles/components/avatar.css";
 @import "/styles/components/theme-toggle.css";
 @import "/styles/components/badge.css";
-@import "/vendor/redpash-components/components/stat-strip.css";
-@import "/vendor/redpash-components/components/settings-card.css";
+@import "/styles/components/stat-strip.css";
+@import "/styles/components/settings-card.css";
 
 /* glass-btn.css (.rp-btn base) loads globally via main.css. */
 

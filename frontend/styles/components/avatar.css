@@ -1,0 +1,243 @@
+/* ━━━━━━━━━━━━━━━━━━ AVATAR — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Profile avatar component. Two states: initials (default) and photo.
+ * Photo is applied by JS — CSS handles both states automatically.
+ *
+ * Requires: tokens.css (--accent, --bg, --text, --over1)
+ *
+ * ── JS hooks ─────────────────────────────────────────────────────────────
+ *
+ *  Two class-based JS hooks power all avatar instances:
+ *
+ *  .rp-initials  — JS writes the user's 1–2 letter initials as textContent
+ *  .rp-photo-av  — JS sets backgroundImage + clears textContent when a
+ *                  photo URL is available
+ *
+ *  Pattern in your loadProfile() / boot function:
+ *
+ *    const initials = (firstName[0] + lastName[0]).toUpperCase();
+ *    document.querySelectorAll('.rp-initials').forEach(el => el.textContent = initials);
+ *
+ *    if (avatarUrl) {
+ *      document.querySelectorAll('.rp-photo-av').forEach(el => {
+ *        el.style.backgroundImage = `url(${avatarUrl})`;
+ *        el.textContent = '';
+ *      });
+ *    }
+ *
+ * ── HTML patterns ────────────────────────────────────────────────────────
+ *
+ *  <!-- Topbar / inline — medium, circle -->
+ *  <div class="rp-avatar rp-initials rp-photo-av">?</div>
+ *
+ *  <!-- Floating home — large, circle, fixed top-left -->
+ *  <div class="rp-avatar rp-avatar--lg rp-avatar--float rp-initials rp-photo-av"
+ *       onclick="go('profile')" role="button" tabindex="0" title="View profile">?</div>
+ *
+ *  <!-- Glass style (dark backgrounds, home step cards) -->
+ *  <div class="rp-avatar rp-avatar--lg rp-avatar--glass rp-initials rp-photo-av">?</div>
+ *
+ *  <!-- Profile page — extra large, with edit overlay -->
+ *  <div class="rp-avatar-wrap">
+ *    <div class="rp-avatar rp-avatar--xl rp-initials rp-photo-av">?</div>
+ *    <div class="rp-avatar-edit" onclick="triggerAvatarUpload()">
+ *      <i class="bi bi-camera-fill"></i>
+ *    </div>
+ *  </div>
+ *
+ *  <!-- Settings account row — large, rounded-square -->
+ *  <div class="rp-avatar rp-avatar--lg rp-avatar--square rp-initials rp-photo-av">?</div>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ BASE ━━━━━━━━━━━━━━━━━━ */
+
+.rp-avatar {
+  /* size — override with size modifier */
+  width:  1.875rem;
+  height: 1.875rem;
+  flex-shrink: 0;
+
+  /* shape */
+  border-radius: 50%;
+  overflow: hidden;
+
+  /* initials state — solid accent fill */
+  background: var(--accent);
+  background-size: cover;
+  background-position: center;
+  color: var(--bg);
+  font-size: 0.6875rem;
+  font-weight: 700;
+
+  /* layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Photo state — text is hidden but CSS requires nothing extra.
+ * JS sets backgroundImage and clears textContent.
+ * The background-size:cover on the base handles the photo display. */
+
+
+/* ━━━━━━━━━━━━━━━━━━ SIZE MODIFIERS ━━━━━━━━━━━━━━━━━━ */
+
+/* Sidebar / icon-only contexts */
+.rp-avatar--sm {
+  width:  1.375rem;
+  height: 1.375rem;
+  font-size: 0.5625rem;
+  border-radius: 0.3125rem;  /* slightly rounded-square at this size */
+}
+
+/* Default (topbar) — no modifier needed, base is medium */
+
+/* Floating home, settings rows */
+.rp-avatar--lg {
+  width:  2.5rem;
+  height: 2.5rem;
+  font-size: 0.875rem;
+}
+
+@media (min-width: 30em) {
+  .rp-avatar--lg {
+    width:  3rem;
+    height: 3rem;
+  }
+}
+
+/* Profile page hero */
+.rp-avatar--xl {
+  width:  3.75rem;
+  height: 3.75rem;
+  font-size: 1.375rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ SHAPE MODIFIERS ━━━━━━━━━━━━━━━━━━ */
+
+/* Rounded-square — used in settings account rows */
+.rp-avatar--square {
+  border-radius: 0.625rem;
+}
+
+/* Fully circular (default) — no modifier needed */
+
+
+/* ━━━━━━━━━━━━━━━━━━ STYLE MODIFIERS ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Glass — for dark/hero backgrounds (home step cards, landing page).
+ * When showing initials: frosted-glass look instead of solid accent.
+ * When showing a photo: border provides subtle separation from background.
+ */
+.rp-avatar--glass {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 0.0938rem solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  /* no backdrop-filter — photo needs full color fidelity */
+}
+
+html[data-theme="light"] .rp-avatar--glass {
+  background-color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(30, 30, 46, 0.12);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ FLOATING VARIANT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Positions the avatar fixed top-left — companion to the float-bar top-right.
+ * Hidden on mobile; appears at tablet+ (same threshold as .rp-float-bar).
+ * Always use alongside .rp-avatar--lg for correct sizing.
+ *
+ * Auto-hide when a panel overlaps (add to your stylesheet):
+ *   body:has(#my-panel:not([aria-hidden="true"])) .rp-avatar--float { display: none !important; }
+ */
+
+.rp-avatar--float {
+  display: none;
+}
+
+@media (min-width: 46.5em) and (min-height: 25em) {
+  .rp-avatar--float {
+    display: flex;
+    position: fixed;
+    top: 1.25rem;
+    left: 1.75rem;
+    z-index: 1000;
+    cursor: pointer;
+  }
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ EDITABLE AVATAR (PROFILE PAGE) ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Wrap the avatar in .rp-avatar-wrap to get a hover-reveal camera overlay.
+ * Works alongside any size modifier.
+ *
+ * HTML:
+ *   <div class="rp-avatar-wrap">
+ *     <div class="rp-avatar rp-avatar--xl rp-initials rp-photo-av">?</div>
+ *     <div class="rp-avatar-edit" onclick="triggerAvatarUpload()">
+ *       <i class="bi bi-camera-fill"></i>
+ *     </div>
+ *   </div>
+ */
+
+.rp-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.rp-avatar-edit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;           /* matches the avatar's default shape */
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.rp-avatar-edit i.bi {
+  font-size: 1rem;
+  color: #fff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rp-avatar-wrap:hover .rp-avatar-edit {
+    opacity: 1;
+  }
+}
+
+/* Match edit overlay shape to --square modifier */
+.rp-avatar-wrap:has(.rp-avatar--square) .rp-avatar-edit {
+  border-radius: 0.625rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ CONTEXT: TOPBAR ON DARK BACKGROUNDS ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * When the topbar floats over a full-bleed dark/hero background
+ * (e.g. the home step cards), apply the glass treatment to the avatar.
+ * Scope this to the topbar context in your own stylesheet:
+ *
+ *   #app.visible .app-topbar .rp-avatar {
+ *     background-color: rgba(255,255,255,0.1);
+ *     border: 0.0938rem solid rgba(255,255,255,0.18);
+ *     color: var(--text);
+ *   }
+ *
+ *   html[data-theme="light"] #app.visible .app-topbar .rp-avatar {
+ *     background-color: rgba(255,255,255,0.55);
+ *     border-color: rgba(30,30,46,0.12);
+ *   }
+ */

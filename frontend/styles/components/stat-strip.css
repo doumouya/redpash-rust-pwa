@@ -1,0 +1,213 @@
+/* ━━━━━━━━━━━━━━━━━━ STAT STRIP — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Frosted-glass strip of clickable stat buttons. Each cell shows a large
+ * animated number and a small uppercase label. Cells share equal width and
+ * are separated by hairline dividers.
+ *
+ * Clicking a button navigates or opens a filtered table view (see _tblOpen
+ * pattern below). Non-clickable cells use <div> instead of <button> —
+ * CSS removes the hover fill automatically via :not(button).
+ *
+ * Two contexts:
+ *   Default (glass)  — frosted glass for dark/hero backgrounds (home cards)
+ *   --surface        — opaque surface background for inner pages / panels
+ *
+ * Requires: tokens.css (--text, --sub, --green, --yellow, --red, --accent,
+ *                        --surface, --over0)
+ *
+ * ── HTML: glass (dark background) ────────────────────────────────────────
+ *
+ *  <div class="rp-stat-strip">
+ *
+ *    <button class="rp-stat" onclick="_tblOpen('projects')" title="Open projects">
+ *      <span class="rp-stat-val" id="stat-projects">—</span>
+ *      <span class="rp-stat-lbl">Projects</span>
+ *    </button>
+ *
+ *    <button class="rp-stat" onclick="_tblOpen('files')" title="Open files">
+ *      <span class="rp-stat-val" id="stat-files">—</span>
+ *      <span class="rp-stat-lbl">Files</span>
+ *    </button>
+ *
+ *    <!-- value color variants: rp-stat-val--green / --yellow / --red / --accent -->
+ *    <button class="rp-stat" onclick="_tblOpen('projects',{stage:['publish']})" title="Published">
+ *      <span class="rp-stat-val rp-stat-val--green" id="stat-published">—</span>
+ *      <span class="rp-stat-lbl">Published</span>
+ *    </button>
+ *
+ *  </div>
+ *
+ * ── HTML: non-clickable cells ─────────────────────────────────────────────
+ *
+ *  <div class="rp-stat-strip">
+ *    <div class="rp-stat">
+ *      <span class="rp-stat-val">12,450</span>
+ *      <span class="rp-stat-lbl">Rows</span>
+ *    </div>
+ *    <div class="rp-stat">
+ *      <span class="rp-stat-val">8</span>
+ *      <span class="rp-stat-lbl">Columns</span>
+ *    </div>
+ *    <div class="rp-stat">
+ *      <span class="rp-stat-val rp-stat-val--accent">94%</span>
+ *      <span class="rp-stat-lbl">Clean</span>
+ *    </div>
+ *  </div>
+ *
+ * ── HTML: surface variant (inner pages) ──────────────────────────────────
+ *
+ *  <div class="rp-stat-strip rp-stat-strip--surface"> … </div>
+ *
+ * ── JS: countUp animation ─────────────────────────────────────────────────
+ *
+ *  function countUp(id, target, ms = 700) {
+ *    const el = document.getElementById(id);
+ *    if (!el) return;
+ *    const t0 = performance.now();
+ *    const step = now => {
+ *      const p     = Math.min((now - t0) / ms, 1);
+ *      const eased = 1 - Math.pow(1 - p, 3);   // ease-out-cubic
+ *      el.textContent = Math.round(eased * target);
+ *      if (p < 1) requestAnimationFrame(step);
+ *    };
+ *    requestAnimationFrame(step);
+ *  }
+ *
+ *  // Call after fetching stats from your API:
+ *  countUp('stat-projects',  data.total_projects);
+ *  countUp('stat-files',     data.total_files);
+ *  countUp('stat-published', data.published_count);
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ STRIP WRAPPER ━━━━━━━━━━━━━━━━━━ */
+
+.rp-stat-strip {
+  display: flex;
+  overflow: hidden;
+  border-radius: 0.5rem;
+
+  /* frosted glass — default context: dark/hero background */
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  border: 0.0625rem solid rgba(255, 255, 255, 0.14);
+}
+
+/* Light mode — glass strip brightens with a soft shadow */
+html[data-theme="light"] .rp-stat-strip {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(30, 30, 46, 0.12);
+  box-shadow: 0 0.125rem 0.875rem rgba(30, 30, 46, 0.08);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ SURFACE VARIANT ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Use on inner pages where the strip sits on --surface (not a dark hero).
+ * Drops the frosted glass in favour of a plain opaque surface background.
+ */
+
+.rp-stat-strip--surface {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--over0);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .rp-stat-strip--surface {
+  background: var(--surface);
+  border-color: var(--over0);
+  box-shadow: none;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ STAT CELL ━━━━━━━━━━━━━━━━━━ */
+
+.rp-stat {
+  flex: 1;
+  position: relative;
+  padding: 0.75rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+
+  /* reset button chrome */
+  background: none;
+  border: none;
+  transition: background 0.15s;
+}
+
+/* Hairline divider — 80% tall, vertically centred */
+.rp-stat + .rp-stat::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10%;
+  height: 80%;
+  width: 0.0625rem;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="light"] .rp-stat + .rp-stat::before {
+  background: rgba(30, 30, 46, 0.1);
+}
+
+.rp-stat-strip--surface .rp-stat + .rp-stat::before {
+  background: var(--over0);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ HOVER (BUTTON CELLS ONLY) ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Only <button> cells get hover fill — <div> cells are non-interactive
+ * and don't receive this rule. No extra class needed.
+ */
+
+button.rp-stat {
+  cursor: pointer;
+}
+
+button.rp-stat:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rp-stat-strip--surface button.rp-stat:hover {
+  background: var(--over0);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ VALUE & LABEL ━━━━━━━━━━━━━━━━━━ */
+
+.rp-stat-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.rp-stat-lbl {
+  font-size: 0.5938rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sub);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ VALUE COLOR MODIFIERS ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Apply to .rp-stat-val to highlight a specific metric.
+ * The parent theme handles dark/light automatically via the token.
+ */
+
+.rp-stat-val--green  { color: var(--green);  }
+.rp-stat-val--yellow { color: var(--yellow); }
+.rp-stat-val--red    { color: var(--red);    }
+.rp-stat-val--accent { color: var(--accent); }
