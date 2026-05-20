@@ -1035,7 +1035,7 @@ html[data-theme="light"] #page-cleaner .rp-rtp-tab.active {
    panel's `is-mode-edit` class (sandbox convention from spSetMode in
    controls.js) so the overview rides the same toggle path the file
    table uses. The legacy `rp-rt-mode-edit` was the live class name
-   from the cleaner.live.html era — sandbox sticks with `is-mode-*`. */
+   from the legacy cleaner monolith — sandbox sticks with `is-mode-*`. */
 .rp-rt-panel.is-mode-edit #cleaner-ov-table .ov-cell-name {
   cursor: text;
 }

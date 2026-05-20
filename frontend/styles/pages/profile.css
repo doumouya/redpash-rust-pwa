@@ -7,7 +7,7 @@
  * profile.js continues to bind to every id="profile-*" / id="settings-*"
  * handle without changes.
  *
- * Previous 2-step home-cards CSS lives at profile.live.css for reference.
+ * Previous 2-step home-cards CSS is in git history (pre-internalization).
  * ──────────────────────────────────────────────────────────────────── */
 
 /* shell.css's body chrome lives in main.css now (scoped to

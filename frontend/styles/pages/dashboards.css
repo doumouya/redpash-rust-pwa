@@ -9,7 +9,7 @@
  *     inline top/left on the [data-dashboards-tools-drag] header.
  *
  * Same chrome family as cleaner / objects / reports / profile.
- * Previous list+builder CSS lives at dashboards.live.css for reference.
+ * Previous list+builder CSS is in git history (pre-internalization).
  * ──────────────────────────────────────────────────────────────────── */
 
 @import "/styles/base/shell.css";

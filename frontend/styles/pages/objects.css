@@ -830,7 +830,7 @@ html[data-theme="light"] .obj-tab.active        { color: #1e1e2e; }
  *
  * Sandbox's spSetMode (controls.js) flips an `is-mode-<mode>` class on
  * the .rp-rt-panel (NOT the legacy `rp-rt-mode-<mode>` from the
- * objects.live.html era):
+ * legacy objects markup):
  *   .is-mode-select → first-cell .rp-row-uncheck / .rp-row-check
  *                     glyphs fade in; ticked rows highlight; toolbar
  *                     selection chip + bulk-delete.

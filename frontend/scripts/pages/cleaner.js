@@ -142,8 +142,8 @@ export default async function mount(root, ctx) {
 
   // Phase 3 wiring — when the sandbox markup is on screen (no
   // #cleaner-title), branch into mountSandbox(). The legacy mount path
-  // below stays intact for the historical cleaner.live.html, so a
-  // future revert just swaps the partial file.
+  // below stays intact as a fallback; the historical
+  // monolith markup is in git history if a revert is needed.
   const sandboxStrip = root.querySelector(".rp-rt-proj-tabs-inner");
   if (sandboxStrip) {
     await mountSandbox(root, ctx, sandboxStrip);
@@ -5303,7 +5303,7 @@ async function mountSandbox(root, ctx, strip) {
 // Behaviour mirrors the legacy versions (STATE + persistence + sandbox
 // re-paint), minus the legacy `_renderTabs(root)` / `_renderProjectTabs
 // (root)` calls — those write into #cleaner-tabs-list / #cleaner-proj-
-// tabs-list which only exist in the historical cleaner.live.html
+// tabs-list which only existed in the historical cleaner monolith
 // markup. The sandbox strip is repainted via spActivateTab (visual
 // flip), spDeleteTab (animated remove), spAddProjectTab / spAddFileTab
 // (animated add) — those run alongside via the composite onclick.
