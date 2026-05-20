@@ -14,11 +14,11 @@
 @import "/vendor/redpash-components/components/button.css";
 @import "/vendor/redpash-components/components/badge.css";
 @import "/vendor/redpash-components/components/form.css";
-@import "/vendor/redpash-components/components/redtable.css";
-@import "/vendor/redpash-components/components/redtable-pro.css";
-@import "/vendor/redpash-components/components/pager.css";
-@import "/vendor/redpash-components/components/filter-by.css";
-@import "/vendor/redpash-components/components/col-order.css";
+@import "/styles/components/redtable/redtable.css";
+@import "/styles/components/redtable/redtable-pro.css";
+@import "/styles/components/redtable/pager.css";
+@import "/styles/components/redtable/filter-by.css";
+@import "/styles/components/redtable/col-order.css";
 @import "/vendor/redpash-components/components/upload-zone.css";
 /* openModal() (ui/modal.js) renders the library glass modal — pull in
    the base modal + the .rp-modal--glass shell (Home already imports
@@ -33,10 +33,10 @@
    for the per-row badges + cleanness bar + name anchor + row-mode glyphs
    unique to this page. .rp-btn (glass-btn.css) + .rp-modal
    (modals-sandbox.css) load globally via main.css. */
-@import "/vendor/redpash-components/components/proj-tabs.css";
-@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
-@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
-@import "/vendor/redpash-components/components/objects-sandbox.css";
+@import "/styles/components/redtable/proj-tabs.css";
+@import "/styles/components/redtable/dropdowns-sandbox.css";
+@import "/styles/components/redtable/filter-panel-sandbox.css";
+@import "/styles/components/redtable/objects-sandbox.css";
 
 /* Root font-size (112.5% = 18px) is set globally in main.css.
    #page-objects re-sets its own font-size to 1rem (below) so the body's
@@ -843,7 +843,7 @@ html[data-theme="light"] .obj-tab.active        { color: #1e1e2e; }
  * .rp-rt-th-mode first cell (sandbox single-cell overlap pattern),
  * with CSS controlling which glyph is opacity:1 per mode — no
  * separate hidden columns to swap. Show/hide rules for those overlay
- * glyphs live in /vendor/redpash-components/components/objects-sandbox.css. */
+ * glyphs live in /styles/components/redtable/objects-sandbox.css. */
 
 /* Edit mode — only cells the schema marks editable (data-edit-type) get
    the cue; the rest stay inert. Sandbox tables use [data-edit-type]

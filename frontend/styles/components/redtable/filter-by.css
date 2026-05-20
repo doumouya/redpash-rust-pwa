@@ -1,0 +1,289 @@
+/* ━━━━━━━━━━━━━━━━━━ FILTER-BY — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Autocomplete searchbar with deletable tag pills. Used inside the filter
+ * side-panel to let users pick which columns/fields to filter by.
+ *
+ * Behaviour:
+ *   1. User types in the search input → autocomplete list appears
+ *   2. User clicks/keyboards to a suggestion → pill tag added, input cleared
+ *   3. User clicks ✕ on a tag → tag removed, corresponding filter cleared
+ *   4. Input blur hides the autocomplete after 150ms (mousedown-safe delay)
+ *
+ * Anatomy:
+ *   .rp-fby                  Outer wrapper (flex column)
+ *     .rp-fby-tags           Wrap row of active filter pills
+ *       .rp-fby-tag          One active filter pill (accent tint)
+ *         .rp-fby-tag-x      Delete button (✕)
+ *     .rp-fby-search         Text input — type to filter the autocomplete
+ *     .rp-fby-ac             Autocomplete dropdown (<ul>, shown/hidden by JS)
+ *       .rp-fby-ac-item      Suggestion item (<li>)
+ *       .rp-fby-ac-hi        Keyboard-highlighted item (JS-toggled)
+ *
+ * Context: designed for use inside the RedTable filter side-panel
+ * (.rp-rt-filter / .rp-rtf-*), but self-contained and usable anywhere.
+ *
+ * Requires: tokens.css (--accent, --text, --sub, --muted, --over0, --surface)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────
+ *
+ *  <div class="rp-fby">
+ *
+ *    <!-- Active filter pills — populated by JS -->
+ *    <div class="rp-fby-tags" id="fby-tags"></div>
+ *
+ *    <!-- Search input -->
+ *    <input
+ *      class="rp-fby-search"
+ *      id="fby-search"
+ *      type="text"
+ *      placeholder="Add filter…"
+ *      autocomplete="off"
+ *      oninput="fbySearchInput(this.value)"
+ *      onkeydown="fbySearchKeydown(event)"
+ *      onfocus="fbySearchInput(this.value)"
+ *      onblur="fbySearchBlur()"
+ *    >
+ *
+ *    <!-- Autocomplete list — shown/hidden by JS -->
+ *    <ul class="rp-fby-ac" id="fby-ac" style="display:none"></ul>
+ *
+ *  </div>
+ *
+ * ── JS ────────────────────────────────────────────────────────────────────
+ *
+ *  // Column label map: { columnKey: 'Display Label', … }
+ *  // filterBySec map:  { columnKey: 'sectionId', … } — which filter section
+ *  //                    to show/hide when this column is added/removed
+ *
+ *  const colLabels = {
+ *    stage:   'Stage',
+ *    status:  'Status',
+ *    created: 'Created',
+ *    updated: 'Updated',
+ *  };
+ *
+ *  let _active = [];    // keys of currently active filters
+ *  let _acIdx  = -1;    // keyboard-selected index in autocomplete (-1 = none)
+ *
+ *  // ── Tag rendering ────────────────────────────────────────────────────
+ *
+ *  function fbyBuildTags() {
+ *    const wrap = document.getElementById('fby-tags');
+ *    if (!wrap) return;
+ *    wrap.innerHTML = _active.map(col => {
+ *      const label = colLabels[col] || col;
+ *      // IMPORTANT: use onmousedown + preventDefault, NOT onclick.
+ *      // Prevents the input losing focus before the remove fires.
+ *      return `<span class="rp-fby-tag" data-col="${col}">
+ *                ${label}
+ *                <button class="rp-fby-tag-x"
+ *                  onmousedown="event.preventDefault(); fbyRemove('${col}')"
+ *                  title="Remove">✕</button>
+ *              </span>`;
+ *    }).join('');
+ *  }
+ *
+ *  // ── Add / remove ─────────────────────────────────────────────────────
+ *
+ *  function fbyAdd(col) {
+ *    if (_active.includes(col)) return;
+ *    _active.push(col);
+ *    fbyBuildTags();
+ *    const inp = document.getElementById('fby-search');
+ *    if (inp) inp.value = '';
+ *    fbyAcHide();
+ *    onFilterChange();   // re-render the table
+ *  }
+ *
+ *  function fbyRemove(col) {
+ *    _active = _active.filter(k => k !== col);
+ *    fbyBuildTags();
+ *    onFilterChange();
+ *  }
+ *
+ *  function fbyClearAll() {
+ *    _active = [];
+ *    fbyBuildTags();
+ *    onFilterChange();
+ *  }
+ *
+ *  // ── Autocomplete input ────────────────────────────────────────────────
+ *
+ *  function fbySearchInput(val) {
+ *    _acIdx = -1;
+ *    const q = val.trim().toLowerCase();
+ *
+ *    // Filter: exclude already-active, match query against label or key
+ *    const candidates = Object.entries(colLabels)
+ *      .filter(([k]) => !_active.includes(k))
+ *      .filter(([k, label]) => !q || label.toLowerCase().includes(q) || k.includes(q));
+ *
+ *    if (!candidates.length) { fbyAcHide(); return; }
+ *
+ *    const ac = document.getElementById('fby-ac');
+ *    if (!ac) return;
+ *
+ *    // Cap at 10 suggestions — avoids overwhelming the narrow panel
+ *    ac.innerHTML = candidates.slice(0, 10).map(([k, label]) =>
+ *      // IMPORTANT: onmousedown + preventDefault — same reason as tag delete
+ *      `<li class="rp-fby-ac-item"
+ *           onmousedown="event.preventDefault(); fbyAdd('${k}')">${label}</li>`
+ *    ).join('');
+ *    ac.style.display = '';
+ *  }
+ *
+ *  // ── Keyboard navigation ───────────────────────────────────────────────
+ *
+ *  function fbySearchKeydown(e) {
+ *    const ac = document.getElementById('fby-ac');
+ *    if (!ac || ac.style.display === 'none') return;
+ *    const items = ac.querySelectorAll('.rp-fby-ac-item');
+ *    if (!items.length) return;
+ *
+ *    if      (e.key === 'ArrowDown') { e.preventDefault(); _acIdx = Math.min(_acIdx + 1, items.length - 1); fbyAcHighlight(items); }
+ *    else if (e.key === 'ArrowUp')   { e.preventDefault(); _acIdx = Math.max(_acIdx - 1, 0);               fbyAcHighlight(items); }
+ *    else if (e.key === 'Enter')     { e.preventDefault();
+ *      // _acIdx -1 means nothing highlighted → pick first item
+ *      const target = _acIdx >= 0 ? items[_acIdx] : items[0];
+ *      if (target) target.dispatchEvent(new MouseEvent('mousedown'));
+ *    }
+ *    else if (e.key === 'Escape')    { fbyAcHide(); }
+ *  }
+ *
+ *  function fbyAcHighlight(items) {
+ *    items.forEach((li, i) => li.classList.toggle('rp-fby-ac-hi', i === _acIdx));
+ *  }
+ *
+ *  // ── Blur / hide ───────────────────────────────────────────────────────
+ *
+ *  function fbySearchBlur() {
+ *    // 150ms delay: gives mousedown on tag-x or ac-item time to fire first.
+ *    // Without this the AC list would close before the click registers.
+ *    setTimeout(fbyAcHide, 150);
+ *  }
+ *
+ *  function fbyAcHide() {
+ *    const ac = document.getElementById('fby-ac');
+ *    if (ac) ac.style.display = 'none';
+ *    _acIdx = -1;
+ *  }
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ WRAPPER ━━━━━━━━━━━━━━━━━━ */
+
+.rp-fby {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ ACTIVE FILTER TAG PILLS ━━━━━━━━━━━━━━━━━━ */
+
+.rp-fby-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 0;       /* collapses cleanly when empty */
+}
+
+/* Individual pill — accent-tinted border + bg */
+.rp-fby-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2em 0.35em 0.2em 0.55em;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--text) 85%, transparent);
+  white-space: nowrap;
+}
+
+/* Delete button — tiny circle, hover reveals */
+.rp-fby-tag-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.6rem;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.rp-fby-tag-x:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ SEARCH INPUT ━━━━━━━━━━━━━━━━━━ */
+
+.rp-fby-search {
+  width: 100%;
+  padding: 0.35em 0.5em;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.rp-fby-search::placeholder {
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.rp-fby-search:focus {
+  border-color: var(--accent);
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ AUTOCOMPLETE DROPDOWN ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Renders below the search input. Width matches the .rp-fby container
+ * naturally (it's in normal flow). Max 10 items shown (enforced by JS).
+ */
+
+.rp-fby-ac {
+  list-style: none;
+  margin: 0;
+  padding: 0.2rem 0;
+  background: var(--bg);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+/* Suggestion item */
+.rp-fby-ac-item {
+  padding: 0.35em 0.6em;
+  font-size: 0.8125rem;
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+/* Mouse hover OR keyboard highlight (.rp-fby-ac-hi toggled by JS) */
+.rp-fby-ac-item:hover,
+.rp-fby-ac-item.rp-fby-ac-hi {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--text);
+}

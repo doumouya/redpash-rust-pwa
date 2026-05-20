@@ -1,0 +1,404 @@
+/* ── Filter side-panel + predicate builder — sandbox vocabulary ──────────
+ *
+ * Vendored from redpash-front-end/main.css (the canonical sandbox).
+ * Cleaner partials use the rp- prefixed convention; vendored
+ * components/filter-by.css does NOT define the slide-in panel + the
+ * .rp-rt-fb-* predicate-row family, so without this the filter side-
+ * panel renders unstyled (no animation, no glass background, no
+ * predicate-row chrome).
+ *
+ * Includes the shared slide-in shell that also covers .rp-rtp-tools —
+ * both panels share the same off-canvas mechanic (left/right slide via
+ * transform). When tools-panel styling lands, it can re-use the same
+ * .rp-rt-filter-inner / .rp-rt-filter-content / .rp-rt-filter-footer
+ * shell selectors.
+ *
+ * Resolved tokens come from the sandbox token block redefined at
+ * #page-cleaner scope. --line / --over1 / --border / --bg / --text /
+ * --accent / --muted / --red — all available there.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Shared slide-in shell (filter on left, tools on right) ────────────── */
+.rp-rt-filter-panel,
+.rp-rtp-tools {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(0.625rem);
+  -webkit-backdrop-filter: blur(0.625rem);
+  z-index: 10;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.rp-rt-filter-panel {
+  left: 0;
+  border-right: var(--line, 0.0625rem) solid var(--over1, var(--border));
+  transform: translateX(-100%);
+}
+.rp-rtp-tools {
+  right: 0;
+  border-left: var(--line, 0.0625rem) solid var(--over1, var(--border));
+  transform: translateX(100%);
+}
+/* width on .open re-asserted: live's vendored redtable-pro.css ships
+   `.rp-rtp-tools.open { width: var(--rp-rtp-tools-w, 16rem) }` from
+   the old width-animation model. Same specificity (0,2,0) as this rule
+   and imported first, so it wins for properties this rule doesn't
+   declare. Without an explicit width here the tools panel opens at
+   16rem (redtable-pro's default) instead of sandbox's 18rem — the
+   filter panel is fine since redtable-pro has no .rp-rt-filter-panel
+   rule. */
+.rp-rt-filter-panel.open,
+.rp-rtp-tools.open {
+  transform: translateX(0);
+  width: 18rem;
+}
+
+/* When a popover-style tool rp-modal is open, side panels lift above
+   the transparent overlay so their buttons stay clickable. Scoped via
+   :has so non-popover (centered) modals still get the panels behind
+   the overlay as before. */
+.rp-rt-panel:has(.rp-modal-overlay.is-popover.open) .rp-rt-filter-panel,
+.rp-rt-panel:has(.rp-modal-overlay.is-popover.open) .rp-rtp-tools {
+  z-index: 110;
+}
+
+/* Panel inner — flex column, no scroll here; scroll lives on the content
+   wrapper so header + footer stay pinned.
+
+   padding/gap explicitly nulled because live's vendored redtable-pro.css
+   sets `.rp-rtp-tools-inner { padding: 0.75rem; gap: 0.4375rem;
+   overflow-y: auto }` at the same specificity (0,1,0). Sandbox is
+   imported later so its overflow/flex wins, but unspecified properties
+   (padding, gap) cascade through from redtable-pro, double-padding the
+   panel (inner pads, then .rp-rtp-tools-content pads again). Explicit
+   0 here makes the layout match sandbox exactly. */
+.rp-rt-filter-inner,
+.rp-rtp-tools-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+/* Scrollable middle — takes all remaining height between header + footer. */
+.rp-rt-filter-content,
+.rp-rtp-tools-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Sticky header bar — used by both filter (rp-rt-filter-hdr) and tools
+   (rp-rt-panel-hdr-bar) panel headers. */
+.rp-rt-filter-hdr,
+.rp-rt-panel-hdr-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-bottom: var(--line, 0.0625rem) solid var(--over1, var(--border));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+}
+.rp-rt-filter-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border-top: var(--line, 0.0625rem) solid var(--over1, var(--border));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+}
+/* Panel title label — used in both panel headers. */
+.rp-rt-panel-hdr {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.rp-rt-panel-hdr-hint { color: var(--muted); font-weight: 300; }
+
+/* ── AND / OR combinator toggle ─────────────────────────────────────────── */
+/* Glass-pill button group. Container is a translucent frosted shell with
+   a soft hairline border + pill radius; buttons sit transparent inside
+   it, lighting up with the soft accent tint when .is-active. */
+.rp-rt-fb-op-toggle {
+  display: flex;
+  width: 100%;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 3rem;
+  overflow: hidden;
+}
+.rp-rt-fb-op-toggle button {
+  flex: 1;
+  padding: 0.3125rem 0.625rem;
+  background: transparent;
+  border: 0;
+  border-left: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  cursor: pointer;
+  font: 0.6875rem inherit;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.rp-rt-fb-op-toggle button:first-child { border-left: 0; }
+.rp-rt-fb-op-toggle button:hover:not(.is-active) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+.rp-rt-fb-op-toggle button.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Predicate rows + "Add predicate" affordance ────────────────────────── */
+.rp-rt-fb-rows { display: flex; flex-direction: column; gap: 0.4375rem; }
+
+.rp-rt-fb-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  margin-top: 0.5rem;
+  padding: 0.3125rem 0.75rem;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border: 0;
+  border-radius: 3rem;
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font: 0.6875rem inherit;
+  cursor: pointer;
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
+  transition: background 0.3s, color 0.3s, box-shadow 0.3s;
+}
+html[data-theme="light"] .rp-rt-fb-add {
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
+}
+.rp-rt-fb-add:hover {
+  background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+  color: #fff;
+  box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+}
+html[data-theme="light"] .rp-rt-fb-add:hover {
+  background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+  color: var(--accent);
+  box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Predicate container — glass-vibe card per row. Translucent fill +
+   hairline border + soft radius so each predicate reads as a discrete
+   chip stacked inside the panel. × pinned top-right (revealed on row
+   hover); selects + value input match the search bar's frosted look. */
+.rp-rt-fb-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.5rem;
+  transition: border-color 0.18s, background 0.18s;
+}
+.rp-rt-fb-row:hover {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+.rp-rt-fb-rm {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: color-mix(in srgb, var(--text) 50%, transparent);
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.rp-rt-fb-row:hover .rp-rt-fb-rm { opacity: 1; }
+.rp-rt-fb-rm:hover {
+  background: color-mix(in srgb, var(--red, var(--text)) 18%, transparent);
+  color: var(--red, var(--text));
+}
+.rp-rt-fb-rm .bi { font-size: 0.875rem; }
+
+/* Full-width column chooser — own row above op + value. */
+.rp-rt-fb-col { width: 100%; }
+/* Op + value — side by side in a 2-col grid. */
+.rp-rt-fb-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 0.375rem; }
+.rp-rt-fb-col,
+.rp-rt-fb-selects select,
+.rp-rt-fb-val {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rp-rt-fb-col:focus,
+.rp-rt-fb-selects select:focus,
+.rp-rt-fb-val:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.rp-rt-fb-val::placeholder { color: color-mix(in srgb, var(--text) 35%, transparent); }
+
+/* ── Panel-scoped inputs / checkboxes / buttons ────────────────────────── */
+/* Regex / pattern input inside the filter panel — same glass recipe as
+   the predicate row's value input. Monospace font (helps regex tokens).
+   Scoped so rp-modal .rp-input rules stay untouched. */
+.rp-rt-filter-panel .rp-input {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.4375rem 0.625rem;
+  margin-bottom: 0.625rem;
+  font-size: 0.75rem;
+  color: var(--text);
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rp-rt-filter-panel .rp-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.rp-rt-filter-panel .rp-input::placeholder {
+  color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+
+/* Checkbox rows — muted ink by default, full ink when checked
+   (:has-driven), subtle hover. Accent flows through the native check. */
+.rp-rt-filter-panel .rp-dd-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--text) 65%, transparent);
+  border-radius: 0.375rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.rp-rt-filter-panel .rp-dd-checkbox:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+.rp-rt-filter-panel .rp-dd-checkbox:has(input:checked) {
+  color: var(--text);
+}
+.rp-rt-filter-panel .rp-dd-checkbox input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Apply + Keep matched columns — glass-pill action buttons, solid border
+   (not dashed) since these are "do" actions, not "extend" affordances.
+   height/min-width unset so live's vendored button.css .btn-sm rule
+   (height: 1.875rem; min-width: 2.75rem) doesn't force the button to
+   30px tall — sandbox uses content-height (padding + font), not a
+   fixed height. */
+.rp-rt-filter-panel .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.3125rem 0.75rem;
+  height: auto;
+  min-width: 0;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 3rem;
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+  font-size: 0.6875rem;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
+  transition: background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+html[data-theme="light"] .rp-rt-filter-panel .btn {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
+}
+.rp-rt-filter-panel .btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+}
+html[data-theme="light"] .rp-rt-filter-panel .btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--over0) 55%, rgba(255, 255, 255, 0.80));
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent);
+  box-shadow: 0 0.125rem 0.875rem color-mix(in srgb, var(--accent) 25%, transparent);
+}
+/* Icon inherits the button's 0.6875rem (matches sandbox). Live's
+   vendored button.css ships `.btn i.bi { font-size: 1rem }` which
+   wins over the bare `i.bi { font-size: inherit }` reset (0,1,1 vs
+   0,0,1) — so without this, the funnel renders at 18px while the
+   label sits at 11px. Specificity (0,3,1) beats button.css. */
+.rp-rt-filter-panel .btn i.bi,
+.rp-rt-filter-panel .btn .bi {
+  font-size: inherit;
+}
+
+/* Section header bottom line dropped inside the filter panel — the
+   shared .rp-rt-panel-sect rule still draws it in the tools panel on
+   the right, but the filter panel reads cleaner without it. */
+.rp-rt-filter-panel .rp-rt-panel-sect { border-bottom: 0; }
+
+/* ── Shared section header (used by both filter + tools panels) ──────────
+   Lives in sandbox main.css alongside the rest of the redtable shell.
+   Vendored here too so the cleaner page picks up the recipe without
+   having to load all of main.css (only filter-panel-sandbox.css is
+   imported from cleaner.css). Same selectors as sandbox so changing
+   one stays in sync.
+   Accordion convention: chevron points DOWN ▼ when collapsed
+   (bi-chevron-down is the markup), rotates 180deg UP ▲ when open. */
+.rp-rt-panel-sect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.25rem;
+  border-bottom: var(--line, 0.0625rem) solid var(--over1, var(--border));
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.rp-rt-panel-sect-chevron { transition: transform 0.15s; }
+.rp-rt-panel-sect.open .rp-rt-panel-sect-chevron { transform: rotate(180deg); }
+.rp-rt-panel-sect-body {
+  padding: 0.375rem 0;
+  display: none;
+}
+.rp-rt-panel-sect-body.open { display: block; }

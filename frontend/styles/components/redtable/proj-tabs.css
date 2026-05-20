@@ -1,0 +1,201 @@
+/* ── Project tabs — rp-rt-proj-tabs / rp-rt-proj-tab ───────────────────────
+ *
+ * The top strip of the panel: one tab per project, always visible.
+ *
+ * Add affordance (.rp-tab-add-wrap / .rp-tab-add) is the SHARED tab-strip
+ * + button — used by both project tabs (here) and file tabs (rp-rtp-tabs);
+ * both open an rp-modal picker. Add-menu selectors (.rp-tab-add-menu /
+ * -hdr / -item / -items) are kept here because the objects-page tab
+ * strip (objects.html — also .rp-rt-proj-tabs-inner under #obj-tabs)
+ * uses the dropdown form via spToggleTabAddMenu.
+ *
+ * Elevation stack (both dark and light):
+ *   strip  < inactive tab < hover tab = active tab
+ *   dark:  --surface    < --over0    < --over1
+ *   light: --over0      < --bg       < --surface  (hover) / --over0 (active)
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Strip ──────────────────────────────────────────────────────────────── */
+.rp-rt-proj-tabs {
+  display: flex;
+  align-items: end;
+  padding: 0.375rem 0.5rem 0.125rem;
+  background: var(--over0);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 7%, transparent);
+}
+.rp-rt-proj-tabs-inner {
+  display: grid;
+  /* auto-fit: each tab occupies its natural slot (6.5–10 rem); empty slots
+     collapse so 2 tabs don't each claim 10 % of a wide strip. */
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 10rem));
+  align-items: center;
+  gap: 0.1875rem;
+  row-gap: 0.25rem;
+  width: 100%;
+}
+
+/* ── Tab ────────────────────────────────────────────────────────────────── */
+.rp-rt-proj-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  background: var(--bg);
+  border: 0;
+  border-bottom: 0.1875rem solid transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  width: 100%;
+  min-width: 0;
+  transition: background 0.18s ease,
+              color 0.18s ease,
+              border-color 0.22s ease,
+              opacity 0.18s ease,
+              transform 0.18s ease,
+              max-width 0.22s ease,
+              padding 0.18s ease;
+}
+/* Add / remove choreography — spAddProjectTab inserts with .is-entering
+   then peels the class; spDeleteTab adds .is-removing and removes the node
+   after the transition ends. Collapses + fades in both directions. */
+.rp-rt-proj-tab.is-entering,
+.rp-rt-proj-tab.is-removing {
+  opacity: 0;
+  transform: scale(0.9);
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+.rp-rt-proj-tab:hover { color: var(--text); background: var(--hover); }
+.rp-rt-proj-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 400;
+}
+
+/* ── Theme overrides ────────────────────────────────────────────────────── */
+html[data-theme="dark"] .rp-rt-proj-tabs {
+  background: var(--surface);
+  border-bottom-color: var(--border);
+}
+html[data-theme="dark"] .rp-rt-proj-tab          { background: var(--over0); }
+html[data-theme="dark"] .rp-rt-proj-tab:hover    { background: var(--over1); }
+html[data-theme="dark"] .rp-rt-proj-tab.active   { background: var(--over1); }
+/* Light: hover must be lighter than the blue-100 strip so tabs don't
+   vanish — --surface (white) lifts above --over0. */
+html[data-theme="light"] .rp-rt-proj-tab          { background: var(--bg); }
+html[data-theme="light"] .rp-rt-proj-tab:hover    { background: var(--surface); }
+html[data-theme="light"] .rp-rt-proj-tab.active   { background: var(--over0); }
+
+/* ── Tab internals ──────────────────────────────────────────────────────── */
+.rp-rt-proj-tab .bi-folder2-open { font-size: 0.8125rem; }
+.rp-rt-proj-tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-rt-proj-tab-x {
+  width: 1.75rem; height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.rp-rt-proj-tab-x .bi { font-size: 1.25rem; }
+.rp-rt-proj-tab:hover .rp-rt-proj-tab-x,
+.rp-rt-proj-tab.active .rp-rt-proj-tab-x { opacity: 0.6; }
+/* Drag affordance — source pill ghosts while dragging; target gets an
+   inset accent left border ("insert here" cue, Excel/Finder convention).
+   Mirrors the live app's .obj-tab-drag / .obj-tab-drop. */
+.rp-rt-proj-tab.is-drag { opacity: 0.4; }
+.rp-rt-proj-tab.is-drop { box-shadow: inset 0.1875rem 0 0 var(--accent); }
+
+/* ── Add button (shared: project tabs + file tabs + objects tabs) ──────── */
+.rp-tab-add-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.rp-tab-add {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rp-tab-add:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* ── Picker dropdown (objects tabs + only) ──────────────────────────────── */
+/* The cleaner project + and file + both open rp-modals; only the objects-
+   page + uses the inline dropdown form. Kept here because the strip is
+   .rp-rt-proj-tabs-inner under #obj-tabs — same family.
+   position:fixed so the menu escapes the tab strip's overflow clip;
+   JS sets top + right from getBoundingClientRect on open. */
+.rp-tab-add-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 30;
+  min-width: 13rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--hover);
+  border: var(--line) solid var(--over1, var(--border));
+  border-radius: var(--radius);
+  padding: 0.25rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.25rem);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.rp-tab-add-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.rp-tab-add-hdr {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0.3125rem 0.5rem;
+  position: sticky;
+  top: 0;
+  background: var(--hover);
+  z-index: 1;
+}
+.rp-tab-add-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+.rp-tab-add-item .bi { color: var(--muted); font-size: 0.8125rem; }
+/* Hover invert — menu bg is already --hover; flip to active ink so the
+   row reads as "about to pick this". Works in both themes. */
+.rp-tab-add-item:hover {
+  background: var(--active-bg);
+  color: var(--bg);
+}
+.rp-tab-add-item:hover .bi { color: var(--bg); }

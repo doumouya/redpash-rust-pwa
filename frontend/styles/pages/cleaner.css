@@ -36,16 +36,16 @@
    .rp-obj-* / .rp-btn-xs / .rp-rt-actions that cleaner doesn't use.
    Acceptable for now; consolidation into a shared row-mode.css is
    captured in the migration progress log. */
-@import "/vendor/redpash-components/components/objects-sandbox.css";
+@import "/styles/components/redtable/objects-sandbox.css";
 @import "/vendor/redpash-components/components/theme-toggle.css";
 @import "/vendor/redpash-components/components/float-btn.css";
 @import "/vendor/redpash-components/components/badge.css";
-@import "/vendor/redpash-components/components/redtable.css";
-@import "/vendor/redpash-components/components/redtable-pro.css";
-@import "/vendor/redpash-components/components/pager.css";
-@import "/vendor/redpash-components/components/tool-modal.css";
-@import "/vendor/redpash-components/components/filter-by.css";
-@import "/vendor/redpash-components/components/col-order.css";
+@import "/styles/components/redtable/redtable.css";
+@import "/styles/components/redtable/redtable-pro.css";
+@import "/styles/components/redtable/pager.css";
+@import "/styles/components/redtable/tool-modal.css";
+@import "/styles/components/redtable/filter-by.css";
+@import "/styles/components/redtable/col-order.css";
 @import "/vendor/redpash-components/components/file-review.css";
 
 /* Sandbox tab-strip styling — proj-tabs.css + file-tabs.css provide the
@@ -53,25 +53,25 @@
    / .rp-rtp-tab-add* blocks were trimmed in the sandbox visual cutover.
    .rp-btn base + .rp-modal sandbox vocabulary load globally via
    main.css; no per-page imports needed. */
-@import "/vendor/redpash-components/components/proj-tabs.css";
-@import "/vendor/redpash-components/components/file-tabs.css";
+@import "/styles/components/redtable/proj-tabs.css";
+@import "/styles/components/redtable/file-tabs.css";
 /* Sandbox toolbar-dropdown vocabulary (.rp-dd-wrap / .rp-dd-menu /
    .rp-dd-item / .rp-dd-reset / .rp-dd-checkbox). Lives only in sandbox
    main.css — without this the rows-per-page pill, columns picker, and
    future date-format dropdown all render with an unstyled menu (no
    panel bg / no visible items / wrong positioning). */
-@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
+@import "/styles/components/redtable/dropdowns-sandbox.css";
 /* Sandbox filter side-panel + predicate builder (.rp-rt-filter-panel,
    .rp-rt-filter-{inner,content,hdr,footer}, .rp-rt-fb-* row family).
    Slide-in shell shared with .rp-rtp-tools so the tools panel reuses
    the same off-canvas mechanic. Vendored library's filter-by.css doesn't
    define these. */
-@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
+@import "/styles/components/redtable/filter-panel-sandbox.css";
 /* Sandbox tools side-panel content (.rp-rtp-tools-top,
    .rp-rtp-ct-{grid,btn,btn-lbl}, .rp-rtp-dtype-* + badges,
    .rp-rtp-applied-item, .rp-rtp-join-* family). Slide-in shell is
    already vendored above via filter-panel-sandbox.css. */
-@import "/vendor/redpash-components/components/tools-panel-sandbox.css";
+@import "/styles/components/redtable/tools-panel-sandbox.css";
 
 /* ── Page-cleaner layout chain ───────────────────────────────────────
    Matches the sandbox model: body flex → .rp-app flex:1 → #page-cleaner
@@ -1363,7 +1363,7 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
    sandbox transform slide (translateX(-100%) → 0). They also set
    .rp-rt-fb-row to an accent wash instead of the sandbox glass-card
    look. All the canonical styling now lives in vendored
-   /vendor/redpash-components/components/filter-panel-sandbox.css
+   /styles/components/redtable/filter-panel-sandbox.css
    (imported at the top of this file). */
 
 /* Leftover from when the tools panel used .rp-rtp-tool-sect[-chevron].
@@ -1378,7 +1378,7 @@ html[data-theme="light"] #page-cleaner .modal-overlay .rp-tm-footer {
    and re-declared the join family with different paddings + flex
    widths. Sandbox is the canonical layout: 2-col chips, glass-tinted,
    accent on hover. All recipes now live in vendored
-   /vendor/redpash-components/components/tools-panel-sandbox.css. */
+   /styles/components/redtable/tools-panel-sandbox.css. */
 /* .rp-rt-fb-rm + .rp-rt-filter-footer trimmed — these were the live
    recipes (× as a flex child via align-self: flex-end; footer with a
    var(--over0) hairline). Sandbox positions × absolutely in the row's

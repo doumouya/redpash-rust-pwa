@@ -24,10 +24,10 @@
 @import "/vendor/redpash-components/components/stat-strip.css";
 @import "/vendor/redpash-components/components/upload-zone.css";
 @import "/vendor/redpash-components/components/file-review.css";
-@import "/vendor/redpash-components/components/redtable.css";
-@import "/vendor/redpash-components/components/redtable-pro.css";
-@import "/vendor/redpash-components/components/filter-by.css";
-@import "/vendor/redpash-components/components/col-order.css";
+@import "/styles/components/redtable/redtable.css";
+@import "/styles/components/redtable/redtable-pro.css";
+@import "/styles/components/redtable/filter-by.css";
+@import "/styles/components/redtable/col-order.css";
 
 /* Full-bleed shell (no topbar, no .rp-app gutter) is set globally by
    main.css via `body[data-chrome="full"]` — see scripts/main.js's

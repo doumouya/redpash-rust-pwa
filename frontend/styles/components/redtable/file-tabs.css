@@ -1,0 +1,131 @@
+/* ── File tabs — rp-rtp-tabs / rp-rtp-tab ───────────────────────────────────
+ *
+ * The file/sheet row below the project header. Lighter glass plate than the
+ * header so the row reads as a nested sub-bar.
+ *
+ * Elevation stack:
+ *   dark:  glass strip < --surface (inactive) < --over0 (hover/active)
+ *   light: glass strip < --bg (inactive)      < --surface (hover) / --over0 (active)
+ *
+ * Picker dropdown selectors (.rp-tab-add-menu etc.) live in
+ * css/proj-tabs.css — both tab families share the same markup shape.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Strip ──────────────────────────────────────────────────────────────── */
+.rp-rtp-tabs {
+  display: flex;
+  padding: 0 0.5rem;
+  background: rgba(0, 0, 0, 0.14);
+  border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 7%, transparent);
+  flex-shrink: 0;
+}
+html[data-theme="light"] .rp-rtp-tabs {
+  background: rgba(255, 255, 255, 0.35);
+  border-bottom-color: var(--border);
+}
+.rp-rtp-tabs-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 10rem));
+  align-items: center;
+  gap: 0.125rem;
+  row-gap: 0.25rem;
+  width: 100%;
+}
+
+/* ── Tab ────────────────────────────────────────────────────────────────── */
+.rp-rtp-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  background: var(--bg);
+  border: 0;
+  border-bottom: 0.1875rem solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  width: 100%;
+  min-width: 0;
+  transition: background 0.18s ease,
+              color 0.18s ease,
+              border-color 0.22s ease,
+              opacity 0.18s ease,
+              transform 0.18s ease,
+              max-width 0.22s ease,
+              padding 0.18s ease;
+}
+.rp-rtp-tab.is-entering,
+.rp-rtp-tab.is-removing {
+  opacity: 0;
+  transform: scale(0.9);
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+.rp-rtp-tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-rtp-tab:hover { color: var(--text); background: var(--hover); }
+.rp-rtp-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 400;
+}
+
+/* ── Theme overrides ────────────────────────────────────────────────────── */
+html[data-theme="dark"] .rp-rtp-tabs       { background: rgba(0, 0, 0, 0.22); border-bottom-color: var(--border); }
+html[data-theme="dark"] .rp-rtp-tab        { background: var(--surface); }
+html[data-theme="dark"] .rp-rtp-tab:hover  { background: var(--over0); }
+html[data-theme="dark"] .rp-rtp-tab.active { background: var(--over0); }
+html[data-theme="dark"] .rp-tab-add    { background: var(--surface); }
+html[data-theme="light"] .rp-rtp-tab          { background: var(--bg); }
+html[data-theme="light"] .rp-rtp-tab:hover    { background: var(--surface); }
+html[data-theme="light"] .rp-rtp-tab.active   { background: var(--over0); }
+html[data-theme="light"] .rp-tab-add      { background: var(--bg); }
+
+/* ── Tab internals ──────────────────────────────────────────────────────── */
+.rp-rtp-tab-x {
+  width: 1.75rem; height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.rp-rtp-tab-x .bi { font-size: 1.25rem; }
+.rp-rtp-tab:hover .rp-rtp-tab-x,
+.rp-rtp-tab.active .rp-rtp-tab-x { opacity: 0.6; }
+
+/* ── Status dot ─────────────────────────────────────────────────────────── */
+/* Cleanness indicator on the left of a tab — green=clean, yellow=warn,
+   red=dirty. Moved here from redtable-pro.css so this file is the single
+   source for all .rp-rtp-tab* styling. */
+.rp-rtp-tab-dot {
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rp-rtp-tab-dot.tab-clean { background: var(--green);  }
+.rp-rtp-tab-dot.tab-warn  { background: var(--yellow); }
+.rp-rtp-tab-dot.tab-dirty { background: var(--red);    }
+
+/* ── Add button ─────────────────────────────────────────────────────────── */
+.rp-tab-add-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.rp-tab-add {
+  background: var(--bg);
+  border: 0;
+  color: var(--muted);
+  width: 1.5rem; height: 1.5rem;
+  cursor: pointer;
+}
+.rp-tab-add:hover { color: var(--text); background: var(--hover); }

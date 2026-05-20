@@ -20,14 +20,14 @@
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/redtable.css";
-@import "/vendor/redpash-components/components/redtable-pro.css";
+@import "/styles/components/redtable/redtable.css";
+@import "/styles/components/redtable/redtable-pro.css";
 
 /* Sandbox-canonical visual vocabulary. */
 @import "/vendor/redpash-components/components/glass-btn.css";
 @import "/vendor/redpash-components/components/modals-sandbox.css";
-@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
-@import "/vendor/redpash-components/components/objects-sandbox.css";
+@import "/styles/components/redtable/dropdowns-sandbox.css";
+@import "/styles/components/redtable/objects-sandbox.css";
 
 /* ── Sandbox-aligned root font-size (matches the family). */
 html { font-size: 112.5%; }

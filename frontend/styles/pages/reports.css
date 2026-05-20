@@ -21,17 +21,17 @@
 @import "/vendor/redpash-components/components/card.css";
 @import "/vendor/redpash-components/components/modal.css";
 @import "/vendor/redpash-components/components/auth-modals.css";
-@import "/vendor/redpash-components/components/redtable.css";
-@import "/vendor/redpash-components/components/redtable-pro.css";
-@import "/vendor/redpash-components/components/pager.css";
+@import "/styles/components/redtable/redtable.css";
+@import "/styles/components/redtable/redtable-pro.css";
+@import "/styles/components/redtable/pager.css";
 
 /* Sandbox-canonical visual vocabulary (mirrors cleaner.css / objects.css).
    .rp-btn (glass-btn.css) + .rp-modal (modals-sandbox.css) load globally
    via main.css. */
-@import "/vendor/redpash-components/components/proj-tabs.css";
-@import "/vendor/redpash-components/components/dropdowns-sandbox.css";
-@import "/vendor/redpash-components/components/filter-panel-sandbox.css";
-@import "/vendor/redpash-components/components/objects-sandbox.css";
+@import "/styles/components/redtable/proj-tabs.css";
+@import "/styles/components/redtable/dropdowns-sandbox.css";
+@import "/styles/components/redtable/filter-panel-sandbox.css";
+@import "/styles/components/redtable/objects-sandbox.css";
 
 /* Root font-size (112.5% = 18px) is set globally in main.css. */
 
