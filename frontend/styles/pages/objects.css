@@ -613,7 +613,7 @@ html[data-theme="light"] #page-objects .rp-rt-table tbody td {
   margin-left: 0.25rem;
 }
 
-/* Bootstrap-icons reset: vendored /vendor/redpash-components/reset.css
+/* Bootstrap-icons reset: styles/base/reset.css
    forces `i.bi { font-size: 1.25rem }` globally, beating per-context
    sizing (button icons, badges, sortable arrows). Sandbox lets icons
    inherit from their container. Bare-tag selector — objects.css only

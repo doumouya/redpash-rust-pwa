@@ -255,7 +255,7 @@ html[data-theme="light"] #page-cleaner .rp-rt-table thead th {
 }
 
 /* ── Bootstrap Icons inherit parent font-size ────────────────────────
-   /vendor/redpash-components/reset.css line 36 sets a global
+   styles/base/reset.css line 36 sets a global
    `i.bi { font-size: 1.25rem }` default. That selector's specificity
    (0,0,1,1) beats `.rp-btn { font-size }` (0,0,1,0), so icons inside
    buttons / titles / tabs ignore their container's font-size and stay

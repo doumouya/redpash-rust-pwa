@@ -1,6 +1,6 @@
 /* Button variant modifiers — composed on top of the library's .rp-btn
-   base (loaded globally from /vendor/redpash-components/components/
-   glass-btn.css via main.css). The library owns the frosted-glass
+   base (loaded globally from /styles/components/glass-btn.css via
+   main.css). The library owns the frosted-glass
    .rp-btn base + states; this file adds the app-specific BEM modifiers
    nothing else defines. Usage: class="rp-btn rp-btn--primary".
 

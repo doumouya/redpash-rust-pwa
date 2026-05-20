@@ -33,11 +33,12 @@ See `git log` for commit hashes; pages verified clean after each phase.
 > copies, same `@import` order — but a moved-file typo would show as a 404.
 > Next to verify: Home / Profile after 2c, Landing after 2d.
 
-**Remaining:** Phase 5 — sweep ~6 stale `/vendor/` *comment* references in
-CSS (cosmetic; no functional effect), and decide the dead `*.live.css` /
-`*.live.html` backups: `profile.live.css` still carries 14 real `/vendor/`
-`@import`s but is never loaded by the router — delete the `.live` files or
-repoint them. After that, `grep -rn "/vendor/" frontend/` is fully clean.
+**Remaining:** the `/vendor/` comment sweep is done. The **only** file left
+with any `/vendor/` reference is `styles/pages/profile.live.css` — a dead
+`.live` backup never loaded by the router (14 real `@import`s). Decision
+pending: delete the `*.live.css` / `*.live.html` backups, or repoint them.
+Once that's settled, `grep -rn "/vendor/" frontend/` is fully clean and the
+migration is 100% done.
 
 ---
 

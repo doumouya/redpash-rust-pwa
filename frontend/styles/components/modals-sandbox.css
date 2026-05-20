@@ -4,7 +4,7 @@
  * sandbox uses .rp-modal-overlay / .rp-modal / .rp-modal-hdr conventions
  * (with `rp-` prefix), distinct from:
  *   • the legacy library's `.modal-overlay` / `.modal` (no prefix) in
- *     /vendor/redpash-components/components/modal.css
+ *     /styles/components/modal-sandbox.css
  *   • the live app's BEM-style `.rp-modal__head` / `.rp-modal__body` in
  *     /styles/components/modal.css
  *

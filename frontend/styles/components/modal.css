@@ -10,8 +10,7 @@
  * recipe used to live here — that vocabulary is gone from the live
  * partials (the sandbox migration replaced it with
  * .rp-modal-overlay/.rp-modal-hdr/.rp-modal-ttl from
- * /vendor/redpash-components/components/modals-sandbox.css, loaded
- * globally via main.css).
+ * /styles/components/modals-sandbox.css, loaded globally via main.css).
  */
 
 /* ── openModal() — library glass modal in a native <dialog> ──────────

@@ -9,8 +9,8 @@
  *   • .rp-brand-mark positioning + progressive-reveal animation
  *
  * Component sheets (typography, hero, cta-btn, hero-steps, eyebrow,
- * rotate-prompt, float-btn, bottom-nav) come from the library via the
- * /vendor/redpash-components ServeDir mount.
+ * rotate-prompt, float-btn, bottom-nav) live in styles/base/ +
+ * styles/components/ (internalized from the old redpash-components library).
  *
  * Once a second consumer wants the same hero gradient or brand-mark
  * reveal, promote them to a component in the library. Until then this
