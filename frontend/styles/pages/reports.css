@@ -23,6 +23,7 @@
 @import "/vendor/redpash-components/components/auth-modals.css";
 @import "/vendor/redpash-components/components/redtable.css";
 @import "/vendor/redpash-components/components/redtable-pro.css";
+@import "/vendor/redpash-components/components/pager.css";
 
 /* Sandbox-canonical visual vocabulary (mirrors cleaner.css / objects.css).
    .rp-btn (glass-btn.css) + .rp-modal (modals-sandbox.css) load globally
@@ -133,44 +134,10 @@ html[data-theme="light"] #page-reports .rp-rt-page-title { color: #1e3a5f; }
   overflow: auto;
   padding: 0;
 }
-/* Pager strip — matches cleaner.css's #page-cleaner .rp-rt-pager
-   visual treatment so reports / cleaner read as the same family.
-   Pinned to bottom of the table pane, sits OVER the table-wrap
-   (which leaves room for it via `bottom: 2rem`). */
-#page-reports .rp-reports__table-pane .rp-rt-pager {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  border-top: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  font-size: 0.6875rem;
-  color: var(--muted);
-  z-index: 5;
-}
-html[data-theme="light"] #page-reports .rp-reports__table-pane .rp-rt-pager {
-  background: color-mix(in srgb, var(--text) 3%, transparent);
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] #page-reports .rp-reports__table-pane .rp-rt-pager {
-    background: color-mix(in srgb, var(--text) 3%, transparent);
-  }
-}
-#page-reports .rp-reports__table-pane .rp-rt-rows-info {
-  font-variant-numeric: tabular-nums;
-  padding: 0;
-}
-#page-reports .rp-reports__table-pane .rp-rt-pages {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-}
+/* Pager strip — canonical `.rp-rt-pager` rules live in
+   components/pager.css (imported above). The table pane reserves room
+   for it via the table-wrap's `bottom: 2rem`. */
+/* .rp-rt-rows-info + .rp-rt-pages styling lives in components/pager.css. */
 
 /* ── Drag handle — horizontal divider straddling the split. 8px tall
    click target; grip icon hints at draggability. JS sets .is-dragging

@@ -42,6 +42,7 @@
 @import "/vendor/redpash-components/components/badge.css";
 @import "/vendor/redpash-components/components/redtable.css";
 @import "/vendor/redpash-components/components/redtable-pro.css";
+@import "/vendor/redpash-components/components/pager.css";
 @import "/vendor/redpash-components/components/tool-modal.css";
 @import "/vendor/redpash-components/components/filter-by.css";
 @import "/vendor/redpash-components/components/col-order.css";
@@ -107,7 +108,7 @@
    Vendored .rp-rt-body is flex-row with overflow:hidden, and
    .rp-rt-table-wrap is flex:1 + overflow-y:auto. Our include.js wraps
    each loaded partial in a <div data-included>, so the actual scroll
-   targets (.rp-rt-table-wrap, .rp-rt-paging) aren't direct flex
+   targets (.rp-rt-table-wrap, .rp-rt-pager) aren't direct flex
    children of .rp-rt-body — `flex: 1` doesn't reach them and the
    wrap stays content-sized → no scroll either direction.
    Sandbox sidesteps this by making .rp-rt-body the positioning
@@ -131,44 +132,10 @@
   overflow: auto;
   padding: 0;
 }
-/* Pager strip — pinned to bottom of .rp-rt-body, sits OVER the
-   table-wrap (which leaves room for it via bottom: var(--rt-pager-h)).
-   Full sandbox styling: frosted text-tone wash, hairline border-top,
-   tabular-nums for the row counter, glass-pill page buttons. */
-#page-cleaner .rp-rt-pager {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--rt-pager-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  border-top: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  font-size: 0.6875rem;
-  color: var(--muted);
-  z-index: 5;
-}
-html[data-theme="light"] #page-cleaner .rp-rt-pager {
-  background: color-mix(in srgb, var(--text) 3%, transparent);
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] #page-cleaner .rp-rt-pager {
-    background: color-mix(in srgb, var(--text) 3%, transparent);
-  }
-}
-#page-cleaner .rp-rt-rows-info {
-  font-variant-numeric: tabular-nums;
-  padding: 0;
-}
-#page-cleaner .rp-rt-pages {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-}
+/* Pager strip — canonical `.rp-rt-pager` rules live in
+   components/pager.css (imported above). #page-cleaner only reserves
+   room for it: the table-wrap's bottom = var(--rt-pager-h). */
+/* .rp-rt-rows-info + .rp-rt-pages styling lives in components/pager.css. */
 /* Page buttons — circular glass pills (same recipe as .rp-btn).
    Supports both .active (sandbox) and .on (legacy library) naming. */
 #page-cleaner .rp-rt-pg {
@@ -283,7 +250,7 @@ html[data-theme="light"] #page-cleaner .rp-rt-table thead th {
      ...) is hoisted to body[data-chrome="full"] in main.css. Below is
      the cleaner-specific extras only. */
   /* Sandbox geometry tokens used by absolute-positioned panes
-     (.rp-rt-pager / .rp-rt-paging at the bottom of .rp-rt-body). */
+     (.rp-rt-pager at the bottom of .rp-rt-body). */
   --rt-pager-h: 2rem;
 }
 

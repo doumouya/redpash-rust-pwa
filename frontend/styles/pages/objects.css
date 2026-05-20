@@ -16,6 +16,7 @@
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/redtable.css";
 @import "/vendor/redpash-components/components/redtable-pro.css";
+@import "/vendor/redpash-components/components/pager.css";
 @import "/vendor/redpash-components/components/filter-by.css";
 @import "/vendor/redpash-components/components/col-order.css";
 @import "/vendor/redpash-components/components/upload-zone.css";
@@ -470,25 +471,12 @@ html[data-theme="dark"] #page-objects .rp-dd-item.is-selected {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 2rem;          /* reserve room for the paging strip below */
+  bottom: 2rem;          /* reserve room for the pager strip below */
   overflow: auto;
   padding: 0;
 }
-#page-objects .rp-rt-paging {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1rem;
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  border-top: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
-  font-size: 0.6875rem;
-  color: var(--muted);
-}
+/* Pager strip — canonical `.rp-rt-pager` + `.rp-rt-rows-info` /
+   `.rp-rt-pages` rules live in components/pager.css (imported above). */
 
 /* ── Per-type table (rp-rt-table) — sandbox values ────────────────────
    Vendored redtable.css gives:
