@@ -2,6 +2,7 @@
 title: Auth
 section: API
 order: 3
+last modified date: 2026-05-16
 ---
 
 # `/api/auth/*`

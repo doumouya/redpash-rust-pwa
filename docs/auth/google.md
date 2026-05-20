@@ -2,6 +2,7 @@
 title: Google OAuth
 section: Auth
 order: 1
+last modified date: 2026-05-16
 ---
 
 # Google OAuth (Phase 4a)

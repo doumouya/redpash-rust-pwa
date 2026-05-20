@@ -2,6 +2,7 @@
 title: Reports page (`#/reports`)
 section: Frontend
 order: 16
+last modified date: 2026-05-16
 ---
 
 # Reports page (`#/reports`)

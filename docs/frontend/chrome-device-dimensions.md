@@ -1,3 +1,10 @@
+---
+title: Chrome device dimensions
+section: Frontend
+order: 1
+last modified date: 2026-05-16
+---
+
 # Modern Device Dimensions for Chrome DevTools
 
 These are modern “Emulated Devices” (a.k.a. *responsive dimensions*) for Chrome DevTools’ [*Mobile Device Viewport Mode*](https://developer.chrome.com/docs/devtools/device-mode/#device).

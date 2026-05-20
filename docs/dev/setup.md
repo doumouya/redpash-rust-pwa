@@ -2,6 +2,7 @@
 title: Local setup
 section: Dev
 order: 0
+last modified date: 2026-05-16
 ---
 
 # RedPash — Local development setup

@@ -2,6 +2,7 @@
 title: Me
 section: API
 order: 2
+last modified date: 2026-05-16
 ---
 
 # `/api/me`

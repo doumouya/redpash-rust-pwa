@@ -2,6 +2,7 @@
 title: Dashboards
 section: API
 order: 8
+last modified date: 2026-05-16
 ---
 
 # `/api/dashboards/*`

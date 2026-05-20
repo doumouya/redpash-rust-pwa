@@ -2,6 +2,7 @@
 title: Profile + Settings page (`#/profile`)
 section: Frontend
 order: 13
+last modified date: 2026-05-19
 ---
 
 # Profile + Settings page (`#/profile`)

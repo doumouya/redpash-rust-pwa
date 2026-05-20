@@ -2,6 +2,7 @@
 title: Users
 section: API
 order: 9
+last modified date: 2026-05-16
 ---
 
 # `/api/users/*`

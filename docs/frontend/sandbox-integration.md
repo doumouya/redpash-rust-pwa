@@ -2,6 +2,7 @@
 title: Sandbox integration (live wiring playbook)
 section: Frontend
 order: 15
+last modified date: 2026-05-19
 ---
 
 # Sandbox integration (live wiring playbook)

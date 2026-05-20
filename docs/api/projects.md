@@ -2,6 +2,7 @@
 title: Projects
 section: API
 order: 4
+last modified date: 2026-05-16
 ---
 
 # `/api/projects/*`

@@ -2,6 +2,7 @@
 title: Design tokens
 section: Frontend
 order: 0
+last modified date: 2026-05-19
 ---
 
 # Design tokens

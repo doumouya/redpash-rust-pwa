@@ -2,6 +2,7 @@
 title: Dashboards page (`#/dashboards`)
 section: Frontend
 order: 18
+last modified date: 2026-05-16
 ---
 
 # Dashboards page (`#/dashboards`)

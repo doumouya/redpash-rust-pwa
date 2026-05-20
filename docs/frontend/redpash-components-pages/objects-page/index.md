@@ -2,6 +2,7 @@
 title: Objects page (`#/objects`)
 section: Frontend
 order: 12
+last modified date: 2026-05-16
 ---
 
 # Objects page (`#/objects`)

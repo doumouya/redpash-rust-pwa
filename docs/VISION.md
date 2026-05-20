@@ -2,6 +2,7 @@
 title: Vision
 section: Start here
 order: 2
+last modified date: 2026-05-16
 ---
 
 # RedPash — Product Vision & Intent

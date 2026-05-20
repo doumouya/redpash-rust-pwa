@@ -2,6 +2,7 @@
 title: Health
 section: API
 order: 1
+last modified date: 2026-05-16
 ---
 
 # `/api/health`

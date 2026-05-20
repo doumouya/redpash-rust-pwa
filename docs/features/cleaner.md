@@ -2,6 +2,7 @@
 title: Cleaner workspace
 section: Features
 order: 0
+last modified date: 2026-05-16
 ---
 
 # Cleaner workspace

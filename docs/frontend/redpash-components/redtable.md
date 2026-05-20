@@ -2,6 +2,7 @@
 title: Redtable (app-side integration)
 section: Frontend
 order: 10
+last modified date: 2026-05-16
 ---
 
 # Redtable (app-side integration)

@@ -2,6 +2,7 @@
 title: Home page (`#/home`)
 section: Frontend
 order: 11
+last modified date: 2026-05-19
 ---
 
 # Home page (`#/home`)

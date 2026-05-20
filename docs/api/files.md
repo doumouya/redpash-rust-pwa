@@ -2,6 +2,7 @@
 title: Files
 section: API
 order: 6
+last modified date: 2026-05-19
 ---
 
 # `/api/files/*`

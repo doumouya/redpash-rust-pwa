@@ -2,6 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
+last modified date: 2026-05-19
 ---
 
 # RedPash REDMAP

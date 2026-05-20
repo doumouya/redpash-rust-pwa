@@ -2,6 +2,7 @@
 title: Dashboards
 section: Features
 order: 2
+last modified date: 2026-05-16
 ---
 
 # Dashboards
