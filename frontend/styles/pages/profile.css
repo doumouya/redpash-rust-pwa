@@ -13,7 +13,7 @@
 /* shell.css's body chrome lives in main.css now (scoped to
    body[data-chrome="full"]); no per-page import needed. */
 
-@import "/vendor/redpash-components/components/typography.css";
+@import "/styles/base/typography.css";
 @import "/vendor/redpash-components/components/button.css";
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/card.css";

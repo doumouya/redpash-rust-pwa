@@ -1,0 +1,29 @@
+/* ━━━━━━━━━━━━━━━━━━ BACKGROUND UTILITIES ━━━━━━━━━━━━━━━━━━
+ *
+ * Drop-in classes that paint the four home-step gradients on ANY
+ * element — sections, cards, modals, hero strips, anything. The
+ * gradients themselves are defined as tokens in tokens.css so they
+ * auto-swap between dark / light / system themes; this file is just
+ * the ergonomic class layer.
+ *
+ *   <section class="rp-bg-import">…</section>
+ *   <div    class="rp-bg-clean">…</div>
+ *   <header class="rp-bg-report">…</header>
+ *   <aside  class="rp-bg-publish">…</aside>
+ *
+ * Equivalent inline form (when you'd rather not add a class):
+ *   <div style="background: var(--bg-step-import);">…</div>
+ *
+ * Why "import / clean / report / publish"?
+ *   Those are the four stages of RedPash's user journey, which is
+ *   also how the home-page step cards are named. The names are kept
+ *   for muscle-memory; they don't imply the element has to actually
+ *   be on that route.
+ *
+ * Requires: tokens.css (--bg-step-import / clean / report / publish)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.rp-bg-import  { background: var(--bg-step-import); }
+.rp-bg-clean   { background: var(--bg-step-clean); }
+.rp-bg-report  { background: var(--bg-step-report); }
+.rp-bg-publish { background: var(--bg-step-publish); }

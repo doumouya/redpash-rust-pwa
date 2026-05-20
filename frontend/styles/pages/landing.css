@@ -21,7 +21,7 @@
    body[data-chrome="full"]; this page is `chrome: "full"` in ROUTES so
    it picks it up automatically. No per-page shell.css import needed. */
 
-@import "/vendor/redpash-components/components/typography.css";
+@import "/styles/base/typography.css";
 @import "/vendor/redpash-components/components/hero.css";
 @import "/vendor/redpash-components/components/cta-btn.css";
 @import "/vendor/redpash-components/components/hero-steps.css";

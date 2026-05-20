@@ -18,7 +18,7 @@
    See docs/frontend/design.md for the full integration spec. */
 
 /* Library tokens — defines --bg, --accent, --over0/1, --shadow, --r, etc. */
-@import "/vendor/redpash-components/tokens.css";
+@import "/styles/base/tokens.css";
 
 /* Library defensive resets — anchor / button / .bi defaults + universal
    box-sizing + margin/padding reset. Loading globally lets us drop the
@@ -26,14 +26,14 @@
    leaked into library components like .rp-brand-mark. Body-chrome rules
    (flex-column body + overflow:hidden) live below scoped to
    body[data-chrome="full"] — previously came from shell.css per-page. */
-@import "/vendor/redpash-components/reset.css";
+@import "/styles/base/reset.css";
 
 /* Library background utilities — .rp-bg-import / .rp-bg-clean / .rp-bg-report
    / .rp-bg-publish paint the four home-step gradients on any element. The
    gradients themselves are tokens (--bg-step-*) defined in tokens.css and
    auto-swap with the active theme. Loaded globally so any partial or
    per-page CSS can opt in with just the class — no per-page @import. */
-@import "/vendor/redpash-components/components/backgrounds.css";
+@import "/styles/base/backgrounds.css";
 
 /* Sandbox component sheets that own a base selector the whole app
    shares. Hoisted out of per-page CSS so the .rp-btn / .rp-modal base

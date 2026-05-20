@@ -8,7 +8,7 @@
  * file-review modal also loads globally via main.css.
  * ──────────────────────────────────────────────────────────────────── */
 
-@import "/vendor/redpash-components/components/typography.css";
+@import "/styles/base/typography.css";
 @import "/vendor/redpash-components/components/button.css";
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/card.css";

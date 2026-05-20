@@ -1,0 +1,242 @@
+/* ━━━━━━━━━━━━━━━━━━ TYPOGRAPHY — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Two conventions live here:
+ *
+ *   1. SYSTEM FONTS — body text, UI text, code. No external requests, no FOUT,
+ *      renders in each platform's native sans-serif. Convention only; set once
+ *      on <body> and everything inherits.
+ *
+ *   2. LOGO TYPOGRAPHY — the "RedPash" wordmark uses Savate (Google Fonts,
+ *      900 weight only). Because the wordmark is plain HTML text styled with
+ *      a custom font, it responds to any CSS property exactly like normal text:
+ *      color, font-size, background-clip, mix-blend-mode, opacity, transforms.
+ *      This is the key advantage over an SVG or image logo — no file editing,
+ *      no export step; just change the CSS.
+ *
+ *      The "R" mark (.rp-r) is sized with 1em so it scales with the surrounding
+ *      font-size automatically.
+ *
+ * ── Font stacks ──────────────────────────────────────────────────────────────
+ *
+ *   Body / UI (system sans-serif):
+ *     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
+ *     Helvetica, Arial, sans-serif
+ *
+ *   Code / monospace:
+ *     'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace
+ *
+ *   Logo wordmark (loaded from Google Fonts — 900 weight only):
+ *     'Savate', sans-serif
+ *     → <link href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap">
+ *
+ * ── Components ───────────────────────────────────────────────────────────────
+ *
+ *   .rp-r               Red circle "R" — 1em × 1em, scales with font-size
+ *   .rp-wordmark        Full "RedPash" wordmark in Savate 900
+ *   .rp-wordmark--sm    Sidebar size (1.25rem)
+ *   .rp-wordmark--md    Landing / card size (2.4rem, default)
+ *   .rp-wordmark--lg    Login page size (3rem)
+ *   .rp-logo-tile       Square rounded avatar tile for login / splash screens
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <!-- Inline use — inherits surrounding font-size -->
+ *  <span class="rp-wordmark">
+ *    <span class="rp-r">R</span>edPash
+ *  </span>
+ *
+ *  <!-- Explicit sizes -->
+ *  <span class="rp-wordmark rp-wordmark--sm"><span class="rp-r">R</span>edPash</span>
+ *  <span class="rp-wordmark rp-wordmark--md"><span class="rp-r">R</span>edPash</span>
+ *  <span class="rp-wordmark rp-wordmark--lg"><span class="rp-r">R</span>edPash</span>
+ *
+ *  <!-- Accent-colored variant — just set color on the wrapper -->
+ *  <span class="rp-wordmark rp-wordmark--md" style="color: var(--accent)">
+ *    <span class="rp-r">R</span>edPash
+ *  </span>
+ *
+ *  <!-- Login splash: large tile + stacked wordmark -->
+ *  <div class="rp-login-brand">
+ *    <span class="rp-r rp-logo-tile">R</span>
+ *    <span class="rp-wordmark rp-wordmark--lg"><span class="rp-r">R</span>edPash</span>
+ *  </div>
+ *
+ *  <!-- Sidebar: name fades in on hover (opacity transition driven by parent) -->
+ *  <div class="sb-logo">
+ *    <span class="rp-wordmark rp-wordmark--sm sb-logo-name">
+ *      <span class="rp-r">R</span>edPash
+ *    </span>
+ *  </div>
+ *
+ * ── Why a text-based logo? ────────────────────────────────────────────────────
+ *
+ *  An SVG or image logo is a black box — resizing, recoloring, or animating it
+ *  requires editing the file. A text-based wordmark with a custom font is a
+ *  first-class DOM node, which means:
+ *
+ *  • Size   → font-size: inherit, 1rem, 3rem — anything works
+ *  • Color  → color: var(--text) (default), white, var(--accent), etc.
+ *  • Clip   → background-clip: text + transparent color = gradient logo text
+ *  • Opacity / blur / transform — all work with zero extra markup
+ *  • Screen readers read the text naturally
+ *  • Retina-sharp at every size — it's vector by default
+ *
+ *  The .rp-r mark uses 1em width/height so it is always the same cap-height
+ *  as the letters next to it, regardless of font-size.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+
+/* ━━━━━━━━━━━━━━━━━━ BASE RESET ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Body font: system sans-serif stack.
+ * Covers Apple (-apple-system / BlinkMacSystemFont), Windows (Segoe UI),
+ * Linux/Android (Noto Sans), then generic fallbacks.
+ * -webkit-font-smoothing:antialiased tightens subpixel rendering on macOS.
+ */
+
+body {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans',
+    Helvetica,
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* All buttons inherit body font — browsers default to system-ui which may differ */
+button {
+  font-family: inherit;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ MONOSPACE ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Prefers JetBrains Mono / Cascadia Code / Fira Code if the user has them
+ * installed (common for developers). Falls back to the browser's generic
+ * monospace. Used for code snippets, before/after diff rows, and inspect
+ * values in tool modals.
+ */
+
+code,
+.rp-mono {
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 0.6875rem;
+  background: var(--over0);
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ R MARK — RED CIRCLE ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * The "R" logomark: a radial-gradient red circle containing the letter R.
+ * Sized with 1em × 1em so it always matches the cap-height of whatever
+ * font-size its parent is using — no size override ever needed.
+ *
+ * vertical-align: -0.12em drops the circle slightly to sit on the baseline
+ * rather than floating above it.
+ */
+
+.rp-r {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  background: radial-gradient(
+    circle at 38% 35%,
+    #ff7a7a 0%,
+    #e53935 48%,
+    #8b0000 100%
+  );
+  color: var(--text);
+  border-radius: 50%;
+  vertical-align: -0.12em;
+  flex-shrink: 0;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ WORDMARK ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Full "RedPash" wordmark in Savate 900.
+ * Requires: <link href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap" rel="stylesheet">
+ *
+ * The .rp-r inside scales automatically because font-size is set on the
+ * wordmark container and .rp-r uses 1em dimensions.
+ *
+ * To change the wordmark color, set `color` on .rp-wordmark — the text
+ * inherits it. The .rp-r mark always stays red (its own background/color).
+ */
+
+.rp-wordmark {
+  font-family: 'Savate', sans-serif;
+  font-weight: 900;
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  /* No gap between the .rp-r mark and the trailing "edPash" text node —
+     they should read as a single word "RedPash". */
+  gap: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+
+/* Size variants */
+
+.rp-wordmark--sm {
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.rp-wordmark--md {
+  font-size: 2.4rem;
+  letter-spacing: -0.02em;
+}
+
+.rp-wordmark--lg {
+  font-size: 3rem;
+  letter-spacing: -0.03em;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ LOGO TILE (LOGIN / SPLASH) ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Large square-rounded avatar tile used on the login page above the wordmark.
+ * This is the .rp-r mark scaled up with explicit dimensions, not 1em.
+ * Override font-size to set the "R" glyph size inside the tile.
+ */
+
+.rp-logo-tile {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  font-size: 2.25rem;
+}
+
+
+/* ━━━━━━━━━━━━━━━━━━ LOGIN BRAND BLOCK ━━━━━━━━━━━━━━━━━━ */
+
+/*
+ * Centered column: tile on top, wordmark below.
+ * Used on login / splash screens.
+ */
+
+.rp-login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0 0.25rem;
+}

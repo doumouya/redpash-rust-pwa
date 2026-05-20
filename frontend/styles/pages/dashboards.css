@@ -12,9 +12,9 @@
  * Previous list+builder CSS lives at dashboards.live.css for reference.
  * ──────────────────────────────────────────────────────────────────── */
 
-@import "/vendor/redpash-components/shell.css";
+@import "/styles/base/shell.css";
 
-@import "/vendor/redpash-components/components/typography.css";
+@import "/styles/base/typography.css";
 @import "/vendor/redpash-components/components/button.css";
 @import "/vendor/redpash-components/components/form.css";
 @import "/vendor/redpash-components/components/card.css";
