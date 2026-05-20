@@ -18,22 +18,25 @@ app has **zero `/vendor/` imports**.
 
 ## Status — 2026-05-20
 
-**Done & committed:** Phase 0 (prep), Phase 1 (foundation → `styles/base/`),
-Phase 2a (redtable family → `styles/components/redtable/`), Phase 2b
-(overlays + controls), Phase 2c (home/profile family) — 2b/2c →
-`styles/components/`. See `git log` for commit hashes. Pages verified clean
-(cold reload, SW unregistered) after each phase.
+**Done & committed:** Phases 0–2d — **all 41 CSS files internalized.**
+Foundation → `styles/base/`; redtable family → `styles/components/redtable/`;
+everything else → `styles/components/`. Every live page sheet is off
+`/vendor/` (`grep @import.*vendor main.css pages/*.css` → zero). See
+`git log` for commit hashes. Pages verified clean (cold reload, SW
+unregistered) after each phase.
 
 > ⚠️ **After each phase — eyeball the affected pages** (hard-refresh, clean
 > SW). The migration is behaviour-neutral by construction — byte-identical
 > copies, same `@import` order — but a moved-file typo would show as a 404.
 > Next to verify: Home / Profile after 2c, Landing after 2d.
 
-**Remaining:** Phase 2d (landing/marketing — 6 files: hero, hero-steps,
-cta-btn, eyebrow, bottom-nav, rotate-prompt), Phase 4 (JS + cut the
-`/vendor` mount), Phase 5 (verify + `/vendor` comment sweep). This migration
-is housekeeping — resume it deliberately; don't let it crowd out actual
-product work.
+**Remaining:** Phase 4 — internalize `file-review.js` (`index.html:86`, the
+only non-CSS `/vendor/` ref), then remove the `/vendor/redpash-components`
+ServeDir mount from `backend/crates/api/src/routes/mod.rs`. Phase 5 — final
+verify, sweep stale `/vendor/` comment references in CSS, and decide the dead
+`*.live.css` / `*.live.html` backups (delete or repoint). This migration is
+housekeeping — resume it deliberately; don't let it crowd out actual product
+work.
 
 ---
 

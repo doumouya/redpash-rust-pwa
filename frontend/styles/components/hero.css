@@ -1,0 +1,92 @@
+/* ━━━━━━━━━━━━━━━━━━ HERO — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Landing-page hero scaffolding — full-viewport intro block for
+ * unauthenticated pages. Centered vertical column with a large display
+ * heading, CTAs, optional decoration, and an eyebrow callout.
+ *
+ * Background gradient is set by the consuming page, not the component —
+ * the hero is structurally neutral so consumers can apply any gradient
+ * or solid color via inline style or a page-level class.
+ *
+ * Built-in entrance animations (.rp-slide-up keyframe):
+ *   .rp-hero-h1     0s   delay, 0.55s duration
+ *   .rp-hero-ctas   0.2s delay, 0.55s duration   (cta-btn.css owns layout)
+ *   .rp-eyebrow     0.4s delay, 0.5s  duration   (eyebrow.css owns the look)
+ *
+ * The hero exposes its keyframe (rp-slide-up) so adjacent components
+ * (hero-steps, etc.) can share the same entrance language.
+ *
+ * Requires: tokens.css (--accent, --text, --bg)
+ * Companion: cta-btn.css (.rp-hero-ctas layout + .rp-cta-btn buttons)
+ * Companion: eyebrow.css (.rp-eyebrow pill)
+ * Companion: hero-steps.css (the animated flow indicator)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <section class="rp-hero" style="background-image: linear-gradient(135deg,
+ *           #0f3460 0%, #3a1f6e 100%);">
+ *    <div class="rp-hero-content">
+ *      <h1 class="rp-hero-h1">Turn messy data into<br><em>beautiful insights.</em></h1>
+ *      <div class="rp-hero-ctas">
+ *        <button class="rp-cta-btn rp-cta-btn--primary">…</button>
+ *      </div>
+ *      <!-- optional decoration: hero-steps, eyebrow, etc. -->
+ *    </div>
+ *  </section>
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+@keyframes rp-slide-up {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rp-hero {
+  flex: 1;
+  min-height: 100svh;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  text-align: center;
+  background-size: cover;
+}
+
+.rp-hero-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  padding: 1.5rem 0;
+  width: 90%;
+  height: 100%;
+}
+
+.rp-hero-h1 {
+  font-size: clamp(2.5rem, 7.5vw, 6rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  text-shadow: 0 0.125rem 2.5rem color-mix(in srgb, var(--bg) 60%, transparent);
+  animation: rp-slide-up 0.55s ease both;
+}
+.rp-hero-h1 em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+/* cta-btn.css defines .rp-hero-ctas layout (flex, gap, wrap).
+   We layer the entrance animation here so the timing belongs to the hero. */
+.rp-hero-ctas {
+  animation: rp-slide-up 0.55s 0.2s ease both;
+}
+
+/* eyebrow.css defines .rp-eyebrow's look. We layer the entrance animation
+   here so it stays in sync with the hero's stagger. */
+.rp-eyebrow {
+  animation: rp-slide-up 0.5s 0.4s ease both;
+}

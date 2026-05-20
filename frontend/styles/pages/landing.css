@@ -22,13 +22,13 @@
    it picks it up automatically. No per-page shell.css import needed. */
 
 @import "/styles/base/typography.css";
-@import "/vendor/redpash-components/components/hero.css";
-@import "/vendor/redpash-components/components/cta-btn.css";
-@import "/vendor/redpash-components/components/hero-steps.css";
-@import "/vendor/redpash-components/components/eyebrow.css";
-@import "/vendor/redpash-components/components/rotate-prompt.css";
+@import "/styles/components/hero.css";
+@import "/styles/components/cta-btn.css";
+@import "/styles/components/hero-steps.css";
+@import "/styles/components/eyebrow.css";
+@import "/styles/components/rotate-prompt.css";
 @import "/styles/components/float-btn.css";
-@import "/vendor/redpash-components/components/bottom-nav.css";
+@import "/styles/components/bottom-nav.css";
 @import "/styles/components/modal-sandbox.css";
 @import "/styles/components/auth-modals.css";
 @import "/styles/components/theme-toggle.css";

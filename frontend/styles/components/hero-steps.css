@@ -1,0 +1,132 @@
+/* ━━━━━━━━━━━━━━━━━━ HERO STEPS — RedPash Component Library ━━━━━━━━━━━━━━━━━━
+ *
+ * Animated horizontal flow indicator under a hero: Import → Clean → Report →
+ * Publish. Each step is a glass card with an inline SVG illustration and a
+ * short label, separated by chevron arrows.
+ *
+ * Visual conventions:
+ *   - 4 step variants — one color per stage (blue / green / purple / red)
+ *   - SVG illustrations animate continuously (highlighting rows, plotting
+ *     bars, connecting nodes) to draw the eye
+ *   - Border on each card subtly tinted by its stage color
+ *
+ * Step modifiers:
+ *   .rp-hero-step--import    Blue accent  (data ingestion)
+ *   .rp-hero-step--clean     Green accent (transformation)
+ *   .rp-hero-step--report    Purple accent (visualization)
+ *   .rp-hero-step--publish   Red accent  (distribution)
+ *
+ * Glass background recipe:
+ *   color-mix(--over1 55%, transparent) + 1.25rem backdrop blur — same
+ *   tokenized recipe as the .demo-card pattern. Switches to opaque white
+ *   in light mode for legibility against pastel hero gradients.
+ *
+ * Light mode adjustments:
+ *   - Card bg: 72% white + dark thin border + small shadow
+ *   - Per-step border tints darken (e.g., import: rgba(29,78,216,0.3))
+ *   - SVG fills/strokes darken to stay readable
+ *
+ * Requires: tokens.css (--over1, --sub, --r)
+ * Companion: hero.css (provides @keyframes rp-slide-up — staggered entrance)
+ *
+ * ── HTML ─────────────────────────────────────────────────────────────────────
+ *
+ *  <div class="rp-hero-steps" aria-hidden="true">
+ *    <div class="rp-hero-step rp-hero-step--import">
+ *      <svg viewBox="0 0 48 38">…</svg>
+ *      <span class="rp-hero-step-lbl">Import</span>
+ *    </div>
+ *    <span class="rp-hero-step-arrow">&#8250;</span>
+ *    <div class="rp-hero-step rp-hero-step--clean">…</div>
+ *    <span class="rp-hero-step-arrow">&#8250;</span>
+ *    <div class="rp-hero-step rp-hero-step--report">…</div>
+ *    <span class="rp-hero-step-arrow">&#8250;</span>
+ *    <div class="rp-hero-step rp-hero-step--publish">…</div>
+ *  </div>
+ *
+ *  (Inline SVG bodies — see redpash-demo/index.html for the full markup.)
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.rp-hero-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  width: 100%;
+  animation: rp-slide-up 0.55s 0.3s ease both;
+}
+
+.rp-hero-step {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  background: color-mix(in srgb, var(--over1) 55%, transparent);
+  backdrop-filter: blur(1.25rem);
+  -webkit-backdrop-filter: blur(1.25rem);
+  border: 0.0625rem solid color-mix(in srgb, var(--over1) 60%, transparent);
+  border-radius: var(--r);
+  flex: 1;
+  max-width: 10rem;
+}
+
+.rp-hero-step svg {
+  display: block;
+  width: 3.25rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+}
+
+.rp-hero-step-lbl {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sub);
+}
+
+.rp-hero-step-arrow {
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+/* Per-step accent borders — dark theme */
+.rp-hero-step--import  { border-color: rgba(137, 180, 250, 0.22); }
+.rp-hero-step--clean   { border-color: rgba(166, 227, 161, 0.22); }
+.rp-hero-step--report  { border-color: rgba(203, 166, 247, 0.22); }
+.rp-hero-step--publish { border-color: rgba(243, 139, 168, 0.22); }
+
+/* Light mode — opaque-white card + darker accents */
+html[data-theme="light"] .rp-hero-step {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(30, 30, 46, 0.1);
+  box-shadow: 0 0.125rem 0.875rem rgba(30, 30, 46, 0.1);
+}
+html[data-theme="light"] .rp-hero-step--import  { border-color: rgba( 29,  78, 216, 0.3);  }
+html[data-theme="light"] .rp-hero-step--clean   { border-color: rgba( 34, 197,  94, 0.35); }
+html[data-theme="light"] .rp-hero-step--report  { border-color: rgba(124,  58, 237, 0.3);  }
+html[data-theme="light"] .rp-hero-step--publish { border-color: rgba(220,  38,  38, 0.3);  }
+html[data-theme="light"] .rp-hero-step-arrow    { color: rgba(30, 30, 46, 0.3); }
+
+/* SVG shape visibility on the pastel light hero gradient */
+html[data-theme="light"] .rp-hero-step--import  svg rect:nth-of-type(-n+3) {
+  stroke: rgba( 29,  78, 216, 0.5); fill: rgba( 29,  78, 216, 0.07);
+}
+html[data-theme="light"] .rp-hero-step--clean   svg rect:nth-of-type(-n+3) {
+  stroke: rgba( 34, 197,  94, 0.5); fill: rgba( 34, 197,  94, 0.07);
+}
+html[data-theme="light"] .rp-hero-step--report  svg line { stroke: rgba(124,  58, 237, 0.3); }
+html[data-theme="light"] .rp-hero-step--report  svg rect { fill:   rgba(124,  58, 237, 0.65); }
+html[data-theme="light"] .rp-hero-step--publish svg circle {
+  fill: rgba(220, 38, 38, 0.45);
+}
+html[data-theme="light"] .rp-hero-step--publish svg circle:first-of-type {
+  fill:   rgba(220, 38, 38, 0.12);
+  stroke: rgba(220, 38, 38, 0.7);
+}
+html[data-theme="light"] .rp-hero-step--publish svg line {
+  stroke: rgba(220, 38, 38, 0.6);
+}
