@@ -145,23 +145,21 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
                     "unwrap_csv only applies to a single-column DataFrame".into()));
             }
             let series = &df.get_columns()[0];
-            // The original column header was the FIRST line of the
-            // wrapped source — Polars treated it as the CSV header on
-            // the initial parse, then each subsequent line became a
-            // single-column row. Re-emit it as the first line of the
-            // new buffer, then hand off to parse_text (which sniffs
-            // delimiter + skips preamble, same as the upload pipeline).
+
+            // A "wrapped" CSV is one where the real record was quoted
+            // whole, so Polars' first parse collapsed it to one column.
             //
-            // Defensive unwrap: when the source has inconsistent
-            // wrapping (some lines `"…"`, some bare), Polars' first
-            // parse leaves the inner content of some rows still
-            // wrapped in `"…"`. Without the strip, the second parse
-            // sees those as single-field quoted blobs and the result
-            // ends up with a mix of quoted + unquoted columns. We
-            // strip a balanced outer pair and unescape doubled `""`
-            // BEFORE re-emitting — uses our parser as the
-            // normalisation stage instead of nuking every `"` char
-            // (the Django approach).
+            // The hard case (`raw_dossier_onecol_tricky`): the wrapping
+            // is INCONSISTENT row by row — inner delimiter varies
+            // (`,` `;` `|`), quote style varies (`"…"`, `\"…\"`, `'…'`,
+            // bare), and some rows lost their outer wrap. A single
+            // file-wide delimiter sniff (the old approach) left every
+            // `;`/`|` row unsplit. Fix: parse each record on ITS OWN
+            // sniffed delimiter + quote style, then re-emit one
+            // canonical CSV for a typed re-parse.
+
+            // Peel the OUTER wrapping Polars left — a balanced `"…"`
+            // pair plus doubled-`""` unescaping.
             fn defensive_unquote(s: &str) -> String {
                 let t = s.trim();
                 let inner = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
@@ -171,22 +169,121 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
                 };
                 inner.replace("\"\"", "\"")
             }
-            let header = defensive_unquote(&series.name().to_string());
-            let mut buf = String::with_capacity(series.len() * 32);
-            buf.push_str(&header);
-            buf.push('\n');
+
+            // Most-frequent delimiter for THIS record — decided per row,
+            // not once for the file.
+            fn sniff_delim(record: &str) -> u8 {
+                const DELIMS: [u8; 4] = [b',', b';', b'\t', b'|'];
+                DELIMS.iter()
+                    .map(|&d| (d, record.bytes().filter(|&b| b == d).count()))
+                    .filter(|&(_, n)| n > 0)
+                    .max_by_key(|&(_, n)| n)
+                    .map(|(d, _)| d)
+                    .unwrap_or(b',')
+            }
+
+            // Does this record wrap its fields in single quotes? A real
+            // `"`-quoted row carries far more `"` than the stray
+            // apostrophes in its values, so a simple majority is safe.
+            fn is_single_quoted(record: &str) -> bool {
+                let singles = record.bytes().filter(|&b| b == b'\'').count();
+                let doubles = record.bytes().filter(|&b| b == b'"').count();
+                singles >= 2 && singles > doubles
+            }
+
+            // Strip one balanced outer pair of `q` from a field value.
+            fn strip_pair(s: &str, q: char) -> String {
+                let t = s.trim();
+                if t.chars().count() >= 2 && t.starts_with(q) && t.ends_with(q) {
+                    t[q.len_utf8()..t.len() - q.len_utf8()].to_string()
+                } else {
+                    t.to_string()
+                }
+            }
+
+            // Parse ONE record into fields, sniffing its own delimiter
+            // and quote style. `\"`-escaped quotes are normalised to
+            // plain `"` first. Single-quote rows are split on the
+            // delimiter only — single quotes carry no escape for an
+            // embedded apostrophe (`Coupure d'eau`), so quote-aware
+            // parsing would mis-split — then unwrapped per field.
+            fn unwrap_record(record: &str) -> Vec<String> {
+                let rec = record.trim().replace("\\\"", "\"");
+                if rec.is_empty() {
+                    return Vec::new();
+                }
+                let single = is_single_quoted(&rec);
+                let mut builder = csv::ReaderBuilder::new();
+                builder
+                    .delimiter(sniff_delim(&rec))
+                    .has_headers(false)
+                    .flexible(true);
+                if single {
+                    builder.quoting(false);
+                }
+                let mut rdr = builder.from_reader(rec.as_bytes());
+                let fields: Vec<String> = match rdr.records().next() {
+                    Some(Ok(r)) => r.iter().map(|f| f.trim().to_string()).collect(),
+                    _           => return vec![rec],
+                };
+                if single {
+                    fields.iter().map(|f| strip_pair(f, '\'')).collect()
+                } else {
+                    fields
+                }
+            }
+
+            // The wrapped header was line 0 of the source → the column
+            // name. Unwrap it the same way to recover the real headers.
+            let header = {
+                let h = unwrap_record(&defensive_unquote(&series.name().to_string()));
+                if h.is_empty() { vec!["column_1".to_string()] } else { h }
+            };
+            let width = header.len();
+
+            let mut rows: Vec<Vec<String>> = Vec::with_capacity(series.len());
             for i in 0..series.len() {
-                let v = series.get(i).map_err(DataError::from)?;
-                let raw = match v {
-                    AnyValue::Null            => { buf.push('\n'); continue; }
+                let raw = match series.get(i).map_err(DataError::from)? {
+                    AnyValue::Null            => continue,
                     AnyValue::String(s)       => s.to_string(),
                     AnyValue::StringOwned(s)  => s.to_string(),
                     other                     => other.to_string(),
                 };
-                buf.push_str(&defensive_unquote(&raw));
-                buf.push('\n');
+                // A cell can hold MORE THAN ONE record. The first CSV
+                // parse merges any line whose quotes don't balance,
+                // swallowing the following line(s) into one field as
+                // embedded newlines. Split them back into separate rows
+                // — the "rows" half of the unwrap — then unwrap each.
+                for line in raw.split('\n') {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    rows.push(unwrap_record(&defensive_unquote(line)));
+                }
             }
-            crate::parse::parse_text(buf)
+
+            // Re-emit every record in one canonical CSV (comma, standard
+            // quoting), conformed to the header width so the buffer is
+            // rectangular for the typed re-parse via `parse_text`.
+            let conform = |r: &[String]| -> Vec<String> {
+                let mut out = r.to_vec();
+                out.resize(width, String::new());
+                out
+            };
+            let mut wtr = csv::WriterBuilder::new().from_writer(Vec::<u8>::new());
+            wtr.write_record(&conform(&header))
+                .map_err(|e| DataError::InvalidSpec(format!("unwrap csv encode: {e}")))?;
+            for r in &rows {
+                wtr.write_record(&conform(r))
+                    .map_err(|e| DataError::InvalidSpec(format!("unwrap csv encode: {e}")))?;
+            }
+            let buf = wtr.into_inner()
+                .map_err(|e| DataError::InvalidSpec(format!("unwrap csv finalize: {e}")))?;
+            let text = String::from_utf8(buf)
+                .map_err(|e| DataError::InvalidSpec(format!("unwrap csv utf8: {e}")))?;
+
+            crate::parse::parse_text(text)
         }
 
         "drop_nulls" => {
@@ -843,4 +940,51 @@ fn snake_case(s: &str) -> String {
         }
     }
     collapsed.trim_matches('_').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A wrapped one-column frame whose rows each use a DIFFERENT inner
+    /// delimiter and quote style — the `raw_dossier_onecol_tricky`
+    /// shape. After `unwrap_csv` every row must land in the same
+    /// columns, regardless of its individual wrapping.
+    #[test]
+    fn unwrap_csv_handles_per_row_delimiter_and_quote_variation() {
+        let df = df![
+            "id,\"name\",\"city\",\"ok\"" => [
+                "R1,\"Alice\",\"Paris\",\"yes\"",          // comma + double quote
+                "R2;\"Bob\";\"Lyon\";\"no\"",              // semicolon
+                "R3|\"Carol\"|\"Nice\"|\"yes\"",           // pipe
+                "R4,\\\"Dan\\\",\\\"Metz\\\",\\\"no\\\"",  // backslash-escaped quote
+                "R5,'Eve','Lille','yes'",                  // single quote
+                "R6,Frank,Caen,no",                        // bare, unquoted
+            ]
+        ]
+        .unwrap();
+
+        let out = apply(df, "unwrap_csv", &serde_json::Value::Null).unwrap();
+
+        assert_eq!(out.width(), 4, "every row must unwrap to the 4 real columns");
+        assert_eq!(out.height(), 6);
+
+        let cols: Vec<&str> =
+            out.get_column_names().iter().map(|c| c.as_str()).collect();
+        assert_eq!(cols, ["id", "name", "city", "ok"]);
+
+        let col = |name: &str| -> Vec<String> {
+            out.column(name)
+                .unwrap()
+                .str()
+                .unwrap()
+                .into_iter()
+                .map(|o| o.unwrap_or("").to_string())
+                .collect()
+        };
+        // The `;`, `|`, `\"`-escaped and `'`-quoted rows all split into
+        // the right cells — not just the dominant comma/double-quote row.
+        assert_eq!(col("name"), ["Alice", "Bob", "Carol", "Dan", "Eve", "Frank"]);
+        assert_eq!(col("city"), ["Paris", "Lyon", "Nice", "Metz", "Lille", "Caen"]);
+    }
 }
