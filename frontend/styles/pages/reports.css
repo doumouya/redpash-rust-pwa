@@ -30,6 +30,7 @@
 @import "/styles/components/redtable/file-tabs.css";
 @import "/styles/components/redtable/dropdowns-sandbox.css";
 @import "/styles/components/redtable/filter-panel-sandbox.css";
+@import "/styles/components/redtable/tools-panel-sandbox.css";
 @import "/styles/components/redtable/objects-sandbox.css";
 
 /* Root font-size (112.5% = 18px) is set globally in main.css. */
@@ -236,11 +237,14 @@ html[data-theme="light"] #page-reports .rp-rtp-tab.active {
 
 /* Page 1 — the table area below the chrome strips. Flex column so the
    table scroller takes the remaining height and the pager sits below. */
+/* position:relative — the filter / Reports-Tools side panels are
+   absolute overlays (filter-panel-sandbox.css) that anchor here. */
 #page-reports .rp-reports-page__body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 #page-reports .rp-reports-page__body .rp-rt-table-wrap {
   flex: 1;

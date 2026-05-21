@@ -1,9 +1,8 @@
-<!-- Reports toolbar — search + filter + view controls + chart-add.
-     The source-file selector is the file-tabs strip one row up; the
-     report-level actions (export, etc.) live in the header. Reports are
-     read-only against the source — no row-select / delete / edit modes.
-     Filter funnel kept (reports can filter the source to chart a
-     subset). -->
+<!-- Reports toolbar — search + filter + view controls + tools panel.
+     Cleaner-style toolbar; the source-file selector is the file-tabs
+     strip one row up. Reports are read-only against the source — no
+     row-select / delete / edit modes. Filter funnel opens the left
+     filter panel; the tools button opens the right Reports Tools panel. -->
 <div class="rp-rt-toolbar">
 
   <input class="rp-rt-search" type="search" placeholder="Filter rows in source…"
@@ -46,11 +45,13 @@
     </div>
   </div>
 
-  <!-- + Chart — opens new-chart modal. Pinned to the right. -->
-  <button class="rp-btn" type="button" aria-label="Add a chart" title="Add a chart"
+  <!-- Reports Tools panel toggle — pinned to the right, mirrors the
+       cleaner's tools-panel button. -->
+  <button class="rp-btn" type="button" title="Reports tools"
           style="margin-left:auto"
-          onclick="reportsNewChart()">
-    <i class="bi bi-plus-lg"></i>
+          data-sp-panel-trigger="reports-tools-panel"
+          onclick="spToggle('reports-tools-panel')">
+    <i class="bi bi-tools"></i>
   </button>
 
 </div>
