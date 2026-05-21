@@ -114,9 +114,13 @@ and panel as one continuous surface.
 
 ## Tab strip
 
-`#cleaner-tabs-list` (= `.rp-rtp-tabs-inner`) holds the leading
+`.rp-rtp-tabs-inner` (`[data-cleaner-file-tabs]`) holds the leading
 **Overview** tab + one tab per file in `STATE.files` filtered through
-`STATE.hiddenFiles`, plus a trailing **`+`** add-back control.
+`STATE.hiddenFiles`, plus a trailing **`+`** add-back control. The strip
+is a centred flex row — tabs are a fixed 10rem and wrap to a new line
+once it fills, with the row centred (equal gutters left / right). The
+project-tab strip above it (`.rp-rt-proj-tabs-inner`) shares the same
+centred-flex construction and the same `+` picker dropdown.
 
 Each file tab carries:
 - A coloured status dot (green ≥90 / yellow ≥70 / red below) reading
@@ -128,13 +132,23 @@ Each file tab carries:
   closed tab was active falls back to the next visible file (or
   Overview). The file is **not** deleted from the project.
 
-The trailing **`+`** (`.rp-rtp-tab-add`) is disabled when nothing is
-hidden; otherwise it opens `.rp-rtp-tab-add-menu` — a dropdown of the
-hidden files. Click an item → `cleanerShowFileTab(fid)` removes the
-rid from `hiddenFiles`, re-renders the strip. The menu is
-`position: fixed` (anchored to the button at click-time) so it
-escapes the tab strip's `overflow-y: hidden` clip; an outside-click
+The trailing **`+`** (`.rp-tab-add`, `onclick="spOpenFilePicker(this)"`)
+opens an inline picker dropdown (`.rp-tab-add-menu.rp-tab-add-menu--pick`):
+a header, a search field (`spFilterTabAdd` live-filters the list as you
+type), a scroll-capped (~6-row) list of the project's files that are
+currently closed (in `STATE.hiddenFiles`), and a footer row that uploads
+more files to the project (`spAddFilesToCurrentProject`). Click a file
+row → `spOpenFileFromPicker(rid, name)` un-hides it (`cleanerShowFileTab`
+removes the rid from `hiddenFiles`) and opens the tab. When every file is
+already open the list shows an empty state — the `+` is **not** disabled.
+The menu is `position: fixed`; `_positionAddMenu` anchors it under the
+button and clamps it on-screen when the `+` sits near the viewport's left
+edge, so it escapes the tab strip's overflow clip. An outside-click
 listener dismisses it.
+
+This picker dropdown replaced the old open-file `<dialog>` modal (it and
+its open-project sibling were retired); the search field carried over,
+the meta-rich pick cards collapsed to plain rows.
 
 Switching tabs (`cleanerActivateTab(fid)`):
 - If the target rid is in `hiddenFiles`, it's un-hidden first (user
