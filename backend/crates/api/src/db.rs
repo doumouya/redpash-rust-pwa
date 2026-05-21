@@ -1038,11 +1038,17 @@ const CHART_COLS: &str = "redpash_id, project_redpash_id, source_file_id,
                           spec, created_at, updated_at";
 
 pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>> {
+    // Single-table SELECT — a JOIN to `projects` collides the shared,
+    // unqualified CHART_COLS on redpash_id / created_at / updated_at
+    // ("column reference redpash_id is ambiguous"). Owner filter runs as
+    // a subquery so CHART_COLS stays usable as-is, shared unchanged with
+    // find_chart / insert_chart / update_chart.
     let rows: Vec<ChartRow> = sqlx::query_as(&format!(
-        "SELECT {CHART_COLS} FROM project_files pf
-         JOIN projects p ON p.redpash_id = pf.project_redpash_id
-         WHERE pf.file_type = 'chart' AND p.owner_id = $1
-         ORDER BY pf.updated_at DESC"
+        "SELECT {CHART_COLS} FROM project_files
+         WHERE file_type = 'chart'
+           AND project_redpash_id IN (
+             SELECT redpash_id FROM projects WHERE owner_id = $1)
+         ORDER BY updated_at DESC"
     ))
     .bind(owner)
     .fetch_all(pool)
