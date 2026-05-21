@@ -2,7 +2,7 @@
 title: File
 section: Objects
 order: 2
-last modified date: 2026-05-19
+last modified date: 2026-05-21
 ---
 
 # File (`FileSummary`)
@@ -111,13 +111,24 @@ upload and on every applied step.
 
 ```rust
 pub struct ColumnMeta {
-    pub name:       String,
-    pub dtype:      String,         // int | float | date | bool | string | empty
-    pub null_pct:   Option<f32>,
-    pub unique_pct: Option<f32>,
-    pub sample:     Option<String>, // first non-null value, truncated
+    pub name:           String,
+    pub dtype:          String,         // storage dtype  — int | float | date | bool | string | empty
+    pub semantic_dtype: String,         // intended dtype — same vocab; defaults to "string"
+    pub null_pct:       Option<f32>,
+    pub unique_pct:     Option<f32>,
+    pub sample:         Option<String>, // first non-null value, truncated
 }
 ```
+
+**Two dtype fields.** `dtype` is the *storage* dtype — what Polars actually
+parsed the column as; a messy `prix_ht` column with `€1234,56` cells stays
+`string`. `semantic_dtype` is the *intended* dtype — what the column is
+trying to be, sniffed from a value sample (that same `prix_ht` sniffs as
+`float`). The cleanness scorer compares the two: a string-stored,
+float-intended column is docked proportionally to how many values fail a
+strict native parse — exactly the dirt `cast` / `replace_text` /
+`fix_invalid` exist to fix. `semantic_dtype` is `#[serde(default)]` →
+`"string"` for column rows written before the field existed.
 
 ### `PageQuery` (redtable query string)
 

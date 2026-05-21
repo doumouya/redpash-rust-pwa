@@ -29,6 +29,7 @@ pub struct ChartSpec {
     pub symbol:        Option<String>,  // pictorial_bar: circle / rect / triangle / …
     pub symbol_repeat: bool,            // pictorial_bar: tile vs stretch
     pub y_group_by:    Option<String>,  // heatmap / radar: 2nd categorical dim
+    pub rich_labels:   bool,            // pie / bar: multi-line styled data labels
 }
 ```
 
@@ -49,6 +50,7 @@ pub struct ChartSpec {
 | `symbol`         | `Option<String>`  | pictorial_bar                            | ECharts symbol name or `path://…` SVG |
 | `symbol_repeat`  | `bool`            | pictorial_bar                            | `true` tiles the symbol; `false` stretches one |
 | `y_group_by`     | `Option<String>`  | heatmap / radar                          | Y-axis category for heatmap; spokes / indicators for radar |
+| `rich_labels`    | `bool`            | pie / bar                                | Multi-line styled data labels — pie slice shows name / value / percent; bar label splits category + value. No effect on kinds without data labels |
 
 ## Kinds
 
@@ -87,7 +89,8 @@ Unknown `kind` values fall back to `bar`.
   "regression": null,
   "symbol":     null,
   "symbol_repeat": false,
-  "y_group_by": null
+  "y_group_by": null,
+  "rich_labels": false
 }
 ```
 

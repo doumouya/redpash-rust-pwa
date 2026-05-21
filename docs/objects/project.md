@@ -2,7 +2,7 @@
 title: Project
 section: Objects
 order: 1
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # Project (`ProjectSummary`)
@@ -70,6 +70,23 @@ pub struct ProjectSummary {
 `JOIN users u ON u.redpash_id = p.owner_id` (see `PROJECT_SELECT` in
 `db.rs`). `cleanness_pct` is still a placeholder (`None`) for future
 per-project scoring.
+
+### `ProjectDetail` DTO
+
+A second DTO wraps `ProjectSummary` with the project's files inline — for
+a single-project detail fetch:
+
+```rust
+pub struct ProjectDetail {
+    #[serde(flatten)]
+    pub summary: ProjectSummary,    // all ProjectSummary fields, flattened
+    pub files:   Vec<FileSummary>,  // the project's files
+}
+```
+
+`#[serde(flatten)]` keeps the wire shape flat — every `ProjectSummary`
+field sits at the top level alongside a `files` array, not under a nested
+`summary` key.
 
 ### `stage` / `status` (computed)
 

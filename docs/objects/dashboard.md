@@ -2,7 +2,7 @@
 title: Dashboard
 section: Objects
 order: 2
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # Dashboard
@@ -21,6 +21,9 @@ Persisted row in the `dashboards` table. Source: `shared::dashboard`.
 | `is_favorite`         | `bool`                | |
 | `is_public`           | `bool`                | Phase 4 share-toggle |
 | `folder`              | `Option<String>`      | |
+| `owner_id`            | `Option<String>`      | FK → `users.redpash_id`, joined via `projects.owner_id`. `None` when the fetcher skipped the users join (single-row endpoints) |
+| `owner_display_name`  | `Option<String>`      | From the users join — populated by the list endpoint for the Dashboards tab |
+| `owner_username`      | `Option<String>`      | From the users join |
 | `created_at`          | `DateTime<Utc>`       | |
 | `updated_at`          | `DateTime<Utc>`       | |
 

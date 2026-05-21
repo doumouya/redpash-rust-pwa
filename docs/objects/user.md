@@ -2,7 +2,7 @@
 title: User
 section: Objects
 order: 0
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # User (`UserProfile`)
@@ -40,9 +40,11 @@ in via a different mechanism would create a new RID.
 
 ## Fields
 
-All fields surfaced by the `UserProfile` DTO. The table also stores
-`google_sub` (matched on sign-in) which is intentionally **not** in
-the DTO — it's a private auth detail.
+The `users` table columns. Most map straight to the `UserProfile` DTO;
+three are **not** in it — `created_at` / `updated_at` (timestamps aren't
+surfaced) and `google_sub` (a private auth detail, matched on sign-in).
+The DTO also carries a joined `memberships` array with no `users` column
+behind it — see [Company memberships](#company-memberships).
 
 | Field | DB column | Type | Nullable | Default | Description |
 |---|---|---|---|---|---|
@@ -71,6 +73,28 @@ the DTO — it's a private auth detail.
 
 Set server-side. No user-facing upgrade flow yet — billing lands with
 Phase 6.
+
+### Company memberships (`memberships`)
+
+`UserProfile` carries one DTO-only field with no `users` column behind it:
+
+```rust
+#[serde(default)]
+pub memberships: Vec<UserMembership>,
+
+pub struct UserMembership {
+    pub company_id:   String,
+    pub company_name: String,
+    pub role:         String,   // owner | admin | member
+}
+```
+
+`memberships` lists the user's company memberships, joined in by
+`GET /api/users` (the Objects → Users tab) so each row shows which
+companies a user belongs to. It is `#[serde(default)]` and left **empty**
+by single-row fetchers that skip the join — `find_user_by_id`,
+`find_user_by_username`, and `GET /api/me` all return `[]`. A user in no
+company also has `[]`.
 
 ---
 
