@@ -232,12 +232,12 @@ async function mountReportsSandbox(root, ctx) {
   _renderReportsHeader(root);
   await _paintReportsTable(root);
 
-  // Restore this project's saved charts from localStorage into the dock —
-  // on a fresh load or a project switch — so a saved report survives a
-  // reload and is there for the Dashboard page. Drafts are in-memory only;
+  // Restore this project's saved charts into the dock — on a fresh load
+  // or a project switch — by hydrating from the backend `/api/charts`
+  // store (cache fallback when offline). Drafts are in-memory only;
   // within the same project (SPA re-nav) the working set is left as-is.
   if (_chartsProject !== STATE.projectId) {
-    const saved = _loadSavedCharts(STATE.projectId);
+    const saved = await _hydrateSavedCharts(STATE.projectId);
     for (const c of saved) {
       const m = /^chart-(\d+)$/.exec(c.title || "");
       if (m) _chartSeq = Math.max(_chartSeq, Number(m[1]));
@@ -603,11 +603,12 @@ function _installReportsLiveHandlers(root) {
   // Each acts on a chart by index. The foot's master buttons pass the
   // active chart; the per-card header buttons pass that card's index.
 
-  // Commit title + description onto a chart, flag it saved, and persist it
-  // to localStorage (survives reload, available to the Dashboard page).
-  // For the active card the foot fields are the live source of truth; an
-  // inactive card uses its already-assigned values. Blank → auto-named.
-  const _saveChart = (i) => {
+  // Commit title + description onto a chart, flag it saved, write it
+  // through to the backend `/api/charts` store, and refresh the
+  // localStorage mirror. For the active card the foot fields are the
+  // live source of truth; an inactive card uses its already-assigned
+  // values. Blank → auto-named.
+  const _saveChart = async (i) => {
     const c = STATE.charts[i];
     if (!c) { toast.error("No chart to save."); return; }
     let title = c.title, desc = c.description;
@@ -618,17 +619,28 @@ function _installReportsLiveHandlers(root) {
     c.title       = title || _defaultChartTitle();
     c.description = desc  || _autoChartDesc(c);
     c._saved      = true;
-    if (!c.id) c.id = _mkChartId();
     c.source_file_id = STATE.rid;
     c.saved_at = new Date().toISOString();
     const host = root.querySelector(`[data-chart-host][data-chart-i="${i}"]`);
     const svg  = host?.querySelector("svg");
     if (svg) c.svg = svg.outerHTML;        // SVG snapshot for thumbnails
     if (host?._rpOption) c.option = host._rpOption;  // self-contained ECharts option
+    // Write-through: PUT an already-persisted chart, POST a fresh one,
+    // then adopt the backend-minted CHT_ id.
+    try {
+      const saved = (c._persisted && c.id)
+        ? await api.put(`/charts/${encodeURIComponent(c.id)}`, _chartToRequest(c))
+        : await api.post("/charts", _chartToRequest(c));
+      c.id = saved.redpash_id;
+      c._persisted = true;
+    } catch (err) {
+      if (!c.id) c.id = _mkChartId();   // keep the cache coherent
+      toast.error(`Saved locally — server save failed: ${err.message ?? err}`);
+    }
     _persistSavedCharts();
     if (i === _activeChart) _builderLoad(i);   // refresh fields + repaint
     else _renderReportsCharts(root).catch(() => {});
-    toast.success(`Saved "${c.title}".`);
+    if (c._persisted) toast.success(`Saved "${c.title}".`);
   };
 
   // Download a chart as a standalone HTML report — its rendered ECharts
@@ -653,15 +665,22 @@ function _installReportsLiveHandlers(root) {
     toast.success(`Downloaded ${_slug(title)}.html`);
   };
 
-  // Drop a chart. A saved chart is also removed from localStorage. Keeps
-  // _activeChart on a valid card; re-seeds a draft if the dock empties.
+  // Drop a chart — from the dock, the localStorage mirror, and (if it
+  // was persisted) the backend store. Keeps _activeChart on a valid
+  // card; re-seeds a draft if the dock empties.
   const _deleteChart = (i) => {
     if (i < 0 || i >= STATE.charts.length) return;
-    const wasSaved = !!STATE.charts[i]?._saved;
+    const removed  = STATE.charts[i];
+    const wasSaved = !!removed?._saved;
     STATE.charts.splice(i, 1);
     if (_activeChart === i) _activeChart = -1;
     else if (_activeChart > i) _activeChart -= 1;
     if (wasSaved) _persistSavedCharts();
+    // Fire-and-forget the backend delete — the dock already updated.
+    if (removed?._persisted && removed.id) {
+      api.delete(`/charts/${encodeURIComponent(removed.id)}`)
+        .catch((err) => console.warn("[reports] server delete failed", err));
+    }
     if (!STATE.charts.length) {
       STATE.charts.push({ kind: "bar", group_by: "", agg_col: "*", agg_fn: "count" });
     }
@@ -1303,14 +1322,59 @@ function _chartReportHtml(title, desc, svgMarkup) {
 </html>`;
 }
 
-// ── Saved-chart persistence (localStorage stopgap) ─────────────────────
-// A saved chart is written to localStorage so it survives a reload and
-// can be read by the Dashboard page. Each entry carries its spec, title,
-// description, an SVG snapshot, and project / source-file ids. Backend
-// FIL_ File persistence is the eventual replacement.
+// ── Saved-chart persistence ────────────────────────────────────────────
+// Charts persist to the backend `/api/charts` store (chart-typed File
+// rows). localStorage mirrors that store — a fast-paint cache and the
+// Dashboard page's read source. _saveChart write-throughs to the API and
+// adopts the backend-minted id; _hydrateSavedCharts pulls the store on
+// mount, falling back to the cache when the server is unreachable.
 
+// Provisional id, used only if a write-through fails before the backend
+// has minted the real CHT_ id — keeps the localStorage cache coherent.
 function _mkChartId() {
   return "CHT_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// Map a frontend chart object → POST/PUT /api/charts body. Everything
+// chart-specific rides in `spec`; the rest become Chart columns.
+function _chartToRequest(c) {
+  const spec = { ...c };
+  for (const k of ["id", "project_id", "source_file_id", "title",
+                    "_saved", "_persisted", "saved_at"]) {
+    delete spec[k];
+  }
+  return { source_file_id: c.source_file_id, title: c.title, spec };
+}
+
+// Map a backend Chart → frontend chart object (the localStorage shape).
+function _chartFromApi(ch) {
+  return {
+    ...(ch.spec || {}),
+    id:             ch.redpash_id,
+    project_id:     ch.project_redpash_id,
+    source_file_id: ch.source_file_id,
+    title:          ch.title,
+    saved_at:       ch.updated_at,
+    _saved:         true,
+    _persisted:     true,
+  };
+}
+
+// Pull the backend chart store, refresh the localStorage mirror, and
+// return this project's charts. Falls back to the cache when the API is
+// unreachable so the dock still paints offline.
+async function _hydrateSavedCharts(projectId) {
+  try {
+    const res = await api.get("/charts");
+    const all = (res.items ?? []).map(_chartFromApi);
+    try {
+      localStorage.setItem(SAVED_CHARTS_KEY, JSON.stringify(all));
+    } catch (err) { console.warn("[reports] couldn't cache charts", err); }
+    return all.filter((c) => c.project_id === projectId);
+  } catch (err) {
+    console.warn("[reports] charts fetch failed — using cache", err);
+    return _loadSavedCharts(projectId);
+  }
 }
 
 function _readSavedStore() {
