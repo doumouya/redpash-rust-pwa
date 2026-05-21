@@ -32,6 +32,7 @@ use tower_http::{
 use crate::state::AppState;
 
 mod auth;
+mod charts;
 mod companies;
 mod dashboards;
 mod docs;
@@ -157,6 +158,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/companies",  companies::routes())
         .nest("/files",      files::routes())
         .nest("/reports",    reports::routes())
+        .nest("/charts",     charts::routes())
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())
         .nest("/events",     events::routes())

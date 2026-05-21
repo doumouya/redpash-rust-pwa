@@ -5,6 +5,7 @@
 //! takes a `&PgPool` and returns a domain DTO from `shared::*`.
 
 use chrono::{DateTime, Utc};
+use shared::chart::Chart;
 use shared::company::{Company, CompanyMember, CompanySummary};
 use shared::dashboard::{Dashboard, DashboardSpec};
 use shared::event::Event;
@@ -432,7 +433,8 @@ const PROJECT_SELECT: &str =
                  THEN 'published' ELSE p.status END AS status,
             p.created_at, p.updated_at,
             u.display_name AS owner_display_name, u.username AS owner_username,
-            (SELECT COUNT(*) FROM project_files f WHERE f.project_redpash_id = p.redpash_id) AS file_count
+            (SELECT COUNT(*) FROM project_files f
+             WHERE f.project_redpash_id = p.redpash_id AND f.file_type <> 'chart') AS file_count
      FROM projects p JOIN users u ON u.redpash_id = p.owner_id";
 
 fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
@@ -615,7 +617,7 @@ pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Re
                 pf.encoding, pf.delimiter, pf.storage_path, pf.created_at, pf.updated_at
          FROM project_files pf
          JOIN file_stages fs ON fs.file_redpash_id = pf.redpash_id
-         WHERE pf.project_redpash_id = $1
+         WHERE pf.project_redpash_id = $1 AND pf.file_type <> 'chart'
          ORDER BY pf.created_at ASC",
     )
     .bind(project_rid)
@@ -635,7 +637,7 @@ pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec
          FROM project_files f
          JOIN projects p ON p.redpash_id = f.project_redpash_id
          JOIN file_stages fs ON fs.file_redpash_id = f.redpash_id
-         WHERE p.owner_id = $1
+         WHERE p.owner_id = $1 AND f.file_type <> 'chart'
          ORDER BY f.updated_at DESC",
     )
     .bind(owner_rid)
@@ -655,6 +657,7 @@ pub async fn list_files_in_project_except(
         "SELECT redpash_id, COALESCE(display_name, filename) AS title
          FROM project_files
          WHERE project_redpash_id = $1 AND redpash_id <> $2
+           AND file_type <> 'chart'
          ORDER BY created_at ASC",
     )
     .bind(project_rid)
@@ -1000,6 +1003,127 @@ pub async fn delete_report(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
         .execute(pool)
         .await?;
     Ok(n.rows_affected() > 0)
+}
+
+// ─── charts (chart-typed project_files rows) ────────────────────
+
+#[derive(FromRow)]
+struct ChartRow {
+    redpash_id:         String,
+    project_redpash_id: String,
+    source_file_id:     String,
+    title:              String,
+    spec:               serde_json::Value,
+    created_at:         DateTime<Utc>,
+    updated_at:         DateTime<Utc>,
+}
+impl From<ChartRow> for Chart {
+    fn from(r: ChartRow) -> Self {
+        Self {
+            redpash_id:         r.redpash_id,
+            project_redpash_id: r.project_redpash_id,
+            source_file_id:     r.source_file_id,
+            title:              r.title,
+            spec:               r.spec,
+            created_at:         r.created_at,
+            updated_at:         r.updated_at,
+        }
+    }
+}
+
+// A chart is a project_files row with file_type='chart'. `title` is
+// COALESCE(display_name, filename) — both are set to the chart title.
+const CHART_COLS: &str = "redpash_id, project_redpash_id, source_file_id,
+                          COALESCE(display_name, filename) AS title,
+                          spec, created_at, updated_at";
+
+pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>> {
+    let rows: Vec<ChartRow> = sqlx::query_as(&format!(
+        "SELECT {CHART_COLS} FROM project_files pf
+         JOIN projects p ON p.redpash_id = pf.project_redpash_id
+         WHERE pf.file_type = 'chart' AND p.owner_id = $1
+         ORDER BY pf.updated_at DESC"
+    ))
+    .bind(owner)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn find_chart(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Chart>> {
+    let row: Option<ChartRow> = sqlx::query_as(&format!(
+        "SELECT {CHART_COLS} FROM project_files
+         WHERE redpash_id = $1 AND file_type = 'chart'"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_chart(
+    pool:    &PgPool,
+    rid:     &str,
+    project: &str,
+    source:  &str,
+    title:   &str,
+    spec:    &serde_json::Value,
+) -> sqlx::Result<Chart> {
+    let row: ChartRow = sqlx::query_as(&format!(
+        "INSERT INTO project_files
+            (redpash_id, project_redpash_id, filename, display_name,
+             file_type, source_file_id, storage_path, spec)
+         VALUES ($1, $2, $3, $3, 'chart', $4, '', $5)
+         RETURNING {CHART_COLS}"
+    ))
+    .bind(rid)
+    .bind(project)
+    .bind(title)
+    .bind(source)
+    .bind(spec)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+pub async fn update_chart(
+    pool:  &PgPool,
+    rid:   &str,
+    title: &str,
+    spec:  &serde_json::Value,
+) -> sqlx::Result<Option<Chart>> {
+    let row: Option<ChartRow> = sqlx::query_as(&format!(
+        "UPDATE project_files
+         SET filename = $1, display_name = $1, spec = $2, updated_at = now()
+         WHERE redpash_id = $3 AND file_type = 'chart'
+         RETURNING {CHART_COLS}"
+    ))
+    .bind(title)
+    .bind(spec)
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn delete_chart(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let n = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1 AND file_type = 'chart'")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
+pub async fn chart_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT p.owner_id FROM project_files pf
+         JOIN projects p ON p.redpash_id = pf.project_redpash_id
+         WHERE pf.redpash_id = $1 AND pf.file_type = 'chart'",
+    )
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(o,)| o))
 }
 
 // ─── dashboards ─────────────────────────────────────────────────

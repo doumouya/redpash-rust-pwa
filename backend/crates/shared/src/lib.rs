@@ -15,6 +15,7 @@ pub mod company;
 pub mod file;
 pub mod filter;
 pub mod report;
+pub mod chart;
 pub mod dashboard;
 pub mod step;
 pub mod user;
