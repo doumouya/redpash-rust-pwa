@@ -95,7 +95,7 @@ redpash-app/
     ├── INDEX.md                            section TOC
     ├── getting-started.md                  run locally, phase progress
     ├── features/                           cleaner, joins, reports, dashboards, charts
-    ├── objects/                            DTO reference (report, dashboard, chart)
+    ├── objects/                            DTO reference (user, project, file, step, report, dashboard, chart)
     ├── api/                                per-resource detail (overview + health/me/auth/projects/files/reports/dashboards)
     ├── auth/google.md                      OAuth flow + cookies + dev_user fallback
     ├── db/schema.md                        tables + migrations + RID prefixes
@@ -161,6 +161,7 @@ redpash-app/
 | **DB helpers** | `db::list_steps`, `insert_step`, `undo_last`, `redo_next`, `clear_steps_of_kind` (surgical un-apply of every step of a given kind — powers `/clear-filters`) |
 | **Replay** | `data::steps::replay(base_df, [(kind, params)])` |
 | **Supported `kind`s** | **Column shape:** `drop_columns`, `filter_columns` (keep listed), `rename_column`, `snake_case_columns`, `replace_in_names`, `join_columns`, `split_column`. **Row shape:** `drop_rows` (by index), `drop_nulls`, `filter_rows` (predicate-tree). **Cell value:** `set_cell`, `fill_nulls`, `cast` (with `/cast-preview` dry-run), `change_case`, `replace_text`, `fix_invalid` (sentinel replace), `format_dates`. **Rescue:** `unwrap_csv` (re-parse a fully-wrapped CSV). See [api/files.md](api/files.md#post-apifilesridsteps--apply-a-cleaning-step) for the per-kind param shapes. |
+| **Docs** | [`features/cleaner.md`](features/cleaner.md) · [`objects/step.md`](objects/step.md) |
 
 ### Report (`Report`, `ReportSpec`)
 | Layer | Location |
