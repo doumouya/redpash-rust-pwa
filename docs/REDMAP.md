@@ -76,6 +76,7 @@ redpash-app/
 │   └── scripts/
 │       ├── main.js                         hash router + page bootstrap
 │       ├── api.js                          fetch wrapper; 401 → #/landing
+│       ├── events.js                       frontend error capture → POST /api/events
 │       ├── ui/
 │       │   ├── toast.js                    success/error/info toasts
 │       │   └── history.js                  generic undo/redo ring buffer (reports + dashboards)
@@ -217,7 +218,7 @@ redpash-app/
 | **DTO** | `shared::event::Event`, `EventReport` |
 | **Table** | `events` (migration 013 — `20260529000001_events.sql`) |
 | **RID prefix** | `EVT` |
-| **Capture** | *auto* — `routes::mod::capture_mw` logs every 4xx/5xx; *explicit* — `event::record(&db, EventDraft)` at lifecycle sites (`auth_login`, `auth_logout`, `file_upload`, `file_delete`, `step_apply`); *frontend* — `POST /api/events` |
+| **Capture** | *auto* — `routes::mod::capture_mw` logs every 4xx/5xx; *explicit* — `event::record(&db, EventDraft)` at lifecycle sites (`auth_login`, `auth_logout`, `file_upload`, `file_delete`, `step_apply`); *frontend* — `scripts/events.js` (uncaught JS errors, promise rejections, transport failures, page load/mount failures) → `POST /api/events` |
 | **Write** | `event::record` — fire-and-forget (spawns the INSERT on a detached task; a logging failure never blocks or fails the request) |
 | **DB helpers** | `db::list_events(level, kind, limit)`, `db::find_event` |
 | **API** | `GET /api/events` (filter `level`/`kind`/`limit`), `GET /api/events/:rid`, `POST /api/events` (frontend report) |
@@ -348,7 +349,7 @@ redpash-app/
 - Two `/api/*` middlewares: `request_id_mw` mints a per-request id (echoed as the `X-Request-Id` header); `capture_mw` persists every 4xx/5xx response as an `events` row.
 - `AppError::into_response` stashes an `EventInfo` extension (kind + message) so `capture_mw` recovers the real error after the handler returns. Responses with no extension (Axum's own 404/405, 413, extractor 400s) are logged by status alone.
 - Explicit `event::record(&db, EventDraft { … })` at lifecycle sites for `info` events. **Fire-and-forget** — the insert is spawned on a detached task, never awaited; a logging failure can't break the request.
-- Frontend events arrive via `POST /api/events` (`origin=frontend`; `user`/`session` stamped server-side from the cookie, never trusted from the body).
+- **Frontend capture** (`scripts/events.js`) — global `error` / `unhandledrejection` handlers, an `api.js` transport-failure funnel, and router page script/mount failures, all POSTed to `/api/events` (`origin=frontend`; `user`/`session` stamped server-side from the cookie, never trusted from the body). Captures what the backend can't see — HTTP 4xx/5xx responses are *not* re-reported client-side, `capture_mw` already owns them. Repeats deduped within 10s, session capped at 100, and `reportEvent` uses raw `fetch` so a failed event POST can't recurse.
 
 ---
 

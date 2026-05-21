@@ -160,6 +160,18 @@ session-cookied.
 
 ---
 
+## Planned — Logs monitoring Dashboard
+
+`GET /api/events` returns a flat, newest-first feed today. Once the
+Dashboard feature is production-ready, a **Logs monitoring Dashboard**
+will sit on top of it — error rate, level / kind breakdowns, recent
+failures at a glance. That surface will likely need aggregation
+endpoints (counts grouped by `level` / `kind`, binned over time) rather
+than the flat list, and should be gated behind the company-admin role
+once RBAC lands.
+
+---
+
 ## Retention
 
 `events` is append-only and grows unbounded. A retention prune (delete
