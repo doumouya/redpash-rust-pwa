@@ -65,8 +65,32 @@ const STATE = {
   pageSize: 25,
   sorts:    [],     // [{ col, dir: "asc" | "desc" }] — single-key today
   search:   "",
+  filter:   null,   // shared::filter::FilterNode Group — applied row filter
+  keepCols: null,   // string[] of columns to keep, or null = show all
   charts:   [],     // ChartSpec[] — each rendered as a chart-dock card
 };
+
+// Filter-panel operator vocabulary — the 13 ops the backend's
+// shared::filter::FilterOp enum accepts (snake_case), each paired with
+// its menu label. Same op→label pairs the cleaner's FILTER_OPS uses,
+// minus the cleaner-only in/not_in/before/after (the /reports/preview +
+// /page FilterNode contract has no in/not_in; before/after fold into
+// lt/gt). Order matters — it's the .rp-dd-menu render order.
+const REPORTS_FILTER_OPS = [
+  ["eq",           "equals"],
+  ["neq",          "not equals"],
+  ["contains",     "contains"],
+  ["not_contains", "not contains"],
+  ["starts_with",  "starts with"],
+  ["ends_with",    "ends with"],
+  ["gt",           ">"],
+  ["gte",          "≥"],
+  ["lt",           "<"],
+  ["lte",          "≤"],
+  ["between",      "between (lo, hi)"],
+  ["is_null",      "is null"],
+  ["not_null",     "is not null"],
+];
 
 // Which chart the builder rail is editing — index into STATE.charts,
 // or -1 when none is active.
@@ -278,6 +302,12 @@ function _installReportsLiveHandlers(root) {
     STATE.page    = 1;
     STATE.search  = "";
     STATE.sorts   = [];
+    // The old file's predicates / column keep-list reference columns
+    // that may not exist in the new file — drop them and reset the panel
+    // DOM so a stale filter doesn't 500 the new file's /page request.
+    STATE.filter   = null;
+    STATE.keepCols = null;
+    window.reportsFbClear?.();
     const searchInput = root.querySelector("[data-reports-search]");
     if (searchInput) searchInput.value = "";
     // Re-render the strip so .active moves and the × is suppressed on
@@ -710,6 +740,18 @@ function _installReportsLiveHandlers(root) {
     _toolsPanel.addEventListener("change", () => { _paintReportsTable(root); });
   }
 
+  // Filter panel — live regex name-filter over the column keep-list.
+  // Delegated on the panel + once-guarded so it survives partial
+  // re-includes. [data-reports-filter-regex] is the regex <input>.
+  const _filterPanel = root.querySelector("#reports-filter-panel");
+  if (_filterPanel && !_filterPanel.__rpReportsBound) {
+    _filterPanel.__rpReportsBound = true;
+    _filterPanel.addEventListener("input", (ev) => {
+      const rx = ev.target.closest("[data-reports-filter-regex]");
+      if (rx) _reportsFilterColsRegex(root, rx.value);
+    });
+  }
+
   // Expose the builder loader so mountReportsSandbox can re-point it at a
   // chart after the project-scoped localStorage restore.
   _reportsBuilderLoad = _builderLoad;
@@ -745,8 +787,14 @@ async function _paintReportsTable(root) {
   const qs = new URLSearchParams();
   qs.set("page", String(STATE.page));
   qs.set("size", String(STATE.pageSize));
-  if (STATE.search)        qs.set("q",     STATE.search);
-  if (STATE.sorts.length)  qs.set("sorts", JSON.stringify(STATE.sorts));
+  if (STATE.search)        qs.set("q",       STATE.search);
+  if (STATE.sorts.length)  qs.set("sorts",   JSON.stringify(STATE.sorts));
+  // Filter panel — STATE.filter is a FilterNode Group; the /page
+  // endpoint's `filters` param decodes the tree shape directly.
+  if (STATE.filter)        qs.set("filters", JSON.stringify(STATE.filter));
+  // Column trim — "Keep matched columns" sets STATE.keepCols; the
+  // /page endpoint's `cols` param is a comma-joined keep-list.
+  if (STATE.keepCols?.length) qs.set("cols", STATE.keepCols.join(","));
 
   let envRes, pageRes;
   try {
@@ -780,6 +828,9 @@ async function _paintReportsTable(root) {
     }
     _renderReportsHeader(root);
     _renderReportsColumnsPicker(root);
+    // Columns just landed — fill the filter panel's column / op pickers
+    // and the column keep-list so an open panel reflects this file.
+    _populateReportsFilter(root);
   }
 
   _renderReportsRows(root, pageRes);
@@ -886,7 +937,14 @@ function _renderReportsRows(root, page) {
   const tableWrap = root.querySelector("[data-reports-table]");
   if (!tableWrap) return;
 
-  const colNames = STATE.columns.map((c) => c.name);
+  // When "Keep matched columns" is active the /page response rows are
+  // trimmed to STATE.keepCols (server-side `cols=` projection), so the
+  // header row must follow the same keep-list — in the file's column
+  // order — or headers and cells would misalign.
+  const allNames = STATE.columns.map((c) => c.name);
+  const colNames = STATE.keepCols?.length
+    ? allNames.filter((n) => STATE.keepCols.includes(n))
+    : allNames;
   if (!colNames.length) {
     tableWrap.innerHTML = `
       <table class="rp-rt-table">
@@ -1471,6 +1529,272 @@ function _addAggRow(root) {
   _syncReportTools(root);
 }
 
+// ─────────────────────────── filter panel ─────────────────────────────
+//
+// #reports-filter-panel is a flat AND/OR list of leaf predicates plus a
+// regex-driven column keep-list. It produces ONE shared::filter::
+// FilterNode Group ({ op, children:[leaf,…] }) consumed by both the
+// /reports/preview spec.filter and the raw /page `filters` query param.
+//
+// The column / op pickers are custom .rp-dd-wrap widgets (not native
+// <select>) — the chosen value lives in wrap.dataset.value, the visible
+// label in [data-dd-lbl]. This mirrors the cleaner's filter panel, but
+// the cleaner's handlers are cleaner.js-scoped, so the Reports page
+// carries its own equivalents.
+
+// Populate the column + op .rp-dd-menus of every predicate row in the
+// filter panel from STATE.columns / REPORTS_FILTER_OPS. Called when a
+// file's columns load (after _paintReportsTable) and after a predicate
+// row is added. A row's already-chosen value is preserved across a
+// repopulate if it's still a valid choice; a stale value (column
+// dropped) resets back to the placeholder.
+function _populateReportsFilter(root) {
+  const panel = root.querySelector("#reports-filter-panel");
+  if (!panel) return;
+  const cols = Array.isArray(STATE.columns) ? STATE.columns : [];
+  const colItems = cols.map((c) => {
+    const v = _attrEsc(c.name);
+    const dtype = c.dtype ? ` · ${_htmlEsc(c.dtype)}` : "";
+    return `<div class="rp-dd-item" data-value="${v}" onclick="reportsFbDdPick(this)">${_htmlEsc(c.name)}${dtype}</div>`;
+  }).join("");
+  const opItems = REPORTS_FILTER_OPS.map(([v, l]) =>
+    `<div class="rp-dd-item" data-value="${_attrEsc(v)}" onclick="reportsFbDdPick(this)">${_htmlEsc(l)}</div>`
+  ).join("");
+
+  // Re-mark is-selected on the item matching the wrap's current value;
+  // clear + reset to placeholder if that value no longer exists.
+  const _hydrate = (wrap, itemsHtml) => {
+    const menu = wrap.querySelector(".rp-dd-menu");
+    if (!menu) return;
+    menu.innerHTML = itemsHtml;
+    const cur = wrap.dataset.value || "";
+    if (!cur) return;
+    const hit = menu.querySelector(`.rp-dd-item[data-value="${CSS.escape(cur)}"]`);
+    if (hit) {
+      hit.classList.add("is-selected");
+    } else {
+      wrap.dataset.value = "";
+      const lbl = wrap.querySelector("[data-dd-lbl]");
+      if (lbl) lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+    }
+  };
+
+  panel.querySelectorAll(".rp-rt-fb-row .rp-dd-wrap.rp-rt-fb-col")
+       .forEach((wrap) => _hydrate(wrap, colItems));
+  panel.querySelectorAll(".rp-rt-fb-row .rp-dd-wrap.rp-rt-fb-op")
+       .forEach((wrap) => _hydrate(wrap, opItems));
+
+  // Column keep-list checkboxes — one per source column.
+  _renderReportsFilterCols(root);
+}
+
+// Paint one checkbox per STATE.columns column into [data-reports-filter-
+// cols]. Checked = kept after "Keep matched columns". Preserves the
+// current check state across repaints (regex toggles re-tick live);
+// columns not yet seen default to checked.
+function _renderReportsFilterCols(root) {
+  const box = root.querySelector("[data-reports-filter-cols]");
+  if (!box) return;
+  const cols = Array.isArray(STATE.columns) ? STATE.columns : [];
+  if (!cols.length) {
+    box.innerHTML = '<div class="rp-form-meta" style="font-style:italic">No columns.</div>';
+    return;
+  }
+  // Snapshot existing check state so a repopulate (schema refresh)
+  // doesn't wipe the user's selection.
+  const prev = new Map();
+  box.querySelectorAll("input[data-col]").forEach((i) => prev.set(i.dataset.col, i.checked));
+  box.innerHTML = cols.map((c) => {
+    const checked = prev.has(c.name) ? (prev.get(c.name) ? " checked" : "") : " checked";
+    return `<label class="rp-dd-check">`
+      +    `<input type="checkbox" data-col="${_attrEsc(c.name)}"${checked} /> `
+      +    _htmlEsc(c.name)
+      + `</label>`;
+  }).join("");
+}
+
+// Predicate dropdown item-pick — commit the chosen value into the wrap
+// (data-value + visible label), mark the item is-selected (clearing
+// siblings), close the menu. Reports equivalent of cleaner.js's
+// cleanerFbDdPick (that one is cleaner.js-scoped).
+window.reportsFbDdPick = function (item) {
+  if (!item) return;
+  const wrap = item.closest(".rp-dd-wrap");
+  if (!wrap) return;
+  const value = item.dataset.value ?? "";
+  wrap.dataset.value = value;
+  const lbl = wrap.querySelector("[data-dd-lbl]");
+  if (lbl) {
+    const isCol = wrap.classList.contains("rp-rt-fb-col");
+    lbl.textContent = value ? item.textContent.trim() : (isCol ? "Column…" : "Op…");
+  }
+  wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+  if (value) item.classList.add("is-selected");
+  wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+};
+
+// Reset a single predicate row to a fresh-empty state — value input
+// cleared, each .rp-dd-wrap's data-value blanked, label restored to
+// placeholder, is-selected wiped, any open menu closed.
+function _resetReportsFbRow(row) {
+  if (!row) return;
+  row.querySelectorAll("input").forEach((i) => { i.value = ""; });
+  row.querySelectorAll(".rp-dd-wrap").forEach((wrap) => {
+    wrap.dataset.value = "";
+    const lbl = wrap.querySelector("[data-dd-lbl]");
+    if (lbl) lbl.textContent = wrap.classList.contains("rp-rt-fb-col") ? "Column…" : "Op…";
+    wrap.querySelectorAll(".rp-dd-item.is-selected").forEach((it) => it.classList.remove("is-selected"));
+    wrap.querySelector(".rp-dd-menu")?.classList.remove("open");
+  });
+}
+
+// Add Predicate — route through the shared spFbAddPredicate (which
+// clones the seed row), then re-populate + reset the freshly-appended
+// last row. spFbAddPredicate clones the FIRST row, so the clone
+// inherits that row's chosen value / is-selected state — the reset
+// scrubs it back to a clean placeholder.
+window.reportsFbAddPredicate = function (btn) {
+  window.spFbAddPredicate?.(btn);
+  const panel = btn?.closest(".rp-rt-filter-panel");
+  const rows  = panel?.querySelectorAll(".rp-rt-fb-rows .rp-rt-fb-row");
+  const last  = rows?.[rows.length - 1];
+  if (last) {
+    _resetReportsFbRow(last);
+    // The clone may carry the seed's menu items already, but re-running
+    // the populator keeps it in sync if the schema changed mid-session.
+    const root = panel.closest("#page-reports") || document;
+    _populateReportsFilter(root);
+  }
+};
+
+// Combinator toggle — single-active AND / OR pair.
+window.reportsFbSetCombo = function (btn) {
+  if (!btn) return;
+  btn.parentElement?.querySelectorAll("button")
+     .forEach((b) => b.classList.remove("is-active"));
+  btn.classList.add("is-active");
+};
+
+// Clear all — reset the panel to one empty predicate row and the
+// combinator back to AND, then drop any applied filter and repaint.
+window.reportsFbClear = function (btn) {
+  const root  = btn?.closest("#page-reports") || document.querySelector("#page-reports") || document;
+  const panel = root.querySelector("#reports-filter-panel");
+  if (panel) {
+    const rows = panel.querySelector(".rp-rt-fb-rows");
+    if (rows) {
+      [...rows.querySelectorAll(".rp-rt-fb-row")].slice(1).forEach((r) => r.remove());
+      _resetReportsFbRow(rows.querySelector(".rp-rt-fb-row"));
+    }
+    // Combinator back to AND.
+    const combo = panel.querySelector(".rp-rt-fb-op-toggle");
+    combo?.querySelectorAll("button").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.combo === "and"));
+  }
+  // Drop the applied filter and re-render if one was live.
+  if (STATE.filter) {
+    STATE.filter = null;
+    STATE.page   = 1;
+    _paintReportsTable(root);
+  }
+};
+
+// Collect the panel into a shared::filter::FilterNode Group, or null
+// when there are zero valid predicates. Leaf shape is { col, op, value }
+// — note the field is `col`, not `column`. Value parsing per op mirrors
+// the cleaner's _collectFilterDraft (minus in/not_in):
+//   • is_null / not_null  → value omitted entirely
+//   • between             → array of exactly two numbers (drop if not 2)
+//   • gt / gte / lt / lte  → a single number (drop if NaN / empty)
+//   • everything else      → a trimmed non-empty string (drop if empty)
+function _collectReportsFilter(root) {
+  const panel = root.querySelector("#reports-filter-panel");
+  if (!panel) return null;
+  const comboBtn  = panel.querySelector(".rp-rt-fb-op-toggle button.is-active");
+  const combinator = comboBtn?.dataset.combo === "or" ? "or" : "and";
+
+  const children = [];
+  for (const r of panel.querySelectorAll(".rp-rt-fb-row")) {
+    const col = r.querySelector("[data-fb-col]")?.dataset.value || "";
+    const op  = r.querySelector("[data-fb-op]")?.dataset.value || "";
+    if (!col || !op) continue;
+
+    const leaf = { col, op };
+    if (op === "is_null" || op === "not_null") {
+      children.push(leaf);
+      continue;
+    }
+    const raw = r.querySelector("[data-fb-val]")?.value ?? "";
+    if (op === "between") {
+      const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      if (parts.length !== 2) continue;
+      const nums = parts.map((s) => Number(s));
+      if (nums.some(Number.isNaN)) continue;
+      leaf.value = nums;
+    } else if (op === "gt" || op === "gte" || op === "lt" || op === "lte") {
+      if (raw.trim() === "") continue;
+      const n = Number(raw);
+      if (Number.isNaN(n)) continue;
+      leaf.value = n;
+    } else {
+      const v = raw.trim();
+      if (!v) continue;
+      leaf.value = v;
+    }
+    children.push(leaf);
+  }
+
+  return children.length ? { op: combinator, children } : null;
+}
+
+// Apply — collect the panel into STATE.filter, then re-render. In
+// grouped mode _paintReportsTable routes to _paintGroupedReport, whose
+// _collectReportSpec call picks up spec.filter via _collectReportsFilter.
+// In raw mode the /page query carries STATE.filter as its `filters`
+// param. Either way _paintReportsTable is the single re-render entry.
+window.reportsFbApply = function (btn) {
+  const root = btn?.closest("#page-reports") || document.querySelector("#page-reports") || document;
+  if (!STATE.rid) { window.toast?.info?.("Pick a source file first."); return; }
+  STATE.filter = _collectReportsFilter(root);
+  STATE.page   = 1;   // a new filter invalidates the old offset
+  _paintReportsTable(root);
+};
+
+// Keep matched columns — apply the column keep-list (the ticked
+// checkboxes) to the shown table. An all-checked list clears the trim
+// (STATE.keepCols = null = show everything).
+window.reportsFbKeepCols = function (btn) {
+  const root = btn?.closest("#page-reports") || document.querySelector("#page-reports") || document;
+  if (!STATE.rid) { window.toast?.info?.("Pick a source file first."); return; }
+  const box = root.querySelector("[data-reports-filter-cols]");
+  if (!box) return;
+  const boxes  = [...box.querySelectorAll("input[data-col]")];
+  const kept   = boxes.filter((i) => i.checked).map((i) => i.dataset.col);
+  if (!kept.length) { window.toast?.info?.("Keep at least one column."); return; }
+  // All ticked → no trim; partial → carry the keep-list.
+  STATE.keepCols = kept.length === boxes.length ? null : kept;
+  _paintReportsTable(root);
+};
+
+// Live regex name-filter — as the user types, tick/untick each column
+// checkbox by whether its name matches the pattern. Empty pattern ticks
+// everything. An invalid regex is treated as a no-op (leaves the boxes
+// as-is) so a half-typed pattern doesn't thrash the selection.
+function _reportsFilterColsRegex(root, pattern) {
+  const box = root.querySelector("[data-reports-filter-cols]");
+  if (!box) return;
+  const boxes = [...box.querySelectorAll("input[data-col]")];
+  const pat = (pattern ?? "").trim();
+  if (!pat) {
+    boxes.forEach((i) => { i.checked = true; });
+    return;
+  }
+  let re;
+  try { re = new RegExp(pat, "i"); }
+  catch { return; }   // invalid regex mid-type — leave selection untouched
+  boxes.forEach((i) => { i.checked = re.test(i.dataset.col || ""); });
+}
+
 // ── Report Tools — Slice 2: collect a ReportSpec from the panel, run
 // /reports/preview, render the grouped result. Detail rows + grand
 // total + matrix layout are the next render slice.
@@ -1502,7 +1826,10 @@ function _collectReportSpec(root) {
     group_by:       groupBy,
     group_by_cols:  groupCols ? [groupCols] : [],
     aggregations,
-    filter:         null,
+    // Filter panel — the APPLIED filter (a shared::filter::FilterNode
+    // Group, or null). STATE.filter is set by reportsFbApply; the grouped
+    // and raw renders both read it, so Apply is the single commit gate.
+    filter:         STATE.filter,
     sort:           [],
     show_details:   show("details"),
     show_subtotals: show("subtotals"),
