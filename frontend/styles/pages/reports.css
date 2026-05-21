@@ -605,6 +605,52 @@ html[data-theme="light"] #page-reports .rp-rt-toolbar { background: rgba(255, 25
   display: none;
 }
 
+/* Filter-panel predicate dropdown triggers — the column / op picker
+   buttons. The glass recipe lives unscoped in cleaner.css (cleaner-page
+   only); the Reports filter panel reuses the same classes, so mirror
+   the rules under #page-reports or the triggers render as bare buttons. */
+#page-reports .rp-rt-filter-panel .rp-dd-wrap.rp-rt-fb-col,
+#page-reports .rp-rt-filter-panel .rp-dd-wrap.rp-rt-fb-op {
+  display: block;
+  width: 100%;
+}
+#page-reports .rp-rt-fb-dd-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+  width: 100%;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+#page-reports .rp-rt-fb-dd-btn:hover {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+#page-reports .rp-rt-fb-dd-btn:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+#page-reports .rp-rt-fb-dd-btn > [data-dd-lbl] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+#page-reports .rp-rt-fb-dd-btn > .bi {
+  font-size: 0.625rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 /* Search — frosted pill, flex:1 to eat slack. */
 #page-reports .rp-rt-search {
   flex: 1;
