@@ -591,8 +591,10 @@ function _installReportsLiveHandlers(root) {
     if (!c.id) c.id = _mkChartId();
     c.source_file_id = STATE.rid;
     c.saved_at = new Date().toISOString();
-    const svg = root.querySelector(`[data-chart-host][data-chart-i="${i}"] svg`);
-    if (svg) c.svg = svg.outerHTML;       // SVG snapshot for thumbnails
+    const host = root.querySelector(`[data-chart-host][data-chart-i="${i}"]`);
+    const svg  = host?.querySelector("svg");
+    if (svg) c.svg = svg.outerHTML;        // SVG snapshot for thumbnails
+    if (host?._rpOption) c.option = host._rpOption;  // self-contained ECharts option
     _persistSavedCharts();
     if (i === _activeChart) _builderLoad(i);   // refresh fields + repaint
     else _renderReportsCharts(root).catch(() => {});
@@ -1394,6 +1396,9 @@ async function _mountChart(echarts, host, cfg, res) {
   host.innerHTML = "";
   const inst = echarts.init(host, "redpash", { renderer: "svg" });
   inst.setOption(opt);
+  // Stash the option on the host — Save captures it (data baked in, so
+  // it's a self-contained chart the Dashboard can re-render with no fetch).
+  host._rpOption = opt;
   const ro = new ResizeObserver(() => inst.resize());
   ro.observe(host);
   host._rpDispose = () => { ro.disconnect(); inst.dispose(); };
