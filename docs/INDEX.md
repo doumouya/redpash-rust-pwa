@@ -31,6 +31,7 @@ YAML frontmatter above).
 - [User](objects/user.md) — `UserProfile`, `users` table, bootstrap + OAuth upsert, `resolve_user_rid`.
 - [Project](objects/project.md) — `ProjectSummary`, default-project lifecycle, `ensure_default_project`.
 - [File](objects/file.md) — `FileSummary` + `ColumnMeta` + `PageQuery` + `Row`, upload → step → hydrate, step kinds.
+- [Step](objects/step.md) — `ProjectStep` + `StepRequest`, the append-only cleaning-op log, apply/undo/redo, 18 step kinds.
 - [Report](objects/report.md) — `Report` + `ReportSpec` + `Aggregation` + `SortSpec` + `TopNFilter` + `WindowSpec`.
 - [Dashboard](objects/dashboard.md) — `Dashboard` + `DashboardSpec` + `Widget`.
 - [Chart](objects/chart.md) — `ChartSpec` field reference and per-kind requirements.
