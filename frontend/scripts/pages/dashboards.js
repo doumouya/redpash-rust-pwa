@@ -1,24 +1,23 @@
-// Dashboards page — sandbox port Phase 1 (full canvas + floating tools).
+// Dashboards page — full canvas + floating tools.
 //
-// Phase 1 scope (this file):
-//   • Pull in the partial subtree via rpInclude (router doesn't recurse
-//     into data-include).
-//   • Wire the floating tools window: drag (pointer events on the
-//     header), collapse / restore (data-dashboards-tools-collapse), and
-//     persist position + collapsed state via prefs.dashboards_tools_pos.
-//   • Open the tools window by default so the canvas + tools both
-//     read as part of the same interface on first mount.
+// This file:
+//   • Pulls in the partial subtree via rpInclude (router doesn't
+//     recurse into data-include).
+//   • Wires the floating tools window: drag, collapse / restore, and
+//     persists position + collapsed state via prefs.dashboards_tools_pos.
+//   • Saved-chart widgets — initWidgets(): charts authored on the
+//     Reports page are persisted to localStorage (rp_saved_charts_v1)
+//     as self-contained artifacts (a baked-in ECharts `option` plus an
+//     SVG snapshot). The dashboard binds those charts to canvas slots
+//     via the +Widget picker and renders them straight from the option.
 //
-// Phase 2 (TODO):
-//   • Source-file picker → /api/files swap canvas data
-//   • Template selector → write grid-template-columns/rows inline
-//   • +Widget flow → push spec into STATE.widgets, render via
-//     /scripts/dashboards/echarts.js + chart-render.js
-//   • Save / Export → /api/dashboards POST + canvas-to-blob download
+// Still TODO: template selector, dashboard save/export to /api/dashboards.
 //
 // The old multi-file delegator (/scripts/dashboards/index.js) is no
 // longer called — its DOM hooks (#dashboards-list, #dashboards-builder)
 // don't exist in the new shell. Kept on disk for revertability.
+
+import { loadECharts } from "/scripts/dashboards/echarts.js";
 
 export default async function mount(root, ctx) {
   // Sandbox subtree — router only loaded the thin shell.
@@ -130,4 +129,264 @@ export default async function mount(root, ctx) {
       });
     });
   }
+
+  // Saved-chart widgets — bind charts from localStorage onto the canvas.
+  initWidgets(root);
+}
+
+const SAVED_CHARTS_KEY = "rp_saved_charts_v1";
+
+// Canvas slots for the (currently fixed) hero-pair template. `span`
+// makes the hero tile fill both rows of its column.
+const SLOTS = [
+  { id: "hero",  span: 2 },
+  { id: "kpi-1"          },
+  { id: "kpi-2"          },
+];
+
+// Saved charts live in localStorage, written by the Reports page on
+// Save. Read fresh on every call — the store is the source of truth.
+function loadSavedCharts() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_CHARTS_KEY) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+
+// Wire the saved-chart flow: populate the two chart galleries (tools
+// window + pick-chart modal), bind a picked chart to a canvas slot,
+// and render bound charts from their self-contained ECharts option.
+function initWidgets(root) {
+  const grid        = root.querySelector("[data-dashboards-grid]");
+  if (!grid) return;
+  const libGallery  = root.querySelector("[data-dashboards-chart-gallery]");
+  const libSearch   = root.querySelector("[data-dashboards-chart-search]");
+  const slotsList   = root.querySelector("[data-dashboards-slots-list]");
+  const titleInput  = root.querySelector("#dw-title");
+  const pickModal   = root.querySelector("#rp-modal-pick-chart");
+  const pickGallery = root.querySelector("[data-dashboards-pick-gallery]");
+  const pickSearch  = pickModal?.querySelector('input[type="search"]');
+
+  // slotId → { chart_id, title_override }. Lives for this page mount;
+  // dashboard-level persistence to /api/dashboards is a later pass.
+  const widgets    = {};
+  let selectedSlot = SLOTS[0].id;
+  let pickFilter   = "all";   // pick-chart modal kind pill
+
+  const chartById = (id) => loadSavedCharts().find((c) => c.id === id);
+
+  // ── Render: canvas ──────────────────────────────────────────────
+  async function mountChart(host, chart, titleOverride) {
+    // Primary path: the chart's self-contained ECharts option. chartById
+    // re-parses localStorage every call, so `option` is a fresh object
+    // — safe to set the title in place.
+    if (chart.option) {
+      let echarts;
+      try { echarts = await loadECharts(); }
+      catch (err) {
+        host.innerHTML = `<p class="rp-dashboards__tile-msg">${esc(err.message ?? String(err))}</p>`;
+        return;
+      }
+      const opt = chart.option;
+      const t = titleOverride?.trim() || chart.title?.trim() || "";
+      if (t) {
+        if (Array.isArray(opt.title)) { if (opt.title[0]) opt.title[0].text = t; }
+        else { opt.title = { ...(opt.title || {}), text: t }; }
+      }
+      const inst = echarts.init(host, "redpash", { renderer: "svg" });
+      inst.setOption(opt);
+      const ro = new ResizeObserver(() => inst.resize());
+      ro.observe(host);
+      host._rpDispose = () => { ro.disconnect(); inst.dispose(); };
+      return;
+    }
+    // Fallback: an older saved chart with only an SVG snapshot.
+    if (chart.svg) { host.innerHTML = chart.svg; return; }
+    host.innerHTML = `<p class="rp-dashboards__tile-msg">No snapshot — re-save this chart on the Reports page.</p>`;
+  }
+
+  function renderCanvas() {
+    grid.querySelectorAll("[data-chart-host]").forEach((h) => h._rpDispose?.());
+    grid.innerHTML = SLOTS.map((slot) => {
+      const span = slot.span ? ` style="grid-row: span ${slot.span}"` : "";
+      const w = widgets[slot.id];
+      if (!w) {
+        return `<article class="rp-dashboards__tile rp-dashboards__tile--empty" data-slot="${esc(slot.id)}"${span}>
+          <button type="button" class="rp-dashboards__tile-add" data-add-slot="${esc(slot.id)}">
+            <i class="bi bi-plus-lg"></i>
+            <span>Add a chart</span>
+          </button>
+        </article>`;
+      }
+      const chart = chartById(w.chart_id);
+      const title = w.title_override?.trim() || chart?.title?.trim() || w.chart_id;
+      return `<article class="rp-dashboards__tile" data-slot="${esc(slot.id)}"${span}>
+        <header class="rp-dashboards__tile-hdr">
+          <i class="bi bi-bar-chart-fill"></i>
+          <span class="rp-dashboards__tile-ttl">${esc(title)}</span>
+          <span class="rp-dashboards__tile-meta">${chart ? esc(chart.kind || "chart") : "missing chart"}</span>
+          <button class="rp-btn rp-btn-xs" title="Configure slot" style="margin-left:auto" data-config-slot="${esc(slot.id)}">
+            <i class="bi bi-sliders"></i>
+          </button>
+          <button class="rp-btn rp-btn-xs" title="Remove from dashboard" data-remove-slot="${esc(slot.id)}">
+            <i class="bi bi-x"></i>
+          </button>
+        </header>
+        <div class="rp-dashboards__tile-body">
+          <div class="rp-dashboards__tile-canvas" data-chart-host></div>
+        </div>
+      </article>`;
+    }).join("");
+
+    SLOTS.forEach((slot) => {
+      const w = widgets[slot.id];
+      if (!w) return;
+      const host  = grid.querySelector(`[data-slot="${slot.id}"] [data-chart-host]`);
+      const chart = chartById(w.chart_id);
+      if (!host) return;
+      if (chart) mountChart(host, chart, w.title_override);
+      else host.innerHTML = `<p class="rp-dashboards__tile-msg">Saved chart not found — it may have been deleted on the Reports page.</p>`;
+    });
+  }
+
+  // ── Render: galleries ───────────────────────────────────────────
+  function cardHtml(chart) {
+    const bound = Object.values(widgets).some((w) => w.chart_id === chart.id);
+    // chart.svg is ECharts' own SVG output — trusted, same as the
+    // Reports-page download path.
+    const thumb = chart.svg
+      || `<svg viewBox="0 0 60 36" aria-hidden="true"><rect x="6" y="17" width="48" height="2" fill="currentColor" opacity="0.4"/></svg>`;
+    return `<button type="button" class="rp-dashboards__chart-card${bound ? " is-bound" : ""}"
+              data-chart-id="${esc(chart.id)}">
+      <span class="rp-dashboards__chart-thumb">${thumb}</span>
+      <span class="rp-dashboards__chart-card-ttl">${esc(chart.title || chart.id)}</span>
+      <span class="rp-dashboards__chart-card-src">${esc(chart.kind || "chart")}</span>
+    </button>`;
+  }
+
+  function renderGalleries() {
+    const charts = loadSavedCharts();
+    if (libGallery) {
+      const q = (libSearch?.value || "").trim().toLowerCase();
+      const list = charts.filter((c) => !q || (c.title || "").toLowerCase().includes(q));
+      libGallery.innerHTML = list.length
+        ? list.map(cardHtml).join("")
+        : `<p class="rp-muted" style="grid-column:1/-1">${charts.length ? "No charts match." : "No saved charts yet."}</p>`;
+    }
+    if (pickGallery) {
+      const q = (pickSearch?.value || "").trim().toLowerCase();
+      const list = charts.filter((c) =>
+        (pickFilter === "all" || (c.kind || "") === pickFilter)
+        && (!q || (c.title || "").toLowerCase().includes(q)));
+      pickGallery.innerHTML = list.length
+        ? list.map(cardHtml).join("")
+        : `<p class="rp-muted" style="grid-column:1/-1">${charts.length ? "No charts match this filter." : "No saved charts yet — create one on the Reports page."}</p>`;
+    }
+  }
+
+  function renderSlotsList() {
+    if (!slotsList) return;
+    slotsList.innerHTML = SLOTS.map((slot) => {
+      const w = widgets[slot.id];
+      const chart = w ? chartById(w.chart_id) : null;
+      const name = w ? (w.title_override?.trim() || chart?.title?.trim() || "Chart") : "Empty";
+      const icon = w ? "bi-bar-chart-fill" : "bi-plus-square-dotted";
+      return `<button class="rp-dashboards__slot${slot.id === selectedSlot ? " is-selected" : ""}" type="button" data-slot="${esc(slot.id)}">
+        <span class="rp-dashboards__slot-key">${esc(slot.id)}</span>
+        <span class="rp-dashboards__slot-name">${esc(name)}</span>
+        <i class="bi ${icon}"></i>
+      </button>`;
+    }).join("");
+  }
+
+  function renderAll() {
+    renderCanvas();
+    renderGalleries();
+    renderSlotsList();
+  }
+
+  // ── Mutations ───────────────────────────────────────────────────
+  function bindChart(slotId, chartId) {
+    widgets[slotId] = { ...(widgets[slotId] || {}), chart_id: chartId };
+    renderAll();
+  }
+  function removeWidget(slotId) {
+    delete widgets[slotId];
+    renderAll();
+  }
+  function selectSlot(slotId) {
+    selectedSlot = slotId;
+    renderSlotsList();
+    if (titleInput) titleInput.value = widgets[slotId]?.title_override || "";
+  }
+  // Where a pick-chart-modal selection lands: the selected slot if it's
+  // free, else the first empty slot, else the selected slot (replace).
+  function pickTarget() {
+    if (!widgets[selectedSlot]) return selectedSlot;
+    const free = SLOTS.find((s) => !widgets[s.id]);
+    return free ? free.id : selectedSlot;
+  }
+
+  // ── Events ──────────────────────────────────────────────────────
+  grid.addEventListener("click", (ev) => {
+    const add = ev.target.closest("[data-add-slot]");
+    if (add) {
+      selectSlot(add.dataset.addSlot);
+      window.openModal?.("pick-chart");
+      return;
+    }
+    const rm = ev.target.closest("[data-remove-slot]");
+    if (rm) { removeWidget(rm.dataset.removeSlot); return; }
+    const cfg = ev.target.closest("[data-config-slot]");
+    if (cfg) {
+      selectSlot(cfg.dataset.configSlot);
+      const w = document.getElementById("dashboards-tools-window");
+      if (w && !w.classList.contains("open")) window.spToggle?.("dashboards-tools-window");
+    }
+  });
+
+  libGallery?.addEventListener("click", (ev) => {
+    const card = ev.target.closest("[data-chart-id]");
+    if (card) bindChart(selectedSlot, card.dataset.chartId);
+  });
+
+  pickGallery?.addEventListener("click", (ev) => {
+    const card = ev.target.closest("[data-chart-id]");
+    if (!card) return;
+    bindChart(pickTarget(), card.dataset.chartId);
+    window.closeModal?.("pick-chart");
+  });
+
+  slotsList?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-slot]");
+    if (btn) selectSlot(btn.dataset.slot);
+  });
+
+  libSearch?.addEventListener("input", renderGalleries);
+  pickSearch?.addEventListener("input", renderGalleries);
+
+  pickModal?.querySelectorAll("[data-filter]").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      pickFilter = pill.dataset.filter;
+      pickModal.querySelectorAll("[data-filter]").forEach((p) => p.classList.toggle("active", p === pill));
+      renderGalleries();
+    });
+  });
+
+  // Title override applies on commit (blur / Enter) — re-mounting the
+  // ECharts instance on every keystroke would be janky.
+  titleInput?.addEventListener("change", () => {
+    const w = widgets[selectedSlot];
+    if (!w) return;
+    w.title_override = titleInput.value.trim();
+    renderCanvas();
+  });
+
+  selectSlot(SLOTS[0].id);
+  renderAll();
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }

@@ -318,6 +318,41 @@ html[data-theme="light"] #page-dashboards .rp-rt-toolbar { background: rgba(255,
   background: color-mix(in srgb, var(--bg) 50%, transparent);
   border-radius: 0.375rem;
 }
+.rp-dashboards__tile-msg {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 0.5rem;
+}
+
+/* Empty slot — dashed placeholder with an add affordance. */
+.rp-dashboards__tile--empty {
+  border-style: dashed;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+.rp-dashboards__tile--empty:hover {
+  transform: none;
+  box-shadow: none;
+}
+.rp-dashboards__tile-add {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.rp-dashboards__tile-add .bi { font-size: 1.5rem; }
+.rp-dashboards__tile-add:hover { color: var(--accent); }
 
 /* Stat tile body — big number + delta. */
 .rp-dashboards__tile-body--stat {
