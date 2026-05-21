@@ -46,7 +46,6 @@ function walk(dir, acc) {
 }
 
 function groupOf(rel) {
-  if (rel.indexOf('base/') === 0 || rel === 'main.css' && false) return 'base';
   if (rel === 'main.css') return 'main';
   if (rel.indexOf('base/') === 0) return 'base';
   if (rel.indexOf('pages/') === 0) return 'page';
@@ -234,11 +233,13 @@ function normalizeSelector(s) {
 function specificity(sel) {
   var a = 0, b = 0, c = 0;
   var s = ' ' + sel + ' ';
+  // strip :where(...) first — it contributes zero specificity, so its
+  // contents must be wiped before the id / class / attr counters run.
+  s = s.replace(/:where\([^)]*\)/g, ' ');                                   // :where -> 0
   s = s.replace(/\[[^\]]*\]/g, function () { b++; return ' '; });          // attrs
   s = s.replace(/#[-_a-zA-Z0-9\\]+/g, function () { a++; return ' '; });    // ids
   s = s.replace(/\.[-_a-zA-Z0-9\\]+/g, function () { b++; return ' '; });   // classes
   s = s.replace(/::[-a-zA-Z]+/g, function () { c++; return ' '; });         // pseudo-elements
-  s = s.replace(/:where\([^)]*\)/g, ' ');                                   // :where -> 0
   s = s.replace(/:[-a-zA-Z]+(\([^)]*\))?/g, function () { b++; return ' '; }); // pseudo-classes
   s = s.replace(/[a-zA-Z][-_a-zA-Z0-9]*/g, function () { c++; return ' '; });  // elements
   return [a, b, c];
@@ -256,10 +257,53 @@ function normVal(v) {
 /* extract class tokens from a normalized selector */
 function classesIn(sel) {
   var out = [], m;
-  var re = /\.(-?[_a-zA-Z -￿][-_a-zA-Z0-9 -￿]*)/g;
+  // explicit \u00a0 / \uffff escapes: as literals these render as plain
+  // spaces and are trivially misread as a bug. \u00a0-\uffff is the
+  // correct range for CSS non-ASCII identifier characters.
+  var re = /\.(-?[_a-zA-Z\u00a0-\uffff][-_a-zA-Z0-9\u00a0-\uffff]*)/g;
   while ((m = re.exec(sel))) out.push(m[1]);
   return out;
 }
+
+/* Split a normalized selector into compounds on top-level whitespace —
+   spaces inside :not()/:is()/:where()/:has() and [] are NOT split points.
+   normalizeSelector already space-pads combinators, so `.a > .b` yields
+   ['.a','>','.b']. */
+function splitCompounds(sel) {
+  var out = [], buf = '', depth = 0;
+  for (var i = 0; i < sel.length; i++) {
+    var c = sel[i];
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') { if (depth > 0) depth--; }
+    if (c === ' ' && depth === 0) { if (buf) out.push(buf); buf = ''; continue; }
+    buf += c;
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+
+/* The "subject" (key) compound — the last compound, i.e. the element the
+   rule actually styles. `.obj-tab .bi` styles `.bi`, not `.obj-tab`. */
+function subjectCompound(sel) {
+  var t = splitCompounds(sel);
+  for (var i = t.length - 1; i >= 0; i--) {
+    if (t[i] && !/^[>+~]$/.test(t[i])) return t[i];
+  }
+  return sel;
+}
+
+/* Everything before the subject compound — the ancestor/context chain.
+   Differs between `.obj-tab` and `html[data-theme="light"] .obj-tab`, so
+   theme/container variants land in separate divergence buckets. */
+function ancestorChain(sel) {
+  var t = splitCompounds(sel);
+  for (var i = t.length - 1; i >= 0; i--) {
+    if (t[i] && !/^[>+~]$/.test(t[i])) { t.length = i; break; }
+  }
+  return t.join(' ');
+}
+
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 /* ── run ─────────────────────────────────────────────────────────────────── */
 console.log('Scanning ' + STYLES_DIR + ' …');
@@ -382,12 +426,27 @@ var classIndex = Object.keys(byClass).sort().map(function (cls) {
   var fileCounts = {};
   rs.forEach(function (r) { fileCounts[r.file] = (fileCounts[r.file] || 0) + 1; });
 
-  // property divergence: same property set to >=2 distinct values across ALL
-  // rules that target this class, regardless of the rest of the selector.
+  // property divergence — state-aware. A class can be styled across many
+  // rules; only a genuine *conflict* should count:
+  //   (1) only rules where the class is in the SUBJECT compound — a rule
+  //       like `.obj-tab .bi` styles `.bi`, not `.obj-tab`;
+  //   (2) survivors bucket by atContext + ancestor chain + subject-state
+  //       (the subject compound minus the class token), so `:hover` /
+  //       `.active` / theme-prefixed / descendant variants separate out.
+  //       A property is divergent only when ONE bucket — same element,
+  //       same state, same context — holds 2+ distinct values.
+  var clsTokenRe = new RegExp('\\.' + escRe(cls) + '(?![-_a-zA-Z0-9])', 'g');
   var propMap = {};
   rs.forEach(function (r) {
+    var subj = subjectCompound(r.selector);
+    var hadClass = false;
+    var stateSig = subj.replace(clsTokenRe, function () { hadClass = true; return ''; });
+    if (!hadClass) return;   // class is an ancestor here, not the styled element
+    var bucket = (r.atContext || '') + ' ||| ' + ancestorChain(r.selector)
+               + ' ||| ' + stateSig;
     r.decls.forEach(function (d) {
-      (propMap[d.prop] || (propMap[d.prop] = [])).push({
+      var pm = propMap[d.prop] || (propMap[d.prop] = {});
+      (pm[bucket] || (pm[bucket] = [])).push({
         value: d.value, norm: normVal(d.value), important: d.important,
         file: r.file, line: d.line, selector: r.selector, atContext: r.atContext || ''
       });
@@ -395,10 +454,16 @@ var classIndex = Object.keys(byClass).sort().map(function (cls) {
   });
   var divergent = [];
   Object.keys(propMap).sort().forEach(function (p) {
-    var entries = propMap[p];
-    var distinct = {};
-    entries.forEach(function (e) { distinct[e.norm] = 1; });
-    if (Object.keys(distinct).length >= 2) divergent.push({ prop: p, entries: entries });
+    var buckets = propMap[p], entries = [];
+    Object.keys(buckets).forEach(function (bk) {
+      var be = buckets[bk], distinct = {};
+      be.forEach(function (e) { distinct[e.norm] = 1; });
+      // a bucket with 2+ distinct values = same element/state set twice
+      if (Object.keys(distinct).length >= 2) {
+        be.forEach(function (e) { entries.push(e); });
+      }
+    });
+    if (entries.length) divergent.push({ prop: p, entries: entries });
   });
 
   return {
