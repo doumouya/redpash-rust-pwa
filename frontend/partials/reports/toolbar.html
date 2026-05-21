@@ -1,23 +1,61 @@
-<!-- Reports toolbar — search + filter + view controls + tools panel.
-     Cleaner-style toolbar; the source-file selector is the file-tabs
-     strip one row up. Reports are read-only against the source — no
-     row-select / delete / edit modes. Filter funnel opens the left
-     filter panel; the tools button opens the right Reports Tools panel. -->
+<!-- Reports toolbar — full cleaner-style file-tab toolbar: same buttons,
+     same order as the cleaner's. The one difference is the Report Tools
+     panel (right) in place of the cleaner's Cleaning tools. Reports are
+     read-only on the source, so the edit / select / delete modes are
+     visual for now — real wiring lands with the tools stage. -->
 <div class="rp-rt-toolbar">
 
-  <input class="rp-rt-search" type="search" placeholder="Filter rows in source…"
-         data-reports-search />
-
+  <!-- Filter funnel — opens the left filter panel. -->
   <button class="rp-btn" title="Filter"
           data-sp-panel-trigger="reports-filter-panel"
           onclick="spToggle('reports-filter-panel')">
     <i class="bi bi-funnel"></i>
   </button>
 
+  <!-- Search the source rows. -->
+  <input class="rp-rt-search" type="search" placeholder="Filter rows in source…"
+         data-reports-search />
+
+  <!-- Mode triplet — edit / select / delete; spSetMode keeps one active. -->
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="edit"
+          title="Edit mode" onclick="spSetMode(this)">
+    <i class="bi bi-pencil"></i>
+  </button>
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="select"
+          title="Select mode" onclick="spSetMode(this)">
+    <i class="bi bi-check2-square"></i>
+  </button>
+  <span class="rp-rt-sel-chip" data-count="0"><i class="bi bi-check2-square"></i> 0 selected</span>
+  <button type="button" class="rp-btn" data-sp-mode data-sp-mode-value="delete"
+          title="Delete mode" onclick="spSetMode(this)">
+    <i class="bi bi-trash"></i>
+  </button>
+
+  <!-- Refresh the source view. -->
   <button class="rp-btn" title="Refresh source" onclick="spRefresh(this)">
     <i class="bi bi-arrow-clockwise"></i>
   </button>
 
+  <!-- Row-numbers toggle. -->
+  <button type="button" class="rp-btn is-active" title="Show row numbers"
+          aria-pressed="true" onclick="spToggleRowNums(this)">
+    <i class="bi bi-list-ol"></i>
+  </button>
+
+  <!-- Open Reports / Dashboards. -->
+  <a class="rp-btn" href="#/reports" title="Reports">
+    <i class="bi bi-bar-chart-fill"></i>
+  </a>
+  <a class="rp-btn" href="#/dashboards" title="Dashboards">
+    <i class="bi bi-grid-1x2-fill"></i>
+  </a>
+
+  <!-- Compute cleanness for the source file. -->
+  <button class="rp-btn" title="Compute cleanness" onclick="spClean(this)">
+    <i class="bi bi-magic"></i>
+  </button>
+
+  <!-- Rows per page. -->
   <div class="rp-dd-wrap">
     <button class="rp-rt-pill-btn" title="Rows per page" onclick="spDdToggle(this)">
       <span data-sp-rows-label>25</span><span class="rp-rt-pill-unit"> rows</span>
@@ -45,13 +83,18 @@
     </div>
   </div>
 
-  <!-- Reports Tools panel toggle — pinned to the right, mirrors the
-       cleaner's tools-panel button. -->
-  <button class="rp-btn" type="button" title="Reports tools"
+  <!-- Sync search + rows-per-page across file tabs. -->
+  <button type="button" class="rp-btn" title="Sync across file tabs"
+          onclick="spToggleSync(this)">
+    <i class="bi bi-link-45deg"></i>
+  </button>
+
+  <!-- Report Tools panel — pinned right (the cleaner's Cleaning tools slot). -->
+  <button class="rp-btn" type="button" title="Report tools"
           style="margin-left:auto"
           data-sp-panel-trigger="reports-tools-panel"
           onclick="spToggle('reports-tools-panel')">
-    <i class="bi bi-tools"></i>
+    <i class="bi bi-diagram-3"></i>
   </button>
 
 </div>
