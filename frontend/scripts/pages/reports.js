@@ -1470,11 +1470,12 @@ function _addAggRow(root) {
 // /reports/preview, render the grouped result. Detail rows + grand
 // total + matrix layout are the next render slice.
 
-// True when at least one group-by column is set — the signal to render
-// a grouped report instead of the raw source page.
+// True when grouping is configured — a group row OR a group column —
+// the signal to render a grouped report instead of the raw source page.
 function _reportGroupingActive(root) {
-  return [...root.querySelectorAll("[data-reports-group-rows] select")]
+  const rows = [...root.querySelectorAll("[data-reports-group-rows] select")]
     .some((s) => s.value);
+  return rows || !!root.querySelector("[data-reports-group-cols]")?.value;
 }
 
 // Read the Report Tools panel into a ReportSpec for /reports/preview.
@@ -1482,11 +1483,15 @@ function _collectReportSpec(root) {
   const groupBy = [...root.querySelectorAll("[data-reports-group-rows] select")]
     .map((s) => s.value).filter(Boolean);
   const groupCols = root.querySelector("[data-reports-group-cols]")?.value || "";
+  // "Row count" blocks (col "*") are dropped — the engine can't aggregate
+  // the "*" literal. With no explicit aggregations the engine adds an
+  // implicit count(*), which is exactly the row count.
   const aggregations = [...root.querySelectorAll("[data-reports-aggs] .rp-rt-tool-agg")]
     .map((blk) => {
       const sels = blk.querySelectorAll("select");
-      return { col: sels[0]?.value || "*", fn: sels[1]?.value || "count", alias: "" };
-    });
+      return { col: sels[0]?.value || "", fn: sels[1]?.value || "count", alias: "" };
+    })
+    .filter((a) => a.col && a.col !== "*");
   const show = (k) => !!root.querySelector(`[data-reports-show="${k}"]`)?.checked;
   return {
     group_by:       groupBy,
@@ -1494,8 +1499,6 @@ function _collectReportSpec(root) {
     aggregations,
     filter:         null,
     sort:           [],
-    windows:        [],
-    top_n:          null,
     show_details:   show("details"),
     show_subtotals: show("subtotals"),
     show_total:     show("total"),
