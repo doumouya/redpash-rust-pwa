@@ -28,6 +28,7 @@ YAML frontmatter above).
 - [Charts](features/charts.md) — the 13 chart kinds and how they dispatch through `chart-render.js`.
 
 ### Objects (DTOs that travel over the wire)
+- [Object model](objects/object-model.md) — **the locked contract.** Two entities (Project, File); Report/Dashboard are derived views; stage is computed.
 - [User](objects/user.md) — `UserProfile`, `users` table, bootstrap + OAuth upsert, `resolve_user_rid`.
 - [Project](objects/project.md) — `ProjectSummary`, default-project lifecycle, `ensure_default_project`.
 - [File](objects/file.md) — `FileSummary` + `ColumnMeta` + `PageQuery` + `Row`, upload → step → hydrate, step kinds.
@@ -70,6 +71,7 @@ YAML frontmatter above).
 - [0001 — Orphan preferences](internal/runbook/0001-orphan-prefs.md) — Settings controls that persisted a choice no code consumed.
 - [Excel edge-case catalog](internal/excel-edge-cases/index.md) — triage board for Workstream 4: 22 dirty multi-sheet `.xlsx` fixtures × 41 edge-case classes (EXL-01…41).
 - [Standup log](internal/standup/index.md) — git-mediated async team standup; one append-only file per contributor.
+- [Object model — hard refresh](internal/object-model-hard-refresh.md) — execution plan for retiring the `reports` / `dashboards` tables.
 
 ## Reference set
 
