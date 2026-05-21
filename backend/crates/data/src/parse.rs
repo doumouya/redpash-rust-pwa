@@ -202,6 +202,32 @@ pub fn parse_text(text: String) -> Result<DataFrame> {
         }
     }
 
+    // **Wrapped one-column file.** Some exports quote the WHOLE record,
+    // so every line is a single `"…delimiters-inside…"` blob — Pass 1
+    // sees no *unquoted* delimiter and it reads as one column. Polars'
+    // CSV parser would then merge, or silently drop, any line whose
+    // quotes don't balance (a stray `"`) — losing rows before the user
+    // can touch them. When the shape is detected, parse LINE-LITERALLY:
+    // one physical line = one cell, no quote processing, so every row
+    // survives intact for the `unwrap_csv` cleaning step to split.
+    if !found_multi {
+        let sample: Vec<&str> = text.lines().skip(skip_rows).take(20).collect();
+        let wrapped = sample.len() >= 2 && {
+            const DELIMS: [u8; 4] = [b',', b';', b'\t', b'|'];
+            let rich = sample.iter().filter(|l| {
+                DELIMS.iter().any(|&d| l.bytes().filter(|&b| b == d).count() >= 2)
+            }).count();
+            rich * 2 >= sample.len()
+        };
+        if wrapped {
+            let mut rows = text.lines().skip(skip_rows);
+            let header = rows.next().unwrap_or("column_1");
+            let values: Vec<&str> = rows.collect();
+            return DataFrame::new(vec![Series::new(header.into(), values.as_slice())])
+                .map_err(DataError::from);
+        }
+    }
+
     let cursor = Cursor::new(text.into_bytes());
     CsvReadOptions::default()
         .with_has_header(true)

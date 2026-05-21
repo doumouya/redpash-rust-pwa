@@ -182,15 +182,6 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
                     .unwrap_or(b',')
             }
 
-            // Does this record wrap its fields in single quotes? A real
-            // `"`-quoted row carries far more `"` than the stray
-            // apostrophes in its values, so a simple majority is safe.
-            fn is_single_quoted(record: &str) -> bool {
-                let singles = record.bytes().filter(|&b| b == b'\'').count();
-                let doubles = record.bytes().filter(|&b| b == b'"').count();
-                singles >= 2 && singles > doubles
-            }
-
             // Strip one balanced outer pair of `q` from a field value.
             fn strip_pair(s: &str, q: char) -> String {
                 let t = s.trim();
@@ -201,36 +192,28 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
                 }
             }
 
-            // Parse ONE record into fields, sniffing its own delimiter
-            // and quote style. `\"`-escaped quotes are normalised to
-            // plain `"` first. Single-quote rows are split on the
-            // delimiter only — single quotes carry no escape for an
-            // embedded apostrophe (`Coupure d'eau`), so quote-aware
-            // parsing would mis-split — then unwrapped per field.
+            // Parse ONE record into fields. The wrapped corpus has
+            // reliable delimiter structure but UNreliable quoting —
+            // stray / unbalanced `"`, mixed `"` and `'`. Quote-aware
+            // parsing trips on that junk and drops fields, so split on
+            // the delimiter alone, then strip a balanced outer quote
+            // pair (`"` or `'`) per field. `\"`-escaped quotes are
+            // normalised to plain `"` first. (Trade-off: a field value
+            // containing the delimiter would mis-split — acceptable for
+            // a wrapped-file rescue, where structure beats the rare
+            // delimiter-in-value.)
             fn unwrap_record(record: &str) -> Vec<String> {
                 let rec = record.trim().replace("\\\"", "\"");
                 if rec.is_empty() {
                     return Vec::new();
                 }
-                let single = is_single_quoted(&rec);
-                let mut builder = csv::ReaderBuilder::new();
-                builder
-                    .delimiter(sniff_delim(&rec))
-                    .has_headers(false)
-                    .flexible(true);
-                if single {
-                    builder.quoting(false);
-                }
-                let mut rdr = builder.from_reader(rec.as_bytes());
-                let fields: Vec<String> = match rdr.records().next() {
-                    Some(Ok(r)) => r.iter().map(|f| f.trim().to_string()).collect(),
-                    _           => return vec![rec],
-                };
-                if single {
-                    fields.iter().map(|f| strip_pair(f, '\'')).collect()
-                } else {
-                    fields
-                }
+                let delim = sniff_delim(&rec) as char;
+                rec.split(delim)
+                    .map(|f| {
+                        let unquoted = strip_pair(f.trim(), '"');
+                        strip_pair(&unquoted, '\'')
+                    })
+                    .collect()
             }
 
             // The wrapped header was line 0 of the source → the column
