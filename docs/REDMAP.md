@@ -422,6 +422,23 @@ redpash-app/
 
 ## Conventions & gotchas
 
+### Commit messages
+
+- **Subject:** `area: imperative summary` — lowercase area prefix (`docs:`, `css:`, `feat:`, `tools:`, `fix:`, …), under ~70 chars.
+- **Body — a per-file changelog.** One bullet per touched file: `path — what changed (and why, if not obvious)`. A reviewer gets "which part to check" straight from `git log` / `git show --stat`, no diffing required.
+- **Touched a doc?** Bump its `last modified date` frontmatter in the *same* commit — it's the per-file freshness proxy the docs are ranked by.
+- **One commit = one coherent change** — avoid broad `checkpoint:` commits bundling unrelated efforts; they can't be reviewed or reverted per-feature.
+
+Example body:
+
+```
+docs: sync REDMAP for the Events system
+
+- REDMAP.md — new Event entry in Objects; /api/events in the API table.
+- db/schema.md — events table + indexes; EVT prefix marked live.
+- api/events.md — new per-resource doc.
+```
+
 ### Polars 0.43 quirks
 - **Use eager `DataFrame::sort` after `group_by().agg()`** — lazy `sort_by_exprs` chained off `group_by` has been observed to silently drop in some 0.43 builds. See `data::group_by::execute` step 5.
 - **Quantile type is `QuantileInterpolOptions` (not `QuantileMethod`)** in 0.43.1 — `data::group_by::build_agg_exprs` uses `base.quantile(lit(0.25), QuantileInterpolOptions::Linear)` for `Q1`/`Q3`/`Median`.

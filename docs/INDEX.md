@@ -2,7 +2,7 @@
 title: Documentation index
 section: Start here
 order: 0
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # RedPash docs
