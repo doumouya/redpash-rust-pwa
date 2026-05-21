@@ -1354,45 +1354,56 @@ html[data-theme="light"] .rp-rt-table .rp-rt-action {
   gap: 0.1875rem;
 }
 
+/* Page buttons — circular glass pills, shared by every redtable
+   (cleaner / objects / reports). Promoted here un-scoped from the old
+   #page-cleaner override so all three pagers match. `.active` (sandbox)
+   and `.on` (library) are both honoured as the current-page class. */
 .rp-rt-pg {
-  min-width: 1.75rem;
+  width: 1.75rem;
   height: 1.75rem;
-  padding: 0 0.375rem;
-  background: transparent;
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 0.3125rem;
+  padding: 0;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 50%;
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
   color: color-mix(in srgb, var(--text) 75%, transparent);
-  font-size: 0.6875rem;
+  font: 0.6875rem inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
   line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
+  transition: background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
 }
-.rp-rt-pg:hover:not(:disabled):not(.on) {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
+html[data-theme="light"] .rp-rt-pg {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
 }
+.rp-rt-pg:hover:not(:disabled):not(.active):not(.on) {
+  background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
+}
+.rp-rt-pg.active,
 .rp-rt-pg.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
   font-weight: 700;
 }
-.rp-rt-pg:disabled { opacity: 0.3; cursor: not-allowed; }
-
+.rp-rt-pg:disabled { opacity: 0.35; cursor: not-allowed; }
+.rp-rt-pg .bi { font-size: 0.6875rem; }
+.rp-rt-pg-ellipsis,
 .rp-rt-pg-gap {
   font-size: 0.6875rem;
   color: var(--muted);
   padding: 0 0.125rem;
   user-select: none;
-}
-
-html[data-theme="light"] .rp-rt-pg {
-  border-color: rgba(0, 0, 0, 0.12);
-  color: rgba(0, 0, 0, 0.65);
 }
 
 

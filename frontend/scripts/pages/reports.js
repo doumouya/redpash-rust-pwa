@@ -32,6 +32,7 @@
 
 import { api }   from "/scripts/api.js";
 import { toast } from "/scripts/ui/toast.js";
+import { pagerMarkup } from "/scripts/ui/pager.js";
 import { loadECharts, loadECStat } from "/scripts/dashboards/echarts.js";
 import {
   chartOption, chartOptionHeatmap, chartOptionRadar,
@@ -945,36 +946,9 @@ function _renderReportsPaging(root, page) {
   }
 
   if (pages) {
-    const cur   = page.page;
-    const total = page.pages || 1;
-    // Class names match library + cleaner convention (.rp-rt-pg / .on /
-     // .rp-rt-pg-gap) so the library's redtable.css pagination styles
-     // apply here too. Previously rp-rt-page-btn / is-active /
-     // rp-rt-page-ellipsis — nothing in the library matched, so reports
-     // pagination rendered as unstyled UA buttons.
-    const btn = (label, p, disabled, active) =>
-      `<button type="button" class="rp-rt-pg${active ? ' on' : ''}"${disabled ? ' disabled' : ''} data-page="${p}">${label}</button>`;
-    const parts = [];
-    parts.push(btn("‹", Math.max(1, cur - 1), cur <= 1, false));
-
-    // Compact pager: 1 … cur-1 cur cur+1 … last.
-    const seen = new Set();
-    const push = (p) => {
-      if (p < 1 || p > total || seen.has(p)) return;
-      seen.add(p);
-      parts.push(btn(String(p), p, false, p === cur));
-    };
-    push(1);
-    if (cur - 2 > 2)         parts.push(`<span class="rp-rt-pg rp-rt-pg-gap">…</span>`);
-    push(cur - 1); push(cur); push(cur + 1);
-    if (cur + 2 < total - 1) parts.push(`<span class="rp-rt-pg rp-rt-pg-gap">…</span>`);
-    push(total);
-
-    parts.push(btn("›", Math.min(total, cur + 1), cur >= total, false));
-    pages.innerHTML = parts.join("");
-
-    pages.querySelectorAll("button[data-page]").forEach((b) => {
-      b.addEventListener("click", () => window.reportSetPage?.(b.dataset.page));
+    pages.innerHTML = pagerMarkup(page.page, page.pages || 1);
+    pages.querySelectorAll("button[data-pg]").forEach((b) => {
+      b.addEventListener("click", () => window.reportSetPage?.(Number(b.dataset.pg)));
     });
   }
 }

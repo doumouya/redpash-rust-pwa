@@ -8,8 +8,9 @@
  * Canonical home for the strip, its rows-info label, and the page-button
  * wrapper — promoted out of the per-page sheets, where #page-cleaner /
  * #page-reports / #page-objects each re-declared near-identical copies.
- * The page buttons themselves (.rp-rt-pg) stay in redtable.css / the host
- * page (cleaner uses a custom circular-pill design).
+ * The page buttons themselves (.rp-rt-pg) live in redtable.css — one
+ * circular-pill design shared by every redtable (cleaner / objects /
+ * reports).
  *
  * `--rt-pager-h` lets a host page sync the strip height with the room it
  * reserves under the table; falls back to 2rem.

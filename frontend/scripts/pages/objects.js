@@ -28,6 +28,7 @@
 import { api }       from "/scripts/api.js";
 import { toast }     from "/scripts/ui/toast.js";
 import { openModal } from "/scripts/ui/modal.js";
+import { pagerMarkup } from "/scripts/ui/pager.js";
 import { OBJECT_TAB_KEYS, normalizeObjectTabs }
   from "/scripts/objects-catalog.js";
 
@@ -3885,11 +3886,10 @@ function paintObjectsSandboxTable(kind) {
   }
   const _pages = _pagerHost?.querySelector("[data-objects-pages]");
   if (_pages) {
-    _pages.innerHTML = totalPages <= 1
-      ? ""
-      : Array.from({ length: totalPages }, (_, i) => i + 1)
-          .map((p) => `<button type="button" class="rp-rt-pg${p === page ? " on" : ""}" onclick="objectsGoPage(${p})">${p}</button>`)
-          .join("");
+    _pages.innerHTML = pagerMarkup(page, totalPages);
+    _pages.querySelectorAll("button[data-pg]").forEach((b) => {
+      b.addEventListener("click", () => window.objectsGoPage?.(Number(b.dataset.pg)));
+    });
   }
 
   // Honour the per-tab columns picker — _visibleOrderedCols reads

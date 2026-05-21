@@ -136,55 +136,9 @@
    components/pager.css (imported above). #page-cleaner only reserves
    room for it: the table-wrap's bottom = var(--rt-pager-h). */
 /* .rp-rt-rows-info + .rp-rt-pages styling lives in components/pager.css. */
-/* Page buttons — circular glass pills (same recipe as .rp-btn).
-   Supports both .active (sandbox) and .on (legacy library) naming. */
-#page-cleaner .rp-rt-pg {
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
-  border-radius: 50%;
-  backdrop-filter: blur(0.75rem);
-  -webkit-backdrop-filter: blur(0.75rem);
-  color: color-mix(in srgb, var(--text) 75%, transparent);
-  font: 0.6875rem inherit;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.2);
-  transition: background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
-}
-html[data-theme="light"] #page-cleaner .rp-rt-pg {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
-  box-shadow: 0 0.125rem 1rem rgba(0, 0, 0, 0.06);
-}
-#page-cleaner .rp-rt-pg:hover:not(:disabled):not(.active):not(.on) {
-  background: color-mix(in srgb, #fff 18%, rgba(255, 255, 255, 0.08));
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #fff;
-  box-shadow: 0 0.125rem 0.625rem color-mix(in srgb, #fff 22%, transparent);
-}
-#page-cleaner .rp-rt-pg.active,
-#page-cleaner .rp-rt-pg.on {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-}
-#page-cleaner .rp-rt-pg:disabled { opacity: 0.35; cursor: not-allowed; }
-#page-cleaner .rp-rt-pg .bi { font-size: 0.6875rem; }
-#page-cleaner .rp-rt-pg-ellipsis,
-#page-cleaner .rp-rt-pg-gap {
-  font-size: 0.6875rem;
-  color: var(--muted);
-  padding: 0 0.125rem;
-  user-select: none;
-}
+/* Page buttons — `.rp-rt-pg` (circular glass pills) are now shared,
+   un-scoped, in components/redtable/redtable.css so cleaner / objects /
+   reports all match. The old #page-cleaner-scoped copy lived here. */
 
 /* ── Table head — sticky band + sandbox typography ─────────────────
    Vendored redtable.css gives .rp-rt-table thead th the right text
