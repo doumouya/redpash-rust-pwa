@@ -100,6 +100,7 @@ redpash-app/
     ├── auth/google.md                      OAuth flow + cookies + dev_user fallback
     ├── db/schema.md                        tables + migrations + RID prefixes
     ├── dev/setup.md                        prereqs, watch loop
+    ├── internal/runbook/                   team-only — post-mortems (Problem Statement / Troubleshooting steps / RCA / Solution / Post Checking)
     └── frontend/design.md                  tokens, dark mode, naming convention vs library
 ```
 

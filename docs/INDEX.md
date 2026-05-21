@@ -64,6 +64,10 @@ YAML frontmatter above).
 ### Auth
 - [Google OAuth](auth/google.md) — Phase 4a flow, cookies, session storage, dev_user fallback.
 
+### Runbook (internal)
+- [Runbook index](internal/runbook/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking. **Internal — RedPash team only.**
+- [0001 — Orphan preferences](internal/runbook/0001-orphan-prefs.md) — Settings controls that persisted a choice no code consumed.
+
 ## Reference set
 
 The original Django app lives at `streamlit-proj/clarna-django/md/` —
