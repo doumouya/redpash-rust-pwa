@@ -124,6 +124,9 @@ export default function mount(root) {
     { once: true },
   );
 
+  // "Parse any CSV" demo widget — drop a file, see its cleanness score.
+  setupDemo(root);
+
   // openModal / closeModal / Escape-closes-all live in main.js so
   // they're available on every page (landing + home + future surfaces).
 
@@ -221,4 +224,89 @@ export default function mount(root) {
     const saved = localStorage.getItem("redpash-lang") || "en";
     if (saved !== "en") window.setLang(saved);
   } catch {}
+}
+
+// ── "Parse any CSV" demo ───────────────────────────────────────────
+// Drop or pick a CSV → POST it to /api/demo/parse (ephemeral, no auth,
+// nothing stored) → render the cleanness score and funnel to sign-up.
+function setupDemo(root) {
+  const drop   = root.querySelector("#rp-demo-drop");
+  const input  = root.querySelector("#rp-demo-file");
+  const note   = root.querySelector("#rp-demo-note");
+  const result = root.querySelector("#rp-demo-result");
+  if (!drop || !input || !note || !result) return;
+
+  const esc = (s) => String(s).replace(/[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const showIdle = () => {
+    drop.hidden = false;
+    note.hidden = false;
+    result.hidden = true;
+    result.innerHTML = "";
+    input.value = ""; // let the same file be re-picked
+  };
+  const wireAgain = () => {
+    result.querySelector(".rp-demo-again")?.addEventListener("click", showIdle);
+  };
+
+  const showResult = (name, d) => {
+    const n = Number(d.type_mismatches) || 0;
+    const findings = `${n} type mismatch${n === 1 ? "" : "es"} · `
+      + `${Number(d.empty_pct).toFixed(1)}% empty cells`;
+    result.innerHTML = `
+      <div class="rp-demo-file"><i class="bi bi-filetype-csv"></i> ${esc(name)}</div>
+      <div class="rp-demo-score">${Math.round(d.score)}<span>%</span></div>
+      <div class="rp-demo-score-lbl">cleanness score</div>
+      <div class="rp-demo-stats">${Number(d.rows).toLocaleString()} rows × ${d.columns} cols`
+      + ` · parsed in ${d.parse_ms} ms</div>
+      <div class="rp-demo-findings">
+        <i class="bi bi-exclamation-triangle-fill"></i> ${findings}
+      </div>
+      <button type="button" class="rp-cta-btn rp-cta-btn--primary rp-demo-cta"
+              onclick="openModal('login')">
+        <i class="bi bi-rocket-takeoff-fill"></i>
+        <span class="rp-cta-label">Log in to clean it</span>
+      </button>
+      <button type="button" class="rp-demo-again">↻ Try another file</button>`;
+    wireAgain();
+  };
+
+  const showError = (name) => {
+    result.innerHTML = `
+      <div class="rp-demo-err">
+        <i class="bi bi-exclamation-triangle"></i>
+        Couldn't parse <b>${esc(name)}</b> — that's a bug on us, not your file.
+      </div>
+      <button type="button" class="rp-demo-again">↻ Try another file</button>`;
+    wireAgain();
+  };
+
+  const run = async (file) => {
+    if (!file) return;
+    drop.hidden = true;
+    note.hidden = true;
+    result.hidden = false;
+    result.innerHTML = `<div class="rp-demo-loading">`
+      + `<i class="bi bi-arrow-repeat"></i> Scoring <b>${esc(file.name)}</b>…</div>`;
+    try {
+      const res = await fetch("/api/demo/parse", { method: "POST", body: file });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showResult(file.name, await res.json());
+    } catch {
+      showError(file.name);
+    }
+  };
+
+  input.addEventListener("change", () => run(input.files[0]));
+  drop.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    drop.classList.add("rp-demo-drop--over");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("rp-demo-drop--over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("rp-demo-drop--over");
+    run(e.dataTransfer?.files?.[0]);
+  });
 }

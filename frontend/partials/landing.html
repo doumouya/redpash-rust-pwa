@@ -82,6 +82,20 @@
         </button>
       </div>
 
+      <!-- "Parse any CSV" demo — drop a file → cleanness score → sign-up.
+           Wired by landing.js → POST /api/demo/parse (no auth, nothing
+           stored). The result card is built by JS into #rp-demo-result. -->
+      <div class="rp-demo" id="rp-demo">
+        <label class="rp-demo-drop" id="rp-demo-drop">
+          <input type="file" id="rp-demo-file" accept=".csv,text/csv,text/plain" hidden />
+          <i class="bi bi-cloud-arrow-up-fill"></i>
+          <span class="rp-demo-drop-ttl">Bring your messiest CSV</span>
+          <span class="rp-demo-drop-sub">Drop it here — or click to browse</span>
+        </label>
+        <div class="rp-demo-note" id="rp-demo-note">Scored on the spot · nothing stored</div>
+        <div class="rp-demo-result" id="rp-demo-result" hidden></div>
+      </div>
+
       <!-- Animated step indicator: Import → Clean → Report → Publish -->
       <div class="rp-hero-steps" aria-hidden="true">
 

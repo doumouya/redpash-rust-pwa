@@ -35,6 +35,7 @@ mod auth;
 mod charts;
 mod companies;
 mod dashboards;
+mod demo;
 mod docs;
 mod events;
 mod files;
@@ -162,6 +163,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())
         .nest("/events",     events::routes())
+        .nest("/demo",       demo::routes())
         .nest("/docs",       docs::routes())
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
