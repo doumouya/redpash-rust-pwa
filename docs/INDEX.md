@@ -64,9 +64,12 @@ YAML frontmatter above).
 ### Auth
 - [Google OAuth](auth/google.md) — Phase 4a flow, cookies, session storage, dev_user fallback.
 
-### Runbook (internal)
-- [Runbook index](internal/runbook/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking. **Internal — RedPash team only.**
+### Internal — RedPash team only
+
+- [Runbook index](internal/runbook/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking.
 - [0001 — Orphan preferences](internal/runbook/0001-orphan-prefs.md) — Settings controls that persisted a choice no code consumed.
+- [Excel edge-case catalog](internal/excel-edge-cases/index.md) — triage board for Workstream 4: 22 dirty multi-sheet `.xlsx` fixtures × 41 edge-case classes (EXL-01…41).
+- [Standup log](internal/standup/index.md) — git-mediated async team standup; one append-only file per contributor.
 
 ## Reference set
 
