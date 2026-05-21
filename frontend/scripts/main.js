@@ -18,6 +18,11 @@
 
 import { api } from "/scripts/api.js";
 import { toast } from "/scripts/ui/toast.js";
+import { installErrorCapture, reportEvent } from "/scripts/events.js";
+
+// Arm the frontend error-capture net before anything else runs, so an
+// exception during boot still lands in the Events log. See events.js.
+installErrorCapture();
 
 // chrome:
 //   "default" (or unset) → app shell (topbar + gutter padding around #app)
@@ -184,11 +189,30 @@ async function mount(route, app, params) {
   // Fetch partial + module in parallel.
   const [html, mod] = await Promise.all([
     fetch(route.partial).then((r) => r.ok ? r.text() : Promise.reject(r.status)),
-    import(route.script).catch(() => ({ default: () => {} })),
+    import(route.script).catch((err) => {
+      // A page module that 404s or fails to parse is a silent break —
+      // the catch keeps the app alive, so log it for the monitoring tool.
+      reportEvent({
+        kind:    "page_script_error",
+        message: err?.message || `failed to load ${route.script}`,
+        source:  "main.js#mount",
+        context: { route: route.path, script: route.script, stack: err?.stack },
+      });
+      return { default: () => {} };
+    }),
   ]);
   app.innerHTML = html;
   try { await mod.default?.(app, { session, params: params || {} }); }
-  catch (err) { console.error(`[router] mount failed for ${route.path}`, err); toast.error("Failed to load page"); }
+  catch (err) {
+    console.error(`[router] mount failed for ${route.path}`, err);
+    toast.error("Failed to load page");
+    reportEvent({
+      kind:    "page_mount_error",
+      message: err?.message || String(err),
+      source:  "main.js#mount",
+      context: { route: route.path, stack: err?.stack },
+    });
+  }
   app.setAttribute("aria-busy", "false");
 }
 

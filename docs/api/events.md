@@ -32,8 +32,14 @@ Three paths feed the `events` table:
 2. **Explicit — lifecycle actions.** `event::record(&db, EventDraft { … })`
    at notable success points. Wired today: `auth_login`, `auth_logout`,
    `file_upload`, `file_delete`, `step_apply` (all `level = "info"`).
-3. **Frontend — `POST /api/events`.** Client-side JS errors and failed
-   user actions (see below).
+3. **Frontend — `POST /api/events`.** A capture module
+   ([`scripts/events.js`](../../frontend/scripts/events.js)) logs what
+   the backend structurally can't see — uncaught JS exceptions,
+   unhandled promise rejections, transport failures (a `fetch` that
+   never reached the server), and page-module load/mount failures. HTTP
+   error *responses* are **not** re-reported client-side: path 1 above
+   already owns them, and re-logging would double every failure. See
+   [`POST /api/events`](#post-apievents) for the body and the kinds.
 
 **Fire-and-forget.** `event::record` clones the pool and spawns the
 INSERT on a detached task — the request path never blocks on, or fails
@@ -123,6 +129,24 @@ fire-and-forget, so even a later failure is invisible to the client.
   the `rp_session` cookie. The client never asserts its own identity.
 - An unrecognised `level` is coerced to `error` so a mislabelled event
   isn't silently dropped.
+
+### Frontend event kinds
+
+The capture module emits these `kind`s automatically — no per-feature
+instrumentation:
+
+| `kind`                | Level   | Captured from |
+|-----------------------|---------|---------------|
+| `js_error`            | `error` | window `error` — an uncaught exception |
+| `unhandled_rejection` | `error` | window `unhandledrejection` — a promise with no `.catch()` |
+| `network_error`       | `error` | `api.js` — a `fetch` that threw (offline, DNS, connection refused) |
+| `page_script_error`   | `error` | a route's JS module 404s or fails to parse |
+| `page_mount_error`    | `error` | a route's module threw while mounting |
+
+Every event's `context` carries `url` + `route` — the page the user
+was on. Safeguards: a repeat of the same `kind|message` is de-duplicated
+within a 10-second window, and one page-session is capped at 100 events,
+so a render loop that throws every frame can't flood the table.
 
 ---
 

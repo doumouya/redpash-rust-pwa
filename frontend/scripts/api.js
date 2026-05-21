@@ -10,6 +10,8 @@
 // Anything that needs the raw Response (file downloads, streaming
 // exports) bypasses this and calls fetch directly.
 
+import { reportEvent } from "/scripts/events.js";
+
 const BASE = "/api";
 
 async function request(method, path, body, opts = {}) {
@@ -24,13 +26,31 @@ async function request(method, path, body, opts = {}) {
     }
   }
 
-  const res = await fetch(BASE + path, {
-    method,
-    headers,
-    body: payload,
-    credentials: "same-origin",
-    signal: opts.signal,
-  });
+  let res;
+  try {
+    res = await fetch(BASE + path, {
+      method,
+      headers,
+      body: payload,
+      credentials: "same-origin",
+      signal: opts.signal,
+    });
+  } catch (err) {
+    // Transport failure — offline, DNS, connection refused. No response
+    // reached the server, so the backend has no record of it; this is
+    // the frontend's to log. An AbortError is an intentional
+    // cancellation (navigation, a superseded request) — not a failure.
+    if (err.name !== "AbortError") {
+      reportEvent({
+        kind:    "network_error",
+        message: err.message || "fetch failed",
+        source:  "api.js#request",
+        context: { method, path },
+      });
+      err._rpLogged = true;
+    }
+    throw err;
+  }
 
   if (res.status === 204) return null;
   // Session expired (or never existed). Redirect to the landing page

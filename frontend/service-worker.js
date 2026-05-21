@@ -21,7 +21,7 @@
 //
 // Bump CACHE_VERSION on any breaking change to invalidate old caches.
 
-const CACHE_VERSION = "v573";
+const CACHE_VERSION = "v574";
 const SHELL_CACHE   = `redpash-shell-${CACHE_VERSION}`;
 const API_CACHE     = `redpash-api-${CACHE_VERSION}`;
 
@@ -32,6 +32,7 @@ const SHELL_ASSETS = [
   "/styles/main.css",
   "/scripts/main.js",
   "/scripts/api.js",
+  "/scripts/events.js",
   "/icons/logo.svg",
 ];
 
