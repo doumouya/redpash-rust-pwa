@@ -2,7 +2,7 @@
 title: Profile + Settings page (`#/profile`)
 section: Frontend
 order: 13
-last modified date: 2026-05-20
+last modified date: 2026-05-21
 ---
 
 # Profile + Settings page (`#/profile`)
@@ -345,9 +345,10 @@ two `.hs-card` steps) is **gone**. Section anchors use native
 | Topbar position | `localStorage["rp-topbar-pos"]` + `window.rpSetBarPos` | ✅ live; restored on every nav |
 | Footer position | `localStorage["rp-bottombar-pos"]` + `window.rpSetBarPos` | ✅ live; restored on every nav |
 | Language pills | `localStorage["redpash-lang"]` | ✅ live; doesn't yet PATCH `prefs.locale` |
-| Default CSV delimiter | `localStorage["rp-default-delimiter"]` | 🟡 persisted; not yet read by cleaner sidebar |
-| Default encoding | `localStorage["rp-default-encoding"]` | 🟡 persisted; not yet read by cleaner sidebar |
-| Export format | `localStorage["rp-export-format"]` | 🟡 persisted; not yet read by export buttons |
+| Table density | `prefs.density` → `html[data-density]` | ✅ live — redtable row height; wired 2026-05-21 (see [runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
+| Default CSV delimiter | `prefs.default_delimiter` | 🟡 persisted; badged "Soon" — file-open wiring needs backend ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
+| Default encoding | `prefs.default_encoding` | 🟡 persisted; badged "Soon" — file-open wiring needs backend ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
+| Export format | `prefs.export_format` | 🟡 persisted; badged "Soon" — export is CSV-only until xlsx/json land ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
 | Avatar upload | — | ⛔ stub (Phase 6) |
 | Password change | — | ⛔ stub (OAuth-only — no password to manage) |
 | Two-factor auth | — | ⛔ stub (Soon) |
