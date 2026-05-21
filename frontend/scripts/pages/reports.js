@@ -227,6 +227,7 @@ async function mountReportsSandbox(root, ctx) {
   }
 
   _builderSyncPickers(root);
+  _syncReportTools(root);
   _renderReportsCharts(root).catch(() => {});
 
   _snapshotForMount();
@@ -256,6 +257,7 @@ function _installReportsLiveHandlers(root) {
     _renderReportsHeader(root);
     await _paintReportsTable(root);
     _builderSyncPickers(root);
+    _syncReportTools(root);
     _renderReportsCharts(root).catch(() => {});   // re-fetch charts vs the new file
     _snapshotForMount();
   }
@@ -676,6 +678,27 @@ function _installReportsLiveHandlers(root) {
       if (dl) { _downloadChart(Number(dl.dataset.chartDownload)); return; }
       const card = ev.target.closest("[data-chart-card]");
       if (card) _builderLoad(Number(card.dataset.chartCard));
+    });
+  }
+
+  // Report Tools panel — add / remove grouping + summarize rows.
+  // Delegated so it survives the section innerHTML; once-guarded.
+  const _toolsPanel = root.querySelector("#reports-tools-panel");
+  if (_toolsPanel && !_toolsPanel.__rpReportsBound) {
+    _toolsPanel.__rpReportsBound = true;
+    _toolsPanel.addEventListener("click", (ev) => {
+      const add = ev.target.closest("[data-reports-add]");
+      if (add) {
+        if (add.dataset.reportsAdd === "group")        _addGroupRow(root);
+        else if (add.dataset.reportsAdd === "summary") _addAggRow(root);
+        return;
+      }
+      const rm = ev.target.closest(".rp-rt-tool-rm");
+      if (rm) {
+        const row = rm.closest(".rp-rt-tool-row, .rp-rt-tool-agg");
+        const box = row?.parentElement;
+        if (row && box && box.children.length > 1) row.remove();
+      }
     });
   }
 
@@ -1412,6 +1435,50 @@ function _builderSyncPickers(root) {
   _fillChartPicker(root.querySelector("[data-reports-x-picker]"),      false, cfg.group_by);
   _fillChartPicker(root.querySelector("[data-reports-ygroup-picker]"), false, cfg.y_group_by);
   _fillChartPicker(root.querySelector("[data-reports-y-picker]"),      true,  cfg.agg_col);
+}
+
+// ── Report Tools panel — Slice 1: populate the grouping / summarize
+// column pickers from STATE.columns, and add/remove rows. Spec
+// collection + the /reports/preview wiring land in the next slice.
+
+// Re-fill the Report Tools selects, keeping each select's first <option>
+// (its placeholder) and the user's current pick where still valid.
+function _syncReportTools(root) {
+  const opts = (STATE.columns ?? []).map((c) =>
+    `<option value="${_attrEsc(c.name)}">${_htmlEsc(c.name)}</option>`).join("");
+  const fill = (sel) => {
+    if (!sel) return;
+    const head = sel.querySelector("option");
+    const prev = sel.value;
+    sel.innerHTML = (head ? head.outerHTML : "") + opts;
+    sel.value = prev;
+  };
+  root.querySelectorAll("[data-reports-group-rows] select").forEach(fill);
+  fill(root.querySelector("[data-reports-group-cols]"));
+  root.querySelectorAll("[data-reports-aggs] .rp-rt-tool-agg > select").forEach(fill);
+}
+
+// Append a fresh group-row — clone the first row, reset its select,
+// repopulate from STATE.columns.
+function _addGroupRow(root) {
+  const box = root.querySelector("[data-reports-group-rows]");
+  const tpl = box?.querySelector(".rp-rt-tool-row");
+  if (!box || !tpl) return;
+  const row = tpl.cloneNode(true);
+  row.querySelectorAll("select").forEach((s) => { s.selectedIndex = 0; });
+  box.appendChild(row);
+  _syncReportTools(root);
+}
+// Append a fresh aggregate block — clone the first block, reset its
+// column + function selects.
+function _addAggRow(root) {
+  const box = root.querySelector("[data-reports-aggs]");
+  const tpl = box?.querySelector(".rp-rt-tool-agg");
+  if (!box || !tpl) return;
+  const row = tpl.cloneNode(true);
+  row.querySelectorAll("select").forEach((s) => { s.selectedIndex = 0; });
+  box.appendChild(row);
+  _syncReportTools(root);
 }
 
 // Show/hide the builder's per-kind conditional rows + relabel the
