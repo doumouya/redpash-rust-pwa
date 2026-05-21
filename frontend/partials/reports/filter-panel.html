@@ -58,6 +58,32 @@
         <i class="bi bi-plus-lg"></i> Add predicate
       </button>
 
+      <!-- Filter / select columns — collapsible. A regex name-pattern +
+           a checkbox per source column; "Keep matched columns" trims the
+           view to the matches. Mirrors the cleaner (the Objects-page
+           filter has no column section). -->
+      <div class="rp-rt-panel-sect open" onclick="spToggleSection(this)" style="margin-top:0.25rem">
+        <span class="rp-rt-panel-sect-lbl">Filter / select columns</span>
+        <i class="bi bi-chevron-down rp-rt-panel-sect-chevron"></i>
+      </div>
+      <div class="rp-rt-panel-sect-body open">
+        <label class="rp-form-row">
+          <span class="rp-form-lbl">Name pattern (regex)</span>
+          <input type="text" class="rp-input" placeholder="e.g. TOP.* or date.*" />
+        </label>
+
+        <!-- One checkbox per source column — painted by JS from the
+             active file's columns. Checked = kept after Apply. -->
+        <div class="rp-form-row" data-reports-filter-cols
+             style="display:flex;flex-direction:column;gap:0.1875rem;max-height:11rem;overflow-y:auto"></div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:0.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="spClickFx(this)">
+            <i class="bi bi-funnel-fill"></i> Keep matched columns
+          </button>
+        </div>
+      </div>
+
     </div><!-- /.rp-rt-filter-content -->
 
     <div class="rp-rt-filter-footer">
