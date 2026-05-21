@@ -894,3 +894,20 @@ html[data-theme="light"] #page-reports .rp-rt-table tbody td { color: var(--text
   font-size: 0.6875rem;
   margin-left: 0.25rem;
 }
+
+/* Grouped report — group banner row in the groups-with-details view:
+   the group label + its aggregate values, above that group's rows. */
+#page-reports .rp-rt-grp td {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.4375rem 0.75rem;
+  border-top: 0.0625rem solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+#page-reports .rp-rt-grp-agg {
+  margin-left: 0.75rem;
+  font-weight: 400;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}

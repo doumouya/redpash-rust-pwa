@@ -1506,16 +1506,15 @@ function _collectReportSpec(root) {
 }
 
 // Grouped-report path — POST the panel's ReportSpec to /reports/preview
-// and render the subtotals.
+// and render it (flat subtotals, or groups-with-details when Detail rows
+// is on).
 async function _paintGroupedReport(root) {
   const tableWrap = root.querySelector("[data-reports-table]");
   if (tableWrap) tableWrap.setAttribute("aria-busy", "true");
+  const spec = _collectReportSpec(root);
   let res;
   try {
-    res = await api.post("/reports/preview", {
-      source_file_id: STATE.rid,
-      spec: _collectReportSpec(root),
-    });
+    res = await api.post("/reports/preview", { source_file_id: STATE.rid, spec });
   } catch (err) {
     _renderReportsEmptyState(root,
       `Report failed: ${err.body?.error ?? err.message ?? err}`);
@@ -1523,16 +1522,33 @@ async function _paintGroupedReport(root) {
   } finally {
     if (tableWrap) tableWrap.removeAttribute("aria-busy");
   }
-  _renderGroupedRows(root, res);
+  _renderGroupedRows(root, res, spec);
 }
 
-// Render a /reports/preview subtotals payload ({columns, rows}) as the
-// table — the grouped + aggregated view.
-function _renderGroupedRows(root, res) {
+function _groupedTd(v) {
+  return v == null
+    ? `<td><span class="rp-rt-null">—</span></td>`
+    : `<td>${_htmlEsc(String(v))}</td>`;
+}
+
+// Dispatch the /reports/preview render — groups-with-details when Detail
+// rows is on and the payload carries detail rows, else the flat
+// grouped + aggregated subtotals table.
+function _renderGroupedRows(root, res, spec) {
+  const detRows = res?.details?.rows ?? [];
+  if (spec?.show_details && detRows.length) {
+    _renderGroupedDetails(root, res, spec);
+  } else {
+    _renderSubtotalsTable(root, res?.subtotals ?? {});
+  }
+}
+
+// Flat subtotals — one row per group: group columns + aggregate columns.
+function _renderSubtotalsTable(root, sub) {
   const tableWrap = root.querySelector("[data-reports-table]");
   if (!tableWrap) return;
-  const cols = res?.subtotals?.columns ?? [];
-  const rows = res?.subtotals?.rows ?? [];
+  const cols = sub.columns ?? [];
+  const rows = sub.rows ?? [];
   if (!cols.length) {
     _renderReportsEmptyState(root, "Pick a group column and a summary.");
     return;
@@ -1541,15 +1557,61 @@ function _renderGroupedRows(root, res) {
     `<th>${_htmlEsc(String(c))}</th>`).join("")}</tr></thead>`;
   const tbody = rows.length === 0
     ? `<tbody><tr><td colspan="${cols.length}" style="text-align:center;color:var(--muted);padding:1rem;font-style:italic">No rows.</td></tr></tbody>`
-    : `<tbody>${rows.map((r) => `<tr>${
-        r.map((v) => v == null
-          ? `<td><span class="rp-rt-null">—</span></td>`
-          : `<td>${_htmlEsc(String(v))}</td>`).join("")
-      }</tr>`).join("")}</tbody>`;
+    : `<tbody>${rows.map((r) => `<tr>${r.map(_groupedTd).join("")}</tr>`).join("")}</tbody>`;
   tableWrap.innerHTML = `<table class="rp-rt-table">${thead}${tbody}</table>`;
   const rowsInfo = root.querySelector("[data-reports-rows-info]");
+  if (rowsInfo) rowsInfo.textContent = `${rows.length} group${rows.length === 1 ? "" : "s"}`;
+  const pages = root.querySelector("[data-reports-pages]");
+  if (pages) pages.innerHTML = "";
+}
+
+// Groups-with-details — the detail rows (backend-sorted by group_by)
+// interleaved with a banner per group carrying the group label + its
+// aggregate values pulled from the subtotals payload.
+function _renderGroupedDetails(root, res, spec) {
+  const tableWrap = root.querySelector("[data-reports-table]");
+  if (!tableWrap) return;
+  const detCols = res.details?.columns ?? [];
+  const detRows = res.details?.rows ?? [];
+  const subCols = res.subtotals?.columns ?? [];
+  const subRows = res.subtotals?.rows ?? [];
+  const gbNames = spec.group_by ?? [];
+  const gbIdx   = gbNames.map((n) => detCols.indexOf(n)).filter((i) => i >= 0);
+
+  // Subtotal lookup — group key → the aggregate cells (columns after the
+  // group columns).
+  const aggCols = subCols.slice(gbNames.length);
+  const subMap  = new Map();
+  for (const r of subRows) {
+    subMap.set(r.slice(0, gbNames.length).map((v) => String(v ?? "")).join(""),
+               r.slice(gbNames.length));
+  }
+
+  const ncols = detCols.length || 1;
+  let body = "", curKey = null, groups = 0;
+  for (const row of detRows) {
+    const key = gbIdx.map((i) => String(row[i] ?? "")).join("");
+    if (key !== curKey) {
+      curKey = key;
+      groups++;
+      const label  = gbIdx.map((i) => String(row[i] ?? "")).join(" · ") || "—";
+      const aggs   = subMap.get(key) ?? [];
+      const aggTxt = aggCols
+        .map((c, i) => `${_htmlEsc(String(c))} ${_htmlEsc(String(aggs[i] ?? "—"))}`)
+        .join(" ");
+      body += `<tr class="rp-rt-grp"><td colspan="${ncols}">${_htmlEsc(label)}`
+            + (aggTxt ? `<span class="rp-rt-grp-agg">${aggTxt}</span>` : "")
+            + `</td></tr>`;
+    }
+    body += `<tr>${row.map(_groupedTd).join("")}</tr>`;
+  }
+  const thead = `<thead><tr>${detCols.map((c) =>
+    `<th>${_htmlEsc(String(c))}</th>`).join("")}</tr></thead>`;
+  tableWrap.innerHTML = `<table class="rp-rt-table">${thead}<tbody>${body}</tbody></table>`;
+  const rowsInfo = root.querySelector("[data-reports-rows-info]");
   if (rowsInfo) {
-    rowsInfo.textContent = `${rows.length} group${rows.length === 1 ? "" : "s"}`;
+    rowsInfo.textContent =
+      `${groups} group${groups === 1 ? "" : "s"} · ${detRows.length} rows`;
   }
   const pages = root.querySelector("[data-reports-pages]");
   if (pages) pages.innerHTML = "";
