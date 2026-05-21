@@ -348,7 +348,7 @@ two `.hs-card` steps) is **gone**. Section anchors use native
 | Table density | `prefs.density` → `html[data-density]` | ✅ live — redtable row height; wired 2026-05-21 (see [runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
 | Default CSV delimiter | `prefs.default_delimiter` | 🟡 persisted; badged "Soon" — file-open wiring needs backend ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
 | Default encoding | `prefs.default_encoding` | 🟡 persisted; badged "Soon" — file-open wiring needs backend ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
-| Export format | `prefs.export_format` | 🟡 persisted; badged "Soon" — export is CSV-only until xlsx/json land ([runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
+| Export format | `prefs.export_format` | ✅ wired — csv / xlsx / json via `?format=` (see [runbook 0001](../../../internal/runbook/0001-orphan-prefs.md)) |
 | Avatar upload | — | ⛔ stub (Phase 6) |
 | Password change | — | ⛔ stub (OAuth-only — no password to manage) |
 | Two-factor auth | — | ⛔ stub (Soon) |

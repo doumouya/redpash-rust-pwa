@@ -71,6 +71,7 @@ impl From<data::DataError> for AppError {
             Encoding(m)    => AppError::bad_request("encoding_failed", m),
             Polars(e)      => AppError::bad_request("invalid_csv", e.to_string()),
             Io(e)          => AppError::internal("io", e.to_string()),
+            Export(m)      => AppError::internal("export_failed", m),
         }
     }
 }

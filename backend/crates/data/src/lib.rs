@@ -29,6 +29,7 @@ pub mod group_by;
 pub mod steps;
 pub mod stats;
 pub mod render;
+pub mod export;
 
 /// Crate-level error. Wraps Polars, IO, and parse failures into a single
 /// type the `api` crate can map to HTTP status codes.
@@ -48,6 +49,9 @@ pub enum DataError {
 
     #[error("Not found: {0}")]
     NotFound(String),
+
+    #[error("Export error: {0}")]
+    Export(String),
 }
 
 pub type Result<T> = std::result::Result<T, DataError>;

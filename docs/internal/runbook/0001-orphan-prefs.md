@@ -69,13 +69,15 @@ referencing write sites against read sites by hand.
 `html[data-density="compact"]`, and `settings.js` applies it live on
 click.
 
-**Deferred — the File-handling trio.** `default_delimiter`,
-`default_encoding` and `export_format` need backend work that does not
-belong in a frontend change: `export` must grow xlsx / json writers and
-a format parameter, and the file-open path must accept delimiter /
-encoding overrides. Until then the three controls are badged **"Soon"**
-in Settings so the UI stops promising an effect it cannot deliver. They
-remain a tracked backend follow-up.
+**Deferred, then partly resolved — the File-handling trio.**
+`default_delimiter`, `default_encoding` and `export_format` needed
+backend work that did not belong in the original frontend change.
+**`export_format` is now wired (2026-05-21):** the `export` handler
+grew a `?format=` parameter and a new `data::export` module added xlsx
+(`rust_xlsxwriter`) and json renderers, so csv / xlsx / json all work.
+`default_delimiter` and `default_encoding` are still deferred — the
+file-open path must accept delimiter / encoding overrides — and stay
+badged **"Soon"** in Settings. They remain a tracked backend follow-up.
 
 **Prevention.** When adding a preference, wire the *reader* in the same
 change as the *writer* — or badge it "Soon" from day one. A persisted
@@ -93,10 +95,13 @@ value with no consumer is a bug, not a feature.
   `prefs.density`, mirroring `data-theme`.
 - The three "Soon" badges render via the existing `.rp-soon` CSS — no
   new style was needed.
-- **Still watching:** the File-handling trio remains an open backend
-  follow-up. This entry's status stays *partially resolved* until
-  `default_delimiter` / `default_encoding` / `export_format` are wired
-  for real — extend this entry when that lands.
+- **`export_format` closed out 2026-05-21** — xlsx / json / csv export
+  verified by `data::export` unit tests (valid xlsx zip container,
+  typed json) and a live `?format=` endpoint check (xlsx workbook,
+  `400` on an unknown format).
+- **Still watching:** `default_delimiter` and `default_encoding` remain
+  an open backend follow-up (the file-open path must honour them). This
+  entry's status stays *partially resolved* until those two land.
 
 ## Links
 

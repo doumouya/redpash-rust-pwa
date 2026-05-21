@@ -2,7 +2,7 @@
 title: Files
 section: API
 order: 6
-last modified date: 2026-05-19
+last modified date: 2026-05-21
 ---
 
 # `/api/files/*`
@@ -532,30 +532,41 @@ POST /api/files/:rid/snapshot
 
 ---
 
-## `GET /api/files/:rid/export`
+## `GET /api/files/:rid/export?format=`
 
-Stream the current view (post step-replay, post-filter) as a
-downloadable CSV. Unlike `snapshot`, this writes **nothing** to disk
-and creates no new `project_files` row — it's a pure
-materialise-and-hand-back.
+Stream the current view (post step-replay, post-filter) as a download.
+Unlike `snapshot`, this writes **nothing** to disk and creates no new
+`project_files` row — it's a pure materialise-and-hand-back.
+
+| `format` | Output | Content-Type |
+|---|---|---|
+| `csv` *(default)* | comma-separated, header row | `text/csv; charset=utf-8` |
+| `xlsx` | single-sheet Excel 2007 workbook | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| `json` | pretty-printed array of row objects | `application/json; charset=utf-8` |
+
+An unknown `format` is a **400** (`unsupported_format`). `xlsx` and
+`json` preserve column typing — numeric columns export as numbers,
+booleans as booleans; dates and other non-native types fall back to
+text. The renderers live in `data::export`.
 
 The download filename is derived from `display_name` (or `filename`),
-trimmed of `.csv`, with control chars / quotes / path separators /
-newlines replaced by `_`, then re-suffixed with `.csv`.
+stripped of any `.csv` / `.xlsx` / `.json` suffix, with control chars /
+quotes / path separators / newlines replaced by `_`, then re-suffixed
+with the chosen format's extension.
 
 ```
-GET /api/files/FIL_…/export
+GET /api/files/FIL_…/export?format=xlsx
 ```
 
 ```
 200 OK
-Content-Type: text/csv; charset=utf-8
-Content-Disposition: attachment; filename="dossiers_export_cleaned.csv"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Disposition: attachment; filename="dossiers_export_cleaned.xlsx"
 
-<csv bytes>
+<xlsx bytes>
 ```
 
-> **Memory note.** The CSV is materialised in-memory before send. With
+> **Memory note.** The export body is materialised in-memory before send. With
 > the 256 MiB upload cap and post-step text inflation, a single export
 > can be several hundred MiB resident. Acceptable for single-user dev;
 > if exports start failing at scale, switch to a streaming body

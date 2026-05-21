@@ -59,6 +59,8 @@ encoding_rs     = "0.8"
 # Excel readers — used at upload to convert .xlsx/.xls/.xlsm/.xlsb/.ods
 # into CSV bytes before they enter the standard CSV pipeline.
 calamine        = "0.26"
+# Excel writer — renders a DataFrame as a .xlsx workbook at export time.
+rust_xlsxwriter = "0.95"
 
 # HTML rendering for reports / docs
 pulldown-cmark  = "0.12"

@@ -1010,52 +1010,76 @@ async fn snapshot(
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
 }
 
-/// `GET /api/files/:rid/export` — stream the current view (post
-/// step-replay) as a downloadable CSV. Unlike `snapshot` this writes
-/// nothing to disk and creates no new file row: it's a pure
-/// materialise-and-hand-back. The CSV is built in-memory; for the
-/// 256 MiB upload cap that's a few hundred MiB worst case, acceptable
-/// for a single-shot download (we can switch to a streaming body if
-/// big-file exports become common).
+#[derive(serde::Deserialize)]
+struct ExportQuery {
+    #[serde(default)]
+    format: Option<String>,
+}
+
+/// `GET /api/files/:rid/export?format=` — stream the current view
+/// (post step-replay) as a download. `format` is `csv` (default),
+/// `xlsx`, or `json`; an unknown value is a 400. Unlike `snapshot`
+/// this writes nothing to disk and creates no new file row: it's a
+/// pure materialise-and-hand-back. The body is built in-memory; for
+/// the 256 MiB upload cap that's a few hundred MiB worst case,
+/// acceptable for a single-shot download (we can switch to a
+/// streaming body if big-file exports become common).
 async fn export(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
     Path(rid):    Path<String>,
+    Query(q):     Query<ExportQuery>,
 ) -> Result<impl axum::response::IntoResponse, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+
+    // Resolve the renderer up front so an unknown format fails fast
+    // with a 400 — before hydrating the frame.
+    let format = q.format.as_deref().unwrap_or("csv").to_ascii_lowercase();
+    let (render, ext, content_type): (
+        fn(&polars::prelude::DataFrame) -> data::Result<Vec<u8>>,
+        &str,
+        &str,
+    ) = match format.as_str() {
+        "csv"  => (data::export::to_csv, "csv", "text/csv; charset=utf-8"),
+        "xlsx" => (
+            data::export::to_xlsx,
+            "xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "json" => (data::export::to_json, "json", "application/json; charset=utf-8"),
+        other  => return Err(AppError::bad_request(
+            "unsupported_format",
+            format!("export format '{other}' is not supported (use csv, xlsx, or json)"),
+        )),
+    };
+
     let entry = hydrate(&state, &rid).await?;
     let frame = Arc::clone(&entry.frame);
+    let bytes = tokio::task::spawn_blocking(move || render(frame.as_ref()))
+        .await
+        .map_err(|e| AppError::internal("join", e.to_string()))??;
 
-    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, data::DataError> {
-        let mut df = (*frame).clone();
-        let mut buf: Vec<u8> = Vec::new();
-        use polars::prelude::SerWriter;
-        polars::io::csv::write::CsvWriter::new(&mut buf)
-            .include_header(true)
-            .finish(&mut df)
-            .map_err(data::DataError::from)?;
-        Ok(buf)
-    })
-    .await
-    .map_err(|e| AppError::internal("join", e.to_string()))??;
-
-    // Download filename — prefer the display name, guarantee a .csv
-    // extension, and strip anything that could break the
+    // Download filename — prefer the display name, force the chosen
+    // format's extension, and strip anything that could break the
     // Content-Disposition header (quotes, control chars, path seps).
     let raw_name = entry.summary.display_name.as_deref()
         .unwrap_or(&entry.summary.filename);
-    let stem = raw_name.trim_end_matches(".csv").trim_end_matches('.');
+    let stem = raw_name
+        .trim_end_matches(".csv")
+        .trim_end_matches(".xlsx")
+        .trim_end_matches(".json")
+        .trim_end_matches('.');
     let safe: String = stem.chars()
         .map(|c| if c.is_control() || matches!(c, '"' | '\\' | '/' | '\n' | '\r') { '_' } else { c })
         .collect();
-    let download_name = format!("{safe}.csv");
+    let download_name = format!("{safe}.{ext}");
 
     use axum::http::header;
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (header::CONTENT_TYPE, content_type.to_string()),
             (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{download_name}\"")),
         ],
         bytes,

@@ -1253,8 +1253,10 @@ function _wireGlobals(root) {
     const btn = root.querySelector("#cleaner-export");
     btn?.classList.add("is-spinning");
     try {
+      let ext = (localStorage.getItem("rp-export-format") || "csv").toLowerCase();
+      if (!["csv", "xlsx", "json"].includes(ext)) ext = "csv";
       const res = await fetch(
-        `/api/files/${encodeURIComponent(STATE.rid)}/export`,
+        `/api/files/${encodeURIComponent(STATE.rid)}/export?format=${ext}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -1268,7 +1270,7 @@ function _wireGlobals(root) {
       const cd = res.headers.get("Content-Disposition") ?? "";
       const m  = /filename="?([^"]+)"?/.exec(cd);
       const stem = STATE.summary?.display_name ?? STATE.summary?.filename ?? "export";
-      const name = m?.[1] ?? `${stem}.csv`;
+      const name = m?.[1] ?? `${stem}.${ext}`;
 
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
@@ -5551,8 +5553,10 @@ function _installSandboxLiveHandlers(root) {
     const btn = root.querySelector("[data-cleaner-export]");
     btn?.classList.add("is-spinning");
     try {
+      let ext = (localStorage.getItem("rp-export-format") || "csv").toLowerCase();
+      if (!["csv", "xlsx", "json"].includes(ext)) ext = "csv";
       const res = await fetch(
-        `/api/files/${encodeURIComponent(STATE.rid)}/export`,
+        `/api/files/${encodeURIComponent(STATE.rid)}/export?format=${ext}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -5563,7 +5567,7 @@ function _installSandboxLiveHandlers(root) {
       const cd = res.headers.get("Content-Disposition") ?? "";
       const m  = /filename="?([^"]+)"?/.exec(cd);
       const stem = STATE.summary?.display_name ?? STATE.summary?.filename ?? "export";
-      const name = m?.[1] ?? `${stem}.csv`;
+      const name = m?.[1] ?? `${stem}.${ext}`;
 
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
