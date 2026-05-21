@@ -696,13 +696,13 @@ html[data-theme="dark"] #page-cleaner .rp-dd-item.is-selected {
 #page-cleaner .rp-rtp-tab {
   background: var(--surface);
   /* File tabs naturally grow to the height of their tallest child —
-     the close-× (.rp-rtp-tab-x) is 1.75rem, so file tabs land at
-     ~2.375rem (0.3125rem top pad + 1.75rem + 0.3125rem bottom pad).
-     The Overview tab has no close-× (it's permanent) so its tallest
-     child is the icon (~1.25rem) → ~1.875rem total, ~0.5rem shorter
-     than the file tabs. Pin a min-height so Overview always matches
-     the file-tab height regardless of internal children. */
-  min-height: 2.375rem;
+     the close-x (.rp-rtp-tab-x) is 1.375rem, so file tabs land at
+     ~1.75rem (0.1875rem top pad + 1.375rem + 0.1875rem bottom pad).
+     The Overview tab has no close-x (it's permanent) so its tallest
+     child is the icon, leaving it shorter. Pin a min-height so it
+     always matches the file-tab height. File tabs run deliberately
+     shorter than the project tabs — see file-tabs.css .rp-rtp-tab. */
+  min-height: 1.75rem;
 }
 #page-cleaner .rp-rtp-tab:hover,
 #page-cleaner .rp-rtp-tab.active {
