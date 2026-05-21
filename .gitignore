@@ -41,3 +41,9 @@ Thumbs.db
 *.iml
 *.swp
 *.swo
+
+# ── Audit tooling — generated reports ─────────────────────────────
+# tools/*-audit/audit.js emit standalone HTML reports (report.html /
+# audit-bro.html — embed the full DATA JSON, 0.2–1.8 MB each).
+# Regenerate on demand with `node audit-bro.js`; never track them.
+/tools/**/*.html
