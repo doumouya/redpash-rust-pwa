@@ -30,6 +30,7 @@ pub mod steps;
 pub mod stats;
 pub mod render;
 pub mod export;
+pub mod clean;
 
 /// Crate-level error. Wraps Polars, IO, and parse failures into a single
 /// type the `api` crate can map to HTTP status codes.
