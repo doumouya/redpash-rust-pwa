@@ -22,10 +22,12 @@
   border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 7%, transparent);
 }
 .rp-rt-proj-tabs-inner {
-  display: grid;
-  /* auto-fit: each tab occupies its natural slot (6.5–10 rem); empty slots
-     collapse so 2 tabs don't each claim 10 % of a wide strip. */
-  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 10rem));
+  /* Centred flex row — each tab is a fixed 10rem and wraps to a new line
+     once the strip fills. justify-content keeps the row (tabs + the
+     trailing + add-wrap) centred with equal gutters on both sides. */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 0.1875rem;
   row-gap: 0.25rem;
@@ -44,7 +46,10 @@
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
-  width: 100%;
+  /* Fixed 10rem slot — wraps to a new line instead of shrinking.
+     min-width:0 keeps the is-entering / is-removing max-width:0 collapse
+     working (flex items default to min-width:auto, which would block it). */
+  flex: 0 0 10rem;
   min-width: 0;
   transition: background 0.18s ease,
               color 0.18s ease,
