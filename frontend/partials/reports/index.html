@@ -1,17 +1,11 @@
-<!-- Reports composition root — Stacked layout.
+<!-- Reports composition root — two full-bleed pages, vertical scroll-snap.
 
-     Topbar: back + title + cleaner / profile / theme.
-     Panel structure:
-       toolbar (source-file selector + chart-type + +Chart + search)
-       body (position: relative, holds two stacked panes split by drag handle)
-         table pane     (absolute top → drag-handle.top, holds rp-rt-table-wrap)
-         drag handle    (absolute, horizontal, draggable)
-         chart dock     (absolute drag-handle.bottom → 0, holds chart cards)
-       modals
-     Drag handle resizes the split via JS (data-reports-split-handle).
-     Both panes contain absolute-positioned scrollers so the redtable
-     and chart dock scroll independently without the page itself
-     scrolling. -->
+     Topbar: back + title + cleaner / objects / profile / theme.
+     Panel = a vertical scroll-snap deck of two pages + a page-dots rail:
+       Page 1 "Data"   — proj-tabs / header / file-tabs / toolbar + redtable
+       Page 2 "Charts" — the chart dock (builder panel lands in pass 2)
+     The page-dots (right edge) jump between pages; reports.js keeps the
+     active dot in sync with the scroll position. -->
 
 <div class="rp-rt-topbar">
   <button class="rp-btn" type="button" aria-label="Back to Home" title="Back to Home"
@@ -38,27 +32,31 @@
 
 <div class="rp-rt-panel">
 
-  <div data-include="./toolbar.html"></div>
+  <div class="rp-reports-deck" data-reports-deck>
 
-  <div class="rp-rt-body">
-    <!-- Top pane: redtable showing the source file's rows. -->
-    <div class="rp-reports__table-pane" data-reports-table-pane>
-      <div data-include="./table.html"></div>
-    </div>
+    <!-- ── Page 1 — Data: workspace chrome + the source redtable. ──── -->
+    <section class="rp-reports-page" data-reports-page="data">
+      <div data-include="./proj-tabs.html"></div>
+      <div data-include="./header.html"></div>
+      <div data-include="./file-tabs.html"></div>
+      <div data-include="./toolbar.html"></div>
+      <div class="rp-reports-page__body">
+        <div data-include="./table.html"></div>
+      </div>
+    </section>
 
-    <!-- Drag handle — horizontal divider; JS resizes the split. -->
-    <div class="rp-reports__split-handle" data-reports-split-handle
-         role="separator" aria-orientation="horizontal" aria-label="Resize chart pane"
-         tabindex="0" title="Drag to resize">
-      <i class="bi bi-grip-horizontal"></i>
-    </div>
-
-    <!-- Bottom pane: chart dock with one card per chart. -->
-    <div class="rp-reports__chart-pane" data-reports-chart-pane>
+    <!-- ── Page 2 — Charts. ─────────────────────────────────────────── -->
+    <section class="rp-reports-page" data-reports-page="charts">
       <div data-include="./chart-dock.html"></div>
-    </div>
+    </section>
 
-    <!-- Modals — included so openModal can find them anywhere on the page. -->
-    <div data-include="./modals/new-chart.html"></div>
   </div>
+
+  <!-- Page-dots — jump between Data + Charts; active dot tracks scroll. -->
+  <nav class="rp-reports-dots" aria-label="Reports pages">
+    <button class="rp-reports-dot is-active" type="button"
+            data-reports-dot="data" aria-label="Data page" title="Data"></button>
+    <button class="rp-reports-dot" type="button"
+            data-reports-dot="charts" aria-label="Charts page" title="Charts"></button>
+  </nav>
 </div>

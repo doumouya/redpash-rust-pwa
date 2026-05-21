@@ -1,65 +1,137 @@
-<!-- Chart dock — bottom pane below the source table. JS appends one
-     .rp-reports__chart-card per chart in the report; each card has
-     a title bar (chart type + columns + remove ×) and a body holding
-     the <canvas>. Multiple cards lay out horizontally on wide screens,
-     wrapping to multiple rows as needed; vertical scrolling on the
-     pane itself when they overflow.
+<!-- Charts page (page 2) body — left builder rail + the chart dock.
+     The builder edits the *active* chart; its card in the dock redraws
+     live as fields change. Chart type = a family <select> + a row of
+     inline-SVG variant tiles (no modifier checkboxes — every variant is
+     a tile). "+ New" starts a draft; Save (title + description) commits. -->
+<div class="rp-reports-charts" data-reports-chart-dock>
 
-     Two sample cards kept for the visual port — live JS will replace
-     the inner-grid contents from STATE.charts. -->
-<div class="rp-reports__chart-dock" data-reports-chart-dock>
-
-  <!-- Empty-state — shown when no charts have been added yet. JS
-       hides this once the first chart is rendered. -->
-  <div class="rp-reports__chart-empty" data-reports-chart-empty hidden>
-    <i class="bi bi-bar-chart-line" style="font-size:2rem;color:var(--muted)"></i>
-    <div style="margin-top:0.5rem;color:var(--muted);font-size:0.8125rem">
-      No charts yet. Click <i class="bi bi-plus-lg"></i> in the toolbar to add one.
+  <!-- ── Builder rail ─────────────────────────────────────────────── -->
+  <aside class="rp-chart-builder" data-chart-builder>
+    <div class="rp-chart-builder__hdr">
+      <span class="rp-chart-builder__ttl" data-builder-ttl>New chart</span>
+      <button class="rp-btn rp-btn-xs" type="button" title="New chart" data-nc-new>
+        <i class="bi bi-plus-lg"></i>
+      </button>
     </div>
-  </div>
 
-  <!-- Chart cards — JS render target. Sample cards below show the
-       intended structure: header (type icon + title + columns + ×)
-       + body with <canvas>. -->
-  <div class="rp-reports__chart-grid" data-reports-chart-grid>
-
-    <article class="rp-reports__chart-card">
-      <header class="rp-reports__chart-hdr">
-        <i class="bi bi-bar-chart-fill"></i>
-        <span class="rp-reports__chart-ttl">Sales by month</span>
-        <span class="rp-reports__chart-meta">bar · month × revenue</span>
-        <button class="rp-btn rp-btn-xs" title="Edit chart"
-                style="margin-left:auto"
-                onclick="openModal('new-chart')">
-          <i class="bi bi-pencil"></i>
-        </button>
-        <button class="rp-btn rp-btn-xs" title="Remove chart">
-          <i class="bi bi-x"></i>
-        </button>
-      </header>
-      <div class="rp-reports__chart-body">
-        <canvas class="rp-reports__chart-canvas" width="600" height="220"></canvas>
+    <div class="rp-chart-builder__body">
+      <div class="rp-form-row">
+        <label class="rp-form-lbl" for="nc-family">Chart type</label>
+        <select id="nc-family" class="rp-input">
+          <option value="bar">Bar</option>
+          <option value="line">Line</option>
+          <option value="area">Area</option>
+          <option value="pie">Pie</option>
+          <option value="pictorial_bar">Pictorial</option>
+          <option value="scatter">Scatter</option>
+          <option value="heatmap">Heatmap</option>
+          <option value="matrix">Matrix</option>
+          <option value="radar">Radar</option>
+          <option value="boxplot">Box plot</option>
+          <option value="calendar">Calendar</option>
+          <option value="funnel">Funnel</option>
+          <option value="gauge">Gauge</option>
+        </select>
       </div>
-    </article>
 
-    <article class="rp-reports__chart-card">
-      <header class="rp-reports__chart-hdr">
-        <i class="bi bi-graph-up"></i>
-        <span class="rp-reports__chart-ttl">Trend (cumulative)</span>
-        <span class="rp-reports__chart-meta">line · date × total</span>
-        <button class="rp-btn rp-btn-xs" title="Edit chart"
-                style="margin-left:auto"
-                onclick="openModal('new-chart')">
-          <i class="bi bi-pencil"></i>
-        </button>
-        <button class="rp-btn rp-btn-xs" title="Remove chart">
-          <i class="bi bi-x"></i>
-        </button>
-      </header>
-      <div class="rp-reports__chart-body">
-        <canvas class="rp-reports__chart-canvas" width="600" height="220"></canvas>
+      <!-- Variant tiles — JS paints one SVG-button per variant of the
+           selected family; empty for single-variant families. -->
+      <div class="rp-chart-variants" data-nc-variants></div>
+
+      <!-- X / group-by — hidden for gauge (single scalar, no group). -->
+      <div class="rp-form-row" data-cond-x>
+        <label class="rp-form-lbl" for="nc-x"><span data-nc-lbl-x>Group by</span></label>
+        <select id="nc-x" class="rp-input" data-reports-x-picker>
+          <option value="">Pick a source file first</option>
+        </select>
       </div>
-    </article>
 
-  </div>
+      <!-- Y group-by — heatmap / matrix / radar second categorical dim. -->
+      <div class="rp-form-row" data-cond-ygroup hidden>
+        <label class="rp-form-lbl" for="nc-ygroup"><span data-nc-lbl-ygroup>Y group by</span></label>
+        <select id="nc-ygroup" class="rp-input" data-reports-ygroup-picker>
+          <option value="">Pick a source file first</option>
+        </select>
+      </div>
+
+      <div class="rp-form-row">
+        <label class="rp-form-lbl" for="nc-y"><span data-nc-lbl-y>Metric column</span></label>
+        <select id="nc-y" class="rp-input" data-reports-y-picker>
+          <option value="*">* (row count)</option>
+        </select>
+      </div>
+
+      <!-- Aggregator — hidden for scatter (raw rows) + boxplot (5-stat). -->
+      <div class="rp-form-row" data-cond-agg>
+        <label class="rp-form-lbl" for="nc-agg">Aggregator</label>
+        <select id="nc-agg" class="rp-input">
+          <option value="count">Count</option>
+          <option value="sum">Sum</option>
+          <option value="mean">Average</option>
+          <option value="min">Min</option>
+          <option value="max">Max</option>
+        </select>
+      </div>
+
+      <!-- Trend line — scatter only. -->
+      <div class="rp-form-row" data-cond-regression hidden>
+        <label class="rp-form-lbl" for="nc-regression">Trend line</label>
+        <select id="nc-regression" class="rp-input">
+          <option value="">None</option>
+          <option value="linear">Linear</option>
+          <option value="exponential">Exponential</option>
+          <option value="logarithmic">Logarithmic</option>
+          <option value="polynomial">Polynomial</option>
+        </select>
+      </div>
+
+      <!-- Symbol shape — pictorial only. -->
+      <div class="rp-form-row" data-cond-symbol hidden>
+        <label class="rp-form-lbl" for="nc-symbol">Symbol</label>
+        <select id="nc-symbol" class="rp-input">
+          <option value="circle">Circle</option>
+          <option value="rect">Rectangle</option>
+          <option value="roundRect">Rounded rect</option>
+          <option value="triangle">Triangle</option>
+          <option value="diamond">Diamond</option>
+          <option value="pin">Pin</option>
+          <option value="arrow">Arrow</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Title + description live in the foot — auto-filled while a card is
+         active, Save stamps them onto it. No modal: these two fields are
+         the whole "save" interaction. The action row is the master
+         Save / Download / Delete cluster, all acting on the active chart. -->
+    <div class="rp-chart-builder__foot">
+      <div class="rp-form-row">
+        <label class="rp-form-lbl" for="nc-title">Title</label>
+        <input id="nc-title" class="rp-input" type="text" placeholder="chart-001" />
+      </div>
+      <div class="rp-form-row">
+        <label class="rp-form-lbl" for="nc-desc">Description</label>
+        <textarea id="nc-desc" class="rp-input" rows="2"
+                  placeholder="Optional — what this chart shows"></textarea>
+      </div>
+      <div class="rp-chart-builder__actions">
+        <button class="btn btn-primary" type="button" data-nc-save>
+          <i class="bi bi-floppy"></i> Save
+        </button>
+        <button class="rp-btn" type="button" data-nc-download
+                aria-label="Download as HTML" title="Download as HTML">
+          <i class="bi bi-download"></i>
+        </button>
+        <button class="rp-btn" type="button" data-nc-delete
+                aria-label="Delete chart" title="Delete chart">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Chart dock — one card per STATE.charts entry; the active one
+       redraws live from the builder. Painted by _renderReportsCharts. ── -->
+  <div class="rp-reports__chart-grid" data-reports-chart-grid></div>
+
 </div>

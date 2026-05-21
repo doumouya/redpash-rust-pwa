@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-20
+last modified date: 2026-05-21
 ---
 
 # RedPash REDMAP
@@ -77,14 +77,14 @@ redpash-app/
 │       │   ├── toast.js                    success/error/info toasts
 │       │   └── history.js                  generic undo/redo ring buffer (reports + dashboards)
 │       ├── cleaner/                        cleaner controller + filter panel + tools sidebar
-│       ├── reports/index.js                report builder (charts panel + tools panel)
+│       ├── reports/index.js                ⚠ legacy builder — superseded by scripts/pages/reports.js
 │       ├── dashboards/
 │       │   ├── index.js                    dashboard builder (template + slots)
 │       │   ├── widgets.js                  chart-ref and text widget renderers
 │       │   ├── templates.js                grid template registry
 │       │   ├── echarts.js                  lazy loaders (loadECharts + loadECStat)
 │       │   └── chart-render.js             shared chartOption + per-kind extractors. Used by reports AND dashboards.
-│       └── pages/                          one-liners that mount each page module
+│       └── pages/                          per-page modules (sandbox pages: cleaner, objects, reports, profile…)
 │
 └── docs/                                   served at /docs (this file lives here)
     ├── REDMAP.md (this)                    one-page navigation
@@ -167,20 +167,20 @@ redpash-app/
 | **DB helpers** | `db::list_reports(owner)`, `find_report`, `insert_report`, `update_report`, `delete_report`, `set_report_favorite`, `report_owner` (ownership gate) |
 | **Engine** | `data::group_by::execute(df, spec)` — filter → group → sort → windows → top_n |
 | **API** | `GET/POST /api/reports`, `POST /api/reports/preview` (polymorphic source), `GET/PUT/DELETE /:rid`, `POST /:rid/run`, `POST /:rid/favorite` |
-| **Frontend** | `scripts/reports/index.js` (1100+ lines, charts panel + tools panel + modal); `partials/reports.html` |
+| **Frontend** | `scripts/pages/reports.js` — sandbox-ported page (2-page scroll-snap deck: Data + Charts); `partials/reports/*.html`. Legacy `scripts/reports/index.js` kept on disk, no longer invoked. |
 | **Docs** | [`features/reports.md`](features/reports.md) · [`objects/report.md`](objects/report.md) |
 
 ### Chart (`ChartSpec`)
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::report::ChartSpec` (lives inside `ReportSpec.charts`) |
-| **Kinds** | `bar`, `bar_horizontal`, `line`, `area`, `pie`, `funnel`, `gauge`, `pictorial_bar`, `scatter`, `heatmap`, `radar`, `boxplot`, `calendar` |
-| **Modifiers** | `smooth` (line/area), `donut`/`half`/`rose` (pie), `regression` (scatter), `symbol`/`symbol_repeat` (pictorial_bar), `y_group_by` (heatmap/radar), `rich_labels` (pie/bar) |
-| **Preview body** | `chart-render.js::chartPreviewBody` dispatches 4 shapes (subtotals / heatmap-radar / scatter-details / gauge-scalar / boxplot-5-aggs) |
-| **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `detailsToScatterSeries` |
-| **Option builders** | `chartOption(cfg, labels, values)` for category kinds; `chartOptionHeatmap`, `chartOptionRadar`, `chartOptionBoxplot`, `chartOptionCalendar` for the rest |
-| **Icon → preset** | `ICON_PRESETS` in `scripts/reports/index.js` |
-| **Library** | ECharts 5 (CDN, lazy-loaded via `echarts.js::loadECharts`); ecStat lazy-loaded via `loadECStat` for regression fits |
+| **Kinds** | `bar`, `bar_horizontal`, `line`, `area`, `pie`, `funnel`, `gauge`, `pictorial_bar`, `scatter`, `heatmap`, `radar`, `boxplot`, `calendar`, `matrix` |
+| **Modifiers** | `smooth` (line/area), `donut`/`half`/`rose` (pie), `regression` (scatter), `symbol`/`symbol_repeat` (pictorial_bar), `y_group_by` (heatmap/radar/matrix), `rich_labels` (pie/bar) |
+| **Preview body** | `chart-render.js::chartPreviewBody` dispatches 4 shapes (subtotals / heatmap-radar-matrix / scatter-details / gauge-scalar / boxplot-5-aggs) |
+| **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `subtotalsToMatrix`, `detailsToScatterSeries` |
+| **Option builders** | `chartOption(cfg, labels, values)` for category kinds; `chartOptionHeatmap`, `chartOptionRadar`, `chartOptionBoxplot`, `chartOptionCalendar`, `chartOptionMatrix` for the rest |
+| **Builder** | family `<select>` + inline-SVG variant tiles; registry `_CHART_FAMILIES` in `scripts/pages/reports.js` |
+| **Library** | ECharts 6 (CDN, lazy-loaded via `echarts.js::loadECharts`); ecStat lazy-loaded via `loadECStat` for regression fits |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
 
 ### Company (`Company`, `CompanyMember`, `CompanySummary`)
@@ -243,15 +243,15 @@ redpash-app/
 | **Endpoint** | `GET /api/files/:rid/page?…` |
 | **Docs** | [`features/cleaner.md`](features/cleaner.md) |
 
-### `#/reports?id=RPT_…` or `?new=1` — report builder
+### `#/reports?project=PRJ_…&file=FIL_…` — reports + chart builder
 | Asset | Location |
 |---|---|
-| **Partial** | `partials/reports.html` |
-| **Controller** | `scripts/reports/index.js` |
-| **Filter** | reused from cleaner via the same `panel.js` |
-| **Charts panel** | left column, 24 collapsible category sections of icon buttons |
-| **Chart modal** | `<dialog class="rp-modal" id="chart-modal">` — modal-driven create/edit |
-| **Endpoint** | `POST /api/reports/preview` |
+| **Partials** | `partials/reports/` — `index.html` composition root + `proj-tabs` / `header` / `file-tabs` / `toolbar` / `table` / `chart-dock` |
+| **Module** | `scripts/pages/reports.js` — sandbox port |
+| **Layout** | 2-page vertical scroll-snap deck — Page 1 Data (chrome + read-only source redtable), Page 2 Charts (builder rail + chart dock) |
+| **Chart builder** | left rail: family `<select>` + inline-SVG variant tiles; no modal |
+| **Persistence** | saved charts → `localStorage['rp_saved_charts_v1']` (per-project stopgap; backend `FIL_` File pending) |
+| **Endpoint** | `POST /api/reports/preview` (one per chart) |
 
 ### `#/dashboards?id=DSH_…` or `?new=1` — dashboard builder
 | Asset | Location |
@@ -387,7 +387,7 @@ redpash-app/
 
 **"I want to add an API endpoint"** → pick the matching `routes/*.rs`, add a handler, wire into the module's `routes()` fn.
 **"I want to add a SQL query"** → `crates/api/src/db.rs`. One helper per task. Take `&PgPool`, return DTOs from `shared::*`.
-**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `chart-render.js`, `reports/index.js`, `partials/reports.html`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
+**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `chart-render.js`, `scripts/pages/reports.js` (`_CHART_FAMILIES`), `partials/reports/chart-dock.html`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
 **"I want to add a cleaning tool"** → backend: a new arm in `data::steps::replay` plus a helper in `data::*`. Frontend: `scripts/cleaner/tools/<tool>.js` + sidebar wiring.
 **"I want to add a dashboard widget kind"** → extend `widgets.js` dispatch; new entry in `index.js` `KINDS` array; widget spec lives in `DashboardSpec.widgets[].spec`.
 **"I want to add a wire-format field"** → `crates/shared/src/<obj>.rs`. Use `#[serde(default)]` so older specs deserialise.

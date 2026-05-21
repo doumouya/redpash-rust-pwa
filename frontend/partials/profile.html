@@ -45,51 +45,50 @@
 
   <div class="rp-rt-panel">
 
-    <div class="rp-profile__layout">
+    <div class="rp-rail-layout">
 
       <!-- ─── Left rail — section anchors ───────────────────────────
-           Plain anchor links — `href="#section-..."` scroll-jumps the
-           right pane to the matching <section id="section-...">. No JS
-           needed; CSS :target highlights the active link. -->
-      <nav class="rp-profile__rail" aria-label="Profile sections">
+           Shared rp-side-nav component. Account/System links are plain
+           anchors — `href="#section-..."` scroll-jumps the right pane
+           to the matching <section id="section-...">; CSS :has(:target)
+           highlights the active one (no JS). The Preferences link is a
+           route (#/settings) — settings now have their own page. -->
+      <nav class="rp-side-nav" aria-label="Profile sections">
         <!-- Account group — who you are + what you have + how you sign in. -->
-        <div class="rp-profile__rail-group-hdr">Account</div>
-        <a class="rp-profile__rail-link" href="#section-personal">
+        <div class="rp-side-nav__group-hdr">Account</div>
+        <a class="rp-side-nav__link" href="#section-personal">
           <i class="bi bi-person"></i><span>Personal info</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-usage">
+        <a class="rp-side-nav__link" href="#section-usage">
           <i class="bi bi-bar-chart"></i><span>Usage</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-plan">
+        <a class="rp-side-nav__link" href="#section-plan">
           <i class="bi bi-rocket-takeoff"></i><span>Plan &amp; Billing</span>
         </a>
-        <a class="rp-profile__rail-link" href="#section-signin">
+        <a class="rp-side-nav__link" href="#section-signin">
           <i class="bi bi-shield-lock"></i><span>Sign-in</span>
         </a>
 
-        <!-- Settings group — global app preferences. -->
-        <div class="rp-profile__rail-group-hdr">Settings</div>
-        <a class="rp-profile__rail-link" href="#section-appearance">
-          <i class="bi bi-palette"></i><span>Appearance</span>
-        </a>
-        <a class="rp-profile__rail-link" href="#section-defaults">
-          <i class="bi bi-sliders"></i><span>Defaults</span>
+        <!-- Preferences — app settings live on their own /settings page. -->
+        <div class="rp-side-nav__group-hdr">Preferences</div>
+        <a class="rp-side-nav__link" href="#/settings">
+          <i class="bi bi-sliders"></i><span>Settings</span>
         </a>
 
         <!-- System group — meta + irreversible. -->
-        <div class="rp-profile__rail-group-hdr">System</div>
-        <a class="rp-profile__rail-link" href="#section-about">
+        <div class="rp-side-nav__group-hdr">System</div>
+        <a class="rp-side-nav__link" href="#section-about">
           <i class="bi bi-info-circle"></i><span>About</span>
         </a>
-        <a class="rp-profile__rail-link rp-profile__rail-link--danger" href="#section-danger">
+        <a class="rp-side-nav__link rp-side-nav__link--danger" href="#section-danger">
           <i class="bi bi-exclamation-triangle"></i><span>Danger zone</span>
         </a>
 
-        <div class="rp-profile__rail-foot">
-          <a class="rp-profile__rail-link rp-profile__rail-link--muted" href="#/docs">
+        <div class="rp-side-nav__foot">
+          <a class="rp-side-nav__link rp-side-nav__link--muted" href="#/docs">
             <i class="bi bi-book"></i><span>Docs</span>
           </a>
-          <button type="button" class="rp-profile__rail-link rp-profile__rail-link--muted"
+          <button type="button" class="rp-side-nav__link rp-side-nav__link--muted"
                   onclick="openModal('contact')">
             <i class="bi bi-envelope"></i><span>Contact</span>
           </button>
@@ -102,13 +101,13 @@
            rp-set-input, rp-stat-strip, etc.) are nested inside so JS
            continues to find every id="profile-*" / id="settings-*"
            handle unchanged. -->
-      <div class="rp-profile__pane">
+      <div class="rp-rail-layout__pane">
 
         <!-- ─── Personal info ──────────────────────────────────────── -->
-        <section id="section-personal" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Personal info</h2>
-            <div class="rp-profile__section-sub">Your identity + contact details. Click the pencil to enter edit mode; the floppy commits changes.</div>
+        <section id="section-personal" class="rp-rail-section">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">Personal info</h2>
+            <div class="rp-rail-section__sub">Your identity + contact details. Click the pencil to enter edit mode; the floppy commits changes.</div>
           </header>
 
           <form class="rp-profile__card" id="profile-form" novalidate>
@@ -220,10 +219,10 @@
         </section>
 
         <!-- ─── Usage ──────────────────────────────────────────────── -->
-        <section id="section-usage" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Usage</h2>
-            <div class="rp-profile__section-sub">Counts of what you've created — click any tile to jump to that surface.</div>
+        <section id="section-usage" class="rp-rail-section">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">Usage</h2>
+            <div class="rp-rail-section__sub">Counts of what you've created — click any tile to jump to that surface.</div>
           </header>
           <div class="rp-profile__card">
             <div class="rp-stat-strip">
@@ -252,10 +251,10 @@
         </section>
 
         <!-- ─── Plan & Billing ─────────────────────────────────────── -->
-        <section id="section-plan" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Plan &amp; Billing</h2>
-            <div class="rp-profile__section-sub">Current tier + upgrade path. Billing lands with Phase 6.</div>
+        <section id="section-plan" class="rp-rail-section">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">Plan &amp; Billing</h2>
+            <div class="rp-rail-section__sub">Current tier + upgrade path. Billing lands with Phase 6.</div>
           </header>
           <div class="rp-profile__card">
             <div class="rp-profile__plan">
@@ -298,10 +297,10 @@
              Merged from the separate #section-connected + #section-security
              so all "how you authenticate" controls sit in one card with
              two subsection headers. -->
-        <section id="section-signin" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Sign-in</h2>
-            <div class="rp-profile__section-sub">Providers, password, and session controls.</div>
+        <section id="section-signin" class="rp-rail-section">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">Sign-in</h2>
+            <div class="rp-rail-section__sub">Providers, password, and session controls.</div>
           </header>
           <div class="rp-profile__card rp-profile__signin-grid">
             <!-- Left column: connected providers. -->
@@ -381,192 +380,11 @@
           </div>
         </section>
 
-        <!-- ─── Appearance (Theme + Float bars + Language) ─────────── -->
-        <section id="section-appearance" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Appearance</h2>
-            <div class="rp-profile__section-sub">Theme, palette, float-bar anchors, interface language.</div>
-          </header>
-          <div class="rp-profile__card">
-            <div class="rp-set-row">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Theme</div>
-                <div class="rp-set-sub">Choose how RedPash looks on your device</div>
-              </div>
-              <div class="rp-theme-row">
-                <button id="settings-bg-preview" class="rp-bg-preview-tog"
-                        type="button" role="switch" aria-checked="false"
-                        aria-label="Preview palette" title="Preview palette"
-                        onclick="rpToggleBgPreview()">
-                  <i class="bi bi-eye-slash"></i>
-                </button>
-                <div class="rp-theme-sw" role="group" aria-label="Color theme">
-                  <button class="rp-theme-btn" data-theme="light"  title="Light"  onclick="rpSetTheme('light')"><i class="bi bi-sun-fill"></i></button>
-                  <button class="rp-theme-btn" data-theme="system" title="System" onclick="rpSetTheme('system')"><i class="bi bi-circle-half"></i></button>
-                  <button class="rp-theme-btn" data-theme="dark"   title="Dark"   onclick="rpSetTheme('dark')"><i class="bi bi-moon-fill"></i></button>
-                </div>
-                <div class="rp-bg-sw" id="settings-bg-sw" role="group" aria-label="Background palette">
-                  <button class="rp-bg-btn rp-bg-import"  data-bg="import"  title="Import"  onclick="rpSetBgPalette('import')"></button>
-                  <button class="rp-bg-btn rp-bg-clean"   data-bg="clean"   title="Clean"   onclick="rpSetBgPalette('clean')"></button>
-                  <button class="rp-bg-btn rp-bg-report"  data-bg="report"  title="Report"  onclick="rpSetBgPalette('report')"></button>
-                  <button class="rp-bg-btn rp-bg-publish" data-bg="publish" title="Publish" onclick="rpSetBgPalette('publish')"></button>
-                </div>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Topbar position</div>
-                <div class="rp-set-sub">Where the top float bar anchors (legacy float-bar layout)</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-topbar-pos">
-                <button type="button" class="rp-set-opt" data-pos="l" title="Left"><i class="bi bi-align-start"></i></button>
-                <button type="button" class="rp-set-opt" data-pos="c" title="Center"><i class="bi bi-align-center"></i></button>
-                <button type="button" class="rp-set-opt active" data-pos="r" title="Right"><i class="bi bi-align-end"></i></button>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Footer position</div>
-                <div class="rp-set-sub">Where the bottom float bar anchors</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-footer-pos">
-                <button type="button" class="rp-set-opt active" data-pos="l" title="Left"><i class="bi bi-align-start"></i></button>
-                <button type="button" class="rp-set-opt" data-pos="c" title="Center"><i class="bi bi-align-center"></i></button>
-                <button type="button" class="rp-set-opt" data-pos="r" title="Right"><i class="bi bi-align-end"></i></button>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Language</div>
-                <div class="rp-set-sub">Interface language — more coming soon</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-lang">
-                <button type="button" class="rp-set-opt" data-lang="en">English</button>
-                <button type="button" class="rp-set-opt" data-lang="fr">Français</button>
-                <span class="rp-set-opt--soon">中文 <span class="rp-soon">Soon</span></span>
-                <span class="rp-set-opt--soon">Русский <span class="rp-soon">Soon</span></span>
-                <span class="rp-set-opt--soon">Swahili <span class="rp-soon">Soon</span></span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ─── Defaults (file handling + objects-page + cleaner-page) ────
-             Merged from #section-data + #section-objects + #section-cleaner
-             so every "what should the app do by default" knob sits in one
-             card with three subsection headers. Reduces rail-link count
-             and keeps related defaults adjacent. -->
-        <section id="section-defaults" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Defaults</h2>
-            <div class="rp-profile__section-sub">File handling defaults, per-page settings, and shared vocabulary.</div>
-          </header>
-          <div class="rp-profile__card">
-            <h3 class="rp-profile__subhdr">Objects page</h3>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Object tabs</div>
-                <div class="rp-set-sub">Which object types show as tabs on the Objects page. Drag active pills to reorder.</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-object-tabs">
-                <button type="button" class="rp-set-opt" data-key="projects"><i class="bi bi-folder2-open bi-sm"></i> Projects</button>
-                <button type="button" class="rp-set-opt" data-key="files"><i class="bi bi-file-earmark-text bi-sm"></i> Files</button>
-                <button type="button" class="rp-set-opt" data-key="reports"><i class="bi bi-bar-chart-fill bi-sm"></i> Reports</button>
-                <button type="button" class="rp-set-opt" data-key="dashboards"><i class="bi bi-grid-1x2-fill bi-sm"></i> Dashboards</button>
-                <button type="button" class="rp-set-opt" data-key="companies"><i class="bi bi-building bi-sm"></i> Companies</button>
-                <button type="button" class="rp-set-opt" data-key="users"><i class="bi bi-people-fill bi-sm"></i> Users</button>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Saved tab views</div>
-                <div class="rp-set-sub">Each tab remembers its own columns, rows-per-page, sort and date format. Adjust them from the Objects-page toolbar; reset here to drop a tab back to the default view.</div>
-              </div>
-              <div id="settings-views-list" class="rp-views-list"></div>
-            </div>
-
-            <div class="rp-set-divider rp-profile__subdivider"></div>
-
-            <h3 class="rp-profile__subhdr">File handling</h3>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Default CSV delimiter</div>
-                <div class="rp-set-sub">Applied when opening files</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-delimiter">
-                <button type="button" class="rp-set-opt active" data-value="auto">Auto-detect</button>
-                <button type="button" class="rp-set-opt"        data-value="comma">Comma ,</button>
-                <button type="button" class="rp-set-opt"        data-value="semi">Semicolon ;</button>
-                <button type="button" class="rp-set-opt"        data-value="tab">Tab ↹</button>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Default encoding</div>
-                <div class="rp-set-sub">Fallback when RedPash can't detect encoding. List matches the cleaner sidebar's options + the codecs the chardetng detector surfaces.</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-encoding">
-                <button type="button" class="rp-set-opt active" data-value="auto"        title="Let chardetng pick — recommended">Auto-detect</button>
-                <button type="button" class="rp-set-opt"        data-value="utf-8"       title="Unicode (most common)">UTF-8</button>
-                <button type="button" class="rp-set-opt"        data-value="utf-16le"    title="Unicode 16-bit little-endian">UTF-16 LE</button>
-                <button type="button" class="rp-set-opt"        data-value="utf-16be"    title="Unicode 16-bit big-endian">UTF-16 BE</button>
-                <button type="button" class="rp-set-opt"        data-value="windows-1252" title="Western European Windows (CP1252)">Windows-1252</button>
-                <button type="button" class="rp-set-opt"        data-value="iso-8859-1"  title="Western European 8-bit (ISO-8859-1)">Latin-1</button>
-                <button type="button" class="rp-set-opt"        data-value="iso-8859-15" title="Western European + euro (ISO-8859-15)">Latin-9</button>
-                <button type="button" class="rp-set-opt"        data-value="windows-1250" title="Central European Windows">Windows-1250</button>
-                <button type="button" class="rp-set-opt"        data-value="macintosh"   title="Classic Mac OS Roman">MacRoman</button>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Export format</div>
-                <div class="rp-set-sub">Default format when downloading cleaned data</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-export-format">
-                <button type="button" class="rp-set-opt active" data-value="csv"  title="Comma-separated values"><i class="bi bi-filetype-csv bi-sm"></i> CSV</button>
-                <button type="button" class="rp-set-opt"        data-value="xlsx" title="Excel workbook (single sheet)"><i class="bi bi-filetype-xlsx bi-sm"></i> Excel</button>
-                <button type="button" class="rp-set-opt"        data-value="json" title="Array of records"><i class="bi bi-filetype-json bi-sm"></i> JSON</button>
-              </div>
-            </div>
-
-            <div class="rp-set-divider rp-profile__subdivider"></div>
-
-            <h3 class="rp-profile__subhdr">Cleaner page</h3>
-            <div class="rp-set-row rp-set-row--col">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Your sentinel values</div>
-                <div class="rp-set-sub">Junk placeholders you've flagged in Fix invalid values. RedPash scans every file for these in addition to the built-in list. Click × to remove an entry.</div>
-              </div>
-              <div id="settings-sentinels-list" class="rp-sentinels-list">
-                <div class="rp-sentinels-empty" style="font-size:0.75rem;color:var(--muted)">No personal sentinels yet — add them via the Cleaner's Fix invalid values modal.</div>
-              </div>
-            </div>
-            <div class="rp-set-divider"></div>
-            <div class="rp-set-row">
-              <div class="rp-set-lbl">
-                <div class="rp-set-title">Share with all users</div>
-                <div class="rp-set-sub">When on, the sentinels you flag join the global vocabulary (after 2+ users flag the same value). We share only the placeholder string, never your data.</div>
-              </div>
-              <div class="rp-set-opt-grp" id="settings-share-sentinels">
-                <button type="button" class="rp-set-opt" data-value="true"  title="Share my sentinels with everyone">On</button>
-                <button type="button" class="rp-set-opt" data-value="false" title="Keep my sentinels personal">Off</button>
-              </div>
-            </div>
-          </div>
-        </section>
-        <!-- ─── (end Defaults section — merged data + objects + cleaner) ─── -->
-
         <!-- ─── About ──────────────────────────────────────────────── -->
-        <section id="section-about" class="rp-profile__section">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">About</h2>
-            <div class="rp-profile__section-sub">Version + documentation links.</div>
+        <section id="section-about" class="rp-rail-section">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">About</h2>
+            <div class="rp-rail-section__sub">Version + documentation links.</div>
           </header>
           <div class="rp-profile__card">
             <div class="rp-set-row">
@@ -584,10 +402,10 @@
         </section>
 
         <!-- ─── Danger zone (last in pane order) ───────────────────── -->
-        <section id="section-danger" class="rp-profile__section rp-profile__section--danger">
-          <header class="rp-profile__section-hdr">
-            <h2 class="rp-profile__section-ttl">Danger zone</h2>
-            <div class="rp-profile__section-sub">Sign out of this session — or delete the account entirely.</div>
+        <section id="section-danger" class="rp-rail-section rp-rail-section--danger">
+          <header class="rp-rail-section__hdr">
+            <h2 class="rp-rail-section__ttl">Danger zone</h2>
+            <div class="rp-rail-section__sub">Sign out of this session — or delete the account entirely.</div>
           </header>
           <div class="rp-profile__card rp-profile__card--danger">
             <div class="rp-set-row">
@@ -608,8 +426,8 @@
           </div>
         </section>
 
-      </div><!-- /.rp-profile__pane -->
-    </div><!-- /.rp-profile__layout -->
+      </div><!-- /.rp-rail-layout__pane -->
+    </div><!-- /.rp-rail-layout -->
   </div><!-- /.rp-rt-panel -->
 
   <!-- Contact modal — same shell as landing/home for the rail's

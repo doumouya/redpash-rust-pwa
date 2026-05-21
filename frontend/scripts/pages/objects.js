@@ -28,7 +28,7 @@
 import { api }       from "/scripts/api.js";
 import { toast }     from "/scripts/ui/toast.js";
 import { openModal } from "/scripts/ui/modal.js";
-import { OBJECT_TAB_CATALOG, OBJECT_TAB_KEYS, normalizeObjectTabs }
+import { OBJECT_TAB_KEYS, normalizeObjectTabs }
   from "/scripts/objects-catalog.js";
 
 // Project stage / status → a colored `.rp-badge` chip (library
@@ -879,81 +879,10 @@ export default async function mount(root, ctx) {
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────
-// Rendered from `objTabs` (the user's chosen set), not the full catalog.
-// Each tab carries a remove (×); a trailing "+" opens a dropdown of the
-// object types not currently shown. Add / remove persist to the account
-// via rpSavePref — see objAddTab / objRemoveTab.
+// The object-type tab strip is rendered by controls.js (spRenderObjectTabs),
+// which writes the sandbox .rp-rt-proj-tab markup. _renderTabs just delegates.
 function _renderTabs(root) {
-  // Prerelease (Phase 1): sandbox owns the type-tab strip visual.
-  // controls.js exposes spRenderObjectTabs which writes
-  // <button class="rp-rt-proj-tab" data-sp-project-key="..."> markup
-  // matching the new objects.css proj-tabs theme overrides. Old
-  // _renderTabs emitted <div class="obj-tab"> which doesn't match
-  // the sandbox styling and would clobber the strip every time the
-  // user added / removed / activated a tab. Delegate so the two
-  // renderers don't fight over #obj-tabs.
-  //
-  // State coupling caveat: sandbox tracks _spActiveObjectKey inside
-  // controls.js; live's currentKind stays stale until we wire
-  // objActivateTab through spActivateObjectType in the next pass.
-  // For the visual port this is fine — clicks update the sandbox
-  // active class + toggle [data-object-type] visibility; live's
-  // per-kind data render isn't wired into the new per-type wrappers
-  // yet so currentKind being stale is a no-op.
-  if (typeof window.spRenderObjectTabs === "function") {
-    window.spRenderObjectTabs(root);
-    return;
-  }
-
-  const list = root.querySelector("#obj-tabs");
-  if (!list) return;
-
-  // Min-1: the last remaining tab can't be removed (you always keep at
-  // least one object type visible), so its × is omitted entirely.
-  const canRemove = objTabs.length > 1;
-  const tabsHtml = objTabs.map((k) => {
-    const s = SCHEMAS[k];
-    if (!s) return "";
-    const x = canRemove
-      ? `<button class="obj-tab-x" title="Remove tab"
-                 aria-label="Remove ${esc(s.label)} tab"
-                 onclick="event.stopPropagation();objRemoveTab('${k}')"><i class="bi bi-x"></i></button>`
-      : "";
-    // Tabs are draggable so the user can reorder them in place;
-    // dropping one on another inserts the source BEFORE the target.
-    // Persists via rpSavePref("objects_tabs", ...) so the new order
-    // shows up immediately in Profile's Settings panel too. Mirrors
-    // ovColDrag* / cleanerColDrag* but mutates objTabs.
-    return `<div class="obj-tab" data-kind="${k}" draggable="true"
-                 onclick="objActivateTab('${k}')"
-                 ondragstart="objTabDragStart(event)"
-                 ondragover="objTabDragOver(event)"
-                 ondragleave="objTabDragLeave(event)"
-                 ondrop="objTabDrop(event)"
-                 ondragend="objTabDragEnd(event)">
-      <i class="bi ${s.icon}"></i><span>${esc(s.label)}</span>${x}
-    </div>`;
-  }).join("");
-
-  // "+" add-tab control — a dropdown of catalog types not yet shown.
-  const hidden = OBJECT_TAB_CATALOG.filter((c) => !objTabs.includes(c.key));
-  const menuHtml = hidden.length
-    ? hidden.map((c) =>
-        `<button class="obj-add-item" onclick="objAddTab('${c.key}')">
-           <i class="bi ${c.icon}"></i><span>${esc(c.label)}</span></button>`).join("")
-    : `<div class="obj-add-empty">All object types are shown.</div>`;
-  const addHtml = `<div class="obj-tab-add-wrap">
-    <button class="obj-tab-add" title="Add a tab" aria-label="Add a tab"${
-      hidden.length ? ` onclick="objToggleAddMenu(this)"` : " disabled"
-    }><i class="bi bi-plus-lg"></i></button>
-    <div class="obj-tab-add-menu" hidden>${menuHtml}</div>
-  </div>`;
-
-  list.innerHTML = tabsHtml + addHtml;
-  // The innerHTML rebuild drops the active class — re-apply it.
-  list.querySelectorAll(".obj-tab").forEach((t) => {
-    t.classList.toggle("active", t.dataset.kind === currentKind);
-  });
+  window.spRenderObjectTabs?.(root);
 }
 
 // ── Inline-onclick globals ─────────────────────────────────────────
@@ -968,10 +897,7 @@ function _wireGlobals(root) {
     if (!kind) return;
     currentKind = kind;
 
-    // Re-render the strip from objTabs — this also moves the active
-    // highlight (it reads currentKind) AND picks up any add/remove the
-    // caller just made to objTabs, so objAddTab / objRemoveTab can
-    // delegate here without separately re-rendering.
+    // Re-render the strip so the active highlight moves to this kind.
     _renderTabs(root);
     // Keep the URL shareable / reload-stable without a router re-mount.
     try { history.replaceState(null, "", `#/objects?tab=${kind}`); } catch {}
@@ -1819,100 +1745,8 @@ function _wireGlobals(root) {
     _objOpenUploadModal();
   };
 
-  // ── Customizable tab strip ────────────────────────────────────────
-  // Add / remove tabs from the user's set. Both persist the new set to
-  // the account via rpSavePref("objects_tabs", …) — which also updates
-  // the in-memory session, so the Settings control reflects the change
-  // next time profile mounts. localStorage is NOT touched (objects_tabs
-  // isn't in main.js's PREFS_LS_MAP — it's an array, not a scalar).
-  const _persistObjTabs = () => {
-    window.rpSavePref?.("objects_tabs", [...objTabs]);
-  };
-
-  // Remove a tab. Refuses the last one (min-1 — you always keep one
-  // object type visible). If the active tab is removed, the nearest
-  // neighbour becomes active.
-  window.objRemoveTab = (kind) => {
-    const idx = objTabs.indexOf(kind);
-    if (idx === -1 || objTabs.length <= 1) return;
-    objTabs.splice(idx, 1);
-    _persistObjTabs();
-    if (currentKind === kind) {
-      // objActivateTab re-renders the strip; just pick a neighbour.
-      window.objActivateTab(objTabs[Math.min(idx, objTabs.length - 1)]);
-    } else {
-      _renderTabs(root);
-    }
-  };
-
-  // Add a hidden object type back as a tab, and switch to it.
-  window.objAddTab = (kind) => {
-    if (!KINDS.includes(kind) || objTabs.includes(kind)) return;
-    objTabs.push(kind);
-    _persistObjTabs();
-    _closeAddMenu();
-    window.objActivateTab(kind);  // activates + re-renders the strip
-  };
-
-  window.objToggleAddMenu = (btn) => {
-    const menu = btn.parentElement?.querySelector(".obj-tab-add-menu");
-    if (menu) menu.hidden = !menu.hidden;
-  };
-
-  // Drag-to-reorder tabs. Same shape as the column-drag pattern:
-  // dragstart stamps the source kind, dragover marks the target,
-  // drop splices `objTabs` (insert before target). Mutation is
-  // persisted to prefs.objects_tabs so the new order shows up in
-  // Profile's Settings panel as well.
-  let _objTabDragKind = null;
-  window.objTabDragStart = (e) => {
-    const tab = e.currentTarget;
-    _objTabDragKind = tab?.dataset?.kind || null;
-    if (_objTabDragKind) {
-      e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", _objTabDragKind); } catch {}
-      tab.classList.add("obj-tab-drag");
-    }
-  };
-  window.objTabDragOver = (e) => {
-    if (!_objTabDragKind) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const tab = e.currentTarget;
-    if (tab && tab.dataset.kind !== _objTabDragKind) tab.classList.add("obj-tab-drop");
-  };
-  window.objTabDragLeave = (e) => {
-    e.currentTarget?.classList.remove("obj-tab-drop");
-  };
-  window.objTabDragEnd = () => {
-    _root.querySelectorAll(".obj-tab.obj-tab-drag, .obj-tab.obj-tab-drop")
-      .forEach((t) => t.classList.remove("obj-tab-drag", "obj-tab-drop"));
-    _objTabDragKind = null;
-  };
-  window.objTabDrop = (e) => {
-    e.preventDefault();
-    const targetTab = e.currentTarget;
-    const target = targetTab?.dataset?.kind;
-    const source = _objTabDragKind;
-    window.objTabDragEnd();
-    if (!source || !target || source === target) return;
-    const from = objTabs.indexOf(source);
-    if (from < 0) return;
-    objTabs.splice(from, 1);
-    const insertAt = objTabs.indexOf(target);
-    if (insertAt < 0) return;
-    objTabs.splice(insertAt, 0, source);
-    _persistObjTabs();
-    _renderTabs(_root);
-  };
-  const _closeAddMenu = () => {
-    root.querySelector("#obj-tabs .obj-tab-add-menu")
-      ?.setAttribute("hidden", "");
-  };
-
-  // Close toolbar dropdowns (pill + cols), the filter dropdowns, and
-  // the add-tab menu on outside click. Guarded so re-mounts don't
-  // stack listeners.
+  // Close toolbar dropdowns (pill + cols) and the filter dropdowns on
+  // outside click. Guarded so re-mounts don't stack listeners.
   if (!window._objDdWired) {
     window._objDdWired = true;
     document.addEventListener("click", (e) => {
@@ -1927,10 +1761,6 @@ function _wireGlobals(root) {
       // column / op dropdowns (.rp-rt-fb-dd) and the value input + its
       // suggestion menu (.rp-rt-fb-val-wrap).
       if (!e.target.closest(".rp-rt-fb-dd, .rp-rt-fb-val-wrap")) _objCloseFbMenus();
-      if (!e.target.closest(".obj-tab-add-wrap")) {
-        document.querySelectorAll(".obj-tab-add-menu:not([hidden])")
-          .forEach((m) => m.setAttribute("hidden", ""));
-      }
     });
   }
 
@@ -3925,6 +3755,18 @@ function _installObjectsLiveHandlers(root) {
     _persistObjView(currentKind);
   };
 
+  // Page navigation — the [data-objects-pages] buttons painted by
+  // paintObjectsSandboxTable call this. paintObjectsSandboxTable clamps
+  // an out-of-range page, so no bounds check needed here. The page is
+  // transient nav state, not a saved-view field — no _persistObjView.
+  window.objectsGoPage = (p) => {
+    if (!currentKind || !STATE[currentKind]) return;
+    STATE[currentKind].page = Number(p) || 1;
+    if (typeof paintObjectsSandboxTable === "function") {
+      paintObjectsSandboxTable(currentKind);
+    }
+  };
+
   if (_installObjectsLiveHandlers._installed) return;
   _installObjectsLiveHandlers._installed = true;
 
@@ -4015,6 +3857,41 @@ function paintObjectsSandboxTable(kind) {
         return true;
       })
     : allRows;
+
+  // Paginate — honour the toolbar's rows-per-page choice + current page
+  // (STATE[kind].rowsPerPage / .page). Without this the table painted
+  // every filtered row, so the rows-per-page dropdown did nothing.
+  const _st        = STATE[kind] ?? {};
+  const perPage    = OBJ_ROWS_OPTS.includes(_st.rowsPerPage) ? _st.rowsPerPage : 25;
+  const totalPages = Math.max(1, Math.ceil(rows.length / perPage));
+  const page       = Math.min(Math.max(1, _st.page || 1), totalPages);
+  if (STATE[kind]) STATE[kind].page = page;   // clamp back into range
+  const pageStart  = (page - 1) * perPage;
+  const pageRows   = rows.slice(pageStart, pageStart + perPage);
+
+  // Footer — fill the per-type partial's <div class="rp-rt-pager">:
+  // the [data-objects-rows-info] line + the [data-objects-pages] buttons.
+  // Scope the lookup to the table-wrap's parent — the pager is its
+  // sibling in the table partial. NOT [data-object-type="<kind>"]:
+  // that attribute appears twice (header strip + body), so querySelector
+  // would hit the header block, which has no pager. [data-objects-table]
+  // is unique per kind, so `wrap` is unambiguous.
+  const _pagerHost = wrap?.parentElement;
+  const _info = _pagerHost?.querySelector("[data-objects-rows-info]");
+  if (_info) {
+    _info.textContent = rows.length
+      ? `Showing ${pageStart + 1}–${Math.min(pageStart + perPage, rows.length)} of ${rows.length} ${kind}`
+      : "";
+  }
+  const _pages = _pagerHost?.querySelector("[data-objects-pages]");
+  if (_pages) {
+    _pages.innerHTML = totalPages <= 1
+      ? ""
+      : Array.from({ length: totalPages }, (_, i) => i + 1)
+          .map((p) => `<button type="button" class="rp-rt-pg${p === page ? " on" : ""}" onclick="objectsGoPage(${p})">${p}</button>`)
+          .join("");
+  }
+
   // Honour the per-tab columns picker — _visibleOrderedCols reads
   // STATE[kind].visibleCols + .colOrder so the table reflects what
   // objectsToggleCol / objectsResetCols just changed. Falls back to
@@ -4073,7 +3950,7 @@ function paintObjectsSandboxTable(kind) {
   // applies the same uncheck / check / trash fade-in behaviour. Per-row
   // onclick="spToggleRowSel(this)" mirrors the partial's hardcoded
   // demo rows so select mode works without per-row wiring this pass.
-  tbody.innerHTML = rows.map((r) => {
+  tbody.innerHTML = pageRows.map((r) => {
     const rid = esc(r.redpash_id ?? "");
     // Composite onclick — spToggleRowSel handles the visual class flip,
     // objectsToggleRowSel mirrors that into STATE[kind].selected so the

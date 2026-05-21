@@ -43,7 +43,7 @@ const ROUTES = [
   { path: "/reports",    partial: "/partials/reports.html",    script: "/scripts/pages/reports.js",    auth: true,  hidden: true, css: "/styles/pages/reports.css", chrome: "full" },
   { path: "/dashboards", partial: "/partials/dashboards.html", script: "/scripts/pages/dashboards.js", auth: true,  hidden: true, css: "/styles/pages/dashboards.css", chrome: "full" },
   { path: "/profile",    partial: "/partials/profile.html",    script: "/scripts/pages/profile.js",    auth: true,  hidden: true, css: "/styles/pages/profile.css", chrome: "full" },
-  { path: "/settings",   partial: "/partials/settings.html",   script: "/scripts/pages/settings.js",   auth: true,  hidden: true  },
+  { path: "/settings",   partial: "/partials/settings.html",   script: "/scripts/pages/settings.js",   auth: true,  hidden: true, css: "/styles/pages/settings.css", chrome: "full" },
   { path: "/docs",       partial: "/partials/docs.html",       script: "/scripts/pages/docs.js",       auth: false, label: "Docs", css: "/styles/pages/docs.css", chrome: "full" },
 ];
 

@@ -66,14 +66,17 @@ async function loadSlug(slug, content) {
   }
 }
 
+// Paints the shared rp-side-nav component: a group header per section,
+// then one link per doc. markActive() toggles `.is-active` on the
+// link whose data-slug matches the open doc.
 function renderNav(items) {
   const bySection = items.reduce((acc, it) => {
     (acc[it.section ?? "Misc"] ??= []).push(it);
     return acc;
   }, {});
   return Object.entries(bySection).map(([section, list]) => `
-    <h3>${section}</h3>
-    <ul>${list.map((it) => `<li><a href="#" data-slug="${it.slug}">${it.title}</a></li>`).join("")}</ul>
+    <div class="rp-side-nav__group-hdr">${section}</div>
+    ${list.map((it) => `<a class="rp-side-nav__link" href="#" data-slug="${it.slug}"><span>${it.title}</span></a>`).join("")}
   `).join("");
 }
 

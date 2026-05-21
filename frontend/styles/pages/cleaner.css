@@ -439,57 +439,6 @@ html[data-theme="light"] #page-cleaner .rp-rt-topbar {
   }
 }
 
-/* ── Project-tabs strip + tabs ───────────────────────────────────────
-   Now that #page-cleaner redefines the bare tokens to sandbox values,
-   var(--over0) / var(--surface) / etc. resolve correctly inside this
-   scope. But the vendored proj-tabs.css's theme overrides key off
-   html[data-theme="dark"] / html[data-theme="light"] which never match
-   live's data-theme="system" — so its default rules apply regardless
-   of OS preference, leaving the dark-mode tab too-dark (default uses
-   var(--bg), sandbox dark uses var(--over0)).
-
-   Mirror the sandbox dark recipe as the default (dark is the common
-   case here), then re-apply the light recipe through both explicit
-   data-theme="light" and prefers-color-scheme: light when system is
-   in play. */
-#page-cleaner .rp-rt-proj-tabs {
-  background: var(--surface);
-  border-bottom: 0.0313rem solid var(--border);
-}
-#page-cleaner .rp-rt-proj-tab {
-  background: var(--over0);
-}
-#page-cleaner .rp-rt-proj-tab:hover,
-#page-cleaner .rp-rt-proj-tab.active {
-  background: var(--over1);
-}
-html[data-theme="light"] #page-cleaner .rp-rt-proj-tabs {
-  background: var(--over0);
-}
-html[data-theme="light"] #page-cleaner .rp-rt-proj-tab {
-  background: var(--bg);
-}
-html[data-theme="light"] #page-cleaner .rp-rt-proj-tab:hover {
-  background: var(--surface);
-}
-html[data-theme="light"] #page-cleaner .rp-rt-proj-tab.active {
-  background: var(--over0);
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] #page-cleaner .rp-rt-proj-tabs {
-    background: var(--over0);
-  }
-  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab {
-    background: var(--bg);
-  }
-  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab:hover {
-    background: var(--surface);
-  }
-  html[data-theme="system"] #page-cleaner .rp-rt-proj-tab.active {
-    background: var(--over0);
-  }
-}
-
 /* ── Header bar + internals — sandbox values ─────────────────────────
    Vendored redtable.css gives the bare .rp-rt-header a big padding
    (1.25rem 1.5rem 0.875rem) and no background — its design assumed a

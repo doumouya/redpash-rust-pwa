@@ -638,11 +638,10 @@
   }
 
   // Render the strip from spObjectTabs. Each tab carries inline drag
-  // handlers (sp{Start,Over,Leave,End,Drop}ObjectTab) — same per-tab
-  // pattern as the live app's objTabDrag*, so the array mutation +
-  // re-render flow stays single-source-of-truth (no DOM-to-array
-  // sync needed). Min-1: when there's only one tab, the × is omitted
-  // entirely so the user can't end up with zero tabs.
+  // handlers (sp{Start,Over,Leave,End,Drop}ObjectTab) — the array
+  // mutation + re-render flow stays single-source-of-truth (no
+  // DOM-to-array sync needed). Min-1: when there's only one tab, the
+  // × is omitted entirely so the user can't end up with zero tabs.
   window.spRenderObjectTabs = function (root) {
     var host = (root || document).querySelector("#obj-tabs");
     if (!host) return;
@@ -732,8 +731,7 @@
     });
   };
 
-  // Add a hidden type back as a tab and switch to it. Mirrors the
-  // live app's objAddTab(kind). De-dupes silently.
+  // Add a hidden type back as a tab and switch to it. De-dupes silently.
   window.spAddObjectTab = function (kind) {
     if (!kind || OBJECT_TAB_KEYS.indexOf(kind) === -1) return;
     if (window.spObjectTabs.indexOf(kind) !== -1) return;
@@ -749,7 +747,6 @@
 
   // Remove a tab from the strip. Min-1 — refuses the last one. If
   // the active tab is removed, the nearest neighbour becomes active.
-  // Mirrors the live app's objRemoveTab(kind).
   window.spRemoveObjectTab = function (kind) {
     var idx = window.spObjectTabs.indexOf(kind);
     if (idx === -1 || window.spObjectTabs.length <= 1) return;
@@ -763,12 +760,11 @@
     }
   };
 
-  // ── Object-tab drag handlers — same shape as the live app's
-  // objTabDrag*. Source/target classes (.is-drag / .is-drop) drive
-  // the visual cues. Drop splices spObjectTabs (source inserted
-  // BEFORE target), persists, re-renders. No fallback to
-  // _bindDragReorder — object tabs own their drag flow so the array
-  // stays the single source of truth.
+  // ── Object-tab drag handlers. Source/target classes (.is-drag /
+  // .is-drop) drive the visual cues. Drop splices spObjectTabs
+  // (source inserted BEFORE target), persists, re-renders. No
+  // fallback to _bindDragReorder — object tabs own their drag flow
+  // so the array stays the single source of truth.
   var _spDragObjectKey = null;
   window.spStartObjectTabDrag = function (e) {
     var tab = e.currentTarget;
@@ -918,9 +914,8 @@
 
   // Toggle the tab-strip + picker dropdown. Only the objects-page
   // tab strip uses the inline dropdown form (cleaner project + and
-  // file + both open rp-modals). Click-only — no hover-open, matching
-  // the live app's objToggleAddMenu. Closes any other open add-menu
-  // so only one is on-screen at a time.
+  // file + both open rp-modals). Click-only — no hover-open. Closes
+  // any other open add-menu so only one is on-screen at a time.
   window.spToggleTabAddMenu = function (btn) {
     var wrap = btn.closest(".rp-tab-add-wrap");
     var menu = wrap && wrap.querySelector(".rp-tab-add-menu");

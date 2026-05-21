@@ -2,7 +2,7 @@
 title: Charts
 section: Features
 order: 3
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # Charts
@@ -34,15 +34,16 @@ ReportSpec.charts: Vec<ChartSpec>
 ```
 
 All of `chartOption*`, the extractors, and `chartPreviewBody` live in
-`scripts/dashboards/chart-render.js`. The report viewer and the
-dashboard widget renderer both import from there.
+`scripts/dashboards/chart-render.js`. The Reports page
+(`scripts/pages/reports.js`) and the dashboard widget renderer both
+import from there.
 
 ## ECharts loader
 
 `loadECharts()` (in `scripts/dashboards/echarts.js`) lazy-loads
-ECharts from CDN on first chart mount and registers the `redpash`
+**ECharts 6** from CDN on first chart mount and registers the `redpash`
 theme (palette + tooltips pulled from CSS variables — works in dark
-mode too).
+mode too). The `matrix` kind needs the v6 `matrix` coordinate system.
 
 `loadECStat()` lazy-loads `echarts-stat` only when a chart needs a
 regression fit. Single-promise shared across concurrent callers.
@@ -54,7 +55,7 @@ regression fit. Single-promise shared across concurrent callers.
 | Kind family                                                    | `group_by` sent    | `aggregations` sent                              | Reads back from |
 |----------------------------------------------------------------|---------------------|---------------------------------------------------|-----------------|
 | `bar` / `bar_horizontal` / `line` / `area` / `pie` / `funnel` / `pictorial_bar` / `calendar` | `[group_by]`        | `[{col, fn, alias: "value"}]`                     | `res.subtotals` |
-| `heatmap` / `radar`                                            | `[group_by, y_group_by]` | `[{col, fn, alias: "value"}]`                | `res.subtotals` |
+| `heatmap` / `radar` / `matrix`                                 | `[group_by, y_group_by]` | `[{col, fn, alias: "value"}]`                | `res.subtotals` |
 | `boxplot`                                                      | `[group_by]`        | 5 fixed aggs: `min`, `q1`, `median`, `q3`, `max`  | `res.subtotals` |
 | `gauge`                                                        | `[]`                | `[{col, fn, alias: "value"}]`                     | `res.subtotals` (1 row) |
 | `scatter`                                                      | `[]`                | `[]`                                              | `res.details`   |
@@ -76,6 +77,7 @@ regression fit. Single-promise shared across concurrent callers.
 | `radar`          | polygon per series              | `{indicators, series}` (2-dim subtotals)                | requires `y_group_by`                    |
 | `boxplot`        | box+whiskers per group          | `[[min, q1, median, q3, max], ...]`                     | (canned 5-agg pipeline)                  |
 | `calendar`       | year-grid heatmap               | `[[date, value], ...]`; range auto-picked               | —                                        |
+| `matrix`         | ECharts 6 matrix-coord grid     | `[[xIdx, yIdx, value]]` + axis labels                   | requires `y_group_by`; ECharts 6 only    |
 
 Unknown kinds fall back to `bar` via `normalizeKind`.
 
@@ -106,26 +108,31 @@ Unknown kinds fall back to `bar` via `normalizeKind`.
   → fit line via ecStat, appended as a second series. Renders after
   the base chart (ecStat loads async).
 
-## Icon picker → ChartSpec
+## Chart builder → ChartSpec
 
-The new-chart icon grid in the Charts panel maps each `data-add-chart`
-value to a seed config via `ICON_PRESETS` in `scripts/reports/index.js`:
+The Reports page builds charts from a left-rail builder
+(`partials/reports/chart-dock.html`) — not a modal. Chart type is a
+family `<select>` (`#nc-family`) plus a row of inline-SVG **variant
+tiles**; every variant is a tile, there are no modifier checkboxes.
+
+`_CHART_FAMILIES` in `scripts/pages/reports.js` is the registry. A
+multi-variant family (bar, line, area, pie, pictorial_bar) carries a
+`variants[]` array — each variant commits a `kind` (+ modifiers) to the
+active chart and ships an inline-SVG glyph for its tile:
 
 ```js
-donut               → { kind: "pie", donut: true }
-half_donut          → { kind: "pie", donut: true, half: true }
-rose                → { kind: "pie", rose: true }
-scatter_linear      → { kind: "scatter", regression: "linear" }
-scatter_exponential → { kind: "scatter", regression: "exponential" }
-pictorial_bar_dotted → { kind: "pictorial_bar", symbol: "circle", symbol_repeat: true }
-pictorial_bar_icon   → { kind: "pictorial_bar", symbol: "triangle", symbol_repeat: false }
-…etc
+{ key: "pie", label: "Pie", variants: [
+  { id: "pie",        label: "Pie",        spec: { kind: "pie" },                g: `<svg…>` },
+  { id: "donut",      label: "Donut",      spec: { kind: "pie", donut: true },    g: `<svg…>` },
+  { id: "half_donut", label: "Half-donut", spec: { kind: "pie", donut: true, half: true }, g: `<svg…>` },
+  { id: "rose",       label: "Rose",       spec: { kind: "pie", rose: true },     g: `<svg…>` },
+]}
 ```
 
-Add a new variant icon: drop a `<button class="rp-ct-btn"
-data-add-chart="…">` into the matching `<details class="rp-ct-cat">`,
-then add an `ICON_PRESETS` entry. The modal opens pre-seeded and the
-existing save handler handles the rest.
+Single-variant families (scatter, heatmap, matrix, radar, boxplot,
+calendar, funnel, gauge) have `variants: []` — picked by the `<select>`
+alone, no tiles. Applying a variant resets all modifiers first, so
+switching never leaves a stale `smooth` / `donut` / `rose` / etc.
 
 ## Rollup behaviour (history)
 
@@ -153,7 +160,6 @@ list speculatively.
 | **ThemeRiver**             | `(time, category, value)`                              | Two-group-by + date axis. Could route through the existing heatmap body shape. |
 | **Geo / Map**              | geoJSON region key + value; sometimes pies overlaid    | Needs geoJSON registration + region-name join. `map-iceland-pie` from the official examples is parked here. |
 | **Candlestick**            | OHLC per time bucket                                   | Backend needs windowed pre-aggregation (per-period open/high/low/close). |
-| **Matrix**                 | Newer ECharts `matrix()` coord system                  | Cell-by-cell config; distinct from heatmap. |
 | **Pie-nest**               | Two pie series at different radii                      | Not really a new kind — second series with inner radius. Could ship as a `nest: bool` modifier on pie. |
 | **Bar-rich-text (axis)**   | Per-category icon/image axis labels                    | The current "rich bar" handles data labels; this variant styles the axis category labels (flags / images). |
 | **Scatter timeline**       | Time-indexed bubble (life-expectancy variant)          | Needs timeline animation + bubble-size column + per-frame dataset. |
@@ -167,14 +173,17 @@ list speculatively.
 2. **Backend (only if a new agg fn is needed)**: extend `AggFn` enum in
    `shared::report` and the matching arms in `data::group_by::build_agg_exprs`
    and `default_alias`.
-3. **reports/index.js**:
-   - Add `<option value="<kind>">` to the modal kind dropdown.
-   - If the kind needs a new modal field (Y dimension, regression, symbol,
-     …), add a `[data-cond-<name>]` row + a ref + the `syncModalConditionals`
-     toggle. Save the value into the spec in `cmSaveBtn.click`.
-   - Add an `ICON_PRESETS` entry.
+3. **scripts/pages/reports.js**:
+   - Add the kind to `_CHART_FAMILIES` — either a new single-variant
+     family `{ key, label, variants: [] }`, or a `variants[]` entry
+     (with an inline-SVG `g` glyph) under an existing family.
+   - Add an `<option value="<kind>">` to `#nc-family` in
+     `partials/reports/chart-dock.html`.
+   - If the kind needs a new builder field (Y dimension, regression,
+     symbol, …), add a `[data-cond-<name>]` row to `chart-dock.html`,
+     include it in `_builderFields`, and toggle it in
+     `_syncChartConditionals`.
+   - Map the kind in `_familyOf` / `_variantOf` if it carries modifiers.
 4. **widgets.js**: mirror the chart-render kind dispatch (the dashboard
    widget renderer is a direct copy of the report's chart-mount path).
-5. **partials/reports.html**: drop an icon button in the right
-   `<details class="rp-ct-cat">` section.
-6. Bump `service-worker.js` `CACHE_VERSION`.
+5. Bump `service-worker.js` `CACHE_VERSION`.

@@ -18,6 +18,7 @@ pub mod report;
 pub mod dashboard;
 pub mod step;
 pub mod user;
+pub mod event;
 
 /// One page of a paginated result. Returned by every `…/page` endpoint
 /// (files, reports, …). `rows` is generic so each resource can pick its

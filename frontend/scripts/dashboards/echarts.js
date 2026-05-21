@@ -13,7 +13,7 @@ export function loadECharts() {
   if (echartsPromise) return echartsPromise;
   echartsPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js";
+    s.src = "https://cdn.jsdelivr.net/npm/echarts@6/dist/echarts.min.js";
     s.async = true;
     s.onload  = () => { registerTheme(window.echarts); resolve(window.echarts); };
     s.onerror = () => reject(new Error("Failed to load ECharts from CDN"));

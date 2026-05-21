@@ -2,7 +2,7 @@
 title: Chart
 section: Objects
 order: 3
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # Chart
@@ -67,6 +67,7 @@ pub struct ChartSpec {
 | `heatmap`        | 2-dim aggregated        | subtotals                | `group_by`, `y_group_by`, agg       |
 | `radar`          | 2-dim aggregated        | subtotals                | `group_by` (series), `y_group_by` (indicators), agg |
 | `boxplot`        | 5-stat per group        | subtotals (5 cols)       | `group_by`, `agg_col` numeric (agg_fn ignored — runs canned min/q1/median/q3/max) |
+| `matrix`         | 2-dim aggregated        | subtotals                | `group_by`, `y_group_by`, agg — renders on the ECharts 6 `matrix` coord system |
 
 Unknown `kind` values fall back to `bar`.
 

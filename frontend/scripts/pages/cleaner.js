@@ -1424,9 +1424,9 @@ function _wireGlobals(root) {
   // re-mount the whole partial). Result: switching between files is
   // just one /api/files/:rid round-trip + a re-paint of the affected
   // slots, no partial swap, no /api/projects refetch.
-  // Persist STATE.hiddenFiles to the user's account prefs. Same pattern
-  // as objects.js _persistObjTabs — fire-and-forget, the in-memory set
-  // is already authoritative for this session.
+  // Persist STATE.hiddenFiles to the user's account prefs —
+  // fire-and-forget, the in-memory set is already authoritative for
+  // this session.
   const _persistHidden = () => {
     window.rpSavePref?.("cleaner_hidden_files", [...STATE.hiddenFiles]);
   };

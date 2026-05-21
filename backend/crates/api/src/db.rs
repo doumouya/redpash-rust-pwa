@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use shared::company::{Company, CompanyMember, CompanySummary};
 use shared::dashboard::{Dashboard, DashboardSpec};
+use shared::event::Event;
 use shared::file::{ColumnMeta, FileSummary};
 use shared::project::ProjectSummary;
 use shared::report::{Report, ReportSpec};
@@ -1635,4 +1636,89 @@ pub async fn remove_company_member(
     .execute(pool)
     .await?;
     Ok(n.rows_affected() > 0)
+}
+
+// ─── events ─────────────────────────────────────────────────────
+//
+// Read side only — the INSERT lives in `crate::event::record`, which
+// runs fire-and-forget off a detached task (the request path must
+// never block on, or fail because of, event logging).
+
+#[derive(FromRow)]
+struct EventRow {
+    redpash_id:      String,
+    occurred_at:     DateTime<Utc>,
+    origin:          String,
+    level:           String,
+    kind:            String,
+    message:         String,
+    source:          Option<String>,
+    user_redpash_id: Option<String>,
+    session_id:      Option<String>,
+    request_id:      Option<String>,
+    http_method:     Option<String>,
+    http_path:       Option<String>,
+    http_status:     Option<i32>,
+    duration_ms:     Option<i32>,
+    context:         serde_json::Value,
+}
+impl From<EventRow> for Event {
+    fn from(r: EventRow) -> Self {
+        Self {
+            redpash_id:      r.redpash_id,
+            occurred_at:     r.occurred_at,
+            origin:          r.origin,
+            level:           r.level,
+            kind:            r.kind,
+            message:         r.message,
+            source:          r.source,
+            user_redpash_id: r.user_redpash_id,
+            session_id:      r.session_id,
+            request_id:      r.request_id,
+            http_method:     r.http_method,
+            http_path:       r.http_path,
+            http_status:     r.http_status,
+            duration_ms:     r.duration_ms,
+            context:         r.context,
+        }
+    }
+}
+
+const EVENT_COLS: &str =
+    "redpash_id, occurred_at, origin, level, kind, message, source,
+     user_redpash_id, session_id, request_id, http_method, http_path,
+     http_status, duration_ms, context";
+
+/// Recent events, newest first. `level` / `kind` are optional exact-match
+/// filters — the `$n::text IS NULL OR …` form means a `None` bind skips
+/// that filter without dynamic SQL. `limit` is clamped by the caller.
+pub async fn list_events(
+    pool:  &PgPool,
+    level: Option<&str>,
+    kind:  Option<&str>,
+    limit: i64,
+) -> sqlx::Result<Vec<Event>> {
+    let rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "SELECT {EVENT_COLS} FROM events
+         WHERE ($1::text IS NULL OR level = $1)
+           AND ($2::text IS NULL OR kind  = $2)
+         ORDER BY occurred_at DESC
+         LIMIT $3"
+    ))
+    .bind(level)
+    .bind(kind)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn find_event(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Event>> {
+    let row: Option<EventRow> = sqlx::query_as(&format!(
+        "SELECT {EVENT_COLS} FROM events WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
 }

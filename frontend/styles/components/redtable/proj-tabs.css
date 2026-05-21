@@ -19,7 +19,7 @@
 .rp-rt-proj-tabs {
   display: flex;
   align-items: end;
-  padding: 0.375rem 0.5rem 0.125rem;
+  padding: 0 0.5rem;
   background: var(--over0);
   border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 7%, transparent);
 }
@@ -44,7 +44,6 @@
   border: 0;
   border-bottom: 0.1875rem solid transparent;
   color: var(--muted);
-  font-size: 0.75rem;
   cursor: pointer;
   white-space: nowrap;
   width: 100%;
@@ -199,3 +198,49 @@ html[data-theme="light"] .rp-rt-proj-tab.active   { background: var(--over0); }
   color: var(--bg);
 }
 .rp-tab-add-item:hover .bi { color: var(--bg); }
+
+/* ── Host-page override — cleaner + objects ──────────────────────────
+ * The theme overrides above key off html[data-theme="dark"] / "light",
+ * which never match the live app's data-theme="system" — so under
+ * system theme the base rules apply and the strip/tabs read too dark.
+ * The full-bleed pages (cleaner, objects, reports) mirror the dark
+ * recipe as the default, then re-apply the light recipe under explicit
+ * data-theme="light" AND prefers-color-scheme: light.
+ * ─────────────────────────────────────────────────────────────────── */
+:is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tabs {
+  background: var(--surface);
+  border-bottom: 0.0313rem solid var(--border);
+}
+:is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab {
+  background: var(--over0);
+}
+:is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab:hover,
+:is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab.active {
+  background: var(--over1);
+}
+html[data-theme="light"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tabs {
+  background: var(--over0);
+}
+html[data-theme="light"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab {
+  background: var(--bg);
+}
+html[data-theme="light"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab:hover {
+  background: var(--surface);
+}
+html[data-theme="light"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab.active {
+  background: var(--over0);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tabs {
+    background: var(--over0);
+  }
+  html[data-theme="system"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab {
+    background: var(--bg);
+  }
+  html[data-theme="system"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab:hover {
+    background: var(--surface);
+  }
+  html[data-theme="system"] :is(#page-cleaner, #page-objects, #page-reports) .rp-rt-proj-tab.active {
+    background: var(--over0);
+  }
+}

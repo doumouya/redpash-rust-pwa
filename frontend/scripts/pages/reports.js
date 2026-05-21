@@ -32,18 +32,31 @@
 
 import { api }   from "/scripts/api.js";
 import { toast } from "/scripts/ui/toast.js";
-
-const DEFAULT_SPLIT = 0.60;   // table 60% / chart dock 40%
-const MIN_SPLIT     = 0.20;
-const MAX_SPLIT     = 0.85;
+import { loadECharts, loadECStat } from "/scripts/dashboards/echarts.js";
+import {
+  chartOption, chartOptionHeatmap, chartOptionRadar,
+  chartOptionBoxplot, chartOptionCalendar,
+  subtotalsToSeries, subtotalsToScalar, subtotalsToHeatmap,
+  subtotalsToRadar, subtotalsToBoxplot, subtotalsToCalendar,
+  detailsToScatterSeries, chartPreviewBody, withRegression,
+  subtotalsToMatrix, chartOptionMatrix,
+} from "/scripts/dashboards/chart-render.js";
 
 const SNAPSHOT_KEY = "rp_reports_mount_snapshot_v1";
+
+// Saved charts persist here so they survive a reload and are available
+// to the Dashboard page. Stopgap until backend FIL_ File persistence.
+const SAVED_CHARTS_KEY = "rp_saved_charts_v1";
 
 // Module-scope STATE — every window.report* handler reads from here.
 // Reset shape (no `let STATE = …` reassignment) so other modules holding
 // a stale reference don't drift.
 const STATE = {
-  files:    [],     // FileSummary[] from /api/files
+  files:    [],     // FileSummary[] — this project's CSV datasets
+  projects: [],     // ProjectSummary[] — every project the user owns
+  hiddenProjects: new Set(),  // project ids the user ×-hid from the strip
+  hiddenFiles:    new Set(),  // file ids the user ×-hid from the strip
+  projectId: null,  // project this Reports view is scoped to
   rid:      null,   // currently-selected file rid (null = none)
   summary:  null,   // FileSummary of the selected file
   columns:  [],     // ColumnMeta[] of the selected file
@@ -51,7 +64,24 @@ const STATE = {
   pageSize: 25,
   sorts:    [],     // [{ col, dir: "asc" | "desc" }] — single-key today
   search:   "",
+  charts:   [],     // ChartSpec[] — each rendered as a chart-dock card
 };
+
+// Which chart the builder rail is editing — index into STATE.charts,
+// or -1 when none is active.
+let _activeChart = -1;
+
+// Monotonic counter behind auto-generated chart-NNN titles — only
+// advances on a real assignment, so generated names never collide.
+let _chartSeq = 0;
+
+// Builder-load closure, exposed by _installReportsLiveHandlers so the
+// mount path can re-point the builder after the localStorage restore.
+let _reportsBuilderLoad = null;
+
+// Project STATE.charts currently reflects — when it changes, the dock is
+// rebuilt from that project's saved charts.
+let _chartsProject = null;
 
 export default async function mount(root, ctx) {
   // 1) Sandbox subtree — router only loaded the thin partials/reports.html
@@ -63,9 +93,8 @@ export default async function mount(root, ctx) {
     catch (err) { console.warn("[reports] rpInclude failed", err); }
   }
 
-  // 2) Split-handle restore + wire. Same drag wiring as before; refactored
-  //    out so mount() stays a clear bootstrap sequence.
-  _applyAndWireSplit(root, ctx);
+  // 2) Page-dots — wire the Data ↔ Charts scroll-snap navigation.
+  _wireReportsDeck(root);
 
   // 3) Sandbox wiring — picker, fetch, table paint.
   await mountReportsSandbox(root, ctx);
@@ -74,11 +103,11 @@ export default async function mount(root, ctx) {
 // ─────────────────────────── mountReportsSandbox ──────────────────────
 
 async function mountReportsSandbox(root, ctx) {
-  const pickerMenu = root.querySelector("[data-reports-source-picker]");
-  const tableWrap  = root.querySelector("[data-reports-table]");
+  const fileTabs  = root.querySelector("[data-reports-file-tabs]");
+  const tableWrap = root.querySelector("[data-reports-table]");
   // Sandbox markup missing → bail. Mirrors the cleaner / objects guard so
   // a fall-through to the legacy layout (none today) wouldn't blow up.
-  if (!pickerMenu || !tableWrap) return;
+  if (!fileTabs || !tableWrap) return;
 
   // Restore prefs FIRST so renderers see them when they paint.
   const prefs = ctx?.session?.prefs ?? {};
@@ -95,103 +124,125 @@ async function mountReportsSandbox(root, ctx) {
   // matches STATE on first paint (the static partial says "25").
   _syncRowsLabel(root);
 
-  // URL → starting report + file. Contract mirrors Cleaner
-  // (?project=…&file=…): Reports opens at a report id +, optionally,
-  // an explicit source file. `?id=` is accepted as a legacy alias for
-  // `?report=`. When a report is named the file is implied by its
-  // source_file_id unless `?file=` overrides.
+  // URL → which project's report we're opening, + optionally an explicit
+  // source file: #/reports?project=PRJ_…&file=FIL_…
   const q = new URLSearchParams(location.hash.split("?")[1] ?? "");
-  const initialReportId = q.get("report") || q.get("id") || null;
-  const initialFileId   = q.get("file");
-  STATE.reportId = initialReportId;   // remembered for URL canonicalisation
+  let   projectId     = q.get("project");
+  const initialFileId = q.get("file");
 
-  // Mount snapshot — paint cached picker label fast, before the fetch
-  // resolves. Table body shows the partial's "Pick a source file…" until
-  // the page fetch lands (matches the cleaner discipline).
+  // Every project the user owns — the proj-tabs strip lists them all,
+  // and a bare #/reports resolves to the most-recently-updated one (the
+  // same convenience the Objects topbar's Cleaner button uses).
+  try {
+    const pj   = api.getCached("/projects");
+    const list = pj.cached ?? await pj.fresh;
+    STATE.projects = [...(list?.items ?? [])];
+  } catch (err) {
+    console.error("[reports] fetch /projects failed", err);
+    STATE.projects = [];
+  }
+
+  if (!projectId) {
+    const rows = [...STATE.projects].sort((a, b) =>
+      String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    projectId = rows[0]?.redpash_id ?? null;
+  }
+  if (!projectId) {
+    _renderReportsEmptyState(root, "No projects yet — upload a file from Home to start one.");
+    return;
+  }
+  STATE.projectId = projectId;
+  _renderReportsProjectTabs(root);
+
+  // Mount snapshot — paint the cached picker label fast, before the
+  // fetch resolves.
   _restoreFromSnapshot(root);
 
-  // Fetch the user's files. /api/files returns every file owned by the
-  // session user across every project — no per-project hop needed.
-  //
-  // SWR (Phase 1 A): cache-then-correct. Cached list populates the
-  // picker synchronously so the source dropdown is ready before the
-  // network round-trip lands. Cold cache → falls through to the
-  // network paint without a flicker.
+  // Fetch the user's files, then scope to this project. /api/files
+  // returns every file the user owns across all projects; the Reports
+  // page works only with this project's CSV datasets.
+  const _scopeToProject = (items) => (items ?? [])
+    .filter((f) => f.project_redpash_id === projectId && f.file_type === "csv");
   const { cached, fresh } = api.getCached("/files");
   if (cached?.items) {
-    STATE.files = cached.items;
-    _renderReportsPicker(root);
+    STATE.files = _scopeToProject(cached.items);
+    _renderReportsFileTabs(root);
+    _renderReportsHeader(root);
   }
   try {
     const res = await fresh;
-    STATE.files = res?.items ?? [];
+    STATE.files = _scopeToProject(res?.items);
   } catch (err) {
     console.error("[reports] fetch /files failed", err);
     if (!cached) {
       STATE.files = [];
       toast.error(`Couldn't load file list: ${err.body?.error ?? err.message ?? err}`);
     }
-    // else: keep the cached paint; correction will retry on next mount.
+    // else: keep the cached paint; correction retries on next mount.
   }
 
-  _renderReportsPicker(root);
+  _renderReportsFileTabs(root);
+  _renderReportsHeader(root);
 
-  // When ?report= is set, fetch the report so its source_file_id can
-  // drive the active file (and title / spec land on STATE for handlers
-  // that need them). A missing / non-owned report degrades quietly to
-  // the file-only path below.
-  if (initialReportId) {
-    try {
-      STATE.report = await api.get(`/reports/${encodeURIComponent(initialReportId)}`);
-    } catch (err) {
-      console.warn("[reports] fetch /reports/:id failed", err);
-    }
-  }
-
-  // Decide active file. Order of preference:
-  //   1. ?file= when it names a file we can see
-  //   2. the loaded report's source_file_id (when ?file= is absent)
-  //   3. first owned file (blank-landing fallback)
-  // A URL file we can't see (deleted / not owned) silently falls
-  // through rather than 404-ing — same forgiving behaviour as Cleaner.
-  const urlFileValid    = initialFileId && STATE.files.some((f) => f.redpash_id === initialFileId);
-  const reportFileId    = STATE.report?.source_file_id;
-  const reportFileValid = reportFileId && STATE.files.some((f) => f.redpash_id === reportFileId);
-  const activeId = urlFileValid    ? initialFileId
-                 : reportFileValid ? reportFileId
-                 :                   (STATE.files[0]?.redpash_id ?? null);
-
-  if (!activeId) {
-    _renderReportsEmptyState(root, "No files yet — upload one from the Home page.");
+  // No CSV datasets in this project → nothing to chart from yet.
+  if (!STATE.files.length) {
+    _renderReportsEmptyState(root, "No datasets in this project.");
     return;
   }
 
-  // STATE mirror — every handler reads from here. Set BEFORE the picker
-  // gets a click target.
+  // Active file: ?file= when it names a CSV in this project, else the
+  // project's first dataset. A ?file= we can't see falls through.
+  const urlFileValid = initialFileId && STATE.files.some((f) => f.redpash_id === initialFileId);
+  const activeId     = urlFileValid ? initialFileId : STATE.files[0].redpash_id;
+
+  // STATE mirror — every handler reads from here.
   STATE.rid     = activeId;
   STATE.summary = STATE.files.find((f) => f.redpash_id === activeId) ?? null;
   STATE.columns = [];   // forces _paintReportsTable to refetch /files/:rid
 
-  _renderReportsPickerLabel(root);
+  // Re-render the file tabs now STATE.rid is set so the active dataset's
+  // tab carries .active on first paint (the line-157 render ran before
+  // the active file was chosen).
+  _renderReportsFileTabs(root);
+  _renderReportsHeader(root);
   await _paintReportsTable(root);
+
+  // Restore this project's saved charts from localStorage into the dock —
+  // on a fresh load or a project switch — so a saved report survives a
+  // reload and is there for the Dashboard page. Drafts are in-memory only;
+  // within the same project (SPA re-nav) the working set is left as-is.
+  if (_chartsProject !== STATE.projectId) {
+    const saved = _loadSavedCharts(STATE.projectId);
+    for (const c of saved) {
+      const m = /^chart-(\d+)$/.exec(c.title || "");
+      if (m) _chartSeq = Math.max(_chartSeq, Number(m[1]));
+    }
+    STATE.charts.splice(0, STATE.charts.length, ...saved);
+    if (!STATE.charts.length) {
+      STATE.charts.push({ kind: "bar", group_by: "", agg_col: "*", agg_fn: "count" });
+    }
+    _activeChart = 0;
+    _reportsBuilderLoad?.(0);
+    _chartsProject = STATE.projectId;
+  }
+
+  _builderSyncPickers(root);
+  _renderReportsCharts(root).catch(() => {});
 
   _snapshotForMount();
 
-  // Canonicalise the URL — write back `?report=` (when known) + `?file=`
-  // (the active source) so a reload reopens exactly this report+file
-  // pair. Skip the write when nothing changed (avoids a redundant
-  // history entry on every mount of an already-canonical URL).
+  // Canonicalise the URL — #/reports?project=…&file=… so a reload
+  // reopens this project + file. replaceState fires no hashchange, so
+  // the router doesn't re-mount.
   const _params = new URLSearchParams();
-  if (initialReportId) _params.set("report", initialReportId);
-  if (activeId)        _params.set("file",   activeId);
-  const _canonical = `#/reports${_params.toString() ? "?" + _params.toString() : ""}`;
+  _params.set("project", projectId);
+  if (activeId) _params.set("file", activeId);
+  const _canonical = `#/reports?${_params.toString()}`;
   if (_canonical !== location.hash) {
     history.replaceState(null, "", _canonical);
   }
 
-  // Tier 2 E — Reports already loaded /files; warm the other lists
-  // so jumping to Home / Objects / Dashboards from the report builder
-  // hits cache.
+  // Tier 2 E — warm the other lists for fast cross-navigation.
   api.prewarm(["/projects", "/reports", "/dashboards", "/users", "/companies"]);
 }
 
@@ -202,8 +253,10 @@ function _installReportsLiveHandlers(root) {
   // Shared closure — call after any STATE.rid / .search / .sorts / .page
   // mutation that needs a chrome + table repaint.
   async function _afterFileChange() {
-    _renderReportsPickerLabel(root);
+    _renderReportsHeader(root);
     await _paintReportsTable(root);
+    _builderSyncPickers(root);
+    _renderReportsCharts(root).catch(() => {});   // re-fetch charts vs the new file
     _snapshotForMount();
   }
 
@@ -224,16 +277,13 @@ function _installReportsLiveHandlers(root) {
     STATE.sorts   = [];
     const searchInput = root.querySelector("[data-reports-search]");
     if (searchInput) searchInput.value = "";
-    // Mark the selected item in the dropdown so re-open shows the chosen
-    // file with .is-selected without a full re-render.
-    root.querySelectorAll("[data-reports-source-picker] .rp-dd-item").forEach((el) => {
-      el.classList.toggle("is-selected", el.dataset.fileId === fileId);
-    });
-    // Preserve ?report= across a source-file swap so a reload keeps
-    // the report context. STATE.reportId is set at mount when the URL
-    // carried a report.
+    // Re-render the strip so .active moves and the × is suppressed on
+    // the newly-selected tab (× placement depends on which tab is active).
+    _renderReportsFileTabs(root);
+    // Keep the project in the URL across a source-file swap so a reload
+    // reopens the same Reports view.
     const _p = new URLSearchParams();
-    if (STATE.reportId) _p.set("report", STATE.reportId);
+    if (STATE.projectId) _p.set("project", STATE.projectId);
     _p.set("file", fileId);
     history.replaceState(null, "", `#/reports?${_p.toString()}`);
     await _afterFileChange();
@@ -320,6 +370,324 @@ function _installReportsLiveHandlers(root) {
       if (Number.isFinite(n)) window.reportSetPageSize?.(n);
     });
   }
+
+  // Project tabs — delegated click. Three targets inside the strip: the
+  // × hides a project tab, an add-menu item shows a hidden one, a bare
+  // tab click re-scopes the page. The listener sits on the stable strip
+  // container so it survives every innerHTML rebuild; once-guarded.
+  const projStrip = root.querySelector("[data-reports-proj-tabs]");
+  if (projStrip && !projStrip.__rpReportsBound) {
+    projStrip.__rpReportsBound = true;
+    projStrip.addEventListener("click", (ev) => {
+      const x = ev.target.closest(".rp-rt-proj-tab-x");
+      if (x) {
+        window.reportsHideProject?.(x.closest("[data-project-id]")?.dataset.projectId);
+        return;
+      }
+      const addItem = ev.target.closest(".rp-tab-add-item");
+      if (addItem) { window.reportsShowProject?.(addItem.dataset.projectId); return; }
+      const tab = ev.target.closest("[data-project-id]");
+      if (tab) window.reportsSelectProject?.(tab.dataset.projectId);
+    });
+  }
+  // File tabs — same shape: × hides, add-menu item shows, tab click
+  // selects the source dataset.
+  const fileStrip = root.querySelector("[data-reports-file-tabs]");
+  if (fileStrip && !fileStrip.__rpReportsBound) {
+    fileStrip.__rpReportsBound = true;
+    fileStrip.addEventListener("click", (ev) => {
+      const x = ev.target.closest(".rp-rtp-tab-x");
+      if (x) {
+        window.reportsHideFile?.(x.closest("[data-file-id]")?.dataset.fileId);
+        return;
+      }
+      const addItem = ev.target.closest(".rp-tab-add-item");
+      if (addItem) { window.reportsShowFile?.(addItem.dataset.fileId); return; }
+      const tab = ev.target.closest("[data-file-id]");
+      if (tab) window.reportSelectFile?.(tab.dataset.fileId);
+    });
+  }
+
+  // Switch the Reports view to another project — push the hash so the
+  // router re-mounts mountReportsSandbox against the new ?project=.
+  window.reportsSelectProject = (pid) => {
+    if (!pid || pid === STATE.projectId) return;
+    location.hash = `#/reports?project=${encodeURIComponent(pid)}`;
+  };
+
+  // Add a dataset — Reports doesn't ingest files, the Cleaner does.
+  // Route there scoped to the active project so a fresh upload lands
+  // in this project.
+  window.reportsAddFile = () => {
+    location.hash = STATE.projectId
+      ? `#/cleaner?project=${encodeURIComponent(STATE.projectId)}`
+      : "#/cleaner";
+  };
+
+  // ×/+ on the tab strips — hide a tab into a session-scoped set, or
+  // show a hidden one back. The active project / dataset is never
+  // hideable (its × isn't rendered), so a hidden tab is always non-active.
+  window.reportsHideProject = (pid) => {
+    if (!pid || pid === STATE.projectId) return;
+    STATE.hiddenProjects.add(pid);
+    _renderReportsProjectTabs(root);
+  };
+  window.reportsShowProject = (pid) => {
+    if (!pid) return;
+    STATE.hiddenProjects.delete(pid);
+    window.reportsSelectProject?.(pid);   // unhide + jump to it
+  };
+  window.reportsHideFile = (fid) => {
+    if (!fid || fid === STATE.rid) return;
+    STATE.hiddenFiles.add(fid);
+    _renderReportsFileTabs(root);
+  };
+  window.reportsShowFile = (fid) => {
+    if (!fid) return;
+    STATE.hiddenFiles.delete(fid);
+    _renderReportsFileTabs(root);          // tab must exist before selecting
+    window.reportSelectFile?.(fid);        // unhide + select
+  };
+
+  // ── Chart builder (Charts page rail) ──────────────────────────────
+  // The builder edits STATE.charts[_activeChart]; the matching dock card
+  // redraws live. Chart type = a family <select> + inline-SVG variant
+  // tiles — there are no modifier checkboxes, every variant is a tile.
+
+  // Paint the family's variant tiles into [data-nc-variants], the active
+  // variant marked. Single-variant families render no tiles.
+  const _renderVariantTiles = (familyKey, activeVariantId) => {
+    const box = root.querySelector("[data-nc-variants]");
+    if (!box) return;
+    const fam = _CHART_FAMILIES.find((f) => f.key === familyKey);
+    box.innerHTML = (fam?.variants ?? []).map((v) =>
+      `<button class="rp-chart-variant${v.id === activeVariantId ? " is-active" : ""}" type="button" data-nc-variant="${v.id}" title="${_attrEsc(v.label)}">${v.g}<span class="rp-chart-variant-lbl">${_htmlEsc(v.label)}</span></button>`
+    ).join("");
+  };
+
+  // Data-binding fields — kind + modifiers come from the variant tiles.
+  const _builderFields = () => [...root.querySelectorAll(
+    "#nc-x,#nc-ygroup,#nc-y,#nc-agg,#nc-regression,#nc-symbol")];
+
+  // Load STATE.charts[idx] into the builder, mark it active, repaint.
+  const _builderLoad = (idx) => {
+    _activeChart = idx;
+    const cfg = STATE.charts[idx] ?? {};
+    // A card in is-active mode always carries a Title + Description —
+    // seed basic defaults the user can keep or overwrite, so the foot
+    // fields are never blank and Save never has to prompt.
+    if (STATE.charts[idx]) {
+      if (!cfg.title)       cfg.title       = _defaultChartTitle();
+      if (!cfg.description) cfg.description = _autoChartDesc(cfg);
+    }
+    const $ = (s) => root.querySelector(s);
+    const famKey = _familyOf(cfg);
+    if ($("#nc-family")) $("#nc-family").value = famKey;
+    _renderVariantTiles(famKey, _variantOf(cfg));
+    _fillChartPicker($("[data-reports-x-picker]"),      false, cfg.group_by);
+    _fillChartPicker($("[data-reports-ygroup-picker]"), false, cfg.y_group_by);
+    _fillChartPicker($("[data-reports-y-picker]"),      true,  cfg.agg_col);
+    if ($("#nc-agg"))        $("#nc-agg").value        = cfg.agg_fn ?? "count";
+    if ($("#nc-regression")) $("#nc-regression").value = cfg.regression ?? "";
+    if ($("#nc-symbol"))     $("#nc-symbol").value     = cfg.symbol ?? "circle";
+    if ($("#nc-title"))      $("#nc-title").value      = cfg.title ?? "";
+    if ($("#nc-desc"))       $("#nc-desc").value       = cfg.description ?? "";
+    _syncChartConditionals(root);
+    const ttl = root.querySelector("[data-builder-ttl]");
+    if (ttl) ttl.textContent = cfg.title?.trim() || "New chart";
+    _renderReportsCharts(root).catch(() => {});
+  };
+
+  // Apply a variant's kind + modifiers to the active chart. Every
+  // modifier is reset first so switching variant leaves none stale.
+  const _applyVariant = (variantId) => {
+    if (_activeChart < 0) return;
+    let spec = null;
+    for (const f of _CHART_FAMILIES) {
+      const v = f.variants.find((x) => x.id === variantId);
+      if (v) { spec = v.spec; break; }
+    }
+    if (!spec) return;
+    const reset = { smooth: false, donut: false, half: false, rose: false, symbol_repeat: false };
+    STATE.charts[_activeChart] = { ...STATE.charts[_activeChart], ...reset, ...spec };
+    _builderLoad(_activeChart);
+  };
+
+  // Family <select> → the family's first variant (or, for a single-
+  // variant family, just its kind).
+  const _pickFamily = (familyKey) => {
+    if (_activeChart < 0) return;
+    const fam = _CHART_FAMILIES.find((f) => f.key === familyKey);
+    if (!fam) return;
+    if (fam.variants.length) { _applyVariant(fam.variants[0].id); return; }
+    const reset = { smooth: false, donut: false, half: false, rose: false, symbol_repeat: false };
+    STATE.charts[_activeChart] = { ...STATE.charts[_activeChart], ...reset, kind: fam.key };
+    _builderLoad(_activeChart);
+  };
+
+  // Form edit → merge the data fields into the active chart (kind +
+  // modifiers stay — the variant owns them), debounce a re-preview.
+  let _previewT = null;
+  const _builderChanged = () => {
+    if (_activeChart < 0 || _activeChart >= STATE.charts.length) return;
+    STATE.charts[_activeChart] = { ...STATE.charts[_activeChart], ..._chartFormToSpec(root) };
+    clearTimeout(_previewT);
+    _previewT = setTimeout(() => _renderReportsCharts(root).catch(() => {}), 220);
+  };
+  _builderFields().forEach((el) => {
+    if (el.__rpReportsBound) return;
+    el.__rpReportsBound = true;
+    el.addEventListener("change", _builderChanged);
+  });
+  const _ncFamily = root.querySelector("#nc-family");
+  if (_ncFamily && !_ncFamily.__rpReportsBound) {
+    _ncFamily.__rpReportsBound = true;
+    _ncFamily.addEventListener("change", () => _pickFamily(_ncFamily.value));
+  }
+  const _ncVariants = root.querySelector("[data-nc-variants]");
+  if (_ncVariants && !_ncVariants.__rpReportsBound) {
+    _ncVariants.__rpReportsBound = true;
+    _ncVariants.addEventListener("click", (ev) => {
+      const t = ev.target.closest("[data-nc-variant]");
+      if (t) _applyVariant(t.dataset.ncVariant);
+    });
+  }
+
+  // Start a fresh draft chart + jump the deck to the Charts page.
+  window.reportsNewChart = () => {
+    STATE.charts.push({ kind: "bar", group_by: "", agg_col: "*", agg_fn: "count" });
+    _builderLoad(STATE.charts.length - 1);
+    root.querySelector('[data-reports-page="charts"]')
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const _ncNew = root.querySelector("[data-nc-new]");
+  if (_ncNew && !_ncNew.__rpReportsBound) {
+    _ncNew.__rpReportsBound = true;
+    _ncNew.addEventListener("click", () => window.reportsNewChart());
+  }
+
+  // ── Save / download / delete ──────────────────────────────────────
+  // Each acts on a chart by index. The foot's master buttons pass the
+  // active chart; the per-card header buttons pass that card's index.
+
+  // Commit title + description onto a chart, flag it saved, and persist it
+  // to localStorage (survives reload, available to the Dashboard page).
+  // For the active card the foot fields are the live source of truth; an
+  // inactive card uses its already-assigned values. Blank → auto-named.
+  const _saveChart = (i) => {
+    const c = STATE.charts[i];
+    if (!c) { toast.error("No chart to save."); return; }
+    let title = c.title, desc = c.description;
+    if (i === _activeChart) {
+      title = root.querySelector("#nc-title")?.value.trim() || title;
+      desc  = root.querySelector("#nc-desc")?.value.trim()  || desc;
+    }
+    c.title       = title || _defaultChartTitle();
+    c.description = desc  || _autoChartDesc(c);
+    c._saved      = true;
+    if (!c.id) c.id = _mkChartId();
+    c.source_file_id = STATE.rid;
+    c.saved_at = new Date().toISOString();
+    const svg = root.querySelector(`[data-chart-host][data-chart-i="${i}"] svg`);
+    if (svg) c.svg = svg.outerHTML;       // SVG snapshot for thumbnails
+    _persistSavedCharts();
+    if (i === _activeChart) _builderLoad(i);   // refresh fields + repaint
+    else _renderReportsCharts(root).catch(() => {});
+    toast.success(`Saved "${c.title}".`);
+  };
+
+  // Download a chart as a standalone HTML report — its rendered ECharts
+  // SVG wrapped with the title + description, theme tokens inlined so the
+  // file reads correctly on its own. Filename = slugged title.
+  const _downloadChart = (i) => {
+    const c = STATE.charts[i];
+    if (!c) return;
+    const host = root.querySelector(`[data-chart-host][data-chart-i="${i}"]`);
+    const svg  = host?.querySelector("svg");
+    if (!svg) { toast.error("Render the chart before downloading."); return; }
+    const title = c.title || _defaultChartTitle();
+    const html  = _chartReportHtml(title, c.description || "", svg.outerHTML);
+    const url   = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${_slug(title)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded ${_slug(title)}.html`);
+  };
+
+  // Drop a chart. A saved chart is also removed from localStorage. Keeps
+  // _activeChart on a valid card; re-seeds a draft if the dock empties.
+  const _deleteChart = (i) => {
+    if (i < 0 || i >= STATE.charts.length) return;
+    const wasSaved = !!STATE.charts[i]?._saved;
+    STATE.charts.splice(i, 1);
+    if (_activeChart === i) _activeChart = -1;
+    else if (_activeChart > i) _activeChart -= 1;
+    if (wasSaved) _persistSavedCharts();
+    if (!STATE.charts.length) {
+      STATE.charts.push({ kind: "bar", group_by: "", agg_col: "*", agg_fn: "count" });
+    }
+    const next = _activeChart >= 0
+      ? _activeChart
+      : Math.min(i, STATE.charts.length - 1);
+    _builderLoad(next);
+  };
+
+  // Footer master buttons — Save / Download / Delete act on the active chart.
+  const _ncSave = root.querySelector("[data-nc-save]");
+  if (_ncSave && !_ncSave.__rpReportsBound) {
+    _ncSave.__rpReportsBound = true;
+    _ncSave.addEventListener("click", () => {
+      if (_activeChart < 0) { toast.error("Build a chart first."); return; }
+      _saveChart(_activeChart);
+    });
+  }
+  const _ncDownload = root.querySelector("[data-nc-download]");
+  if (_ncDownload && !_ncDownload.__rpReportsBound) {
+    _ncDownload.__rpReportsBound = true;
+    _ncDownload.addEventListener("click", () => {
+      if (_activeChart < 0) { toast.error("Build a chart first."); return; }
+      _downloadChart(_activeChart);
+    });
+  }
+  const _ncDelete = root.querySelector("[data-nc-delete]");
+  if (_ncDelete && !_ncDelete.__rpReportsBound) {
+    _ncDelete.__rpReportsBound = true;
+    _ncDelete.addEventListener("click", () => {
+      if (_activeChart < 0) { toast.error("No chart to delete."); return; }
+      _deleteChart(_activeChart);
+    });
+  }
+
+  // Dock card → the header buttons save / download / remove that specific
+  // chart; a bare card click loads it into the builder.
+  const _chartGrid = root.querySelector("[data-reports-chart-grid]");
+  if (_chartGrid && !_chartGrid.__rpReportsBound) {
+    _chartGrid.__rpReportsBound = true;
+    _chartGrid.addEventListener("click", (ev) => {
+      const rm = ev.target.closest("[data-chart-remove]");
+      if (rm) { _deleteChart(Number(rm.dataset.chartRemove)); return; }
+      const sv = ev.target.closest("[data-chart-save]");
+      if (sv) { _saveChart(Number(sv.dataset.chartSave)); return; }
+      const dl = ev.target.closest("[data-chart-download]");
+      if (dl) { _downloadChart(Number(dl.dataset.chartDownload)); return; }
+      const card = ev.target.closest("[data-chart-card]");
+      if (card) _builderLoad(Number(card.dataset.chartCard));
+    });
+  }
+
+  // Expose the builder loader so mountReportsSandbox can re-point it at a
+  // chart after the project-scoped localStorage restore.
+  _reportsBuilderLoad = _builderLoad;
+
+  // Ensure the builder always has a chart to edit.
+  if (!STATE.charts.length) {
+    STATE.charts.push({ kind: "bar", group_by: "", agg_col: "*", agg_fn: "count" });
+  }
+  _builderLoad(_activeChart >= 0 && _activeChart < STATE.charts.length ? _activeChart : 0);
 }
 
 // ─────────────────────────── paint pipeline ───────────────────────────
@@ -373,7 +741,7 @@ async function _paintReportsTable(root) {
       const idx = STATE.files.findIndex((f) => f.redpash_id === STATE.rid);
       if (idx >= 0) STATE.files[idx] = envRes.summary;
     }
-    _renderReportsPickerLabel(root);
+    _renderReportsHeader(root);
     _renderReportsColumnsPicker(root);
   }
 
@@ -383,41 +751,98 @@ async function _paintReportsTable(root) {
 
 // ─────────────────────────── renderers ────────────────────────────────
 
-function _renderReportsPicker(root) {
-  const menu = root.querySelector("[data-reports-source-picker]");
-  if (!menu) return;
-  if (!STATE.files.length) {
-    menu.innerHTML = `<div class="rp-dd-item is-disabled">No files yet</div>`;
-    return;
-  }
-  // Build items with data-attrs only — listener attached below so file IDs
-  // can never poison an inline onclick.
-  menu.innerHTML = STATE.files.map((f) => {
-    const id   = f.redpash_id;
-    const name = f.display_name || f.filename;
-    const sel  = (id === STATE.rid) ? " is-selected" : "";
-    return `<div class="rp-dd-item${sel}" role="menuitem" data-file-id="${_attrEsc(id)}">${_htmlEsc(name)}</div>`;
+// Project strip — one tab per visible project; the active project
+// carries .active and has no × (you can't hide what you're viewing).
+// × hides a tab into STATE.hiddenProjects; the trailing + opens a menu
+// of hidden ones. Delegated click handling lives in _installReportsLiveHandlers.
+function _renderReportsProjectTabs(root) {
+  const strip = root.querySelector("[data-reports-proj-tabs]");
+  if (!strip) return;
+  const visible = STATE.projects.filter(
+    (p) => p.redpash_id === STATE.projectId || !STATE.hiddenProjects.has(p.redpash_id));
+  const hidden = STATE.projects.filter(
+    (p) => p.redpash_id !== STATE.projectId && STATE.hiddenProjects.has(p.redpash_id));
+  const tabs = visible.map((p) => {
+    const id     = p.redpash_id;
+    const name   = p.name || id;
+    const active = id === STATE.projectId;
+    const x = active ? ""
+      : `<span class="rp-rt-proj-tab-x" title="Hide tab"><i class="bi bi-x"></i></span>`;
+    return `<button class="rp-rt-proj-tab${active ? " active" : ""}" type="button" data-project-id="${_attrEsc(id)}" title="${_attrEsc(name)}">
+      <i class="bi bi-folder2-open"></i>
+      <span class="rp-rt-proj-tab-name">${_htmlEsc(name)}</span>
+      ${x}
+    </button>`;
   }).join("");
-
-  // Delegated click — closes the menu and dispatches to the live handler.
-  // Once-guarded so re-render doesn't stack listeners.
-  if (!menu.__rpReportsBound) {
-    menu.__rpReportsBound = true;
-    menu.addEventListener("click", (ev) => {
-      const item = ev.target.closest("[data-file-id]");
-      if (!item) return;
-      menu.classList.remove("open");
-      window.reportSelectFile?.(item.dataset.fileId);
-    });
-  }
+  strip.innerHTML = tabs + _renderTabAddWrap(hidden, "Hidden projects", "project");
 }
 
-function _renderReportsPickerLabel(root) {
-  const lbl = root.querySelector("[data-reports-source-label]");
-  if (!lbl) return;
-  lbl.textContent = STATE.summary?.display_name
-                 || STATE.summary?.filename
-                 || (STATE.rid ?? "No file");
+// Source-file strip — one tab per visible CSV dataset; the selected
+// dataset (STATE.rid) carries .active and has no ×. Same ×/+ model as
+// the project strip. This strip IS the source-file selector.
+function _renderReportsFileTabs(root) {
+  const strip = root.querySelector("[data-reports-file-tabs]");
+  if (!strip) return;
+  const visible = STATE.files.filter(
+    (f) => f.redpash_id === STATE.rid || !STATE.hiddenFiles.has(f.redpash_id));
+  const hidden = STATE.files.filter(
+    (f) => f.redpash_id !== STATE.rid && STATE.hiddenFiles.has(f.redpash_id));
+  const tabs = visible.map((f) => {
+    const id     = f.redpash_id;
+    const name   = f.display_name || f.filename;
+    const active = id === STATE.rid;
+    const x = active ? ""
+      : `<span class="rp-rtp-tab-x" title="Hide tab"><i class="bi bi-x"></i></span>`;
+    return `<button class="rp-rtp-tab${active ? " active" : ""}" type="button" data-file-id="${_attrEsc(id)}" title="${_attrEsc(name)}">
+      <i class="bi bi-file-earmark-text"></i>
+      <span class="rp-rtp-tab-name">${_htmlEsc(name)}</span>
+      ${x}
+    </button>`;
+  }).join("");
+  strip.innerHTML = tabs + _renderTabAddWrap(hidden, "Hidden datasets", "file");
+}
+
+// The trailing + and its hidden-items dropdown — shared by both strips.
+// `kind` ("project" | "file") picks the data-attr the click listener
+// reads. Mirrors the objects type-tab add-menu (rp-tab-add-* classes,
+// spToggleTabAddMenu for open/close). + is disabled when nothing's hidden.
+function _renderTabAddWrap(hiddenItems, header, kind) {
+  const attr = kind === "project" ? "data-project-id" : "data-file-id";
+  const icon = kind === "project" ? "bi-folder2-open" : "bi-file-earmark-text";
+  const items = hiddenItems.length
+    ? hiddenItems.map((it) => {
+        const name = it.name || it.display_name || it.filename || it.redpash_id;
+        return `<div class="rp-tab-add-item" ${attr}="${_attrEsc(it.redpash_id)}"><i class="bi ${icon}"></i>${_htmlEsc(name)}</div>`;
+      }).join("")
+    : `<div class="rp-form-meta" style="padding:0.5rem;font-style:italic">Nothing hidden.</div>`;
+  return `<span class="rp-tab-add-wrap">
+    <button class="rp-tab-add" type="button" aria-label="Show a hidden tab" title="Show a hidden tab"${
+      hiddenItems.length ? ` onclick="spToggleTabAddMenu(this)"` : " disabled"}>
+      <i class="bi bi-plus-lg"></i>
+    </button>
+    <div class="rp-tab-add-menu" role="menu">
+      <div class="rp-tab-add-hdr">${_htmlEsc(header)}</div>
+      <div class="rp-tab-add-items">${items}</div>
+    </div>
+  </span>`;
+}
+
+// Header — project name, active source-file name, and the dataset-count
+// meta line. Called after the project resolves, after files load, and
+// after every source-file change.
+function _renderReportsHeader(root) {
+  const proj = STATE.projects.find((p) => p.redpash_id === STATE.projectId);
+  const nm = root.querySelector("[data-reports-proj-name]");
+  const fn = root.querySelector("[data-reports-file-name]");
+  const mt = root.querySelector("[data-reports-proj-meta]");
+  if (nm) nm.textContent = proj?.name || STATE.projectId || "—";
+  if (fn) fn.textContent = STATE.summary?.display_name
+                        || STATE.summary?.filename
+                        || (STATE.rid ?? "No file");
+  if (mt) {
+    const n = STATE.files.length;
+    mt.textContent = n ? `${n} dataset${n === 1 ? "" : "s"}` : "No datasets";
+  }
 }
 
 function _renderReportsRows(root, page) {
@@ -603,9 +1028,9 @@ function _restoreFromSnapshot(root) {
   // (same file). Different URL = different file → don't paint stale.
   if (!snap || snap.hashUrl !== location.hash) return;
 
-  const lbl = root.querySelector("[data-reports-source-label]");
-  if (lbl && snap.summary) {
-    lbl.textContent = snap.summary.display_name || snap.summary.filename;
+  const fn = root.querySelector("[data-reports-file-name]");
+  if (fn && snap.summary) {
+    fn.textContent = snap.summary.display_name || snap.summary.filename;
   }
   if (Number.isFinite(snap.pageSize)) {
     STATE.pageSize = snap.pageSize;
@@ -613,84 +1038,35 @@ function _restoreFromSnapshot(root) {
   }
 }
 
-// ─────────────────────────── split-handle ─────────────────────────────
+// ─────────────────────────── page deck ────────────────────────────────
+// Two full-bleed pages (Data / Charts) on a vertical scroll-snap deck.
+// The page-dots jump between them; the active dot tracks scroll position.
+function _wireReportsDeck(root) {
+  const deck = root.querySelector("[data-reports-deck]");
+  if (!deck || deck.__rpReportsBound) return;
+  deck.__rpReportsBound = true;
+  const dots  = [...root.querySelectorAll("[data-reports-dot]")];
+  const pages = [...deck.querySelectorAll("[data-reports-page]")];
 
-function _applyAndWireSplit(root, ctx) {
-  const savedSplit = Number(ctx?.session?.prefs?.reports_split);
-  const split = Number.isFinite(savedSplit) && savedSplit >= MIN_SPLIT && savedSplit <= MAX_SPLIT
-    ? savedSplit
-    : DEFAULT_SPLIT;
-  _applySplit(root, split);
-
-  const handle = root.querySelector("[data-reports-split-handle]");
-  if (!handle || handle.__rpReportsBound) return;
-  handle.__rpReportsBound = true;
-
-  let dragging = false;
-  let bodyEl   = null;
-
-  const startDrag = (ev) => {
-    bodyEl = root.querySelector(".rp-rt-body");
-    if (!bodyEl) return;
-    dragging = true;
-    handle.classList.add("is-dragging");
-    handle.setPointerCapture?.(ev.pointerId);
-    ev.preventDefault();
-  };
-  const moveDrag = (ev) => {
-    if (!dragging || !bodyEl) return;
-    const rect = bodyEl.getBoundingClientRect();
-    const y    = (ev.clientY ?? ev.touches?.[0]?.clientY ?? 0) - rect.top;
-    let frac = y / rect.height;
-    if (frac < MIN_SPLIT) frac = MIN_SPLIT;
-    if (frac > MAX_SPLIT) frac = MAX_SPLIT;
-    _applySplit(root, frac);
-  };
-  const endDrag = (ev) => {
-    if (!dragging) return;
-    dragging = false;
-    handle.classList.remove("is-dragging");
-    handle.releasePointerCapture?.(ev.pointerId);
-    const tablePane = root.querySelector("[data-reports-table-pane]");
-    const pct = parseFloat(tablePane?.style.height || "");
-    if (Number.isFinite(pct) && pct >= 1) {
-      window.rpSavePref?.("reports_split", pct / 100);
-    }
-  };
-  handle.addEventListener("pointerdown",   startDrag);
-  handle.addEventListener("pointermove",   moveDrag);
-  handle.addEventListener("pointerup",     endDrag);
-  handle.addEventListener("pointercancel", endDrag);
-
-  // Keyboard accessibility — arrow keys nudge the split by 2% steps.
-  handle.addEventListener("keydown", (ev) => {
-    if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") return;
-    const tablePane = root.querySelector("[data-reports-table-pane]");
-    const cur = parseFloat(tablePane?.style.height || "") / 100;
-    if (!Number.isFinite(cur)) return;
-    const step = ev.key === "ArrowUp" ? -0.02 : 0.02;
-    let next = cur + step;
-    if (next < MIN_SPLIT) next = MIN_SPLIT;
-    if (next > MAX_SPLIT) next = MAX_SPLIT;
-    _applySplit(root, next);
-    window.rpSavePref?.("reports_split", next);
-    ev.preventDefault();
+  // Dot click → snap-scroll the deck to that page.
+  dots.forEach((dot) => {
+    dot.addEventListener("click", () => {
+      deck.querySelector(`[data-reports-page="${dot.dataset.reportsDot}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
-}
 
-// Write the same fraction to all three split-aware elements so the table
-// pane, chart pane, and handle stay aligned. Fraction is the table pane's
-// height as a 0-1 number; chart pane fills the rest. Handle is biased up
-// by 0.25rem so its 0.5rem hit area straddles the pane boundary line.
-function _applySplit(root, frac) {
-  const pct       = (frac * 100).toFixed(2) + "%";
-  const handlePct = `calc(${pct} - 0.25rem)`;
-  const tablePane = root.querySelector("[data-reports-table-pane]");
-  const chartPane = root.querySelector("[data-reports-chart-pane]");
-  const handle    = root.querySelector("[data-reports-split-handle]");
-  if (tablePane) tablePane.style.height = pct;
-  if (chartPane) chartPane.style.top    = pct;
-  if (handle)    handle.style.top       = handlePct;
+  // Scroll position → active dot: whichever page is ≥50% in view wins.
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting || e.intersectionRatio < 0.5) continue;
+        const key = e.target.dataset.reportsPage;
+        dots.forEach((d) => d.classList.toggle("is-active", d.dataset.reportsDot === key));
+      }
+    }, { root: deck, threshold: [0.5] });
+    pages.forEach((p) => io.observe(p));
+  }
 }
 
 // ─────────────────────────── tiny helpers ─────────────────────────────
@@ -706,4 +1082,356 @@ function _attrEsc(s) {
   // Same as html, plus apostrophe (we use double-quoted attrs but data-
   // attrs occasionally land inside single-quoted innerHTML strings).
   return _htmlEsc(s).replace(/'/g, "&#39;");
+}
+
+// ─────────────────────────── chart dock ───────────────────────────────
+// Reuses scripts/dashboards/chart-render.js — the same engine the
+// dashboard chart-ref widgets use. Each ChartSpec runs its own
+// /reports/preview against the active source file.
+
+const _CHART_ICONS = {
+  bar: "bi-bar-chart-fill", bar_horizontal: "bi-bar-chart-steps",
+  line: "bi-graph-up", area: "bi-graph-up-arrow", pie: "bi-pie-chart-fill",
+  funnel: "bi-funnel-fill", gauge: "bi-speedometer2", pictorial_bar: "bi-bar-chart",
+  scatter: "bi-asterisk", heatmap: "bi-grid-3x3-gap-fill", radar: "bi-pentagon",
+  boxplot: "bi-box", calendar: "bi-calendar3", matrix: "bi-grid-3x3",
+};
+function _chartIcon(kind) { return _CHART_ICONS[kind] || "bi-bar-chart-fill"; }
+
+// Builder chart families. Multi-variant families expose a row of inline-SVG
+// variant tiles; single-variant families are picked by the family <select>
+// alone. Each variant commits a kind (+ modifiers) to the active chart —
+// there are no modifier checkboxes. `g` is a glyph (viewBox 0 0 40 26,
+// currentColor) drawn in the hero-steps style.
+const _CHART_FAMILIES = [
+  { key: "bar", label: "Bar", variants: [
+    { id: "bar", label: "Bar", spec: { kind: "bar" },
+      g: `<svg viewBox="0 0 40 26"><g fill="currentColor"><rect x="3" y="13" width="6" height="11" rx="1"/><rect x="12" y="6" width="6" height="18" rx="1"/><rect x="21" y="10" width="6" height="14" rx="1"/><rect x="30" y="3" width="6" height="21" rx="1"/></g></svg>` },
+    { id: "bar_horizontal", label: "Horizontal", spec: { kind: "bar_horizontal" },
+      g: `<svg viewBox="0 0 40 26"><g fill="currentColor"><rect x="3" y="3" width="22" height="5" rx="1"/><rect x="3" y="11" width="33" height="5" rx="1"/><rect x="3" y="19" width="14" height="5" rx="1"/></g></svg>` },
+  ]},
+  { key: "line", label: "Line", variants: [
+    { id: "line", label: "Basic", spec: { kind: "line" },
+      g: `<svg viewBox="0 0 40 26"><polyline points="3,21 13,9 22,15 31,5 37,11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>` },
+    { id: "line_smooth", label: "Smooth", spec: { kind: "line", smooth: true },
+      g: `<svg viewBox="0 0 40 26"><path d="M3 20 Q 12 4 20 13 T 37 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>` },
+  ]},
+  { key: "area", label: "Area", variants: [
+    { id: "area", label: "Basic", spec: { kind: "area" },
+      g: `<svg viewBox="0 0 40 26"><path d="M3 21 L13 9 L22 15 L31 5 L37 11 L37 24 L3 24 Z" fill="currentColor" opacity="0.28"/><polyline points="3,21 13,9 22,15 31,5 37,11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>` },
+    { id: "area_smooth", label: "Smooth", spec: { kind: "area", smooth: true },
+      g: `<svg viewBox="0 0 40 26"><path d="M3 20 Q 12 4 20 13 T 37 9 L37 24 L3 24 Z" fill="currentColor" opacity="0.28"/><path d="M3 20 Q 12 4 20 13 T 37 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>` },
+  ]},
+  { key: "pie", label: "Pie", variants: [
+    { id: "pie", label: "Pie", spec: { kind: "pie" },
+      g: `<svg viewBox="0 0 40 26"><circle cx="20" cy="13" r="11" fill="currentColor" opacity="0.28"/><path d="M20 13 L20 2 A11 11 0 0 1 31 13 Z" fill="currentColor"/></svg>` },
+    { id: "donut", label: "Donut", spec: { kind: "pie", donut: true },
+      g: `<svg viewBox="0 0 40 26"><circle cx="20" cy="13" r="9" fill="none" stroke="currentColor" stroke-width="5" opacity="0.28"/><path d="M20 4 A9 9 0 0 1 29 13" fill="none" stroke="currentColor" stroke-width="5"/></svg>` },
+    { id: "half_donut", label: "Half-donut", spec: { kind: "pie", donut: true, half: true },
+      g: `<svg viewBox="0 0 40 26"><path d="M5 20 A11 11 0 0 1 35 20" fill="none" stroke="currentColor" stroke-width="5" opacity="0.28"/><path d="M5 20 A11 11 0 0 1 20 9" fill="none" stroke="currentColor" stroke-width="5"/></svg>` },
+    { id: "rose", label: "Rose", spec: { kind: "pie", rose: true },
+      g: `<svg viewBox="0 0 40 26"><g fill="currentColor"><ellipse cx="20" cy="7" rx="3" ry="6"/><ellipse cx="20" cy="19" rx="3" ry="6" opacity="0.55"/><ellipse cx="13" cy="13" rx="6" ry="3" opacity="0.7"/><ellipse cx="27" cy="13" rx="6" ry="3" opacity="0.4"/></g></svg>` },
+  ]},
+  { key: "pictorial_bar", label: "Pictorial", variants: [
+    { id: "pictorial", label: "Standard", spec: { kind: "pictorial_bar" },
+      g: `<svg viewBox="0 0 40 26"><g fill="currentColor"><circle cx="9" cy="20" r="3"/><circle cx="9" cy="13" r="3"/><circle cx="20" cy="20" r="3"/><circle cx="20" cy="13" r="3"/><circle cx="20" cy="6" r="3"/><circle cx="31" cy="20" r="3"/></g></svg>` },
+    { id: "pictorial_tiled", label: "Tiled", spec: { kind: "pictorial_bar", symbol_repeat: true },
+      g: `<svg viewBox="0 0 40 26"><g fill="currentColor"><rect x="6" y="17" width="6" height="3" rx="1.5"/><rect x="6" y="12" width="6" height="3" rx="1.5"/><rect x="17" y="20" width="6" height="3" rx="1.5"/><rect x="17" y="15" width="6" height="3" rx="1.5"/><rect x="17" y="10" width="6" height="3" rx="1.5"/><rect x="17" y="5" width="6" height="3" rx="1.5"/><rect x="28" y="17" width="6" height="3" rx="1.5"/><rect x="28" y="12" width="6" height="3" rx="1.5"/></g></svg>` },
+  ]},
+  { key: "scatter",  label: "Scatter",  variants: [] },
+  { key: "heatmap",  label: "Heatmap",  variants: [] },
+  { key: "matrix",   label: "Matrix",   variants: [] },
+  { key: "radar",    label: "Radar",    variants: [] },
+  { key: "boxplot",  label: "Box plot", variants: [] },
+  { key: "calendar", label: "Calendar", variants: [] },
+  { key: "funnel",   label: "Funnel",   variants: [] },
+  { key: "gauge",    label: "Gauge",    variants: [] },
+];
+
+// Which family <select> key a chart spec belongs to.
+function _familyOf(spec) {
+  return spec?.kind === "bar_horizontal" ? "bar" : (spec?.kind || "bar");
+}
+// Which variant id within its family a chart spec resolves to.
+function _variantOf(s) {
+  if (!s) return "bar";
+  if (s.kind === "bar")  return "bar";
+  if (s.kind === "bar_horizontal") return "bar_horizontal";
+  if (s.kind === "line") return s.smooth ? "line_smooth" : "line";
+  if (s.kind === "area") return s.smooth ? "area_smooth" : "area";
+  if (s.kind === "pie")  return s.half ? "half_donut" : s.donut ? "donut" : s.rose ? "rose" : "pie";
+  if (s.kind === "pictorial_bar") return s.symbol_repeat ? "pictorial_tiled" : "pictorial";
+  return s.kind;
+}
+
+// Sequential fallback name for an untitled chart — chart-001, chart-002…
+// The counter only advances on a real assignment, so numbers never repeat.
+function _defaultChartTitle() {
+  return `chart-${String(++_chartSeq).padStart(3, "0")}`;
+}
+
+// A plain-language description from the spec — seeds the Description field
+// so a card in is-active mode is never blank.
+function _autoChartDesc(cfg) {
+  const fam  = _CHART_FAMILIES.find((f) => f.key === _familyOf(cfg));
+  const kind = fam?.label || cfg.kind || "Chart";
+  return cfg.group_by ? `${kind} by ${cfg.group_by}` : `${kind} chart`;
+}
+
+// Filesystem-safe slug for a download filename.
+function _slug(s) {
+  return String(s).toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "chart";
+}
+
+// Wrap a rendered ECharts SVG into a standalone HTML report — title +
+// description + the chart. The live theme tokens are read off :root and
+// inlined so the downloaded file reads correctly on its own, in whatever
+// theme the chart was rendered under.
+function _chartReportHtml(title, desc, svgMarkup) {
+  const cs = getComputedStyle(document.documentElement);
+  const v  = (n, fb) => (cs.getPropertyValue(n).trim() || fb);
+  const t  = {
+    text:    v("--rp-text", "#1a1a1f"),
+    muted:   v("--rp-text-muted", "#5f5f6b"),
+    surface: v("--rp-surface", "#ffffff"),
+    border:  v("--rp-border", "#e3e3e8"),
+    bg:      v("--rp-bg", v("--rp-surface", "#f4f4f6")),
+  };
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${_htmlEsc(title)}</title>
+<style>
+  body { margin: 0; padding: 2.5rem 1.5rem; display: flex; justify-content: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: ${t.bg}; color: ${t.text}; }
+  .rp-report { width: 100%; max-width: 52rem; }
+  .rp-report h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.25rem; }
+  .rp-report .desc { margin: 0 0 1.5rem; color: ${t.muted}; }
+  .rp-report__chart { background: ${t.surface}; border: 1px solid ${t.border};
+    border-radius: 0.625rem; padding: 1rem; display: flex; justify-content: center; }
+  .rp-report__chart svg { max-width: 100%; height: auto; }
+  .rp-report footer { margin-top: 1.25rem; font-size: 0.75rem; color: ${t.muted}; }
+</style>
+</head>
+<body>
+  <div class="rp-report">
+    <h1>${_htmlEsc(title)}</h1>
+    ${desc ? `<p class="desc">${_htmlEsc(desc)}</p>` : ""}
+    <div class="rp-report__chart">${svgMarkup}</div>
+    <footer>Generated by RedPash</footer>
+  </div>
+</body>
+</html>`;
+}
+
+// ── Saved-chart persistence (localStorage stopgap) ─────────────────────
+// A saved chart is written to localStorage so it survives a reload and
+// can be read by the Dashboard page. Each entry carries its spec, title,
+// description, an SVG snapshot, and project / source-file ids. Backend
+// FIL_ File persistence is the eventual replacement.
+
+function _mkChartId() {
+  return "CHT_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function _readSavedStore() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_CHARTS_KEY) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+
+// Saved charts for one project, flagged _saved so the dock paints them
+// as committed.
+function _loadSavedCharts(projectId) {
+  return _readSavedStore()
+    .filter((c) => c && c.project_id === projectId)
+    .map((c) => ({ ...c, _saved: true }));
+}
+
+// Rewrite this project's saved charts from STATE.charts; other projects'
+// entries in the store are left untouched.
+function _persistSavedCharts() {
+  const others = _readSavedStore().filter((c) => c && c.project_id !== STATE.projectId);
+  const mine = STATE.charts
+    .filter((c) => c && c._saved)
+    .map((c) => ({ ...c, project_id: STATE.projectId }));
+  try {
+    localStorage.setItem(SAVED_CHARTS_KEY, JSON.stringify([...others, ...mine]));
+  } catch (err) {
+    console.warn("[reports] couldn't persist saved charts", err);
+  }
+}
+
+// Paint one card per STATE.charts entry into the chart-dock grid, then
+// fetch + mount each chart's ECharts instance.
+async function _renderReportsCharts(root) {
+  const grid  = root.querySelector("[data-reports-chart-grid]");
+  const empty = root.querySelector("[data-reports-chart-empty]");
+  if (!grid) return;
+
+  // Dispose any live ECharts instances before the innerHTML rebuild.
+  grid.querySelectorAll("[data-chart-host]").forEach((h) => h._rpDispose?.());
+
+  if (empty) empty.hidden = STATE.charts.length > 0;
+  if (!STATE.charts.length) { grid.innerHTML = ""; return; }
+
+  grid.innerHTML = STATE.charts.map((cfg, i) => {
+    const ttl  = cfg.title?.trim() || cfg.group_by || cfg.kind || "Chart";
+    const meta = [cfg.kind, cfg.group_by,
+                  cfg.agg_col && cfg.agg_col !== "*" ? cfg.agg_col : null]
+      .filter(Boolean).map(_htmlEsc).join(" · ");
+    const flag = cfg._saved
+      ? `<i class="bi bi-floppy-fill" title="Saved" style="margin-left:auto;color:var(--green);font-size:0.6875rem"></i>`
+      : `<span style="margin-left:auto;font-size:0.625rem;color:var(--muted)">draft</span>`;
+    return `<article class="rp-reports__chart-card${i === _activeChart ? " is-active" : ""}" data-chart-card="${i}">
+      <header class="rp-reports__chart-hdr">
+        <i class="bi ${_chartIcon(cfg.kind)}"></i>
+        <span class="rp-reports__chart-ttl">${_htmlEsc(ttl)}</span>
+        <span class="rp-reports__chart-meta">${meta}</span>
+        ${flag}
+        <button class="rp-btn rp-btn-xs" title="Save report" data-chart-save="${i}"><i class="bi bi-floppy"></i></button>
+        <button class="rp-btn rp-btn-xs" title="Download as HTML" data-chart-download="${i}"><i class="bi bi-download"></i></button>
+        <button class="rp-btn rp-btn-xs" title="Remove chart" data-chart-remove="${i}"><i class="bi bi-x"></i></button>
+      </header>
+      <div class="rp-reports__chart-body">
+        <div class="rp-reports__chart-canvas" data-chart-host data-chart-i="${i}"></div>
+      </div>
+    </article>`;
+  }).join("");
+
+  if (!STATE.rid) return;
+  let echarts;
+  try { echarts = await loadECharts(); } catch { return; }
+  STATE.charts.forEach(async (cfg, i) => {
+    const host = grid.querySelector(`[data-chart-host][data-chart-i="${i}"]`);
+    if (!host) return;
+    if (!cfg.group_by && cfg.kind !== "gauge") {
+      host.innerHTML = `<div class="rp-reports__chart-msg">Pick a group-by column.</div>`;
+      return;
+    }
+    let res;
+    try {
+      res = await api.post("/reports/preview",
+        chartPreviewBody(cfg.source_file_id || STATE.rid, cfg, null));
+    } catch (err) {
+      host.innerHTML = `<div class="rp-reports__chart-msg">${
+        _htmlEsc(err.body?.error ?? err.message ?? String(err))}</div>`;
+      return;
+    }
+    await _mountChart(echarts, host, cfg, res);
+  });
+}
+
+// Dispatch a /reports/preview payload to the right chart-render.js
+// extractor + option builder, then init ECharts into `host`.
+async function _mountChart(echarts, host, cfg, res) {
+  let opt = null;
+  if (cfg.kind === "heatmap") {
+    const hm = subtotalsToHeatmap(res.subtotals);
+    if (hm.data.length) opt = chartOptionHeatmap(cfg, hm.xValues, hm.yValues, hm.data);
+  } else if (cfg.kind === "radar") {
+    const rd = subtotalsToRadar(res.subtotals);
+    if (rd.series.length && rd.indicators.length) opt = chartOptionRadar(cfg, rd.indicators, rd.series);
+  } else if (cfg.kind === "boxplot") {
+    const bp = subtotalsToBoxplot(res.subtotals);
+    if (bp.data.length) opt = chartOptionBoxplot(cfg, bp.labels, bp.data);
+  } else if (cfg.kind === "calendar") {
+    const cal = subtotalsToCalendar(res.subtotals);
+    if (cal.length) opt = chartOptionCalendar(cfg, cal);
+  } else if (cfg.kind === "matrix") {
+    const m = subtotalsToMatrix(res.subtotals);
+    if (m.data.length) opt = chartOptionMatrix(cfg, m.xValues, m.yValues, m.data);
+  } else {
+    const { labels, values } =
+      cfg.kind === "scatter" ? detailsToScatterSeries(res.details, cfg.group_by, cfg.agg_col) :
+      cfg.kind === "gauge"   ? subtotalsToScalar(res.subtotals, cfg.title?.trim() || cfg.agg_col || "") :
+                               subtotalsToSeries(res.subtotals);
+    if (labels.length) {
+      opt = chartOption(cfg, labels, values);
+      if (cfg.kind === "scatter") await withRegression(opt, cfg, labels, values, loadECStat);
+    }
+  }
+  if (!opt) {
+    host.innerHTML = `<div class="rp-reports__chart-msg">No data.</div>`;
+    return;
+  }
+  host.innerHTML = "";
+  const inst = echarts.init(host, "redpash", { renderer: "svg" });
+  inst.setOption(opt);
+  const ro = new ResizeObserver(() => inst.resize());
+  ro.observe(host);
+  host._rpDispose = () => { ro.disconnect(); inst.dispose(); };
+}
+
+// Fill a column <select> from STATE.columns. `withRowCount` adds the
+// "* (row count)" option for the metric picker; `selected` pre-selects.
+function _fillChartPicker(sel, withRowCount, selected) {
+  if (!sel) return;
+  const cols = STATE.columns ?? [];
+  const head = withRowCount
+    ? `<option value="*">* (row count)</option>`
+    : `<option value="">— pick a column —</option>`;
+  sel.innerHTML = head + cols.map((c) =>
+    `<option value="${_attrEsc(c.name)}">${_htmlEsc(c.name)}</option>`).join("");
+  if (selected != null) sel.value = selected;
+}
+
+// Re-fill the builder's column pickers from STATE.columns, preserving the
+// active chart's current selections. Called after the source file (and
+// so its column set) changes.
+function _builderSyncPickers(root) {
+  const cfg = (_activeChart >= 0 ? STATE.charts[_activeChart] : null) ?? {};
+  _fillChartPicker(root.querySelector("[data-reports-x-picker]"),      false, cfg.group_by);
+  _fillChartPicker(root.querySelector("[data-reports-ygroup-picker]"), false, cfg.y_group_by);
+  _fillChartPicker(root.querySelector("[data-reports-y-picker]"),      true,  cfg.agg_col);
+}
+
+// Show/hide the builder's per-kind conditional rows + relabel the
+// column pickers. Keyed off the active chart's kind (set by variants).
+function _syncChartConditionals(root) {
+  const kind = STATE.charts[_activeChart]?.kind || "bar";
+  const isScatter = kind === "scatter";
+  const isBoxplot = kind === "boxplot";
+  const isGauge   = kind === "gauge";
+  const is2D      = kind === "heatmap" || kind === "radar" || kind === "matrix";
+  const show = (sel, on) => {
+    const el = root.querySelector(sel);
+    if (el) el.hidden = !on;
+  };
+  show("[data-cond-x]",          !isGauge);
+  show("[data-cond-ygroup]",     is2D);
+  show("[data-cond-agg]",        !(isScatter || isBoxplot));
+  show("[data-cond-regression]", isScatter);
+  show("[data-cond-symbol]",     kind === "pictorial_bar");
+  const lblX = root.querySelector("[data-nc-lbl-x]");
+  const lblY = root.querySelector("[data-nc-lbl-y]");
+  if (lblX) lblX.textContent = isScatter ? "X column"
+    : kind === "calendar" ? "Date column" : "Group by";
+  if (lblY) lblY.textContent = isScatter ? "Y column"
+    : isBoxplot ? "Value column" : "Metric column";
+}
+
+// Read the builder's *data-binding* fields into a partial ChartSpec.
+// kind + modifiers (smooth/donut/half/rose/symbol_repeat) are NOT here —
+// the variant tiles own those; title/description are committed on Save.
+function _chartFormToSpec(root) {
+  const $ = (sel) => root.querySelector(sel);
+  const kind        = STATE.charts[_activeChart]?.kind || "bar";
+  const isScatter   = kind === "scatter";
+  const isPictorial = kind === "pictorial_bar";
+  const is2D        = kind === "heatmap" || kind === "radar" || kind === "matrix";
+  return {
+    group_by:   $("#nc-x")?.value || "",
+    agg_col:    $("#nc-y")?.value || "*",
+    agg_fn:     $("#nc-agg")?.value || "count",
+    regression: isScatter && $("#nc-regression")?.value ? $("#nc-regression").value : null,
+    symbol:     isPictorial ? ($("#nc-symbol")?.value || "circle") : null,
+    y_group_by: is2D ? ($("#nc-ygroup")?.value || "") : null,
+  };
 }

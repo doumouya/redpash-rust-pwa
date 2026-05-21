@@ -11,6 +11,7 @@
 mod bootstrap;
 mod db;
 mod error;
+mod event;
 mod id;
 mod routes;
 mod state;

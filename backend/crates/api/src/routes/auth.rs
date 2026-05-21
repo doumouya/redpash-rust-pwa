@@ -186,6 +186,16 @@ async fn callback(
         .await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
 
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:     "backend",
+        level:      "info",
+        kind:       "auth_login".into(),
+        message:    format!("{} signed in (Google OAuth)", user.username),
+        user:       Some(user.redpash_id.clone()),
+        session_id: Some(sid.clone()),
+        ..Default::default()
+    });
+
     let mut out = HeaderMap::new();
     out.append(SET_COOKIE, HeaderValue::from_str(&clear_cookie(STATE_COOKIE)).unwrap());
     out.append(SET_COOKIE, HeaderValue::from_str(&session_cookie(&sid)).unwrap());
@@ -196,7 +206,19 @@ async fn callback(
 
 async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, AppError> {
     if let Some(sid) = read_cookie(&headers, SESSION_COOKIE) {
+        // Resolve the user before the session row is deleted so the
+        // logout event can still be attributed.
+        let user = db::find_session_user(&state.db, &sid).await.ok().flatten();
         let _ = db::delete_session(&state.db, &sid).await;
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:     "backend",
+            level:      "info",
+            kind:       "auth_logout".into(),
+            message:    "signed out".into(),
+            user,
+            session_id: Some(sid),
+            ..Default::default()
+        });
     }
     let mut out = HeaderMap::new();
     out.insert(SET_COOKIE, HeaderValue::from_str(&clear_cookie(SESSION_COOKIE)).unwrap());

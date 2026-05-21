@@ -48,8 +48,17 @@ impl IntoResponse for AppError {
             message = %self.message,
             "request failed"
         );
+        // Stash kind + message in the response extensions so the
+        // `capture_mw` middleware can persist this failure as an event
+        // — the `AppError` itself is consumed building the body below.
+        let info = crate::event::EventInfo {
+            kind:    self.kind,
+            message: self.message.clone(),
+        };
         let body = Json(ApiError { error: self.message, kind: self.kind.to_string() });
-        (self.status, body).into_response()
+        let mut resp = (self.status, body).into_response();
+        resp.extensions_mut().insert(info);
+        resp
     }
 }
 

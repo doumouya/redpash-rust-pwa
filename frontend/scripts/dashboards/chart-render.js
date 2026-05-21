@@ -229,7 +229,7 @@ function normalizeKind(k) {
   return ({
     bar: 1, bar_horizontal: 1, line: 1, area: 1, pie: 1, scatter: 1,
     funnel: 1, gauge: 1, pictorial_bar: 1, heatmap: 1, radar: 1,
-    boxplot: 1, calendar: 1,
+    boxplot: 1, calendar: 1, matrix: 1,
   }[k] ? k : "bar");
 }
 
@@ -310,10 +310,11 @@ export function chartPreviewBody(sourceFileId, chartCfg, reportFilter) {
       },
     };
   }
-  if (chartCfg.kind === "heatmap" || chartCfg.kind === "radar") {
-    // Both need two categorical dims + one value. Heatmap renders
-    // them as a 2D grid coloured by value; radar plots each unique
-    // value of group_by as a polygon with spokes from y_group_by.
+  if (chartCfg.kind === "heatmap" || chartCfg.kind === "radar" || chartCfg.kind === "matrix") {
+    // heatmap / radar / matrix all need two categorical dims + one
+    // value. Heatmap + matrix render a 2D grid coloured by value
+    // (matrix on the ECharts `matrix` coord system); radar plots each
+    // unique value of group_by as a polygon with spokes from y_group_by.
     return {
       source_file_id: sourceFileId,
       spec: {
@@ -629,4 +630,68 @@ export async function withRegression(option, cfg, labels, values, loader) {
     tooltip:    { trigger: "axis" },
   });
   return option;
+}
+
+// Convert two-group-by subtotal rows [x, y, value] into the shape the
+// ECharts `matrix` coordinate system wants: distinct x + y category
+// labels (first-seen order) + data triples of [xName, yName, value].
+// Unlike subtotalsToHeatmap (cartesian grid, index-based), the matrix
+// coord system addresses cells by category NAME.
+export function subtotalsToMatrix(subtotals) {
+  const rows  = subtotals?.rows ?? [];
+  const xVals = []; const yVals = []; const data = [];
+  const xSeen = new Set(); const ySeen = new Set();
+  for (const r of rows) {
+    const x = String(r[0] ?? "");
+    const y = String(r[1] ?? "");
+    const v = Number(r[2] ?? 0);
+    if (!xSeen.has(x)) { xSeen.add(x); xVals.push(x); }
+    if (!ySeen.has(y)) { ySeen.add(y); yVals.push(y); }
+    if (Number.isFinite(v)) data.push([x, y, v]);
+  }
+  return { xValues: xVals, yValues: yVals, data };
+}
+
+// Matrix ECharts option (ECharts 6 `matrix` coordinate system). Same
+// two-group-by data as heatmap, but rendered as a heatmap series bound
+// to a `matrix` coord component instead of a cartesian grid.
+export function chartOptionMatrix(cfg, xValues, yValues, data) {
+  const title = cfg.title?.trim()
+    ? { text: cfg.title.trim(), left: 8, top: 4, textStyle: { fontSize: 13 } }
+    : undefined;
+  const titleOffset = title ? 30 : 12;
+  let maxV = 0;
+  for (const d of data) { if (d[2] > maxV) maxV = d[2]; }
+  return {
+    title,
+    tooltip: {
+      position: "top",
+      formatter: (p) => `${esc(p.data[0])} / ${esc(p.data[1])}<br/>${p.data[2]}`,
+    },
+    matrix: {
+      x:      { data: xValues },
+      y:      { data: yValues },
+      top:    titleOffset + 8,
+      bottom: 44,
+      left:   70,
+      right:  16,
+    },
+    visualMap: {
+      type:       "continuous",
+      min:        0,
+      max:        maxV || 1,
+      dimension:  2,
+      calculable: true,
+      orient:     "horizontal",
+      left:       "center",
+      bottom:     8,
+    },
+    series: [{
+      type:             "heatmap",
+      coordinateSystem: "matrix",
+      data,
+      label:    { show: data.length <= 200 },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: "rgba(0,0,0,.3)" } },
+    }],
+  };
 }

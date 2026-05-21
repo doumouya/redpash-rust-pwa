@@ -216,6 +216,18 @@ async fn upload(
     .await
     .map_err(|e| AppError::internal("db", e.to_string()))?;
 
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_upload".into(),
+        message: format!("uploaded {filename}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "file": rid.clone(), "project": project.clone(), "rows": df.height(),
+        }),
+        ..Default::default()
+    });
+
     let now = Utc::now();
     let summary = FileSummary {
         redpash_id:         rid.clone(),
@@ -354,6 +366,15 @@ async fn delete_file(
     if !existed {
         return Err(AppError::not_found("not_found", "file not found"));
     }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_delete".into(),
+        message: format!("deleted file {rid}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "file": rid.clone() }),
+        ..Default::default()
+    });
     let _ = tokio::fs::remove_file(state.file_path(&rid)).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -425,6 +446,16 @@ async fn add_step(
     db::insert_step(&state.db, &step_rid, &rid, &req.kind, &req.params)
         .await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "step_apply".into(),
+        message: format!("applied `{}` step", req.kind),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "file": rid.clone(), "step": req.kind.clone() }),
+        ..Default::default()
+    });
 
     // Cache invalidation forces the next hydrate to replay from disk,
     // including the new step.

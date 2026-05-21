@@ -1,23 +1,10 @@
-<!-- Reports toolbar — source-file selector + search + chart-add.
-     Different shape from the cleaner/objects toolbars because reports
-     don't have row-select / row-delete / edit modes — they're
-     read-only against the source file. Filter funnel kept (reports
-     can filter the source to chart a subset). -->
+<!-- Reports toolbar — search + filter + view controls + chart-add.
+     The source-file selector is the file-tabs strip one row up; the
+     report-level actions (export, etc.) live in the header. Reports are
+     read-only against the source — no row-select / delete / edit modes.
+     Filter funnel kept (reports can filter the source to chart a
+     subset). -->
 <div class="rp-rt-toolbar">
-
-  <!-- Source file picker — pill dropdown listing the user's files.
-       The active file's rows populate the table pane + feed every
-       chart's data. Painted by JS in mountReportsSandbox(). -->
-  <div class="rp-dd-wrap">
-    <button class="rp-rt-pill-btn" title="Source file" onclick="spDdToggle(this)">
-      <i class="bi bi-file-earmark-text" style="font-size:0.75rem;margin-right:0.2rem"></i>
-      <span data-reports-source-label>No file</span>
-      <i class="bi bi-chevron-down"></i>
-    </button>
-    <div class="rp-dd-menu" role="menu" data-reports-source-picker>
-      <div class="rp-dd-item is-selected">No files yet</div>
-    </div>
-  </div>
 
   <input class="rp-rt-search" type="search" placeholder="Filter rows in source…"
          data-reports-search />
@@ -62,19 +49,8 @@
   <!-- + Chart — opens new-chart modal. Pinned to the right. -->
   <button class="rp-btn" type="button" aria-label="Add a chart" title="Add a chart"
           style="margin-left:auto"
-          onclick="openModal('new-chart')">
+          onclick="reportsNewChart()">
     <i class="bi bi-plus-lg"></i>
-  </button>
-
-  <!-- Save / Export the report (config + rendered charts). Save persists
-       to /api/reports; Export downloads the chart canvases. -->
-  <button class="rp-btn" type="button" aria-label="Save report" title="Save report"
-          data-reports-save>
-    <i class="bi bi-floppy"></i>
-  </button>
-  <button class="rp-btn" type="button" aria-label="Export charts as images" title="Export"
-          data-reports-export>
-    <i class="bi bi-download"></i>
   </button>
 
 </div>

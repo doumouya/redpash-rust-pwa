@@ -24,6 +24,9 @@
 @import "/styles/components/badge.css";
 @import "/styles/components/stat-strip.css";
 @import "/styles/components/settings-card.css";
+@import "/styles/components/settings-rows.css";
+@import "/styles/components/side-nav.css";
+@import "/styles/components/rail-layout.css";
 
 /* glass-btn.css (.rp-btn base) loads globally via main.css. */
 
@@ -89,170 +92,41 @@ html[data-theme="light"] #page-profile .rp-rt-page-title { color: #1e3a5f; }
   transform: none;
 }
 
-/* ── Layout: left rail + right scrolling pane ──────────────────────── */
-.rp-profile__layout {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 16rem 1fr;
-  overflow: hidden;
-}
-@media (max-width: 50rem) {
-  .rp-profile__layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-}
+/* ── Layout + rail ───────────────────────────────────────────────────
+   The rail+pane grid and the rail's narrow-screen reflow are the
+   shared rail-layout.css component; the frosted rail surface itself is
+   side-nav.css. profile.css owns only the JS-free active highlight
+   below, driven by :has(:target). */
 
-/* ── Left rail ─────────────────────────────────────────────────────── */
-.rp-profile__rail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: 1rem 0.625rem;
-  background: rgba(0, 0, 0, 0.18);
-  border-right: 0.0313rem solid color-mix(in srgb, var(--text) 8%, transparent);
-  overflow-y: auto;
-}
-html[data-theme="light"] .rp-profile__rail { background: rgba(255, 255, 255, 0.22); }
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] .rp-profile__rail { background: rgba(255, 255, 255, 0.22); }
-}
-@media (max-width: 50rem) {
-  .rp-profile__rail {
-    flex-direction: row;
-    flex-wrap: wrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: 0;
-    border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 8%, transparent);
-  }
-}
-
-.rp-profile__rail-link {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.5rem 0.75rem;
-  border: 0;
-  background: transparent;
-  color: color-mix(in srgb, var(--text) 70%, transparent);
-  text-decoration: none;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 0.4375rem;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-  white-space: nowrap;
-  text-align: left;
-  font-family: inherit;
-}
-.rp-profile__rail-link > .bi {
-  font-size: 0.9375rem;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-.rp-profile__rail-link:hover {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text);
-}
-.rp-profile__rail-link:active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-
-/* Active rail item — driven by :has(:target) so the link whose href
-   matches the section currently anchored by the URL hash highlights
-   accent. JS-free. Modern browsers (Chrome 105+, Safari 15.4+,
-   FF 121+); older browsers just lose the active highlight. The 8
-   section IDs match the rail entries below: 11→8 mergers (connected +
-   security → signin; data + objects + cleaner → defaults). */
-.rp-profile__layout:has(#section-personal:target)    .rp-profile__rail-link[href="#section-personal"],
-.rp-profile__layout:has(#section-usage:target)       .rp-profile__rail-link[href="#section-usage"],
-.rp-profile__layout:has(#section-plan:target)        .rp-profile__rail-link[href="#section-plan"],
-.rp-profile__layout:has(#section-signin:target)      .rp-profile__rail-link[href="#section-signin"],
-.rp-profile__layout:has(#section-appearance:target)  .rp-profile__rail-link[href="#section-appearance"],
-.rp-profile__layout:has(#section-defaults:target)    .rp-profile__rail-link[href="#section-defaults"],
-.rp-profile__layout:has(#section-about:target)       .rp-profile__rail-link[href="#section-about"],
-.rp-profile__layout:has(#section-danger:target)      .rp-profile__rail-link[href="#section-danger"] {
+/* Active rail item — :has(:target) lights the link whose href matches
+   the section the URL hash currently anchors. JS-free; reproduces the
+   .is-active look from side-nav.css (profile drives active state from
+   the hash, not a JS class). Modern browsers only (Chrome 105+,
+   Safari 15.4+, FF 121+); older ones just lose the highlight. */
+.rp-rail-layout:has(#section-personal:target) .rp-side-nav__link[href="#section-personal"],
+.rp-rail-layout:has(#section-usage:target)    .rp-side-nav__link[href="#section-usage"],
+.rp-rail-layout:has(#section-plan:target)     .rp-side-nav__link[href="#section-plan"],
+.rp-rail-layout:has(#section-signin:target)   .rp-side-nav__link[href="#section-signin"],
+.rp-rail-layout:has(#section-about:target)    .rp-side-nav__link[href="#section-about"],
+.rp-rail-layout:has(#section-danger:target)   .rp-side-nav__link[href="#section-danger"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
-}
-
-/* Rail group headers — small caps text labels for "Account / Settings /
-   System" cluster headings. Not interactive; just visual grouping. */
-.rp-profile__rail-group-hdr {
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--text) 45%, transparent);
-  padding: 0.875rem 0.875rem 0.375rem;
-  user-select: none;
-}
-.rp-profile__rail-group-hdr:first-child { padding-top: 0.125rem; }
-
-.rp-profile__rail-link--danger { color: var(--red, #f87171); }
-.rp-profile__rail-link--danger:hover {
-  background: color-mix(in srgb, var(--red, #f87171) 12%, transparent);
-  color: var(--red, #f87171);
-}
-.rp-profile__rail-link--muted { color: color-mix(in srgb, var(--text) 55%, transparent); }
-.rp-profile__rail-foot {
-  margin-top: auto;
-  padding-top: 0.5rem;
-  border-top: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-@media (max-width: 50rem) {
-  .rp-profile__rail-foot {
-    flex-direction: row;
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-    border-left: 0.0313rem solid color-mix(in srgb, var(--text) 6%, transparent);
-    padding-left: 0.5rem;
-    margin-left: 0.5rem;
-  }
-}
-
-/* ── Right pane ────────────────────────────────────────────────────── */
-.rp-profile__pane {
-  overflow-y: auto;
-  padding: 1.25rem 1.5rem 2rem;
-  /* scroll-padding-top — keeps the section title clear of the topbar
-     when a hash-jump (#section-foo) lands. */
-  scroll-padding-top: 3.625rem;
-  scroll-behavior: smooth;
-}
-
-.rp-profile__section {
-  max-width: 48rem;
-  margin: 0 auto 1.5rem;
-}
-.rp-profile__section:first-child { margin-top: 0; }
-
-.rp-profile__section-hdr {
-  margin-bottom: 0.625rem;
-  padding-left: 0.25rem;
-}
-.rp-profile__section-ttl {
-  margin: 0;
-  font-size: 1.125rem;
   font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
-.rp-profile__section-sub {
-  margin-top: 0.1875rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-  line-height: 1.4;
+.rp-rail-layout:has(#section-personal:target) .rp-side-nav__link[href="#section-personal"]::before,
+.rp-rail-layout:has(#section-usage:target)    .rp-side-nav__link[href="#section-usage"]::before,
+.rp-rail-layout:has(#section-plan:target)     .rp-side-nav__link[href="#section-plan"]::before,
+.rp-rail-layout:has(#section-signin:target)   .rp-side-nav__link[href="#section-signin"]::before,
+.rp-rail-layout:has(#section-about:target)    .rp-side-nav__link[href="#section-about"]::before,
+.rp-rail-layout:has(#section-danger:target)   .rp-side-nav__link[href="#section-danger"]::before {
+  background: var(--accent);
+  transform: scaleY(1);
 }
+
+/* ── Right pane + sections — the pane shell, the section blocks and
+   their accent-bar headers are the shared rail-layout.css component.
+   The profile-specific pane treatment (topbar-clearing padding, the
+   wide-screen 3-col grid) lives in the visual-polish pass below. */
 
 /* Sections are cardless — content sits directly on the rp-rt-panel
    surface, structured by the section header's accent bar + row
@@ -267,131 +141,13 @@ html[data-theme="light"] .rp-profile__rail { background: rgba(255, 255, 255, 0.2
 }
 form.rp-profile__card { display: block; }
 
-/* ── Settings rows (kept rp-set-* class family so profile.js bindings
-   continue to work). Sandbox tokens applied to the existing recipe. */
-#page-profile .rp-set-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.625rem 0;
-}
-#page-profile .rp-set-row--col {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-#page-profile .rp-set-divider {
-  height: 0.0625rem;
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  margin: 0.125rem 0;
-}
-#page-profile .rp-set-lbl {
-  flex: 1;
-  min-width: 0;
-}
-#page-profile .rp-set-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text);
-}
-#page-profile .rp-set-sub {
-  font-size: 0.71875rem;
-  color: var(--muted);
-  margin-top: 0.125rem;
-  line-height: 1.4;
-}
-
-#page-profile .rp-set-input {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 0.375rem;
-  color: var(--text);
-  font-size: 0.8125rem;
-  padding: 0.4375rem 0.625rem;
-  min-width: 12rem;
-  font-family: inherit;
-}
-#page-profile .rp-set-input:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-}
-#page-profile .rp-set-input[readonly] {
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-}
-#page-profile .rp-set-input-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-#page-profile .rp-set-input-link {
-  background: transparent;
-  border: 0;
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-  padding: 0.25rem;
-  cursor: pointer;
-  border-radius: 0.25rem;
-}
-#page-profile .rp-set-input-link:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-
-/* Option-group pills */
-#page-profile .rp-set-opt-grp {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-#page-profile .rp-set-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.3125rem 0.625rem;
-  font-size: 0.71875rem;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--text) 75%, transparent);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-  font-family: inherit;
-}
-#page-profile .rp-set-opt:hover {
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 22%, transparent);
-}
-#page-profile .rp-set-opt.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
-}
-#page-profile .rp-set-opt--soon {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.3125rem 0.625rem;
-  font-size: 0.71875rem;
-  color: var(--muted);
-  opacity: 0.7;
-}
-
-/* "Soon" pill */
-#page-profile .rp-soon {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.0938rem 0.4375rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 18%, transparent);
-  color: var(--muted);
-  border-radius: 999px;
-  white-space: nowrap;
-}
+/* ── Settings rows ───────────────────────────────────────────────────
+   The rp-set-* row family (rows, dividers, labels, inputs, option
+   pills, "Soon" badge) is the shared slate-cobalt skin in
+   styles/components/settings-rows.css — scoped to #page-profile +
+   #page-settings there, so /profile and /settings stay identical.
+   Profile-specific row tweaks (the identity hero row) live further
+   down in the visual-polish pass. */
 
 /* ── Stat strip (usage tiles) — cardless to match the rest of the
    page. 2x2 grid stays compact inside the Usage section's 1-of-3
@@ -510,65 +266,11 @@ form.rp-profile__card { display: block; }
   color: var(--muted);
 }
 
-/* ── Theme switcher row ──────────────────────────────────────────── */
-#page-profile .rp-theme-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-#page-profile .rp-bg-preview-tog {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 18%, transparent);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-}
-#page-profile .rp-bg-preview-tog[aria-checked="true"] {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
-}
-#page-profile .rp-theme-sw {
-  display: inline-flex;
-  border-radius: 999px;
-  border: 0.0625rem solid color-mix(in srgb, var(--text) 18%, transparent);
-  overflow: hidden;
-}
-#page-profile .rp-theme-btn {
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 0;
-  background: transparent;
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-  cursor: pointer;
-  font-size: 0.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-#page-profile .rp-theme-btn[aria-pressed="true"],
-#page-profile .rp-theme-btn.active {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
-}
-#page-profile .rp-bg-sw {
-  display: inline-flex;
-  gap: 0.25rem;
-}
-#page-profile .rp-bg-btn {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  border: 0.0938rem solid color-mix(in srgb, var(--text) 18%, transparent);
-  cursor: pointer;
-}
+/* ── Theme switcher row ──────────────────────────────────────────────
+   The theme 3-state switcher + bg-palette swatches moved to /settings
+   when the Appearance section was lifted out; their slate-cobalt skin
+   lives in styles/components/settings-rows.css alongside the rp-set-*
+   family. Nothing theme-switcher-related renders on /profile now. */
 
 /* ── Avatar ──────────────────────────────────────────────────────── */
 #page-profile .rp-avatar-wrap {
@@ -665,37 +367,10 @@ form.rp-profile__card { display: block; }
   }
 }
 
-/* ── Bootstrap-icons reset + form-element font reset (matches the
-   cleaner / objects / reports port). */
-i.bi {
-  font-size: inherit;
-  display: inline;
-  line-height: inherit;
-  vertical-align: baseline;
-}
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
-}
-
-/* ── Sentinels list — profile.js paints chips into this container.
-   The views list (.rp-views-list) gets its 3-up grid layout from
-   styles/main.css; nothing needed here for it. */
-#page-profile #settings-sentinels-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  width: 100%;
-}
-#page-profile .rp-sentinels-list:empty::before {
-  content: "Nothing here yet.";
-  font-size: 0.71875rem;
-  color: var(--muted);
-  font-style: italic;
-}
+/* The Bootstrap-icons + form-element resets, and the sentinels-list
+   container, moved to styles/components/settings-rows.css (shared with
+   /settings). profile.css imports that file, so /profile still gets
+   them — the Sign-in section's rp-set-* rows depend on the resets. */
 
 /* ═════════════════════════════════════════════════════════════════════
    VISUAL POLISH PASS — pushes the page past "sandbox shell wrapping
@@ -719,91 +394,34 @@ textarea {
   opacity: 0.85;
 }
 
-/* ── Rail — visually group the sections, add an animated active bar,
-   tighten icon→label rhythm. */
-.rp-profile__rail {
-  padding: 0.875rem 0.625rem 0.625rem;
-  gap: 0.0625rem;
-}
-.rp-profile__rail-link {
-  position: relative;
-  padding: 0.4375rem 0.75rem 0.4375rem 1rem;
-  font-size: 0.78125rem;
-  letter-spacing: 0.005em;
-}
-/* Slim accent bar that slides in on hover + lights solid on active. */
-.rp-profile__rail-link::before {
-  content: "";
-  position: absolute;
-  left: 0.25rem;
-  top: 0.5rem;
-  bottom: 0.5rem;
-  width: 0.125rem;
-  border-radius: 999px;
-  background: transparent;
-  transition: background 0.15s, transform 0.15s;
-  transform: scaleY(0);
-  transform-origin: center;
-}
-.rp-profile__rail-link:hover::before {
-  background: color-mix(in srgb, var(--text) 22%, transparent);
-  transform: scaleY(0.6);
-}
-.rp-profile__layout:has(#section-personal:target)    .rp-profile__rail-link[href="#section-personal"]::before,
-.rp-profile__layout:has(#section-usage:target)       .rp-profile__rail-link[href="#section-usage"]::before,
-.rp-profile__layout:has(#section-plan:target)        .rp-profile__rail-link[href="#section-plan"]::before,
-.rp-profile__layout:has(#section-signin:target)      .rp-profile__rail-link[href="#section-signin"]::before,
-.rp-profile__layout:has(#section-appearance:target)  .rp-profile__rail-link[href="#section-appearance"]::before,
-.rp-profile__layout:has(#section-defaults:target)    .rp-profile__rail-link[href="#section-defaults"]::before,
-.rp-profile__layout:has(#section-about:target)       .rp-profile__rail-link[href="#section-about"]::before,
-.rp-profile__layout:has(#section-danger:target)      .rp-profile__rail-link[href="#section-danger"]::before {
-  background: var(--accent);
-  transform: scaleY(1);
-}
-.rp-profile__rail-link--danger::before { background: transparent; }
-.rp-profile__rail-link--danger:hover::before {
-  background: color-mix(in srgb, var(--red) 60%, transparent);
-}
+/* (Rail visual treatment — frosted surface, link rhythm, the slim
+   accent hover/active bar — is the shared side-nav.css component. The
+   :has(:target) active highlight is defined once near the top of this
+   file; nothing rail-specific remains in the polish pass.) */
 
-/* (Old section-group separators removed — the .rp-profile__rail-group-hdr
-   labels above the affected links handle grouping explicitly now.) */
-
-/* ── Pane — 3-col grid on wider viewports. Long-form sections
-   (personal / signin / appearance / defaults) span all 3 cols; the
-   short ones (usage / plan / about / danger) sit one-per-column so
-   the page reads as a single dashboard surface instead of a stack
-   of boxed cards. */
-.rp-profile__pane {
+/* ── Pane — profile-specific. The pane shell + section blocks come
+   from rail-layout.css; profile adds its topbar-clearing padding and
+   a wide-screen 3-col grid — the long-form sections (Personal info,
+   Sign-in) span all 3 cols, the short ones (Usage, Plan, About,
+   Danger zone) sit one-per-column, so the page reads as a single
+   dashboard surface. */
+.rp-rail-layout__pane {
   padding: 1.25rem 1.75rem 2.5rem;
+  /* scroll-padding-top keeps a hash-jumped section clear of the topbar. */
+  scroll-padding-top: 3.625rem;
+  scroll-behavior: smooth;
 }
-.rp-profile__section { margin: 0 0 1.25rem; max-width: none; }
 @media (min-width: 60rem) {
-  .rp-profile__pane {
+  .rp-rail-layout__pane {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 1.5rem 2rem;
     align-content: start;
   }
-  .rp-profile__pane > .rp-profile__section { margin: 0; max-width: none; }
-  #section-personal, #section-signin,
-  #section-appearance, #section-defaults {
+  .rp-rail-layout__pane > .rp-rail-section { margin: 0; }
+  #section-personal, #section-signin {
     grid-column: 1 / -1;
   }
-}
-
-/* Section header — accent dot before the title + tighter sub. */
-.rp-profile__section-hdr {
-  margin-bottom: 0.75rem;
-  padding-left: 0.5rem;
-  border-left: 0.1875rem solid color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.rp-profile__section-ttl {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-}
-.rp-profile__section--danger .rp-profile__section-hdr {
-  border-left-color: color-mix(in srgb, var(--red) 60%, transparent);
 }
 
 /* (No section-card chrome — sections are cardless. The hover/lift
@@ -824,13 +442,8 @@ textarea {
 }
 .rp-profile__subhdr:not(:first-child) { margin-top: 0.5rem; }
 
-/* The divider between two subsections is heavier than the row-to-row
-   divider so the subsection break reads. */
-.rp-profile__subdivider {
-  height: 0.0625rem;
-  background: color-mix(in srgb, var(--text) 14%, transparent) !important;
-  margin: 1rem 0 0.5rem !important;
-}
+/* (.rp-profile__subdivider removed with the Defaults section — the
+   Sign-in section's subheaders no longer need an inter-group rule.) */
 
 /* Sign-in section: Connected accounts (left) + Security (right) share
    the same row at wider viewports. Below 50rem they stack so the
@@ -848,7 +461,7 @@ textarea {
 .rp-profile__signin-col > .rp-profile__subhdr:first-child { margin-top: 0; }
 /* (Cardless layout — no top-edge accent line, no hover lift, no
    plan-card gradient, no danger-card red bg. Each section's left
-   accent bar in .rp-profile__section-hdr carries the structural
+   accent bar in .rp-rail-section-hdr carries the structural
    cue now. The plan-name gradient text below stays as the visual
    accent for the Plan section.) */
 #page-profile .rp-profile__plan-name {
@@ -865,7 +478,7 @@ textarea {
 }
 
 /* (Danger card box removed. The red accent now lives on the
-   .rp-profile__section--danger section header's left bar.) */
+   .rp-rail-section--danger section header's left bar.) */
 
 /* ── Identity / hero row inside Personal info — bigger, more deliberate. */
 #section-personal form.rp-profile__card > .rp-set-row:first-child {
@@ -915,27 +528,8 @@ textarea {
   box-shadow: 0 0.25rem 0.875rem color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
-/* ── Inputs — accent focus ring, readonly distinct without
-   reading "disabled". */
-#page-profile .rp-set-input {
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-}
-#page-profile .rp-set-input:focus {
-  box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--accent) 22%, transparent);
-}
-#page-profile .rp-set-input[readonly] {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--text) 18%, transparent);
-}
-
-/* ── Option pills — animated press + clearer active glow. */
-#page-profile .rp-set-opt {
-  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
-}
-#page-profile .rp-set-opt:active { transform: scale(0.96); }
-#page-profile .rp-set-opt.active {
-  box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--accent) 18%, transparent);
-}
+/* (Input focus-ring + option-pill press/glow polish folded into the
+   shared settings-rows.css skin.) */
 
 /* ── Stat tiles — hover lights the number in accent. No bg/border/
    transform: the cardless surface is what makes the section read as
@@ -986,10 +580,5 @@ textarea {
   box-shadow: 0 0.375rem 1.125rem color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
-/* ── Rail footer (Docs / Contact) — slightly muted vs main rail. */
-.rp-profile__rail-link--muted::before { background: transparent !important; }
-
-/* ── Section anchor offset — smooth scroll already enabled on the
-   pane; clicking a rail link should leave a visible gap above the
-   section's accent-bar header. */
-.rp-profile__section { scroll-margin-top: 1rem; }
+/* (Section anchor offset — the scroll-margin-top gap above a
+   hash-jumped section — is in the shared rail-layout.css component.) */

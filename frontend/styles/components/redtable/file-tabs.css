@@ -43,7 +43,6 @@ html[data-theme="light"] .rp-rtp-tabs {
   border-bottom: 0.1875rem solid transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 0.75rem;
   white-space: nowrap;
   width: 100%;
   min-width: 0;

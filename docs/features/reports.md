@@ -2,7 +2,7 @@
 title: Reports
 section: Features
 order: 1
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # Reports
@@ -14,24 +14,30 @@ optionally plot charts. All authored from one page.
 
 ## Layout
 
-The builder is a 3-column shell at `#/reports?id=RPT_…`:
+The Reports page (`#/reports?project=PRJ_…&file=FIL_…`,
+`scripts/pages/reports.js`) is a sandbox-ported page — a vertical
+scroll-snap deck of two full-bleed pages, with a page-dots rail to
+jump between them:
 
 ```
-┌──────────┬──────────────────────┬───────────────────┐
-│ Charts   │ Preview              │ Report tools      │
-│ panel    │  details / subtotals │  filter           │
-│ + saved  │  + matrix / total    │  group-by         │
-│ list     │  + chart cells       │  group-by-cols    │
-│          │                      │  aggregations     │
-│          │                      │  display toggles  │
-│          │                      │  windows          │
-│          │                      │  top-N            │
-└──────────┴──────────────────────┴───────────────────┘
+Page 1 — Data                     Page 2 — Charts
+┌─────────────────────────────┐   ┌──────────┬──────────────────────┐
+│ proj-tabs / header /        │   │ builder  │ chart dock           │
+│ file-tabs / toolbar         │   │ rail     │  one card per chart; │
+│ ┌─────────────────────────┐ │   │ (edits   │  the active card     │
+│ │ source redtable         │ │   │  active  │  redraws live        │
+│ │ (read-only) + pager     │ │   │  chart)  │                      │
+│ └─────────────────────────┘ │   │          │                      │
+└─────────────────────────────┘   └──────────┴──────────────────────┘
 ```
 
-The charts panel is independent of the report tools — chart kind /
-slicing / column choices live next to the data definition, not in the
-table spec.
+- **Page 1 "Data"** — workspace chrome (project tabs, header,
+  source-file tabs, toolbar) over the **read-only** source redtable.
+  Reports never mutate the source; the toolbar's filter can scope the
+  rows a chart sees.
+- **Page 2 "Charts"** — a left **builder rail** + the **chart dock**.
+  The builder edits the *active* chart; its dock card redraws live as
+  fields change.
 
 ## ReportSpec
 
@@ -153,15 +159,30 @@ set the derived column is `col / window_value * 100` — perfect for
 > Phase B/B.1 windows — both produce wrong results if you sum
 > subtotals. Add an aggregation against the source instead.
 
-## Charts panel
+## Charts page
 
-Each chart on a report runs its **own** `/reports/preview` against the
-source file with its own `group_by` + agg. They are *not* derived from
-the report's table-level grouping — that's the whole point of the
-left-panel split. See [charts.md](charts.md).
+Page 2 is the chart workspace. Each chart runs its **own**
+`/reports/preview` against its source file with its own `group_by` +
+agg — see [charts.md](charts.md).
 
-Save round-trips `spec.charts` into the persisted ReportSpec. Charts
-are referenced by index from dashboards: `(report_id, chart_index)`.
+- **Builder rail** — family `<select>` + variant tiles + the data
+  fields (group-by, metric, aggregator, per-kind conditionals). Edits
+  the active chart; the matching dock card redraws live.
+- **Chart dock** — one card per chart. Each card header has
+  Save / Download / Remove; the builder footer carries the master
+  Save / Download / Delete acting on the active chart.
+- **Save** stamps a title + description (auto-named `chart-NNN` when a
+  card is active and the field is blank) and flags the chart saved.
+- **Download** exports the chart as a standalone HTML report — the
+  rendered ECharts SVG wrapped with its title + description.
+
+### Persistence (current)
+
+Saved charts are written to `localStorage['rp_saved_charts_v1']`, keyed
+per project — they survive a reload and are restored into the dock on
+mount. This is a **stopgap**: the eventual model persists a saved chart
+as a `FIL_` html File (so it surfaces on the Objects page and the
+Dashboard page can read it). Drafts stay in-memory only.
 
 ## Endpoints
 
