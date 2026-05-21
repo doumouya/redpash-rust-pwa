@@ -8088,31 +8088,22 @@ function _populateOpenProjectPicker(root, projects, openList) {
   const closed  = (projects || []).filter((p) => !openSet.has(p.redpash_id));
   if (!closed.length) {
     grid.innerHTML =
-      '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
-      + 'All your projects are already open as tabs.'
-      + '</div>';
+      '<div class="rp-tab-add-empty">All your projects are already open.</div>';
     return;
   }
+  // .rp-tab-add-item rows — the picker lives in the tab-strip + dropdown
+  // now (proj-tabs.html), not a modal. data-pick-name is the lowercased
+  // search key spFilterTabAdd matches against.
   grid.innerHTML = closed.map((p) => {
-    const meta = [];
-    if (p.file_count != null) {
-      meta.push(`${p.file_count} file${p.file_count === 1 ? "" : "s"}`);
-    }
-    if (p.stage)                 meta.push(`stage: ${_escHtml(p.stage)}`);
-    if (p.cleanness_pct != null) meta.push(`${Math.round(p.cleanness_pct)}% clean`);
-    // Pass the project name as the second arg so spAddProjectTab
-    // (inside spOpenProjectFromPicker) can de-dupe + label the new
-    // animated tab.
+    const name = p.name || p.redpash_id;
     return ''
-      + '<button type="button" class="rp-pick-card"'
+      + '<div class="rp-tab-add-item" role="menuitem"'
+      + ' data-pick-name="' + _escAttr(name.toLowerCase()) + '"'
       + ' onclick="spOpenProjectFromPicker(\'' + p.redpash_id + '\',\''
-      +   _escAttr(p.name) + '\')">'
-      +   '<i class="bi bi-folder2-open rp-pick-ico"></i>'
-      +   '<div class="rp-pick-body">'
-      +     '<div class="rp-pick-name">' + _escHtml(p.name) + '</div>'
-      +     '<div class="rp-pick-meta">' + _escHtml(meta.join(" · ")) + '</div>'
-      +   '</div>'
-      + '</button>';
+      +   _escAttr(name) + '\')">'
+      +   '<i class="bi bi-folder2-open"></i>'
+      +   '<span>' + _escHtml(name) + '</span>'
+      + '</div>';
   }).join("");
 }
 
@@ -8261,9 +8252,8 @@ function _populateColsPicker(root, columns) {
 // the entering animation.
 window.spOpenProjectFromPicker = function (pid, name) {
   if (!pid) return;
-  if (typeof window.closeModal === "function") {
-    window.closeModal('open-project');
-  }
+  document.querySelectorAll(".rp-tab-add-menu.open")
+    .forEach((m) => m.classList.remove("open"));
   const strip = document.querySelector(".rp-rt-proj-tabs-inner");
   if (strip && typeof window.spAddProjectTab === "function") {
     // De-dupe: if a tab with this name is already on screen, sandbox
@@ -8312,34 +8302,22 @@ function _populateOpenFilePicker(root, files, hiddenSet) {
   const hidden = (files || []).filter((f) => hiddenSet.has(f.redpash_id));
   if (!hidden.length) {
     grid.innerHTML =
-      '<div class="rp-form-meta" style="padding:1rem;text-align:center;font-style:italic">'
-      + 'All files in this project are already open as tabs.'
-      + '</div>';
+      '<div class="rp-tab-add-empty">All files in this project are already open.</div>';
     return;
   }
+  // .rp-tab-add-item rows — the picker lives in the tab-strip + dropdown
+  // now (file-tabs.html), not a modal. data-pick-name is the lowercased
+  // search key spFilterTabAdd matches against.
   grid.innerHTML = hidden.map((f) => {
     const name = f.display_name || f.filename || f.redpash_id;
-    const meta = [];
-    if (f.row_count != null) meta.push(`${f.row_count.toLocaleString()} rows`);
-    if (f.col_count != null) meta.push(`${f.col_count} cols`);
-    if (f.cleanness_pct != null) meta.push(`${Math.round(f.cleanness_pct)}% clean`);
-    if (f.file_size_bytes != null) {
-      const kb = f.file_size_bytes / 1024;
-      meta.push(kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`);
-    }
-    // Pass the file's display name as second arg so spAddFileTab
-    // (inside spOpenFileFromPicker) can de-dupe + label the new
-    // animated tab.
     return ''
-      + '<button type="button" class="rp-pick-card"'
+      + '<div class="rp-tab-add-item" role="menuitem"'
+      + ' data-pick-name="' + _escAttr(name.toLowerCase()) + '"'
       + ' onclick="spOpenFileFromPicker(\'' + f.redpash_id + '\',\''
       +   _escAttr(name) + '\')">'
-      +   '<i class="bi bi-file-earmark-text rp-pick-ico"></i>'
-      +   '<div class="rp-pick-body">'
-      +     '<div class="rp-pick-name">' + _escHtml(name) + '</div>'
-      +     '<div class="rp-pick-meta">' + _escHtml(meta.join(" · ")) + '</div>'
-      +   '</div>'
-      + '</button>';
+      +   '<i class="bi bi-file-earmark-text"></i>'
+      +   '<span>' + _escHtml(name) + '</span>'
+      + '</div>';
   }).join("");
 }
 
@@ -8350,9 +8328,8 @@ function _populateOpenFilePicker(root, files, hiddenSet) {
 // STATE.hiddenFiles + persists, cleanerActivateTab fetches/paints.
 window.spOpenFileFromPicker = function (rid, name) {
   if (!rid) return;
-  if (typeof window.closeModal === "function") {
-    window.closeModal('open-file');
-  }
+  document.querySelectorAll(".rp-tab-add-menu.open")
+    .forEach((m) => m.classList.remove("open"));
   const strip = document.querySelector(".rp-rtp-tabs-inner");
   if (strip && typeof window.spAddFileTab === "function") {
     const before = strip.querySelectorAll(".rp-rtp-tab:not([data-is-overview])").length;
@@ -8391,15 +8368,15 @@ window.spOpenFileFromPicker = function (rid, name) {
 };
 
 // Reuse the new-project modal as the "add files to current project"
-// flow. Closes the open-file picker (if open), then opens new-project
-// pre-filled with the active project's name (locked, so the user can't
-// retype). spCleanerCreateProject's loop POSTs each file with that
-// name; ensure_named_project upserts so all files land in the same
-// project regardless of how many uploads we make.
+// flow. Closes the file-picker dropdown (if open), then opens
+// new-project pre-filled with the active project's name (locked, so the
+// user can't retype). spCleanerCreateProject's loop POSTs each file with
+// that name; ensure_named_project upserts so all files land in the same
+// project regardless of how many uploads we make. Wired from the file
+// picker dropdown's footer row (file-tabs.html).
 window.spAddFilesToCurrentProject = function () {
-  if (typeof window.closeModal === "function") {
-    window.closeModal('open-file');
-  }
+  document.querySelectorAll(".rp-tab-add-menu.open")
+    .forEach((m) => m.classList.remove("open"));
   const pname = STATE.project?.name || "";
   window.spOpenNewProjectModal?.(pname);
 };
@@ -8419,17 +8396,23 @@ window.spAddFilesToCurrentProject = function () {
 // hitting + would leave the just-closed project missing because the
 // picker doesn't refresh. STATE.openProjects is the source of truth
 // for which projects are currently tabbed; everything else is closed.
-window.spOpenProjectPicker = async function () {
+window.spOpenProjectPicker = async function (btn) {
   const root = document.getElementById("page-cleaner");
-  if (!root) return;
+  if (!root || !btn) return;
+  const wrap = btn.closest(".rp-tab-add-wrap");
+  const menu = wrap && wrap.querySelector(".rp-tab-add-menu");
+  if (!menu) return;
+  // Second click on an open menu just closes it.
+  if (menu.classList.contains("open")) { menu.classList.remove("open"); return; }
   try {
     const res = await api.get("/projects");
-    const projects = res.items ?? [];
-    _populateOpenProjectPicker(root, projects, STATE.openProjects);
+    _populateOpenProjectPicker(root, res.items ?? [], STATE.openProjects);
   } catch (err) {
     console.error("[cleaner] /projects refetch failed", err);
   }
-  window.openModal && window.openModal("open-project");
+  if (typeof window.spToggleTabAddMenu === "function") window.spToggleTabAddMenu(btn);
+  const search = menu.querySelector(".rp-tab-add-search");
+  if (search) { search.value = ""; search.focus(); }
 };
 
 // file-tabs + handler — mirrors spOpenProjectPicker. Re-fetches the
@@ -8437,9 +8420,14 @@ window.spOpenProjectPicker = async function () {
 // since mount) show up correctly, then opens the picker. Falls back
 // to STATE.files if the refetch fails so the picker isn't blank just
 // because the network blipped.
-window.spOpenFilePicker = async function () {
+window.spOpenFilePicker = async function (btn) {
   const root = document.getElementById("page-cleaner");
-  if (!root) return;
+  if (!root || !btn) return;
+  const wrap = btn.closest(".rp-tab-add-wrap");
+  const menu = wrap && wrap.querySelector(".rp-tab-add-menu");
+  if (!menu) return;
+  // Second click on an open menu just closes it.
+  if (menu.classList.contains("open")) { menu.classList.remove("open"); return; }
   const pid = STATE.activeProjectId;
   let files = STATE.files || [];
   if (pid) {
@@ -8452,7 +8440,40 @@ window.spOpenFilePicker = async function () {
     }
   }
   _populateOpenFilePicker(root, files, STATE.hiddenFiles ?? new Set());
-  window.openModal && window.openModal("open-file");
+  if (typeof window.spToggleTabAddMenu === "function") window.spToggleTabAddMenu(btn);
+  const search = menu.querySelector(".rp-tab-add-search");
+  if (search) { search.value = ""; search.focus(); }
+};
+
+// Live filter for the tab-add picker dropdown — wired to the search
+// input's oninput (file-tabs.html / proj-tabs.html). Hides .rp-tab-add-item
+// rows whose data-pick-name doesn't contain the query; shows a "No match"
+// note when the filter empties the list. Scoped to .rp-tab-add-items so
+// the .rp-tab-add-foot action row (a sibling, not a child) is never
+// filtered out and never counts toward the match tally.
+window.spFilterTabAdd = function (input) {
+  const menu = input.closest(".rp-tab-add-menu");
+  if (!menu) return;
+  const list = menu.querySelector(".rp-tab-add-items") || menu;
+  const q = input.value.trim().toLowerCase();
+  let shown = 0;
+  list.querySelectorAll(".rp-tab-add-item").forEach((it) => {
+    const hay = it.dataset.pickName || it.textContent.toLowerCase();
+    const hit = !q || hay.indexOf(q) !== -1;
+    it.style.display = hit ? "" : "none";
+    if (hit) shown += 1;
+  });
+  let none = menu.querySelector(".rp-tab-add-noresult");
+  if (!shown && q) {
+    if (!none) {
+      none = document.createElement("div");
+      none.className = "rp-tab-add-empty rp-tab-add-noresult";
+      none.textContent = "No match.";
+      (menu.querySelector(".rp-tab-add-items") || menu).appendChild(none);
+    }
+  } else if (none) {
+    none.remove();
+  }
 };
 
 // Update the file-drop label as the user picks files (replaces the

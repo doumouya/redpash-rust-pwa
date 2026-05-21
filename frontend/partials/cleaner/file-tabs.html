@@ -27,9 +27,26 @@
          show up correctly in the picker. -->
     <span class="rp-tab-add-wrap">
       <button class="rp-tab-add" type="button" aria-label="Open another file" title="Open another file"
-              onclick="spOpenFilePicker()">
+              onclick="spOpenFilePicker(this)">
         <i class="bi bi-plus-lg"></i>
       </button>
+      <!-- Inline picker dropdown — replaced the open-file modal. A search
+           field + a scroll-capped (~6-row) list of project files not yet
+           open as tabs. spOpenFilePicker re-fetches, populates, and opens. -->
+      <div class="rp-tab-add-menu rp-tab-add-menu--pick" role="menu">
+        <div class="rp-tab-add-hdr">Open a file</div>
+        <input class="rp-rt-search rp-tab-add-search" type="search"
+               placeholder="Filter files…" oninput="spFilterTabAdd(this)" />
+        <div class="rp-tab-add-items" data-cleaner-file-picker></div>
+        <!-- Footer action — carries over the open-file modal's "upload"
+             button. Sits OUTSIDE .rp-tab-add-items so it stays pinned
+             below the ~6-row scroll window. -->
+        <div class="rp-tab-add-item rp-tab-add-foot" role="menuitem"
+             onclick="spAddFilesToCurrentProject()">
+          <i class="bi bi-cloud-upload"></i>
+          <span>Upload files to this project…</span>
+        </div>
+      </div>
     </span>
   </div>
 </div>

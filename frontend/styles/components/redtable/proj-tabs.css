@@ -3,11 +3,9 @@
  * The top strip of the panel: one tab per project, always visible.
  *
  * Add affordance (.rp-tab-add-wrap / .rp-tab-add) is the SHARED tab-strip
- * + button — used by both project tabs (here) and file tabs (rp-rtp-tabs);
- * both open an rp-modal picker. Add-menu selectors (.rp-tab-add-menu /
- * -hdr / -item / -items) are kept here because the objects-page tab
- * strip (objects.html — also .rp-rt-proj-tabs-inner under #obj-tabs)
- * uses the dropdown form via spToggleTabAddMenu.
+ * + button — used by project tabs (here), file tabs (rp-rtp-tabs), and
+ * the objects-page tab strip; all open the inline .rp-tab-add-menu
+ * picker dropdown via spToggleTabAddMenu.
  *
  * Elevation stack (both dark and light):
  *   strip  < inactive tab < hover tab = active tab
@@ -139,12 +137,11 @@ html[data-theme="light"] .rp-rt-proj-tab.active   { background: var(--over0); }
   color: var(--accent);
 }
 
-/* ── Picker dropdown (objects tabs + only) ──────────────────────────────── */
-/* The cleaner project + and file + both open rp-modals; only the objects-
-   page + uses the inline dropdown form. Kept here because the strip is
-   .rp-rt-proj-tabs-inner under #obj-tabs — same family.
-   position:fixed so the menu escapes the tab strip's overflow clip;
-   JS sets top + right from getBoundingClientRect on open. */
+/* ── Picker dropdown (objects tabs + cleaner proj/file +) ───────────────── */
+/* The objects-page + and the cleaner project + / file + all use this
+   inline dropdown form. position:fixed so the menu escapes the tab
+   strip's overflow clip; JS sets top + right from getBoundingClientRect
+   on open (_positionAddMenu). */
 .rp-tab-add-menu {
   position: fixed;
   top: 0;
@@ -198,6 +195,43 @@ html[data-theme="light"] .rp-rt-proj-tab.active   { background: var(--over0); }
   color: var(--bg);
 }
 .rp-tab-add-item:hover .bi { color: var(--bg); }
+
+/* ── Picker variant — cleaner's file / project + dropdown ────────────
+ * Wider than the plain add-menu (it carries a search field), and the
+ * item list scrolls inside a fixed ~6-row window rather than the whole
+ * menu growing. _positionAddMenu clamps it on-screen when the tab row
+ * is short and the + sits near the left edge. */
+.rp-tab-add-menu--pick {
+  min-width: 16rem;
+  max-height: none;
+  overflow: visible;
+}
+.rp-tab-add-search {
+  width: 100%;
+  margin: 0.125rem 0 0.3125rem;
+}
+.rp-tab-add-menu--pick .rp-tab-add-items {
+  max-height: 12rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rp-tab-add-empty {
+  padding: 0.5rem;
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--muted);
+}
+/* Footer action row — carries the modal's upload affordance. Pinned
+   below the scroll window (it's a sibling of .rp-tab-add-items, not a
+   child), with a top border separating it from the file/project list. */
+.rp-tab-add-foot {
+  margin-top: 0.25rem;
+  padding-top: 0.4375rem;
+  border-top: var(--line) solid var(--over1, var(--border));
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
 
 /* ── Host-page override — cleaner + objects ──────────────────────────
  * The theme overrides above key off html[data-theme="dark"] / "light",

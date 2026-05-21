@@ -14,19 +14,33 @@
   <div class="rp-rt-proj-tabs-inner">
     <!-- Project tabs injected here by _renderSandboxProjectTabs. -->
 
-    <!-- + opens the open-project rp-modal — same pattern as the file-tabs
-         +. A modal scales past the ~6-item dropdown sweet spot: 20+
-         projects per user is realistic, and the picker wants search
-         + per-project meta (file count · last opened) that doesn't
-         fit a 13rem inline menu. Shares the .rp-tab-add-wrap / .rp-tab-add
-         classes with the file-tabs + (single tab-strip add family).
-         spOpenProjectPicker re-fetches /api/projects before opening so
-         the picker reflects the current open / closed split. -->
+    <!-- + opens the inline picker dropdown — shares the .rp-tab-add-wrap /
+         .rp-tab-add classes with the file-tabs + (single tab-strip add
+         family) and the same .rp-tab-add-menu form the objects page uses.
+         spOpenProjectPicker re-fetches /api/projects before opening so the
+         picker reflects the current open / closed split. -->
     <span class="rp-tab-add-wrap">
       <button class="rp-tab-add" type="button" aria-label="Open another project" title="Open another project"
-              onclick="spOpenProjectPicker()">
+              onclick="spOpenProjectPicker(this)">
         <i class="bi bi-plus-lg"></i>
       </button>
+      <!-- Inline picker dropdown — replaced the open-project modal. A search
+           field + a scroll-capped (~6-row) list of projects not yet open as
+           tabs. spOpenProjectPicker re-fetches, populates, and opens. -->
+      <div class="rp-tab-add-menu rp-tab-add-menu--pick" role="menu">
+        <div class="rp-tab-add-hdr">Open a project</div>
+        <input class="rp-rt-search rp-tab-add-search" type="search"
+               placeholder="Filter projects…" oninput="spFilterTabAdd(this)" />
+        <div class="rp-tab-add-items" data-cleaner-project-picker></div>
+        <!-- Footer action — carries over the open-project modal's "new
+             project" button. Sits OUTSIDE .rp-tab-add-items so it stays
+             pinned below the ~6-row scroll window. -->
+        <div class="rp-tab-add-item rp-tab-add-foot" role="menuitem"
+             onclick="document.querySelectorAll('.rp-tab-add-menu.open').forEach(function(m){m.classList.remove('open');});spOpenNewProjectModal();">
+          <i class="bi bi-cloud-upload"></i>
+          <span>New project (upload a file)…</span>
+        </div>
+      </div>
     </span>
   </div>
 </div>

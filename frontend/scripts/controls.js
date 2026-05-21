@@ -850,23 +850,30 @@
     }, 180);
   };
 
-  // Position an add-menu against its trigger wrap. Only the objects-page
-  // tab strip uses the inline dropdown (.rp-tab-add-menu) — the cleaner
-  // project + and file + both open rp-modals (no positional math).
-  // Pins the menu's right edge to the trigger's right edge, top just
-  // below. Pixel math is unavoidable because getBoundingClientRect
-  // returns viewport pixels — the no-px CSS discipline doesn't apply
-  // to JS-computed coords.
+  // Position an add-menu against its trigger wrap. The objects-page tab
+  // strip and the cleaner project + / file + pickers all use this inline
+  // dropdown (.rp-tab-add-menu). Pins the menu's right edge to the
+  // trigger's right edge, top just below; the clamp keeps a wide picker
+  // on-screen when the + sits near the viewport's left edge. Pixel math
+  // is unavoidable because getBoundingClientRect returns viewport
+  // pixels — the no-px CSS discipline doesn't apply to JS-computed
+  // coords.
   function _positionAddMenu(wrap, menu) {
     var r = wrap.getBoundingClientRect();
-    menu.style.top   = (r.bottom + 4) + "px";
-    menu.style.right = (window.innerWidth - r.right) + "px";
+    menu.style.top = (r.bottom + 4) + "px";
+    // Right-anchored to the + wrap, but clamp so a wide menu never spills
+    // off-screen when the tab row is short and the + sits near the left
+    // edge (8px gutter on both sides).
+    var mw    = menu.offsetWidth || 0;
+    var right = window.innerWidth - r.right;
+    if (mw) right = Math.min(right, window.innerWidth - mw - 8);
+    menu.style.right = Math.max(8, right) + "px";
     menu.style.left  = "auto";
   }
 
   // File-tab counterpart to spAddProjectTab. Inserts a fresh tab into
-  // the active project's file strip; called from open-file.html's pick
-  // cards via `spAddFileTab(this, "<filename>")` then `closeModal`.
+  // the active project's file strip; called from spOpenFileFromPicker
+  // (cleaner.js) when a row in the file-picker dropdown is clicked.
   // De-dupes — picking an already-open file just activates that tab.
   window.spAddFileTab = function (trigger, name) {
     var strip = trigger.closest(".rp-rtp-tabs-inner")
@@ -912,10 +919,10 @@
     input.blur();
   };
 
-  // Toggle the tab-strip + picker dropdown. Only the objects-page
-  // tab strip uses the inline dropdown form (cleaner project + and
-  // file + both open rp-modals). Click-only — no hover-open. Closes
-  // any other open add-menu so only one is on-screen at a time.
+  // Toggle the tab-strip + picker dropdown. Used by the objects-page
+  // tab strip and the cleaner project + / file + pickers. Click-only —
+  // no hover-open. Closes any other open add-menu so only one is
+  // on-screen at a time.
   window.spToggleTabAddMenu = function (btn) {
     var wrap = btn.closest(".rp-tab-add-wrap");
     var menu = wrap && wrap.querySelector(".rp-tab-add-menu");
