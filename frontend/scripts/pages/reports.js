@@ -697,9 +697,14 @@ function _installReportsLiveHandlers(root) {
       if (rm) {
         const row = rm.closest(".rp-rt-tool-row, .rp-rt-tool-agg");
         const box = row?.parentElement;
-        if (row && box && box.children.length > 1) row.remove();
+        if (row && box && box.children.length > 1) {
+          row.remove();
+          _paintReportsTable(root);
+        }
       }
     });
+    // Any grouping / summarize / display change → re-render the table.
+    _toolsPanel.addEventListener("change", () => { _paintReportsTable(root); });
   }
 
   // Expose the builder loader so mountReportsSandbox can re-point it at a
@@ -718,6 +723,12 @@ function _installReportsLiveHandlers(root) {
 async function _paintReportsTable(root) {
   if (!STATE.rid) {
     _renderReportsEmptyState(root, "Pick a source file from the toolbar.");
+    return;
+  }
+
+  // Report Tools grouping configured → grouped report, not the raw page.
+  if (_reportGroupingActive(root)) {
+    await _paintGroupedReport(root);
     return;
   }
 
@@ -1479,6 +1490,92 @@ function _addAggRow(root) {
   row.querySelectorAll("select").forEach((s) => { s.selectedIndex = 0; });
   box.appendChild(row);
   _syncReportTools(root);
+}
+
+// ── Report Tools — Slice 2: collect a ReportSpec from the panel, run
+// /reports/preview, render the grouped result. Detail rows + grand
+// total + matrix layout are the next render slice.
+
+// True when at least one group-by column is set — the signal to render
+// a grouped report instead of the raw source page.
+function _reportGroupingActive(root) {
+  return [...root.querySelectorAll("[data-reports-group-rows] select")]
+    .some((s) => s.value);
+}
+
+// Read the Report Tools panel into a ReportSpec for /reports/preview.
+function _collectReportSpec(root) {
+  const groupBy = [...root.querySelectorAll("[data-reports-group-rows] select")]
+    .map((s) => s.value).filter(Boolean);
+  const groupCols = root.querySelector("[data-reports-group-cols]")?.value || "";
+  const aggregations = [...root.querySelectorAll("[data-reports-aggs] .rp-rt-tool-agg")]
+    .map((blk) => {
+      const sels = blk.querySelectorAll("select");
+      return { col: sels[0]?.value || "*", fn: sels[1]?.value || "count", alias: "" };
+    });
+  const show = (k) => !!root.querySelector(`[data-reports-show="${k}"]`)?.checked;
+  return {
+    group_by:       groupBy,
+    group_by_cols:  groupCols ? [groupCols] : [],
+    aggregations,
+    filter:         null,
+    sort:           [],
+    windows:        [],
+    top_n:          null,
+    show_details:   show("details"),
+    show_subtotals: show("subtotals"),
+    show_total:     show("total"),
+  };
+}
+
+// Grouped-report path — POST the panel's ReportSpec to /reports/preview
+// and render the subtotals.
+async function _paintGroupedReport(root) {
+  const tableWrap = root.querySelector("[data-reports-table]");
+  if (tableWrap) tableWrap.setAttribute("aria-busy", "true");
+  let res;
+  try {
+    res = await api.post("/reports/preview", {
+      source_file_id: STATE.rid,
+      spec: _collectReportSpec(root),
+    });
+  } catch (err) {
+    _renderReportsEmptyState(root,
+      `Report failed: ${err.body?.error ?? err.message ?? err}`);
+    return;
+  } finally {
+    if (tableWrap) tableWrap.removeAttribute("aria-busy");
+  }
+  _renderGroupedRows(root, res);
+}
+
+// Render a /reports/preview subtotals payload ({columns, rows}) as the
+// table — the grouped + aggregated view.
+function _renderGroupedRows(root, res) {
+  const tableWrap = root.querySelector("[data-reports-table]");
+  if (!tableWrap) return;
+  const cols = res?.subtotals?.columns ?? [];
+  const rows = res?.subtotals?.rows ?? [];
+  if (!cols.length) {
+    _renderReportsEmptyState(root, "Pick a group column and a summary.");
+    return;
+  }
+  const thead = `<thead><tr>${cols.map((c) =>
+    `<th>${_htmlEsc(String(c))}</th>`).join("")}</tr></thead>`;
+  const tbody = rows.length === 0
+    ? `<tbody><tr><td colspan="${cols.length}" style="text-align:center;color:var(--muted);padding:1rem;font-style:italic">No rows.</td></tr></tbody>`
+    : `<tbody>${rows.map((r) => `<tr>${
+        r.map((v) => v == null
+          ? `<td><span class="rp-rt-null">—</span></td>`
+          : `<td>${_htmlEsc(String(v))}</td>`).join("")
+      }</tr>`).join("")}</tbody>`;
+  tableWrap.innerHTML = `<table class="rp-rt-table">${thead}${tbody}</table>`;
+  const rowsInfo = root.querySelector("[data-reports-rows-info]");
+  if (rowsInfo) {
+    rowsInfo.textContent = `${rows.length} group${rows.length === 1 ? "" : "s"}`;
+  }
+  const pages = root.querySelector("[data-reports-pages]");
+  if (pages) pages.innerHTML = "";
 }
 
 // Show/hide the builder's per-kind conditional rows + relabel the
