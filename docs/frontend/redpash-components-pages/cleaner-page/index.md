@@ -117,10 +117,10 @@ and panel as one continuous surface.
 `.rp-rtp-tabs-inner` (`[data-cleaner-file-tabs]`) holds the leading
 **Overview** tab + one tab per file in `STATE.files` filtered through
 `STATE.hiddenFiles`, plus a trailing **`+`** add-back control. The strip
-is a centred flex row — tabs are a fixed 10rem and wrap to a new line
-once it fills, with the row centred (equal gutters left / right). The
+is a left-aligned flex row — tabs are a fixed 10rem and wrap to a new
+line once it fills; the Overview tab leads at the left edge. The
 project-tab strip above it (`.rp-rt-proj-tabs-inner`) shares the same
-centred-flex construction and the same `+` picker dropdown.
+flex construction and the same `+` picker dropdown.
 
 Each file tab carries:
 - A coloured status dot (green ≥90 / yellow ≥70 / red below) reading

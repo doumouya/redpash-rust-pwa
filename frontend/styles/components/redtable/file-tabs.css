@@ -24,12 +24,11 @@ html[data-theme="light"] .rp-rtp-tabs {
   border-bottom-color: var(--border);
 }
 .rp-rtp-tabs-inner {
-  /* Centred flex row — see proj-tabs.css .rp-rt-proj-tabs-inner. Tabs are
-     a fixed 10rem and wrap; justify-content centres the row with equal
-     gutters (the permanent Overview tab centres along with it). */
+  /* Left-aligned flex row — see proj-tabs.css .rp-rt-proj-tabs-inner.
+     Tabs are a fixed 10rem and wrap; the Overview tab leads at the left. */
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 0.125rem;
   row-gap: 0.25rem;

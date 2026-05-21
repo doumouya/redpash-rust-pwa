@@ -22,12 +22,12 @@
   border-bottom: 0.0313rem solid color-mix(in srgb, var(--text) 7%, transparent);
 }
 .rp-rt-proj-tabs-inner {
-  /* Centred flex row — each tab is a fixed 10rem and wraps to a new line
-     once the strip fills. justify-content keeps the row (tabs + the
-     trailing + add-wrap) centred with equal gutters on both sides. */
+  /* Left-aligned flex row — each tab is a fixed 10rem and wraps to a new
+     line once the strip fills; the trailing + add-wrap sits right after
+     the last tab. */
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 0.1875rem;
   row-gap: 0.25rem;
