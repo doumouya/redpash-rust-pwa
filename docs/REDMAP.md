@@ -426,6 +426,7 @@ redpash-app/
 
 - **Subject:** `area: imperative summary` — lowercase area prefix (`docs:`, `css:`, `feat:`, `tools:`, `fix:`, …), under ~70 chars.
 - **Body — a per-file changelog.** One bullet per touched file: `path — what changed (and why, if not obvious)`. A reviewer gets "which part to check" straight from `git log` / `git show --stat`, no diffing required.
+- **Sign-off — the last body line.** End the body with `— <Name>` (your contributor name: `— Gus`, `— Woz`, `— Torv`). Keeps authorship visible in plain `git log` now that everyone shares the `prerelease` branch.
 - **Touched a doc?** Bump its `last modified date` frontmatter in the *same* commit — it's the per-file freshness proxy the docs are ranked by.
 - **One commit = one coherent change** — avoid broad `checkpoint:` commits bundling unrelated efforts; they can't be reviewed or reverted per-feature.
 
@@ -437,6 +438,8 @@ docs: sync REDMAP for the Events system
 - REDMAP.md — new Event entry in Objects; /api/events in the API table.
 - db/schema.md — events table + indexes; EVT prefix marked live.
 - api/events.md — new per-resource doc.
+
+— Gus
 ```
 
 ### Polars 0.43 quirks
