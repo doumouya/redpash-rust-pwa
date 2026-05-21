@@ -1086,6 +1086,10 @@ body.rp-rt-col-resizing {
   height: 3rem;
 }
 
+/* Compact density — Settings › Appearance (prefs.density). The attribute
+   is set on <html> at boot by main.js, mirroring data-theme. */
+html[data-density="compact"] .rp-rt-table tbody tr { height: 2.25rem; }
+
 .rp-rt-table tbody tr:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
 
 .rp-rt-table tbody td {

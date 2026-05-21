@@ -149,6 +149,7 @@ function wireAppearance(root, me) {
     btn.addEventListener("click", () => {
       root.querySelectorAll("#settings-density .rp-set-opt")
         .forEach((p) => p.classList.toggle("active", p === btn));
+      document.documentElement.setAttribute("data-density", btn.dataset.value);
       window.rpSavePref?.("density", btn.dataset.value);
     });
   });

@@ -122,6 +122,7 @@ const PREFS_LS_MAP = {
   language:          "redpash-lang",
   bg_palette:        "rp-bg-palette",
   bg_preview:        "rp-bg-preview",
+  density:           "rp-density",
 };
 
 // Boot/login: copy the account's saved prefs into localStorage so the
@@ -148,6 +149,9 @@ function seedPrefsToLocalStorage(prefs) {
     document.documentElement.setAttribute("data-bg-preview", "on");
   } else if (prefs.bg_preview === "off") {
     document.documentElement.removeAttribute("data-bg-preview");
+  }
+  if (prefs.density === "compact" || prefs.density === "comfortable") {
+    document.documentElement.setAttribute("data-density", prefs.density);
   }
 }
 
@@ -626,11 +630,15 @@ window.rpRestoreBgPreview = () => {
   try {
     const palette = localStorage.getItem("rp-bg-palette");
     const preview = localStorage.getItem("rp-bg-preview");
+    const density = localStorage.getItem("rp-density");
     if (palette && _RP_BG_PALETTES.includes(palette)) {
       document.documentElement.setAttribute("data-bg-palette", palette);
     }
     if (preview === "on") {
       document.documentElement.setAttribute("data-bg-preview", "on");
+    }
+    if (density === "compact" || density === "comfortable") {
+      document.documentElement.setAttribute("data-density", density);
     }
   } catch {}
 })();
