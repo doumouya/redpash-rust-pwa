@@ -33,7 +33,7 @@ table.
 | `RPT`  | Report (`reports`)                    | `routes::reports::create` |
 | `DSH`  | Dashboard (`dashboards`)              | `routes::dashboards::create` |
 | `CMP`  | Company (`companies`)                 | `db::create_company` |
-| `EVT`  | Event — **reserved**, no table yet    | — |
+| `EVT`  | Event (`events`)                      | `event::record` (via `id::new`) |
 | `CAS`  | Case — **reserved**, no table yet     | — |
 
 The membership join tables (`company_memberships`, `project_memberships`)
@@ -57,6 +57,10 @@ never addressed in a URL.
 | `20260523000001_computed_stages.sql`       | Drops `projects.stage` + `project_files.status`; adds the `file_stages` view (stage is computed, not stored) |
 | `20260524000001_sentinel_submissions.sql`  | `sentinel_submissions` shared-vocab promotion table + `global_sentinels` view |
 | `20260525000001_filename_stem.sql`         | Strips the upload extension off `project_files.filename` / `display_name`; the column now stores the stem and `file_type` owns the extension half (see "filename + file_type contract" below) |
+| `20260526000001_mtime_cascade.sql`         | Trigger chain — a child INSERT/UPDATE/DELETE bumps the parent's `updated_at` (`project_steps`→`project_files`→`projects`; `reports`/`dashboards`→`projects`). Project-as-folder mtime semantics. |
+| `20260527000001_dependency_mtime_cascade.sql` | Companion triggers — a `project_files` UPDATE bumps reports that source it; a `reports` UPDATE bumps dashboards whose widget spec references it. |
+| `20260528000001_audit_storage.sql`         | `audit.run` + `audit.finding` in a separate `audit` schema — **dev-meta**, persists CSS/HTML audit-tool output for trend tracking (see `tools/audit-storage-brainstorming.md`). Not read by the app request path. |
+| `20260529000001_events.sql`                | `events` table — the runtime observability log (see below). |
 
 ---
 
@@ -394,6 +398,48 @@ row — ownership is tracked directly on `projects`.
 > files / reports / dashboards — and any use of `project_memberships`
 > in access checks — is a deliberate follow-up; today every
 > owner-scoped endpoint still gates on `projects.owner_id` alone.
+
+### `events`
+
+Mig 013. Runtime observability log — failures and lifecycle actions,
+captured from both the backend (the `capture_mw` middleware logs every
+4xx/5xx; explicit `event::record` calls at lifecycle sites) and the
+frontend (`POST /api/events`). Append-only. Writes go through
+`event::record`, which is fire-and-forget — the INSERT runs on a
+detached task so event logging can never block or fail a real request.
+
+| Column            | Type          | Nullable | Default          | Notes |
+|-------------------|---------------|----------|------------------|-------|
+| `redpash_id`      | `TEXT` PK     | NO       | —                | `EVT_…` |
+| `occurred_at`     | `TIMESTAMPTZ` | NO       | `now()`          | |
+| `origin`          | `TEXT`        | NO       | `'backend'`      | `CHECK (backend / frontend)` |
+| `level`           | `TEXT`        | NO       | `'info'`         | `CHECK (debug / info / warn / error)` |
+| `kind`            | `TEXT`        | NO       | —                | Machine-readable type — `http_error`, `auth_login`, `auth_logout`, `file_upload`, `file_delete`, `step_apply`, … |
+| `message`         | `TEXT`        | NO       | —                | Human-readable. |
+| `source`          | `TEXT`        | YES      | —                | Emitting site — `routes::files::upload`, `cleaner.js#applyStep`, … |
+| `user_redpash_id` | `TEXT` FK     | YES      | —                | → `users.redpash_id` `ON DELETE SET NULL` — troubleshooting history outlives a deleted user. |
+| `session_id`      | `TEXT`        | YES      | —                | `rp_session` RID. Plain `TEXT`, **not** an FK — sessions expire. |
+| `request_id`      | `TEXT`        | YES      | —                | `req_…` — correlates every event from one request (frontend + backend). |
+| `http_method`     | `TEXT`        | YES      | —                | |
+| `http_path`       | `TEXT`        | YES      | —                | |
+| `http_status`     | `INTEGER`     | YES      | —                | |
+| `duration_ms`     | `INTEGER`     | YES      | —                | |
+| `context`         | `JSONB`       | NO       | `'{}'::jsonb`    | Free-form structured payload — error kind, rid involved, params. |
+
+**Indexes:**
+
+| Index                  | Columns                            | Notes |
+|------------------------|------------------------------------|-------|
+| `events_pkey`          | `redpash_id`                       | PK |
+| `events_occurred_idx`  | `occurred_at DESC`                 | Recent-events feed |
+| `events_level_idx`     | `(level, occurred_at DESC)`        | Recent errors |
+| `events_kind_idx`      | `(kind, occurred_at DESC)`         | Events of one kind |
+| `events_user_idx`      | `(user_redpash_id, occurred_at DESC)` | A user's timeline |
+| `events_request_idx`   | `request_id`                       | One request's events |
+
+> A future `cases` table (the reserved `CAS` prefix — user support
+> tickets) will pin a slice of `events` rows as troubleshooting
+> evidence. See `api/events.md` for the full design.
 
 ---
 

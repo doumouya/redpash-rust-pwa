@@ -28,8 +28,9 @@ redpash-app/
 │   │   │       ├── id.rs                   RedPash-ID generator (`PFX_<32 uppercase hex>`)
 │   │   │       ├── db.rs                   SQL helpers — every query lives here
 │   │   │       ├── error.rs                AppError + IntoResponse + From<DataError>
+│   │   │       ├── event.rs                runtime event capture — fire-and-forget record()
 │   │   │       └── routes/
-│   │   │           ├── mod.rs              Router assembly + ServeDir + `ensure_owner` helper
+│   │   │           ├── mod.rs              Router assembly + ServeDir + `ensure_owner` + request-id/capture middleware
 │   │   │           ├── auth.rs             Google OAuth — /start, /callback, /logout, /dev-login
 │   │   │           ├── me.rs               GET + PATCH /api/me + resolve_user_rid (shared)
 │   │   │           ├── health.rs           liveness
@@ -38,7 +39,8 @@ redpash-app/
 │   │   │           ├── reports.rs          CRUD + /preview + /run + favorite + PATCH (sparse meta)
 │   │   │           ├── dashboards.rs       CRUD + favorite + PATCH (sparse meta)
 │   │   │           ├── users.rs            dev-permissive directory CRUD
-│   │   │           └── companies.rs        companies + memberships (owner/admin/member); membership IS the access check
+│   │   │           ├── companies.rs        companies + memberships (owner/admin/member); membership IS the access check
+│   │   │           └── events.rs           runtime observability log — capture + read API
 │   │   ├── data/                           Polars-backed compute. No HTTP.
 │   │   │   └── src/
 │   │   │       ├── parse.rs                CSV → DataFrame; preamble + delimiter sniff; apply_filter; Excel→CSV via calamine
@@ -59,7 +61,8 @@ redpash-app/
 │   │           ├── report.rs               Report, ReportSpec, Aggregation, AggFn, SortSpec, TopNFilter, WindowSpec, ChartSpec
 │   │           ├── dashboard.rs            Dashboard, DashboardSpec, Widget
 │   │           ├── user.rs                 UserProfile, UserMembership
-│   │           └── company.rs              Company, CompanySummary, CompanyMember
+│   │           ├── company.rs              Company, CompanySummary, CompanyMember
+│   │           └── event.rs                Event, EventReport
 │   └── migrations/                         sqlx-managed SQL — one per phase
 │
 ├── frontend/
@@ -208,6 +211,19 @@ redpash-app/
 | **Frontend** | `scripts/dashboards/index.js` builder + `widgets.js` renderers; `partials/dashboards.html` |
 | **Docs** | [`features/dashboards.md`](features/dashboards.md) · [`objects/dashboard.md`](objects/dashboard.md) |
 
+### Event (`Event`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::event::Event`, `EventReport` |
+| **Table** | `events` (migration 013 — `20260529000001_events.sql`) |
+| **RID prefix** | `EVT` |
+| **Capture** | *auto* — `routes::mod::capture_mw` logs every 4xx/5xx; *explicit* — `event::record(&db, EventDraft)` at lifecycle sites (`auth_login`, `auth_logout`, `file_upload`, `file_delete`, `step_apply`); *frontend* — `POST /api/events` |
+| **Write** | `event::record` — fire-and-forget (spawns the INSERT on a detached task; a logging failure never blocks or fails the request) |
+| **DB helpers** | `db::list_events(level, kind, limit)`, `db::find_event` |
+| **API** | `GET /api/events` (filter `level`/`kind`/`limit`), `GET /api/events/:rid`, `POST /api/events` (frontend report) |
+| **Correlation** | `request_id` (per request, echoed as `X-Request-Id`) + `session_id` (`rp_session` RID) |
+| **Docs** | [`api/events.md`](api/events.md) |
+
 ---
 
 ## Screens
@@ -328,6 +344,12 @@ redpash-app/
 - `frontend/service-worker.js` — shell cache + /api network-first.
 - **Bump `CACHE_VERSION` on every frontend-touching commit.** Otherwise users get stale modules.
 
+### Event capture (observability)
+- Two `/api/*` middlewares: `request_id_mw` mints a per-request id (echoed as the `X-Request-Id` header); `capture_mw` persists every 4xx/5xx response as an `events` row.
+- `AppError::into_response` stashes an `EventInfo` extension (kind + message) so `capture_mw` recovers the real error after the handler returns. Responses with no extension (Axum's own 404/405, 413, extractor 400s) are logged by status alone.
+- Explicit `event::record(&db, EventDraft { … })` at lifecycle sites for `info` events. **Fire-and-forget** — the insert is spawned on a detached task, never awaited; a logging failure can't break the request.
+- Frontend events arrive via `POST /api/events` (`origin=frontend`; `user`/`session` stamped server-side from the cookie, never trusted from the body).
+
 ---
 
 ## API quick reference
@@ -378,6 +400,9 @@ redpash-app/
 | GET·PATCH·DELETE | `/api/companies/:rid` | read needs membership; PATCH/DELETE currently dev-permissive (target: owner-only delete, owner/admin PATCH) |
 | GET·POST | `/api/companies/:rid/members` | list / upsert (owner-only for `role: owner`); last-owner demotion blocked |
 | DELETE | `/api/companies/:rid/members/:user_id` | leave (self) or remove (owner/admin); last-owner removal blocked |
+| GET | `/api/events` | recent events, newest first — filter `?level=` `?kind=` `?limit=` |
+| GET | `/api/events/:rid` | one event |
+| POST | `/api/events` | frontend-reported event — `origin=frontend`, `user`/`session` stamped server-side |
 | POST | `/api/auth/dev-login` | mint a session for any user RID — gated by `REDPASH_DEV_LOGIN=1`, otherwise 403 |
 | GET | `/api/docs`, `/api/docs/:slug` | rendered markdown |
 

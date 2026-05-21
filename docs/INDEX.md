@@ -44,6 +44,7 @@ YAML frontmatter above).
 - [Files](api/files.md) — `/api/files/*` upload, page, steps, undo/redo, joins, snapshots.
 - [Reports](api/reports.md) — `/api/reports/*` CRUD + preview/run + polymorphic source resolver.
 - [Dashboards](api/dashboards.md) — `/api/dashboards/*` CRUD; widgets fetch via `/api/reports`.
+- [Events](api/events.md) — `/api/events` runtime observability log — capture middleware + read API.
 
 ### Database
 - [Schema](db/schema.md) — tables, indexes, RedPash-ID prefix table.
