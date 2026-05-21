@@ -1098,6 +1098,12 @@ const _CHART_ICONS = {
 };
 function _chartIcon(kind) { return _CHART_ICONS[kind] || "bi-bar-chart-fill"; }
 
+// Per-card state markup — icon + line. Used for empty / no-data / error
+// states inside a chart canvas host.
+function _chartMsg(icon, text) {
+  return `<div class="rp-reports__chart-msg"><i class="bi ${icon}"></i><span>${_htmlEsc(text)}</span></div>`;
+}
+
 // Builder chart families. Multi-variant families expose a row of inline-SVG
 // variant tiles; single-variant families are picked by the family <select>
 // alone. Each variant commits a kind (+ modifiers) to the active chart —
@@ -1300,19 +1306,35 @@ async function _renderReportsCharts(root) {
         <button class="rp-btn rp-btn-xs" title="Remove chart" data-chart-remove="${i}"><i class="bi bi-x"></i></button>
       </header>
       <div class="rp-reports__chart-body">
-        <div class="rp-reports__chart-canvas" data-chart-host data-chart-i="${i}"></div>
+        <div class="rp-reports__chart-canvas" data-chart-host data-chart-i="${i}">
+          <div class="rp-reports__chart-loading">
+            <div class="rp-reports__chart-spinner"></div><span>Loading</span>
+          </div>
+        </div>
       </div>
     </article>`;
   }).join("");
 
-  if (!STATE.rid) return;
+  if (!STATE.rid) {
+    grid.querySelectorAll("[data-chart-host]").forEach((h) => {
+      h.innerHTML = _chartMsg("bi-file-earmark-text", "Pick a source file to preview.");
+    });
+    return;
+  }
   let echarts;
-  try { echarts = await loadECharts(); } catch { return; }
+  try {
+    echarts = await loadECharts();
+  } catch {
+    grid.querySelectorAll("[data-chart-host]").forEach((h) => {
+      h.innerHTML = _chartMsg("bi-wifi-off", "Couldn't load the chart library.");
+    });
+    return;
+  }
   STATE.charts.forEach(async (cfg, i) => {
     const host = grid.querySelector(`[data-chart-host][data-chart-i="${i}"]`);
     if (!host) return;
     if (!cfg.group_by && cfg.kind !== "gauge") {
-      host.innerHTML = `<div class="rp-reports__chart-msg">Pick a group-by column.</div>`;
+      host.innerHTML = _chartMsg("bi-sliders", "Pick a group-by column to draw this chart.");
       return;
     }
     let res;
@@ -1320,8 +1342,8 @@ async function _renderReportsCharts(root) {
       res = await api.post("/reports/preview",
         chartPreviewBody(cfg.source_file_id || STATE.rid, cfg, null));
     } catch (err) {
-      host.innerHTML = `<div class="rp-reports__chart-msg">${
-        _htmlEsc(err.body?.error ?? err.message ?? String(err))}</div>`;
+      host.innerHTML = _chartMsg("bi-exclamation-triangle",
+        err.body?.error ?? err.message ?? String(err));
       return;
     }
     await _mountChart(echarts, host, cfg, res);
@@ -1358,7 +1380,7 @@ async function _mountChart(echarts, host, cfg, res) {
     }
   }
   if (!opt) {
-    host.innerHTML = `<div class="rp-reports__chart-msg">No data.</div>`;
+    host.innerHTML = _chartMsg("bi-inbox", "No data for this selection.");
     return;
   }
   host.innerHTML = "";

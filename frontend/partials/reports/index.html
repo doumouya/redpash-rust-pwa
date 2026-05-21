@@ -52,11 +52,16 @@
 
   </div>
 
-  <!-- Page-dots — jump between Data + Charts; active dot tracks scroll. -->
+  <!-- Page-dots — jump between Data + Charts; active dot tracks scroll.
+       The active page's dot becomes its bi-icon; inactive pages stay dots. -->
   <nav class="rp-reports-dots" aria-label="Reports pages">
     <button class="rp-reports-dot is-active" type="button"
-            data-reports-dot="data" aria-label="Data page" title="Data"></button>
+            data-reports-dot="data" aria-label="Data page" title="Data">
+      <i class="bi bi-table"></i>
+    </button>
     <button class="rp-reports-dot" type="button"
-            data-reports-dot="charts" aria-label="Charts page" title="Charts"></button>
+            data-reports-dot="charts" aria-label="Charts page" title="Charts">
+      <i class="bi bi-bar-chart-fill"></i>
+    </button>
   </nav>
 </div>

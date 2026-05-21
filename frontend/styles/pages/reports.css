@@ -247,8 +247,18 @@ html[data-theme="light"] #page-reports .rp-rtp-tab.active {
   min-height: 0;
   overflow: auto;
 }
+/* pager.css ships .rp-rt-pager as position:absolute (bottom:0). With the
+   table partial's wrapper now display:contents, "absolute" escaped up to
+   .rp-rt-panel and floated the strip over BOTH deck pages — including the
+   Charts page. Pin it back into normal flow so it's a flex item at the
+   bottom of the Data page's column only. */
+#page-reports .rp-rt-pager {
+  position: static;
+  flex-shrink: 0;
+}
 
-/* Page-dots rail — vertical, right edge; jumps between Data + Charts. */
+/* Page-dots rail — vertical, right edge. The active page's dot becomes
+   its bi-icon (table / bar chart); inactive pages stay plain dots. */
 #page-reports .rp-reports-dots {
   position: absolute;
   right: 0.625rem;
@@ -257,24 +267,61 @@ html[data-theme="light"] #page-reports .rp-rtp-tab.active {
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.625rem;
 }
 #page-reports .rp-reports-dot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 0.625rem;
   height: 0.625rem;
   padding: 0;
   border-radius: 50%;
   border: 0.0938rem solid color-mix(in srgb, var(--text) 45%, transparent);
   background: transparent;
+  color: var(--accent);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s, color 0.15s;
+}
+#page-reports .rp-reports-dot .bi {
+  display: none;
+  font-size: 1rem;
+  line-height: 1;
 }
 #page-reports .rp-reports-dot:hover { border-color: var(--accent); }
+/* Active page — the dot drops its circle and shows its page icon. */
 #page-reports .rp-reports-dot.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  transform: scale(1.15);
+  width: auto;
+  height: auto;
+  border: none;
+  background: transparent;
 }
+#page-reports .rp-reports-dot.is-active .bi { display: block; }
+#page-reports .rp-reports-dot.is-active:hover {
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+/* Hover label — the page name in an inverted pill, left of the dot. */
+#page-reports .rp-reports-dot::after {
+  content: attr(title);
+  position: absolute;
+  right: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--text) 85%, transparent);
+  color: var(--bg);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+#page-reports .rp-reports-dot:hover::after { opacity: 1; }
 
 /* ── Charts page (page 2) — builder rail (left) + chart dock (right). */
 #page-reports .rp-reports-charts {
@@ -439,18 +486,24 @@ html[data-theme="light"] #page-reports .rp-chart-builder {
 }
 #page-reports .rp-reports__chart-hdr > .bi { font-size: 0.875rem; color: var(--accent); }
 #page-reports .rp-reports__chart-ttl {
+  flex: 1 1 auto;
+  min-width: 2.5rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 #page-reports .rp-reports__chart-meta {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 0.6875rem;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Header action buttons never shrink — a long title ellipsises instead. */
+#page-reports .rp-reports__chart-hdr .rp-btn { flex-shrink: 0; }
 #page-reports .rp-reports__chart-body {
   padding: 0.5rem;
   display: flex;
@@ -465,12 +518,48 @@ html[data-theme="light"] #page-reports .rp-chart-builder {
   background: color-mix(in srgb, var(--bg) 50%, transparent);
   border-radius: 0.375rem;
 }
-/* Per-card status line — "No data." / error, shown inside the host. */
+/* Per-card state — empty / no-data / error, shown inside the canvas
+   host. Icon + line, vertically centred. */
 #page-reports .rp-reports__chart-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  padding: 1rem;
+  text-align: center;
   color: var(--muted);
   font-size: 0.75rem;
-  text-align: center;
-  padding: 1rem;
+}
+#page-reports .rp-reports__chart-msg .bi {
+  font-size: 1.625rem;
+  opacity: 0.45;
+}
+/* Loading state — spinner shown while /reports/preview is in flight. */
+#page-reports .rp-reports__chart-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  height: 100%;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#page-reports .rp-reports__chart-spinner {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 0.1875rem solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-top-color: var(--accent);
+  animation: rp-reports-spin 0.7s linear infinite;
+}
+@keyframes rp-reports-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #page-reports .rp-reports__chart-spinner { animation-duration: 2.4s; }
 }
 
 /* ── Toolbar (frosted band, sandbox values). */
