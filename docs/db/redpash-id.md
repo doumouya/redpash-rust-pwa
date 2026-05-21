@@ -2,7 +2,7 @@
 title: RedPash-ID system
 section: DB
 order: 1
-last modified date: 2026-05-16
+last modified date: 2026-05-21
 ---
 
 # RedPash-ID system
@@ -72,9 +72,9 @@ PK column is `TEXT`.
 | `STP` | Project step | `project_steps` | `routes::files::add_step` (via the steps insert) |
 | `RPT` | Report | `reports` | `routes::reports::create` |
 | `DSH` | Dashboard | `dashboards` | `routes::dashboards::create` |
-| `EVT` | Event | `events` *(reserved; not yet inserted from any route)* | — |
-| `CAS` | Case | `cases` *(reserved; Phase 4+)* | — |
-| `CMP` | Company | `companies` *(reserved; Phase 4+)* | — |
+| `CMP` | Company | `companies` | `db::create_company` |
+| `EVT` | Event | `events` | `event::record` |
+| `CAS` | Case | `cases` *(reserved — no table yet)* | — |
 
 ## 4. Why a UUID and not Crockford base32?
 

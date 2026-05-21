@@ -137,7 +137,7 @@ shape stays close to the Django `ProjectFile`.
 |----------------------|---------------|----------|------------------|-------|
 | `redpash_id`         | `TEXT` PK     | NO       | —                | `FIL_…` |
 | `project_redpash_id` | `TEXT` FK     | NO       | —                | → `projects.redpash_id` `ON DELETE CASCADE` |
-| `filename`           | `TEXT`        | NO       | —                | Original filename including extension. |
+| `filename`           | `TEXT`        | NO       | —                | User-facing **stem** — upload extension stripped (mig 011); `file_type` owns the extension. See the contract below. |
 | `display_name`       | `TEXT`        | YES      | —                | Auto-derived; user-overridable. |
 | `file_type`          | `TEXT`        | NO       | `'csv'`          | Phase 4+ may add `png_chart`, `html_report`, `html_dashboard`. |
 | `row_count`          | `BIGINT`      | YES      | —                | |
@@ -228,10 +228,16 @@ INSERT clears the redo stack via
 | `applied`         | `BOOLEAN`     | NO       | `TRUE`        | `FALSE` = undone but still in the redo stack. |
 | `created_at`      | `TIMESTAMPTZ` | NO       | `now()`       | |
 
-**Step kinds** (actual values written by the cleaner — see
+**Step kinds** — 18 kinds, dispatched by `data::steps::replay` (see
 [`data/src/steps.rs`](../../backend/crates/data/src/steps.rs)):
-`drop_columns`, `rename_column`, `drop_rows`, `drop_nulls`,
-`fill_nulls`, `change_case`, `replace_text`, `fix_invalid`.
+
+- **Column shape (7):** `drop_columns`, `filter_columns`,
+  `rename_column`, `snake_case_columns`, `replace_in_names`,
+  `join_columns`, `split_column`.
+- **Row shape (3):** `drop_rows`, `drop_nulls`, `filter_rows`.
+- **Cell value (7):** `set_cell`, `fill_nulls`, `cast`, `change_case`,
+  `replace_text`, `fix_invalid`, `format_dates`.
+- **Rescue (1):** `unwrap_csv` — re-parse a fully-wrapped CSV.
 
 **Indexes:**
 
@@ -399,9 +405,39 @@ row — ownership is tracked directly on `projects`.
 > in access checks — is a deliberate follow-up; today every
 > owner-scoped endpoint still gates on `projects.owner_id` alone.
 
+### `sentinel_submissions`
+
+Mig 010. Shared-vocabulary promotion table for the cleaner's
+`fix_invalid` flow. When a user picks a custom sentinel value and
+consents to sharing (`prefs.share_sentinels = true`), `PATCH /api/me`
+upserts one row per `(canonical, user_id)` — a vote. The
+`global_sentinels` view promotes a value once enough distinct users
+have voted for it.
+
+| Column         | Type          | Nullable | Default | Notes |
+|----------------|---------------|----------|---------|-------|
+| `canonical`    | `TEXT`        | NO       | —       | Normalised sentinel string (e.g. `n/a`, `?`). |
+| `user_id`      | `TEXT` FK     | NO       | —       | → `users.redpash_id` `ON DELETE CASCADE` — a contributor's votes leave with them. |
+| `submitted_at` | `TIMESTAMPTZ` | NO       | `now()` | |
+
+**PK:** `(canonical, user_id)` — one vote per user per value. No
+RedPash-ID; never addressed in a URL.
+
+### `global_sentinels` (view)
+
+Mig 010. Read-only view — the promoted shared sentinel vocabulary:
+one row per `canonical` that **≥ 2 distinct users** have submitted.
+The cleanness scorer unions this with each user's
+`prefs.learned_sentinels`. The threshold lives in the view definition,
+so raising it (3, 5, …) is a view re-create with no data migration.
+
+| Column      | Type   | Notes |
+|-------------|--------|-------|
+| `canonical` | `TEXT` | A sentinel value flagged by ≥ 2 distinct users. |
+
 ### `events`
 
-Mig 013. Runtime observability log — failures and lifecycle actions,
+Mig 015. Runtime observability log — failures and lifecycle actions,
 captured from both the backend (the `capture_mw` middleware logs every
 4xx/5xx; explicit `event::record` calls at lifecycle sites) and the
 frontend (`POST /api/events`). Append-only. Writes go through
@@ -441,11 +477,45 @@ detached task so event logging can never block or fail a real request.
 > tickets) will pin a slice of `events` rows as troubleshooting
 > evidence. See `api/events.md` for the full design.
 
+### `audit.run` + `audit.finding` (`audit` schema)
+
+Mig 014. **Dev-meta, not application data** — a separate `audit`
+schema, never touched by the request path. Persists the output of the
+`tools/css-audit` + `tools/html-audit` runs so codebase-health trends
+stay queryable (design notes: `tools/audit-storage-brainstorming.md`).
+
+`audit.run` — one row per audit-tool execution:
+
+| Column       | Type           | Nullable | Default | Notes |
+|--------------|----------------|----------|---------|-------|
+| `id`         | `BIGSERIAL` PK | NO       | seq     | Plain serial — **not** a RedPash-ID. |
+| `tool`       | `TEXT`         | NO       | —       | `CHECK (css / html)` |
+| `ran_at`     | `TIMESTAMPTZ`  | NO       | `now()` | |
+| `git_sha`    | `TEXT`         | YES      | —       | |
+| `git_branch` | `TEXT`         | YES      | —       | |
+| `stats`      | `JSONB`        | NO       | —       | Run summary, lifted out of `payload` for cheap trend queries. |
+| `payload`    | `JSONB`        | NO       | —       | Full report `data` object — source of truth. |
+
+`UNIQUE (tool, git_sha, ran_at)` — accidental double-insert guard.
+
+`audit.finding` — one row per finding, exploded from `run.payload`:
+
+| Column        | Type        | Nullable | Default | Notes |
+|---------------|-------------|----------|---------|-------|
+| `run_id`      | `BIGINT` FK | NO       | —       | → `audit.run(id)` `ON DELETE CASCADE` |
+| `tool`        | `TEXT`      | NO       | —       | |
+| `kind`        | `TEXT`      | NO       | —       | `selector_conflict` / `class_divergence` / `component_candidate` |
+| `finding_key` | `TEXT`      | NO       | —       | Stable identity across runs — powers new/fixed/regressed diffs. |
+| `severity`    | `INTEGER`   | YES      | —       | `conflictCount` / `divergentCount` / `saved`. |
+| `detail`      | `JSONB`     | NO       | —       | |
+
+**PK:** `(run_id, finding_key)`.
+
 ---
 
 ## Permissions model
 
-Phases 4a + 4b + 4c have shipped:
+Phases 4a + 4b + 4c + 4d have shipped:
 
 - **4a** Google OAuth code flow → `users.google_sub` + `sessions`.
 - **4b** Per-user data scoping — every owner-scoped list endpoint
@@ -457,9 +527,17 @@ Phases 4a + 4b + 4c have shipped:
   `kind="not_found"` either way, so existence isn't leaked). Profile +
   Settings pages backed by `PATCH /api/me` (sparse field update +
   shallow merge of the `prefs` JSONB).
+- **4d** Multi-tenancy *data model* — `companies` + `company_memberships`
+  (`owner`/`admin`/`member`), `project_memberships`, and
+  `projects.company_id`. The tables and the `/api/companies` resource
+  exist; company-scoped *visibility* of projects/files/reports/dashboards
+  is **not** wired — every owner-scoped endpoint still gates on
+  `projects.owner_id` alone and `project_memberships` is unread.
 
 Still pending:
 
+- Company-scoped resource visibility — reading `company_memberships` /
+  `project_memberships` in the owner gates (the 4d follow-up).
 - Share-link UI for `reports.is_public` / `dashboards.is_public`. The
   columns exist; no toggle surface yet.
 
