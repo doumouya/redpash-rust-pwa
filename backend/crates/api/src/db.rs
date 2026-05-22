@@ -437,8 +437,9 @@ const PROJECT_SELECT: &str =
                       WHEN 3 THEN 'publish' WHEN 2 THEN 'report' WHEN 1 THEN 'clean'
                       ELSE 'import' END
              FROM file_stages fs WHERE fs.project_redpash_id = p.redpash_id) AS stage,
-            CASE WHEN EXISTS (SELECT 1 FROM dashboards d
-                              WHERE d.project_redpash_id = p.redpash_id AND d.is_public)
+            CASE WHEN EXISTS (SELECT 1 FROM project_files d
+                              WHERE d.project_redpash_id = p.redpash_id
+                                AND d.file_type = 'dashboard' AND d.is_public)
                  THEN 'published' ELSE p.status END AS status,
             p.created_at, p.updated_at,
             u.display_name AS owner_display_name, u.username AS owner_username,
