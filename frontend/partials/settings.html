@@ -1,11 +1,23 @@
-<!-- Settings — app preferences. Skeleton shell. -->
+<!-- Settings — app preferences. First fill: the theme picker. -->
 <section class="rp-page">
   <header id="rp-topbar"></header>
   <div class="rp-page__body">
     <header class="rp-page__head">
       <h1 class="rp-page__title">Settings</h1>
-      <p class="rp-page__sub">App preferences and account controls.</p>
+      <p class="rp-page__sub">App preferences.</p>
     </header>
-    <div class="rp-page__placeholder">Theme, defaults, export format and the rest land here.</div>
+
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Appearance</h2>
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Theme</span>
+        <div class="rp-page__row-control" id="rp-settings-theme">
+          <button class="rt-btn" type="button" data-theme="dark"><i class="bi bi-moon-stars"></i> Dark</button>
+          <button class="rt-btn" type="button" data-theme="light"><i class="bi bi-sun"></i> Light</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="rp-page__placeholder">More preferences land here — defaults, exports, account.</div>
   </div>
 </section>

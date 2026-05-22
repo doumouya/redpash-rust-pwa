@@ -24,9 +24,36 @@
 .rp-page__sub { margin: var(--rp-sp-2) 0 0; color: var(--rp-text-mute); }
 
 .rp-page__placeholder {
+  margin-top: var(--rp-sp-5);
   padding: var(--rp-sp-8);
   text-align: center;
   color: var(--rp-text-mute);
   border: 1px dashed var(--rp-border);
   border-radius: var(--rp-radius-lg);
 }
+
+/* a card section inside the page body — used by Settings, Profile.
+   Generic, not page-specific; the same atom every flat page uses. */
+.rp-page__section {
+  margin-top: var(--rp-sp-5);
+  padding: var(--rp-sp-5) var(--rp-sp-6);
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+}
+.rp-page__section-h {
+  margin: 0 0 var(--rp-sp-3);
+  font-size: var(--rp-text-lg);
+  font-weight: 600;
+}
+.rp-page__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-4);
+  padding: var(--rp-sp-3) 0;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-page__row:first-of-type { border-top: 0; }
+.rp-page__row-label { color: var(--rp-text); font-size: var(--rp-text-md); }
+.rp-page__row-control { display: flex; gap: var(--rp-sp-2); }
