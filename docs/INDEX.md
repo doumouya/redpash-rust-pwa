@@ -57,6 +57,7 @@ YAML frontmatter above).
 
 ### Frontend
 - [Design tokens](frontend/design.md) — CSS variables, brand, dark mode, library integration + leak-class discipline.
+- [Unified surface](frontend/unified-surface.md) — future milestone: RedPash as one Excel-like window; parent-tab isolation, child-tab shared data.
 - [Landing page](frontend/redpash-components-pages/landing-page/index.md) — first surface composing `redpash-components`. Hero / float bars / modals / i18n / theme toggle / PWA install / typewriter / shimmer.
 - [Home page](frontend/redpash-components-pages/home-page/index.md) — authenticated landing: a single dashboard card (upload zone, minitables, stat strip) linking into /objects.
 - [Objects page](frontend/redpash-components-pages/objects-page/index.md) — the browse surface: one redtable, customizable tabs (projects / files / reports / dashboards), edit/select/delete modes.
