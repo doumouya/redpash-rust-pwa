@@ -1,99 +1,22 @@
 <!doctype html>
-<!-- data-theme="system" activates the library's prefers-color-scheme
-     branch (see redpash-components/tokens.css). Settings will let users
-     pin to "light" / "dark" via prefs.theme later. -->
-<html lang="en" data-theme="system">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-
-  <!-- Theme-color drives the browser-chrome bg (Android status bar +
-       desktop Chrome titlebar). Two `media`-scoped tags let the browser
-       pick the right one for the user's prefers-color-scheme when the
-       app is in `data-theme="system"`. main.js's rpSetTheme() overrides
-       the `id="meta-theme"` tag for pinned light/dark choices.
-       Values match the slate-cobalt page bg so the chrome blends with
-       the topbar, not a different brand color. -->
-  <meta name="theme-color" content="#0f172a" id="meta-theme" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#f0f4ff" media="(prefers-color-scheme: light)" />
-
-  <!-- iOS PWA standalone — without these, "Add to Home Screen" on
-       iPhone launches the app in Safari with the URL bar showing.
-       `apple-mobile-web-app-capable=yes` is the iOS-specific opt-in
-       (Safari doesn't read manifest.json for this); `mobile-web-app-
-       capable=yes` is the non-Apple alias picked up by Android.
-       `status-bar-style=black-translucent` makes the iOS status bar
-       transparent so our topbar can flow under it — paired with the
-       `env(safe-area-inset-top)` padding in main.css so interactive
-       chrome stays in the safe zone. -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="RedPash" />
-
+  <meta name="theme-color" content="#11111b" />
   <title>RedPash</title>
 
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
-  <!-- iOS uses apple-touch-icon for the home-screen icon (doesn't
-       read the manifest's icon array). 192px is the iOS-recommended
-       size and reuses the existing PWA icon. -->
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <link rel="manifest" href="/manifest.json" />
 
-  <!-- Savate is the brand wordmark face. Loaded globally so the favicon
-       SVG (and any in-app .rp-wordmark) renders consistently across
-       all pages, not just /landing. ~30 KB, swapped during font load. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap" />
-
   <link rel="stylesheet" href="/styles/main.css" />
-
-  <!-- Per-page CSS is loaded by the router as a <link> tagged data-page-css
-       so it can be swapped on navigation. Component CSS files in
-       /styles/components are imported by /styles/main.css. -->
 </head>
 <body>
-  <!-- ────────────────── App shell ──────────────────
-       The shell is intentionally tiny. The router replaces #app with the
-       active page partial; the topbar stays mounted across navigations.
-       See scripts/main.js for the route table. -->
-  <header id="topbar" class="rp-topbar" hidden>
-    <a class="rp-topbar__brand" href="#/home">
-      <img src="/icons/logo.svg" alt="RedPash" width="28" height="28" />
-      <span>RedPash</span>
-    </a>
-    <nav class="rp-topbar__nav" id="topbar-nav"></nav>
-    <div class="rp-topbar__user" id="topbar-user"></div>
-  </header>
-
-  <main id="app" class="rp-app" aria-busy="true">
-    <!-- Boot splash. Replaced by the first route render. -->
-    <div class="rp-boot">
-      <img src="/icons/logo.svg" alt="" width="48" height="48" />
-      <p>Loading RedPash…</p>
-    </div>
-  </main>
-
-  <!-- Toast region — pinned bottom-right, populated by ui/toast.js. -->
-  <div id="toasts" class="rp-toasts" role="status" aria-live="polite"></div>
-
-  <!-- Library client-side file analyser. Registers window.handleFiles +
-       window.closeFileReview + window.switchFrTab + window.updateFrNameValidity
-       used by the upload preview modal in the home page (and any future
-       drop zone). IIFE, no module — load with defer so it parses but
-       waits on the DOM the home partial injects later. -->
-  <script defer src="/scripts/file-review.js"></script>
-
-  <!-- Prerelease (Phase 2): sandbox fragment loader + interaction script.
-       include.js exposes window.rpInclude so partials' children resolve
-       recursively after the router injects a partial. controls.js exposes
-       window.sp* (activate/delete tab, toggle modal, render object tabs)
-       so inline onclick handlers in the sandbox partials don't
-       ReferenceError. Per-page modules decide whether to await
-       rpInclude(root) before querying the DOM. -->
-  <script defer src="/scripts/include.js"></script>
-  <script defer src="/scripts/controls.js"></script>
+  <!-- App shell. The router (scripts/main.js) renders the active page
+       partial into #app. Kept intentionally bare — the frontend reset
+       rebuilds every page from here. -->
+  <main id="app"></main>
 
   <script type="module" src="/scripts/main.js"></script>
 </body>

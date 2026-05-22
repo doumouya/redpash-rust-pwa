@@ -53,14 +53,14 @@ async function request(method, path, body, opts = {}) {
   }
 
   if (res.status === 204) return null;
-  // Session expired (or never existed). Redirect to the landing page
+  // Session expired (or never existed). Redirect to the login page
   // so the user can sign in again. Skip the redirect when we're
-  // already on landing — otherwise it loops.
+  // already on login — otherwise it loops.
   if (res.status === 401) {
-    const onLanding = (location.hash || "#/landing") === "#/landing"
-                   || location.hash.startsWith("#/landing");
-    if (!onLanding) {
-      location.hash = "#/landing";
+    const onLogin = (location.hash || "#/login") === "#/login"
+                 || location.hash.startsWith("#/login");
+    if (!onLogin) {
+      location.hash = "#/login";
     }
     const err = new Error("Not signed in");
     err.status = 401;
