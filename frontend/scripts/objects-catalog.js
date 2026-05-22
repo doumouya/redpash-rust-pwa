@@ -13,13 +13,16 @@
 // docs), add a row here and both surfaces pick it up.
 //
 // `key` matches the SCHEMAS keys in objects.js and the catalog `data-key`
-// attributes in profile.html.
+// attributes in settings.html.
+//
+// Reports & Dashboards are NOT object types — per the locked object model
+// they're derived views (a project's chart-files / dashboard-files), not
+// browsable entities. Removed as Objects tabs 2026-05-22;
+// normalizeObjectTabs() below drops them from any stored pref.
 
 export const OBJECT_TAB_CATALOG = [
   { key: "projects",   label: "Projects",   icon: "bi-folder2-open" },
   { key: "files",      label: "Files",      icon: "bi-file-earmark-text" },
-  { key: "reports",    label: "Reports",    icon: "bi-bar-chart-fill" },
-  { key: "dashboards", label: "Dashboards", icon: "bi-grid-1x2-fill" },
   { key: "companies",  label: "Companies",  icon: "bi-building" },
   { key: "users",      label: "Users",      icon: "bi-people-fill" },
 ];
