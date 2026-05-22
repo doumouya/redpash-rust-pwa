@@ -18,8 +18,9 @@ import { installErrorCapture } from "/scripts/events.js";
 installErrorCapture();
 
 const ROUTES = {
-  "/login": { partial: "/partials/login.html", script: "/scripts/pages/login.js", auth: false },
-  "/home":  { partial: "/partials/home.html",  script: "/scripts/pages/home.js",  auth: true  },
+  "/login":     { partial: "/partials/login.html",     script: "/scripts/pages/login.js",     auth: false },
+  "/home":      { partial: "/partials/home.html",      script: "/scripts/pages/home.js",      auth: true  },
+  "/workspace": { partial: "/partials/workspace.html", script: "/scripts/pages/workspace.js", auth: true  },
 };
 
 // ─── Session ────────────────────────────────────────────────────

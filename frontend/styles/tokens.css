@@ -52,6 +52,12 @@
   --rp-text-lg: 20px;
   --rp-text-xl: 32px;
 
+  /* extra hues + interaction surfaces (workspace) */
+  --rp-teal:        #94e2d5;
+  --rp-peach:       #fab387;
+  --rp-hover:       rgba(255, 255, 255, 0.05);
+  --rp-accent-soft: rgba(137, 180, 250, 0.14);
+
   /* motion */
   --rp-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }

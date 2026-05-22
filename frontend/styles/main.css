@@ -7,8 +7,17 @@
    app. That keeps the CSS layer fully traceable (css-audit enforces
    it: no orphan sheet, no surprise import).
    ───────────────────────────────────────────────────────────────── */
-@import "tokens.css";   /* design tokens — every value */
-@import "base.css";     /* reset + document defaults + brand text */
-@import "button.css";   /* .rp-btn family */
-@import "login.css";    /* the sign-in page */
-@import "home.css";     /* the home page */
+@import "tokens.css";    /* design tokens — every value */
+@import "base.css";      /* reset + document defaults + brand text */
+@import "button.css";    /* .rp-btn + .rt-btn families */
+@import "login.css";     /* the sign-in page */
+@import "home.css";      /* the home launchpad */
+
+/* the Workspace — the redtable-as-a-browser, one file per component */
+@import "workspace.css"; /* shell layout */
+@import "topbar.css";    /* brand · omnibox · actions */
+@import "rail.css";      /* the project / file nav rail */
+@import "toolbar.css";   /* the redtable toolbar */
+@import "table.css";     /* the data table */
+@import "panel.css";     /* the filter + tools side panels */
+@import "pager.css";     /* the redtable pager */
