@@ -22,3 +22,4 @@
 @import "table.css";     /* the data table */
 @import "panel.css";     /* the filter + tools side panels */
 @import "pager.css";     /* the redtable pager */
+@import "chart.css";     /* the redtable body when a chart file is open */

@@ -32,6 +32,7 @@ export default function workspace(app, { session }) {
   const thead      = table.tHead;
   const tbody      = table.tBodies[0];
   const tableState = $("#wsTableState");
+  const chartEl    = $("#wsChart");
   const colsDd     = $("#wsColsDd");
   const rowsInfo   = $("#wsRowsInfo");
   const selChip    = $("#wsSelChip");
@@ -42,6 +43,7 @@ export default function workspace(app, { session }) {
   // ─── state ─────────────────────────────────────────────────────
   let activeFileRid = null;
   let activeColumns = [];   // ColumnMeta[] for the open file
+  let chartInstance = null; // echarts — lazily created on first chart render
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }]
   let searchQ       = "";
@@ -176,22 +178,29 @@ export default function workspace(app, { session }) {
     setTableState("Loading…");
     rowsInfo.textContent = "Loading…";
     try {
-      const [envelope, pageData] = await Promise.all([
-        api.get("/files/" + encodeURIComponent(rid)),
-        api.get("/files/" + encodeURIComponent(rid) + "/page"),
-      ]);
+      const envelope = await api.get("/files/" + encodeURIComponent(rid));
       activeColumns = envelope?.columns || [];
-      // Reset all column-indexed state — sort keys, filter, search.
-      sortKeys = []; activeFilter = null; searchQ = "";
-      $("#wsRowSearch").value = "";
-      $("#wsFilterToggle").classList.remove("has-filter");
-      renderTable(activeColumns, pageData?.rows || []);
-      rebuildColsDropdown(activeColumns);
-      rebuildFilterCols(activeColumns);
-      rowsInfo.textContent = (pageData?.rows?.length || 0) + " of "
-        + (pageData?.total || 0) + " rows · parsed in "
-        + (pageData?.ms != null ? pageData.ms + " ms" : "—");
-      setTableState(null);
+      const isChart = envelope?.summary?.file_type === "chart";
+      if (isChart) {
+        // Designer mode — body becomes the chart, not the data table.
+        const chart = await api.get("/charts/" + encodeURIComponent(rid));
+        renderChart(chart);
+        rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
+      } else {
+        // Data mode — body is the data table.
+        const pageData = await api.get("/files/" + encodeURIComponent(rid) + "/page");
+        // Reset all column-indexed state — sort keys, filter, search.
+        sortKeys = []; activeFilter = null; searchQ = "";
+        $("#wsRowSearch").value = "";
+        $("#wsFilterToggle").classList.remove("has-filter");
+        renderTable(activeColumns, pageData?.rows || []);
+        rebuildColsDropdown(activeColumns);
+        rebuildFilterCols(activeColumns);
+        rowsInfo.textContent = (pageData?.rows?.length || 0) + " of "
+          + (pageData?.total || 0) + " rows · parsed in "
+          + (pageData?.ms != null ? pageData.ms + " ms" : "—");
+        setTableState(null);
+      }
     } catch (err) {
       setTableState("Couldn’t load file" + (err.status ? " (" + err.status + ")" : "") + ".");
       rowsInfo.textContent = "Error.";
@@ -223,14 +232,36 @@ export default function workspace(app, { session }) {
   }
 
   function setTableState(msg) {
+    // State message — when no body is current (loading, error, no file).
     if (msg) {
       tableState.textContent = msg;
       tableState.hidden = false;
       table.hidden = true;
+      chartEl.hidden = true;
     } else {
       tableState.hidden = true;
       table.hidden = false;
+      chartEl.hidden = true;
     }
+  }
+
+  function renderChart(chart) {
+    // Designer mode — render the file's baked ECharts option into the
+    // chart container. The spec is opaque to the backend; the frontend
+    // expects spec.option (or the spec itself, defensively).
+    tableState.hidden = true;
+    table.hidden = true;
+    chartEl.hidden = false;
+    const opt = chart?.spec?.option || chart?.spec;
+    if (!opt || !window.echarts) {
+      chartEl.innerHTML = '<div class="rt-chart__state">Chart preview unavailable'
+        + (window.echarts ? '' : ' — ECharts didn’t load') + '.</div>';
+      return;
+    }
+    chartEl.innerHTML = "";
+    if (!chartInstance) chartInstance = window.echarts.init(chartEl);
+    chartInstance.setOption(opt, true);
+    chartInstance.resize();
   }
 
   // ─── columns dropdown — rebuilt per file ───────────────────────
