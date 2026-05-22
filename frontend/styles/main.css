@@ -1,95 +1,14 @@
 /* ─────────────────────────────────────────────────────────────────
-   RedPash — root stylesheet.
+   RedPash — CSS manifest.
 
-   Imports the tokens, lays a minimal reset, styles the app shell and
-   the two blank scaffold pages (login, home). As the rebuild adds
-   real pages, each UI concern gets its own file imported below — no
-   raw values, no cross-file selector duplication.
+   This file is the entire @import graph and nothing else: every
+   stylesheet in the app is listed here, in cascade order. There is
+   no @import anywhere else — a sheet not named here is not in the
+   app. That keeps the CSS layer fully traceable (css-audit enforces
+   it: no orphan sheet, no surprise import).
    ───────────────────────────────────────────────────────────────── */
-@import "tokens.css";
-
-/* ── reset ─────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  font-family: var(--rp-font);
-  font-size: var(--rp-text-md);
-  line-height: 1.5;
-  color: var(--rp-text);
-  background: var(--rp-bg);
-  -webkit-font-smoothing: antialiased;
-}
-#app { min-height: 100%; }
-a { color: var(--rp-accent-2); }
-
-/* ── button ────────────────────────────────────────────────────── */
-.rp-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--rp-sp-2);
-  padding: var(--rp-sp-3) var(--rp-sp-5);
-  font: inherit;
-  font-weight: 600;
-  color: var(--rp-bg);
-  background: var(--rp-accent);
-  border: 0;
-  border-radius: var(--rp-radius);
-  cursor: pointer;
-}
-.rp-btn:hover { filter: brightness(1.08); }
-.rp-btn:disabled { opacity: 0.55; cursor: default; }
-.rp-btn--ghost {
-  color: var(--rp-text);
-  background: transparent;
-  border: 1px solid var(--rp-border);
-}
-
-/* ── wordmark + shared text ────────────────────────────────────── */
-.rp-wordmark {
-  font-size: var(--rp-text-xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--rp-text);
-}
-.rp-wordmark b { color: var(--rp-accent); font-weight: 800; }
-.rp-muted { color: var(--rp-text-mute); font-size: var(--rp-text-sm); margin: 0; }
-
-/* ── login ─────────────────────────────────────────────────────── */
-.rp-login {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: var(--rp-sp-5);
-}
-.rp-login__card {
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--rp-sp-5);
-  padding: var(--rp-sp-8) var(--rp-sp-6);
-  text-align: center;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius-lg);
-}
-
-/* ── home ──────────────────────────────────────────────────────── */
-.rp-home { min-height: 100vh; display: flex; flex-direction: column; }
-.rp-home__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--rp-sp-4) var(--rp-sp-5);
-  border-bottom: 1px solid var(--rp-border);
-}
-.rp-home__body {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  padding: var(--rp-sp-5);
-  color: var(--rp-text-mute);
-}
+@import "tokens.css";   /* design tokens — every value */
+@import "base.css";     /* reset + document defaults + brand text */
+@import "button.css";   /* .rp-btn family */
+@import "login.css";    /* the sign-in page */
+@import "home.css";     /* the home page */

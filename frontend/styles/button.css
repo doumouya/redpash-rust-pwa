@@ -1,0 +1,37 @@
+/* ── button ─────────────────────────────────────────────────────
+   .rp-btn base plus the glass and ghost variants. Width is left to
+   the caller — buttons size to content unless a page stretches them. */
+
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-3) var(--rp-sp-5);
+  font: inherit;
+  font-weight: 600;
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  cursor: pointer;
+  transition: transform 0.15s var(--rp-ease),
+              border-color 0.15s var(--rp-ease),
+              background 0.15s var(--rp-ease);
+}
+.rp-btn:hover { transform: translateY(-1px); }
+.rp-btn:active { transform: translateY(0); }
+.rp-btn:focus-visible { outline: 2px solid var(--rp-accent-2); outline-offset: 2px; }
+.rp-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+
+/* glass — translucent and blurred; the primary surface treatment. */
+.rp-btn--glass {
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border-color: var(--rp-glass-border);
+}
+.rp-btn--glass:hover { border-color: rgba(205, 214, 244, 0.28); }
+
+/* ghost — bare, for low-emphasis actions. */
+.rp-btn--ghost { background: transparent; border-color: var(--rp-border); }

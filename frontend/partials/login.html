@@ -1,10 +1,43 @@
-<!-- Blank login — frontend-reset scaffold. A rebuild target: the real
-     sign-in surface (Google OAuth + dev login) lands here later. -->
+<!-- Login — the RedPash sign-in surface. It puts the product to work
+     first: parse a messy CSV live (no auth, nothing stored), then
+     sign in. The demo hits POST /api/demo/parse. -->
 <section class="rp-login">
   <div class="rp-login__card">
-    <div class="rp-wordmark">Red<b>Pash</b></div>
-    <p class="rp-muted">Sign in to continue.</p>
-    <button type="button" id="rp-login-btn" class="rp-btn">Sign in</button>
-    <p class="rp-muted" id="rp-login-msg" role="status"></p>
+    <header class="rp-login__head">
+      <div class="rp-wordmark rp-login__mark">Red<b>Pash</b></div>
+      <p class="rp-login__tagline">Paste your messiest CSV — watch RedPash read it in milliseconds.</p>
+    </header>
+
+    <div class="rp-login__demo">
+      <label class="rp-login__demo-label" for="rp-demo-input">CSV in</label>
+      <textarea id="rp-demo-input" class="rp-login__demo-input" rows="6" spellcheck="false"></textarea>
+      <button type="button" id="rp-demo-run" class="rp-btn rp-btn--glass">Scan this CSV</button>
+
+      <div class="rp-login__result" id="rp-demo-result" hidden>
+        <div class="rp-login__score">
+          <span class="rp-login__score-n" id="rp-demo-score">—</span>
+          <span class="rp-login__score-l">cleanness</span>
+        </div>
+        <div class="rp-login__stats" id="rp-demo-stats"></div>
+      </div>
+      <p class="rp-login__msg" id="rp-demo-msg" role="status"></p>
+    </div>
+
+    <div class="rp-login__divider">then sign in</div>
+
+    <div class="rp-login__actions">
+      <button type="button" id="rp-login-google" class="rp-btn rp-btn--glass">
+        <svg class="rp-login__gicon" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#ea4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285f4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#fbbc05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34a853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+      <button type="button" id="rp-login-dev" class="rp-login__dev">Continue as developer</button>
+    </div>
+
+    <p class="rp-login__msg" id="rp-login-msg" role="status"></p>
   </div>
 </section>

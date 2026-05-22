@@ -1,0 +1,32 @@
+/* ── base ───────────────────────────────────────────────────────
+   Reset, document defaults, and the shared brand text atoms. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--rp-font);
+  font-size: var(--rp-text-md);
+  line-height: 1.5;
+  color: var(--rp-text);
+  background: var(--rp-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { min-height: 100%; }
+
+a { color: var(--rp-accent-2); }
+
+/* The RedPash wordmark. Font, weight and colour only — each surface
+   sets its own size (login is large, the home bar is small). */
+.rp-wordmark {
+  font-family: var(--rp-font-brand);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--rp-text);
+}
+.rp-wordmark b { color: var(--rp-accent); font-weight: 900; }
+
+.rp-muted { margin: 0; color: var(--rp-text-mute); font-size: var(--rp-text-sm); }

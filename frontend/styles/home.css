@@ -1,0 +1,22 @@
+/* ── home ───────────────────────────────────────────────────────
+   The home page — a blank canvas pending its rebuild from the
+   red-front prototype. */
+
+.rp-home { min-height: 100vh; display: flex; flex-direction: column; }
+
+.rp-home__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--rp-sp-4) var(--rp-sp-5);
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-home__bar .rp-wordmark { font-size: var(--rp-text-lg); }
+
+.rp-home__body {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--rp-sp-5);
+  color: var(--rp-text-mute);
+}
