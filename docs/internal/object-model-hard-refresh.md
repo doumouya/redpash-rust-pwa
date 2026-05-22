@@ -69,6 +69,9 @@ be: see the row counts.
 | `/api/reports` CRUD | gone — `/api/charts` |
 | `/api/reports/preview` | **kept** — it is the stateless grouping engine, not a "report". Rename it honest (`/api/group/preview`). |
 | `/api/dashboards` CRUD | folded into the unified file API |
+| `import` stage | `new` stage |
+| `report` stage | `design` stage |
+| "Reports" page / "Dashboards" page | **Designer** / **Publisher** surfaces |
 
 ## Phasing
 
@@ -83,6 +86,11 @@ be: see the row counts.
   (`/api/group`).
 - Remove `reports`-table code from `db.rs`; drop the `Report` DTO's
   stored-row assumptions.
+- **Stage rename (bundled here):** recreate the `file_stages` view with
+  `new` / `clean` / `design` / `publish` `CASE` literals (`import→new`,
+  `report→design`); update the stage DTO and the frontend stage chips.
+  Bundled into Phase 1 because it is already in the migration + stage
+  layer — done separately later means touching `file_stages` twice.
 - Lane: backend (Gus). `/api/charts` is already the canonical
   replacement — confirm with Woz that the Reports page is on
   `/api/charts` before deleting anything.
@@ -110,14 +118,16 @@ premature. Park it.
 - **Backend (Gus):** Phase 1 + Phase 2 migrations and route changes.
 - **Frontend (Woz):** confirm the Reports page is on `/api/charts`; the
   Dashboard page reads `project_files WHERE file_type='dashboard'`;
-  drop any `report_id` / `RPT_` assumptions.
+  drop any `report_id` / `RPT_` assumptions. Rebrand the surfaces —
+  "Reports" page → **Designer**, "Dashboards" page → **Publisher**;
+  stage chips show New / Clean / Design / Publish.
 - **Docs (Torv):** rewrite / retire `objects/report.md` +
   `objects/dashboard.md`; update `api/reports.md`, `api/dashboards.md`,
-  `db/schema.md`, `REDMAP.md`. **Hold until D3 is ruled.**
+  `db/schema.md`, `REDMAP.md`.
 
-## Open: D3
+## Decisions — all locked
 
-The Publish stage trigger is the one decision still on Em. See the
-decision record in
-[`object-model.md`](../objects/object-model.md#decision-record). The
-docs sync (Torv's lane) waits on this ruling.
+D1–D6 are all ruled (see the decision record in
+[`object-model.md`](../objects/object-model.md#decision-record)) —
+including D3 (Publish = ≥1 public dashboard-file) and the D6 stage
+rebrand. Torv's docs sync is unblocked; no decision is outstanding.

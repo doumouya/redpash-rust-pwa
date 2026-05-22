@@ -28,8 +28,8 @@ Plus the cleaner's per-file transform history: **Step**
 (`project_steps`, `STP_`).
 
 Em's analogy: a real-world folder named *"invoices"* is not itself an
-invoice. "Project", "Report", "Dashboard" are folders — containers —
-not the things inside them.
+invoice. A project is a folder; the Designer and Publisher views are
+folder-like groupings — none of them is the thing inside.
 
 ### File types
 
@@ -52,12 +52,13 @@ html, json) are just files with a `file_type` — "a File is a File"
   project id.
 - **No `report_id` / `dashboard_id` column on a chart.**
 
-"Report" and "Dashboard" are **derived views** over a project's files:
+A project's chart set and dashboard set are **derived views**, never
+stored:
 
 | View | Definition |
 |------|------------|
-| a project's **Report**    | `project_files WHERE project_redpash_id = X AND file_type = 'chart'` |
-| a project's **Dashboard** | `project_files WHERE project_redpash_id = X AND file_type = 'dashboard'` |
+| the **Designer** view  | `project_files WHERE project_redpash_id = X AND file_type = 'chart'` |
+| the **Publisher** view | `project_files WHERE project_redpash_id = X AND file_type = 'dashboard'` |
 
 ## Stage — computed, never stored
 
@@ -71,17 +72,34 @@ Project stage = the furthest-along milestone present among its files:
 
 | Stage       | Reached when the project has… |
 |-------------|-------------------------------|
-| **Publish** | ≥1 *public* dashboard-file — *(D3, see decision record)* |
-| **Report**  | ≥1 chart-file |
+| **Publish** | ≥1 *public* dashboard-file |
+| **Design**  | ≥1 chart-file |
 | **Clean**   | ≥1 file with ≥1 cleaning step |
-| **Import**  | files, nothing else done (default) |
+| **New**     | files uploaded, nothing else done (default) |
 
-There is **no "Report step".** The Reports page *builds charts* — it is
-not a cleaning surface. Cleaning is the Cleaner's job, and cleaning
-steps are the only thing recorded in `project_steps`. "Edits on the
-Reports table don't persist as steps" is therefore correct by design,
-not a bug. (The real fix there is making the Reports data cells visibly
-read-only so they don't look editable.)
+Stages mark the *furthest surface reached*, not a mandatory sequence. A
+project can reach **Design** without ever passing through **Clean** —
+import an already-clean file and go straight to charting. Like a
+spreadsheet: opening it just to sort one table doesn't mean you must
+use every feature (Em).
+
+There is **no cleaning step on the Designer.** The Designer *builds
+charts*; it is not a cleaning surface. Cleaning steps (`project_steps`)
+are recorded only by the Cleaner. So "edits on the Designer's table
+don't persist as steps" is correct by design, not a bug — the fix
+there is making the Designer's data cells visibly read-only so they
+don't look editable.
+
+## Surfaces
+
+Each work stage has exactly one workspace:
+
+| Stage       | Surface       | What you do there |
+|-------------|---------------|-------------------|
+| New         | *(upload)*    | a file exists, untouched |
+| Clean       | **Cleaner**   | apply cleaning steps |
+| Design      | **Designer**  | build charts |
+| Publish     | **Publisher** | compose and publish dashboards |
 
 ## Chart → Dashboard link
 
@@ -96,9 +114,9 @@ A share is a *grant*, stored in a future `shares` table — not a
 property of the shared thing:
 
 `(grantee, project_id, scope, file_id?, role)`,
-`scope ∈ {project, report, dashboard, file}`.
+`scope ∈ {project, charts, dashboards, file}`.
 
-"Share my charts, not my CSVs" = a grant with `scope = report`. This is
+"Share my charts, not my CSVs" = a grant with `scope = charts`. This is
 the exact use Em had in mind for `RPT_` / `DSH_` — and it needs a *new*
 table, not the old ones kept on life support. A derived `RPT_` / `DSH_`
 label is a perfectly fine share target. Parked until the RBAC
@@ -110,9 +128,10 @@ workstream.
 |----|----------|--------|
 | D1 | Report & Dashboard are derived views — no table, no stored id | **Locked** (Em, 2026-05-22) |
 | D2 | Chart↔dashboard link lives in the dashboard `spec` (`chart_id`s); many-to-many; nothing on the chart | **Locked** — the `file_stages` view already keys on this shape |
-| D3 | Publish stage trigger | **Open — Em to rule.** Recommended: **≥1 *public* dashboard-file** (matches the word "publish"; already what the `file_stages` view computes; needs only a per-dashboard "make public" toggle, not the full `shares` table). Alternative: ≥1 dashboard-file exists at all (model uniformity — every other stage is "a file type is present"). |
-| D4 | Word lock: "Report" = the folder/view; the artifact inside is a **Chart** — never "report" for a chart | **Locked** |
+| D3 | Publish stage trigger | **Locked** — Em ruled (a), 2026-05-22: **Publish = the project has ≥1 *public* dashboard-file.** Matches the word "publish"; already what the `file_stages` view computes; needs only a per-dashboard "make public" toggle. |
+| D4 | Word lock — the three work surfaces are **Cleaner / Designer / Publisher**. "Report" is retired entirely: not an entity, not a stage, not a surface. A chart is a **Chart**; a dashboard is a **Dashboard**. | **Locked** (Em, 2026-05-22) |
 | D5 | A dashboard is a `project_files` row (`file_type='dashboard'`), not its own table | **Locked** target — folded in by the migration |
+| D6 | Pipeline stages renamed: Import→**New**, **Clean**, Report→**Design**, **Publish**. Stages mark the furthest surface reached, not a forced sequence. | **Locked** (Em, 2026-05-22) |
 
 ## What this does NOT touch
 
