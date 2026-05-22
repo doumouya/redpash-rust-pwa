@@ -1,9 +1,10 @@
 //! `/api/dashboards/*` — CRUD + favourite toggle.
 //!
-//! Dashboards are project-scoped layouts of widgets. Widgets reference
-//! reports/files via their `spec` JSON. The render-time data fetch
-//! happens widget-by-widget (next-turn work); this module just
-//! persists the layout.
+//! A dashboard is a layout of widgets, persisted as a dashboard-typed
+//! `project_files` row (`file_type='dashboard'`) — the "everything is a
+//! File" object model, the same one charts use. Widgets reference
+//! charts by id in the `spec` JSON. This module persists the layout;
+//! the render-time data fetch is widget-by-widget on the frontend.
 
 use axum::{
     extract::{Path, State},
@@ -79,15 +80,15 @@ async fn create(
         db::project_owner(&state.db, &req.project_redpash_id).await,
         &user, "project", &req.project_redpash_id,
     )?;
-    let rid = id::new("DSH");
-    let report = db::insert_dashboard(
+    let rid = id::new("FIL");
+    let dashboard = db::insert_dashboard(
         &state.db, &rid, &req.project_redpash_id, &req.title, &req.spec,
         req.folder.as_deref().filter(|s| !s.is_empty()),
         req.description.as_deref().filter(|s| !s.is_empty()),
     )
     .await
     .map_err(|e| AppError::internal("db", e.to_string()))?;
-    Ok(Json(report))
+    Ok(Json(dashboard))
 }
 
 async fn get_one(

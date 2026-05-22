@@ -1,9 +1,9 @@
 //! Dashboard resource DTOs.
 //!
 //! A `Dashboard` is the persisted record (id + title + spec + favorite
-//! + folder). `DashboardSpec` is the inner shape — a layout template
-//! + a list of widgets. Widgets point at reports, files, or carry
-//! their own group-by spec depending on `kind`.
+//! + folder), stored as a dashboard-typed `project_files` row.
+//! `DashboardSpec` is the inner shape — a layout template + a list of
+//! widgets; each widget references a chart by id.
 
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
@@ -54,9 +54,8 @@ pub struct Widget {
     /// `chart` | `kpi` | `table` | `text` | `report`.
     pub kind: String,
     /// Shape varies by `kind`:
-    ///   chart : { report_id, chart_index, title_override? } — references
-    ///           a chart authored on the report itself; the dashboard
-    ///           just decides where to place it.
+    ///   chart : { chart_id, title_override? } — references a saved
+    ///           chart file; the dashboard decides where to place it.
     ///   text  : { markdown }
     #[serde(default)]
     pub spec: serde_json::Value,

@@ -997,20 +997,26 @@ impl From<DashboardRow> for Dashboard {
     }
 }
 
-const DASHBOARD_COLS: &str = "redpash_id, project_redpash_id, title, description, spec,
-                              is_favorite, is_public, folder, created_at, updated_at";
+// A dashboard is a project_files row with file_type='dashboard'.
+// `title` is COALESCE(display_name, filename) — both hold the title.
+const DASHBOARD_COLS: &str = "redpash_id, project_redpash_id,
+                              COALESCE(display_name, filename) AS title,
+                              description, spec, is_favorite, is_public,
+                              folder, created_at, updated_at";
 
 pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Dashboard>> {
     let rows: Vec<DashboardRow> = sqlx::query_as(
-        "SELECT d.redpash_id, d.project_redpash_id, d.title, d.description, d.spec,
+        "SELECT d.redpash_id, d.project_redpash_id,
+                COALESCE(d.display_name, d.filename) AS title,
+                d.description, d.spec,
                 d.is_favorite, d.is_public, d.folder, d.created_at, d.updated_at,
                 p.owner_id AS owner_id,
                 u.display_name AS owner_display_name,
                 u.username AS owner_username
-         FROM dashboards d
+         FROM project_files d
          JOIN projects p ON p.redpash_id = d.project_redpash_id
          JOIN users    u ON u.redpash_id = p.owner_id
-         WHERE p.owner_id = $1
+         WHERE d.file_type = 'dashboard' AND p.owner_id = $1
          ORDER BY d.folder ASC NULLS LAST, d.is_favorite DESC, d.updated_at DESC",
     )
     .bind(owner)
@@ -1021,7 +1027,8 @@ pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Das
 
 pub async fn find_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Dashboard>> {
     let row: Option<DashboardRow> = sqlx::query_as(&format!(
-        "SELECT {DASHBOARD_COLS} FROM dashboards WHERE redpash_id = $1"
+        "SELECT {DASHBOARD_COLS} FROM project_files
+         WHERE redpash_id = $1 AND file_type = 'dashboard'"
     ))
     .bind(rid)
     .fetch_optional(pool)
@@ -1040,8 +1047,10 @@ pub async fn insert_dashboard(
 ) -> sqlx::Result<Dashboard> {
     let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
     let row: DashboardRow = sqlx::query_as(&format!(
-        "INSERT INTO dashboards (redpash_id, project_redpash_id, title, description, spec, folder)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        "INSERT INTO project_files
+            (redpash_id, project_redpash_id, filename, display_name,
+             file_type, storage_path, spec, description, folder)
+         VALUES ($1, $2, $3, $3, 'dashboard', '', $5, $4, $6)
          RETURNING {DASHBOARD_COLS}"
     ))
     .bind(rid)
@@ -1065,9 +1074,10 @@ pub async fn update_dashboard(
 ) -> sqlx::Result<Option<Dashboard>> {
     let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
     let row: Option<DashboardRow> = sqlx::query_as(&format!(
-        "UPDATE dashboards
-         SET title = $1, description = $2, spec = $3, folder = $4, updated_at = now()
-         WHERE redpash_id = $5
+        "UPDATE project_files
+         SET filename = $1, display_name = $1, description = $2,
+             spec = $3, folder = $4, updated_at = now()
+         WHERE redpash_id = $5 AND file_type = 'dashboard'
          RETURNING {DASHBOARD_COLS}"
     ))
     .bind(title)
@@ -1081,7 +1091,7 @@ pub async fn update_dashboard(
 }
 
 pub async fn delete_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    let n = sqlx::query("DELETE FROM dashboards WHERE redpash_id = $1")
+    let n = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1 AND file_type = 'dashboard'")
         .bind(rid)
         .execute(pool)
         .await?;
@@ -1100,14 +1110,15 @@ pub async fn patch_dashboard_meta(
     is_public:   Option<bool>,
 ) -> sqlx::Result<Option<Dashboard>> {
     let row: Option<DashboardRow> = sqlx::query_as(&format!(
-        "UPDATE dashboards
-         SET title       = COALESCE($2, title),
-             description = COALESCE($3, description),
-             folder      = COALESCE($4, folder),
-             is_favorite = COALESCE($5, is_favorite),
-             is_public   = COALESCE($6, is_public),
-             updated_at  = now()
-         WHERE redpash_id = $1
+        "UPDATE project_files
+         SET filename     = COALESCE($2, filename),
+             display_name = COALESCE($2, display_name),
+             description  = COALESCE($3, description),
+             folder       = COALESCE($4, folder),
+             is_favorite  = COALESCE($5, is_favorite),
+             is_public    = COALESCE($6, is_public),
+             updated_at   = now()
+         WHERE redpash_id = $1 AND file_type = 'dashboard'
          RETURNING {DASHBOARD_COLS}"
     ))
     .bind(rid)
@@ -1127,8 +1138,8 @@ pub async fn set_dashboard_favorite(
     value: bool,
 ) -> sqlx::Result<Option<Dashboard>> {
     let row: Option<DashboardRow> = sqlx::query_as(&format!(
-        "UPDATE dashboards SET is_favorite = $1, updated_at = now()
-         WHERE redpash_id = $2
+        "UPDATE project_files SET is_favorite = $1, updated_at = now()
+         WHERE redpash_id = $2 AND file_type = 'dashboard'
          RETURNING {DASHBOARD_COLS}"
     ))
     .bind(value)
@@ -1312,9 +1323,9 @@ pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Stri
 
 pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT p.owner_id FROM dashboards d
-         JOIN projects p ON p.redpash_id = d.project_redpash_id
-         WHERE d.redpash_id = $1",
+        "SELECT p.owner_id FROM project_files pf
+         JOIN projects p ON p.redpash_id = pf.project_redpash_id
+         WHERE pf.redpash_id = $1 AND pf.file_type = 'dashboard'",
     )
     .bind(rid)
     .fetch_optional(pool)
