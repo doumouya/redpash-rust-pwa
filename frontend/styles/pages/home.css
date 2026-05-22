@@ -181,26 +181,12 @@ html[data-theme="light"] #page-home { --accent: #2563eb; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* "Diamond" glass — forced bright. The --surface tint let the dark app
-     background bleed through and grey the column out; pinned to a high
-     white tint so it actually reads white, with a crisp bright edge, a
-     frost blur and a soft lift shadow. Only the bg is theme-pinned — in
-     light mode --text inverts to dark and would grey it. */
-  background: color-mix(in srgb, var(--text) 58%, transparent);
-  border: 0.0938rem solid color-mix(in srgb, var(--text) 55%, transparent);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
   border-radius: 0.7rem;
   overflow: hidden;
-  backdrop-filter: blur(0.875rem);
-  -webkit-backdrop-filter: blur(0.875rem);
-  box-shadow: 0 0.375rem 1rem rgba(0, 0, 0, 0.28);
-}
-html[data-theme="light"] .rp-pipe__col {
-  background: rgba(255, 255, 255, 0.82);
-}
-@media (prefers-color-scheme: light) {
-  html[data-theme="system"] .rp-pipe__col {
-    background: rgba(255, 255, 255, 0.82);
-  }
+  backdrop-filter: blur(0.6rem);
+  -webkit-backdrop-filter: blur(0.6rem);
 }
 /* One accent for the whole board — the app's blue. The columns read
    as a progression by position + label, not by colour. */
