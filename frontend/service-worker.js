@@ -21,7 +21,7 @@
 //
 // Bump CACHE_VERSION on any breaking change to invalidate old caches.
 
-const CACHE_VERSION = "v598";
+const CACHE_VERSION = "v599";
 const SHELL_CACHE   = `redpash-shell-${CACHE_VERSION}`;
 const API_CACHE     = `redpash-api-${CACHE_VERSION}`;
 
