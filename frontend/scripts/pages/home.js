@@ -1,24 +1,17 @@
 // Home page — the project launchpad.
 //
-// Lists the signed-in user's projects (GET /api/projects) as a board
-// of cards. Each card renders the project's place in the four-stage
-// pipeline. Project create + click-through to the Workspace land when
-// those pieces of the rebuild do.
+// Mounts the shared topbar, then lists the signed-in user's projects
+// (GET /api/projects) as a board of cards. Each card renders the
+// project's place in the four-stage pipeline. Project create lands
+// when POST /api/projects does.
 
 import { api } from "/scripts/api.js";
+import { mountTopbar } from "/scripts/topbar.js";
 
 const STAGES = ["import", "clean", "report", "publish"];
 
 export default function home(app, { session }) {
-  const who = app.querySelector("#rp-home-who");
-  if (who) who.textContent = session?.display_name || session?.username || "—";
-
-  app.querySelector("#rp-home-signout")?.addEventListener("click", async () => {
-    try { await api.post("/auth/logout"); }
-    catch { /* idempotent — clear the client session regardless */ }
-    location.hash = "#/login";
-    location.reload();
-  });
+  mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session });
 
   const board = app.querySelector("#rp-home-board");
   const count = app.querySelector("#rp-home-count");

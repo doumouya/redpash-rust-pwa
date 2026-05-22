@@ -7,30 +7,13 @@
 // carries sample rows — loading a file's real data from /api lands
 // when the rail is wired to the file endpoints.
 
-import { toggleTheme, currentTheme } from "/scripts/theme.js";
+import { mountTopbar } from "/scripts/topbar.js";
 
 export default function workspace(app, { session }) {
   const $  = (s) => app.querySelector(s);
   const $$ = (s) => Array.from(app.querySelectorAll(s));
 
-  // avatar — the signed-in user's initials
-  const avatar = $("#wsAvatar");
-  if (avatar) {
-    const name = (session?.display_name || session?.username || "").trim();
-    avatar.textContent = name
-      ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
-      : "··";
-  }
-
-  // theme toggle — dark (default) <-> light. The icon shows the theme
-  // the click switches to: a sun in dark, a moon in light.
-  const themeBtn = $("#wsTheme");
-  const paintThemeIcon = () => {
-    themeBtn.querySelector("i").className =
-      currentTheme() === "light" ? "bi bi-moon-stars" : "bi bi-sun";
-  };
-  paintThemeIcon();
-  themeBtn.addEventListener("click", () => { toggleTheme(); paintThemeIcon(); });
+  mountTopbar($("#rp-topbar"), { active: "workspace", session });
 
   // ── rail — collapse to compact ──────────────────────────────────
   const nav = $("#wsNav");
@@ -425,11 +408,4 @@ export default function workspace(app, { session }) {
         .forEach((c) => { c.style.display = show; });
     }));
 
-  // ── omnibox — Ctrl/Cmd+K focuses the site search ────────────────
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-      e.preventDefault();
-      $("#wsOmni")?.focus();
-    }
-  });
 }

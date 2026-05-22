@@ -5,19 +5,6 @@
 
 .rp-home { min-height: 100vh; display: flex; flex-direction: column; }
 
-/* top bar */
-.rp-home__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--rp-sp-4);
-  padding: var(--rp-sp-4) var(--rp-sp-6);
-  border-bottom: 1px solid var(--rp-border);
-}
-.rp-home__brand { font-size: var(--rp-text-lg); }
-.rp-home__user { display: flex; align-items: center; gap: var(--rp-sp-4); }
-.rp-home__who { color: var(--rp-text-dim); font-size: var(--rp-text-sm); }
-
 /* main column */
 .rp-home__main {
   width: 100%;
