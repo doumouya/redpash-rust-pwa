@@ -103,15 +103,22 @@ async fn capture_mw(
 ) -> Response {
     let method  = req.method().to_string();
     let path    = req.uri().path().to_string();
+    let route   = crate::request_log::normalize_route(&path);
     let req_id  = req.extensions().get::<RequestId>().map(|r| r.0.clone());
     let session = read_cookie(req.headers(), "rp_session");
 
     let started = Instant::now();
     let resp = next.run(req).await;
     let status = resp.status();
+    let ms = started.elapsed().as_millis() as i32;
+
+    // Every request — fire-and-forget — feeds the performance metrics.
+    crate::request_log::record(
+        &state.db, method.clone(), route, status.as_u16() as i16, ms,
+        req_id.clone(),
+    );
 
     if status.as_u16() >= 400 {
-        let ms = started.elapsed().as_millis() as i32;
         let (err_kind, message) = match resp.extensions().get::<crate::event::EventInfo>() {
             Some(info) => (Some(info.kind), info.message.clone()),
             None => (None, status.canonical_reason().unwrap_or("error").to_string()),
