@@ -840,6 +840,9 @@ var JS = [
 
 /* ── emit ────────────────────────────────────────────────────────────────── */
 fs.writeFileSync(OUT, renderHtml(data), 'utf8');
+/* `data` is the source-of-truth payload `redpash-audit-ingest` reads to
+   persist audit.run + audit.finding rows. See tools/audit-storage-brainstorming.md. */
+fs.writeFileSync(path.join(__dirname, 'audit-bro.json'), JSON.stringify(data));
 
 console.log('');
 console.log('  files scanned         ' + data.stats.files);

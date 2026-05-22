@@ -12,6 +12,10 @@ edition = { workspace = true }
 name = "redpash-api"
 path = "src/main.rs"
 
+[[bin]]
+name = "redpash-audit-ingest"
+path = "src/bin/audit_ingest.rs"
+
 [dependencies]
 shared = { path = "../shared" }
 data   = { path = "../data" }
