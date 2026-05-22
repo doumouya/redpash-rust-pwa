@@ -4,7 +4,12 @@
 // sign-out + avatar. A page drops <header id="rp-topbar"></header> into
 // its partial and its script calls mountTopbar(el, { active, session });
 // `active` names which nav entry is the current page. There is exactly
-// one topbar — home and the Workspace render the identical thing.
+// one topbar — every authed page renders the identical thing.
+//
+// NAV is the closed list of the app's authed pages. Entries marked
+// `parked: true` render as a disabled button (an honest "coming soon",
+// not a broken link); wiring lands when the page does, by dropping the
+// `parked` flag from the entry — no other topbar edit needed.
 
 import { api } from "/scripts/api.js";
 import { toggleTheme, currentTheme } from "/scripts/theme.js";
@@ -12,6 +17,9 @@ import { toggleTheme, currentTheme } from "/scripts/theme.js";
 const NAV = [
   { id: "home",      hash: "#/home",      icon: "bi-house-door", label: "Home" },
   { id: "workspace", hash: "#/workspace", icon: "bi-stars",      label: "Workspace" },
+  { id: "profile",   hash: "#/profile",   icon: "bi-person",     label: "Profile",  parked: true },
+  { id: "settings",  hash: "#/settings",  icon: "bi-gear",       label: "Settings", parked: true },
+  { id: "docs",      hash: "#/docs",      icon: "bi-book-half",  label: "Docs",     parked: true },
 ];
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's
@@ -32,9 +40,11 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     +   '<kbd class="rp-omni-kbd">Ctrl K</kbd>'
     + '</div>'
     + '<nav class="rp-topbar-actions">'
-    +   NAV.map((n) =>
-          '<a class="rt-btn' + (n.id === active ? ' is-active' : '') + '"'
-        + ' href="' + n.hash + '" title="' + n.label + '"><i class="bi ' + n.icon + '"></i></a>'
+    +   NAV.map((n) => n.parked
+          ? '<button class="rt-btn" type="button" disabled title="' + n.label + ' — coming soon">'
+            + '<i class="bi ' + n.icon + '"></i></button>'
+          : '<a class="rt-btn' + (n.id === active ? ' is-active' : '') + '"'
+            + ' href="' + n.hash + '" title="' + n.label + '"><i class="bi ' + n.icon + '"></i></a>'
         ).join('')
     +   '<button class="rt-btn" type="button" data-act="theme" title="Toggle theme">'
     +     '<i class="bi bi-sun"></i></button>'
