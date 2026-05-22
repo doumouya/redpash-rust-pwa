@@ -12,6 +12,7 @@
 @import "button.css";    /* .rp-btn + .rt-btn families */
 @import "login.css";     /* the sign-in page */
 @import "home.css";      /* the home launchpad */
+@import "page.css";      /* generic page shell — profile, settings, docs */
 
 /* the Workspace — the redtable-as-a-browser, one file per component */
 @import "workspace.css"; /* shell layout */

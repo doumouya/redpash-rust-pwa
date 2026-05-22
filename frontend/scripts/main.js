@@ -21,6 +21,9 @@ const ROUTES = {
   "/login":     { partial: "/partials/login.html",     script: "/scripts/pages/login.js",     auth: false },
   "/home":      { partial: "/partials/home.html",      script: "/scripts/pages/home.js",      auth: true  },
   "/workspace": { partial: "/partials/workspace.html", script: "/scripts/pages/workspace.js", auth: true  },
+  "/profile":   { partial: "/partials/profile.html",   script: "/scripts/pages/profile.js",   auth: true  },
+  "/settings":  { partial: "/partials/settings.html",  script: "/scripts/pages/settings.js",  auth: true  },
+  "/docs":      { partial: "/partials/docs.html",      script: "/scripts/pages/docs.js",      auth: true  },
 };
 
 // ─── Session ────────────────────────────────────────────────────

@@ -1,0 +1,32 @@
+/* ── page ───────────────────────────────────────────────────────
+   The generic page shell — topbar above, a centred body below.
+   Used by Profile, Settings, Docs (and any future flat page); the
+   Workspace and Home keep their own shells because they need
+   different body geometry (Workspace is fixed-height; Home is a
+   project board with a custom grid). */
+
+.rp-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.rp-page__body {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--rp-sp-8) var(--rp-sp-6);
+}
+
+.rp-page__head { margin-bottom: var(--rp-sp-5); }
+.rp-page__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; }
+.rp-page__sub { margin: var(--rp-sp-2) 0 0; color: var(--rp-text-mute); }
+
+.rp-page__placeholder {
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+  border: 1px dashed var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+}
