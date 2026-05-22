@@ -11,7 +11,6 @@ use shared::dashboard::{Dashboard, DashboardSpec};
 use shared::event::Event;
 use shared::file::{ColumnMeta, FileSummary};
 use shared::project::ProjectSummary;
-use shared::report::{Report, ReportSpec};
 use shared::step::ProjectStep;
 use shared::user::{UserMembership, UserProfile};
 use sqlx::{FromRow, PgPool, Row};
@@ -563,7 +562,7 @@ pub async fn project_file_rids(pool: &PgPool, project_rid: &str) -> sqlx::Result
 /// `Ok(false)` means the row exists (the handler's `ensure_owner`
 /// already confirmed that) but is the default, so the caller must
 /// promote another project to default first. Cascades to files /
-/// steps / reports / dashboards / memberships via FK.
+/// steps / dashboards / memberships via FK.
 pub async fn delete_project(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     let res = sqlx::query("DELETE FROM projects WHERE redpash_id = $1 AND NOT is_default")
         .bind(rid)
@@ -694,10 +693,11 @@ pub async fn find_file(pool: &PgPool, rid: &str) -> sqlx::Result<Option<FileFull
     Ok(row.map(Into::into))
 }
 
-/// Delete a file row. `project_steps` and `reports` both declare
-/// `ON DELETE CASCADE` on `project_files`, so the history and any
-/// reports built from this file go with it. Returns whether a row was
-/// actually removed (false → caller surfaces a 404).
+/// Delete a file row. `project_steps` and any chart files built from
+/// it (the `source_file_id` self-FK) declare `ON DELETE CASCADE` on
+/// `project_files`, so the step history and derived charts go with it.
+/// Returns whether a row was actually removed (false → caller
+/// surfaces a 404).
 pub async fn delete_file(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     let res = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1")
         .bind(rid)
@@ -827,192 +827,6 @@ pub async fn insert_file(
     .execute(pool)
     .await?;
     Ok(())
-}
-
-// ─── reports ────────────────────────────────────────────────────
-
-#[derive(FromRow)]
-struct ReportRow {
-    redpash_id:         String,
-    project_redpash_id: String,
-    source_file_id:     String,
-    title:              String,
-    description:        Option<String>,
-    spec:               serde_json::Value,
-    is_favorite:        bool,
-    is_public:          bool,
-    folder:             Option<String>,
-    created_at:         DateTime<Utc>,
-    updated_at:         DateTime<Utc>,
-    // Owner join — only present in list_reports' SELECT. #[sqlx(default)]
-    // keeps single-row fetchers (find_report / update_report /
-    // patch_report_meta / set_report_favorite) working without the join.
-    #[sqlx(default)] owner_id:           Option<String>,
-    #[sqlx(default)] owner_display_name: Option<String>,
-    #[sqlx(default)] owner_username:     Option<String>,
-}
-impl From<ReportRow> for Report {
-    fn from(r: ReportRow) -> Self {
-        Self {
-            redpash_id:         r.redpash_id,
-            project_redpash_id: r.project_redpash_id,
-            source_file_id:     r.source_file_id,
-            title:              r.title,
-            description:        r.description,
-            spec:               serde_json::from_value(r.spec).unwrap_or_default(),
-            is_favorite:        r.is_favorite,
-            is_public:          r.is_public,
-            folder:             r.folder,
-            owner_id:           r.owner_id,
-            owner_display_name: r.owner_display_name,
-            owner_username:     r.owner_username,
-            created_at:         r.created_at,
-            updated_at:         r.updated_at,
-        }
-    }
-}
-
-const REPORT_COLS: &str = "redpash_id, project_redpash_id, source_file_id, title, description,
-                           spec, is_favorite, is_public, folder, created_at, updated_at";
-
-pub async fn list_reports(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Report>> {
-    // Sort: folder name first (NULLs last so uncategorised lands at the
-    // bottom), then favourites within each folder, then by updated_at.
-    let rows: Vec<ReportRow> = sqlx::query_as(
-        "SELECT r.redpash_id, r.project_redpash_id, r.source_file_id, r.title, r.description,
-                r.spec, r.is_favorite, r.is_public, r.folder, r.created_at, r.updated_at,
-                p.owner_id AS owner_id,
-                u.display_name AS owner_display_name,
-                u.username AS owner_username
-         FROM reports r
-         JOIN projects p ON p.redpash_id = r.project_redpash_id
-         JOIN users    u ON u.redpash_id = p.owner_id
-         WHERE p.owner_id = $1
-         ORDER BY r.folder ASC NULLS LAST, r.is_favorite DESC, r.updated_at DESC",
-    )
-    .bind(owner)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows.into_iter().map(Into::into).collect())
-}
-
-pub async fn find_report(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Report>> {
-    let row: Option<ReportRow> = sqlx::query_as(&format!(
-        "SELECT {REPORT_COLS} FROM reports WHERE redpash_id = $1"
-    ))
-    .bind(rid)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(Into::into))
-}
-
-pub async fn insert_report(
-    pool:    &PgPool,
-    rid:     &str,
-    project: &str,
-    source:  &str,
-    title:   &str,
-    spec:    &ReportSpec,
-    folder:  Option<&str>,
-) -> sqlx::Result<Report> {
-    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
-    let row: ReportRow = sqlx::query_as(&format!(
-        "INSERT INTO reports (redpash_id, project_redpash_id, source_file_id, title, spec, folder)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING {REPORT_COLS}"
-    ))
-    .bind(rid)
-    .bind(project)
-    .bind(source)
-    .bind(title)
-    .bind(spec_json)
-    .bind(folder)
-    .fetch_one(pool)
-    .await?;
-    Ok(row.into())
-}
-
-pub async fn update_report(
-    pool:   &PgPool,
-    rid:    &str,
-    title:  &str,
-    spec:   &ReportSpec,
-    source: &str,
-    folder: Option<&str>,
-) -> sqlx::Result<Option<Report>> {
-    let spec_json = serde_json::to_value(spec).unwrap_or(serde_json::json!({}));
-    let row: Option<ReportRow> = sqlx::query_as(&format!(
-        "UPDATE reports
-         SET title = $1, spec = $2, source_file_id = $3, folder = $4, updated_at = now()
-         WHERE redpash_id = $5
-         RETURNING {REPORT_COLS}"
-    ))
-    .bind(title)
-    .bind(spec_json)
-    .bind(source)
-    .bind(folder)
-    .bind(rid)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(Into::into))
-}
-
-/// Sparse metadata update for the Reports-tab inline editor.
-/// `None` keeps the existing column value (COALESCE).
-pub async fn patch_report_meta(
-    pool:        &PgPool,
-    rid:         &str,
-    title:       Option<&str>,
-    description: Option<&str>,
-    folder:      Option<&str>,
-    is_favorite: Option<bool>,
-    is_public:   Option<bool>,
-) -> sqlx::Result<Option<Report>> {
-    let row: Option<ReportRow> = sqlx::query_as(&format!(
-        "UPDATE reports
-         SET title       = COALESCE($2, title),
-             description = COALESCE($3, description),
-             folder      = COALESCE($4, folder),
-             is_favorite = COALESCE($5, is_favorite),
-             is_public   = COALESCE($6, is_public),
-             updated_at  = now()
-         WHERE redpash_id = $1
-         RETURNING {REPORT_COLS}"
-    ))
-    .bind(rid)
-    .bind(title)
-    .bind(description)
-    .bind(folder)
-    .bind(is_favorite)
-    .bind(is_public)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(Into::into))
-}
-
-pub async fn set_report_favorite(
-    pool:  &PgPool,
-    rid:   &str,
-    value: bool,
-) -> sqlx::Result<Option<Report>> {
-    let row: Option<ReportRow> = sqlx::query_as(&format!(
-        "UPDATE reports SET is_favorite = $1, updated_at = now()
-         WHERE redpash_id = $2
-         RETURNING {REPORT_COLS}"
-    ))
-    .bind(value)
-    .bind(rid)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(Into::into))
-}
-
-pub async fn delete_report(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    let n = sqlx::query("DELETE FROM reports WHERE redpash_id = $1")
-        .bind(rid)
-        .execute(pool)
-        .await?;
-    Ok(n.rows_affected() > 0)
 }
 
 // ─── charts (chart-typed project_files rows) ────────────────────
@@ -1489,18 +1303,6 @@ pub async fn redo_next(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
 pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT owner_id FROM projects WHERE redpash_id = $1",
-    )
-    .bind(rid)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|(o,)| o))
-}
-
-pub async fn report_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT p.owner_id FROM reports r
-         JOIN projects p ON p.redpash_id = r.project_redpash_id
-         WHERE r.redpash_id = $1",
     )
     .bind(rid)
     .fetch_optional(pool)

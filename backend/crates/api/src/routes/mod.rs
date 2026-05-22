@@ -39,10 +39,10 @@ mod demo;
 mod docs;
 mod events;
 mod files;
+mod group;
 mod health;
 mod me;
 mod projects;
-mod reports;
 mod users;
 
 pub(crate) use auth::read_cookie;
@@ -158,7 +158,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/projects", projects::routes())
         .nest("/companies",  companies::routes())
         .nest("/files",      files::routes())
-        .nest("/reports",    reports::routes())
+        .nest("/group",      group::routes())
         .nest("/charts",     charts::routes())
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())

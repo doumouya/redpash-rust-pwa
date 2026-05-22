@@ -1,42 +1,13 @@
-//! Report resource DTOs.
+//! Grouping / report-spec DTOs.
 //!
-//! A `Report` is the persisted record (id + title + source file +
-//! spec). `ReportSpec` is the inner shape — what columns to group by,
-//! what aggregations to compute, optional filter to apply first.
-//! `ReportRequest` is what the builder POSTs when creating or updating
-//! a report.
+//! `ReportSpec` is the grouping shape — what columns to group by, what
+//! aggregations to compute, an optional filter to apply first, and the
+//! `ChartSpec`s authored alongside it. It feeds the stateless
+//! `/api/group/preview` engine and chart files. There is no stored
+//! `Report` entity — the object-model hard-refresh removed it;
+//! "Report" is a derived view over a project's chart files.
 
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Report {
-    pub redpash_id:         String,
-    pub project_redpash_id: String,
-    pub source_file_id:     String,
-    pub title:              String,
-    #[serde(default)]
-    pub description:        Option<String>,
-    pub spec:               ReportSpec,
-    #[serde(default)]
-    pub is_favorite:        bool,
-    #[serde(default)]
-    pub is_public:          bool,
-    #[serde(default)]
-    pub folder:             Option<String>,
-    // Owner — joined in via projects.owner_id → users. None when the
-    // fetcher didn't take the users join (e.g. the builder's find_one).
-    // The list endpoint populates all three so the Reports tab can show
-    // them.
-    #[serde(default)]
-    pub owner_id:           Option<String>,
-    #[serde(default)]
-    pub owner_display_name: Option<String>,
-    #[serde(default)]
-    pub owner_username:     Option<String>,
-    pub created_at:         DateTime<Utc>,
-    pub updated_at:         DateTime<Utc>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportSpec {
@@ -271,16 +242,4 @@ pub enum AggFn {
     Q1,
     /// 75th percentile (boxplot).
     Q3,
-}
-
-/// Body of `POST /api/reports` (and `PUT /api/reports/:rid`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReportRequest {
-    pub source_file_id: String,
-    pub title:          String,
-    pub spec:           ReportSpec,
-    #[serde(default)]
-    pub description:    Option<String>,
-    #[serde(default)]
-    pub folder:         Option<String>,
 }
