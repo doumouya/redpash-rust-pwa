@@ -43,3 +43,7 @@ Every entry follows the same five headings:
 
 - [0001 — Orphan preferences](0001-orphan-prefs.md) — Settings controls
   that persisted a choice no code ever consumed.
+- [0002 — Stale join after a table drop](0002-stale-join-after-drop.md) —
+  `/api/projects` 500'd after Phase 2 dropped `dashboards`;
+  `PROJECT_SELECT`'s published-status subquery still joined the dropped
+  table.
