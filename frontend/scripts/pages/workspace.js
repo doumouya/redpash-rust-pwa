@@ -7,6 +7,8 @@
 // carries sample rows — loading a file's real data from /api lands
 // when the rail is wired to the file endpoints.
 
+import { toggleTheme, currentTheme } from "/scripts/theme.js";
+
 export default function workspace(app, { session }) {
   const $  = (s) => app.querySelector(s);
   const $$ = (s) => Array.from(app.querySelectorAll(s));
@@ -19,6 +21,16 @@ export default function workspace(app, { session }) {
       ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
       : "··";
   }
+
+  // theme toggle — dark (default) <-> light. The icon shows the theme
+  // the click switches to: a sun in dark, a moon in light.
+  const themeBtn = $("#wsTheme");
+  const paintThemeIcon = () => {
+    themeBtn.querySelector("i").className =
+      currentTheme() === "light" ? "bi bi-moon-stars" : "bi bi-sun";
+  };
+  paintThemeIcon();
+  themeBtn.addEventListener("click", () => { toggleTheme(); paintThemeIcon(); });
 
   // ── rail — collapse to compact ──────────────────────────────────
   const nav = $("#wsNav");

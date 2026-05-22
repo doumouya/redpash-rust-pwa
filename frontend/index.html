@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#11111b" />
   <title>RedPash</title>
 
+  <!-- Apply the saved theme before first paint — no flash of the wrong theme. -->
+  <script>
+    try { var t = localStorage.getItem("rp-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <link rel="manifest" href="/manifest.json" />

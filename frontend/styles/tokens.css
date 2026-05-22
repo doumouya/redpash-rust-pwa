@@ -61,3 +61,31 @@
   /* motion */
   --rp-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ── light theme (Catppuccin Latte) — opt-in via the theme switcher.
+   Overrides only the colour tokens; spacing / radius / type / motion
+   are theme-independent and stay on :root. ─────────────────────────── */
+html[data-theme="light"] {
+  --rp-bg:        #eff1f5;
+  --rp-surface:   #ffffff;
+  --rp-surface-2: #e6e9ef;
+  --rp-border:    #ccd0da;
+
+  --rp-text:      #4c4f69;
+  --rp-text-dim:  #5c5f77;
+  --rp-text-mute: #8c8fa1;
+
+  --rp-accent:    #d20f39;
+  --rp-accent-2:  #1e66f5;
+  --rp-mauve:     #8839ef;
+  --rp-teal:      #179299;
+  --rp-peach:     #fe640b;
+  --rp-ok:        #40a02b;
+  --rp-warn:      #df8e1d;
+
+  --rp-glass:        rgba(255, 255, 255, 0.62);
+  --rp-glass-border: rgba(255, 255, 255, 0.75);
+  --rp-hover:        rgba(76, 79, 105, 0.06);
+  --rp-accent-soft:  rgba(30, 102, 245, 0.10);
+  --rp-shadow:       0 1px 2px rgba(76, 79, 105, 0.08), 0 12px 32px rgba(76, 79, 105, 0.10);
+}
