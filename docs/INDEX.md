@@ -54,6 +54,7 @@ YAML frontmatter above).
 
 ### Dev
 - [Local setup](dev/setup.md) — prereqs, watch loop, frontend reload.
+- [Tech stack](dev/stack.md) — every component + its pinned version: Rust/crates, Postgres, Node, the frontend ES level.
 
 ### Frontend
 - [Design tokens](frontend/design.md) — CSS variables, brand, dark mode, library integration + leak-class discipline.
