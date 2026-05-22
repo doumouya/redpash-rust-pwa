@@ -1,13 +1,28 @@
-<!-- Profile — the user's account surface. Skeleton shell; editable
-     fields (name, email, avatar, prefs) land here when the page is
-     built. -->
+<!-- Profile — the user's account surface. First fill: identity from
+     the session. Editable fields land here next. -->
 <section class="rp-page">
   <header id="rp-topbar"></header>
   <div class="rp-page__body">
-    <header class="rp-page__head">
-      <h1 class="rp-page__title">Profile</h1>
-      <p class="rp-page__sub" id="rp-profile-who">—</p>
+    <header class="rp-page__head rp-page__head--row">
+      <span class="rp-avatar rp-avatar--lg" id="rp-profile-avatar">··</span>
+      <div>
+        <h1 class="rp-page__title" id="rp-profile-name">—</h1>
+        <p class="rp-page__sub" id="rp-profile-handle">@—</p>
+      </div>
     </header>
-    <div class="rp-page__placeholder">Editable profile fields land here.</div>
+
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Account</h2>
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Display name</span>
+        <span class="rp-page__row-value" id="rp-profile-display">—</span>
+      </div>
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Username</span>
+        <span class="rp-page__row-value" id="rp-profile-username">—</span>
+      </div>
+    </section>
+
+    <div class="rp-page__placeholder">Editable fields land here — display name, email, avatar, password.</div>
   </div>
 </section>

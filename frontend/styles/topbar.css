@@ -92,3 +92,5 @@
   color: var(--rp-bg);
   background: linear-gradient(135deg, var(--rp-accent-2), var(--rp-teal));
 }
+/* Size variant — same atom, larger usage (Profile head). */
+.rp-avatar--lg { width: 64px; height: 64px; margin-left: 0; font-size: 22px; }

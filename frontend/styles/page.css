@@ -20,6 +20,7 @@
 }
 
 .rp-page__head { margin-bottom: var(--rp-sp-5); }
+.rp-page__head--row { display: flex; align-items: center; gap: var(--rp-sp-4); }
 .rp-page__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; }
 .rp-page__sub { margin: var(--rp-sp-2) 0 0; color: var(--rp-text-mute); }
 
@@ -56,4 +57,5 @@
 }
 .rp-page__row:first-of-type { border-top: 0; }
 .rp-page__row-label { color: var(--rp-text); font-size: var(--rp-text-md); }
+.rp-page__row-value { color: var(--rp-text-dim); font-size: var(--rp-text-md); }
 .rp-page__row-control { display: flex; gap: var(--rp-sp-2); }
