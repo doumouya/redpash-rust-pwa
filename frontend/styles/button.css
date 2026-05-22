@@ -52,6 +52,7 @@
   border: 1px solid transparent;
   border-radius: 9px;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.14s var(--rp-ease),
               color 0.14s var(--rp-ease),
               border-color 0.14s var(--rp-ease),
@@ -59,6 +60,8 @@
 }
 .rt-btn:hover { background: var(--rp-hover); color: var(--rp-text); }
 .rt-btn:active { transform: scale(0.96); }
+.rt-btn:disabled { opacity: 0.4; cursor: default; }
+.rt-btn:disabled:hover { background: transparent; color: var(--rp-text-mute); }
 .rt-btn:focus-visible { outline: 2px solid var(--rp-accent-2); outline-offset: 1px; }
 .rt-btn.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
 .rt-btn i { font-size: 15px; }

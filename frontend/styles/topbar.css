@@ -15,7 +15,15 @@
   border-bottom: 1px solid var(--rp-border);
 }
 
-.rp-brand { display: flex; align-items: center; gap: 10px; justify-self: start; }
+.rp-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  color: inherit;
+  text-decoration: none;
+}
+.rp-brand:hover { opacity: 0.85; }
 .rp-brand-mark {
   width: 28px;
   height: 28px;

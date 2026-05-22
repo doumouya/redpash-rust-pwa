@@ -6,20 +6,20 @@
 
   <!-- ════ topbar ════ -->
   <header class="rp-topbar">
-    <div class="rp-brand">
+    <a class="rp-brand" href="#/home" title="Home">
       <span class="rp-brand-mark"></span>
       <span class="rp-brand-name">RedPash</span>
-    </div>
+    </a>
     <div class="rp-omni">
       <i class="bi bi-search"></i>
       <input type="search" id="wsOmni" placeholder="Search RedPash — projects, files, settings…" />
       <kbd class="rp-omni-kbd">Ctrl K</kbd>
     </div>
     <nav class="rp-topbar-actions">
-      <button class="rt-btn" type="button" title="Objects"><i class="bi bi-folder2"></i></button>
-      <button class="rt-btn is-active" type="button" title="Cleaner"><i class="bi bi-stars"></i></button>
-      <button class="rt-btn" type="button" title="Designer"><i class="bi bi-bar-chart-line"></i></button>
-      <button class="rt-btn" type="button" title="Settings"><i class="bi bi-gear"></i></button>
+      <a class="rt-btn" href="#/home" title="Home"><i class="bi bi-house-door"></i></a>
+      <a class="rt-btn is-active" href="#/workspace" title="Workspace"><i class="bi bi-stars"></i></a>
+      <button class="rt-btn" type="button" disabled title="Designer — coming soon"><i class="bi bi-bar-chart-line"></i></button>
+      <button class="rt-btn" type="button" disabled title="Settings — coming soon"><i class="bi bi-gear"></i></button>
       <button class="rt-btn" id="wsTheme" type="button" title="Toggle theme"><i class="bi bi-sun"></i></button>
       <span class="rp-avatar" id="wsAvatar">··</span>
     </nav>

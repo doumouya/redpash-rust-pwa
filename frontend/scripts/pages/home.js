@@ -62,14 +62,14 @@ export default function home(app, { session }) {
       p.cleanness_pct != null ? Math.round(p.cleanness_pct) + "% clean" : null,
       "updated " + fmtDate(p.updated_at),
     ].filter(Boolean).join("  ·  ");
-    return '<article class="rp-proj">'
+    return '<a class="rp-proj" href="#/workspace">'
       +   '<div class="rp-proj__top">'
       +     '<h2 class="rp-proj__name">' + esc(p.name) + "</h2>"
       +     (p.is_default ? '<span class="rp-proj__tag">default</span>' : "")
       +   "</div>"
       +   '<ol class="rp-proj__pipe">' + pipe + "</ol>"
       +   '<p class="rp-proj__meta">' + meta + "</p>"
-      + "</article>";
+      + "</a>";
   }
 
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
