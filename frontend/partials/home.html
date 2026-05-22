@@ -54,98 +54,70 @@
       <i class="bi bi-file-earmark-text"></i>
       <span class="rp-float-label">Files</span>
     </a>
-    <a class="rp-float-btn" aria-label="My reports" href="#/objects?tab=reports">
-      <i class="bi bi-bar-chart-fill"></i>
-      <span class="rp-float-label">Reports</span>
-    </a>
-    <a class="rp-float-btn" aria-label="My dashboards" href="#/objects?tab=dashboards">
-      <i class="bi bi-grid-1x2-fill"></i>
-      <span class="rp-float-label">Dashboards</span>
-    </a>
     <button class="rp-float-btn" aria-label="Contact" onclick="openModal('contact')">
       <i class="bi bi-envelope-fill"></i>
       <span class="rp-float-label">Contact</span>
     </button>
   </div>
 
-  <!-- Home is now a single dashboard card. Browsing projects / files /
-       reports / dashboards moved to the dedicated /objects page; the
-       stat buttons + minitables below link into it. -->
-  <div class="home-steps" id="home-steps">
+  <!-- Home is the pipeline board: every project as a card in its
+       computed stage column (import → clean → report → publish). The
+       top strip carries the greeting, counts, and the upload entry
+       point. Browsing the full object lists lives on /objects (the
+       bottom-left float bar). Board wiring: scripts/pages/home.js. -->
+  <main class="rp-home">
 
-    <!-- ─── Dashboard ───────────────────────────────────────────── -->
-    <section class="hs-card hs-import" data-step="1">
-      <div class="hs-content hs-import-layout">
-
-        <div class="hs-import-text">
-          <div class="hs-eyebrow hs-eyebrow-import">
-            <i class="bi bi-house-fill bi-sm"></i><span>Dashboard</span>
-          </div>
-          <h1 class="hs-h1">Upload your data,<br /><em class="hs-em-import">start clean.</em></h1>
-          <p class="hs-p">Drag in a CSV. RedPash profiles it instantly — types, nulls, duplicates — so you know exactly what you're working with.</p>
-
-          <!-- Recent projects (top 5) -->
-          <div class="rp-minitable">
-            <div class="rp-minitable-hdr">Recent projects</div>
-            <div class="rp-minitable-list" id="hs1-projects">
-              <div class="rp-minitable-empty">Loading…</div>
-            </div>
-          </div>
-
-          <!-- Latest files in most-recent project -->
-          <div class="rp-minitable">
-            <div class="rp-minitable-hdr">Latest files — <span id="hs1-recent-name">—</span></div>
-            <div class="rp-minitable-list" id="hs1-files">
-              <div class="rp-minitable-empty">Loading…</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="hs-import-panel">
-          <!-- Stats strip — values filled by JS from /api/projects + /api/reports + /api/dashboards -->
-          <div class="rp-stat-strip">
-            <button class="rp-stat" aria-label="My projects" onclick="location.hash='#/objects?tab=projects'">
-              <span class="rp-stat-val" id="hs1-stat-projects">—</span>
-              <span class="rp-stat-lbl">Projects</span>
-            </button>
-            <button class="rp-stat" aria-label="My files" onclick="location.hash='#/objects?tab=files'">
-              <span class="rp-stat-val" id="hs1-stat-files">—</span>
-              <span class="rp-stat-lbl">Files</span>
-            </button>
-            <button class="rp-stat" aria-label="Published" onclick="location.hash='#/objects?tab=reports'">
-              <span class="rp-stat-val rp-stat-val--green" id="hs1-stat-published">—</span>
-              <span class="rp-stat-lbl">Published</span>
-            </button>
-          </div>
-
-          <!-- Upload zone card. `multiple` lets users drop / pick several
-               files at once, which homeOpenReview routes into the multi-file
-               tabbed flavor of the file-review modal. -->
-          <input type="file" id="hs1-file-input" multiple
-                 accept=".csv,.tsv,.xlsx,.xls,.xlsm,.xlsb,.ods"
-                 style="display:none"
-                 onchange="if(this.files.length){homeOpenReview(this.files); this.value='';}" />
-          <div class="card card--glass">
-            <div class="card-title">Upload</div>
-            <div class="card-body card-body--center">
-              <div class="rp-upload-zone rp-upload-zone--compact" role="button" tabindex="0"
-                   onclick="document.getElementById('hs1-file-input').click()"
-                   ondragover="event.preventDefault(); this.classList.add('dz-over')"
-                   ondragleave="this.classList.remove('dz-over')"
-                   ondrop="event.preventDefault(); this.classList.remove('dz-over'); if(event.dataTransfer.files.length){homeOpenReview(event.dataTransfer.files);}">
-                <div class="rp-upload-ico"><i class="bi bi-cloud-upload"></i></div>
-              </div>
-              <div class="rp-fmt-picker">
-                <div class="rp-fmt-pill rp-fmt-active"><i class="bi bi-filetype-csv bi-sm"></i> CSV</div>
-                <div class="rp-fmt-pill rp-fmt-active"><i class="bi bi-filetype-xlsx bi-sm"></i> Excel</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+    <header class="rp-home__top">
+      <div class="rp-home__intro">
+        <h1 class="rp-home__title">Your pipeline</h1>
+        <p class="rp-home__sub">Every project by stage — pick up wherever you left off.</p>
       </div>
-    </section>
-  </div><!-- /home-steps -->
+
+      <!-- Counts — link into the /objects browse page. -->
+      <div class="rp-home__stats">
+        <button class="rp-home__stat" aria-label="My projects"
+                onclick="location.hash='#/objects?tab=projects'">
+          <span class="rp-home__stat-val" id="home-stat-projects">—</span>
+          <span class="rp-home__stat-lbl">Projects</span>
+        </button>
+        <button class="rp-home__stat" aria-label="My files"
+                onclick="location.hash='#/objects?tab=files'">
+          <span class="rp-home__stat-val" id="home-stat-files">—</span>
+          <span class="rp-home__stat-lbl">Files</span>
+        </button>
+        <button class="rp-home__stat" aria-label="Published"
+                onclick="location.hash='#/objects?tab=projects'">
+          <span class="rp-home__stat-val rp-home__stat-val--pub" id="home-stat-published">—</span>
+          <span class="rp-home__stat-lbl">Published</span>
+        </button>
+      </div>
+
+      <!-- Upload → file-review modal → new project. `multiple` enables the
+           multi-file tabbed review. The input keeps its hs1-file-input id
+           so the file-review modal's "Change file" button still finds it. -->
+      <input type="file" id="hs1-file-input" multiple
+             accept=".csv,.tsv,.xlsx,.xls,.xlsm,.xlsb,.ods"
+             style="display:none"
+             onchange="if(this.files.length){homeOpenReview(this.files); this.value='';}" />
+      <button class="rp-home__upload" type="button"
+              onclick="document.getElementById('hs1-file-input').click()"
+              ondragover="event.preventDefault(); this.classList.add('is-over')"
+              ondragleave="this.classList.remove('is-over')"
+              ondrop="event.preventDefault(); this.classList.remove('is-over'); if(event.dataTransfer.files.length){homeOpenReview(event.dataTransfer.files);}">
+        <i class="bi bi-cloud-upload"></i>
+        <span class="rp-home__upload-txt">
+          <strong>Drop a CSV or Excel file</strong>
+          <em>or click to upload — starts a new project</em>
+        </span>
+      </button>
+    </header>
+
+    <!-- Pipeline board — JS fills four stage columns from /api/projects. -->
+    <div class="rp-pipe" id="home-pipe">
+      <div class="rp-pipe__loading">Loading your pipeline…</div>
+    </div>
+
+  </main>
 
   <!-- Contact modal (same shell as the landing's). doContact() is owned
        by landing.js but defined as a stub here too so /home users who

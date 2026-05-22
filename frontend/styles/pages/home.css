@@ -1,11 +1,12 @@
-/* ────────────────── Home page — mirrors redpash-demo #page-home.
+/* ────────────────── Home page — the pipeline board.
  *
- * Composes the library's home-screen + redtable + stat-strip + minitable
- * + upload-zone + avatar + page-dots + float-btn components. Body chrome
- * (flex column + hidden overflow, formerly from shell.css) is set in
- * main.css under body[data-chrome="full"]. Each step card mounts its
- * own scroll container. The .rp-modal sandbox shell used by the
- * file-review modal also loads globally via main.css.
+ * Authenticated landing. A slim top strip (greeting + Projects/Files/
+ * Published counts + upload entry point) sits above a four-column
+ * board — import → clean → report → publish — where every project is
+ * a card in its computed-stage column. Browsing the full object lists
+ * lives on /objects (bottom-left float bar). Body chrome (flex column +
+ * hidden overflow) is set in main.css under body[data-chrome="full"].
+ * Wiring: scripts/pages/home.js.
  * ──────────────────────────────────────────────────────────────────── */
 
 @import "/styles/base/typography.css";
@@ -17,12 +18,7 @@
 @import "/styles/components/theme-toggle.css";
 @import "/styles/components/float-btn.css";
 @import "/styles/components/avatar.css";
-@import "/styles/components/page-dots.css";
-@import "/styles/components/home-screen.css";
-@import "/styles/components/minitable.css";
 @import "/styles/components/badge.css";
-@import "/styles/components/stat-strip.css";
-@import "/styles/components/upload-zone.css";
 @import "/styles/components/file-review.css";
 @import "/styles/components/redtable/redtable.css";
 @import "/styles/components/redtable/redtable-pro.css";
@@ -30,8 +26,8 @@
 @import "/styles/components/redtable/col-order.css";
 
 /* Full-bleed shell (no topbar, no .rp-app gutter) is set globally by
-   main.css via `body[data-chrome="full"]` — see scripts/main.js's
-   ROUTES table. Per-page CSS only owns layout INSIDE the page now. */
+   main.css via `body[data-chrome="full"]`. Per-page CSS only owns
+   layout INSIDE the page. */
 
 #page-home {
   flex: 1;
@@ -39,31 +35,293 @@
   flex-direction: column;
   position: relative;
   overflow: hidden;
+
+  /* The slate-cobalt / Arctic-blue app gradient — the same --rp-bg-app
+     token the objects / reports / cleaner pages set, so Home reads as
+     one surface. background-attachment: fixed pins it to the viewport.
+     Woz's rebuild pinned --accent to match but left the page bg unset. */
+  background: var(--rp-bg-app);
+  background-attachment: fixed;
 }
 
-/* The library's page-dots strip is `display: none` by default — pages
-   opt in via .visible or a :has() selector. Reveal whenever #page-home
-   is mounted; the IntersectionObserver in home.js handles the active-
-   dot sync as the user scrolls between the 5 step cards. */
-body:has(#page-home) .rp-page-dots { display: flex; }
+/* Pin the accent to the exact blue the Reports / Dashboards pages use
+   (#page-dashboards in dashboards.css) so the whole app reads as one
+   surface — #60a5fa dark, #2563eb light. */
+#page-home { --accent: #60a5fa; }
+html[data-theme="light"] #page-home { --accent: #2563eb; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] #page-home { --accent: #2563eb; }
+}
 
-/* The library accent restore (catppuccin blue) is now applied
-   globally via `body[data-chrome="full"]` in main.css — see
-   docs/frontend/design.md. */
+/* ── Layout — top strip + board, inset clear of the corner float bars
+   (avatar top-left, button bar top-right, nav bar bottom-left). ── */
+.rp-home {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 5rem 1.75rem 3.5rem;
+}
 
-/* Placeholder rows on the "Recent projects" mini-table — keep the
-   table at a fixed 5-row height even when the database has fewer
-   projects. Muted + non-interactive (no hover, no pointer cursor). */
-.rp-minitable-row--placeholder {
-  opacity: 0.4;
-  pointer-events: none;
-  cursor: default;
+/* ── Top strip — greeting · counts · upload ── */
+.rp-home__top {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+.rp-home__intro { flex: 1; min-width: 12rem; }
+.rp-home__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.rp-home__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.rp-home__stats { display: flex; gap: 0.5rem; }
+.rp-home__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 4.75rem;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.6rem;
+  cursor: pointer;
+  font-family: inherit;
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.rp-home__stat:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  transform: translateY(-0.0625rem);
+}
+.rp-home__stat-val {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.rp-home__stat-val--pub { color: var(--green); }
+.rp-home__stat-lbl {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.rp-home__upload {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 0.09rem dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 0.65rem;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rp-home__upload:hover,
+.rp-home__upload.is-over {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+}
+.rp-home__upload > .bi { font-size: 1.5rem; color: var(--accent); }
+.rp-home__upload-txt {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.3;
+}
+.rp-home__upload-txt strong { font-size: 0.82rem; font-weight: 600; }
+.rp-home__upload-txt em {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-style: normal;
+}
+
+/* ── The board — four stage columns ── */
+.rp-pipe {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.9rem;
+}
+.rp-pipe__loading {
+  grid-column: 1 / -1;
+  padding: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Narrow viewports — keep all four columns, scroll horizontally
+   rather than crushing the cards. */
+@media (max-width: 56em) {
+  .rp-pipe {
+    grid-template-columns: repeat(4, minmax(13rem, 1fr));
+    overflow-x: auto;
+  }
+}
+
+.rp-pipe__col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* "Diamond" glass — forced bright. The --surface tint let the dark app
+     background bleed through and grey the column out; pinned to a high
+     white tint so it actually reads white, with a crisp bright edge, a
+     frost blur and a soft lift shadow. Only the bg is theme-pinned — in
+     light mode --text inverts to dark and would grey it. */
+  background: color-mix(in srgb, var(--text) 58%, transparent);
+  border: 0.0938rem solid color-mix(in srgb, var(--text) 55%, transparent);
+  border-radius: 0.7rem;
+  overflow: hidden;
+  backdrop-filter: blur(0.875rem);
+  -webkit-backdrop-filter: blur(0.875rem);
+  box-shadow: 0 0.375rem 1rem rgba(0, 0, 0, 0.28);
+}
+html[data-theme="light"] .rp-pipe__col {
+  background: rgba(255, 255, 255, 0.82);
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] .rp-pipe__col {
+    background: rgba(255, 255, 255, 0.82);
+  }
+}
+/* One accent for the whole board — the app's blue. The columns read
+   as a progression by position + label, not by colour. */
+.rp-pipe__col { --stage: var(--accent); }
+
+.rp-pipe__col-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  padding: 0.6rem 0.75rem;
+  background: color-mix(in srgb, var(--stage) 10%, transparent);
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.rp-pipe__col-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--stage);
+}
+.rp-pipe__col-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rp-pipe__col-count {
+  margin-left: auto;
+  min-width: 1.4rem;
+  padding: 0.1rem 0.4rem;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--stage) 18%, transparent);
+  color: var(--stage);
+}
+
+.rp-pipe__col-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+}
+
+/* ── Project card ── */
+.rp-pipe__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 0.0625rem solid color-mix(in srgb, var(--text) 10%, transparent);
+  border-left: 0.18rem solid var(--stage);
+  border-radius: 0.45rem;
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.rp-pipe__card:hover {
+  transform: translateY(-0.0625rem);
+  box-shadow: 0 0.25rem 0.9rem rgba(0, 0, 0, 0.18);
+  border-color: color-mix(in srgb, var(--stage) 45%, transparent);
+}
+.rp-pipe__card-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-pipe__card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rp-pipe__card-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.rp-pipe__card-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.rp-pipe__card:hover .rp-pipe__card-go { color: var(--stage); }
+
+.rp-pipe__score {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.6rem;
+}
+.rp-pipe__score.score-hi  { background: color-mix(in srgb, var(--green)  16%, transparent); color: var(--green);  }
+.rp-pipe__score.score-mid { background: color-mix(in srgb, var(--yellow) 16%, transparent); color: var(--yellow); }
+.rp-pipe__score.score-lo  { background: color-mix(in srgb, var(--red)    16%, transparent); color: var(--red);    }
+
+.rp-pipe__empty {
+  padding: 1rem 0.5rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+  border: 0.09rem dashed color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 0.45rem;
 }
 
 /* Bump the home avatar to clearly differentiate it from the 2.5rem
-   float buttons in the corners. The library's .rp-avatar--lg sizes
-   are 2.5rem / 3rem — too close to .rp-float-btn (also 2.5rem). The
-   avatar represents "you" and warrants visual primacy. */
+   float buttons in the corners. The avatar represents "you" and
+   warrants visual primacy. */
 #home-avatar.rp-avatar--lg {
   width: 4rem;
   height: 4rem;
@@ -75,31 +333,6 @@ body:has(#page-home) .rp-page-dots { display: flex; }
     height: 4.5rem;
     font-size: 1.375rem;
   }
-}
-
-#page-home .hs-import .hs-content {
-  width: 90%;
-  margin-inline: auto;
-}
-
-/* The bottom-left float bar fades on step ≥ 2 — port of the demo's
-   .is-not-first-step rules. JS adds the class to #page-home when the
-   scroll-snap leaves step 1. */
-#page-home .rp-float-bar--bl,
-#page-home .rp-avatar--float,
-#page-home .rp-float-bar--tr {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-#page-home.is-not-first-step .rp-avatar--float,
-#page-home.is-not-first-step .rp-float-bar--tr {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-0.75rem);
-}
-#page-home.is-not-first-step .rp-float-bar--bl {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(0.75rem);
 }
 
 /* ── "Log in as user" switcher modal (dev tool) ──────────────────── */
@@ -131,23 +364,15 @@ body:has(#page-home) .rp-page-dots { display: flex; }
 .home-switch-sub  { font-size: 0.75rem; color: var(--muted); }
 
 /* ── File-review modal in sandbox shell ──────────────────────────────
-   The file-review modal (#modal-ul-review) was wrapped in a
-   .rp-modal sandbox shell to match cleaner/objects modal chrome.
-   Three overrides to make the shell host the rp-fr-* internals
-   cleanly:
-
-   1. Width — sandbox default .rp-modal is min(28rem, 92vw); the
-      file-review panel is data-dense (donut + completeness bars +
-      preview table) so it needs the original 56rem max-width.
-   2. Padding + gap zeroed — the .rp-fr-panel internals carry their
-      own filebar / body / cta padding (file-review.css); shell
-      padding would compound and chop horizontal space. gap: 0 too
-      since panels stack tightly.
-   3. .rp-fr-panel chrome neutralized — its `background: var(--surface);
-      border: 0.0625rem solid var(--accent); border-radius: 0.75rem;
-      margin-bottom: 1rem; animation: pop` would paint a second
-      border/bg INSIDE the sandbox shell. Strip it so the shell is
-      the only chrome surface. */
+   The file-review modal (#modal-ul-review) is wrapped in a .rp-modal
+   sandbox shell to match cleaner/objects modal chrome. Three overrides
+   make the shell host the rp-fr-* internals cleanly:
+   1. Width — the file-review panel is data-dense (donut + completeness
+      bars + preview table) so it needs the original 56rem max-width.
+   2. Padding + gap zeroed — the .rp-fr-panel internals carry their own
+      filebar / body / cta padding; shell padding would compound.
+   3. .rp-fr-panel chrome neutralized — its own background/border/
+      margin/animation would paint a second surface inside the shell. */
 .rp-modal--ul-review {
   width: min(56rem, 92vw);
   max-height: 90vh;

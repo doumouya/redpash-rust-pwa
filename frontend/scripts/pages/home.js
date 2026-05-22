@@ -1,15 +1,14 @@
 // Home page — authenticated landing.
 //
-// A single dashboard card: recent-projects / latest-files minitables,
-// a stat strip, and the upload zone. The four browse redtables
-// (projects / files / reports / dashboards) moved to the dedicated
-// /objects page — Home links into it from the stat buttons, the
-// bottom-left float bar, and the minitable rows.
+// A pipeline board: every project as a card in its computed-stage
+// column (import → clean → report → publish), above a slim strip with
+// the greeting, the Projects/Files/Published counts, and the upload
+// entry point. The four browse redtables moved to /objects — the stat
+// buttons and the bottom-left float bar link into it.
 //
 // Real backend wiring (no mock data):
-//   • /api/projects                  recent-projects minitable + stats
-//   • /api/projects/:rid/files       latest-files minitable
-//   • /api/reports + /api/dashboards  the "Published" stat count
+//   • /api/projects                  the board + the Projects/Files counts
+//   • /api/reports + /api/dashboards  the "Published" count
 //   • /api/files/upload              upload zone
 //   • /api/me                        avatar initials
 //   • /api/auth/logout               Log out float-btn
@@ -247,7 +246,7 @@ export default async function mount(root, ctx) {
         // counts for one frame before the network correction.
         const proj = await api.getCached("/projects").fresh.catch(() => ({ items: [] }));
         homeData.projects = proj.items ?? [];
-        renderStep1Cards();
+        renderBoard();
         renderStats();
       } catch {}
 
@@ -336,7 +335,7 @@ export default async function mount(root, ctx) {
     homeData.projects   = projects?.items   ?? [];
     homeData.reports    = reports?.items    ?? [];
     homeData.dashboards = dashboards?.items ?? [];
-    renderStep1Cards();
+    renderBoard();
     renderStats();
   };
 
@@ -362,144 +361,69 @@ export default async function mount(root, ctx) {
   api.prewarm(["/files", "/users", "/companies"]);
 }
 
-// ── Step 1 cards ───────────────────────────────────────────────────
-const RECENT_SLOTS = 5;
+// ── Pipeline board ────────────────────────────────────────────────
+// Four stage columns — import → clean → report → publish. Every
+// project is a card in its computed-stage column; a card click jumps
+// to the tool for that project's next pipeline step.
+const STAGES = [
+  { key: "import",  label: "Import",  hint: "Clean it",
+    href: (p) => `#/cleaner?project=${encodeURIComponent(p.redpash_id)}` },
+  { key: "clean",   label: "Clean",   hint: "Build a report",
+    href: (p) => `#/reports?project=${encodeURIComponent(p.redpash_id)}` },
+  { key: "report",  label: "Report",  hint: "Build a dashboard",
+    href: (p) => `#/dashboards?project=${encodeURIComponent(p.redpash_id)}` },
+  { key: "publish", label: "Publish", hint: "View it",
+    href: (p) => `#/dashboards?project=${encodeURIComponent(p.redpash_id)}` },
+];
 
-// Score → color-class mapping. Mirrors the demo's `scoreClass()`:
-//   ≥ 90  → green   (score-hi)
-//   ≥ 60  → yellow  (score-mid)
-//   <  60 → red     (score-lo)
+// Score → color class. >=90 green · >=60 yellow · <60 red.
 function scoreClass(pct) {
   if (pct == null || isNaN(pct)) return "";
   return pct >= 90 ? "score-hi" : pct >= 60 ? "score-mid" : "score-lo";
 }
 function scoreChip(pct) {
   if (pct == null || isNaN(pct)) return "";
-  return `<span class="rp-minitable-score ${scoreClass(pct)}">${Math.round(pct)}%</span>`;
+  return `<span class="rp-pipe__score ${scoreClass(pct)}">${Math.round(pct)}%</span>`;
 }
 
-// Project stage → .rp-badge--* color modifier. Matches demo
-// (demos/index.html STAGE_CLR) with the addition of `purple` for
-// Report — the demo uses accent for both Import and Report, but our
-// home page already paints Step 4 (Report) purple, so we colour the
-// badge to echo that.
-const PROJECT_STAGE_BADGE = {
-  import:  { cls: "rp-badge--accent", label: "Import"  },
-  clean:   { cls: "rp-badge--yellow", label: "Clean"   },
-  report:  { cls: "rp-badge--purple", label: "Report"  },
-  publish: { cls: "rp-badge--green",  label: "Publish" },
-};
-function stageBadge(stage) {
-  const cfg = PROJECT_STAGE_BADGE[(stage ?? "").toLowerCase()]
-    ?? { cls: "rp-badge--muted", label: stage ?? "—" };
-  return `<span class="rp-badge ${cfg.cls}">${esc(cfg.label)}</span>`;
-}
-
-// Project / file status → .rp-tag-* color modifier. Mirrors the demo's
-// TAG_CLR table plus the extra in-flight statuses our backend emits.
-const STATUS_TAG = {
-  active:    "rp-tag-blue",
-  published: "rp-tag-green",
-  ready:     "rp-tag-green",
-  clean:     "rp-tag-green",
-  publish:   "rp-tag-green",
-  draft:     "rp-tag-grey",
-  archived:  "rp-tag-grey",
-  analysing: "rp-tag-blue",
-  cleaning:  "rp-tag-blue",
-  queued:    "rp-tag-blue",
-  uploading: "rp-tag-blue",
-  error:     "rp-tag-red",
-  failed:    "rp-tag-red",
-};
-function statusTag(status) {
-  if (!status) return "";
-  const key = String(status).toLowerCase();
-  const cls = STATUS_TAG[key] ?? "rp-tag-grey";
-  return `<span class="rp-tag ${cls}">${esc(key)}</span>`;
-}
-
-// Placeholder padding row — empty greyed-out cells so the table holds
-// its 5-row height. Built dynamically so the meta column count matches
-// whatever the real rows render.
-const PLACEHOLDER_ROW = `
-  <div class="rp-minitable-row rp-minitable-row--placeholder" aria-hidden="true">
-    <span class="rp-minitable-name">—</span>
-    <span class="rp-minitable-meta">
-      <span class="rp-minitable-dim">—</span>
-      <span class="rp-minitable-dim">—</span>
-    </span>
-  </div>
-`;
-
-function renderStep1Cards() {
+// Paint the four-column pipeline board from homeData.projects. Each
+// project drops into the column for its computed `stage`; an unknown
+// stage falls back to import.
+function renderBoard() {
   const root = window.__homeRoot;
-  const projects = homeData.projects;
+  const pipe = root?.querySelector("#home-pipe");
+  if (!pipe) return;
 
-  // Recent projects — colorful demo composition: name + score% + file
-  // count + stage badge + status tag. Always RECENT_SLOTS rows; padded
-  // with placeholders so the mini-table keeps its visual weight.
-  const recent = [...projects]
-    .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
-    .slice(0, RECENT_SLOTS);
-  const projList = root.querySelector("#hs1-projects");
-  if (projList) {
-    const real = recent.map((p) => `
-      <a class="rp-minitable-row" href="#/cleaner?project=${encodeURIComponent(p.redpash_id)}">
-        <span class="rp-minitable-name">${esc(p.name)}</span>
-        <span class="rp-minitable-meta">
-          ${scoreChip(p.cleanness_pct)}
-          <span class="rp-minitable-dim">${p.file_count ?? 0} ${p.file_count === 1 ? "file" : "files"}</span>
-          ${stageBadge(p.stage)}
-          ${statusTag(p.status)}
-        </span>
-      </a>
-    `).join("");
-    const pad = PLACEHOLDER_ROW.repeat(RECENT_SLOTS - recent.length);
-    projList.innerHTML = real + pad;
+  const byStage = { import: [], clean: [], report: [], publish: [] };
+  for (const p of homeData.projects) {
+    const s = String(p.stage ?? "import").toLowerCase();
+    (byStage[s] ?? byStage.import).push(p);
   }
 
-  // Latest files — files variant from minitable.css docstring:
-  // name + score + row count + col count + size + stage badge.
-  // Files now carry a computed pipeline stage, same as projects.
-  const recentName = root.querySelector("#hs1-recent-name");
-  const filesList  = root.querySelector("#hs1-files");
-  if (!recent.length) {
-    if (recentName) recentName.textContent = "—";
-    if (filesList)  filesList.innerHTML = `<div class="rp-minitable-empty">No files yet.</div>`;
-    return;
-  }
-  const top = recent[0];
-  if (recentName) recentName.textContent = top.name;
-  if (filesList) {
-    filesList.innerHTML = `<div class="rp-minitable-empty">Loading…</div>`;
-    api.get(`/projects/${encodeURIComponent(top.redpash_id)}/files`)
-      .then((res) => {
-        const files = (res.items ?? []).slice(0, 5);
-        if (!files.length) { filesList.innerHTML = `<div class="rp-minitable-empty">No files in this project yet.</div>`; return; }
-        filesList.innerHTML = files.map((f) => `
-          <a class="rp-minitable-row" href="#/cleaner?file=${encodeURIComponent(f.redpash_id)}">
-            <span class="rp-minitable-name">${esc(f.display_name ?? f.filename)}</span>
-            <span class="rp-minitable-meta">
-              ${scoreChip(f.cleanness_pct)}
-              <span class="rp-minitable-dim">${(f.row_count ?? 0).toLocaleString()}r</span>
-              ${f.col_count != null ? `<span class="rp-minitable-dim">${f.col_count}c</span>` : ""}
-              ${f.file_size_bytes != null ? `<span class="rp-minitable-size">${fmtSize(f.file_size_bytes)}</span>` : ""}
-              ${stageBadge(f.stage)}
+  pipe.innerHTML = STAGES.map((st) => {
+    const col = (byStage[st.key] ?? [])
+      .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+    const cards = col.length
+      ? col.map((p) => `
+          <a class="rp-pipe__card" href="${st.href(p)}">
+            <span class="rp-pipe__card-name">${esc(p.name)}</span>
+            <span class="rp-pipe__card-meta">
+              <span class="rp-pipe__card-files"><i class="bi bi-file-earmark-text"></i> ${p.file_count ?? 0}</span>
+              ${scoreChip(p.cleanness_pct)}
             </span>
-          </a>
-        `).join("");
-      })
-      .catch(() => { filesList.innerHTML = `<div class="rp-minitable-empty">Couldn't load files.</div>`; });
-  }
-}
-
-// Bytes → human-readable. KB / MB / GB with one decimal except for KB.
-function fmtSize(bytes) {
-  if (bytes < 1024)         return `${bytes} B`;
-  if (bytes < 1024 * 1024)  return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 ** 3)    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+            <span class="rp-pipe__card-go">${esc(st.hint)} <i class="bi bi-arrow-right"></i></span>
+          </a>`).join("")
+      : `<div class="rp-pipe__empty">Nothing here yet</div>`;
+    return `
+      <section class="rp-pipe__col rp-pipe__col--${st.key}">
+        <header class="rp-pipe__col-hdr">
+          <span class="rp-pipe__col-dot"></span>
+          <span class="rp-pipe__col-name">${st.label}</span>
+          <span class="rp-pipe__col-count">${col.length}</span>
+        </header>
+        <div class="rp-pipe__col-body">${cards}</div>
+      </section>`;
+  }).join("");
 }
 
 // ── Stat strip ─────────────────────────────────────────────────────
@@ -513,9 +437,9 @@ function renderStats() {
   const published  = reports.filter((r) => r.is_public).length
                    + dashboards.filter((d) => d.is_public).length;
 
-  animateNumber(root.querySelector("#hs1-stat-projects"),  projects.length);
-  animateNumber(root.querySelector("#hs1-stat-files"),     totalFiles);
-  animateNumber(root.querySelector("#hs1-stat-published"), published);
+  animateNumber(root.querySelector("#home-stat-projects"),  projects.length);
+  animateNumber(root.querySelector("#home-stat-files"),     totalFiles);
+  animateNumber(root.querySelector("#home-stat-published"), published);
 }
 
 function animateNumber(el, to) {
@@ -532,9 +456,6 @@ function animateNumber(el, to) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-// Only `esc` survives the redtable extraction — fmtDate / fmtBytes /
-// projectName moved to objects.js with the redtable machinery, and
-// fmtSize (above) is the dashboard's own byte formatter.
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
