@@ -2,7 +2,13 @@
    The RedPash table. App-wide rp- — the redtable is built on it and
    minitables reuse it. */
 
-.rt-table-wrap { flex: 1; min-width: 0; overflow: auto; }
+.rt-table-wrap { flex: 1; min-width: 0; overflow: auto; position: relative; }
+.rt-table-state {
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-md);
+}
 
 .rp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .rp-table .col-chk { width: 38px; display: none; }

@@ -34,6 +34,12 @@
 .rt-nav.compact .rt-nav-title { display: none; }
 
 .rt-nav-body { flex: 1; overflow-y: auto; padding: 4px 6px; }
+.rt-nav-state {
+  padding: var(--rp-sp-4) var(--rp-sp-3);
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+}
 
 /* a group = a project */
 .rt-group { margin-bottom: 2px; }

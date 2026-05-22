@@ -1,15 +1,13 @@
-<!-- Workspace — the redtable as a browser. Composes the eight
-     components: topbar · rail · toolbar · table · filter panel ·
-     tools panel · pager, all built on the button atom. The table
-     carries sample rows until the rail wires file loads to /api. -->
+<!-- Workspace — the redtable as a browser. The rail loads real projects
+     and files; a file click fetches /api/files/:rid (columns) and
+     /page (rows) and renders the table. The toolbar's controls
+     operate on whatever's loaded. -->
 <section class="rp-workspace">
-
-  <!-- topbar — the shared component, mounted by workspace.js -->
   <header id="rp-topbar"></header>
 
   <div class="rp-ws-body">
 
-    <!-- ════ rail — vertical project / file tabs ════ -->
+    <!-- ════ rail — projects + files, lazy-loaded ════ -->
     <aside class="rt-nav" id="wsNav">
       <div class="rt-nav-head">
         <span class="rt-nav-title">Projects</span>
@@ -17,73 +15,12 @@
           <i class="bi bi-chevron-double-left"></i>
         </button>
       </div>
-      <div class="rt-nav-body" id="wsNavBody">
-        <div class="rt-group expanded">
-          <button class="rt-group-head" type="button">
-            <i class="bi bi-chevron-down rt-group-caret"></i>
-            <span class="rt-group-mark" data-c="blue">SD</span>
-            <span class="rt-group-name">Sales Data</span>
-            <span class="rt-group-count">3</span>
-            <span class="rt-group-add" title="New file"><i class="bi bi-plus"></i></span>
-          </button>
-          <div class="rt-group-body">
-            <button class="rt-tab" type="button">
-              <i class="bi bi-filetype-csv rt-tab-icon"></i>
-              <span class="rt-tab-name">sales_2024.csv</span>
-              <span class="rt-tab-dot is-clean" title="Clean"></span>
-              <span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>
-            </button>
-            <button class="rt-tab active" type="button">
-              <i class="bi bi-filetype-csv rt-tab-icon"></i>
-              <span class="rt-tab-name">customers.csv</span>
-              <span class="rt-tab-dot is-warn" title="Needs review"></span>
-              <span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>
-            </button>
-            <button class="rt-tab" type="button">
-              <i class="bi bi-filetype-csv rt-tab-icon"></i>
-              <span class="rt-tab-name">raw_export.csv</span>
-              <span class="rt-tab-dot is-dirty" title="Not cleaned"></span>
-              <span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>
-            </button>
-          </div>
-        </div>
-        <div class="rt-group">
-          <button class="rt-group-head" type="button">
-            <i class="bi bi-chevron-down rt-group-caret"></i>
-            <span class="rt-group-mark" data-c="mauve">Q4</span>
-            <span class="rt-group-name">Q4 Analysis</span>
-            <span class="rt-group-count">5</span>
-            <span class="rt-group-add" title="New file"><i class="bi bi-plus"></i></span>
-          </button>
-          <div class="rt-group-body">
-            <button class="rt-tab" type="button">
-              <i class="bi bi-filetype-csv rt-tab-icon"></i>
-              <span class="rt-tab-name">revenue_q4.csv</span>
-              <span class="rt-tab-dot is-clean"></span>
-              <span class="rt-tab-close"><i class="bi bi-x"></i></span>
-            </button>
-          </div>
-        </div>
-        <div class="rt-group">
-          <button class="rt-group-head" type="button">
-            <i class="bi bi-chevron-down rt-group-caret"></i>
-            <span class="rt-group-mark" data-c="teal">MK</span>
-            <span class="rt-group-name">Marketing</span>
-            <span class="rt-group-count">2</span>
-            <span class="rt-group-add" title="New file"><i class="bi bi-plus"></i></span>
-          </button>
-          <div class="rt-group-body">
-            <button class="rt-tab" type="button">
-              <i class="bi bi-filetype-csv rt-tab-icon"></i>
-              <span class="rt-tab-name">campaigns.csv</span>
-              <span class="rt-tab-dot is-clean"></span>
-              <span class="rt-tab-close"><i class="bi bi-x"></i></span>
-            </button>
-          </div>
-        </div>
+      <div class="rt-nav-body" id="wsNavBody" aria-busy="true">
+        <div class="rt-nav-state">Loading projects…</div>
       </div>
       <div class="rt-nav-foot">
-        <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button">
+        <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button"
+                disabled title="New project — POST /api/projects coming soon">
           <i class="bi bi-plus-lg"></i><span>New project</span>
         </button>
       </div>
@@ -125,13 +62,7 @@
           </div>
           <div class="rt-dd-wrap">
             <button class="rt-btn" data-dd="wsColsDd" type="button" title="Columns"><i class="bi bi-layout-three-columns"></i></button>
-            <div class="rt-dd" id="wsColsDd">
-              <label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="3" checked /> Customer</label>
-              <label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="4" checked /> Email</label>
-              <label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="5" checked /> City</label>
-              <label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="6" checked /> Signed up</label>
-              <label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="7" checked /> Status</label>
-            </div>
+            <div class="rt-dd" id="wsColsDd"><!-- dynamic — rebuilt when a file loads --></div>
           </div>
           <span class="rt-sel-chip" id="wsSelChip" title="Clear selection">
             <i class="bi bi-check2-square"></i><span id="wsSelCount">0</span>&nbsp;selected
@@ -168,31 +99,11 @@
           </aside>
 
           <div class="rt-table-wrap">
-            <table class="rp-table" id="wsTable">
-              <thead>
-                <tr>
-                  <th class="col-chk"><input type="checkbox" class="rt-chk" id="wsSelectAll" /></th>
-                  <th class="col-rownum">#</th>
-                  <th class="sortable" data-sort="3">Customer <i class="bi bi-chevron-expand sort"></i></th>
-                  <th>Email</th>
-                  <th class="sortable" data-sort="5">City <i class="bi bi-chevron-expand sort"></i></th>
-                  <th class="sortable" data-sort="6" data-type="date">Signed up <i class="bi bi-chevron-expand sort"></i></th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">1</td><td class="cell-name editable">Amelia Hart</td><td class="cell-muted editable">amelia.hart@acme.io</td><td class="editable">Bristol</td><td class="cell-muted">12 Jan 2024</td><td><span class="rt-status is-active">Active</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">2</td><td class="cell-name editable">Noah Bergström</td><td class="cell-muted editable">noah.b@acme.io</td><td class="editable">Stockholm</td><td class="cell-muted">28 Jan 2024</td><td><span class="rt-status is-active">Active</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">3</td><td class="cell-name editable">Mia Chen</td><td class="cell-warn editable">— missing —</td><td class="editable">Singapore</td><td class="cell-muted">03 Feb 2024</td><td><span class="rt-status is-new">New</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">4</td><td class="cell-name editable">Liam Walsh</td><td class="cell-muted editable">liam.walsh@acme.io</td><td class="editable">Dublin</td><td class="cell-muted">19 Feb 2024</td><td><span class="rt-status is-lapsed">Lapsed</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">5</td><td class="cell-name editable">Sofia Rossi</td><td class="cell-muted editable">sofia.rossi@acme.io</td><td class="editable">Milan</td><td class="cell-muted">04 Mar 2024</td><td><span class="rt-status is-active">Active</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">6</td><td class="cell-name editable">Ethan Park</td><td class="cell-muted editable">ethan.park@acme.io</td><td class="editable">Seoul</td><td class="cell-muted">22 Mar 2024</td><td><span class="rt-status is-new">New</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">7</td><td class="cell-name editable">Olivia Dubois</td><td class="cell-muted editable">olivia.dubois@acme.io</td><td class="editable">Lyon</td><td class="cell-muted">09 Apr 2024</td><td><span class="rt-status is-active">Active</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">8</td><td class="cell-name editable">Lucas Müller</td><td class="cell-muted editable">lucas.muller@acme.io</td><td class="editable">Berlin</td><td class="cell-muted">27 Apr 2024</td><td><span class="rt-status is-lapsed">Lapsed</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">9</td><td class="cell-name editable">Ava Nakamura</td><td class="cell-muted editable">ava.n@acme.io</td><td class="editable">Osaka</td><td class="cell-muted">11 May 2024</td><td><span class="rt-status is-active">Active</span></td></tr>
-                <tr><td class="col-chk"><input type="checkbox" class="rt-chk" /></td><td class="col-n col-rownum">10</td><td class="cell-name editable">James O'Brien</td><td class="cell-muted editable">james.obrien@acme.io</td><td class="editable">Cork</td><td class="cell-muted">22 May 2024</td><td><span class="rt-status is-new">New</span></td></tr>
-              </tbody>
+            <table class="rp-table" id="wsTable" hidden>
+              <thead><!-- dynamic — rebuilt when a file loads --></thead>
+              <tbody><!-- dynamic --></tbody>
             </table>
+            <div class="rt-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
 
           <aside class="rt-panel rt-panel--tools" id="wsToolsPanel">
@@ -217,18 +128,10 @@
 
         </div>
 
-        <!-- pager -->
+        <!-- pager (static for now — real pagination lands next) -->
         <div class="rt-pager">
-          <span class="rt-rows-info" id="wsRowsInfo">10 of 10 rows</span>
-          <div class="rt-pages">
-            <button class="rt-pg" type="button" title="Previous"><i class="bi bi-chevron-left"></i></button>
-            <button class="rt-pg active" type="button">1</button>
-            <button class="rt-pg" type="button">2</button>
-            <button class="rt-pg" type="button">3</button>
-            <span class="rt-pg-gap">…</span>
-            <button class="rt-pg" type="button">125</button>
-            <button class="rt-pg" type="button" title="Next"><i class="bi bi-chevron-right"></i></button>
-          </div>
+          <span class="rt-rows-info" id="wsRowsInfo">No file open.</span>
+          <div class="rt-pages" id="wsPages"></div>
         </div>
 
       </div>
