@@ -1,12 +1,22 @@
-<!-- Blank home — frontend-reset scaffold. A rebuild target: the real
-     home surface is rebuilt from the red-front prototype as decomposed
-     atoms. -->
+<!-- Home — the project launchpad. Lists the signed-in user's projects;
+     each card shows where the project sits in the import → clean →
+     report → publish pipeline. -->
 <section class="rp-home">
   <header class="rp-home__bar">
-    <div class="rp-wordmark">Red<b>Pash</b></div>
-    <button type="button" id="rp-home-signout" class="rp-btn rp-btn--ghost">Sign out</button>
+    <div class="rp-wordmark rp-home__brand">Red<b>Pash</b></div>
+    <div class="rp-home__user">
+      <span class="rp-home__who" id="rp-home-who">—</span>
+      <button type="button" id="rp-home-signout" class="rp-btn rp-btn--ghost">Sign out</button>
+    </div>
   </header>
-  <div class="rp-home__body">
-    <p>Home — signed in as <span id="rp-home-who">—</span>. Blank canvas for the rebuild.</p>
+
+  <div class="rp-home__main">
+    <div class="rp-home__head">
+      <h1 class="rp-home__title">Your projects</h1>
+      <p class="rp-muted" id="rp-home-count"></p>
+    </div>
+    <div class="rp-home__board" id="rp-home-board" aria-busy="true">
+      <p class="rp-home__state">Loading your projects…</p>
+    </div>
   </div>
 </section>

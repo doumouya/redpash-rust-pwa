@@ -1,22 +1,113 @@
 /* ── home ───────────────────────────────────────────────────────
-   The home page — a blank canvas pending its rebuild from the
-   red-front prototype. */
+   The project launchpad: a top bar of chrome over a board of
+   project cards. Each card shows the project's place in the
+   import → clean → report → publish pipeline. */
 
 .rp-home { min-height: 100vh; display: flex; flex-direction: column; }
 
+/* top bar */
 .rp-home__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--rp-sp-4) var(--rp-sp-5);
+  gap: var(--rp-sp-4);
+  padding: var(--rp-sp-4) var(--rp-sp-6);
   border-bottom: 1px solid var(--rp-border);
 }
-.rp-home__bar .rp-wordmark { font-size: var(--rp-text-lg); }
+.rp-home__brand { font-size: var(--rp-text-lg); }
+.rp-home__user { display: flex; align-items: center; gap: var(--rp-sp-4); }
+.rp-home__who { color: var(--rp-text-dim); font-size: var(--rp-text-sm); }
 
-.rp-home__body {
-  flex: 1;
+/* main column */
+.rp-home__main {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--rp-sp-8) var(--rp-sp-6);
+}
+.rp-home__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-5);
+}
+.rp-home__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; }
+
+/* the board */
+.rp-home__board {
   display: grid;
-  place-items: center;
-  padding: var(--rp-sp-5);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--rp-sp-4);
+}
+.rp-home__state {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--rp-sp-8);
+  text-align: center;
   color: var(--rp-text-mute);
 }
+
+/* project card */
+.rp-proj {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-4);
+  padding: var(--rp-sp-5);
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+  transition: border-color 0.15s var(--rp-ease);
+}
+.rp-proj:hover { border-color: var(--rp-glass-border); }
+.rp-proj__top { display: flex; align-items: center; gap: var(--rp-sp-2); }
+.rp-proj__name {
+  flex: 1;
+  margin: 0;
+  font-size: var(--rp-text-md);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-proj__tag {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rp-accent-2);
+  background: rgba(137, 180, 250, 0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* the pipeline — import / clean / report / publish */
+.rp-proj__pipe {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-proj__step {
+  flex: 1;
+  padding: 5px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--rp-text-mute);
+  background: var(--rp-surface-2);
+  border-top: 2px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+}
+.rp-proj__step.is-done {
+  color: var(--rp-text-dim);
+  border-top-color: var(--rp-accent-2);
+}
+.rp-proj__step.is-current {
+  color: var(--rp-text);
+  background: rgba(243, 139, 168, 0.1);
+  border-top-color: var(--rp-accent);
+}
+
+.rp-proj__meta { margin: 0; font-size: var(--rp-text-sm); color: var(--rp-text-mute); }
