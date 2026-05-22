@@ -64,6 +64,8 @@ async fn get_me(
 #[derive(Deserialize)]
 struct PatchMeBody {
     #[serde(default)] display_name: Option<String>,
+    #[serde(default)] first_name:   Option<String>,
+    #[serde(default)] last_name:    Option<String>,
     #[serde(default)] job_title:    Option<String>,
     #[serde(default)] organisation: Option<String>,
     #[serde(default)] use_case:     Option<String>,
@@ -100,6 +102,8 @@ async fn patch_me(
         body.use_case.as_deref(),
         body.locale.as_deref(),
         body.prefs.as_ref(),
+        body.first_name.as_deref(),
+        body.last_name.as_deref(),
     )
     .await
     .map_err(|e| AppError::internal("db", e.to_string()))?

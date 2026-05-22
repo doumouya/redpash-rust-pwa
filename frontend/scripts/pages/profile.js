@@ -115,6 +115,8 @@ export default async function mount(root) {
     const ucEl = root.querySelector("#profile-use-case .rp-set-opt.active");
     const body = {
       display_name: root.querySelector("#profile-display-name").value.trim() || null,
+      first_name:   root.querySelector("#profile-first-name").value.trim()   || null,
+      last_name:    root.querySelector("#profile-last-name").value.trim()    || null,
       job_title:    root.querySelector("#profile-job-title").value.trim()    || null,
       organisation: root.querySelector("#profile-organisation").value.trim() || null,
       use_case:     ucEl?.dataset.value ?? null,
@@ -169,6 +171,8 @@ function populateIdentity(root, me) {
 
 function populateForm(root, me) {
   root.querySelector("#profile-display-name").value = me.display_name ?? "";
+  root.querySelector("#profile-first-name").value   = me.first_name ?? "";
+  root.querySelector("#profile-last-name").value    = me.last_name ?? "";
   root.querySelector("#profile-username").value     = me.username ?? "";
   root.querySelector("#profile-email").value        = me.email ?? "";
   root.querySelector("#profile-job-title").value    = me.job_title ?? "";

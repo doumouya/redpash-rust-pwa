@@ -12,6 +12,13 @@ pub struct UserProfile {
     pub username:     String,
     pub email:        Option<String>,
     pub display_name: String,
+    /// Structured name fields. Optional — pre-2026-05-22 rows backfill
+    /// from display_name, which stays the friendly label (avatar
+    /// initials, UI). New payloads may omit them, hence #[serde(default)].
+    #[serde(default)]
+    pub first_name:   Option<String>,
+    #[serde(default)]
+    pub last_name:    Option<String>,
     pub avatar_url:   Option<String>,
     pub job_title:    Option<String>,
     pub organisation: Option<String>,

@@ -90,6 +90,8 @@ async fn get_one(
 #[derive(Deserialize)]
 struct PatchUserBody {
     #[serde(default)] display_name: Option<String>,
+    #[serde(default)] first_name:   Option<String>,
+    #[serde(default)] last_name:    Option<String>,
     #[serde(default)] username:     Option<String>,
     #[serde(default)] email:        Option<String>,
     #[serde(default)] plan:         Option<String>,
@@ -109,6 +111,8 @@ async fn patch(
     super::resolve_user_rid(&state, &headers).await?;
     let trim = |o: Option<String>| o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let display_name = trim(body.display_name);
+    let first_name   = trim(body.first_name);
+    let last_name    = trim(body.last_name);
     let username     = trim(body.username);
     let email        = trim(body.email);
     let plan         = trim(body.plan);
@@ -129,6 +133,8 @@ async fn patch(
         use_case.as_deref(),
         locale.as_deref(),
         None,
+        first_name.as_deref(),
+        last_name.as_deref(),
     ).await;
     match res {
         Ok(opt) => Ok(Json(opt.ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?)),

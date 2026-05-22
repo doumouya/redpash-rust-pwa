@@ -452,6 +452,10 @@ const SCHEMAS = {
       // constraint — collisions surface as a 409 with kind:"username_taken".
       { key: "display_name", label: "Name",     render: (r) => esc(r.display_name),
         edit: { type: "text", field: "display_name" } },
+      { key: "first_name",   label: "First name", render: (r) => _objNullable(r.first_name),
+        edit: { type: "text", field: "first_name" } },
+      { key: "last_name",    label: "Last name",  render: (r) => _objNullable(r.last_name),
+        edit: { type: "text", field: "last_name" } },
       { key: "username",     label: "Username", render: (r) => esc(r.username),
         edit: { type: "text", field: "username" } },
       { key: "email",        label: "Email",    render: (r) => _objNullable(r.email),
