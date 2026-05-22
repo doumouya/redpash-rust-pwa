@@ -105,6 +105,56 @@ async fn main() -> Result<()> {
             .map(|s| if s.len() >= 7 { &s[..7] } else { s })
             .unwrap_or("?"),
     );
+
+    print_diff_summary(&pool, &tool, run_id).await?;
+
+    Ok(())
+}
+
+// "Since last run" — look up the most recent earlier run for the same tool
+// and call audit.run_diff. Silent if there's no prior run yet.
+async fn print_diff_summary(pool: &sqlx::PgPool, tool: &str, run_id: i64) -> Result<()> {
+    let prev_id: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM audit.run
+          WHERE tool = $1 AND id < $2
+          ORDER BY id DESC LIMIT 1",
+    )
+    .bind(tool)
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await
+    .context("lookup prev run")?;
+
+    let Some(prev) = prev_id else {
+        println!("  (no prior {tool} run — baseline established)");
+        return Ok(());
+    };
+
+    let counts: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT status, COUNT(*)::bigint
+           FROM audit.run_diff($1, $2)
+          WHERE status <> 'unchanged'
+          GROUP BY status",
+    )
+    .bind(run_id)
+    .bind(prev)
+    .fetch_all(pool)
+    .await
+    .context("run_diff query")?;
+
+    let n = |k: &str| counts.iter().find(|(s, _)| s == k).map(|(_, c)| *c).unwrap_or(0);
+    let new_ = n("new");
+    let fixed = n("fixed");
+    let regr = n("regressed");
+    let impr = n("improved");
+
+    if new_ + fixed + regr + impr == 0 {
+        println!("  vs audit.run #{prev}: no change");
+    } else {
+        println!(
+            "  vs audit.run #{prev}: {new_} new · {fixed} fixed · {regr} regressed · {impr} improved",
+        );
+    }
     Ok(())
 }
 
