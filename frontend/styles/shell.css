@@ -108,7 +108,10 @@
   letter-spacing: 0.05em;
 }
 .rp-kpi-value {
-  font-family: var(--rp-font-brand);
+  /* System font (inherits --rp-font from body). The brand font
+     Savate displays well on the home greeting but reads poorly at
+     small numeric sizes, especially on the Monitoring KPI row. One
+     family across both pages — not worth maintaining two versions. */
   font-size: 22px;
   font-weight: 700;
   color: var(--rp-text);
