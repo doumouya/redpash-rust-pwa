@@ -284,6 +284,37 @@
 .rt-tool-status[data-kind="warn"] { color: var(--rp-warn); border-color: var(--rp-warn); }
 .rt-tool-status[data-kind="err"]  { color: var(--rp-accent); border-color: var(--rp-accent); }
 
+/* When a tool form is open, the tools panel widens to 500px and the
+   list+form (wrapped in .rt-tool-cols) becomes a 2-column flex row:
+   list on the left (its original ~230px column), form on the right.
+   A 1px divider separates them. closeForm collapses .has-form back
+   to the original single-column layout. statusEl stays above the
+   columns as a block sibling. */
+.rt-tool-cols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rt-panel--tools.has-form .rt-tool-cols {
+  flex-direction: row;
+  gap: 12px;
+  align-items: stretch;
+}
+.rt-panel--tools.has-form .rt-tool-list {
+  flex: 0 0 230px;
+  border-right: 1px solid var(--rp-border);
+  padding-right: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.rt-panel--tools.has-form .rt-tool-form {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
 /* the picker — vertical list of tool cards */
 .rt-tool-list { display: flex; flex-direction: column; gap: 5px; }
 .rt-tool-item {
@@ -300,6 +331,10 @@
   transition: border-color 0.14s var(--rp-ease), background 0.14s var(--rp-ease);
 }
 .rt-tool-item:hover { border-color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rt-tool-item.is-active {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
 .rt-tool-item > i { font-size: 16px; color: var(--rp-accent-2); padding-top: 1px; }
 .rt-tool-item-body { display: flex; flex-direction: column; min-width: 0; }
 .rt-tool-item-name {

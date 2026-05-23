@@ -313,8 +313,14 @@ export function mountTools(panelBody, ctx) {
   statusEl.className = "rt-tool-status";
   statusEl.hidden = true;
 
+  // colsEl wraps list + form so when the panel widens (.has-form), the
+  // two become flex row siblings without dragging statusEl into the
+  // row layout. statusEl stays above as a regular block.
+  const colsEl = document.createElement("div");
+  colsEl.className = "rt-tool-cols";
+  colsEl.append(listEl, formEl);
   panelBody.innerHTML = "";
-  panelBody.append(statusEl, listEl, formEl);
+  panelBody.append(statusEl, colsEl);
 
   // ── list view ──────────────────────────────────────────────────────
   function renderList() {
@@ -370,13 +376,16 @@ export function mountTools(panelBody, ctx) {
       +   '</button>'
       + '</div>';
 
-    listEl.hidden = true;
+    // List stays visible — the panel widens, list keeps its 250px
+    // column on the left, form takes the new 250px on the right. The
+    // user can pick a different tool without going back first.
     formEl.hidden = false;
-    // Signal to panel.css: widen the right-side panel for the form
-    // view. The picker fits in 250px; forms (with their multi-field
-    // bodies + the eventual diagnostics / preview surface) breathe
-    // better at 500px. Removed in closeForm.
     panelBody.closest(".rt-panel")?.classList.add("has-form");
+    // Mark the active tool in the list so the user sees which form
+    // they're looking at.
+    listEl.querySelectorAll(".rt-tool-item.is-active").forEach((b) => b.classList.remove("is-active"));
+    const idx = TOOLS.indexOf(tool);
+    if (idx >= 0) listEl.querySelector('.rt-tool-item[data-i="' + idx + '"]')?.classList.add("is-active");
   }
 
   formEl.addEventListener("click", async (e) => {
@@ -394,7 +403,7 @@ export function mountTools(panelBody, ctx) {
     renderedFields = [];
     formEl.innerHTML = "";
     formEl.hidden = true;
-    listEl.hidden = false;
+    listEl.querySelectorAll(".rt-tool-item.is-active").forEach((b) => b.classList.remove("is-active"));
     panelBody.closest(".rt-panel")?.classList.remove("has-form");
   }
 
