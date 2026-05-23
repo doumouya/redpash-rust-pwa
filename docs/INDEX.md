@@ -71,6 +71,7 @@ YAML frontmatter above).
 
 - [Runbook index](internal/runbook/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking.
 - [0001 — Orphan preferences](internal/runbook/0001-orphan-prefs.md) — Settings controls that persisted a choice no code consumed.
+- [UI change process](internal/ui-change-process.md) — the standard checklist for every HTML / CSS / JS change: read disk first, reuse components, run `audit.sh`, update the parity inventory.
 - [Excel edge-case catalog](internal/excel-edge-cases/index.md) — triage board for Workstream 4: 22 dirty multi-sheet `.xlsx` fixtures × 41 edge-case classes (EXL-01…41).
 - [Standup log](internal/standup/index.md) — git-mediated async team standup; one append-only file per contributor.
 - [Object model — hard refresh](internal/object-model-hard-refresh.md) — execution plan for retiring the `reports` / `dashboards` tables.
