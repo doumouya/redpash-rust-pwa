@@ -24,14 +24,14 @@ const STAGES = ["import", "clean", "report", "publish"];
 // /api/ prefix out lets the crossing audit not mistake it for one.
 const HOME_TABS = [
   // ── ORG ────────────────────────────────────────────────────
-  { group: "ORG",  key: "users",       label: "Users",       icon: "bi-people",        perm: "admin", endpoint: "/admin/users",       wired: false },
-  { group: "ORG",  key: "companies",   label: "Companies",   icon: "bi-building",      perm: "admin", endpoint: "/admin/companies",   wired: false },
-  { group: "ORG",  key: "memberships", label: "Memberships", icon: "bi-link-45deg",    perm: "admin", endpoint: "/admin/memberships", wired: false },
+  { group: "ORG",  key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true },
+  { group: "ORG",  key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true },
+  { group: "ORG",  key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true },
   // ── DATA ───────────────────────────────────────────────────
-  { group: "DATA", key: "projects",    label: "Projects",    icon: "bi-folder",        perm: "user",  endpoint: "/projects",          wired: true  },
-  { group: "DATA", key: "files",       label: "Files",       icon: "bi-file-earmark",  perm: "user",  endpoint: "/admin/files",       wired: false },
-  { group: "DATA", key: "charts",      label: "Charts",      icon: "bi-bar-chart",     perm: "user",  endpoint: "/admin/charts",      wired: false },
-  { group: "DATA", key: "steps",       label: "Steps",       icon: "bi-wrench",        perm: "admin", endpoint: "/admin/steps",       wired: false },
+  { group: "DATA", key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true },
+  { group: "DATA", key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true },
+  { group: "DATA", key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/admin/charts",      wired: true },
+  { group: "DATA", key: "steps",       label: "Steps",       icon: "bi-wrench",       perm: "admin", endpoint: "/admin/steps",       wired: true },
 ];
 
 const HOME_GROUPS = [
@@ -48,6 +48,101 @@ export default function home(app, { session }) {
   const nav     = app.querySelector("#rpHomeNav");
   const navBody = app.querySelector("#rpHomeNavBody");
   const view    = app.querySelector("#rpHomeView");
+
+  // List-view specs for the six non-Projects tabs. Same Page<T> shape
+  // across every /api/admin/* endpoint, so one generic renderer
+  // (renderListBody + fetchList) drives all six — only columns, row
+  // HTML and optional chipRows differ. Declared before activate()
+  // runs below so the const isn't in TDZ when renderTabBody dispatches.
+  const LIST_VIEWS = {
+    users: {
+      title: "Users",
+      endpoint: "/admin/users",
+      columns: ["Name", "Plan", "Job", "Org", "Joined"],
+      row: (u) =>
+        '<tr>'
+        + '<td>' + esc(u.display_name) + ' <span class="rp-mon-method">@' + esc(u.username) + '</span></td>'
+        + '<td>' + planChip(u.plan) + '</td>'
+        + '<td>' + esc(u.job_title || "—") + '</td>'
+        + '<td>' + esc(u.organisation || "—") + '</td>'
+        + '<td>' + fmtTime(u.created_at) + '</td>'
+        + '</tr>',
+    },
+    companies: {
+      title: "Companies",
+      endpoint: "/admin/companies",
+      columns: ["Name", "Members", "My role", "Created"],
+      row: (c) =>
+        '<tr>'
+        + '<td>' + esc(c.name) + ' <span class="rp-mon-method">' + esc(c.slug) + '</span></td>'
+        + '<td class="is-num">' + (c.member_count || 0) + '</td>'
+        + '<td>' + (c.my_role ? roleChip(c.my_role) : "—") + '</td>'
+        + '<td>' + fmtTime(c.created_at) + '</td>'
+        + '</tr>',
+    },
+    memberships: {
+      title: "Memberships",
+      endpoint: "/admin/memberships",
+      // The endpoint takes ?scope=project|company; flip via the chip row.
+      chipRows: [{
+        name: "scope",
+        label: "Scope",
+        options: [
+          { label: "Project", value: "project" },
+          { label: "Company", value: "company" },
+        ],
+        default: "project",
+      }],
+      columns: ["Member", "Role", "Scope", "Joined"],
+      row: (m) =>
+        '<tr>'
+        + '<td>' + esc(m.user_display_name) + ' <span class="rp-mon-method">@' + esc(m.user_username) + '</span></td>'
+        + '<td>' + roleChip(m.role) + '</td>'
+        + '<td>' + esc(m.scope_name) + '</td>'
+        + '<td>' + fmtTime(m.joined_at) + '</td>'
+        + '</tr>',
+    },
+    files: {
+      title: "Files",
+      endpoint: "/admin/files",
+      columns: ["Filename", "Project", "Type", "Stage", "Rows", "Updated"],
+      row: (f) =>
+        '<tr>'
+        + '<td>' + esc(f.display_name || f.filename) + '</td>'
+        + '<td>' + esc(f.project_name) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(f.file_type) + '</span></td>'
+        + '<td>' + stageChip(f.stage) + '</td>'
+        + '<td class="is-num">' + (f.row_count != null ? f.row_count : "—") + '</td>'
+        + '<td>' + fmtTime(f.updated_at) + '</td>'
+        + '</tr>',
+    },
+    charts: {
+      title: "Charts",
+      endpoint: "/admin/charts",
+      columns: ["Name", "Project", "Stage", "Updated"],
+      row: (c) =>
+        '<tr>'
+        + '<td>' + esc(c.display_name || c.filename) + '</td>'
+        + '<td>' + esc(c.project_name) + '</td>'
+        + '<td>' + stageChip(c.stage) + '</td>'
+        + '<td>' + fmtTime(c.updated_at) + '</td>'
+        + '</tr>',
+    },
+    steps: {
+      title: "Steps",
+      endpoint: "/admin/steps",
+      columns: ["File", "#", "Kind", "Applied", "When"],
+      row: (s) =>
+        '<tr>'
+        + '<td>' + esc(s.file_filename) + '</td>'
+        + '<td class="is-num">' + s.ordinal + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(s.kind) + '</span></td>'
+        + '<td>' + (s.applied ? '<span class="rp-mon-method rp-mon-err-low">yes</span>'
+                              : '<span class="rp-mon-method">no</span>') + '</td>'
+        + '<td>' + fmtTime(s.created_at) + '</td>'
+        + '</tr>',
+    },
+  };
 
   // ─── rail collapse — same affordance as the Workspace rail ───
   app.querySelector("#rpHomeNavCollapse").addEventListener("click", (e) => {
@@ -129,9 +224,15 @@ export default function home(app, { session }) {
   }
 
   // ─── per-tab body renderers ──────────────────────────────────
-  // Projects — fully wired against /api/projects (Phase 1).
-  async function renderTabBody(tab) {
-    if (tab.key !== "projects") { renderPending(tab); return; }
+  // Dispatch: Projects keeps its card-grid renderer; the six admin
+  // tabs share renderListBody (driven by LIST_VIEWS above).
+  function renderTabBody(tab) {
+    if (tab.key === "projects") return renderProjectsBody();
+    const spec = LIST_VIEWS[tab.key];
+    if (spec) renderListBody(tab, spec);
+  }
+
+  async function renderProjectsBody() {
     view.innerHTML = ''
       + headHTML("Projects", "")
       + kpiStripHTML([
@@ -157,6 +258,129 @@ export default function home(app, { session }) {
       board.innerHTML = '<p class="rp-shell-state">Couldn’t load your projects'
         + (err.status ? " (" + err.status + ")" : "") + ".</p>";
     }
+  }
+
+  // ─── list-view tabs (Users / Companies / Memberships / Files /
+  //     Charts / Steps) — one renderer driven by a LIST_VIEWS spec.
+  let listPage = 1;
+  const LIST_PAGE_SIZE = 50;
+  let listTotalPages = 1;
+
+  function renderListBody(tab, spec) {
+    listPage = 1;
+    // Per-chip-row state — { chipRowName → current value }. Sent to
+    // the endpoint as additional query params; click on a chip flips
+    // the value + resets page to 1 + refetches.
+    const chipState = {};
+    (spec.chipRows || []).forEach((cr) => { chipState[cr.name] = cr.default; });
+
+    view.innerHTML = ''
+      + headHTML(spec.title, "")
+      + (spec.chipRows || []).map((cr) => chipRowHTML(cr, chipState[cr.name])).join("")
+      + kpiStripHTML([
+          { label: "Total",      id: "rp-home-list-total" },
+          { label: "On page",    id: "rp-home-list-shown" },
+          { label: "Page",       id: "rp-home-list-page" },
+          { label: "Last fetch", id: "rp-home-list-ms"   },
+        ])
+      + listPanel(spec.columns)
+      + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
+
+    // Wire each chip row's click handler.
+    view.querySelectorAll(".rp-chip-row").forEach((row) => {
+      row.addEventListener("click", (e) => {
+        const chip = e.target.closest(".rp-chip");
+        if (!chip) return;
+        const chipName = row.dataset.chipName;
+        if (!chipName) return;
+        chipState[chipName] = chip.dataset.value;
+        row.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
+        chip.classList.add("is-active");
+        listPage = 1;
+        fetchList(spec, chipState);
+      });
+    });
+
+    // Wire the pager click handler.
+    view.querySelector("#rp-home-list-pager").addEventListener("click", (e) => {
+      const btn = e.target.closest(".rt-pg[data-page]");
+      if (!btn) return;
+      const target = parseInt(btn.dataset.page, 10);
+      if (!Number.isFinite(target) || target < 1 || target > listTotalPages || target === listPage) return;
+      listPage = target;
+      fetchList(spec, chipState);
+    });
+
+    fetchList(spec, chipState);
+  }
+
+  async function fetchList(spec, chipState) {
+    setKpi("rp-home-list-total", "…");
+    setKpi("rp-home-list-shown", "…");
+    setKpi("rp-home-list-page",  String(listPage));
+    setKpi("rp-home-list-ms",    "…");
+    const tbody = view.querySelector("#rp-home-list-tbody");
+    const colCount = spec.columns.length;
+    if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Loading…</td></tr>';
+
+    const params = new URLSearchParams();
+    params.set("page", String(listPage));
+    params.set("size", String(LIST_PAGE_SIZE));
+    for (const [name, value] of Object.entries(chipState || {})) {
+      if (value != null && value !== "") params.set(name, value);
+    }
+    const t0 = performance.now();
+    try {
+      const data = await api.get(spec.endpoint + "?" + params.toString());
+      const rows = data?.rows || [];
+      listTotalPages = data?.pages || 1;
+      listPage       = data?.page  || listPage;
+      const elapsed = Math.round(performance.now() - t0);
+      setKpi("rp-home-list-total", fmtCount(data?.total || 0));
+      setKpi("rp-home-list-shown", String(rows.length));
+      setKpi("rp-home-list-page",  listPage + " / " + listTotalPages);
+      setKpi("rp-home-list-ms",    elapsed + "ms");
+      view.querySelector(".rp-shell-head-count").textContent = (data?.total || 0) + " rows";
+      if (tbody) {
+        tbody.innerHTML = rows.length
+          ? rows.map(spec.row).join("")
+          : '<tr><td colspan="' + colCount + '">No rows.</td></tr>';
+      }
+      renderListPager();
+    } catch (err) {
+      setKpi("rp-home-list-total", "—");
+      setKpi("rp-home-list-shown", "—");
+      setKpi("rp-home-list-page",  "—");
+      setKpi("rp-home-list-ms",    "—");
+      if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Couldn’t load'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
+    }
+  }
+
+  function renderListPager() {
+    const el = view.querySelector("#rp-home-list-pager");
+    if (!el || listTotalPages < 1) { if (el) el.innerHTML = ""; return; }
+    const p = listPage, last = listTotalPages;
+    const out = [];
+    out.push(pagerBtn("‹", p - 1, false, p === 1));
+    if (last <= 7) {
+      for (let i = 1; i <= last; i++) out.push(pagerBtn(String(i), i, i === p, false));
+    } else {
+      const want = new Set([1, last, p, p - 1, p + 1]);
+      let prev = 0;
+      for (let i = 1; i <= last; i++) {
+        if (!want.has(i)) continue;
+        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
+        out.push(pagerBtn(String(i), i, i === p, false));
+        prev = i;
+      }
+    }
+    out.push(pagerBtn("›", p + 1, false, p === last));
+    el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
+  }
+  function pagerBtn(label, page, active, disabled) {
+    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
+      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
   }
 
   function paintProjectKpis(items) {
@@ -246,6 +470,63 @@ export default function home(app, { session }) {
     return isNaN(d.getTime())
       ? "—"
       : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  // Compact local timestamp for list rows — "May 23, 19:42".
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+    return date + ", " + time;
+  }
+  function fmtCount(n) {
+    if (n == null) return "—";
+    if (n < 1000)    return String(n);
+    if (n < 1000000) return (n / 1000).toFixed(1) + "k";
+    return (n / 1000000).toFixed(1) + "M";
+  }
+
+  // Coloured badges for list-row signal columns. Use existing
+  // .rp-mon-method base + .rp-mon-err-{low,mid,high} for tone, so the
+  // visual vocabulary stays consistent with /monitoring.
+  function roleChip(role) {
+    const v = String(role || "").toLowerCase();
+    const tone = v === "owner" ? "rp-mon-err-high"
+              : v === "admin" || v === "collaborator" ? "rp-mon-err-mid"
+              : v === "member" || v === "viewer" ? "rp-mon-err-low"
+              : "";
+    return '<span class="rp-mon-method ' + tone + '">' + esc(role || "—") + '</span>';
+  }
+  function stageChip(stage) {
+    const v = String(stage || "").toLowerCase();
+    const tone = v === "publish" ? "rp-mon-err-low"
+              : v === "report"   ? "rp-mon-err-mid"
+              : v === "clean"    ? "rp-mon-err-mid"
+              : "";
+    return '<span class="rp-mon-method ' + tone + '">' + esc(stage || "—") + '</span>';
+  }
+  function planChip(plan) {
+    const v = String(plan || "").toLowerCase();
+    const tone = v === "free" ? "" : "rp-mon-err-low";
+    return '<span class="rp-mon-method ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+
+  function chipRowHTML(chipRow, current) {
+    return '<div class="rp-chip-row" data-chip-name="' + esc(chipRow.name) + '">'
+      + (chipRow.label ? '<span class="rp-chip-row-label">' + esc(chipRow.label) + '</span>' : "")
+      + chipRow.options.map((opt) =>
+          '<button type="button" class="rp-chip' + (opt.value === current ? ' is-active' : '') + '"'
+          + ' data-value="' + esc(opt.value) + '">' + esc(opt.label) + '</button>'
+        ).join("")
+      + '</div>';
+  }
+  function listPanel(columns) {
+    return '<section class="rp-mon-panel">'
+      + '<table class="rp-mon-table">'
+      +   '<thead><tr>' + columns.map((c) => '<th>' + esc(c) + '</th>').join("") + '</tr></thead>'
+      +   '<tbody id="rp-home-list-tbody"></tbody>'
+      + '</table>'
+      + '</section>';
   }
 }
 

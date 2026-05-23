@@ -6,33 +6,6 @@
    pending-panel placeholder for charts whose endpoints don't exist
    yet. */
 
-/* window chips — global per-tab control (1h / 24h / 7d / 30d) */
-.rp-mon-window {
-  display: inline-flex;
-  gap: 2px;
-  margin-bottom: var(--rp-sp-4);
-  padding: 3px;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: 99px;
-}
-.rp-mon-window-chip {
-  padding: 4px 14px;
-  font: inherit;
-  font-size: var(--rp-text-sm);
-  color: var(--rp-text-dim);
-  background: transparent;
-  border: 0;
-  border-radius: 99px;
-  cursor: pointer;
-  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
-}
-.rp-mon-window-chip:hover { color: var(--rp-text); }
-.rp-mon-window-chip.is-active {
-  background: var(--rp-accent-2);
-  color: var(--rp-bg);
-}
-
 /* panel — a card section in the body (e.g. a chart or table block) */
 .rp-mon-panel {
   background: var(--rp-glass);
@@ -124,9 +97,3 @@
 }
 .rp-mon-stat-chip:last-child { margin-right: 0; }
 
-/* pager wrapper under the list table — right-aligned */
-.rp-mon-list-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--rp-sp-3);
-}

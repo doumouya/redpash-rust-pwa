@@ -49,6 +49,51 @@
 
 .rp-shell-view { width: 100%; max-width: 1100px; margin: 0 auto; }
 
+/* ── chip row — a horizontal pill-selector ──────────────────────
+   Shared atom: window chips on /monitoring (1h/24h/7d/30d), scope
+   chips on /home memberships (project/company), and any future
+   small-discrete-choice control. Group via .rp-chip-row, items via
+   .rp-chip; the active option carries .is-active. Page-level JS
+   reads data-chip-name on the row + data-value on each chip to
+   re-fire the surrounding fetcher. */
+.rp-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: var(--rp-sp-4);
+  padding: 3px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 99px;
+}
+.rp-chip-row-label {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  padding: 0 8px 0 12px;
+}
+.rp-chip {
+  padding: 4px 14px;
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-chip:hover { color: var(--rp-text); }
+.rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
+
+/* shared pager wrapper — right-aligned, used by /home + /monitoring
+   list-view bodies. The pager widget itself (.rt-pages, .rt-pg) lives
+   in pager.css; this just positions it. */
+.rp-list-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--rp-sp-3);
+}
+
 /* ── --wide modifier ────────────────────────────────────────────
    Opt-in: page wants the body to span the full available width
    beside the rail (like the Workspace's redtable). Drops the main

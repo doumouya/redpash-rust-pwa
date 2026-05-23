@@ -173,10 +173,10 @@ export default function monitoring(app, { session }) {
                      "/monitoring/requests?group_by=status (or similar)");
 
     // Window-chip click delegation — refetch on change.
-    view.querySelector(".rp-mon-window").addEventListener("click", (e) => {
-      const chip = e.target.closest(".rp-mon-window-chip");
+    view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
+      const chip = e.target.closest(".rp-chip");
       if (!chip) return;
-      view.querySelectorAll(".rp-mon-window-chip.is-active").forEach((c) => c.classList.remove("is-active"));
+      view.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
       chip.classList.add("is-active");
       fetchMetrics(chip.dataset.window);
     });
@@ -208,13 +208,13 @@ export default function monitoring(app, { session }) {
           { label: "Last fetch", id: "rp-mon-list-ms"    },
         ])
       + listPanel(viewSpec.columns)
-      + '<div class="rp-mon-list-pager" id="rp-mon-list-pager"></div>';
+      + '<div class="rp-list-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.useWindow) {
-      view.querySelector(".rp-mon-window").addEventListener("click", (e) => {
-        const chip = e.target.closest(".rp-mon-window-chip");
+      view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
+        const chip = e.target.closest(".rp-chip");
         if (!chip) return;
-        view.querySelectorAll(".rp-mon-window-chip.is-active").forEach((c) => c.classList.remove("is-active"));
+        view.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
         chip.classList.add("is-active");
         listWindow = chip.dataset.window;
         listPage = 1;
@@ -363,9 +363,9 @@ export default function monitoring(app, { session }) {
       + '</header>';
   }
   function windowChipsHTML(active) {
-    return '<div class="rp-mon-window">'
+    return '<div class="rp-chip-row">'
       + WINDOWS.map((w) =>
-          '<button type="button" class="rp-mon-window-chip' + (w === active ? ' is-active' : '') + '"'
+          '<button type="button" class="rp-chip' + (w === active ? ' is-active' : '') + '"'
           + ' data-window="' + esc(w) + '">' + esc(w) + '</button>'
         ).join("")
       + '</div>';
