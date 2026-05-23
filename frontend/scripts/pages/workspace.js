@@ -16,6 +16,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
+import { getEngine } from "/scripts/wasm-engine.js";
 
 const STAGE_DOT     = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
 const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
@@ -29,6 +30,12 @@ export default function workspace(app, { session }) {
   const $$ = (s) => Array.from(app.querySelectorAll(s));
 
   mountTopbar($("#rp-topbar"), { active: "workspace", session });
+
+  // Warm the wasm engine cache — the user is on the workspace, they're
+  // going to do data work, so trigger the lazy fetch now and await
+  // later from whichever surface needs it. Fire-and-forget: any load
+  // error stays silent until a real call happens (then surfaces there).
+  getEngine().catch(() => { /* lazy-loader error path; ignored on warm-up */ });
 
   // ─── element refs ──────────────────────────────────────────────
   const nav        = $("#wsNav");

@@ -21,6 +21,26 @@
         <div class="rp-login__stats" id="rp-demo-stats"></div>
       </div>
       <p class="rp-login__msg" id="rp-demo-msg" role="status"></p>
+
+      <!-- Or upload — runs in your browser via WebAssembly; nothing
+           leaves the page. Files larger than the demo cap (5 MB) get
+           the sign-up CTA instead. -->
+      <div class="rp-login__or">
+        <input type="file" id="rp-demo-file" accept=".csv,text/csv" hidden />
+        <button type="button" id="rp-demo-upload" class="rp-btn rp-btn--ghost">
+          <i class="bi bi-upload"></i> Or upload a CSV
+        </button>
+        <p class="rp-login__hint">Stays in your browser — runs locally via WebAssembly.</p>
+      </div>
+
+      <div class="rp-login__result rp-login__result--local" id="rp-demo-local-result" hidden>
+        <div class="rp-login__local-head">
+          <span class="rp-login__local-file" id="rp-demo-local-file">—</span>
+          <span class="rp-login__local-time" id="rp-demo-local-time">—</span>
+        </div>
+        <div class="rp-login__stats" id="rp-demo-local-stats"></div>
+      </div>
+      <p class="rp-login__msg" id="rp-demo-local-msg" role="status"></p>
     </div>
 
     <div class="rp-login__divider">then sign in</div>

@@ -134,6 +134,52 @@
 .rp-login__stat--time { border-color: rgba(243, 139, 168, 0.35); }
 .rp-login__stat--time, .rp-login__stat--time b { color: var(--rp-accent); }
 
+/* "100% in your browser" pitch — the wasm-flow tell */
+.rp-login__stat--local {
+  border-color: rgba(166, 227, 161, 0.35);
+  color: var(--rp-ok);
+}
+
+/* "or upload" affordance, below the paste demo */
+.rp-login__or {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+  margin-top: var(--rp-sp-2);
+}
+.rp-login__or .rp-btn.is-busy { opacity: 0.7; cursor: progress; }
+.rp-login__hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  text-align: center;
+}
+
+/* upload result — same card as paste demo, slightly different head */
+.rp-login__result--local { flex-direction: column; align-items: stretch; gap: var(--rp-sp-3); }
+.rp-login__local-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--rp-sp-3);
+}
+.rp-login__local-file {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.rp-login__local-time {
+  flex: none;
+  font-size: var(--rp-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--rp-accent);
+  font-weight: 600;
+}
+
 /* "then sign in" rule */
 .rp-login__divider {
   display: flex;
