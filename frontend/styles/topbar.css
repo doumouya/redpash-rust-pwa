@@ -40,6 +40,7 @@
 
 /* the omnibox — a site-wide search, centred, ~50vw */
 .rp-omni {
+  position: relative;
   justify-self: center;
   width: min(50vw, 720px);
   height: 36px;
@@ -76,6 +77,91 @@
   border-radius: 6px;
   background: var(--rp-hover);
   border: 1px solid var(--rp-border);
+}
+
+/* ── omnisearch dropdown — results from GET /api/search ─────────
+   Anchored below .rp-omni (position: relative on the parent),
+   matches the input's width, scrolls when results overflow. Glass
+   surface matches the rest of the chrome. */
+.rp-omni-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 0;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  box-shadow: var(--rp-shadow);
+  z-index: 20;
+}
+.rp-omni-dropdown[hidden] { display: none; }
+
+.rp-omni-section {
+  padding: 8px 14px 4px;
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--rp-text-mute);
+}
+.rp-omni-section:not(:first-child) {
+  border-top: 1px solid var(--rp-border);
+  margin-top: 4px;
+}
+
+.rp-omni-result {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--rp-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s var(--rp-ease);
+}
+.rp-omni-result i { color: var(--rp-text-mute); font-size: 14px; flex-shrink: 0; }
+.rp-omni-result:hover,
+.rp-omni-result.is-active {
+  background: var(--rp-accent-soft);
+}
+.rp-omni-result.is-active i { color: var(--rp-accent-2); }
+.rp-omni-result-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-omni-result-sub {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.rp-omni-hl {
+  background: rgba(137, 180, 250, 0.22);
+  color: var(--rp-accent-2);
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.rp-omni-state {
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: var(--rp-text-mute);
+  text-align: center;
 }
 
 .rp-topbar-actions { justify-self: end; display: flex; align-items: center; gap: 2px; }
