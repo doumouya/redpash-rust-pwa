@@ -27,22 +27,33 @@ use axum::{
 use chrono::Utc;
 use serde::Deserialize;
 use shared::{
-    admin::{AdminFileSummary, ChartSummary, MembershipSummary, StepSummary, UserSummary},
+    admin::{
+        AdminFileSummary, ChartStats, ChartSummary, CompanyStats, FileStats,
+        MembershipStats, MembershipSummary, StepStats, StepSummary, UserStats,
+        UserSummary,
+    },
     company::{Company, CompanySummary},
     Page,
 };
+use std::collections::HashMap;
 use sqlx::Row;
 
 use crate::{error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/users",       get(list_users))
-        .route("/companies",   get(list_companies))
-        .route("/memberships", get(list_memberships))
-        .route("/files",       get(list_files))
-        .route("/charts",      get(list_charts))
-        .route("/steps",       get(list_steps))
+        .route("/users",             get(list_users))
+        .route("/users/stats",       get(stats_users))
+        .route("/companies",         get(list_companies))
+        .route("/companies/stats",   get(stats_companies))
+        .route("/memberships",       get(list_memberships))
+        .route("/memberships/stats", get(stats_memberships))
+        .route("/files",             get(list_files))
+        .route("/files/stats",       get(stats_files))
+        .route("/charts",            get(list_charts))
+        .route("/charts/stats",      get(stats_charts))
+        .route("/steps",             get(list_steps))
+        .route("/steps/stats",       get(stats_steps))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -559,4 +570,251 @@ async fn list_steps(
         .collect();
 
     Ok(Json(build_page(rows, total as u64, all_count as u64, page, size, started)))
+}
+
+// ── stats endpoints (Home KPI strips) ───────────────────────────────────
+
+/// Run a `SELECT key, COUNT(*) FROM …` and collect into a HashMap<String, u64>.
+/// Used by every `by_*` distribution below — keeps the per-handler code
+/// to the SQL string + the result Map name.
+async fn group_count(
+    pool:  &sqlx::PgPool,
+    query: &str,
+) -> Result<HashMap<String, u64>, AppError> {
+    let rows = sqlx::query(query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    let mut out = HashMap::with_capacity(rows.len());
+    for r in rows {
+        let key: String = r.try_get(0).unwrap_or_default();
+        let cnt: i64    = r.try_get(1).unwrap_or(0);
+        if !key.is_empty() {
+            out.insert(key, cnt as u64);
+        }
+    }
+    Ok(out)
+}
+
+// ── /api/admin/users/stats ──────────────────────────────────────────────
+
+async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM users")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Active proxy: any event captured against the user in the last 7d.
+    // SET NULL on events.user_redpash_id (per the migration) means events
+    // belonging to deleted users don't count toward "active" — correct.
+    let active_7d: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT user_redpash_id)::BIGINT
+           FROM events
+          WHERE user_redpash_id IS NOT NULL
+            AND occurred_at >= now() - interval '7 days'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let by_plan = group_count(
+        &state.db,
+        "SELECT plan, COUNT(*)::BIGINT FROM users GROUP BY plan",
+    ).await?;
+
+    Ok(Json(UserStats {
+        total: total as u64,
+        active_7d: active_7d as u64,
+        by_plan,
+    }))
+}
+
+// ── /api/admin/companies/stats ──────────────────────────────────────────
+
+async fn stats_companies(State(state): State<AppState>) -> Result<Json<CompanyStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM companies")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Activity proxy: any file in any of the company's projects has
+    // updated_at in the last 30d. EXISTS rather than DISTINCT-join so
+    // a chatty project doesn't double-count the parent company.
+    let active_30d: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM companies c
+          WHERE EXISTS (
+            SELECT 1
+              FROM projects p
+              JOIN project_files f ON f.project_redpash_id = p.redpash_id
+             WHERE p.company_id = c.redpash_id
+               AND f.updated_at >= now() - interval '30 days'
+          )",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let with_projects: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM companies c
+          WHERE EXISTS (SELECT 1 FROM projects p WHERE p.company_id = c.redpash_id)",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(CompanyStats {
+        total: total as u64,
+        active_30d: active_30d as u64,
+        with_projects: with_projects as u64,
+    }))
+}
+
+// ── /api/admin/memberships/stats ────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct MembershipsStatsQuery {
+    #[serde(default)] scope: Option<String>,
+}
+
+async fn stats_memberships(
+    State(state): State<AppState>,
+    Query(q):     Query<MembershipsStatsQuery>,
+) -> Result<Json<MembershipStats>, AppError> {
+    let scope = q.scope.as_deref().unwrap_or("project");
+    if scope != "project" && scope != "company" {
+        return Err(AppError::bad_request(
+            "admin",
+            "scope must be one of: project, company",
+        ));
+    }
+
+    let (count_sql, group_sql) = if scope == "project" {
+        (
+            "SELECT COUNT(*)::BIGINT FROM project_memberships",
+            "SELECT role, COUNT(*)::BIGINT FROM project_memberships GROUP BY role",
+        )
+    } else {
+        (
+            "SELECT COUNT(*)::BIGINT FROM company_memberships",
+            "SELECT role, COUNT(*)::BIGINT FROM company_memberships GROUP BY role",
+        )
+    };
+
+    let total: i64 = sqlx::query_scalar(count_sql)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    let by_role = group_count(&state.db, group_sql).await?;
+
+    Ok(Json(MembershipStats {
+        scope: scope.into(),
+        total: total as u64,
+        by_role,
+    }))
+}
+
+// ── /api/admin/files/stats ──────────────────────────────────────────────
+
+async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_files")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let by_stage = group_count(
+        &state.db,
+        "SELECT COALESCE(s.stage, 'import') AS stage, COUNT(*)::BIGINT
+           FROM project_files f
+           LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
+          GROUP BY COALESCE(s.stage, 'import')",
+    ).await?;
+
+    let by_type = group_count(
+        &state.db,
+        "SELECT file_type, COUNT(*)::BIGINT FROM project_files GROUP BY file_type",
+    ).await?;
+
+    // AVG over the non-null subset. Returns NULL if every row is NULL —
+    // map that to None so the KPI strip shows a dash instead of 0%.
+    let avg_cleanness: Option<f64> = sqlx::query_scalar(
+        "SELECT AVG(cleanness_pct)::DOUBLE PRECISION
+           FROM project_files
+          WHERE cleanness_pct IS NOT NULL",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(FileStats {
+        total: total as u64,
+        by_stage,
+        by_type,
+        avg_cleanness: avg_cleanness.map(|v| v as f32),
+    }))
+}
+
+// ── /api/admin/charts/stats ─────────────────────────────────────────────
+
+async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>, AppError> {
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let last_7d: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM project_files
+          WHERE file_type = 'chart'
+            AND created_at >= now() - interval '7 days'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // The "report" criterion per the object model: a project counts as
+    // a report when it contains ≥1 chart-typed file. So `used_in_reports`
+    // = distinct projects that have at least one chart.
+    let used_in_reports: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT project_redpash_id)::BIGINT
+           FROM project_files
+          WHERE file_type = 'chart'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(ChartStats {
+        total: total as u64,
+        last_7d: last_7d as u64,
+        used_in_reports: used_in_reports as u64,
+    }))
+}
+
+// ── /api/admin/steps/stats ──────────────────────────────────────────────
+
+async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_steps")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let by_kind = group_count(
+        &state.db,
+        "SELECT kind, COUNT(*)::BIGINT FROM project_steps GROUP BY kind",
+    ).await?;
+
+    let last_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM project_steps
+          WHERE created_at >= now() - interval '24 hours'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(StepStats {
+        total: total as u64,
+        by_kind,
+        last_24h: last_24h as u64,
+    }))
 }

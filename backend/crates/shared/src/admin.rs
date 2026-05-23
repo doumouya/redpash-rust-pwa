@@ -113,3 +113,77 @@ pub struct StepSummary {
     pub applied:         bool,
     pub created_at:      DateTime<Utc>,
 }
+
+// ── *Stats — per-entity KPI aggregates ──────────────────────────────────
+//
+// Returned by `GET /api/admin/<entity>/stats`. One small JSON per
+// entity, used to paint the contextual KPI strip at the top of each
+// Home tab body. Shapes are entity-specific — forcing a generic
+// container would obscure the KPIs each tab actually displays. Each
+// distribution (`by_*`) serializes as a JSON object (`{label: count}`)
+// so the frontend renders it as a sorted bar without re-shaping.
+
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserStats {
+    pub total:     u64,
+    /// Distinct users who appear in `events.user_redpash_id` over the
+    /// last 7 days (any captured backend or frontend event). Best
+    /// proxy we have for "active" pre-RBAC; will switch to a proper
+    /// sessions table when one lands.
+    pub active_7d: u64,
+    /// Distribution by `users.plan` (`free | pro | …`).
+    pub by_plan:   HashMap<String, u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanyStats {
+    pub total:          u64,
+    /// Companies whose projects had a file `updated_at` in the last
+    /// 30 days. Activity proxy until we wire a real audit feed.
+    pub active_30d:     u64,
+    /// Companies with `COUNT(projects) > 0`.
+    pub with_projects:  u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MembershipStats {
+    /// `"project"` | `"company"` — scope this stat block describes.
+    pub scope:   String,
+    pub total:   u64,
+    /// Role distribution within this scope.
+    ///   project: owner | collaborator | viewer
+    ///   company: owner | admin | member
+    pub by_role: HashMap<String, u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileStats {
+    pub total:          u64,
+    /// `file_stages.stage` distribution (import | clean | report | publish).
+    /// Files predating the view entry default to `import`.
+    pub by_stage:       HashMap<String, u64>,
+    /// `file_type` distribution (csv | chart | …).
+    pub by_type:        HashMap<String, u64>,
+    /// AVG(cleanness_pct) over rows where it isn't NULL. `None` if no
+    /// rows have a score yet.
+    pub avg_cleanness:  Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartStats {
+    pub total:           u64,
+    pub last_7d:         u64,
+    /// Projects that contain ≥1 chart-typed file — the implicit
+    /// "report" criterion (projects with a chart attached).
+    pub used_in_reports: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepStats {
+    pub total:    u64,
+    /// Step kind distribution (`filter_rows | drop_rows | set_cell | …`).
+    pub by_kind:  HashMap<String, u64>,
+    pub last_24h: u64,
+}
