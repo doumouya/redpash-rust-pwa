@@ -1,0 +1,95 @@
+/* ── doc-viewer ──────────────────────────────────────────────────
+   Typography for rendered markdown on /docs?slug=… — and the row
+   affordances on the index. Pulldown_cmark output is unclassed
+   HTML; styles target the article container's element selectors. */
+
+/* index — make rows look clickable */
+.rp-doc-row {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease);
+  padding-left: var(--rp-sp-3);
+  padding-right: var(--rp-sp-3);
+  margin: 0 calc(-1 * var(--rp-sp-3));
+  border-radius: var(--rp-radius);
+}
+.rp-doc-row:hover { background: var(--rp-hover); }
+
+/* viewer — back button row */
+.rp-doc-head {
+  margin-bottom: var(--rp-sp-5);
+}
+
+/* viewer — the rendered article */
+.rp-doc {
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+  padding: var(--rp-sp-6) var(--rp-sp-8);
+  color: var(--rp-text);
+  line-height: 1.65;
+}
+.rp-doc h1, .rp-doc h2, .rp-doc h3, .rp-doc h4 {
+  margin: var(--rp-sp-6) 0 var(--rp-sp-3);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.rp-doc h1:first-child, .rp-doc h2:first-child { margin-top: 0; }
+.rp-doc h1 { font-size: 28px; }
+.rp-doc h2 { font-size: 22px; }
+.rp-doc h3 { font-size: 18px; }
+.rp-doc h4 { font-size: 16px; color: var(--rp-text-dim); }
+
+.rp-doc p { margin: var(--rp-sp-3) 0; }
+.rp-doc ul, .rp-doc ol { margin: var(--rp-sp-3) 0; padding-left: var(--rp-sp-5); }
+.rp-doc li { margin: 4px 0; }
+
+.rp-doc a { color: var(--rp-accent-2); text-decoration: underline; text-underline-offset: 2px; }
+.rp-doc a:hover { color: var(--rp-mauve); }
+
+.rp-doc code {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+}
+.rp-doc pre {
+  margin: var(--rp-sp-4) 0;
+  padding: var(--rp-sp-4);
+  overflow-x: auto;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  line-height: 1.5;
+}
+.rp-doc pre code { padding: 0; border: 0; background: transparent; }
+
+.rp-doc blockquote {
+  margin: var(--rp-sp-4) 0;
+  padding: var(--rp-sp-2) var(--rp-sp-4);
+  border-left: 3px solid var(--rp-accent-2);
+  color: var(--rp-text-dim);
+  background: var(--rp-hover);
+  border-radius: 0 var(--rp-radius) var(--rp-radius) 0;
+}
+.rp-doc blockquote p { margin: 4px 0; }
+
+.rp-doc hr { border: 0; border-top: 1px solid var(--rp-border); margin: var(--rp-sp-5) 0; }
+
+.rp-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--rp-sp-4) 0;
+  font-size: var(--rp-text-sm);
+}
+.rp-doc th, .rp-doc td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rp-border);
+  text-align: left;
+}
+.rp-doc th { color: var(--rp-text-dim); font-weight: 600; }
+
+.rp-doc img { max-width: 100%; border-radius: var(--rp-radius); }
