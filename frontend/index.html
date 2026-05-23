@@ -6,9 +6,16 @@
   <meta name="theme-color" content="#11111b" />
   <title>RedPash</title>
 
-  <!-- Apply the saved theme before first paint — no flash of the wrong theme. -->
+  <!-- Apply the saved theme + visual prefs (density, font size) before
+       first paint — no flash of the wrong theme / sizing. Inline rather
+       than imported so it runs synchronously before the CSS evaluates. -->
   <script>
-    try { var t = localStorage.getItem("rp-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+    try {
+      var d = document.documentElement;
+      var t = localStorage.getItem("rp-theme");           if (t === "light" || t === "dark") d.dataset.theme = t;
+      var dn = localStorage.getItem("rp-density");        if (dn === "compact" || dn === "cozy" || dn === "comfortable") d.dataset.density = dn;
+      var fs = localStorage.getItem("rp-font-size");      if (fs === "sm" || fs === "md" || fs === "lg") d.dataset.fontSize = fs;
+    } catch (e) {}
   </script>
 
   <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />

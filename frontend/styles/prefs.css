@@ -1,0 +1,61 @@
+/* ── prefs ──────────────────────────────────────────────────────
+   User preferences that reshape the whole app are implemented as
+   token overrides under <html data-*> attributes. Boot script in
+   index.html sets the attributes before first paint; settings.js
+   updates them at runtime via setPref(name, value).
+
+   This file authors none of the values directly — it remaps the
+   tokens authored in tokens.css. Every component already consumes
+   var(--rp-sp-*) and var(--rp-text-*), so changing the token here
+   propagates everywhere with no per-component edit. */
+
+/* ── density — touch-area + breathing room ─────────────────────
+   The spacing scale shifts under data-density. Cozy is the default
+   (matches tokens.css raw values), so no override block needed for
+   it. Compact tightens chrome (denser tables, slimmer panels).
+   Comfortable loosens. */
+
+html[data-density="compact"] {
+  --rp-sp-2: 6px;
+  --rp-sp-3: 8px;
+  --rp-sp-4: 12px;
+  --rp-sp-5: 18px;
+  --rp-sp-6: 24px;
+  --rp-sp-8: 36px;
+}
+
+html[data-density="comfortable"] {
+  --rp-sp-2: 10px;
+  --rp-sp-3: 14px;
+  --rp-sp-4: 20px;
+  --rp-sp-5: 28px;
+  --rp-sp-6: 38px;
+  --rp-sp-8: 56px;
+}
+
+/* ── font size — body text scale ────────────────────────────────
+   Overrides the text-size tokens; body inherits via base.css's
+   font-size: var(--rp-text-md). Small chrome elements (badges,
+   captions) already use --rp-text-sm explicitly and shift in step.
+   md is the default — no override. */
+
+html[data-font-size="sm"] {
+  --rp-text-sm: 12px;
+  --rp-text-md: 14px;
+  --rp-text-lg: 18px;
+  --rp-text-xl: 28px;
+}
+
+html[data-font-size="lg"] {
+  --rp-text-sm: 14px;
+  --rp-text-md: 16px;
+  --rp-text-lg: 22px;
+  --rp-text-xl: 36px;
+}
+
+/* ── show stage dots — workspace rail file tabs ─────────────────
+   The dot next to each file tab name signals stage at-a-glance.
+   Useful most of the time; cluttery if the rail is full. Hidden
+   when the pref is off. */
+
+html[data-show-stage-dots="0"] .rt-tab-dot { display: none; }

@@ -17,6 +17,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
 import { getEngine } from "/scripts/wasm-engine.js";
+import { getPref, setPref } from "/scripts/prefs.js";
 
 const STAGE_DOT     = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
 const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
@@ -742,10 +743,15 @@ export default function workspace(app, { session }) {
     }
   });
 
-  // ─── row numbers toggle ────────────────────────────────────────
-  $("#wsRownum").addEventListener("click", (e) => {
+  // ─── row numbers toggle — initial state from prefs, persists on click ─
+  const rownumBtn = $("#wsRownum");
+  const rownumOnAtMount = getPref("showRowNumbers") !== "0";
+  rownumBtn.classList.toggle("is-active", rownumOnAtMount);
+  table.classList.toggle("no-rownum", !rownumOnAtMount);
+  rownumBtn.addEventListener("click", (e) => {
     const on = e.currentTarget.classList.toggle("is-active");
     table.classList.toggle("no-rownum", !on);
+    setPref("showRowNumbers", on ? "1" : "0");
   });
 
   // ─── dropdowns (rows-per-page, columns) ────────────────────────

@@ -8,6 +8,7 @@
    it: no orphan sheet, no surprise import).
    ───────────────────────────────────────────────────────────────── */
 @import "tokens.css";    /* design tokens — every value */
+@import "prefs.css";     /* pref-driven token overrides — density, font size */
 @import "base.css";      /* reset + document defaults + brand text */
 @import "button.css";    /* .rp-btn + .rt-btn families */
 @import "login.css";     /* the sign-in page */

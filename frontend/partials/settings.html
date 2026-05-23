@@ -1,23 +1,97 @@
-<!-- Settings — app preferences. First fill: the theme picker. -->
+<!-- Settings — app preferences. Controls reflect their pref value at
+     mount (rp-settings paints from prefs.js + theme.js) and update
+     localStorage on click. Visual-impact prefs (theme, density,
+     font size) also drive token overrides on <html> so every
+     component reshapes without a per-page edit. -->
 <section class="rp-page">
   <header id="rp-topbar"></header>
   <div class="rp-page__body">
     <header class="rp-page__head">
       <h1 class="rp-page__title">Settings</h1>
-      <p class="rp-page__sub">App preferences.</p>
+      <p class="rp-page__sub">App preferences. Stored on this device.</p>
     </header>
 
+    <!-- ── Appearance ────────────────────────────────────────── -->
     <section class="rp-page__section">
       <h2 class="rp-page__section-h">Appearance</h2>
+
       <div class="rp-page__row">
         <span class="rp-page__row-label">Theme</span>
-        <div class="rp-page__row-control" id="rp-settings-theme">
-          <button class="rt-btn" type="button" data-theme="dark"><i class="bi bi-moon-stars"></i> Dark</button>
-          <button class="rt-btn" type="button" data-theme="light"><i class="bi bi-sun"></i> Light</button>
+        <div class="rp-page__row-control" data-pref="theme">
+          <button class="rt-btn" type="button" data-value="dark"><i class="bi bi-moon-stars"></i> Dark</button>
+          <button class="rt-btn" type="button" data-value="light"><i class="bi bi-sun"></i> Light</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Density</span>
+        <div class="rp-page__row-control" data-pref="density">
+          <button class="rt-btn" type="button" data-value="compact">Compact</button>
+          <button class="rt-btn" type="button" data-value="cozy">Cozy</button>
+          <button class="rt-btn" type="button" data-value="comfortable">Comfortable</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Font size</span>
+        <div class="rp-page__row-control" data-pref="fontSize">
+          <button class="rt-btn" type="button" data-value="sm">Small</button>
+          <button class="rt-btn" type="button" data-value="md">Medium</button>
+          <button class="rt-btn" type="button" data-value="lg">Large</button>
         </div>
       </div>
     </section>
 
-    <div class="rp-page__placeholder">More preferences land here — defaults, exports, account.</div>
+    <!-- ── Workspace ─────────────────────────────────────────── -->
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Workspace</h2>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Rows per page</span>
+        <div class="rp-page__row-control" data-pref="rowsPerPage">
+          <button class="rt-btn" type="button" data-value="10">10</button>
+          <button class="rt-btn" type="button" data-value="25">25</button>
+          <button class="rt-btn" type="button" data-value="50">50</button>
+          <button class="rt-btn" type="button" data-value="100">100</button>
+          <button class="rt-btn" type="button" data-value="all">All</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Show row numbers</span>
+        <div class="rp-page__row-control" data-pref="showRowNumbers">
+          <button class="rt-btn" type="button" data-value="1">On</button>
+          <button class="rt-btn" type="button" data-value="0">Off</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Stage dots in rail</span>
+        <div class="rp-page__row-control" data-pref="showStageDots">
+          <button class="rt-btn" type="button" data-value="1">On</button>
+          <button class="rt-btn" type="button" data-value="0">Off</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Account ───────────────────────────────────────────── -->
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Account</h2>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Display name</span>
+        <span class="rp-page__row-value" id="rp-settings-display">—</span>
+      </div>
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Username</span>
+        <span class="rp-page__row-value" id="rp-settings-username">—</span>
+      </div>
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Sign out</span>
+        <div class="rp-page__row-control">
+          <button class="rt-btn" type="button" id="rp-settings-signout"><i class="bi bi-box-arrow-right"></i> Sign out</button>
+        </div>
+      </div>
+    </section>
   </div>
 </section>
