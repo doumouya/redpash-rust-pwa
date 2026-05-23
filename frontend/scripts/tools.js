@@ -143,6 +143,28 @@ const TOOLS = [
   }),
 
   defineTool({
+    kind: "drop_columns",
+    label: "Drop columns",
+    icon: "bi-x-square",
+    blurb: "Remove one or more columns from the file.",
+    fields: [
+      { type: "multicolumn", key: "cols", label: "Columns to drop" },
+    ],
+    toParams: (s) => ({ cols: s.cols || [] }),
+  }),
+
+  defineTool({
+    kind: "filter_columns",
+    label: "Keep columns",
+    icon: "bi-check-square",
+    blurb: "Keep only the selected columns, drop the rest.",
+    fields: [
+      { type: "multicolumn", key: "cols", label: "Columns to keep" },
+    ],
+    toParams: (s) => ({ cols: s.cols || [] }),
+  }),
+
+  defineTool({
     kind: "snake_case_columns",
     label: "Snake-case all columns",
     icon: "bi-type",
@@ -250,6 +272,19 @@ const TOOLS = [
       ]},
     ],
     toParams: (s) => ({ column: s.column, fmt: s.fmt || "%Y-%m-%d", on_incomplete: s.on_incomplete }),
+  }),
+
+  defineTool({
+    kind: "unwrap_csv",
+    label: "Unwrap CSV",
+    icon: "bi-box-arrow-up",
+    // Special-case: the server step requires a single-column DataFrame
+    // (a file whose rows look like quoted CSV records collapsed into
+    // one column). Apply will fail-loud on a multi-column file — that's
+    // the right behaviour, the blurb sets the expectation.
+    blurb: "If this file is a single column of wrapped CSV records, parse and unwrap it. No options.",
+    fields: [],
+    toParams: () => ({}),
   }),
 ];
 
