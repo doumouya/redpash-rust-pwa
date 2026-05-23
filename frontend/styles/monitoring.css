@@ -108,3 +108,25 @@
 .rp-mon-err-low  { color: var(--rp-ok); }
 .rp-mon-err-mid  { color: var(--rp-warn); }
 .rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
+
+/* the run-summary cell shows multiple stat chips inline (e.g. "files 14
+   errors 0 reachable 18"); compact, monospace-numeric, neutral colour */
+.rp-mon-stat-chip {
+  display: inline-block;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  border: 1px solid var(--rp-border);
+}
+.rp-mon-stat-chip:last-child { margin-right: 0; }
+
+/* pager wrapper under the list table — right-aligned */
+.rp-mon-list-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--rp-sp-3);
+}
