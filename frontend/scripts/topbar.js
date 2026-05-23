@@ -15,11 +15,12 @@ import { api } from "/scripts/api.js";
 import { toggleTheme, currentTheme } from "/scripts/theme.js";
 
 const NAV = [
-  { id: "home",      hash: "#/home",      icon: "bi-house-door", label: "Home" },
-  { id: "workspace", hash: "#/workspace", icon: "bi-stars",      label: "Workspace" },
-  { id: "profile",   hash: "#/profile",   icon: "bi-person",     label: "Profile" },
-  { id: "settings",  hash: "#/settings",  icon: "bi-gear",       label: "Settings" },
-  { id: "docs",      hash: "#/docs",      icon: "bi-book-half",  label: "Docs" },
+  { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
+  { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
+  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring" },
+  { id: "profile",    hash: "#/profile",    icon: "bi-person",      label: "Profile" },
+  { id: "settings",   hash: "#/settings",   icon: "bi-gear",        label: "Settings" },
+  { id: "docs",       hash: "#/docs",       icon: "bi-book-half",   label: "Docs" },
 ];
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's

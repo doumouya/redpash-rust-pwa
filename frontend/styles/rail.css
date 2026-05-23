@@ -136,6 +136,8 @@
 }
 .rt-tab:hover { background: var(--rp-hover); color: var(--rp-text); }
 .rt-tab.active { background: var(--rp-accent-soft); color: var(--rp-text); }
+.rt-tab:disabled { opacity: 0.4; cursor: default; }
+.rt-tab:disabled:hover { background: transparent; color: var(--rp-text-dim); }
 .rt-tab.active::before {
   content: "";
   position: absolute;

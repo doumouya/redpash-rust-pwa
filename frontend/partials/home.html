@@ -1,17 +1,16 @@
-<!-- Home — the org command center. Same shell pattern as Workspace:
-     topbar above, then a rail (.rt-nav, static groups ORG/DATA) on
-     the left and a per-tab body on the right. The body owns its own
-     sub-controls (filter chips, sub-tabs) so we never end up with
-     stacked horizontal tab rows. -->
-<section class="rp-home">
+<!-- Home — the org command center. Uses the shared rail-page shell
+     (shell.css: outer flex column, greeting, rail+body split, per-tab
+     head, KPI strip). Page-specific styles (board grid + project
+     card) live in home.css. -->
+<section class="rp-shell">
   <header id="rp-topbar"></header>
 
-  <header class="rp-home__greeting">
-    <h1 class="rp-home__greeting-title" id="rp-home-greeting">Welcome.</h1>
-    <p class="rp-home__greeting-sub">Pick up a project or scan a new CSV.</p>
+  <header class="rp-shell-greeting">
+    <h1 class="rp-shell-greeting-title" id="rp-home-greeting">Welcome.</h1>
+    <p class="rp-shell-greeting-sub">Pick up a project or scan a new CSV.</p>
   </header>
 
-  <div class="rp-home__body">
+  <div class="rp-shell-body">
 
     <!-- ════ rail — static groups (ORG + DATA) ════ -->
     <aside class="rt-nav" id="rpHomeNav">
@@ -25,9 +24,9 @@
     </aside>
 
     <!-- ════ main — body view, content depends on the active tab ════ -->
-    <main class="rp-home__main" id="rpHomeMain">
-      <div class="rp-home__view" id="rpHomeView">
-        <p class="rp-home__state">Loading…</p>
+    <main class="rp-shell-main" id="rpHomeMain">
+      <div class="rp-shell-view" id="rpHomeView">
+        <p class="rp-shell-state">Loading…</p>
       </div>
     </main>
 

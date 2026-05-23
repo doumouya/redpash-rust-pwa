@@ -22,7 +22,7 @@ const STAGES = ["import", "clean", "report", "publish"];
 // not rewrite. `endpoint` is the un-prefixed path (no /api/) — it's
 // for the pending-stub display only, not a call site; keeping the
 // /api/ prefix out lets the crossing audit not mistake it for one.
-const TABS = [
+const HOME_TABS = [
   // ── ORG ────────────────────────────────────────────────────
   { group: "ORG",  key: "users",       label: "Users",       icon: "bi-people",        perm: "admin", endpoint: "/admin/users",       wired: false },
   { group: "ORG",  key: "companies",   label: "Companies",   icon: "bi-building",      perm: "admin", endpoint: "/admin/companies",   wired: false },
@@ -34,12 +34,12 @@ const TABS = [
   { group: "DATA", key: "steps",       label: "Steps",       icon: "bi-wrench",        perm: "admin", endpoint: "/admin/steps",       wired: false },
 ];
 
-const GROUPS = [
+const HOME_GROUPS = [
   { name: "ORG",  mark: "OR", color: "mauve" },
   { name: "DATA", mark: "DA", color: "teal"  },
 ];
 
-const DEFAULT_TAB = "projects";
+const HOME_DEFAULT_TAB = "projects";
 
 export default function home(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session });
@@ -57,14 +57,14 @@ export default function home(app, { session }) {
   });
 
   // ─── render the rail (static groups → tabs) ──────────────────
-  navBody.innerHTML = GROUPS.map(renderGroup).join("");
+  navBody.innerHTML = HOME_GROUPS.map(renderGroup).join("");
   // Expand both groups by default — the entity list is short and
   // there's no scroll cost.
   navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
 
   // Active tab — from hash (?tab=<key>) or default.
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
-  const wantTab = params.get("tab") || DEFAULT_TAB;
+  const wantTab = params.get("tab") || HOME_DEFAULT_TAB;
   activate(wantTab);
 
   // ─── rail click delegation ───────────────────────────────────
@@ -82,7 +82,7 @@ export default function home(app, { session }) {
 
   // ─── rail render helpers ─────────────────────────────────────
   function renderGroup(g) {
-    const tabs = TABS.filter((t) => t.group === g.name);
+    const tabs = HOME_TABS.filter((t) => t.group === g.name);
     return ''
       + '<div class="rt-group">'
       +   '<button class="rt-group-head" type="button">'
@@ -97,23 +97,35 @@ export default function home(app, { session }) {
       + '</div>';
   }
   function renderTab(t) {
-    const dot = t.wired ? '' : '<span class="rt-tab-dot is-warn" title="endpoint pending"></span>';
+    // Unwired tabs render visible but disabled. Em's call: don't hide
+    // future surfaces (the rail telegraphs what's coming), but don't
+    // let the user click into an empty body either. When Gus lands the
+    // endpoint, flip `wired: true` and the tab activates — no other
+    // change needed.
+    const attrs = t.wired
+      ? ' data-key="' + esc(t.key) + '"'
+      : ' disabled title="Coming soon — endpoint /api' + esc(t.endpoint) + ' pending"';
     return ''
-      + '<button class="rt-tab" type="button" data-key="' + esc(t.key) + '">'
+      + '<button class="rt-tab" type="button"' + attrs + '>'
       +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
-      +   dot
       + '</button>';
   }
 
   // ─── tab activation ──────────────────────────────────────────
+  // Only wired tabs activate. Unwired tabs are rendered disabled by
+  // renderTab (no data-key) so clicks pass through; this fallback also
+  // handles a deep-link to an unwired key (e.g. #/home?tab=users) by
+  // coercing to HOME_DEFAULT_TAB rather than blanking the body.
   function activate(key) {
-    const tab = TABS.find((t) => t.key === key) || TABS.find((t) => t.key === DEFAULT_TAB);
+    const requested = HOME_TABS.find((t) => t.key === key);
+    const tab = (requested && requested.wired)
+      ? requested
+      : HOME_TABS.find((t) => t.key === HOME_DEFAULT_TAB);
     navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
     const btn = navBody.querySelector('.rt-tab[data-key="' + cssEsc(tab.key) + '"]');
     if (btn) btn.classList.add("active");
-    if (tab.wired) renderTabBody(tab);
-    else renderPending(tab);
+    renderTabBody(tab);
   }
 
   // ─── per-tab body renderers ──────────────────────────────────
@@ -129,7 +141,7 @@ export default function home(app, { session }) {
           { label: "Active 7d",    id: "rp-kpi-active" },
         ])
       + '<div class="rp-home__board" id="rp-home-board" aria-busy="true">'
-      +   '<p class="rp-home__state">Loading your projects…</p>'
+      +   '<p class="rp-shell-state">Loading your projects…</p>'
       + '</div>';
 
     const board = view.querySelector("#rp-home-board");
@@ -138,11 +150,11 @@ export default function home(app, { session }) {
       const items = data?.items || [];
       paintProjectKpis(items);
       paintProjectBoard(board, items);
-      view.querySelector(".rp-home__head-count").textContent = items.length
+      view.querySelector(".rp-shell-head-count").textContent = items.length
         ? items.length + (items.length === 1 ? " project" : " projects") : "";
     } catch (err) {
       board.setAttribute("aria-busy", "false");
-      board.innerHTML = '<p class="rp-home__state">Couldn’t load your projects'
+      board.innerHTML = '<p class="rp-shell-state">Couldn’t load your projects'
         + (err.status ? " (" + err.status + ")" : "") + ".</p>";
     }
   }
@@ -167,7 +179,7 @@ export default function home(app, { session }) {
   function paintProjectBoard(board, items) {
     board.setAttribute("aria-busy", "false");
     if (!items.length) {
-      board.innerHTML = '<p class="rp-home__state">No projects yet — '
+      board.innerHTML = '<p class="rp-shell-state">No projects yet — '
         + 'scan a CSV from the <a href="#/login">landing page</a> to start.</p>';
       return;
     }
@@ -207,23 +219,11 @@ export default function home(app, { session }) {
       + "</div>";
   }
 
-  // Honest stub — what the tab WILL show + the endpoint that blocks it.
-  function renderPending(tab) {
-    view.innerHTML = ''
-      + headHTML(tab.label, "")
-      + '<div class="rp-home__pending">'
-      +   '<h3 class="rp-home__pending-title">' + esc(tab.label) + ' — coming soon</h3>'
-      +   '<p>The redtable for this entity lands when its backend list endpoint is in.</p>'
-      +   '<span class="rp-home__pending-endpoint">GET ' + esc(tab.endpoint) + ' (under /api)</span>'
-      +   '<p>Tracked in <code>docs/internal/admin-monitoring-surfaces.md</code> §6.</p>'
-      + '</div>';
-  }
-
   // ─── small render utilities ──────────────────────────────────
   function headHTML(title, count) {
-    return '<header class="rp-home__head">'
-      +   '<h2 class="rp-home__head-title">' + esc(title) + '</h2>'
-      +   '<span class="rp-home__head-count">' + esc(count) + '</span>'
+    return '<header class="rp-shell-head">'
+      +   '<h2 class="rp-shell-head-title">' + esc(title) + '</h2>'
+      +   '<span class="rp-shell-head-count">' + esc(count) + '</span>'
       + '</header>';
   }
   function kpiStripHTML(tiles) {

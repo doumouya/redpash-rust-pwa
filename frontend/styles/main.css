@@ -13,6 +13,8 @@
 @import "login.css";     /* the sign-in page */
 @import "home.css";      /* the home launchpad */
 @import "page.css";      /* generic page shell — profile, settings, docs */
+@import "shell.css";     /* rail-page shell — home, monitoring */
+@import "monitoring.css"; /* /monitoring — window chips, panels, top-routes table */
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 
 /* the Workspace — the redtable-as-a-browser, one file per component */

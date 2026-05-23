@@ -1,0 +1,110 @@
+/* ── monitoring ────────────────────────────────────────────────
+   Page-specific styles for /monitoring only. The rail-page shell
+   (outer flex column, greeting, rail+body split, per-tab head, KPI
+   strip) is shared with /home and lives in shell.css. This file
+   owns the window-chip control, the top-routes table, and the
+   pending-panel placeholder for charts whose endpoints don't exist
+   yet. */
+
+/* window chips — global per-tab control (1h / 24h / 7d / 30d) */
+.rp-mon-window {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: var(--rp-sp-4);
+  padding: 3px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 99px;
+}
+.rp-mon-window-chip {
+  padding: 4px 14px;
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-mon-window-chip:hover { color: var(--rp-text); }
+.rp-mon-window-chip.is-active {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+
+/* panel — a card section in the body (e.g. a chart or table block) */
+.rp-mon-panel {
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border: 1px solid var(--rp-glass-border);
+  border-radius: var(--rp-radius-lg);
+  padding: var(--rp-sp-4) var(--rp-sp-5);
+  margin-bottom: var(--rp-sp-4);
+}
+.rp-mon-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--rp-sp-3);
+}
+.rp-mon-panel-title {
+  margin: 0;
+  font-size: var(--rp-text-md);
+  font-weight: 650;
+}
+.rp-mon-panel-hint {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+}
+
+/* panel in pending state — empty inside; explains what blocks it */
+.rp-mon-panel.is-pending {
+  border-style: dashed;
+  color: var(--rp-text-dim);
+}
+.rp-mon-panel-endpoint {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: var(--rp-text-sm);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  color: var(--rp-accent-2);
+}
+
+/* top-routes table — compact, readable, sortable visually */
+.rp-mon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--rp-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.rp-mon-table th, .rp-mon-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-mon-table th {
+  color: var(--rp-text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.rp-mon-table td.is-num { text-align: right; }
+.rp-mon-table td .rp-mon-method {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+}
+.rp-mon-table tr:hover td { background: var(--rp-hover); }
+
+/* error-rate emphasis — colour by band, like cleanness on home */
+.rp-mon-err-low  { color: var(--rp-ok); }
+.rp-mon-err-mid  { color: var(--rp-warn); }
+.rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
