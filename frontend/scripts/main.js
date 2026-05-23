@@ -55,10 +55,7 @@ async function mount(path) {
   const app = document.getElementById("app");
   const route = ROUTES[path];
 
-  if (!route) {
-    app.innerHTML = '<p style="padding:24px">Page not found.</p>';
-    return;
-  }
+  if (!route) { app.innerHTML = errorShell("404", "Page not found", "We couldn't find " + path + "."); return; }
   if (route.auth && !session) {
     location.hash = "#/login";
     return;
@@ -78,8 +75,32 @@ function navigate() {
   mount(currentPath()).catch((err) => {
     console.error("[router] mount failed:", err);
     document.getElementById("app").innerHTML =
-      '<p style="padding:24px">Something went wrong loading this page.</p>';
+      errorShell("⚠", "Something went wrong", "Reload to try again.");
   });
+}
+
+// Shared shell for 404 + mount-failure surfaces. Uses .rp-page tokens
+// so it inherits the theme + spacing from the existing page CSS — no
+// new selectors. The CTA falls back to /login when there's no session;
+// /home otherwise.
+function errorShell(badge, title, body) {
+  const back = session ? "#/home" : "#/login";
+  const label = session ? "Back to home" : "Go to sign in";
+  return ''
+    + '<section class="rp-page">'
+    +   '<div class="rp-page__body" style="display:flex;align-items:center;justify-content:center;min-height:70vh;">'
+    +     '<div class="rp-page__placeholder" style="max-width:420px;">'
+    +       '<div style="font-size:36px;font-weight:700;color:var(--rp-text);">' + esc(badge) + '</div>'
+    +       '<h1 class="rp-page__title" style="margin-top:8px;">' + esc(title) + '</h1>'
+    +       '<p class="rp-page__sub">' + esc(body) + '</p>'
+    +       '<p style="margin-top:20px;"><a class="rp-btn rp-btn--glass" href="' + back + '">' + label + '</a></p>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>';
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 window.addEventListener("hashchange", () => {
