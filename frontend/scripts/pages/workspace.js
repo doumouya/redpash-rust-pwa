@@ -96,13 +96,23 @@ export default function workspace(app, { session }) {
       return;
     }
     navBody.innerHTML = items.map(projectGroup).join("");
-    // Auto-expand the default project (or the first), load its files.
-    const first = navBody.querySelector('.rt-group[data-default="1"]')
+    // Deep-link via #/workspace?project=<rid> — auto-open that project.
+    // Falls back to is_default, then first group.
+    const params  = new URLSearchParams(location.hash.split("?")[1] || "");
+    const wantRid = params.get("project");
+    const first = (wantRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(wantRid) + '"]'))
+               || navBody.querySelector('.rt-group[data-default="1"]')
                || navBody.querySelector(".rt-group");
     if (first) {
+      // Mark the target group so loadFilesForGroup auto-opens its first
+      // file (the auto-open path is dataset.default === "1").
+      if (wantRid && first.dataset.rid === wantRid) first.dataset.default = "1";
       first.classList.add("expanded");
       loadFilesForGroup(first);
     }
+  }
+  function cssEsc(s) {
+    return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
   }
 
   function projectGroup(p) {
