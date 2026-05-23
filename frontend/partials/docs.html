@@ -1,14 +1,32 @@
-<!-- Docs — documentation. First fill: the index from /api/docs,
-     grouped by section. Click-through to a doc viewer lands next. -->
-<section class="rp-page">
+<!-- Docs — section-grouped rail on the left, rendered doc body on the
+     right at full width. Same .rp-shell pattern as /monitoring (wide
+     variant), so the workspace-style layout is shared with the other
+     rail-driven pages. Server-side: /api/docs returns the index
+     grouped by section, /api/docs/<slug> returns rendered HTML. -->
+<section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
-  <div class="rp-page__body">
-    <header class="rp-page__head">
-      <h1 class="rp-page__title">Docs</h1>
-      <p class="rp-page__sub">Reference and how-to guides.</p>
-    </header>
-    <div id="rp-docs-list" aria-busy="true">
-      <p class="rp-page__placeholder">Loading docs…</p>
-    </div>
+
+  <div class="rp-shell-body">
+
+    <!-- ════ rail — section groups, each containing doc tabs ════ -->
+    <aside class="rt-nav" id="rpDocsNav">
+      <div class="rt-nav-head">
+        <span class="rt-nav-title">Docs</span>
+        <button class="rt-btn" id="rpDocsNavCollapse" type="button" title="Collapse">
+          <i class="bi bi-chevron-double-left"></i>
+        </button>
+      </div>
+      <div class="rt-nav-body" id="rpDocsNavBody" aria-busy="true">
+        <div class="rt-nav-state">Loading docs…</div>
+      </div>
+    </aside>
+
+    <!-- ════ main — rendered markdown body ════ -->
+    <main class="rp-shell-main" id="rpDocsMain">
+      <div class="rp-shell-view" id="rpDocsView">
+        <p class="rp-shell-state">Loading…</p>
+      </div>
+    </main>
+
   </div>
 </section>

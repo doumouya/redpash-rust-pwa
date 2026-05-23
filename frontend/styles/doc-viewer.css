@@ -1,24 +1,32 @@
 /* ── doc-viewer ──────────────────────────────────────────────────
-   Typography for rendered markdown on /docs?slug=… — and the row
-   affordances on the index. Pulldown_cmark output is unclassed
-   HTML; styles target the article container's element selectors. */
+   Typography for the rendered markdown article on /docs. The index
+   is now driven by the rail (rail.css); this file owns the body
+   styling only. Pulldown_cmark output is unclassed HTML, so styles
+   target the .rp-doc article container's element selectors. */
 
-/* index — make rows look clickable */
-.rp-doc-row {
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  transition: background 0.14s var(--rp-ease);
-  padding-left: var(--rp-sp-3);
-  padding-right: var(--rp-sp-3);
-  margin: 0 calc(-1 * var(--rp-sp-3));
-  border-radius: var(--rp-radius);
-}
-.rp-doc-row:hover { background: var(--rp-hover); }
-
-/* viewer — back button row */
+/* viewer — head row (title + last-modified stamp) */
 .rp-doc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--rp-sp-4);
   margin-bottom: var(--rp-sp-5);
+  padding-bottom: var(--rp-sp-3);
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-doc-title {
+  margin: 0;
+  font-size: var(--rp-text-xl);
+  font-weight: 700;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+}
+.rp-doc-stamp {
+  flex-shrink: 0;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
 }
 
 /* viewer — the rendered article */
