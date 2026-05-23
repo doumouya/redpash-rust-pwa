@@ -59,6 +59,7 @@ export default function workspace(app, { session }) {
   // ─── state ─────────────────────────────────────────────────────
   let activeFileRid = null;
   let activeColumns = [];   // ColumnMeta[] for the open file
+  let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let chartInstance = null; // echarts — lazily created on first chart render
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }]
@@ -207,9 +208,11 @@ export default function workspace(app, { session }) {
         // surface back to the "open a file" prompt.
         activeFileRid = null;
         activeColumns = [];
+        activeSteps = [];
         rowIndices = [];
         totalPages = 1;
         renderPager();
+        syncToolbar();
         setTableState("Open a file from the rail to see its data.");
         rowsInfo.textContent = "No file open.";
       }
@@ -242,6 +245,8 @@ export default function workspace(app, { session }) {
     try {
       const envelope = await api.get("/files/" + encodeURIComponent(rid));
       activeColumns = envelope?.columns || [];
+      activeSteps   = envelope?.steps   || [];
+      syncToolbar();
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
         // Designer mode — body becomes the chart, not the data table.
@@ -682,13 +687,19 @@ export default function workspace(app, { session }) {
 
   // Single-flight POST → refetchPage on success, revert + status on error.
   // Errors land in rowsInfo (the bottom-left status text) so the table
-  // stays visible — setTableState would blank it.
+  // stays visible — setTableState would blank it. The /steps response is
+  // a StepResult (FileEnvelope + per-step metrics); we consume the
+  // envelope bits to keep activeColumns + activeSteps in sync without
+  // a second round-trip.
   async function applyStep(kind, params, onError) {
     if (!activeFileRid || stepInFlight) return;
     stepInFlight = true;
     rowsInfo.textContent = "Saving…";
     try {
-      await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
+      const res = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
+      if (res?.columns) activeColumns = res.columns;
+      if (res?.steps)   activeSteps   = res.steps;
+      syncToolbar();
       await refetchPage();
     } catch (err) {
       const msg = err?.body?.message || err?.body?.error || err?.message || "Save failed";
@@ -697,6 +708,64 @@ export default function workspace(app, { session }) {
     } finally {
       stepInFlight = false;
     }
+  }
+
+  // ─── undo / redo / export — toolbar history actions ───────────
+  // Undo/redo POST endpoints return the rebuilt FileEnvelope; consume
+  // it to keep the toolbar enable state in sync, then refetchPage to
+  // reflect the new frame. Export bypasses api.js — the response is
+  // a binary stream; the browser handles the download via a click on
+  // a hidden <a download>.
+  const undoBtn   = $("#wsUndo");
+  const redoBtn   = $("#wsRedo");
+  const exportBtn = $("#wsExport");
+  const exportDd  = $("#wsExportDd");
+
+  async function doUndoRedo(action) {
+    if (!activeFileRid || stepInFlight) return;
+    stepInFlight = true;
+    rowsInfo.textContent = action === "undo" ? "Undoing…" : "Redoing…";
+    try {
+      const env = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/" + action);
+      if (env?.columns) activeColumns = env.columns;
+      if (env?.steps)   activeSteps   = env.steps;
+      syncToolbar();
+      await refetchPage();
+    } catch (err) {
+      const msg = err?.body?.message || err?.body?.error || err?.message || (action + " failed");
+      rowsInfo.textContent = msg + (err?.status ? " (" + err.status + ")" : "");
+    } finally {
+      stepInFlight = false;
+    }
+  }
+  undoBtn.addEventListener("click", () => doUndoRedo("undo"));
+  redoBtn.addEventListener("click", () => doUndoRedo("redo"));
+
+  exportDd.addEventListener("click", (e) => {
+    const item = e.target.closest(".rt-dd-item");
+    if (!item || !activeFileRid) return;
+    const fmt = item.dataset.fmt || "csv";
+    // Hidden <a download> triggers the browser's download flow; the
+    // server's Content-Disposition: attachment owns the filename.
+    const a = document.createElement("a");
+    a.href = "/api/files/" + encodeURIComponent(activeFileRid)
+           + "/export?format=" + encodeURIComponent(fmt);
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    exportDd.classList.remove("open");
+  });
+
+  // Paint enable/disable on the three history-toolbar buttons based
+  // on the current envelope state. Undo/redo derive from activeSteps;
+  // export is enabled whenever a file is open.
+  function syncToolbar() {
+    const canUndo = activeSteps.some((s) => s.applied);
+    const canRedo = activeSteps.some((s) => !s.applied);
+    undoBtn.disabled   = !canUndo;
+    redoBtn.disabled   = !canRedo;
+    exportBtn.disabled = !activeFileRid;
   }
 
   // ─── side panels ───────────────────────────────────────────────

@@ -44,6 +44,8 @@
           <button class="rt-btn rt-mode" data-mode="select" type="button" title="Select mode"><i class="bi bi-check2-square"></i></button>
           <button class="rt-btn rt-mode" data-mode="delete" type="button" title="Delete mode"><i class="bi bi-trash3"></i></button>
           <span class="rt-toolbar-sep"></span>
+          <button class="rt-btn" id="wsUndo" type="button" disabled title="Undo last step"><i class="bi bi-arrow-return-left"></i></button>
+          <button class="rt-btn" id="wsRedo" type="button" disabled title="Redo next step"><i class="bi bi-arrow-return-right"></i></button>
           <button class="rt-btn" id="wsRefresh" type="button" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
           <button class="rt-btn is-active" id="wsRownum" type="button" title="Row numbers"><i class="bi bi-list-ol"></i></button>
           <span class="rt-toolbar-sep"></span>
@@ -68,6 +70,16 @@
             <i class="bi bi-check2-square"></i><span id="wsSelCount">0</span>&nbsp;selected
           </span>
           <span class="rt-toolbar-sep"></span>
+          <div class="rt-dd-wrap">
+            <button class="rt-btn" id="wsExport" data-dd="wsExportDd" type="button" disabled title="Export">
+              <i class="bi bi-download"></i>
+            </button>
+            <div class="rt-dd" id="wsExportDd">
+              <div class="rt-dd-item" data-fmt="csv">Export as CSV</div>
+              <div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>
+              <div class="rt-dd-item" data-fmt="json">Export as JSON</div>
+            </div>
+          </div>
           <button class="rt-btn" id="wsToolsToggle" type="button" title="Tools panel">
             <i class="bi bi-tools"></i>
           </button>
