@@ -187,7 +187,21 @@ export default function workspace(app, { session }) {
       return;
     }
     if (e.target.closest(".rt-tab-close")) {
-      e.target.closest(".rt-tab").remove();
+      const tab = e.target.closest(".rt-tab");
+      const closingActive = tab.dataset.rid === activeFileRid;
+      tab.remove();
+      if (closingActive) {
+        // The file backing the table just disappeared — clear state so
+        // loadFile(rid) can re-open the same rid later, and blank the
+        // surface back to the "open a file" prompt.
+        activeFileRid = null;
+        activeColumns = [];
+        rowIndices = [];
+        totalPages = 1;
+        renderPager();
+        setTableState("Open a file from the rail to see its data.");
+        rowsInfo.textContent = "No file open.";
+      }
       return;
     }
     const tab = e.target.closest(".rt-tab");
@@ -703,12 +717,17 @@ export default function workspace(app, { session }) {
     },
   });
 
-  // ─── refresh — re-fetch the open file (or no-op) ───────────────
+  // ─── refresh — re-fetch the project rail + the open file ──────
+  // The rail is lazy by group; we drop the group-loaded marker so the
+  // next expand re-fetches files, and re-render the project list from
+  // /api/projects. Then re-load the open file (if any) to pick up any
+  // server-side changes.
   $("#wsRefresh").addEventListener("click", (e) => {
     const i = e.currentTarget.querySelector("i");
     i.classList.remove("rt-spinning");
     void i.offsetWidth;
     i.classList.add("rt-spinning");
+    loadProjects();
     if (activeFileRid) {
       const rid = activeFileRid;
       activeFileRid = null;        // force loadFile to re-run
