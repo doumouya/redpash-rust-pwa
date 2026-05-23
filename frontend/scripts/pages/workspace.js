@@ -58,6 +58,8 @@ export default function workspace(app, { session }) {
   let currentPage   = 1;    // 1-indexed page (matches Page<T>.page on the wire)
   let pageSize      = readPageSize();
   let totalPages    = 1;    // last response's Page<T>.pages — drives the pager render
+  let rowIndices    = [];   // absolute row idx in the underlying frame, per displayed row
+  let stepInFlight  = false;
 
   function readPageSize() {
     const raw = localStorage.getItem(PAGE_SIZE_KEY);
@@ -242,6 +244,7 @@ export default function workspace(app, { session }) {
     // Server clamps page; trust its echo so the pager reflects reality.
     currentPage = pageData?.page || 1;
     totalPages  = pageData?.pages || 1;
+    rowIndices  = pageData?.row_indices || [];
     renderTable(activeColumns, pageData?.rows || []);
     const shown = pageData?.rows?.length || 0;
     const total = pageData?.total || 0;
@@ -263,17 +266,20 @@ export default function workspace(app, { session }) {
           + '>' + esc(c.name) + ' <i class="bi bi-chevron-expand sort"></i></th>'
         ).join("")
       + '</tr>';
-    tbody.innerHTML = rows.map((row, i) =>
-      '<tr>'
-      + '<td class="col-chk"><input type="checkbox" class="rt-chk" /></td>'
-      + '<td class="col-n col-rownum">' + (i + 1) + '</td>'
-      + columns.map((_, ci) => {
-          const v = row[ci];
-          const cls = v == null ? 'cell-muted editable' : 'editable';
-          return '<td class="' + cls + '">' + esc(v == null ? "—" : v) + '</td>';
-        }).join("")
-      + '</tr>'
-    ).join("");
+    tbody.innerHTML = rows.map((row, i) => {
+      const absIdx = rowIndices[i];
+      const idxAttr = absIdx != null ? ' data-idx="' + absIdx + '"' : "";
+      return '<tr' + idxAttr + '>'
+        + '<td class="col-chk"><input type="checkbox" class="rt-chk" /></td>'
+        + '<td class="col-n col-rownum">' + (i + 1) + '</td>'
+        + columns.map((c, ci) => {
+            const v = row[ci];
+            const cls = v == null ? 'cell-muted editable' : 'editable';
+            return '<td class="' + cls + '" data-col="' + esc(c.name) + '">'
+              + esc(v == null ? "—" : v) + '</td>';
+          }).join("")
+        + '</tr>';
+    }).join("");
     syncSel();
   }
 
@@ -567,7 +573,12 @@ export default function workspace(app, { session }) {
     syncSel();
   });
 
-  // ─── edit / select / delete modes (visual; save lands next) ────
+  // ─── edit / select / delete modes — wired to the step engine ───
+  // Cell edits and row deletes hit POST /api/files/:rid/steps with
+  // kind=set_cell|drop_rows. The step engine returns the updated frame;
+  // we refetchPage() to pick it up (preserves sort/filter/page state,
+  // unlike loadFile which would reset). Single-flight: stepInFlight
+  // gates concurrent step posts to avoid out-of-order writes.
   const modeBtns = $$(".rt-mode");
   function setMode(btn) {
     const turnOn = !btn.classList.contains("is-active");
@@ -587,8 +598,10 @@ export default function workspace(app, { session }) {
     if (b.dataset.mode === "delete"
         && table.classList.contains("mode-select")
         && rowChecks().some((c) => c.checked)) {
-      rowChecks().filter((c) => c.checked).forEach((c) => c.closest("tr").remove());
-      syncSel(); renumber(); refresh();
+      const indices = rowChecks().filter((c) => c.checked)
+        .map((c) => parseInt(c.closest("tr")?.dataset.idx, 10))
+        .filter((n) => Number.isFinite(n));
+      if (indices.length) applyStep("drop_rows", { indices });
       return;
     }
     setMode(b);
@@ -596,7 +609,9 @@ export default function workspace(app, { session }) {
   tbody.addEventListener("click", (e) => {
     if (!table.classList.contains("mode-delete")) return;
     const tr = e.target.closest("tr");
-    if (tr) { tr.remove(); renumber(); refresh(); }
+    if (!tr) return;
+    const idx = parseInt(tr.dataset.idx, 10);
+    if (Number.isFinite(idx)) applyStep("drop_rows", { indices: [idx] });
   });
   tbody.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.isContentEditable) {
@@ -604,6 +619,50 @@ export default function workspace(app, { session }) {
       e.target.blur();
     }
   });
+
+  // Cell-edit save — snapshot the value on focus, diff on blur, fire
+  // set_cell only when changed. The "—" placeholder for nulls is also
+  // the empty signal back to the server (params.value: "" → null).
+  tbody.addEventListener("focusin", (e) => {
+    const td = e.target.closest("td.editable[contenteditable=\"true\"]");
+    if (td) td.dataset.original = td.textContent;
+  });
+  tbody.addEventListener("focusout", (e) => {
+    const td = e.target.closest("td.editable[contenteditable=\"true\"]");
+    if (!td) return;
+    const original = td.dataset.original ?? "";
+    const next = td.textContent;
+    if (next === original) { delete td.dataset.original; return; }
+    const tr  = td.closest("tr");
+    const idx = parseInt(tr?.dataset.idx, 10);
+    const column = td.dataset.col;
+    if (!Number.isFinite(idx) || !column) return;
+    // "—" is the rendered placeholder for null — treat it as a clear.
+    const wireValue = (next === "" || next === "—") ? null : next;
+    applyStep("set_cell", { row: idx, column, value: wireValue }, () => {
+      td.textContent = original;  // revert on error
+    });
+    delete td.dataset.original;
+  });
+
+  // Single-flight POST → refetchPage on success, revert + status on error.
+  // Errors land in rowsInfo (the bottom-left status text) so the table
+  // stays visible — setTableState would blank it.
+  async function applyStep(kind, params, onError) {
+    if (!activeFileRid || stepInFlight) return;
+    stepInFlight = true;
+    rowsInfo.textContent = "Saving…";
+    try {
+      await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
+      await refetchPage();
+    } catch (err) {
+      const msg = err?.body?.message || err?.body?.error || err?.message || "Save failed";
+      rowsInfo.textContent = msg + (err?.status ? " (" + err.status + ")" : "");
+      onError?.(err);
+    } finally {
+      stepInFlight = false;
+    }
+  }
 
   // ─── side panels ───────────────────────────────────────────────
   function bindPanel(btnSel, panelSel) {
