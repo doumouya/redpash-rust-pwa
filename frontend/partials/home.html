@@ -1,14 +1,37 @@
-<!-- Home — the project launchpad. The shared topbar over a board of
-     project cards; each card shows where the project sits in the
-     import → clean → report → publish pipeline. -->
+<!-- Home — the project launchpad. Two sections under the shared topbar:
+     a greeting hero with at-a-glance stats, and a board of project
+     cards. Each card shows the project's place in the pipeline + a
+     cleanness bar coloured by score. -->
 <section class="rp-home">
   <header id="rp-topbar"></header>
 
   <div class="rp-home__main">
-    <div class="rp-home__head">
-      <h1 class="rp-home__title">Your projects</h1>
-      <p class="rp-muted" id="rp-home-count"></p>
+
+    <header class="rp-home__greeting">
+      <h1 class="rp-home__greeting-title" id="rp-home-greeting">Welcome.</h1>
+      <p class="rp-home__greeting-sub">Pick up a project or scan a new CSV.</p>
+    </header>
+
+    <div class="rp-home__stats" id="rp-home-stats" aria-busy="true">
+      <div class="rp-home__stat">
+        <span class="rp-home__stat-label">Projects</span>
+        <span class="rp-home__stat-value" id="rp-stat-projects">—</span>
+      </div>
+      <div class="rp-home__stat">
+        <span class="rp-home__stat-label">Files</span>
+        <span class="rp-home__stat-value" id="rp-stat-files">—</span>
+      </div>
+      <div class="rp-home__stat">
+        <span class="rp-home__stat-label">Avg cleanness</span>
+        <span class="rp-home__stat-value" id="rp-stat-cleanness">—</span>
+      </div>
     </div>
+
+    <header class="rp-home__section">
+      <h2 class="rp-home__section-title">Projects</h2>
+      <span class="rp-home__section-count" id="rp-home-count"></span>
+    </header>
+
     <div class="rp-home__board" id="rp-home-board" aria-busy="true">
       <p class="rp-home__state">Loading your projects…</p>
     </div>
