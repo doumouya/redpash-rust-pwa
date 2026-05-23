@@ -2,6 +2,8 @@
    brand · omnibox (centred site search) · app actions. */
 
 .rp-topbar {
+  position: relative;
+  z-index: 50;
   flex-shrink: 0;
   height: 54px;
   display: grid;
@@ -14,6 +16,12 @@
   backdrop-filter: blur(16px) saturate(1.5);
   border-bottom: 1px solid var(--rp-border);
 }
+/* The topbar wraps a flyout dropdown (omnisearch). Without an
+   explicit z-index, later-in-DOM siblings (rail / shell-body /
+   workspace surface — all stacking contexts via their own
+   backdrop-filter) render above the topbar's stacking context.
+   z-index: 50 lifts the whole topbar's context above page content;
+   the dropdown stays inside that context and inherits the layering. */
 
 .rp-brand {
   display: flex;
