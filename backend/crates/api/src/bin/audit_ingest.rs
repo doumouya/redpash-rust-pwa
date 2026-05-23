@@ -1,9 +1,9 @@
-//! `redpash-audit-ingest` — persist one tools/<tool>-audit/audit-bro.json
+//! `redpash-audit-ingest` — persist one tools/<tool>-audit/audit.json
 //! run into audit.run + audit.finding.
 //!
-//! Standalone companion to the audit scripts. Each `audit-bro.js` writes
-//! its full `data` object as `audit-bro.json` next to the .html report;
-//! this binary reads that JSON, captures git context, and writes one
+//! Standalone companion to the audit scripts. Each `audit.js` writes its
+//! full `data` object as `audit.json` next to the .html report; this
+//! binary reads that JSON, captures git context, and writes one
 //! `audit.run` row + one `audit.finding` row per individual finding in a
 //! single transaction.
 //!
@@ -12,10 +12,10 @@
 //!
 //! Usage:
 //!     redpash-audit-ingest --tool css
-//!     redpash-audit-ingest --tool html --file /abs/path/audit-bro.json
+//!     redpash-audit-ingest --tool html --file /abs/path/audit.json
 //!
-//! Default file path: `tools/<tool>-audit/audit-bro.json`, resolved
-//! relative to the current working directory. Run from the repo root.
+//! Default file path: `tools/<tool>-audit/audit.json`, resolved relative
+//! to the current working directory. Run from the repo root.
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     let path = file.unwrap_or_else(|| {
         PathBuf::from("tools")
             .join(format!("{tool}-audit"))
-            .join("audit-bro.json")
+            .join("audit.json")
     });
 
     let raw = std::fs::read_to_string(&path)
@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
 
     let stats = data.get("stats").cloned().unwrap_or(Value::Null);
     if stats.is_null() {
-        bail!("audit-bro.json missing top-level `stats`");
+        bail!("audit.json missing top-level `stats`");
     }
 
     let git_sha = git(&["rev-parse", "HEAD"]).ok();

@@ -22,7 +22,16 @@
    loader (a {{prop}} + <slot> extension is sketched per candidate).
 
    Usage:  node audit.js [partialsDir]
-   Output: ./report.html
+   Output: ./audit.html + ./audit.json  (next to this script)
+           audit.json is the source-of-truth payload `redpash-audit-ingest`
+           reads to persist audit.run + audit.finding rows.
+
+   History: forked 2026-05-23 from the original audit.js as `audit-bro.js`
+   to fix the emit-order bug below (the original called renderHtml(data)
+   BEFORE the `var CSS` / `var JS` assignments ran, so the report shipped
+   `<style>undefined</style>` + `<script>undefined</script>` — an unstyled,
+   non-interactive page). The emit now lives at the end so CSS + JS exist.
+   This fork has since been renamed to `audit.js` as the canonical entry.
    ────────────────────────────────────────────────────────────────────────── */
 'use strict';
 
@@ -33,7 +42,7 @@ var crypto = require('crypto');
 var PARTIALS_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
   : '/home/mansa/redpash-app/frontend/partials';
-var OUT = path.join(__dirname, 'report.html');
+var OUT = path.join(__dirname, 'audit.html');
 
 /* tuning */
 var MIN_NODES  = 4;   // element nodes in a candidate (fixed part, for slotted)
@@ -699,18 +708,6 @@ var data = {
   byFile: byFile
 };
 
-fs.writeFileSync(OUT, renderHtml(data), 'utf8');
-
-console.log('');
-console.log('  files scanned        ' + data.stats.files);
-console.log('  element nodes        ' + data.stats.elements);
-console.log('  component candidates ' + data.stats.candidates
-  + '  (' + data.stats.slotted + ' slotted)');
-console.log('  est. lines saved     ~' + data.stats.totalSaved);
-console.log('  biggest win          ' + data.stats.biggest);
-console.log('');
-console.log('  report -> ' + OUT);
-
 /* ── HTML report ─────────────────────────────────────────────────────────── */
 function renderHtml(d) {
   var json = JSON.stringify(d).replace(/<\//g, '<\\/');
@@ -956,3 +953,26 @@ var JS = [
 "renderCmp();renderFile();",
 "})();"
 ].join("\n");
+
+/* ── emit ────────────────────────────────────────────────────────────────── */
+/* FIX (audit-bro): the original ran this emit at line ~702 — BEFORE the
+   `var CSS` / `var JS` assignments below it. `var` hoists the name but not
+   the value, and `renderHtml` is a hoisted function declaration, so the
+   call didn't crash — it just stringified `undefined` into the page,
+   shipping `<style>undefined</style>` + `<script>undefined</script>`
+   (unstyled, no tabs/sort/filter). Moved here so CSS + JS are assigned
+   first — matches css-audit/audit.js's layout. */
+fs.writeFileSync(OUT, renderHtml(data), 'utf8');
+/* `data` is the source-of-truth payload `redpash-audit-ingest` reads to
+   persist audit.run + audit.finding rows. See tools/audit-storage-brainstorming.md. */
+fs.writeFileSync(path.join(__dirname, 'audit.json'), JSON.stringify(data));
+
+console.log('');
+console.log('  files scanned        ' + data.stats.files);
+console.log('  element nodes        ' + data.stats.elements);
+console.log('  component candidates ' + data.stats.candidates
+  + '  (' + data.stats.slotted + ' slotted)');
+console.log('  est. lines saved     ~' + data.stats.totalSaved);
+console.log('  biggest win          ' + data.stats.biggest);
+console.log('');
+console.log('  report -> ' + OUT);
