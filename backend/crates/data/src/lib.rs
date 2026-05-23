@@ -37,6 +37,12 @@ pub mod render;
 pub mod export;
 pub mod clean;
 
+// `wasm` — Phase B wasm-bindgen wrappers (apply_filter / apply_sort /
+// auto_clean / step_preview). Only compiled for wasm32; the server
+// build doesn't see this module. See docs/internal/roadmap-webassembly.md §5.
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
 /// Crate-level error. Wraps Polars, IO, and parse failures into a single
 /// type the `api` crate can map to HTTP status codes.
 #[derive(Debug, thiserror::Error)]

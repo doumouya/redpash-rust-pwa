@@ -7,6 +7,13 @@ name    = "data"
 version = { workspace = true }
 edition = { workspace = true }
 
+# Two crate types so the wasm32 build produces a `.wasm` cdylib while
+# the server build still works with `data` as a path-rlib dependency
+# of `api`. Native builds emit both an rlib and an unused cdylib; the
+# rlib is what `api` links against.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 shared          = { path = "../shared" }
 serde           = { workspace = true }
@@ -58,3 +65,4 @@ maud            = { workspace = true }
 polars          = { version = "0.43", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str"] }
 uuid            = { version = "1", features = ["v4", "serde", "js"] }
 getrandom       = { version = "0.3", features = ["wasm_js"] }
+wasm-bindgen    = "0.2"
