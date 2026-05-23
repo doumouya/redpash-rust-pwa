@@ -228,3 +228,217 @@ the dropdown's interaction model.
   ever grows past tens of thousands of files-per-user, the right
   next step is a `tsvector` GIN index per searchable column, not
   pagination of the search results.
+
+## Rust internals — query plan + ranking
+
+### Projects query — algorithm + index path
+
+```sql
+SELECT p.redpash_id, p.name, COALESCE(p.description, '')
+  FROM projects p
+ WHERE (p.owner_id = $1
+        OR EXISTS (SELECT 1 FROM project_memberships m
+                    WHERE m.project_redpash_id = p.redpash_id
+                      AND m.user_redpash_id    = $1))
+   AND (p.name ILIKE '%' || $2 || '%'
+        OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
+ ORDER BY (CASE WHEN p.name ILIKE $2 || '%' THEN 0 ELSE 1 END),
+          p.updated_at DESC
+ LIMIT 5
+```
+
+**WHERE clause structure** is OR-of-(owner OR member),
+AND-of-(name OR description). Postgres' planner builds the
+predicate set and chooses a plan:
+
+- Small workspace (today's solo-dev): seq-scan + filter. Fast.
+- Larger: `projects_owner_id_idx` (FK) covers the owner branch;
+  the member EXISTS pushes down to `project_memberships_user_idx`.
+  Both indexes already exist for non-search reasons.
+
+**ILIKE on `name`**: no `tsvector` / GIN index today. ILIKE with
+both-side wildcards (`%q%`) can't use a B-tree even on a typed
+expression. At solo-dev scale that's fine; it's a 30-row seq-scan.
+The optimization horizon: `CREATE INDEX projects_name_trgm ON
+projects USING gin (name gin_trgm_ops)` when row counts climb,
+then ILIKE becomes index-scannable.
+
+**ORDER BY CASE**: the prefix-boost trick. `CASE WHEN ... THEN 0
+ELSE 1 END` evaluates per row at no extra index cost; sort key
+is a tiny int. Cheap.
+
+**LIMIT 5**: the per-kind cap. Hard-coded in `routes/search.rs`
+as `PER_KIND_LIMIT`.
+
+### Files query — the CTE + ROW_NUMBER trick
+
+```sql
+WITH ranked AS (
+    SELECT f.redpash_id, f.filename, f.display_name, f.file_type,
+           f.project_redpash_id, p.name AS project_name,
+           ROW_NUMBER() OVER (
+             PARTITION BY f.file_type
+             ORDER BY (CASE WHEN COALESCE(f.display_name, f.filename) ILIKE $2 || '%' THEN 0 ELSE 1 END),
+                      f.updated_at DESC
+           ) AS rn
+      FROM project_files f
+      JOIN projects p ON p.redpash_id = f.project_redpash_id
+     WHERE (p.owner_id = $1 OR EXISTS (...))
+       AND (f.filename ILIKE '%' || $2 || '%'
+            OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
+)
+SELECT redpash_id, filename, display_name, file_type,
+       project_redpash_id, project_name
+  FROM ranked
+ WHERE rn <= $3
+ ORDER BY file_type, rn
+```
+
+**Why one query, not three** (one per file_type): the CTE
+materializes all matching rows once, then ROW_NUMBER caps each
+`file_type` partition at 5. Three separate queries would walk
+the table three times; this walks it once.
+
+**`PARTITION BY file_type`**: applies the LIMIT-per-kind logic
+inside SQL. A chatty file_type (say, hundreds of charts matching
+`"chart"`) can't crowd out files / dashboards.
+
+**Sort key**: same prefix-boost CASE + `updated_at DESC` tiebreak.
+The most recently updated matching entries surface first within
+each kind.
+
+**`COALESCE(f.display_name, f.filename)`** for the prefix check —
+files may carry an explicit display_name (sometimes rare), fall
+back to the filename otherwise.
+
+### Why no full-text index
+
+`tsvector` + GIN index is the standard answer for "search this
+column fast." We don't use it because:
+
+1. **Per-language config**: `to_tsvector('english', name)` needs
+   a config. RedPash supports multiple locales; a one-config
+   index would penalize the wrong ones. Multi-config indexes
+   are doable but add operational overhead.
+2. **ILIKE is fast enough today**. Solo-dev plus small
+   workspaces means the seq-scan cost is unmeasurable. We have
+   no `EXPLAIN ANALYZE` showing search as a hot path.
+3. **Substring vs token match semantics**. `tsvector` matches
+   on word boundaries; ILIKE matches mid-word. The "cata" → "catalog"
+   demo case works with ILIKE but would miss with default tsvector
+   tokenization (since "cata" isn't a token, and a `:*` prefix
+   match would catch it but loses mid-word like "incatalog").
+
+When search becomes a real cost: switch to `pg_trgm`'s gin index
+(handles ILIKE-style mid-word matches in index time) before
+considering full-text.
+
+### Rust assembly — `routes::search::search`
+
+```rust
+pub async fn search(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Query(q):     Query<SearchQuery>,
+) -> Result<Json<SearchResponse>, AppError> {
+    let started = Instant::now();
+    let user = super::resolve_user_rid(&state, &headers).await?;
+
+    let q_raw = q.q.unwrap_or_default();
+    let q_trim = q_raw.trim();
+    let total_cap = q.limit.unwrap_or(DEFAULT_TOTAL_LIMIT).clamp(1, MAX_TOTAL_LIMIT);
+
+    if q_trim.len() < MIN_Q_LEN {
+        return Ok(Json(SearchResponse {
+            q: q_trim.into(),
+            results: Vec::new(),
+            ms: started.elapsed().as_millis() as u32,
+        }));
+    }
+
+    let q_owned = q_trim.to_string();
+    let mut results: Vec<SearchResult> = Vec::with_capacity(total_cap as usize);
+
+    // Projects query → push results
+    // Files/charts/dashboards CTE → push results
+
+    results.truncate(total_cap as usize);
+    Ok(Json(SearchResponse {
+        q: q_owned, results,
+        ms: started.elapsed().as_millis() as u32,
+    }))
+}
+```
+
+**Constants** (top of file):
+
+```rust
+const PER_KIND_LIMIT:     i64 = 5;
+const DEFAULT_TOTAL_LIMIT: u32 = 20;
+const MAX_TOTAL_LIMIT:     u32 = 100;
+const MIN_Q_LEN:           usize = 1;
+```
+
+- `MIN_Q_LEN = 1` — single-char queries are accepted; the per-
+  kind LIMIT bounds the result count. Bumping to 2 would skip
+  the "type one letter" feedback users sometimes want.
+- `DEFAULT_TOTAL_LIMIT = 20` — at most 20 rows across 4 kinds
+  with 5 per kind. A typical dropdown shows the full count
+  without scrolling.
+- `MAX_TOTAL_LIMIT = 100` — hard cap from the caller; clamps
+  the `?limit=` param.
+- `PER_KIND_LIMIT = 5` — the partition limit. Chosen because
+  the dropdown's section header + 5 rows + headroom for 4 kinds
+  ≈ 20 visible items; matches `DEFAULT_TOTAL_LIMIT`.
+
+**No early return on empty filter**: even when one query
+returns 0 results, the other still runs. Two round-trips to the
+DB regardless. Could be parallelized via `tokio::join!` for ~2x
+speedup on the wall clock — open optimization horizon. At
+current latencies (~5-15ms total) the gain is marginal.
+
+### `hash` field — backend-owned routing
+
+The wire `hash` per result is computed server-side per kind:
+
+```rust
+// Project
+SearchResult {
+    kind:  "project".into(),
+    hash:  format!("#/workspace?project={rid}"),
+    ...
+}
+// File / chart / dashboard
+let hash = format!("#/workspace?file={rid}");
+let kind = match file_type.as_str() {
+    "chart"     => "chart",
+    "dashboard" => "dashboard",
+    _           => "file",
+}.to_string();
+```
+
+**Backend names the destination**. The frontend's click handler
+is `location.hash = r.hash` — no JS-side `switch (kind)` mapping
+to URL. Adding a new kind requires only that the backend ship a
+`hash` that the frontend's router knows how to handle; the
+dropdown code is unchanged.
+
+## Optimization map
+
+| Phase | Cost | Optimization horizon |
+|---|---|---|
+| Auth resolve (session lookup) | ~1ms DB call | already on every endpoint; cached future via JWT or in-memory session map |
+| Empty-q short-circuit | constant | already optimal |
+| Projects + files queries | ~5-10ms each at solo scale | parallelize via `tokio::join!` for 2x; pg_trgm index when scale demands |
+| Result assembly | µs | n/a |
+| Wire size (typical 20 rows) | ~3-5 KB | n/a |
+
+**Slice 4 (admin scope)** will need a third query path for
+admin entities (users / companies / memberships). Same shape;
+adds ~5-10ms when invoked. Gated behind RBAC, so most callers
+will never trigger it.
+
+**Slice 3 (command palette)** — nav shortcuts ("Settings",
+"Toggle theme") + actions — adds *no* SQL. The matching happens
+client-side against a small static command list, results
+interleave into the existing dropdown. Backend stays as-is.

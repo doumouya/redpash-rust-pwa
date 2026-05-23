@@ -291,3 +291,312 @@ to-parse. Worth keeping in the messaging.
   reachable from which runtime). Both fit the
   [cleaning-cadence](../processes/audit-cadence.md) rule — wasm-
   readiness becomes a tracked metric, not a hope.
+
+## Rust internals — wrapper bodies + serial dedup
+
+### `rows_to_df` — JSON → DataFrame with type inference
+
+```rust
+fn rows_to_df(rows_json: &str) -> Result<DataFrame, String> {
+    let rows: Vec<serde_json::Map<String, Value>> = serde_json::from_str(rows_json)?;
+    if rows.is_empty() { return Ok(DataFrame::empty()); }
+    let columns: Vec<String> = rows[0].keys().cloned().collect();
+
+    let mut series_list: Vec<Series> = Vec::with_capacity(columns.len());
+    for col in &columns {
+        // Type inference from FIRST non-null value across all rows.
+        let kind: &str = rows.iter().find_map(|r| match r.get(col) {
+            Some(Value::Number(_)) => Some("number"),
+            Some(Value::Bool(_))   => Some("bool"),
+            Some(Value::String(_)) => Some("string"),
+            _                      => None,
+        }).unwrap_or("string");
+
+        let s = match kind {
+            "number" => {
+                let v: Vec<Option<f64>> = rows.iter().map(|r| {
+                    r.get(col).and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|n| n as f64)))
+                }).collect();
+                Series::new(col.as_str().into(), v)
+            }
+            "bool" => {
+                let v: Vec<Option<bool>> = rows.iter()
+                    .map(|r| r.get(col).and_then(|v| v.as_bool())).collect();
+                Series::new(col.as_str().into(), v)
+            }
+            _ => {
+                let v: Vec<Option<String>> = rows.iter().map(|r| {
+                    r.get(col).and_then(|v| match v {
+                        Value::Null      => None,
+                        Value::String(s) => Some(s.clone()),
+                        other            => Some(other.to_string()),
+                    })
+                }).collect();
+                Series::new(col.as_str().into(), v)
+            }
+        };
+        series_list.push(s);
+    }
+    DataFrame::new(series_list).map_err(|e| format!("df build: {e}"))
+}
+```
+
+**Inference policy**: first non-null per column wins. Mixed types
+in one column get coerced to the inferred dtype's representation
+(e.g. boolean cells in a number column become NULL, since
+`as_f64()` returns None for booleans). That's the same behavior
+Polars' own JSON reader uses; we replicate it manually to avoid
+adding the `polars-json` feature (which pulls more deps and grows
+the wasm bundle).
+
+**Allocations**:
+- One `Vec` per column (typed) sized to `rows.len()`.
+- `Vec<Option<String>>` for string columns clones each input
+  string. Could be `Cow<str>` if zero-copy mattered, but for the
+  5 MB-cap demo path the clone overhead is ~10ms on typical files
+  — negligible against the parse + auto_clean costs.
+
+**Column-order stability**: takes `keys()` from `rows[0]`. Object
+key insertion order in JSON is preserved by serde_json, so the
+order matches the input JSON's order. The wrappers' output via
+`df_to_rows` preserves the same order.
+
+### `df_to_rows` — DataFrame → JSON
+
+```rust
+fn df_to_rows(df: &DataFrame) -> Result<String, String> {
+    let n = df.height();
+    let cols: Vec<&Series> = df.get_columns().iter().collect();
+    let mut rows: Vec<Value> = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut row = serde_json::Map::with_capacity(cols.len());
+        for c in &cols {
+            let v: Value = match c.get(i).unwrap_or(AnyValue::Null) {
+                AnyValue::Null            => Value::Null,
+                AnyValue::Boolean(b)      => Value::Bool(b),
+                AnyValue::Int8(n) | AnyValue::Int16(n) | AnyValue::Int32(n) | ... => json!(n),
+                AnyValue::Float32(n) | AnyValue::Float64(n) => json!(n),
+                AnyValue::String(s)       => Value::String(s.into()),
+                AnyValue::StringOwned(s)  => Value::String(s.to_string()),
+                other                     => Value::String(other.to_string()),
+            };
+            row.insert(c.name().to_string(), v);
+        }
+        rows.push(Value::Object(row));
+    }
+    serde_json::to_string(&rows).map_err(|e| format!("rows serialize: {e}"))
+}
+```
+
+**Per-row, per-cell allocation**: each AnyValue match branch
+allocates per cell. Polars stores columns as chunked arrays;
+walking with `c.get(i)` is O(log chunks) per access. For typical
+page sizes (25-100 rows), totally fine; for the upper bound (5 MB
+file ≈ tens of thousands of rows), this becomes the dominant
+cost. Optimization horizon: batch per-column with iterators
+(`c.str()?.into_iter()`, `c.f64()?.into_iter()`, etc.) and skip
+the AnyValue layer.
+
+### `drop_dupe_rows_serial` — the wasm-only dedup
+
+```rust
+#[cfg(target_arch = "wasm32")]
+fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
+    use std::collections::HashSet;
+    let height = df.height();
+    if height < 2 { return Ok(df); }
+
+    let mut seen: HashSet<Vec<String>> = HashSet::with_capacity(height);
+    let mut keep_mask: Vec<bool> = Vec::with_capacity(height);
+    let cols = df.get_columns();
+    for i in 0..height {
+        let sig: Vec<String> = cols.iter()
+            .map(|c| format!("{:?}", c.get(i).unwrap_or(AnyValue::Null)))
+            .collect();
+        keep_mask.push(seen.insert(sig));
+    }
+    if keep_mask.iter().all(|&k| k) { return Ok(df); }  // no dupes — return as-is
+
+    // Per-dtype Series rebuild (avoids Polars' filter/take which also par_iter)
+    let new_cols: Vec<Series> = cols.iter().map(|col| -> Result<Series> {
+        let name = col.name().clone();
+        match col.dtype() {
+            DataType::String => {
+                let ca = col.str()?;
+                let v: Vec<Option<&str>> = (0..height)
+                    .filter(|&i| keep_mask[i]).map(|i| ca.get(i)).collect();
+                Ok(Series::new(name, v))
+            }
+            DataType::Boolean => { /* same shape, bool typed */ }
+            DataType::Float64 => { /* same shape, f64 typed */ }
+            DataType::Int64   => { /* same shape, i64 typed */ }
+            _ => {
+                // Fallback via AnyValue rebuild — shouldn't trigger
+                // for auto_clean's output (which only produces these
+                // four dtypes) but defended.
+                let values: Vec<AnyValue> = (0..height)
+                    .filter(|&i| keep_mask[i])
+                    .map(|i| col.get(i).unwrap_or(AnyValue::Null))
+                    .collect();
+                Series::from_any_values_and_dtype(name, &values, col.dtype(), false)
+                    .map_err(DataError::from)
+            }
+        }
+    }).collect::<Result<Vec<_>>>()?;
+
+    DataFrame::new(new_cols).map_err(DataError::from)
+}
+```
+
+**Why `Vec<String>` for the signature key**: HashSet on
+`Vec<String>` hashes the vector's elements in order, so two rows
+with the same cells (in column order) hash identically. The
+alternative — `Vec<AnyValue>` — doesn't implement `Hash` directly,
+and going through `{:?}` is uniform across dtype.
+
+**Performance**: O(rows × col_count) for signature build +
+O(rows × col_count) for typed rebuild. For 1k rows × 20 cols ≈
+40k operations — runs in tens of milliseconds. The serial
+implementation is slower than par on large frames but linear,
+predictable, and runtime-portable.
+
+**Why per-dtype rebuild instead of `Series::from_any_values`**:
+the typed path is ~3x faster on large frames (no per-cell
+AnyValue boxing). The fallback exists for defensive correctness;
+auto_clean's output dtype set never triggers it today.
+
+## Build pipeline — `tools/build-wasm.sh` line by line
+
+```sh
+#!/usr/bin/env sh
+set -e
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT/backend"
+
+# Stage 1 — cargo build (release, wasm32)
+RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
+  cargo build --release --target wasm32-unknown-unknown -p data
+cd "$REPO_ROOT"
+
+# Stage 2 — wasm-bindgen → frontend/wasm/
+mkdir -p frontend/wasm
+wasm-bindgen --target web --out-dir frontend/wasm --out-name data \
+  backend/target/wasm32-unknown-unknown/release/data.wasm
+
+# Stage 3 — wasm-opt -Oz strip
+wasm-opt -Oz --strip-debug \
+  --enable-reference-types --enable-bulk-memory --enable-mutable-globals \
+  --enable-nontrapping-float-to-int --enable-sign-ext --enable-simd \
+  --enable-multivalue --enable-tail-call --enable-extended-const --enable-gc \
+  -o frontend/wasm/data_bg.opt.wasm frontend/wasm/data_bg.wasm
+mv frontend/wasm/data_bg.opt.wasm frontend/wasm/data_bg.wasm
+```
+
+**Why `--target web`** to wasm-bindgen: emits an ES module with
+`async init()` default export — the right shape for the
+frontend's dynamic `import('/wasm/data.js')` pattern. Other
+targets (`nodejs`, `no-modules`) emit different glue and don't
+match our loader.
+
+**Why every `--enable-<feature>` flag**: `wasm-opt`'s validator
+rejects features it doesn't know about. Modern Rust + LLVM emit
+wasm using reference-types, bulk-memory, mutable-globals,
+nontrapping-float-to-int, sign-ext, simd, multivalue, tail-call,
+extended-const, gc — all standardized in different wasm proposal
+phases. Without the flags wasm-opt would error out at validate
+time even though the output is well-formed.
+
+**Why `-Oz`** (size-optimize) vs `-O3` (speed-optimize): size
+matters more than runtime perf for a 3 MB bundle delivered over
+network. The size savings: ~5 MB raw → ~11 MB raw after
+wasm-bindgen (which adds glue exports) → ~11.5 MB unoptimized
+release → 11.5 MB optimized release? Actually wasm-opt cuts about
+4 MB off the raw via dead-code-elimination + function inlining;
+the gzip savings are smaller because much of the bundle is
+already entropy-rich.
+
+## Frontend internals — `wasm-engine.js`
+
+### Lazy loader memoization
+
+```js
+let _enginePromise = null;
+
+export async function getEngine() {
+  if (_enginePromise) return _enginePromise;
+  _enginePromise = (async () => {
+    const mod = await import('/wasm/data.js');
+    await mod.default(); // wasm-bindgen init — fetches + instantiates data_bg.wasm
+    return {
+      apply_filter:  mod.apply_filter,
+      apply_sort:    mod.apply_sort,
+      auto_clean:    mod.auto_clean,
+      step_preview:  mod.step_preview,
+    };
+  })();
+  return _enginePromise;
+}
+```
+
+**Why store the *promise* and not the resolved engine**: avoids
+the second-caller race where two concurrent `getEngine()` calls
+both start a download. Storing the promise means callers 2+
+await the same in-flight init.
+
+**Why `import('/wasm/data.js')` dynamic**: ES modules are cached
+by URL — first call kicks the fetch, subsequent calls hit the
+module map cache. Streaming compile happens during the fetch;
+`mod.default()` resolves once the .wasm is instantiated.
+
+### `gateBySize` — the 5 MB cap
+
+```js
+export const DEMO_CAP_BYTES = 5 * 1024 * 1024;
+
+export function gateBySize(file) {
+  if (file.size > DEMO_CAP_BYTES) {
+    const limitMb = (DEMO_CAP_BYTES / 1024 / 1024).toFixed(0);
+    const sizeMb  = (file.size      / 1024 / 1024).toFixed(2);
+    throw new RangeError(
+      `file is ${sizeMb} MB; demo limit is ${limitMb} MB. ` +
+      `Sign up for a free account to handle any size.`
+    );
+  }
+  return file;
+}
+```
+
+**Synchronous + throws** because the cap-gate decision is "do I
+bother awaiting `getEngine()`?". A 6 MB file should never trigger
+the 3 MB download; throwing here is what saves the bandwidth.
+
+The error message is UI-bound — the caller catches and renders
+the sign-up CTA. UI-agnostic helper (`gateBySize` doesn't know
+about the DOM).
+
+## Optimization map — current binary surface
+
+| Layer | Size | Optimization horizon |
+|---|---|---|
+| Raw .wasm (wasm-bindgen output) | ~16 MB | Comes from polars + serde + chrono + the rest of the data crate |
+| `-Oz --strip-debug` | ~11.5 MB | Saves ~4.5 MB via DCE + symbol-name strip |
+| Gzipped (over-the-wire) | ~3.3 MB | The number that matters |
+| JS glue (`data.js`) | ~18 KB raw / ~4 KB gz | Stable; small |
+| Type definitions (`*.d.ts`) | ~3 KB | Not delivered to runtime |
+
+**Cutting the 3.3 MB further** would require trimming polars
+features (drop `regex`, `concat_str`, parts of `dtype-full` —
+loses engine capabilities) or replacing polars with a hand-rolled
+mini-engine for the demo path only (breaks "one engine, two
+surfaces"). Both have real product cost; neither is on today's
+roadmap.
+
+**Threading-aware build** (Phase C territory): `RUSTFLAGS='--cfg
+getrandom_backend="wasm_js" -C target-feature=+atomics,+bulk-memory'`
++ `wasm-bindgen-rayon` + deploy COEP/CORP headers. Polars parse
++ filter would multi-thread on supported browsers (Chrome with
+the headers). Cost: an extra build profile, slightly larger
+binary (~5% from atomics), and the deploy config. Payoff:
+parse/sort throughput catches up with the server version on
+big files.

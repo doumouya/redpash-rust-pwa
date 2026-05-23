@@ -203,4 +203,358 @@ and gets its own URL.
 - **Step engine on wasm.** `data::steps::apply` compiles for
   wasm32. The Phase B `step_preview(rows_json, kind, params_json)`
   wasm wrapper exposes the full 17-kind palette to the browser —
-  see [wasm-engine](wasm-engine.md) §3.
+  see [wasm-engine](wasm-engine.md).
+
+## Rust internals — algorithm + tuning per step kind
+
+Each step's implementation in `data::steps::apply`, the params
+it expects, the Polars primitives it uses, and the
+optimization-relevant decisions.
+
+### Dispatch shape
+
+```rust
+pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value)
+    -> Result<DataFrame>
+{
+    match kind {
+        "drop_columns"    => { /* ... */ }
+        "filter_columns"  => { /* ... */ }
+        "drop_rows"       => { /* ... */ }
+        "filter_rows"     => { /* ... */ }
+        "unwrap_csv"      => { /* ... */ }
+        "drop_nulls"      => { /* ... */ }
+        "set_cell"        => { /* ... */ }
+        "fill_nulls"      => { /* ... */ }
+        "cast"            => { /* ... */ }
+        "rename_column"   => { /* ... */ }
+        "snake_case_columns" => { /* ... */ }
+        "replace_in_names" => { /* ... */ }
+        "change_case"     => { /* ... */ }
+        "replace_text"    => { /* ... */ }
+        "fix_invalid"     => { /* ... */ }
+        "join_columns"    => { /* ... */ }
+        "split_column"    => { /* ... */ }
+        other => Err(DataError::InvalidSpec(
+            format!("unknown step: {other}"))),
+    }
+}
+```
+
+One match arm per kind; the arm reads `params` per its expected
+shape and returns the new DataFrame. The dispatch is exhaustive
+by design — adding a kind without an arm gets the catch-all
+error.
+
+### Column-shape ops — `drop_columns` / `filter_columns` / `rename_column`
+
+```rust
+// drop_columns
+let cols = params["columns"].as_array()?;
+let drop: Vec<&str> = cols.iter().filter_map(|v| v.as_str()).collect();
+df.drop_many(&drop)
+```
+
+**Allocation**: zero — `drop_many` returns a new `DataFrame`
+that aliases the kept columns. The dropped columns' Series are
+dropped only if no other reference exists.
+
+`filter_columns` is the inverse via `df.select(keep)`. Same
+zero-copy property.
+
+`rename_column`: `df.rename(from, to)?` — in-place mutation;
+returns a `&mut DataFrame`. Constant-time.
+
+### `drop_rows` — index-based row removal
+
+```rust
+let indices: Vec<u32> = params["indices"].as_array()?
+    .iter().filter_map(|v| v.as_u64()).map(|n| n as u32).collect();
+let mask: BooleanChunked = (0..df.height() as u32).map(|i| !indices.contains(&i)).collect();
+df.filter(&mask)
+```
+
+**Performance**: `contains` on `Vec<u32>` is O(n) per check, so
+the mask build is O(rows × indices). For typical user actions
+(deleting a handful of rows) this is negligible; if a "select all
+nulls in column X → drop" tool ever pushes thousands of indices,
+swap to `HashSet<u32>` for O(1) per check.
+
+### `filter_rows` — multi-predicate filter
+
+Uses [filter-dto](../specs/filter-dto.md). Builds one
+`polars::Expr` per predicate via `build_filter_predicate`, reduces
+with `.and()` / `.or()` per the `combinator`, applies through
+`df.lazy().filter(expr).collect()`.
+
+**Lazy is the win** — Polars optimizes the predicate AST
+(constant folding, expression pushdown) before materialization.
+Multi-clause filters are no more expensive than single-clause as
+long as you pass them in one `.filter()` call.
+
+**`case_sensitive` default is `true`** on this path (the
+persisted-step engine). Calling `setPref`-style insensitive
+matches require explicit `case_sensitive: false` in params.
+Different from `parse::filter_expr`'s default — deliberate
+asymmetry documented in [filter-dto §case_sensitive defaults](../specs/filter-dto.md#case_sensitive-defaults--deliberate-asymmetry).
+
+### `unwrap_csv` — wrapped-CSV rescue
+
+Refuses to operate on a DF with `width != 1` (defense against
+re-running after a prior unwrap). For each row:
+
+1. `defensive_unquote(value)` — peel outer `"..."` if balanced,
+   replace `""` with `"`.
+2. `sniff_delim(record)` — most-frequent of `,;|\t` in *this row*
+   (per-row, not file-wide, because wild wrapped CSVs are
+   inconsistent).
+3. Build a canonical `,`-delimited CSV from all unwrapped rows.
+4. Feed back through `data::parse::csv_bytes_to_df(canonical)` for
+   typed re-parse.
+
+See [data-engine §parse — unwrap_csv_string](data-engine.md#parse--csvxlsxjson--dataframe)
+for the algorithm in full. Cost: O(n × col_count) two-pass; only
+fires on user demand for the file shape that needs it.
+
+### `drop_nulls` — strict per-column null drop
+
+```rust
+df.drop_nulls(Some(&params["columns"].as_array()?))
+```
+
+Polars' built-in: drops a row if any named column is null.
+Stable; preserves row order in the survivors. O(n × col_count_in_list).
+
+### `set_cell` — surgical edit
+
+```rust
+let row: usize = params["row"].as_u64()? as usize;
+let col_name: &str = params["column"].as_str()?;
+let value = params["value"].clone();
+let col = df.column(col_name)?.clone();
+let mut builder = AnyValueBuilder::with_capacity(col.len(), col.dtype());
+for i in 0..col.len() {
+    builder.append_value(if i == row {
+        json_to_anyvalue(&value, col.dtype())
+    } else { col.get(i).unwrap_or(AnyValue::Null) });
+}
+let new_col = builder.finish(col_name);
+df.replace_column(col_name, new_col)?;
+```
+
+**This is O(n) per cell edit** — Polars columns are immutable
+chunked arrays; "edit cell" means "rebuild column with one
+different value." For the redtable's contenteditable, that's
+acceptable (one edit per blur), but a bulk "fill every null in
+column X" is better expressed as `fill_nulls` (single rebuild)
+than N `set_cell` calls (N rebuilds).
+
+The frontend's edit-mode batching policy: debounce per cell, not
+per file — so tab-through-five-cells produces five `set_cell` rows
+(one undo per cell). That's the design.
+
+### `fill_nulls` — value or forward-fill
+
+```rust
+match params["strategy"].as_str()? {
+    "value" => {
+        let v = json_to_anyvalue(&params["value"], col_dtype);
+        col.fill_null_with_values(lit(v))
+    }
+    "forward" => col.forward_fill(None),
+    other => return Err(InvalidSpec(format!("fill_nulls strategy: {other}"))),
+}
+```
+
+**Forward-fill** holds state across the column scan (the "last
+non-null value"). O(n). The `None` is the `limit` — `Some(k)`
+would cap the forward-fill at k consecutive nulls; today's UI
+doesn't expose the limit.
+
+### `cast` — typed coercion
+
+```rust
+let target_dtype = match params["to"].as_str()? {
+    "int"    => DataType::Int64,
+    "float"  => DataType::Float64,
+    "date"   => DataType::Date,
+    "bool"   => DataType::Boolean,
+    "string" => DataType::String,
+    other    => return Err(InvalidSpec(format!("cast: {other}"))),
+};
+df.lazy()
+  .with_column(col(col_name).cast(target_dtype))
+  .collect()
+```
+
+**Strict cast** — failing values produce an error, not NULL.
+This is intentional: a user wanting "best-effort cast, NULL on
+failure" calls `fix_invalid` instead, which is the lenient cousin.
+
+Date casts use Polars' default strptime — accepts `YYYY-MM-DD`
+only. For other date layouts the workspace tooling proposes
+`replace_text` first (rewrite to ISO), then `cast`.
+
+### `fix_invalid` — lenient cast (NULL on failure)
+
+```rust
+let strict_expr = col(col_name).cast(target_dtype);
+df.lazy()
+  .with_column(strict_expr.fill_null(lit(NULL)))  // pseudo — see below
+  .collect()
+```
+
+In practice this branches per dtype: for numeric, uses
+`str_to_f64_or_null()` patterns; for dates, uses the multi-format
+`parse_date_flex(column)` helper:
+
+```rust
+const FORMATS: &[&str] = &[
+    "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y",
+    "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d",
+];
+let exprs: Vec<Expr> = FORMATS.iter()
+    .map(|f| col(column).str().to_date(StrptimeOptions {
+        format: Some((*f).into()),
+        strict: false, exact: true, cache: true,
+    }))
+    .collect();
+coalesce(&exprs)
+```
+
+`coalesce` walks the list in order, returning the first
+non-null result per row. Cells that match no format → NULL.
+
+`parse_datetime_flex` is the same pattern with datetime layouts.
+
+### `snake_case_columns` — header normalization
+
+```rust
+pub fn snake_case(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_lower_or_digit = false;
+    for ch in s.trim().chars() {
+        if ch.is_uppercase() && prev_lower_or_digit { out.push('_'); }
+        match ch {
+            ' ' | '-' | '.' | '/' => out.push('_'),
+            c => out.extend(c.to_lowercase()),
+        }
+        prev_lower_or_digit = ch.is_lowercase() || ch.is_ascii_digit();
+    }
+    // Then: collapse runs of `__` to `_`, trim leading/trailing `_`.
+    collapse_underscores(out)
+}
+```
+
+**Idempotent** — applying twice produces the same result.
+Verified by the workspace tooling: button doesn't disable after
+first click; running it a second time is a no-op cost.
+
+**Why this specific algorithm**: handles the common cases —
+"Numero.dossier" → "numero_dossier", "Job Title" → "job_title",
+"CamelCase" → "camel_case", "Price (HT)" → "price_ht" after a
+parenthesis-strip pass (not yet wired; today produces
+`price_(ht)`).
+
+### `replace_in_names` / `replace_text` — find/replace
+
+Both run `col.str().replace_literal(find, replace)` on the
+relevant target (column names vs cell values). Literal, not
+regex — UI exposes a "regex" checkbox for future work but the
+engine path stays literal today.
+
+Cost: O(n × avg_string_len) per column.
+
+### `change_case` — lower/upper
+
+```rust
+match params["case"].as_str()? {
+    "lower" => col.str().to_lowercase(),
+    "upper" => col.str().to_uppercase(),
+}
+```
+
+Polars built-ins. UTF-8 aware. Allocates a new column (no
+in-place modification).
+
+### `join_columns` — concat into new column
+
+```rust
+let from: Vec<&str> = params["from"].as_array()?.iter()
+    .filter_map(|v| v.as_str()).collect();
+let sep: &str = params["sep"].as_str().unwrap_or("");
+let to: &str = params["to"].as_str()?;
+let exprs: Vec<Expr> = from.iter().map(|c| col(c).cast(DataType::String)).collect();
+df.lazy()
+  .with_column(concat_str(exprs, sep, /*ignore_nulls*/ false).alias(to))
+  .collect()
+```
+
+**`ignore_nulls = false`** — a single null in any source column
+produces a null in the result. The workspace tooling proposes
+`fill_nulls("")` first if the user wants graceful empty
+substitution.
+
+### `split_column` — split into many
+
+```rust
+let target_count = to.len();
+let series_split: Series = col.str().split_inclusive(sep, target_count)?;
+// Then: explode into N columns, drop the original.
+```
+
+Polars' `split` returns a list-column; we explode it to
+`target_count` separate columns. If a row's value yields *fewer*
+splits than `target_count`, the trailing columns are NULL. If
+*more*, the surplus is concatenated into the last column (so no
+data is lost).
+
+### Cost of replay — what scales with what
+
+| Step kind | Per-replay cost |
+|---|---|
+| `drop_columns`, `filter_columns`, `rename_column` | O(1) — alias change only |
+| `drop_rows` (indices) | O(rows × indices_len) — see contains() note |
+| `filter_rows` | O(rows × predicate_complexity) — par_iter under Polars |
+| `unwrap_csv` | O(rows × col_count) — rare, only the wrapped-file path |
+| `drop_nulls` | O(rows × col_subset) |
+| `set_cell` | O(rows) — column rebuild |
+| `fill_nulls` ("value") | O(rows) |
+| `fill_nulls` ("forward") | O(rows) — sequential dependency, no par |
+| `cast` | O(rows) per column |
+| `snake_case_columns`, `replace_in_names` | O(col_count × avg_name_len) — column metadata only |
+| `change_case`, `replace_text` | O(rows × avg_string_len) per column |
+| `fix_invalid` (date variant) | O(rows × format_count) — 7 strptimes per cell worst case |
+| `join_columns` | O(rows × from_count) |
+| `split_column` | O(rows) — single split, then explode |
+
+The expensive ones in practice: `fix_invalid` (especially on
+non-date cells where all 7 strptimes fail) and `replace_text` on
+wide columns. For a 100k-row file, `fix_invalid` on a single
+column runs in ~50ms; 7-column fix_invalid runs in ~300ms.
+Acceptable but it's the hot path if the user fix-invalid's
+everything.
+
+## Optimization map — where the cost lives
+
+| Phase | Cost | Optimization horizon |
+|---|---|---|
+| `apply` per step (single) | varies — see table | per-kind; mostly fine |
+| `replay` full history | O(n_steps × frame_ops) | snapshot point at ordinal N (`snapshot` endpoint exists; UI wiring TBD) |
+| Cache hydrate (first read) | parse + replay + cache insert | one-shot per file lifetime; restart is rare |
+| Cache invalidation (per mutation) | clears one DashMap entry | O(1); the read after pays the full hydrate |
+
+**The current implicit assumption**: a file has tens of steps,
+not hundreds. The replay cost is linear; at 100 steps × 10ms per
+step = 1 second on the first read after invalidation. Users will
+feel the click → 1s redraw lag at that scale.
+
+**The lever**: snapshot points. `POST /api/files/:rid/snapshot`
+materializes the current frame as a *new file* — but a future
+in-place snapshot would set a marker in the steps history (e.g.
+a `snapshot_marker` row) so replay starts from the marker's
+stored frame and walks forward. Schema: add `materialized_frame
+BYTEA NULL` to project_steps; nullable, written only when the
+snapshot marker fires. Not built today; signaled at the head of
+[step-apply-and-replay](../flows/step-apply-and-replay.md) as
+performance horizon.

@@ -247,3 +247,239 @@ Until then: don't bake a retention assumption into a consumer.
   unification lands one renderer (per [architecture/redtable-unification](../architecture/redtable-unification.md))
   that reads `Page<T>` from any of the list endpoints. No backend
   change needed — `Page<T>` consistency was the whole point.
+
+## Rust internals — `capture_mw` + `event::record` + percentile_cont
+
+### `capture_mw` end-to-end
+
+```rust
+async fn capture_mw(
+    State(state): State<AppState>,
+    req:          Request,
+    next:         Next,
+) -> Response {
+    let method  = req.method().to_string();
+    let path    = req.uri().path().to_string();
+    let route   = crate::request_log::normalize_route(&path);
+    let req_id  = req.extensions().get::<RequestId>().map(|r| r.0.clone());
+    let session = read_cookie(req.headers(), "rp_session");
+
+    let started = Instant::now();
+    let resp = next.run(req).await;
+    let status = resp.status();
+    let ms = started.elapsed().as_millis() as i32;
+
+    // Stream 1 — request_log: fire-and-forget tokio::spawn inside record()
+    crate::request_log::record(
+        &state.db, method.clone(), route, status.as_u16() as i16, ms,
+        req_id.clone(),
+    );
+
+    // Stream 2 — events: only on 4xx/5xx
+    if status.as_u16() >= 400 {
+        let (err_kind, message) = match resp.extensions().get::<crate::event::EventInfo>() {
+            Some(info) => (Some(info.kind), info.message.clone()),
+            None       => (None, status.canonical_reason().unwrap_or("error").to_string()),
+        };
+        let level = if status.as_u16() >= 500 { "error" } else { "warn" };
+        let context = match err_kind {
+            Some(k) => serde_json::json!({ "error_kind": k }),
+            None    => serde_json::json!({}),
+        };
+        // Best-effort user lookup on the error path
+        let user = match &session {
+            Some(sid) => crate::db::find_session_user(&state.db, sid).await.ok().flatten(),
+            None      => None,
+        };
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin: "backend", level, kind: "http_error".into(),
+            message, user, session_id: session,
+            request_id: req_id, http_method: Some(method),
+            http_path: Some(path), http_status: Some(status.as_u16() as i32),
+            duration_ms: Some(ms), context, ..Default::default()
+        });
+    }
+    resp
+}
+```
+
+**Lifecycle order**:
+
+1. **Pre-handler**: read method + path + session cookie + request_id;
+   snapshot `Instant::now()`. The route normalization runs *now*
+   (against the path the handler will see) so request_log captures
+   the same shape as monitoring's filters.
+2. **Run handler** via `next.run(req).await`.
+3. **Post-handler**: read response status + extensions.
+4. **request_log insert** — fires for *every* request, success or
+   failure. Inside `record()`, a `tokio::spawn` decouples the
+   write from the response path.
+5. **events insert** — only if `status >= 400`. Best-effort user
+   lookup (extra DB call only on the error path, so cheap-by-frequency).
+
+**`EventInfo` extension**: `AppError::into_response` attaches an
+`EventInfo { kind, message }` to the response extensions. The
+middleware reads it back to populate `events.context.error_kind`
++ `events.message`. Responses without an `EventInfo` (axum's own
+404/405, the body-limit 413, JSON-extractor 400s) record with
+`context = {}` + the canonical HTTP status reason as message.
+
+### `event::record` — the fire-and-forget pattern
+
+```rust
+pub fn record(pool: &PgPool, draft: EventDraft<'_>) {
+    let pool = pool.clone();
+    let draft = draft.into_owned();
+    tokio::spawn(async move {
+        if let Err(e) = insert_event(&pool, draft).await {
+            tracing::warn!(error = %e, "event insert failed (non-fatal)");
+        }
+    });
+}
+```
+
+**Why not `async fn`**: the foreground request response is
+already returned by the time this runs. A failing insert
+shouldn't propagate. The pattern is **"observe + drop"**: the
+event is best-effort; if the DB is down, we log the warn and
+move on. The user's request still succeeded (or failed) on its
+own merits.
+
+**Cost per call**: one `pool.clone()` (Arc bump) + one
+`tokio::spawn` (cheap on a multi-threaded runtime). Insert
+itself is one INSERT + indexes touched. At 10k requests/day the
+events table grows by ~500 rows (assuming the typical 5% error
+rate); negligible row count.
+
+### `request_log::record` — same fire-and-forget shape
+
+```rust
+pub fn record(pool: &PgPool, method: String, route: String,
+              status: i16, duration_ms: i32, request_id: Option<String>) {
+    let pool = pool.clone();
+    tokio::spawn(async move {
+        if let Err(e) = sqlx::query(
+            "INSERT INTO request_log (method, route, status, duration_ms, request_id)
+             VALUES ($1, $2, $3, $4, $5)")
+            .bind(method).bind(route).bind(status).bind(duration_ms).bind(request_id)
+            .execute(&pool).await
+        {
+            tracing::warn!(error = %e, "request_log insert failed (non-fatal)");
+        }
+    });
+}
+```
+
+Identical shape to `event::record`. Same warn-and-drop semantics.
+
+### `normalize_route` — collapsing RIDs
+
+```rust
+pub fn normalize_route(path: &str) -> String {
+    path.split('/').map(|seg| {
+        if is_redpash_id(seg) { ":id" } else { seg }
+    }).collect::<Vec<_>>().join("/")
+}
+
+fn is_redpash_id(seg: &str) -> bool {
+    match seg.split_once('_') {
+        Some((prefix, hex)) => {
+            (2..=4).contains(&prefix.len())
+                && prefix.bytes().all(|b| b.is_ascii_uppercase())
+                && hex.len() == 32
+                && hex.bytes().all(|b| b.is_ascii_hexdigit())
+        }
+        None => false,
+    }
+}
+```
+
+**Algorithm**: split on `/`, check each segment against the RID
+shape (`<2-4 uppercase letters>_<32 hex>`). Collapses match → `:id`.
+
+Cost: O(n_segments × seg_len). Path lengths cap at a few hundred
+chars; this runs once per request inside the hot middleware path
+and contributes ~1 µs.
+
+**Why explicit "is this a RID" check instead of regex**: regex
+crate dependency adds ~200 KB to the binary; the byte-level check
+is just as fast and zero-dep. The RID format is locked
+(documented in `docs/db/redpash-id.md`), so the shape check
+won't drift.
+
+## SQL internals — `percentile_cont` for /api/metrics
+
+The metrics endpoint computes p50/p95/p99 per route using
+Postgres' built-in percentile aggregator:
+
+```sql
+SELECT method, route,
+       COUNT(*)::BIGINT                                                              AS cnt,
+       COUNT(*) FILTER (WHERE status >= 400)::BIGINT                                 AS errs,
+       COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p50,
+       COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p95,
+       COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p99
+  FROM request_log
+ WHERE at >= $1
+   AND route NOT LIKE '/metrics%'
+ GROUP BY method, route
+ ORDER BY cnt DESC;
+```
+
+**`percentile_cont` vs `percentile_disc`**: continuous (cont)
+interpolates between values when the percentile falls between
+two samples; discrete (disc) picks the nearest actual value.
+For latency in ms, interpolation is the right call —
+"the boundary at p95" isn't a real request, it's the threshold.
+
+**`COALESCE(…, 0)`**: an empty window returns NULL from
+percentile_cont. Coalescing to 0 keeps the response shape stable
+(never NULL in the JSON). Tradeoff: a literally-empty window
+reads "0ms p95" which could be misread as "lightning fast";
+acceptable because the `count` is also 0 in the same row, so the
+operator knows to look at count first.
+
+**Cast to BIGINT**: percentile_cont returns DOUBLE PRECISION;
+the wire shape uses i64. Sub-millisecond resolution would be
+noise on captured int-ms latencies, so truncating is fine.
+
+**Index support**: `request_log_route_idx` is
+`(route, at DESC)`. The WHERE clause hits it; the GROUP BY
+walks all matching rows. Postgres' planner picks an index scan
++ in-memory hash aggregate for typical window sizes.
+
+### Status-mix donut
+
+```sql
+SELECT status::TEXT AS status_str, COUNT(*)::BIGINT AS cnt
+  FROM request_log
+ WHERE at >= $1
+   AND route NOT LIKE '/monitoring%'
+ GROUP BY status
+```
+
+**Cast status to TEXT** so the frontend keys the JSON object by
+string (`"200"`, `"401"`, …) instead of integer keys (JSON
+allows them but the donut renderer expects strings). One-pass
+GROUP BY; trivially indexed.
+
+## Optimization map — where the cost lives
+
+| Phase | Cost | Optimization horizon |
+|---|---|---|
+| `capture_mw` per request | ~1 µs route-normalize + spawn (queue insert) | n/a — already minimal |
+| `event::record` per error | spawn + INSERT (~5ms tail) | the actual DB write is the cost, decoupled from request response |
+| `request_log::record` per request | spawn + INSERT (~3ms tail) | same — every request takes this hit asynchronously |
+| `percentile_cont` per route | O(rows in window) — index-scan + hash-aggregate | indexed; bottleneck would be N_routes for very chatty servers (today: tens of routes) |
+| `audit.run_diff(cur, prev)` per ingest | O(findings_per_run) — set ops in SQL | linear; today's runs have a few hundred findings max |
+
+**The dominant cost at scale** would be `request_log`
+unboundedness — every request is one row, no retention. A 100
+req/s server adds ~8M rows/day. The table doesn't break at that
+size but the per-route GROUP BY slows. A retention policy
+(`DELETE WHERE at < now() - interval '90 days'` nightly) holds
+the table size constant; not built today.
+
+`events` is the other unbounded table but writes are 100× less
+frequent (only on errors + explicit lifecycle calls); growth is
+negligible for years at solo-dev scale.

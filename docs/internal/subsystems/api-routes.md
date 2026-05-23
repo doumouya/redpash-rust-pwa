@@ -141,3 +141,173 @@ Routes that need ownership enforcement layer
   and Polars handles arbitrary row/column counts internally. A 413
   *is* captured into the event log (the body-limit layer is inside
   capture_mw) — useful for spotting CSVs that exceeded the cap.
+
+## Rust internals — middleware composition + the helpers
+
+### Middleware ordering — `router(state)` walk
+
+```rust
+pub fn router(state: AppState) -> Router {
+    let capture_state = state.clone();
+
+    let api = Router::new()
+        .nest("/health",   health::routes())
+        .nest("/me",       me::routes())
+        // ... 15 more .nest() calls
+        .nest("/docs",     docs::routes())
+        .with_state(state)
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(axum::middleware::from_fn_with_state(capture_state, capture_mw))
+        .layer(axum::middleware::from_fn(request_id_mw));
+
+    let frontend = ServeDir::new("../frontend").append_index_html_on_directories(true);
+
+    Router::new()
+        .nest("/api", api)
+        .fallback_service(frontend)
+        .layer(CompressionLayer::new())
+        .layer(CorsLayer::permissive())
+        .layer(TraceLayer::new_for_http())
+}
+```
+
+**Layer ordering in axum**: `.layer()` *wraps* — the last
+`.layer()` declared is the outermost (runs first on request,
+last on response). So the actual nesting from outside in:
+
+```
+TraceLayer                  ← outermost (request enters here)
+  CorsLayer
+    CompressionLayer
+      [/api router]
+        request_id_mw       ← API subtree outermost
+          capture_mw
+            DefaultBodyLimit
+              [resource routers]   ← .with_state(state) finalizes here
+```
+
+**Why `state.clone()` for capture_mw**: `.with_state(state)`
+consumes `state`. The middleware needs its own clone to access
+the pool. `AppState` is `Arc`-wrapped internally (DashMap, Arc'd
+pool), so the clone is a few ref-bumps; cheap.
+
+### `request_id_mw` — minimal hot-path work
+
+```rust
+#[derive(Clone)]
+struct RequestId(String);
+
+async fn request_id_mw(mut req: Request, next: Next) -> Response {
+    let rid = format!("req_{}", uuid::Uuid::new_v4().simple());
+    req.extensions_mut().insert(RequestId(rid.clone()));
+    let mut resp = next.run(req).await;
+    if let Ok(hv) = HeaderValue::from_str(&rid) {
+        resp.headers_mut().insert("x-request-id", hv);
+    }
+    resp
+}
+```
+
+**Per-request cost**: one `Uuid::new_v4()` (~100ns), one
+`format!`, one extension insert, one header insert. Sub-µs.
+
+**`req_` prefix** to namespace from RIDs (`USR_`, `FIL_`, etc.).
+Distinguishable at a glance in logs; doesn't collide with the
+real RID format.
+
+**`.simple()`** strips the dashes from the UUID's default
+display. Shorter on the wire (`req_abcd...` vs `req_abcd-...`);
+no semantic difference.
+
+### `resolve_user_rid` — three-branch auth
+
+```rust
+pub async fn resolve_user_rid(state: &AppState, headers: &HeaderMap)
+    -> Result<String, AppError>
+{
+    if let Some(sid) = super::read_cookie(headers, "rp_session") {
+        if let Some(uid) = db::find_session_user(&state.db, &sid).await
+            .map_err(|e| AppError::internal("db", e.to_string()))?
+        {
+            return Ok(uid);
+        }
+    }
+    if state.oauth.is_some() {
+        return Err(AppError {
+            status:  StatusCode::UNAUTHORIZED,
+            kind:    "unauthenticated",
+            message: "no session cookie".into(),
+        });
+    }
+    Ok(state.dev_user.as_ref().clone())
+}
+```
+
+**Resolution order**:
+
+1. **Has session?** Look up user; success → return.
+2. **No session OR session invalid + OAuth configured** → 401.
+3. **No session + OAuth disabled (dev mode)** → fallback to the
+   bootstrap `dev_user`.
+
+The fallback exists because solo-dev on localhost doesn't always
+have OAuth configured. The `state.oauth.is_some()` check is the
+deciding factor: when OAuth is configured (production-ish),
+demand a session; otherwise the dev fallback is the right call.
+
+**`find_session_user` is one indexed lookup** on `sessions`
+table by RID. ~1ms steady-state. Called on every authed endpoint
+hit, so the DB pool's connection management matters: today's
+pool has 5-10 connections (state::AppState::init sets it), enough
+to absorb the boot burst.
+
+### `ensure_owner` — 404 instead of 403
+
+```rust
+pub(crate) fn ensure_owner(
+    owner_lookup: Result<Option<String>, sqlx::Error>,
+    expected:     &str,
+    label:        &str,
+    rid:          &str,
+) -> Result<(), crate::error::AppError> {
+    let owner = owner_lookup
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .ok_or_else(|| AppError::not_found("not_found", format!("{label} {rid}")))?;
+    if owner != expected {
+        return Err(AppError::not_found("not_found", format!("{label} {rid}")));
+    }
+    Ok(())
+}
+```
+
+**404 on mismatch, not 403** — deliberately doesn't leak
+"this exists but isn't yours" vs "this doesn't exist." A 403
+would tell an attacker the RID is valid (just not theirs); a
+404 keeps the existence private.
+
+**`label` parameter** for the error message — `"file"`,
+`"project"`, `"chart"` — so the response reads `"file FIL_… not
+found"`. The same helper serves every resource.
+
+### `capture_mw` — see [events-and-logs](events-and-logs.md)
+
+The full body and the percentile_cont SQL backing /api/metrics
+live in the events-and-logs subsystem doc. Cross-reference rather
+than duplicate.
+
+## Optimization map
+
+| Phase | Cost | Optimization horizon |
+|---|---|---|
+| `request_id_mw` per request | ~1 µs | n/a |
+| `capture_mw` pre-handler snapshot | ~1 µs (route_normalize) | n/a |
+| Handler dispatch (axum's router) | ~µs match | n/a |
+| `resolve_user_rid` (per authed call) | ~1ms session lookup | cached session map (in-memory) at scale |
+| `ensure_owner` (per resource access) | ~1ms ownership query | combine with the resource hydrate to save the extra trip when both fire |
+| `capture_mw` post-handler write | spawn (~µs) + async insert | fire-and-forget; no foreground cost |
+
+**Auth resolution is the most-called DB hit** in the system.
+At ~1ms × 100 req/s = 100ms/s of DB work. Today's pool absorbs
+it; if connection count ever becomes a bottleneck, the right
+fix is an in-memory session cache (`(session_rid, user_rid)` map
+with TTL ≈ session expiry). Out of scope today.
