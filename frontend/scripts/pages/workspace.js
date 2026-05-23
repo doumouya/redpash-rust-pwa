@@ -25,7 +25,6 @@ import { getPref, setPref } from "/scripts/prefs.js";
 const STAGE_DOT     = { new: "is-dirty", clean: "is-warn", design: "is-clean", publish: "is-clean" };
 const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
 const DATE_DTYPES   = new Set(["date"]);
-const PAGE_SIZE_KEY = "rp-rows-per-page";
 const ALL_ROWS_SIZE = 50000;       // "All rows" is a one-shot big page, not a separate code path.
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -82,13 +81,16 @@ export default function workspace(app, { session }) {
   let groupCombo    = "AND";
   let filterCols    = [];   // [[colIndex, name], ...] for the filter builder
   let currentPage   = 1;    // 1-indexed page (matches Page<T>.page on the wire)
-  let pageSize      = readPageSize();
+  let pageSize      = pageSizeFromPref();
   let totalPages    = 1;    // last response's Page<T>.pages — drives the pager render
   let rowIndices    = [];   // absolute row idx in the underlying frame, per displayed row
   let stepInFlight  = false;
 
-  function readPageSize() {
-    const raw = localStorage.getItem(PAGE_SIZE_KEY);
+  // The wire-level pref ("10" / "25" / "50" / "100" / "all") into the
+  // numeric pageSize the fetch uses. "all" maps to a large one-shot
+  // page so the rest of the code stays in a single paginated path.
+  function pageSizeFromPref() {
+    const raw = getPref("rowsPerPage");
     if (raw === "all") return ALL_ROWS_SIZE;
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
@@ -942,21 +944,23 @@ export default function workspace(app, { session }) {
   document.addEventListener("click", () =>
     app.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open")));
 
-  // Rows-per-page — updates pageSize, persists, resets to page 1, refetches.
-  // Mount with the persisted choice so the label + selected tick survive reloads.
+  // Rows-per-page — setPref persists through prefs.js (server PATCH +
+  // local cache + the unified rp-pref-rowsPerPage key). The numeric
+  // pageSize stays a workspace-local concern (the "all" wire value
+  // expands to ALL_ROWS_SIZE for the fetch).
   syncRowsDropdown();
   $("#wsRowsDd").addEventListener("click", (e) => {
     const item = e.target.closest(".rt-dd-item");
     if (!item) return;
     const raw = item.dataset.rows;
-    localStorage.setItem(PAGE_SIZE_KEY, raw);
+    setPref("rowsPerPage", raw);
     pageSize = raw === "all" ? ALL_ROWS_SIZE : parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
     currentPage = 1;
     syncRowsDropdown();
     refetchPage();
   });
   function syncRowsDropdown() {
-    const raw = localStorage.getItem(PAGE_SIZE_KEY) || String(DEFAULT_PAGE_SIZE);
+    const raw = getPref("rowsPerPage");
     $("#wsRowsDd").querySelectorAll(".rt-dd-item").forEach((i) => {
       i.classList.remove("selected");
       const t = i.querySelector(".tick");
