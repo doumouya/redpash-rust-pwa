@@ -4,9 +4,14 @@
 # dev) the frontend's static assets.
 
 [package]
-name    = "api"
-version = { workspace = true }
-edition = { workspace = true }
+name        = "api"
+version     = { workspace = true }
+edition     = { workspace = true }
+# `cargo run` from the workspace root has two binaries to choose
+# between (redpash-api + redpash-audit-ingest, the audit-persistence
+# CLI Gus added). Default to the server — the audit ingest is invoked
+# by tools/audit.sh, never directly.
+default-run = "redpash-api"
 
 [[bin]]
 name = "redpash-api"
