@@ -14,7 +14,6 @@ serde_json      = { workspace = true }
 thiserror       = { workspace = true }
 anyhow          = { workspace = true }
 
-polars          = { workspace = true }
 # Direct dep only to force the `raw` feature on hashbrown 0.14 — see the
 # explanatory comment in the workspace Cargo.toml. We don't actually use
 # hashbrown in this crate's source.
@@ -25,10 +24,37 @@ csv             = { workspace = true }
 calamine        = { workspace = true }
 rust_xlsxwriter = { workspace = true }
 
+chrono          = { workspace = true }
+tracing         = { workspace = true }
+
+# Server-only deps (wasm32 dep graph excludes these). Two reasons:
+#   1. `polars` default `fmt` feature pulls `comfy-table` → `crossterm`
+#      (terminal IO; not wasm32-compatible). Server keeps the workspace
+#      polars (with defaults — `fmt` powers DataFrame Debug); wasm gets
+#      a default-less polars below.
+#   2. The doc-render deps (`pulldown-cmark`, `syntect`, `gray_matter`,
+#      `maud`) drive `render.rs` for `/api/docs` + Maud templates.
+#      `syntect` ⇒ `onig_sys` (needs `clang` to build a C regex engine)
+#      and ⇒ `crossterm`; neither compiles on wasm32. Gated here +
+#      `#[cfg(not(target_arch = "wasm32"))]` on `pub mod render` in
+#      `lib.rs`. Matches roadmap-webassembly.md "what binds now" rule.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+polars          = { workspace = true }
 pulldown-cmark  = { workspace = true }
 syntect         = { workspace = true }
 gray_matter     = { workspace = true }
 maud            = { workspace = true }
 
-chrono          = { workspace = true }
-tracing         = { workspace = true }
+# WASM-only block. Three things:
+#   1. `polars` is overridden with `default-features = false` so the
+#      `fmt` default (→ comfy-table → crossterm) stops pulling terminal-
+#      IO crates that don't compile on wasm32.
+#   2. `uuid` gets the `js` feature for wasm32 RNG.
+#   3. `getrandom` 0.3.x is pulled directly with `wasm_js` so feature
+#      unification flips it on for every transitive consumer (polars /
+#      rayon-core / ahash). The cfg flag this needs is set in the build
+#      command: `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+polars          = { version = "0.43", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str"] }
+uuid            = { version = "1", features = ["v4", "serde", "js"] }
+getrandom       = { version = "0.3", features = ["wasm_js"] }

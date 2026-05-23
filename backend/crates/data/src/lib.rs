@@ -28,6 +28,11 @@ pub mod joins;
 pub mod group_by;
 pub mod steps;
 pub mod stats;
+// `render` is the Markdown / Maud / syntect path for `/api/docs` and
+// the report templates. Server-side only — its transitive deps
+// (`onig_sys`, `crossterm`) don't compile on wasm32-unknown-unknown.
+// See docs/internal/roadmap-webassembly.md §3 + §7.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod render;
 pub mod export;
 pub mod clean;
