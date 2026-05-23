@@ -49,6 +49,16 @@
 
 .rp-shell-view { width: 100%; max-width: 1100px; margin: 0 auto; }
 
+/* ── --wide modifier ────────────────────────────────────────────
+   Opt-in: page wants the body to span the full available width
+   beside the rail (like the Workspace's redtable). Drops the main
+   padding to a tight 14px (matches workspace.css's .rt-main) and
+   releases the inner view from its 1100px cap. Used on /monitoring
+   where tables benefit from horizontal real estate; not on /home
+   where the card grid genuinely benefits from a centred cap. */
+.rp-shell--wide .rp-shell-main { padding: 14px; }
+.rp-shell--wide .rp-shell-view { max-width: none; }
+
 .rp-shell-state {
   margin: 0;
   padding: var(--rp-sp-8);
