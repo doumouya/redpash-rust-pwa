@@ -865,16 +865,82 @@ export default function workspace(app, { session }) {
 
   // Paint enable/disable on the three history-toolbar buttons based
   // on the current envelope state. Undo/redo derive from activeSteps;
-  // export is enabled whenever a file is open.
+  // export is enabled whenever a file is open. Repaints the history
+  // panel body on each call so the side panel stays current after
+  // every apply/undo/redo.
   function syncToolbar() {
     const canUndo = activeSteps.some((s) => s.applied);
     const canRedo = activeSteps.some((s) => !s.applied);
     undoBtn.disabled   = !canUndo;
     redoBtn.disabled   = !canRedo;
     exportBtn.disabled = !activeFileRid;
+    renderHistory();
+  }
+
+  // ─── history panel — rendered list of activeSteps ─────────────
+  // Applied steps render solid; undone steps (sitting on the redo
+  // stack) get .is-undone for the dim opacity. Each row carries the
+  // ordinal, kind, a 3-key params summary, and a relative timestamp.
+  function renderHistory() {
+    const body = $("#wsHistoryBody");
+    if (!body) return;
+    if (!activeFileRid) {
+      body.innerHTML = '<p class="rt-step-state">Open a file to see its step history.</p>';
+      return;
+    }
+    if (!activeSteps.length) {
+      body.innerHTML = '<p class="rt-step-state">No steps applied yet.</p>';
+      return;
+    }
+    // Server returns steps in ordinal order; show newest first so the
+    // most-recent action is at the top of the panel.
+    const ordered = activeSteps.slice().sort((a, b) => (b.ordinal || 0) - (a.ordinal || 0));
+    body.innerHTML = ordered.map(renderStep).join("");
+  }
+  function renderStep(step) {
+    const undone = step.applied === false;
+    const params = fmtStepParams(step.params);
+    return ''
+      + '<div class="rt-step' + (undone ? ' is-undone' : '') + '">'
+      +   '<span class="rt-step-ord">' + (step.ordinal != null ? step.ordinal : "—") + '</span>'
+      +   '<span class="rt-step-body">'
+      +     '<span class="rt-step-kind">' + esc(step.kind || "—") + '</span>'
+      +     (params ? '<span class="rt-step-params">' + esc(params) + '</span>' : '')
+      +   '</span>'
+      +   '<span class="rt-step-time">' + fmtRelTime(step.created_at) + '</span>'
+      + '</div>';
+  }
+  // Short summary of step.params — first three key=value pairs, each
+  // value JSON-stringified and clipped to 30 chars. Good enough for a
+  // glance at the side panel; full inspection is the file's step log.
+  function fmtStepParams(params) {
+    if (!params || typeof params !== "object") return "";
+    try {
+      return Object.entries(params).slice(0, 3)
+        .map(([k, v]) => {
+          const s = typeof v === "string" ? v : JSON.stringify(v);
+          return k + "=" + (s && s.length > 30 ? s.slice(0, 30) + "…" : s);
+        })
+        .join(", ");
+    } catch { return ""; }
+  }
+  function fmtRelTime(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return "";
+    const s = Math.round((Date.now() - t) / 1000);
+    if (s < 60)         return s + "s";
+    const m = Math.round(s / 60);
+    if (m < 60)         return m + "m";
+    const h = Math.round(m / 60);
+    if (h < 24)         return h + "h";
+    const d = Math.round(h / 24);
+    return d + "d";
   }
 
   // ─── side panels ───────────────────────────────────────────────
+  // Filter is left-side (its own real estate). History + Tools both
+  // slide from the right and share the same surface — opening one
+  // closes the other so they don't overlap.
   function bindPanel(btnSel, panelSel) {
     const btn = $(btnSel), panel = $(panelSel);
     const set = (open) => {
@@ -885,7 +951,30 @@ export default function workspace(app, { session }) {
     panel.querySelector(".rt-panel-close").addEventListener("click", () => set(false));
   }
   bindPanel("#wsFilterToggle", "#wsFilterPanel");
-  bindPanel("#wsToolsToggle",  "#wsToolsPanel");
+
+  // Right-side mutual exclusion — clicking one closes the other.
+  const RIGHT_PANELS = [
+    { btn: "#wsHistoryToggle", panel: "#wsHistoryPanel" },
+    { btn: "#wsToolsToggle",   panel: "#wsToolsPanel"   },
+  ];
+  function toggleRightPanel(target) {
+    const wasOpen = $(target.panel).classList.contains("open");
+    RIGHT_PANELS.forEach((p) => {
+      $(p.panel).classList.remove("open");
+      $(p.btn).classList.remove("is-active");
+    });
+    if (!wasOpen) {
+      $(target.panel).classList.add("open");
+      $(target.btn).classList.add("is-active");
+    }
+  }
+  RIGHT_PANELS.forEach((p) => {
+    $(p.btn).addEventListener("click", () => toggleRightPanel(p));
+    $(p.panel).querySelector(".rt-panel-close").addEventListener("click", () => {
+      $(p.panel).classList.remove("open");
+      $(p.btn).classList.remove("is-active");
+    });
+  });
 
   // ─── tools panel — parameterised, one factory + 12 configs ─────
   mountTools($("#wsToolsBody"), {

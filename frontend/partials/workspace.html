@@ -84,6 +84,9 @@
               <div class="rt-dd-item" data-fmt="json">Export as JSON</div>
             </div>
           </div>
+          <button class="rt-btn" id="wsHistoryToggle" type="button" title="Step history">
+            <i class="bi bi-clock-history"></i>
+          </button>
           <button class="rt-btn" id="wsToolsToggle" type="button" title="Tools panel">
             <i class="bi bi-tools"></i>
           </button>
@@ -122,6 +125,18 @@
             <div class="rt-chart" id="wsChart" hidden></div>
             <div class="rt-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
+
+          <aside class="rt-panel rt-panel--history" id="wsHistoryPanel">
+            <div class="rt-panel-inner">
+              <div class="rt-panel-head">
+                <span class="rt-panel-title"><i class="bi bi-clock-history"></i> History</span>
+                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+              </div>
+              <div class="rt-panel-body" id="wsHistoryBody">
+                <p class="rt-step-state">Open a file to see its step history.</p>
+              </div>
+            </div>
+          </aside>
 
           <aside class="rt-panel rt-panel--tools" id="wsToolsPanel">
             <div class="rt-panel-inner">

@@ -10,8 +10,9 @@
   transition: width 0.18s var(--rp-ease);
 }
 .rt-panel.open { width: 250px; }
-.rt-panel--filter.open { border-right: 1px solid var(--rp-border); }
-.rt-panel--tools.open  { border-left: 1px solid var(--rp-border); }
+.rt-panel--filter.open  { border-right: 1px solid var(--rp-border); }
+.rt-panel--tools.open   { border-left: 1px solid var(--rp-border); }
+.rt-panel--history.open { border-left: 1px solid var(--rp-border); }
 .rt-panel-inner { width: 250px; height: 100%; display: flex; flex-direction: column; }
 
 .rt-panel-head {
@@ -60,6 +61,57 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--rp-text-mute);
+}
+
+/* ── step history — list rows inside the history panel ──────────
+   activeSteps from the file envelope render here. Applied steps =
+   solid; undone steps (sitting on the redo stack) = dimmed. */
+.rt-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--rp-border);
+  transition: opacity 0.14s var(--rp-ease);
+}
+.rt-step:last-child { border-bottom: 0; }
+.rt-step.is-undone { opacity: 0.4; }
+.rt-step-ord {
+  flex-shrink: 0;
+  min-width: 22px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--rp-text-mute);
+}
+.rt-step-body { flex: 1; min-width: 0; }
+.rt-step-kind {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rt-step-params {
+  display: block;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--rp-text-dim);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-step-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.rt-step-state {
+  margin: 0;
+  padding: 8px 4px;
+  color: var(--rp-text-mute);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 /* AND/OR segmented toggle */
