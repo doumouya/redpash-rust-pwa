@@ -79,11 +79,112 @@ pub fn auto_clean(df: &DataFrame) -> Result<(DataFrame, CleanSummary)> {
     let trimmed = DataFrame::new(columns)?;
 
     // ── 3. Drop fully-identical duplicate rows (row order preserved). ─
+    // `unique_stable` routes through `df._apply_columns_par(...)` →
+    // rayon's POOL, which traps on wasm32-unknown-unknown (no
+    // SharedArrayBuffer + COEP/CORP). Server keeps the par version
+    // (fast on large frames); wasm gets a serial implementation that
+    // avoids rayon entirely. See docs/internal/roadmap-webassembly.md §6
+    // for the rayon/threading cliff.
     let before = trimmed.height();
+    #[cfg(not(target_arch = "wasm32"))]
     let deduped = trimmed.unique_stable(None, UniqueKeepStrategy::First, None)?;
+    #[cfg(target_arch = "wasm32")]
+    let deduped = drop_dupe_rows_serial(trimmed)?;
     summary.duplicate_rows_dropped = before - deduped.height();
 
     Ok((deduped, summary))
+}
+
+/// Stable de-dup that walks rows serially. Used on wasm32 where Polars'
+/// par_iter-based `unique_stable` traps because rayon's POOL isn't
+/// available. Slower than the par version for big frames; fine for the
+/// demo cap (5 MB CSV ≈ tens of thousands of rows). Stable: first
+/// occurrence of each distinct row-signature kept.
+#[cfg(target_arch = "wasm32")]
+fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
+    use std::collections::HashSet;
+    let height = df.height();
+    if height < 2 {
+        return Ok(df);
+    }
+
+    // Per-row signature: `{:?}`-format each cell (correctly distinguishes
+    // `Null` from `""` and typed numeric vs string).
+    let mut seen: HashSet<Vec<String>> = HashSet::with_capacity(height);
+    let mut keep_mask: Vec<bool> = Vec::with_capacity(height);
+    let cols = df.get_columns();
+    for i in 0..height {
+        let sig: Vec<String> = cols
+            .iter()
+            .map(|c| format!("{:?}", c.get(i).unwrap_or(AnyValue::Null)))
+            .collect();
+        keep_mask.push(seen.insert(sig));
+    }
+
+    // No dupes? Return as-is. Avoids the rebuild cost when the demo
+    // file is already clean.
+    if keep_mask.iter().all(|&k| k) {
+        return Ok(df);
+    }
+
+    // Rebuild each Series by walking kept indices per its dtype. The
+    // typed extraction sidesteps Polars' `filter` / `take` (which also
+    // route through par_iter). Falls back to AnyValue rebuild for
+    // dtypes we don't expect in cleaned data (auto_clean only produces
+    // String / numeric / bool columns).
+    let new_cols: Vec<Series> = cols
+        .iter()
+        .map(|col| -> Result<Series> {
+            let name = col.name().clone();
+            match col.dtype() {
+                DataType::String => {
+                    let ca = col.str()?;
+                    let v: Vec<Option<&str>> = (0..height)
+                        .filter(|&i| keep_mask[i])
+                        .map(|i| ca.get(i))
+                        .collect();
+                    Ok(Series::new(name, v))
+                }
+                DataType::Boolean => {
+                    let ca = col.bool()?;
+                    let v: Vec<Option<bool>> = (0..height)
+                        .filter(|&i| keep_mask[i])
+                        .map(|i| ca.get(i))
+                        .collect();
+                    Ok(Series::new(name, v))
+                }
+                DataType::Float64 => {
+                    let ca = col.f64()?;
+                    let v: Vec<Option<f64>> = (0..height)
+                        .filter(|&i| keep_mask[i])
+                        .map(|i| ca.get(i))
+                        .collect();
+                    Ok(Series::new(name, v))
+                }
+                DataType::Int64 => {
+                    let ca = col.i64()?;
+                    let v: Vec<Option<i64>> = (0..height)
+                        .filter(|&i| keep_mask[i])
+                        .map(|i| ca.get(i))
+                        .collect();
+                    Ok(Series::new(name, v))
+                }
+                _ => {
+                    // Fallback: rebuild via AnyValue. Should be unreachable for
+                    // auto_clean output; included so any future caller doesn't
+                    // silently corrupt unusual dtypes.
+                    let values: Vec<AnyValue> = (0..height)
+                        .filter(|&i| keep_mask[i])
+                        .map(|i| col.get(i).unwrap_or(AnyValue::Null))
+                        .collect();
+                    Series::from_any_values_and_dtype(name, &values, col.dtype(), false)
+                        .map_err(crate::DataError::from)
+                }
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    DataFrame::new(new_cols).map_err(crate::DataError::from)
 }
 
 #[cfg(test)]

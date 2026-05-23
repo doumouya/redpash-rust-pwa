@@ -15,6 +15,16 @@ use polars::prelude::*;
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
 
+/// Module init — runs once when the .wasm is instantiated. Installs the
+/// panic hook so a Rust panic surfaces as a real `console.error` with
+/// file + line + payload, instead of the bare `RuntimeError: unreachable
+/// executed` the wasm trap mechanism produces by default. Without this,
+/// every panic on wasm32 is opaque.
+#[wasm_bindgen(start)]
+pub fn start() {
+    console_error_panic_hook::set_once();
+}
+
 /// JSON array of row objects → DataFrame.
 ///
 /// Column type is inferred from the first non-null value per column:

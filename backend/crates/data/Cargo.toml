@@ -66,3 +66,7 @@ polars          = { version = "0.43", default-features = false, features = ["laz
 uuid            = { version = "1", features = ["v4", "serde", "js"] }
 getrandom       = { version = "0.3", features = ["wasm_js"] }
 wasm-bindgen    = "0.2"
+# Pipes Rust panics through `console.error` with file + line + payload
+# so the browser shows real messages instead of bare `unreachable
+# executed` traps. Installed once at module init via #[wasm_bindgen(start)].
+console_error_panic_hook = "0.1"
