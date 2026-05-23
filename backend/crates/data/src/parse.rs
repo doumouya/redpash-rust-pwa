@@ -413,15 +413,34 @@ fn stringify(v: &AnyValue) -> Option<String> {
 
 /// Single FilterSpec → Polars Expr.
 ///
-/// Strategy: cast the target column to `String`, lowercase both sides
-/// for text-ish ops (case-insensitive matching mirrors the global
-/// search). Numeric ops (`gt`, `lt`, …) parse the JSON value as `f64`
-/// and let Polars coerce. Null ops bypass casting.
+/// Strategy: cast the target column to `String` and compare; lowercase
+/// both sides when `f.case_sensitive` is `Some(false)` or absent — the
+/// query-time filter has historically defaulted to case-insensitive
+/// matching to mirror the global search, and that default stays
+/// (existing UIs not passing the flag don't change behavior). When
+/// `case_sensitive: Some(true)` is sent (e.g. from a future workspace
+/// toggle), both sides are compared as-is. Numeric ops (`gt`, `lt`, …)
+/// parse the JSON value as `f64` and let Polars coerce. Null + date
+/// ops bypass the casing branch.
 fn filter_expr(f: &FilterSpec) -> Result<Expr> {
     let cname = f.col.as_str();
     let raw   = col(cname);
-    // Case-insensitive LHS for every text op.
-    let str_lc = raw.clone().cast(DataType::String).str().to_lowercase();
+
+    // `case_sensitive` defaults to false (i.e. case-insensitive) on
+    // this path to preserve the historical behavior. The steps.rs
+    // engine path defaults the same flag to true — the two engines
+    // serve different audiences (query-time filter vs persisted
+    // cleaning step), so the asymmetric defaults are deliberate.
+    // Callers that want either behavior pass the flag explicitly.
+    let cs = f.case_sensitive.unwrap_or(false);
+
+    // String column expression — lowercased once when case-insensitive,
+    // raw String cast when case-sensitive. Used by every text op below.
+    let str_col = if cs {
+        raw.clone().cast(DataType::String)
+    } else {
+        raw.clone().cast(DataType::String).str().to_lowercase()
+    };
 
     let val_str = || -> String {
         match f.value.as_ref() {
@@ -430,7 +449,19 @@ fn filter_expr(f: &FilterSpec) -> Result<Expr> {
             None => String::new(),
         }
     };
-    let val_lc = || val_str().to_lowercase();
+    // String-op RHS — lowercased when matching is case-insensitive,
+    // verbatim otherwise. Single closure so every text arm uses the
+    // same casing decision without branching per-arm.
+    let val_op = || -> String {
+        let v = val_str();
+        if cs { v } else { v.to_lowercase() }
+    };
+    // Lexicographic-range RHS — same casing rule as `val_op` so the
+    // Between string-pair fallback stays consistent with Gt/Lt.
+    let val_range = |v: Option<&serde_json::Value>| -> String {
+        let s = v.and_then(|x| x.as_str()).unwrap_or("").to_string();
+        if cs { s } else { s.to_lowercase() }
+    };
     let val_num = || -> Result<f64> {
         let v = f.value.as_ref().ok_or_else(|| DataError::InvalidSpec(
             format!("{:?} needs a numeric value on column {cname}", f.op)))?;
@@ -461,77 +492,80 @@ fn filter_expr(f: &FilterSpec) -> Result<Expr> {
         ))
     };
 
-    // Local helper for `In` / `NotIn` — extract `value` as an array of
-    // lowercased strings. Matches the case-insensitive convention the
-    // rest of this match uses (parse.rs has always lowercased; the new
-    // FilterSpec.case_sensitive flag is honored by the steps.rs engine
-    // path, not yet here — see commit message).
-    let val_arr_lc = || -> Result<Vec<String>> {
+    // `In` / `NotIn` array values — lowercased on the case-insensitive
+    // path, verbatim on the case-sensitive path. Mirrors `val_op`'s
+    // single-side casing decision.
+    let val_arr_op = || -> Result<Vec<String>> {
         let arr = f.value.as_ref().and_then(|v| v.as_array()).ok_or_else(||
             DataError::InvalidSpec(format!("{op:?} on {cname} needs an array value", op = f.op)))?;
         Ok(arr.iter()
-            .map(|v| match v {
-                serde_json::Value::String(s) => s.to_lowercase(),
-                other                        => other.to_string().to_lowercase(),
+            .map(|v| {
+                let s = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other                        => other.to_string(),
+                };
+                if cs { s } else { s.to_lowercase() }
             })
             .collect())
     };
 
     let expr = match f.op {
-        FilterOp::Eq          => str_lc.clone().eq(lit(val_lc())),
-        FilterOp::Neq         => str_lc.clone().neq(lit(val_lc())),
+        FilterOp::Eq          => str_col.clone().eq(lit(val_op())),
+        FilterOp::Neq         => str_col.clone().neq(lit(val_op())),
         FilterOp::In => {
-            let needles = val_arr_lc()?;
+            let needles = val_arr_op()?;
             if needles.is_empty() {
                 lit(false)  // empty set → nothing matches
             } else {
                 needles.into_iter()
-                    .map(|n| str_lc.clone().eq(lit(n)))
+                    .map(|n| str_col.clone().eq(lit(n)))
                     .reduce(|a, b| a.or(b))
                     .unwrap()
             }
         }
         FilterOp::NotIn => {
-            let needles = val_arr_lc()?;
+            let needles = val_arr_op()?;
             if needles.is_empty() {
                 lit(true)   // empty exclusion → everything matches
             } else {
                 needles.into_iter()
-                    .map(|n| str_lc.clone().neq(lit(n)))
+                    .map(|n| str_col.clone().neq(lit(n)))
                     .reduce(|a, b| a.and(b))
                     .unwrap()
             }
         }
-        FilterOp::Contains    => str_lc.str().contains_literal(lit(val_lc())),
-        FilterOp::NotContains => str_lc.str().contains_literal(lit(val_lc())).not(),
-        FilterOp::StartsWith  => str_lc.str().starts_with(lit(val_lc())),
-        FilterOp::EndsWith    => str_lc.str().ends_with(lit(val_lc())),
+        FilterOp::Contains    => str_col.clone().str().contains_literal(lit(val_op())),
+        FilterOp::NotContains => str_col.clone().str().contains_literal(lit(val_op())).not(),
+        FilterOp::StartsWith  => str_col.clone().str().starts_with(lit(val_op())),
+        FilterOp::EndsWith    => str_col.clone().str().ends_with(lit(val_op())),
         // Range ops: try numeric first; on parse failure, fall back to
         // lexicographic string comparison (works for ISO dates).
-        FilterOp::Gt  => match val_num() { Ok(n) => raw.gt(lit(n)),     Err(_) => str_lc.clone().gt(lit(val_lc())) },
-        FilterOp::Gte => match val_num() { Ok(n) => raw.gt_eq(lit(n)),  Err(_) => str_lc.clone().gt_eq(lit(val_lc())) },
-        FilterOp::Lt  => match val_num() { Ok(n) => raw.lt(lit(n)),     Err(_) => str_lc.clone().lt(lit(val_lc())) },
-        FilterOp::Lte => match val_num() { Ok(n) => raw.lt_eq(lit(n)),  Err(_) => str_lc.clone().lt_eq(lit(val_lc())) },
+        FilterOp::Gt  => match val_num() { Ok(n) => raw.gt(lit(n)),     Err(_) => str_col.clone().gt(lit(val_op())) },
+        FilterOp::Gte => match val_num() { Ok(n) => raw.gt_eq(lit(n)),  Err(_) => str_col.clone().gt_eq(lit(val_op())) },
+        FilterOp::Lt  => match val_num() { Ok(n) => raw.lt(lit(n)),     Err(_) => str_col.clone().lt(lit(val_op())) },
+        FilterOp::Lte => match val_num() { Ok(n) => raw.lt_eq(lit(n)),  Err(_) => str_col.clone().lt_eq(lit(val_op())) },
         FilterOp::Between => {
             if let Ok((a, b)) = val_pair() {
                 raw.clone().gt_eq(lit(a)).and(raw.lt_eq(lit(b)))
             } else {
-                // String-pair fallback for ISO-date ranges.
+                // String-pair fallback for ISO-date ranges. Uses the
+                // same casing rule as the single-value text ops above.
                 let arr = f.value.as_ref().and_then(|v| v.as_array()).ok_or_else(||
                     DataError::InvalidSpec(format!("between needs [a, b] on column {cname}")))?;
-                let to_lc = |v: Option<&serde_json::Value>| v.and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-                let a = to_lc(arr.get(0));
-                let b = to_lc(arr.get(1));
-                str_lc.clone().gt_eq(lit(a)).and(str_lc.clone().lt_eq(lit(b)))
+                let a = val_range(arr.get(0));
+                let b = val_range(arr.get(1));
+                str_col.clone().gt_eq(lit(a)).and(str_col.clone().lt_eq(lit(b)))
             }
         }
         // Date ops: cast the column + value to Date. Bogus dates cast
         // to NULL and the comparison fails for every row — same loud-
-        // fail behavior as the steps.rs engine path.
+        // fail behavior as the steps.rs engine path. Value side stays
+        // verbatim (date strings are case-irrelevant; the casing flag
+        // is meaningless here).
         FilterOp::Before => raw.clone().cast(DataType::Date)
-                                .lt(lit(val_lc()).cast(DataType::Date)),
+                                .lt(lit(val_str()).cast(DataType::Date)),
         FilterOp::After  => raw.clone().cast(DataType::Date)
-                                .gt(lit(val_lc()).cast(DataType::Date)),
+                                .gt(lit(val_str()).cast(DataType::Date)),
         FilterOp::IsNull      => raw.is_null(),
         FilterOp::NotNull     => raw.is_not_null(),
     };
@@ -618,4 +652,66 @@ fn search_expr(needle: &str, df: &DataFrame) -> Option<Expr> {
         });
     }
     acc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Default (case_sensitive omitted) — historical behavior, both
+    /// "Paris" and "paris" match `contains: "par"`.
+    #[test]
+    fn filter_contains_default_is_case_insensitive() {
+        let df = df!["city" => ["Paris", "PARIS", "Lyon", "paris"]].unwrap();
+        let filter = serde_json::json!({
+            "col": "city", "op": "contains", "value": "par"
+        }).to_string();
+        let out = apply_filter(df, &filter).unwrap();
+        assert_eq!(out.height(), 3, "all three 'paris' variants match");
+    }
+
+    /// `case_sensitive: true` — only the literal case matches.
+    #[test]
+    fn filter_contains_case_sensitive_only_exact_case() {
+        let df = df!["city" => ["Paris", "PARIS", "Lyon", "paris"]].unwrap();
+        let filter = serde_json::json!({
+            "col": "city", "op": "contains", "value": "Par",
+            "case_sensitive": true
+        }).to_string();
+        let out = apply_filter(df, &filter).unwrap();
+        assert_eq!(out.height(), 1, "only 'Paris' (capital P) matches");
+        let cities: Vec<Option<&str>> =
+            out.column("city").unwrap().str().unwrap().into_iter().collect();
+        assert_eq!(cities, vec![Some("Paris")]);
+    }
+
+    /// `case_sensitive: false` explicit — same as default; locks the
+    /// contract so a later "default to true" refactor would fail this
+    /// test loudly.
+    #[test]
+    fn filter_eq_case_insensitive_when_flag_false() {
+        let df = df!["name" => ["Alice", "ALICE", "Bob"]].unwrap();
+        let filter = serde_json::json!({
+            "col": "name", "op": "eq", "value": "alice",
+            "case_sensitive": false
+        }).to_string();
+        let out = apply_filter(df, &filter).unwrap();
+        assert_eq!(out.height(), 2, "both Alice + ALICE match lowercased 'alice'");
+    }
+
+    /// `case_sensitive: true` on the `in` set op — array membership
+    /// honors casing too, not just single-value ops.
+    #[test]
+    fn filter_in_case_sensitive_array() {
+        let df = df!["country" => ["FR", "fr", "BE", "be"]].unwrap();
+        let filter = serde_json::json!({
+            "col": "country", "op": "in", "value": ["FR", "BE"],
+            "case_sensitive": true
+        }).to_string();
+        let out = apply_filter(df, &filter).unwrap();
+        assert_eq!(out.height(), 2, "only uppercase FR + BE match");
+        let countries: Vec<Option<&str>> =
+            out.column("country").unwrap().str().unwrap().into_iter().collect();
+        assert_eq!(countries, vec![Some("FR"), Some("BE")]);
+    }
 }
