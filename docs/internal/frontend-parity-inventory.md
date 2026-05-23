@@ -40,8 +40,8 @@ Run by Woz against `frontend-reset`. Compared to the inventory as written 2026-0
 
 ### New gaps surfaced by the walk
 
-- **Tools panel has 6 buttons but no JS handlers.** `partials/workspace.html:118-125` declares `.rt-tool-btn` × 6 (dedup, fill, fix, format-dates, split, trim). `workspace.js` does not attach any click handler. Clicking does nothing — no toast, no log, no feedback. Worse than empty, because it looks live. *Either* wire them to the planned `defineTool` factory, *or* add `disabled title="coming soon"` (the `wsNewProject` button shows the honest pattern).
-- **Stale comment, rule-7 violation:** [`workspace.js:10-13`](../../frontend/scripts/pages/workspace.js#L10-L13) header says *"the refresh button"* is stubbed. The code at lines 576-586 actually re-fetches the open file. Fix the comment in the same commit as any other workspace touch.
+- ~~**Tools panel has 6 buttons but no JS handlers.**~~ **Closed 2026-05-23.** Tools panel is now wired: [`scripts/tools.js`](../../frontend/scripts/tools.js) — one `defineTool` factory + 5 field-type renderers (column / enum / text / boolean / multi-column) + **12 tool configs** (drop_nulls, fill_nulls, cast, rename_column, snake_case_columns, replace_in_names, change_case, replace_text, fix_invalid, join_columns, split_column, format_dates) → `POST /api/files/:rid/steps`. Apply re-renders the table from the server's response. No new components added — picker uses `.rt-tool-item`, form rows reuse `.rt-pred` with `--stack` / `--inline` BEM modifiers per [ui-change-process.md](ui-change-process.md). Adds ~430 JS LOC and ~90 panel.css LOC; component count still 15.
+- ~~**Stale comment, rule-7 violation in workspace.js header.**~~ **Fixed in the same commit** — refresh and tools panel removed from the stubbed list (per rule 7 of the UI process).
 
 ### Cross-cutting — still open
 
@@ -54,7 +54,7 @@ Run by Woz against `frontend-reset`. Compared to the inventory as written 2026-0
 
 - **`/login`** — no change. Still complete.
 - **`/home`** — no change. Still 2 small gaps (`href="#/workspace"` lacks rid, stage names old).
-- **`/workspace`** — chart render ✓, real-data ✓. Still open: pagination + rows-per-page refetch, tools panel actions (now visibly broken — buttons without handlers), save edits/deletes, server-side filter/sort, file upload, history/steps log, chart **builder** UI, project CRUD, file metadata edit.
+- **`/workspace`** — chart render ✓, real-data ✓, **tools panel ✓ (12 tools live)**. Still open: pagination + rows-per-page refetch, save cell-edits / row-deletes, server-side filter/sort, file upload, history/steps log, chart **builder** UI, project CRUD, file metadata edit.
 - **`/profile`** — no change. Still 25-LOC stub.
 - **`/settings`** — no change. Still 27-LOC stub (theme only).
 - **`/docs`** — no change. Still read-only index; viewer click-through not wired.

@@ -7,13 +7,14 @@
 // builder) operates on whatever's loaded; column-indexed state
 // (sort keys, filter, cols visibility) resets per file.
 //
-// What's still stubbed: real pagination + rows-per-page refetch, the
-// refresh button, the cleaning tools panel actions, and saving edits
-// or deletions back to the server (the cell / row modes are visual
-// only). All land in the next pass.
+// What's still stubbed: real pagination + rows-per-page refetch, and
+// saving cell-edits / row-deletes back to the server (the cell / row
+// modes are visual only). Pagination and cell/row persistence land in
+// the next pass. The cleaning tools panel + refresh are wired.
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountTools } from "/scripts/tools.js";
 
 const STAGE_DOT    = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
 const MARK_COLORS  = ["blue", "mauve", "teal", "peach"];
@@ -571,6 +572,22 @@ export default function workspace(app, { session }) {
   }
   bindPanel("#wsFilterToggle", "#wsFilterPanel");
   bindPanel("#wsToolsToggle",  "#wsToolsPanel");
+
+  // ─── tools panel — parameterised, one factory + 12 configs ─────
+  mountTools($("#wsToolsBody"), {
+    fileRid: () => activeFileRid,
+    columns: () => activeColumns,
+    // After a step lands, the server returned a fresh envelope. The
+    // simplest path: re-run loadFile on the same rid (it would normally
+    // no-op since the rid is unchanged, so null the cached rid first).
+    // Same trick the Refresh button uses.
+    onApplied: () => {
+      if (!activeFileRid) return;
+      const rid = activeFileRid;
+      activeFileRid = null;
+      loadFile(rid);
+    },
+  });
 
   // ─── refresh — re-fetch the open file (or no-op) ───────────────
   $("#wsRefresh").addEventListener("click", (e) => {
