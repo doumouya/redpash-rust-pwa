@@ -1,18 +1,19 @@
-<!-- Monitoring — the system telemetry surface. Same shell pattern
-     as Home: topbar + rail (.rt-nav, static groups REQUESTS/AUDITS)
-     + per-tab body. Phase 1 wires the Requests tab against
-     /api/metrics; the other tabs render disabled in the rail until
-     their backend list endpoints land (see
+<!-- Monitoring — the system telemetry surface. Uses the shared
+     rail-page shell (shell.css: .rp-shell + .rp-shell-* atoms),
+     same as /home. Page-specific styles (window chips, panels,
+     top-routes table) live in monitoring.css. Phase 1 wires the
+     Requests tab against /api/metrics; the other rail tabs render
+     disabled until their backend list endpoints land (see
      docs/internal/admin-monitoring-surfaces.md §6). -->
-<section class="rp-monitoring">
+<section class="rp-shell">
   <header id="rp-topbar"></header>
 
-  <header class="rp-home__greeting">
-    <h1 class="rp-home__greeting-title">Monitoring</h1>
-    <p class="rp-home__greeting-sub">Requests, audits, and system telemetry.</p>
+  <header class="rp-shell-greeting">
+    <h1 class="rp-shell-greeting-title">Monitoring</h1>
+    <p class="rp-shell-greeting-sub">Requests, audits, and system telemetry.</p>
   </header>
 
-  <div class="rp-home__body">
+  <div class="rp-shell-body">
 
     <!-- ════ rail — static groups (REQUESTS + AUDITS) ════ -->
     <aside class="rt-nav" id="rpMonNav">
@@ -26,9 +27,9 @@
     </aside>
 
     <!-- ════ main — body view per active tab ════ -->
-    <main class="rp-home__main" id="rpMonMain">
-      <div class="rp-home__view" id="rpMonView">
-        <p class="rp-home__state">Loading…</p>
+    <main class="rp-shell-main" id="rpMonMain">
+      <div class="rp-shell-view" id="rpMonView">
+        <p class="rp-shell-state">Loading…</p>
       </div>
     </main>
 
