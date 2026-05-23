@@ -461,9 +461,47 @@ fn filter_expr(f: &FilterSpec) -> Result<Expr> {
         ))
     };
 
+    // Local helper for `In` / `NotIn` — extract `value` as an array of
+    // lowercased strings. Matches the case-insensitive convention the
+    // rest of this match uses (parse.rs has always lowercased; the new
+    // FilterSpec.case_sensitive flag is honored by the steps.rs engine
+    // path, not yet here — see commit message).
+    let val_arr_lc = || -> Result<Vec<String>> {
+        let arr = f.value.as_ref().and_then(|v| v.as_array()).ok_or_else(||
+            DataError::InvalidSpec(format!("{op:?} on {cname} needs an array value", op = f.op)))?;
+        Ok(arr.iter()
+            .map(|v| match v {
+                serde_json::Value::String(s) => s.to_lowercase(),
+                other                        => other.to_string().to_lowercase(),
+            })
+            .collect())
+    };
+
     let expr = match f.op {
         FilterOp::Eq          => str_lc.clone().eq(lit(val_lc())),
         FilterOp::Neq         => str_lc.clone().neq(lit(val_lc())),
+        FilterOp::In => {
+            let needles = val_arr_lc()?;
+            if needles.is_empty() {
+                lit(false)  // empty set → nothing matches
+            } else {
+                needles.into_iter()
+                    .map(|n| str_lc.clone().eq(lit(n)))
+                    .reduce(|a, b| a.or(b))
+                    .unwrap()
+            }
+        }
+        FilterOp::NotIn => {
+            let needles = val_arr_lc()?;
+            if needles.is_empty() {
+                lit(true)   // empty exclusion → everything matches
+            } else {
+                needles.into_iter()
+                    .map(|n| str_lc.clone().neq(lit(n)))
+                    .reduce(|a, b| a.and(b))
+                    .unwrap()
+            }
+        }
         FilterOp::Contains    => str_lc.str().contains_literal(lit(val_lc())),
         FilterOp::NotContains => str_lc.str().contains_literal(lit(val_lc())).not(),
         FilterOp::StartsWith  => str_lc.str().starts_with(lit(val_lc())),
@@ -487,6 +525,13 @@ fn filter_expr(f: &FilterSpec) -> Result<Expr> {
                 str_lc.clone().gt_eq(lit(a)).and(str_lc.clone().lt_eq(lit(b)))
             }
         }
+        // Date ops: cast the column + value to Date. Bogus dates cast
+        // to NULL and the comparison fails for every row — same loud-
+        // fail behavior as the steps.rs engine path.
+        FilterOp::Before => raw.clone().cast(DataType::Date)
+                                .lt(lit(val_lc()).cast(DataType::Date)),
+        FilterOp::After  => raw.clone().cast(DataType::Date)
+                                .gt(lit(val_lc()).cast(DataType::Date)),
         FilterOp::IsNull      => raw.is_null(),
         FilterOp::NotNull     => raw.is_not_null(),
     };

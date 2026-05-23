@@ -806,6 +806,20 @@ fn build_filter_predicate(
                     .str().contains_literal(lit(pat.to_lowercase()))
             }
         }
+        // Symmetric inverse of `contains` — same case-sensitivity
+        // semantics, negated predicate. Reconciles the long-standing
+        // shared::FilterOp::NotContains variant the UI could already
+        // emit (the engine previously returned InvalidSpec for it).
+        "not_contains" => {
+            let pat = val_string()?;
+            let inner = if case_sensitive {
+                c.cast(DataType::String).str().contains_literal(lit(pat))
+            } else {
+                c.cast(DataType::String).str().to_lowercase()
+                    .str().contains_literal(lit(pat.to_lowercase()))
+            };
+            inner.not()
+        }
         "starts_with" => c.cast(DataType::String).str().starts_with(lit(val_string()?)),
         "ends_with"   => c.cast(DataType::String).str().ends_with(lit(val_string()?)),
 
