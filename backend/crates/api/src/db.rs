@@ -434,8 +434,8 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 const PROJECT_SELECT: &str =
     "SELECT p.redpash_id, p.name, p.description, p.is_default, p.owner_id, p.company_id,
             (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
-                      WHEN 3 THEN 'publish' WHEN 2 THEN 'report' WHEN 1 THEN 'clean'
-                      ELSE 'import' END
+                      WHEN 3 THEN 'publish' WHEN 2 THEN 'design' WHEN 1 THEN 'clean'
+                      ELSE 'new' END
              FROM file_stages fs WHERE fs.project_redpash_id = p.redpash_id) AS stage,
             CASE WHEN EXISTS (SELECT 1 FROM project_files d
                               WHERE d.project_redpash_id = p.redpash_id

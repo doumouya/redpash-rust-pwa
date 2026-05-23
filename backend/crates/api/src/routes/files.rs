@@ -235,7 +235,7 @@ async fn upload(
         filename:           filename.clone(),
         display_name:       Some(filename),
         file_type:          "csv".into(),
-        stage:              "import".into(), // fresh file — no steps/reports/dashboards yet
+        stage:              "new".into(), // fresh file — no steps/charts/dashboards yet
         row_count:          Some(df.height() as u64),
         col_count:          Some(df.width() as u32),
         file_size_bytes:    Some(size),
@@ -902,7 +902,7 @@ async fn create_join(
         filename:           filename.clone(),
         display_name:       Some(filename),
         file_type:          "csv".into(),
-        stage:              "import".into(), // fresh file — no steps/reports/dashboards yet
+        stage:              "new".into(), // fresh file — no steps/charts/dashboards yet
         row_count:          Some(h as u64),
         col_count:          Some(w as u32),
         file_size_bytes:    Some(csv_size),
@@ -996,7 +996,7 @@ async fn snapshot(
         filename:           filename.clone(),
         display_name:       Some(filename),
         file_type:          "csv".into(),
-        stage:              "import".into(), // fresh file — no steps/reports/dashboards yet
+        stage:              "new".into(), // fresh file — no steps/charts/dashboards yet
         row_count:          Some(h as u64),
         col_count:          Some(w as u32),
         file_size_bytes:    Some(csv_size),

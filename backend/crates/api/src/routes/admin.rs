@@ -382,7 +382,7 @@ async fn list_files(
            FROM project_files f
            LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
           WHERE ($1::text IS NULL OR f.file_type = $1)
-            AND ($2::text IS NULL OR COALESCE(s.stage, 'import') = $2)
+            AND ($2::text IS NULL OR COALESCE(s.stage, 'new') = $2)
             AND ($3::text IS NULL OR f.project_redpash_id = $3)",
     )
     .bind(q.file_type.as_deref())
@@ -396,14 +396,14 @@ async fn list_files(
         "SELECT f.redpash_id, f.project_redpash_id,
                 p.name AS project_name,
                 f.filename, f.display_name, f.file_type,
-                COALESCE(s.stage, 'import') AS stage,
+                COALESCE(s.stage, 'new') AS stage,
                 f.row_count, f.col_count, f.file_size_bytes, f.cleanness_pct,
                 f.created_at, f.updated_at
            FROM project_files f
            JOIN projects p ON p.redpash_id = f.project_redpash_id
            LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
           WHERE ($1::text IS NULL OR f.file_type = $1)
-            AND ($2::text IS NULL OR COALESCE(s.stage, 'import') = $2)
+            AND ($2::text IS NULL OR COALESCE(s.stage, 'new') = $2)
             AND ($3::text IS NULL OR f.project_redpash_id = $3)
           ORDER BY f.created_at DESC
           LIMIT $4 OFFSET $5",
@@ -426,7 +426,7 @@ async fn list_files(
             filename:           r.try_get("filename").unwrap_or_default(),
             display_name:       r.try_get("display_name").ok(),
             file_type:          r.try_get("file_type").unwrap_or_default(),
-            stage:              r.try_get("stage").unwrap_or_else(|_| "import".into()),
+            stage:              r.try_get("stage").unwrap_or_else(|_| "new".into()),
             row_count:          r.try_get("row_count").ok(),
             col_count:          r.try_get("col_count").ok(),
             file_size_bytes:    r.try_get("file_size_bytes").ok(),
@@ -473,7 +473,7 @@ async fn list_charts(
     let rows = sqlx::query(
         "SELECT f.redpash_id, f.project_redpash_id, p.name AS project_name,
                 f.filename, f.display_name,
-                COALESCE(s.stage, 'import') AS stage,
+                COALESCE(s.stage, 'new') AS stage,
                 f.created_at, f.updated_at
            FROM project_files f
            JOIN projects p ON p.redpash_id = f.project_redpash_id
@@ -500,7 +500,7 @@ async fn list_charts(
             project_name:       r.try_get("project_name").unwrap_or_default(),
             filename:           r.try_get("filename").unwrap_or_default(),
             display_name:       r.try_get("display_name").ok(),
-            stage:              r.try_get("stage").unwrap_or_else(|_| "import".into()),
+            stage:              r.try_get("stage").unwrap_or_else(|_| "new".into()),
             created_at:         r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
             updated_at:         r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
         })
@@ -723,10 +723,10 @@ async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, A
 
     let by_stage = group_count(
         &state.db,
-        "SELECT COALESCE(s.stage, 'import') AS stage, COUNT(*)::BIGINT
+        "SELECT COALESCE(s.stage, 'new') AS stage, COUNT(*)::BIGINT
            FROM project_files f
            LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
-          GROUP BY COALESCE(s.stage, 'import')",
+          GROUP BY COALESCE(s.stage, 'new')",
     ).await?;
 
     let by_type = group_count(

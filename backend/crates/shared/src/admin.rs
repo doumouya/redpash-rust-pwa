@@ -69,7 +69,7 @@ pub struct AdminFileSummary {
     pub filename:           String,
     #[serde(default)] pub display_name:    Option<String>,
     pub file_type:          String,
-    /// Computed via the `file_stages` view (`import | clean | report | publish`).
+    /// Computed via the `file_stages` view (`new | clean | design | publish`).
     /// Replaces the dropped `status` column; matches `shared::file::FileSummary.stage`.
     pub stage:              String,
     #[serde(default)] pub row_count:       Option<i64>,
@@ -161,8 +161,8 @@ pub struct MembershipStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileStats {
     pub total:          u64,
-    /// `file_stages.stage` distribution (import | clean | report | publish).
-    /// Files predating the view entry default to `import`.
+    /// `file_stages.stage` distribution (new | clean | design | publish).
+    /// Files predating the view entry default to `new`.
     pub by_stage:       HashMap<String, u64>,
     /// `file_type` distribution (csv | chart | …).
     pub by_type:        HashMap<String, u64>,

@@ -10,7 +10,7 @@ pub struct FileSummary {
     pub filename:           String,
     pub display_name:       Option<String>,
     pub file_type:          String,
-    pub stage:              String, // import | clean | report | publish — computed, see file_stages view
+    pub stage:              String, // new | clean | design | publish — computed, see file_stages view
     pub row_count:          Option<u64>,
     pub col_count:          Option<u32>,
     pub file_size_bytes:    Option<u64>,

@@ -14,7 +14,14 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 
-const STAGES = ["import", "clean", "report", "publish"];
+// Stage labels mirror backend's file_stages view (migration 022,
+// 2026-06-05). Renamed from `import|report` to `new|design`:
+//   new    — file just arrived (no presumption that data is raw —
+//            an already-clean upload sits here too until it goes to design).
+//   clean  — at least one cleaning step has been applied.
+//   design — file is the source of ≥1 chart (the design surface).
+//   publish — a chart from this file lives in a public dashboard.
+const STAGES = ["new", "clean", "design", "publish"];
 
 // Declarative tab definitions — also drives the rail render. The
 // `perm` field is non-load-bearing today (everyone is admin in
@@ -500,7 +507,7 @@ export default function home(app, { session }) {
   function stageChip(stage) {
     const v = String(stage || "").toLowerCase();
     const tone = v === "publish" ? "rp-mon-err-low"
-              : v === "report"   ? "rp-mon-err-mid"
+              : v === "design"   ? "rp-mon-err-mid"
               : v === "clean"    ? "rp-mon-err-mid"
               : "";
     return '<span class="rp-mon-method ' + tone + '">' + esc(stage || "—") + '</span>';
