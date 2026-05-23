@@ -1,24 +1,28 @@
 // Workspace page — the redtable as a browser, wired to /api.
 //
 // On mount: load real projects + lazy-load files per group. A file
-// click fetches /api/files/:rid (columns) and /api/files/:rid/page
-// (first 25 rows) in parallel and renders the table. The toolbar
-// (search, sort, select / edit / delete, columns dropdown, filter
-// builder) operates on whatever's loaded; column-indexed state
-// (sort keys, filter, cols visibility) resets per file.
+// click fetches /api/files/:rid (columns) + /api/files/:rid/page
+// (?page=N&size=M) and renders. The toolbar (search, sort, select /
+// edit / delete, columns dropdown, filter builder) operates on the
+// loaded page; column-indexed state (sort keys, filter, cols vis)
+// resets per file. Rows-per-page + pager buttons refetch the page
+// server-side via PageQuery.
 //
-// What's still stubbed: real pagination + rows-per-page refetch, and
-// saving cell-edits / row-deletes back to the server (the cell / row
-// modes are visual only). Pagination and cell/row persistence land in
-// the next pass. The cleaning tools panel + refresh are wired.
+// What's still stubbed: server-side filter+sort (still page-local for
+// now — that's WS#2), and saving cell-edits / row-deletes back to the
+// server (cell / row modes are visual only). Tools panel + refresh
+// are wired.
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
 
-const STAGE_DOT    = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
-const MARK_COLORS  = ["blue", "mauve", "teal", "peach"];
-const DATE_DTYPES  = new Set(["date"]);
+const STAGE_DOT     = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
+const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
+const DATE_DTYPES   = new Set(["date"]);
+const PAGE_SIZE_KEY = "rp-rows-per-page";
+const ALL_ROWS_SIZE = 50000;       // "All rows" is a one-shot big page, not a separate code path.
+const DEFAULT_PAGE_SIZE = 25;
 
 export default function workspace(app, { session }) {
   const $  = (s) => app.querySelector(s);
@@ -51,6 +55,16 @@ export default function workspace(app, { session }) {
   let activeFilter  = null; // { outer:'AND'|'OR', groups:[...] }
   let groupCombo    = "AND";
   let filterCols    = [];   // [[colIndex, name], ...] for the filter builder
+  let currentPage   = 1;    // 1-indexed page (matches Page<T>.page on the wire)
+  let pageSize      = readPageSize();
+  let totalPages    = 1;    // last response's Page<T>.pages — drives the pager render
+
+  function readPageSize() {
+    const raw = localStorage.getItem(PAGE_SIZE_KEY);
+    if (raw === "all") return ALL_ROWS_SIZE;
+    const n = parseInt(raw || "", 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
+  }
 
   // ─── rail — collapse to compact ────────────────────────────────
   $("#wsNavCollapse").addEventListener("click", (e) => {
@@ -172,10 +186,20 @@ export default function workspace(app, { session }) {
     }
   });
 
-  // ─── table — load a file's columns + first page ────────────────
+  // ─── table — load a file's columns + page ──────────────────────
+  // Three-helper split: loadFile resets per-file state and fetches
+  // columns; refetchPage preserves column-indexed state and re-renders
+  // the table body; fetchAndRender does the wire call + render shared
+  // by both.
   async function loadFile(rid) {
     if (!rid || rid === activeFileRid) return;
     activeFileRid = rid;
+    // Reset all per-file state — column-indexed knobs only make sense
+    // against the columns we're about to fetch.
+    sortKeys = []; activeFilter = null; searchQ = "";
+    currentPage = 1;
+    $("#wsRowSearch").value = "";
+    $("#wsFilterToggle").classList.remove("has-filter");
     setTableState("Loading…");
     rowsInfo.textContent = "Loading…";
     try {
@@ -187,25 +211,46 @@ export default function workspace(app, { session }) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         renderChart(chart);
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
+        totalPages = 1;
+        renderPager();
       } else {
-        // Data mode — body is the data table.
-        const pageData = await api.get("/files/" + encodeURIComponent(rid) + "/page");
-        // Reset all column-indexed state — sort keys, filter, search.
-        sortKeys = []; activeFilter = null; searchQ = "";
-        $("#wsRowSearch").value = "";
-        $("#wsFilterToggle").classList.remove("has-filter");
-        renderTable(activeColumns, pageData?.rows || []);
         rebuildColsDropdown(activeColumns);
         rebuildFilterCols(activeColumns);
-        rowsInfo.textContent = (pageData?.rows?.length || 0) + " of "
-          + (pageData?.total || 0) + " rows · parsed in "
-          + (pageData?.ms != null ? pageData.ms + " ms" : "—");
-        setTableState(null);
+        await fetchAndRender();
       }
     } catch (err) {
       setTableState("Couldn’t load file" + (err.status ? " (" + err.status + ")" : "") + ".");
       rowsInfo.textContent = "Error.";
     }
+  }
+
+  // Re-fetch the current file's current page without resetting state.
+  // Triggered by pager clicks + rows-per-page changes.
+  async function refetchPage() {
+    if (!activeFileRid) return;
+    rowsInfo.textContent = "Loading…";
+    try { await fetchAndRender(); }
+    catch (err) {
+      setTableState("Couldn’t load page" + (err.status ? " (" + err.status + ")" : "") + ".");
+      rowsInfo.textContent = "Error.";
+    }
+  }
+
+  async function fetchAndRender() {
+    const qs = "?page=" + currentPage + "&size=" + pageSize;
+    const pageData = await api.get("/files/" + encodeURIComponent(activeFileRid) + "/page" + qs);
+    // Server clamps page; trust its echo so the pager reflects reality.
+    currentPage = pageData?.page || 1;
+    totalPages  = pageData?.pages || 1;
+    renderTable(activeColumns, pageData?.rows || []);
+    const shown = pageData?.rows?.length || 0;
+    const total = pageData?.total || 0;
+    const from  = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const to    = Math.min(from + shown - 1, total);
+    rowsInfo.textContent = (total === 0 ? "0 rows" : from + "–" + to + " of " + total + " rows")
+      + " · " + (pageData?.ms != null ? pageData.ms + " ms" : "—");
+    renderPager();
+    setTableState(null);
   }
 
   function renderTable(columns, rows) {
@@ -620,21 +665,73 @@ export default function workspace(app, { session }) {
   document.addEventListener("click", () =>
     app.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open")));
 
-  // Rows-per-page — label only for now; real refetch lands with pagination.
+  // Rows-per-page — updates pageSize, persists, resets to page 1, refetches.
+  // Mount with the persisted choice so the label + selected tick survive reloads.
+  syncRowsDropdown();
   $("#wsRowsDd").addEventListener("click", (e) => {
     const item = e.target.closest(".rt-dd-item");
     if (!item) return;
+    const raw = item.dataset.rows;
+    localStorage.setItem(PAGE_SIZE_KEY, raw);
+    pageSize = raw === "all" ? ALL_ROWS_SIZE : parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
+    currentPage = 1;
+    syncRowsDropdown();
+    refetchPage();
+  });
+  function syncRowsDropdown() {
+    const raw = localStorage.getItem(PAGE_SIZE_KEY) || String(DEFAULT_PAGE_SIZE);
     $("#wsRowsDd").querySelectorAll(".rt-dd-item").forEach((i) => {
       i.classList.remove("selected");
       const t = i.querySelector(".tick");
       if (t) t.remove();
     });
-    item.classList.add("selected");
-    item.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
-    $("#wsRowsLabel").textContent =
-      item.dataset.rows === "all" ? "All rows" : item.dataset.rows + " rows";
-  });
+    const sel = $("#wsRowsDd").querySelector('.rt-dd-item[data-rows="' + raw + '"]')
+      || $("#wsRowsDd").querySelector('.rt-dd-item[data-rows="' + DEFAULT_PAGE_SIZE + '"]');
+    if (sel) {
+      sel.classList.add("selected");
+      sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
+    }
+    $("#wsRowsLabel").textContent = raw === "all" ? "All rows" : raw + " rows";
+  }
   $("#wsColsDd").addEventListener("click", (e) => e.stopPropagation());
+
+  // ─── pager — prev / numbers / ellipsis / next ──────────────────
+  // Compact window: always show 1 and last; show current ±1; collapse
+  // the rest with gaps. Disabled prev/next render as <button disabled>
+  // so the CSS :disabled selector handles them.
+  const pagesEl = $("#wsPages");
+  function renderPager() {
+    if (!activeFileRid || totalPages < 1) { pagesEl.innerHTML = ""; return; }
+    const p = currentPage, last = totalPages;
+    const out = [];
+    out.push(pgBtn("‹", p - 1, false, p === 1));
+    if (last <= 7) {
+      for (let i = 1; i <= last; i++) out.push(pgBtn(String(i), i, i === p, false));
+    } else {
+      const want = new Set([1, last, p, p - 1, p + 1]);
+      let prev = 0;
+      for (let i = 1; i <= last; i++) {
+        if (!want.has(i)) continue;
+        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
+        out.push(pgBtn(String(i), i, i === p, false));
+        prev = i;
+      }
+    }
+    out.push(pgBtn("›", p + 1, false, p === last));
+    pagesEl.innerHTML = out.join("");
+  }
+  function pgBtn(label, page, active, disabled) {
+    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
+      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
+  }
+  pagesEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".rt-pg[data-page]");
+    if (!btn) return;
+    const target = parseInt(btn.dataset.page, 10);
+    if (!Number.isFinite(target) || target < 1 || target > totalPages || target === currentPage) return;
+    currentPage = target;
+    refetchPage();
+  });
 
   // ─── escape utility ────────────────────────────────────────────
   function esc(s) {

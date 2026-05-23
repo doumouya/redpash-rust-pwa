@@ -32,4 +32,5 @@
 }
 .rt-pg:hover { background: var(--rp-hover); color: var(--rp-text); }
 .rt-pg.active { background: var(--rp-accent-2); color: var(--rp-bg); }
-.rt-pg-gap { color: var(--rp-text-mute); padding: 0 2px; }
+.rt-pg:disabled { color: var(--rp-text-mute); opacity: 0.45; cursor: default; background: transparent; }
+.rt-pg-gap { color: var(--rp-text-mute); padding: 0 2px; font-size: 13px; }
