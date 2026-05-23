@@ -57,7 +57,17 @@ impl From<UserRow> for UserProfile {
 pub async fn find_user_by_username(pool: &PgPool, username: &str) -> sqlx::Result<Option<UserProfile>> {
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, use_case, plan, locale, prefs, first_name, last_name
+                job_title, organisation, use_case, plan, locale,
+                -- prefs sourced from the user_preferences table (mig 023);
+                -- the users.prefs JSONB column is dead in Phase 1 and
+                -- gets dropped in Phase 2.
+                COALESCE(
+                  (SELECT jsonb_object_agg(p.key, p.value)
+                     FROM user_preferences p
+                    WHERE p.user_redpash_id = users.redpash_id),
+                  '{}'::jsonb
+                ) AS prefs,
+                first_name, last_name
          FROM users WHERE username = $1",
     )
     .bind(username)
@@ -69,7 +79,17 @@ pub async fn find_user_by_username(pool: &PgPool, username: &str) -> sqlx::Resul
 pub async fn find_user_by_id(pool: &PgPool, rid: &str) -> sqlx::Result<Option<UserProfile>> {
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, use_case, plan, locale, prefs, first_name, last_name
+                job_title, organisation, use_case, plan, locale,
+                -- prefs sourced from the user_preferences table (mig 023);
+                -- the users.prefs JSONB column is dead in Phase 1 and
+                -- gets dropped in Phase 2.
+                COALESCE(
+                  (SELECT jsonb_object_agg(p.key, p.value)
+                     FROM user_preferences p
+                    WHERE p.user_redpash_id = users.redpash_id),
+                  '{}'::jsonb
+                ) AS prefs,
+                first_name, last_name
          FROM users WHERE redpash_id = $1",
     )
     .bind(rid)
@@ -84,7 +104,17 @@ pub async fn find_user_by_id(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Us
 pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
     let rows: Vec<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, use_case, plan, locale, prefs, first_name, last_name
+                job_title, organisation, use_case, plan, locale,
+                -- prefs sourced from the user_preferences table (mig 023);
+                -- the users.prefs JSONB column is dead in Phase 1 and
+                -- gets dropped in Phase 2.
+                COALESCE(
+                  (SELECT jsonb_object_agg(p.key, p.value)
+                     FROM user_preferences p
+                    WHERE p.user_redpash_id = users.redpash_id),
+                  '{}'::jsonb
+                ) AS prefs,
+                first_name, last_name
          FROM users ORDER BY display_name ASC",
     )
     .fetch_all(pool)
@@ -116,10 +146,14 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
 }
 
 /// Sparse update — every `Option::Some` field overwrites the column;
-/// `None` keeps the existing value via `COALESCE`. `prefs_patch` is
-/// merged shallowly with the existing JSONB via the `||` operator so
-/// callers can patch a single key without re-sending the whole object.
-/// `updated_at` is bumped on every call.
+/// `None` keeps the existing value via `COALESCE`. `updated_at` is
+/// bumped on every call.
+///
+/// **Prefs do NOT flow through here.** As of migration 023, prefs live
+/// in the `user_preferences` table and the only write path is
+/// `patch_user_prefs(…)` (called from `PATCH /api/me/prefs`). The
+/// `prefs` column on `users` is dead Phase-1 storage that Phase 2
+/// drops. See `docs/internal/spec-user-preferences.md`.
 #[allow(clippy::too_many_arguments)]
 pub async fn update_user(
     pool:         &PgPool,
@@ -133,7 +167,6 @@ pub async fn update_user(
     organisation: Option<&str>,
     use_case:     Option<&str>,
     locale:       Option<&str>,
-    prefs_patch:  Option<&serde_json::Value>,
     first_name:   Option<&str>,
     last_name:    Option<&str>,
 ) -> sqlx::Result<Option<UserProfile>> {
@@ -148,13 +181,19 @@ pub async fn update_user(
             organisation = COALESCE($8,  organisation),
             use_case     = COALESCE($9,  use_case),
             locale       = COALESCE($10, locale),
-            prefs        = prefs || COALESCE($11, '{}'::jsonb),
-            first_name   = COALESCE($12, first_name),
-            last_name    = COALESCE($13, last_name),
+            first_name   = COALESCE($11, first_name),
+            last_name    = COALESCE($12, last_name),
             updated_at   = now()
          WHERE redpash_id = $1
          RETURNING redpash_id, username, email, display_name, avatar_url,
-                   job_title, organisation, use_case, plan, locale, prefs, first_name, last_name",
+                   job_title, organisation, use_case, plan, locale,
+                   COALESCE(
+                     (SELECT jsonb_object_agg(p.key, p.value)
+                        FROM user_preferences p
+                       WHERE p.user_redpash_id = users.redpash_id),
+                     '{}'::jsonb
+                   ) AS prefs,
+                   first_name, last_name",
     )
     .bind(rid)
     .bind(display_name)
@@ -166,12 +205,39 @@ pub async fn update_user(
     .bind(organisation)
     .bind(use_case)
     .bind(locale)
-    .bind(prefs_patch)
     .bind(first_name)
     .bind(last_name)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(Into::into))
+}
+
+/// Patch one or more pref rows for a user. Sparse upsert: every key
+/// present in `patch` is set to the corresponding value; keys not
+/// present stay as they are. JSONB values (scalars, arrays, booleans)
+/// land verbatim. `updated_at` bumps per affected row.
+pub async fn patch_user_prefs(
+    pool:  &PgPool,
+    rid:   &str,
+    patch: &serde_json::Value,
+) -> sqlx::Result<()> {
+    // No-op on empty / non-object input — keeps the route handler's
+    // "PATCH with no prefs field" path cheap.
+    let Some(obj) = patch.as_object() else { return Ok(()); };
+    if obj.is_empty() { return Ok(()); }
+    sqlx::query(
+        "INSERT INTO user_preferences (user_redpash_id, key, value, updated_at)
+         SELECT $1, kv.key, kv.value, now()
+           FROM jsonb_each($2::jsonb) AS kv(key, value)
+         ON CONFLICT (user_redpash_id, key) DO UPDATE
+            SET value      = EXCLUDED.value,
+                updated_at = now()",
+    )
+    .bind(rid)
+    .bind(patch)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn insert_user(
@@ -185,7 +251,14 @@ pub async fn insert_user(
         "INSERT INTO users (redpash_id, username, display_name, email)
          VALUES ($1, $2, $3, $4)
          RETURNING redpash_id, username, email, display_name, avatar_url,
-                   job_title, organisation, use_case, plan, locale, prefs, first_name, last_name",
+                   job_title, organisation, use_case, plan, locale,
+                   COALESCE(
+                     (SELECT jsonb_object_agg(p.key, p.value)
+                        FROM user_preferences p
+                       WHERE p.user_redpash_id = users.redpash_id),
+                     '{}'::jsonb
+                   ) AS prefs,
+                   first_name, last_name",
     )
     .bind(rid)
     .bind(username)
@@ -214,7 +287,17 @@ pub async fn delete_user(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
 pub async fn find_user_by_google_sub(pool: &PgPool, sub: &str) -> sqlx::Result<Option<UserProfile>> {
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, use_case, plan, locale, prefs, first_name, last_name
+                job_title, organisation, use_case, plan, locale,
+                -- prefs sourced from the user_preferences table (mig 023);
+                -- the users.prefs JSONB column is dead in Phase 1 and
+                -- gets dropped in Phase 2.
+                COALESCE(
+                  (SELECT jsonb_object_agg(p.key, p.value)
+                     FROM user_preferences p
+                    WHERE p.user_redpash_id = users.redpash_id),
+                  '{}'::jsonb
+                ) AS prefs,
+                first_name, last_name
          FROM users WHERE google_sub = $1",
     )
     .bind(sub)
@@ -245,7 +328,14 @@ pub async fn upsert_google_user(
                     updated_at   = now()
               WHERE redpash_id = $1
               RETURNING redpash_id, username, email, display_name, avatar_url,
-                        job_title, organisation, use_case, plan, locale, prefs, first_name, last_name",
+                        job_title, organisation, use_case, plan, locale,
+                        COALESCE(
+                          (SELECT jsonb_object_agg(p.key, p.value)
+                             FROM user_preferences p
+                            WHERE p.user_redpash_id = users.redpash_id),
+                          '{}'::jsonb
+                        ) AS prefs,
+                        first_name, last_name",
         )
         .bind(&existing.redpash_id)
         .bind(email)
@@ -264,7 +354,14 @@ pub async fn upsert_google_user(
         "INSERT INTO users (redpash_id, username, email, display_name, avatar_url, google_sub)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING redpash_id, username, email, display_name, avatar_url,
-                   job_title, organisation, use_case, plan, locale, prefs, first_name, last_name",
+                   job_title, organisation, use_case, plan, locale,
+                   COALESCE(
+                     (SELECT jsonb_object_agg(p.key, p.value)
+                        FROM user_preferences p
+                       WHERE p.user_redpash_id = users.redpash_id),
+                     '{}'::jsonb
+                   ) AS prefs,
+                   first_name, last_name",
     )
     .bind(&rid)
     .bind(&username)

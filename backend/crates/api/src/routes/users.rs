@@ -132,7 +132,6 @@ async fn patch(
         organisation.as_deref(),
         use_case.as_deref(),
         locale.as_deref(),
-        None,
         first_name.as_deref(),
         last_name.as_deref(),
     ).await;

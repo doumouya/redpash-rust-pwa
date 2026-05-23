@@ -1,51 +1,137 @@
-// App-wide preferences — get/set helpers + the canonical PREFS table.
+// App-wide preferences — SWR cache over the server `user_preferences`
+// table, with getPref/setPref helpers above it.
 //
-// Each pref persists in localStorage and is reflected on <html> as a
-// data-<key> attribute so CSS selectors can react without any JS
-// reading the value (e.g. html[data-density="compact"] overrides the
-// --rp-sp-* tokens). index.html applies the visual-impact prefs
-// (density, fontSize) before first paint to avoid a FOUC; this module
-// owns the runtime read/write path used by the Settings page and by
-// page modules that need a pref value at mount.
+// Source of truth is the server (`user_preferences`, migration 023).
+// localStorage holds a per-key cache so synchronous getPref doesn't
+// block on the network; the cache is seeded once at boot from /api/me
+// (`seedPrefs(serverPrefs)`) and written through to the server on
+// every setPref via PATCH /api/me/prefs.
 //
-// Theme stays in theme.js — pre-existing, has its own boot wiring; not
-// duplicated here. When a user-prefs backend endpoint lands, the
-// localStorage layer becomes an SWR cache and these helpers swap to
-// hit /api/users/:rid/prefs underneath; the consumer-facing API
-// doesn't change.
+// Architecture: docs/internal/spec-user-preferences.md.
+//
+// **Two pref classes:**
+//   - **Registered** (in PREFS below) — UI prefs with enum validation,
+//     defaults, and optional <html> data-attr reflection so CSS can
+//     react without any JS read at paint time.
+//   - **Unregistered** — anything else the server stores
+//     (learned_sentinels, share_sentinels, …). Cached as a transparent
+//     passthrough; no validation, no attr reflection; readable via
+//     getPref(name) directly. Adding a new server pref needs zero
+//     change here — it appears in the next /api/me boot-seed.
+//
+// localStorage namespace: `rp-pref-<name>` uniformly. Legacy per-pref
+// keys (rp-density, rp-font-size, …) migrate once at module init.
+
+import { api } from "/scripts/api.js";
 
 export const PREFS = {
-  density:        { key: "rp-density",         values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density"      },
-  fontSize:       { key: "rp-font-size",       values: ["sm", "md", "lg"],                 default: "md",   attr: "fontSize"     },
-  rowsPerPage:    { key: "rp-rows-per-page",   values: ["10", "25", "50", "100", "all"],   default: "25",   attr: null           },
-  showRowNumbers: { key: "rp-show-rownum",     values: ["1", "0"],                         default: "1",    attr: "showRownum"   },
-  showStageDots:  { key: "rp-show-stage-dots", values: ["1", "0"],                         default: "1",    attr: "showStageDots"},
+  density:        { values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density"      },
+  fontSize:       { values: ["sm", "md", "lg"],                 default: "md",   attr: "fontSize"     },
+  rowsPerPage:    { values: ["10", "25", "50", "100", "all"],   default: "25",   attr: null           },
+  showRowNumbers: { values: ["1", "0"],                         default: "1",    attr: "showRownum"   },
+  showStageDots:  { values: ["1", "0"],                         default: "1",    attr: "showStageDots"},
 };
 
-/** Read a pref. Returns the default when localStorage is empty, the
- *  stored value isn't in the allowed list, or storage is unavailable. */
+const KEY_PREFIX = "rp-pref-";
+const storageKey = (name) => KEY_PREFIX + name;
+
+// ── legacy-key migration ─────────────────────────────────────────────
+// One-shot at module-load time. Moves old per-pref keys (rp-density,
+// rp-font-size, rp-rows-per-page, rp-show-rownum, rp-show-stage-dots)
+// into the unified rp-pref-<name> namespace. Values get JSON-encoded
+// so the new namespace is type-safe. Old keys are removed once moved
+// so a re-import doesn't pay the migration cost.
+const LEGACY_KEYS = {
+  density:        "rp-density",
+  fontSize:       "rp-font-size",
+  rowsPerPage:    "rp-rows-per-page",
+  showRowNumbers: "rp-show-rownum",
+  showStageDots:  "rp-show-stage-dots",
+};
+try {
+  for (const [name, legacyKey] of Object.entries(LEGACY_KEYS)) {
+    const v = localStorage.getItem(legacyKey);
+    if (v == null) continue;
+    if (localStorage.getItem(storageKey(name)) == null) {
+      localStorage.setItem(storageKey(name), JSON.stringify(v));
+    }
+    localStorage.removeItem(legacyKey);
+  }
+} catch { /* private mode — non-fatal */ }
+
+// ── read / write API ─────────────────────────────────────────────────
+
+/** Read a pref. Registered prefs validate against the enum + fall back
+ *  to the registered default when the cache is empty / malformed. Un-
+ *  registered prefs JSON-parse the cached value and return as-is, or
+ *  `null` when nothing's cached. Returns the default (registered) or
+ *  null (unregistered) when storage is unavailable. */
 export function getPref(name) {
   const spec = PREFS[name];
-  if (!spec) return null;
-  try {
-    const v = localStorage.getItem(spec.key);
-    return spec.values.includes(v) ? v : spec.default;
-  } catch { return spec.default; }
+  let raw;
+  try { raw = localStorage.getItem(storageKey(name)); }
+  catch { return spec ? spec.default : null; }
+  if (raw == null) return spec ? spec.default : null;
+  // JSON-parse uniformly. Old legacy migrations and seedPrefs both
+  // JSON.stringify on write, so the cache is always JSON.
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+  if (spec) {
+    // Registered: must be in the enum's value list, else fall back.
+    return spec.values.includes(parsed) ? parsed : spec.default;
+  }
+  return parsed;
 }
 
-/** Write a pref. Persists in localStorage and (if the pref has a
- *  data-attr) reflects it on <html>. Returns true on success. */
+/** Write a pref. Registered prefs validate against the enum; un-
+ *  registered prefs accept any JSON-encodable value. Always writes to
+ *  localStorage, reflects to <html> data-attr if the pref declares
+ *  one, and fires a fire-and-forget PATCH /api/me/prefs so the server
+ *  catches up. Returns true on success, false on enum-validation
+ *  failure (registered only). */
 export function setPref(name, value) {
   const spec = PREFS[name];
-  if (!spec || !spec.values.includes(value)) return false;
-  try { localStorage.setItem(spec.key, value); } catch { /* private mode — non-fatal */ }
-  if (spec.attr) document.documentElement.dataset[spec.attr] = value;
+  if (spec && !spec.values.includes(value)) return false;
+  try { localStorage.setItem(storageKey(name), JSON.stringify(value)); }
+  catch { /* private mode — non-fatal; the server PATCH below still goes */ }
+  if (spec?.attr) document.documentElement.dataset[spec.attr] = value;
+  // Fire-and-forget; a network failure here doesn't fail the user
+  // action — the local cache + reflection already landed. Next boot
+  // seedPrefs will resync from whatever the server has.
+  api.patch("/me/prefs", { prefs: { [name]: value } })
+     .catch((err) => { /* swallow — local already correct */
+       if (err && err.status && err.status !== 401) {
+         // 401 is "not signed in" — happens during the brief window
+         // before login completes; not worth logging. Anything else
+         // is unexpected.
+         console.warn("[prefs] write-through failed for", name, err);
+       }
+     });
   return true;
 }
 
+/** Seed the cache from the server's `prefs` object. Called once at
+ *  app boot after /api/me resolves. Overwrites any locally-cached
+ *  values for the keys the server returns; keys not in the server
+ *  response stay as they are (cache may carry prefs the server
+ *  hasn't seen yet — they'll PATCH next time setPref fires).
+ *
+ *  After seeding, applies any registered prefs' <html> data-attrs so
+ *  CSS picks up the server-of-truth value on first paint. */
+export function seedPrefs(serverPrefs) {
+  if (!serverPrefs || typeof serverPrefs !== "object") return;
+  try {
+    for (const [name, value] of Object.entries(serverPrefs)) {
+      localStorage.setItem(storageKey(name), JSON.stringify(value));
+    }
+  } catch { /* private mode — non-fatal */ }
+  applyAllPrefs();
+}
+
 /** Apply every CSS-reflected pref to <html>. Called once at module
- *  import time by index.html's boot script to head off the FOUC before
- *  first paint; safe to call again. */
+ *  import time by index.html's boot script to head off the FOUC
+ *  before first paint; also called by seedPrefs after the server
+ *  response lands. Safe to call repeatedly. */
 export function applyAllPrefs() {
   for (const [name, spec] of Object.entries(PREFS)) {
     if (!spec.attr) continue;

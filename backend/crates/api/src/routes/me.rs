@@ -11,11 +11,11 @@
 use axum::{
     extract::State,
     http::{header, HeaderMap, StatusCode},
-    routing::get,
+    routing::{get, patch},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use shared::user::UserProfile;
+use shared::user::{PrefsPatch, UserProfile};
 
 use crate::{db, error::AppError, state::AppState};
 
@@ -40,6 +40,7 @@ struct MeResponse {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(get_me).patch(patch_me))
+        .route("/prefs", patch(patch_me_prefs))
         .route("/avatar", get(get_avatar))
 }
 
@@ -57,10 +58,14 @@ async fn get_me(
     Ok(Json(MeResponse { user, global_sentinels }))
 }
 
-/// `PATCH /api/me` — sparse profile update. Every field is optional;
-/// `prefs` is shallow-merged with the existing JSONB, so callers can
-/// flip one key (`{"prefs":{"accent":"#ff0000"}}`) without
-/// re-sending the whole object.
+/// `PATCH /api/me` — sparse profile update. Every field is optional.
+///
+/// **Prefs do NOT belong on this endpoint anymore** (migration 023 /
+/// docs/internal/spec-user-preferences.md). The `prefs` field is kept
+/// in the body shape for one release as a deprecation forward — when
+/// set, it's routed to `patch_user_prefs` with a tracing warning so
+/// any stragglers light up the log. Next release: 400 with
+/// `deprecated_field` kind.
 #[derive(Deserialize)]
 struct PatchMeBody {
     #[serde(default)] display_name: Option<String>,
@@ -70,6 +75,8 @@ struct PatchMeBody {
     #[serde(default)] organisation: Option<String>,
     #[serde(default)] use_case:     Option<String>,
     #[serde(default)] locale:       Option<String>,
+    /// DEPRECATED — use `PATCH /api/me/prefs` instead. Forwarded for
+    /// one release; logged + dropped after.
     #[serde(default)] prefs:        Option<serde_json::Value>,
 }
 
@@ -80,14 +87,16 @@ async fn patch_me(
 ) -> Result<Json<UserProfile>, AppError> {
     let user_rid = resolve_user_rid(&state, &headers).await?;
 
-    // Snapshot the prior learned_sentinels so we can diff after the
-    // shallow-merge and surface only the *new* additions to the
-    // shared submissions table. Worst case (lookup race / new user)
-    // the prior set is empty and we treat every entry as new.
-    let prior_learned = db::find_user_by_id(&state.db, &user_rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
-        .and_then(|u| canon_str_array(u.prefs.get("learned_sentinels")))
-        .unwrap_or_default();
+    // Deprecation forward: any caller still putting `prefs` on
+    // PATCH /api/me gets logged + routed to the proper endpoint.
+    // The next release removes this branch and 400s instead.
+    if let Some(patch) = body.prefs.as_ref() {
+        tracing::warn!(
+            user = %user_rid,
+            "deprecated: prefs in PATCH /api/me — use PATCH /api/me/prefs",
+        );
+        apply_prefs_patch(&state, &user_rid, patch).await?;
+    }
 
     let user = db::update_user(
         &state.db,
@@ -101,7 +110,6 @@ async fn patch_me(
         body.organisation.as_deref(),
         body.use_case.as_deref(),
         body.locale.as_deref(),
-        body.prefs.as_ref(),
         body.first_name.as_deref(),
         body.last_name.as_deref(),
     )
@@ -109,29 +117,74 @@ async fn patch_me(
     .map_err(|e| AppError::internal("db", e.to_string()))?
     .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
 
-    // Server-side enforcement of the sharing contract: a submission
-    // only joins the shared `sentinel_submissions` table when the user
-    // has explicitly consented (`prefs.share_sentinels === true`). We
-    // never trust the client to do the right thing here — it could
-    // skip the consent dialog and still PATCH learned_sentinels; the
-    // gate has to live here.
-    let share: bool = user.prefs.get("share_sentinels")
+    Ok(Json(user))
+}
+
+/// `PATCH /api/me/prefs` — sparse upsert into `user_preferences`.
+/// Body: `{ prefs: { key: value, ... } }`. Only keys present in the
+/// patch are written; unmentioned keys stay. JSONB values (scalars,
+/// arrays, booleans) land verbatim. 204 on success.
+///
+/// Also enforces the share_sentinels gate (lifted from the prior
+/// PATCH /api/me path): if the post-patch state has
+/// `share_sentinels === true`, the *new* entries in learned_sentinels
+/// are mirrored to `sentinel_submissions`. The gate lives here because
+/// it has to live in the only write path; the client can't be trusted
+/// to skip the consent dialog and still write learned_sentinels.
+async fn patch_me_prefs(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Json(body):   Json<PrefsPatch>,
+) -> Result<StatusCode, AppError> {
+    let user_rid = resolve_user_rid(&state, &headers).await?;
+    apply_prefs_patch(&state, &user_rid, &body.prefs).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Shared path between `PATCH /api/me/prefs` (canonical) and the
+/// deprecated `PATCH /api/me` forward. Snapshots learned_sentinels
+/// pre-patch, applies the upsert, then diffs to surface only *new*
+/// entries when share_sentinels is on.
+async fn apply_prefs_patch(
+    state:    &AppState,
+    user_rid: &str,
+    patch:    &serde_json::Value,
+) -> Result<(), AppError> {
+    // Pre-patch snapshot — used to find newly-added entries below.
+    // Worst case (lookup race / fresh user) the set is empty and
+    // every entry is treated as new.
+    let prior_learned = db::find_user_by_id(&state.db, user_rid).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .and_then(|u| canon_str_array(u.prefs.get("learned_sentinels")))
+        .unwrap_or_default();
+
+    db::patch_user_prefs(&state.db, user_rid, patch).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Post-patch read for the share_sentinels gate. We re-read the
+    // full prefs (not just the patch) because share_sentinels may
+    // have been set on a prior PATCH and learned_sentinels patched
+    // on this one — both states need to land for the gate to fire.
+    let after_user = db::find_user_by_id(&state.db, user_rid).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
+
+    let share: bool = after_user.prefs.get("share_sentinels")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     if share {
-        let after = canon_str_array(user.prefs.get("learned_sentinels")).unwrap_or_default();
+        let after = canon_str_array(after_user.prefs.get("learned_sentinels")).unwrap_or_default();
         let prior_set: std::collections::HashSet<&String> = prior_learned.iter().collect();
         for canonical in after.iter().filter(|s| !prior_set.contains(s)) {
-            if let Err(e) = db::record_sentinel_submission(&state.db, canonical, &user_rid).await {
+            if let Err(e) = db::record_sentinel_submission(&state.db, canonical, user_rid).await {
                 // Don't fail the PATCH if a submission write fails —
-                // the user's personal pref still landed, and the
-                // global signal is best-effort. Log + carry on.
+                // the user's personal pref still landed, the global
+                // signal is best-effort. Log + carry on.
                 tracing::warn!(error = %e, canonical, "sentinel_submissions insert failed (non-fatal)");
             }
         }
     }
-
-    Ok(Json(user))
+    Ok(())
 }
 
 /// `GET /api/me/avatar` — server-side proxy for the current user's

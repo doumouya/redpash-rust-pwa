@@ -7,14 +7,28 @@
   <title>RedPash</title>
 
   <!-- Apply the saved theme + visual prefs (density, font size) before
-       first paint — no flash of the wrong theme / sizing. Inline rather
-       than imported so it runs synchronously before the CSS evaluates. -->
+       first paint — no flash of the wrong theme / sizing. Inline
+       rather than imported so it runs synchronously before the CSS
+       evaluates. Reads both the new unified namespace (`rp-pref-*`,
+       JSON-encoded — migration 023) and the legacy per-pref keys
+       (raw strings) so this paint is correct across the transitional
+       window. prefs.js's migration on module-load moves legacy keys
+       into the new namespace and removes them. -->
   <script>
     try {
       var d = document.documentElement;
-      var t = localStorage.getItem("rp-theme");           if (t === "light" || t === "dark") d.dataset.theme = t;
-      var dn = localStorage.getItem("rp-density");        if (dn === "compact" || dn === "cozy" || dn === "comfortable") d.dataset.density = dn;
-      var fs = localStorage.getItem("rp-font-size");      if (fs === "sm" || fs === "md" || fs === "lg") d.dataset.fontSize = fs;
+      function rp(name, legacy, ok) {
+        var raw = localStorage.getItem("rp-pref-" + name);
+        if (raw != null) { try { var v = JSON.parse(raw); if (ok(v)) return v; } catch (_) {} }
+        if (legacy) { var lv = localStorage.getItem(legacy); if (ok(lv)) return lv; }
+        return null;
+      }
+      var t  = rp("theme",    "rp-theme",     function (v) { return v === "light" || v === "dark"; });
+      var dn = rp("density",  "rp-density",   function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
+      var fs = rp("fontSize", "rp-font-size", function (v) { return v === "sm" || v === "md" || v === "lg"; });
+      if (t)  d.dataset.theme    = t;
+      if (dn) d.dataset.density  = dn;
+      if (fs) d.dataset.fontSize = fs;
     } catch (e) {}
   </script>
 

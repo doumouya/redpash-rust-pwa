@@ -12,6 +12,7 @@
 
 import { api } from "/scripts/api.js";
 import { installErrorCapture } from "/scripts/events.js";
+import { seedPrefs } from "/scripts/prefs.js";
 
 // Arm frontend error capture before anything else runs, so a
 // boot-time exception still reaches the Events log.
@@ -37,6 +38,12 @@ let session = null;
 async function loadSession() {
   try {
     session = await api.get("/me");
+    // Seed the prefs SWR cache from the server's source of truth. Done
+    // here (not inside prefs.js's import) because the boot fetch is
+    // what guarantees we *have* server state before any page mounts —
+    // otherwise the first paint of e.g. /settings would render the
+    // local cache's defaults and snap to server state a tick later.
+    seedPrefs(session?.prefs);
   } catch (err) {
     session = err.status === 404
       ? { dev: true, username: "dev", display_name: "Dev user" }
