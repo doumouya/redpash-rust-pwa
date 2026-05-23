@@ -101,6 +101,85 @@ export default function workspace(app, { session }) {
       ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
   });
 
+  // ─── upload — POST /api/files/upload (multipart) ───────────────
+  // File picked from #wsUploadInput → uploaded into the project of
+  // the currently-active file (or default when nothing's open). After
+  // the FileEnvelope returns, refresh the rail + auto-expand the
+  // target project's group + auto-open the new file.
+  const uploadInput = $("#wsUploadInput");
+  const uploadBtn   = $("#wsUpload");
+  uploadBtn.addEventListener("click", () => uploadInput.click());
+  uploadInput.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await doUpload(file);
+    uploadInput.value = "";  // reset so re-picking the same file fires change
+  });
+
+  async function doUpload(file) {
+    const targetProject = activeProjectName();
+    const fd = new FormData();
+    fd.append("file", file);
+    if (targetProject) fd.append("project_name", targetProject);
+
+    uploadBtn.disabled = true;
+    uploadBtn.classList.add("is-busy");
+    const labelEl = uploadBtn.querySelector("span");
+    const originalLabel = labelEl?.textContent;
+    if (labelEl) labelEl.textContent = "Uploading…";
+
+    try {
+      // FormData → api.js skips JSON encoding (sees the instance type).
+      const env = await api.post("/files/upload", fd);
+      const newRid  = env?.summary?.redpash_id;
+      const projRid = env?.summary?.project_redpash_id;
+      if (!newRid) throw new Error("Upload succeeded but the server returned no file id.");
+      await refreshAndOpen(newRid, projRid);
+    } catch (err) {
+      const msg = err?.body?.message || err?.body?.error || err?.message || "Upload failed";
+      rowsInfo.textContent = msg + (err?.status ? " (" + err.status + ")" : "");
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.classList.remove("is-busy");
+      if (labelEl && originalLabel) labelEl.textContent = originalLabel;
+    }
+  }
+
+  // The project name of the currently-active file (if any). Sent as
+  // ?project_name= so a logged-in user uploading from inside Project
+  // X gets the new file routed to X (find-or-create) instead of the
+  // default. When no file is open, return null → server defaults to
+  // the user's default project.
+  function activeProjectName() {
+    const activeTab = navBody.querySelector(".rt-tab.active");
+    if (!activeTab) return null;
+    const group = activeTab.closest(".rt-group");
+    return group?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+  }
+
+  async function refreshAndOpen(newRid, projRid) {
+    // Claim activeFileRid up front so loadProjects' default-group
+    // auto-open (gated on `!activeFileRid`) skips — otherwise it
+    // would race against our target file and the table could flicker
+    // through the wrong content first.
+    activeFileRid = newRid;
+    await loadProjects();
+    const group = projRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(projRid) + '"]');
+    if (!group) { activeFileRid = null; loadFile(newRid); return; }
+    group.classList.add("expanded");
+    await loadFilesForGroup(group);
+    const newTab = group.querySelector('.rt-tab[data-rid="' + cssEsc(newRid) + '"]');
+    if (newTab) {
+      navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      newTab.classList.add("active");
+    }
+    activeFileRid = null;  // clear so loadFile's "same-rid" early-return doesn't fire
+    loadFile(newRid);
+  }
+  function cssEsc(s) {
+    return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
+  }
+
   // ─── rail — load projects + lazy files ─────────────────────────
   loadProjects();
 

@@ -19,6 +19,10 @@
         <div class="rt-nav-state">Loading projects…</div>
       </div>
       <div class="rt-nav-foot">
+        <input type="file" id="wsUploadInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv" hidden />
+        <button class="rt-btn rt-btn--glass" id="wsUpload" type="button">
+          <i class="bi bi-upload"></i><span>Upload file</span>
+        </button>
         <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button"
                 disabled title="New project — POST /api/projects coming soon">
           <i class="bi bi-plus-lg"></i><span>New project</span>
