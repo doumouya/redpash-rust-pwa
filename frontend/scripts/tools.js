@@ -372,6 +372,11 @@ export function mountTools(panelBody, ctx) {
 
     listEl.hidden = true;
     formEl.hidden = false;
+    // Signal to panel.css: widen the right-side panel for the form
+    // view. The picker fits in 250px; forms (with their multi-field
+    // bodies + the eventual diagnostics / preview surface) breathe
+    // better at 500px. Removed in closeForm.
+    panelBody.closest(".rt-panel")?.classList.add("has-form");
   }
 
   formEl.addEventListener("click", async (e) => {
@@ -390,6 +395,7 @@ export function mountTools(panelBody, ctx) {
     formEl.innerHTML = "";
     formEl.hidden = true;
     listEl.hidden = false;
+    panelBody.closest(".rt-panel")?.classList.remove("has-form");
   }
 
   async function applyActive() {

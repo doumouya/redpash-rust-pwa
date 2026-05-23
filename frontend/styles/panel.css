@@ -13,7 +13,20 @@
 .rt-panel--filter.open  { border-right: 1px solid var(--rp-border); }
 .rt-panel--tools.open   { border-left: 1px solid var(--rp-border); }
 .rt-panel--history.open { border-left: 1px solid var(--rp-border); }
-.rt-panel-inner { width: 250px; height: 100%; display: flex; flex-direction: column; }
+.rt-panel-inner {
+  width: 250px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.18s var(--rp-ease);
+}
+
+/* Tools panel widens to 500px when a tool's form is open — gives
+   multi-field forms (and the eventual preview / diagnostics surface)
+   room to breathe. tools.js toggles .has-form on the panel root in
+   openForm / closeForm; inner + outer animate together. */
+.rt-panel--tools.has-form.open { width: 500px; }
+.rt-panel--tools.has-form .rt-panel-inner { width: 500px; }
 
 .rt-panel-head {
   flex-shrink: 0;
