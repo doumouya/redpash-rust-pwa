@@ -82,6 +82,28 @@
 .rp-mon-err-mid  { color: var(--rp-warn); }
 .rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
 
+/* two-column row that houses chart-panel + ranked-table side-by-side
+   on wide viewports; wraps on narrow. Used on the Requests tab to
+   pair the status-code donut with the top-routes table. */
+.rp-mon-charts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rp-sp-4);
+  margin-bottom: var(--rp-sp-4);
+}
+.rp-mon-charts-row > .rp-mon-panel {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* fixed-height ECharts mount — the donut + future time-series sit
+   inside this. Width inherits from the surrounding panel. */
+.rp-mon-chart {
+  width: 100%;
+  height: 240px;
+}
+
 /* the run-summary cell shows multiple stat chips inline (e.g. "files 14
    errors 0 reachable 18"); compact, monospace-numeric, neutral colour */
 .rp-mon-stat-chip {

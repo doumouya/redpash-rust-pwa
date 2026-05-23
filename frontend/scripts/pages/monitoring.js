@@ -156,7 +156,21 @@ export default function monitoring(app, { session }) {
     if (view) return renderListBody(tab, view);
   }
 
+  // Per-Requests-tab state for the Recent requests drill-down table.
+  // Window state lives in the active chip (read on demand).
+  let rawPage = 1;
+  let rawTotalPages = 1;
+  const RAW_PAGE_SIZE = 50;
+  let donutChart = null;  // ECharts instance — disposed on body rebuild
+
+  function disposeRequestsCharts() {
+    if (donutChart) { try { donutChart.dispose(); } catch { /* already gone */ } }
+    donutChart = null;
+  }
+
   function renderRequestsBody() {
+    disposeRequestsCharts();
+    rawPage = 1;
     view.innerHTML = ''
       + headHTML("Requests", "")
       + windowChipsHTML(DEFAULT_WINDOW)
@@ -166,22 +180,169 @@ export default function monitoring(app, { session }) {
           { label: "p50",        id: "rp-kpi-req-p50"   },
           { label: "p95",        id: "rp-kpi-req-p95"   },
         ])
-      + topRoutesPanel()
+      + '<div class="rp-mon-charts-row">'
+      +   statusMixPanel()
+      +   topRoutesPanel()
+      + '</div>'
       + pendingPanel("Latency over time", "Bucketed time-series",
                      "/monitoring/requests?bucket=1m (or similar)")
-      + pendingPanel("Status code mix", "Distribution by HTTP status",
-                     "/monitoring/requests?group_by=status (or similar)");
+      + recentRequestsPanel();
 
-    // Window-chip click delegation — refetch on change.
+    // Window-chip click delegation — refetch all three sources.
     view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
       const chip = e.target.closest(".rp-chip");
       if (!chip) return;
       view.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
       chip.classList.add("is-active");
-      fetchMetrics(chip.dataset.window);
+      const w = chip.dataset.window;
+      rawPage = 1;
+      fetchMetrics(w);
+      fetchRequestsStats(w);
+      fetchRecentRequests(w);
+    });
+
+    // Raw-table pager.
+    view.querySelector("#rp-mon-raw-pager").addEventListener("click", (e) => {
+      const btn = e.target.closest(".rt-pg[data-page]");
+      if (!btn) return;
+      const target = parseInt(btn.dataset.page, 10);
+      if (!Number.isFinite(target) || target < 1 || target > rawTotalPages || target === rawPage) return;
+      rawPage = target;
+      fetchRecentRequests(activeWindow());
     });
 
     fetchMetrics(DEFAULT_WINDOW);
+    fetchRequestsStats(DEFAULT_WINDOW);
+    fetchRecentRequests(DEFAULT_WINDOW);
+  }
+
+  function activeWindow() {
+    const chip = view.querySelector(".rp-chip-row .rp-chip.is-active");
+    return chip?.dataset.window || DEFAULT_WINDOW;
+  }
+
+  // ─── /api/monitoring/requests/stats → status-code donut ──────
+  async function fetchRequestsStats(window) {
+    try {
+      const data = await api.get("/monitoring/requests/stats?window=" + encodeURIComponent(window));
+      paintDonut(data?.status_mix || {});
+    } catch {
+      paintDonut({});  // empty donut on error; KPI strip carries the diagnostic
+    }
+  }
+
+  function paintDonut(statusMix) {
+    const el = view.querySelector("#rp-mon-donut");
+    if (!el || !window.echarts) return;
+    if (!donutChart) donutChart = window.echarts.init(el);
+    // Map { "200": 457, "500": 48, ... } → ECharts pie data, coloured
+    // by status band (2xx green / 3xx blue / 4xx amber / 5xx red).
+    const entries = Object.entries(statusMix)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+    const palette = {
+      "2": getCSSVar("--rp-ok"),
+      "3": getCSSVar("--rp-accent-2"),
+      "4": getCSSVar("--rp-warn"),
+      "5": getCSSVar("--rp-accent"),
+    };
+    const data = entries.map(([code, count]) => ({
+      name:  code,
+      value: count,
+      itemStyle: { color: palette[String(code)[0]] || getCSSVar("--rp-text-mute") },
+    }));
+    const total = entries.reduce((acc, [, v]) => acc + v, 0);
+    const textColor = getCSSVar("--rp-text-dim");
+    donutChart.setOption({
+      animation: false,
+      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+      series: [{
+        type: "pie",
+        radius: ["55%", "78%"],
+        avoidLabelOverlap: false,
+        label: {
+          show: true,
+          position: "center",
+          formatter: total === 0
+            ? "no requests"
+            : "{total|" + fmtCount(total) + "}\n{label|requests}",
+          rich: {
+            total: { fontSize: 22, fontWeight: 700, color: getCSSVar("--rp-text") },
+            label: { fontSize: 11, color: textColor, padding: [4, 0, 0, 0] },
+          },
+        },
+        labelLine: { show: false },
+        data,
+      }],
+    }, true);
+    donutChart.resize();
+  }
+
+  // ─── /api/monitoring/requests → paginated drill-down redtable ─
+  async function fetchRecentRequests(window) {
+    const tbody = view.querySelector("#rp-mon-raw-tbody");
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+    try {
+      const data = await api.get("/monitoring/requests?window=" + encodeURIComponent(window)
+        + "&page=" + rawPage + "&size=" + RAW_PAGE_SIZE);
+      const rows = data?.rows || [];
+      rawTotalPages = data?.pages || 1;
+      rawPage       = data?.page  || rawPage;
+      if (tbody) {
+        tbody.innerHTML = rows.length
+          ? rows.map(requestRowHTML).join("")
+          : '<tr><td colspan="6">No requests in this window.</td></tr>';
+      }
+      renderRawPager();
+    } catch (err) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6">Couldn’t load'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
+    }
+  }
+
+  function requestRowHTML(r) {
+    return '<tr>'
+      + '<td>' + fmtTime(r.at) + '</td>'
+      + '<td><span class="rp-mon-method">' + esc(r.method) + '</span></td>'
+      + '<td class="is-num ' + statusBand(r.status) + '">' + r.status + '</td>'
+      + '<td>' + esc(r.route) + '</td>'
+      + '<td class="is-num">' + r.duration_ms + 'ms</td>'
+      + '<td>' + (r.request_id ? '<code>' + esc(r.request_id.slice(0, 8)) + '</code>' : "—") + '</td>'
+      + '</tr>';
+  }
+
+  function statusBand(status) {
+    const code = status | 0;
+    if (code >= 500) return "rp-mon-err-high";
+    if (code >= 400) return "rp-mon-err-mid";
+    if (code >= 300) return "";
+    return "rp-mon-err-low";
+  }
+
+  function renderRawPager() {
+    const el = view.querySelector("#rp-mon-raw-pager");
+    if (!el || rawTotalPages < 1) { if (el) el.innerHTML = ""; return; }
+    const p = rawPage, last = rawTotalPages;
+    const out = [];
+    out.push(pagerBtnHTML("‹", p - 1, false, p === 1));
+    if (last <= 7) {
+      for (let i = 1; i <= last; i++) out.push(pagerBtnHTML(String(i), i, i === p, false));
+    } else {
+      const want = new Set([1, last, p, p - 1, p + 1]);
+      let prev = 0;
+      for (let i = 1; i <= last; i++) {
+        if (!want.has(i)) continue;
+        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
+        out.push(pagerBtnHTML(String(i), i, i === p, false));
+        prev = i;
+      }
+    }
+    out.push(pagerBtnHTML("›", p + 1, false, p === last));
+    el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
+  }
+  function pagerBtnHTML(label, page, active, disabled) {
+    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
+      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
   }
 
   // ─── list-view tabs (Events / Runs / Findings) ───────────────
@@ -196,6 +357,7 @@ export default function monitoring(app, { session }) {
   let listWindow = DEFAULT_WINDOW;
 
   function renderListBody(tab, viewSpec) {
+    disposeRequestsCharts();  // user switching away from Requests
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
     view.innerHTML = ''
@@ -403,6 +565,37 @@ export default function monitoring(app, { session }) {
       + '<p>Coming when its backend endpoint lands.</p>'
       + '<span class="rp-mon-panel-endpoint">' + esc(endpoint) + '</span>'
       + '</section>';
+  }
+  function statusMixPanel() {
+    return '<section class="rp-mon-panel">'
+      + '<div class="rp-mon-panel-head">'
+      +   '<h3 class="rp-mon-panel-title">Status code mix</h3>'
+      +   '<span class="rp-mon-panel-hint">distribution by HTTP status</span>'
+      + '</div>'
+      + '<div class="rp-mon-chart" id="rp-mon-donut"></div>'
+      + '</section>';
+  }
+  function recentRequestsPanel() {
+    return '<section class="rp-mon-panel">'
+      + '<div class="rp-mon-panel-head">'
+      +   '<h3 class="rp-mon-panel-title">Recent requests</h3>'
+      +   '<span class="rp-mon-panel-hint">paginated, newest first</span>'
+      + '</div>'
+      + '<table class="rp-mon-table">'
+      +   '<thead><tr>'
+      +     '<th>Time</th><th>Method</th><th>Status</th><th>Route</th><th>Duration</th><th>Request ID</th>'
+      +   '</tr></thead>'
+      +   '<tbody id="rp-mon-raw-tbody"></tbody>'
+      + '</table>'
+      + '<div class="rp-list-pager" id="rp-mon-raw-pager"></div>'
+      + '</section>';
+  }
+  // Read a CSS custom property (theme token) at runtime so ECharts
+  // colours track the active theme. Falls back to a sensible default
+  // if the var is missing or empty.
+  function getCSSVar(name) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || "#6c7086";
   }
   function setKpi(id, val) {
     const el = view.querySelector("#" + id);
