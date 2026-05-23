@@ -117,9 +117,17 @@ export default function login(app) {
       renderLocalResult(file.name, rows.length, cleaned.summary, elapsed);
       if (localMsg) localMsg.textContent = "";
     } catch (err) {
+      // Surface whatever the wasm side gives us. Rust panics inside the
+      // wasm instance throw a RuntimeError with a terse "unreachable
+      // executed" message — useful enough to flag a wasm-side bug, but
+      // not the panic site. Better diagnostics need console_error_panic_hook
+      // on the Rust side; see Gus.md.
+      console.error("[demo upload]", err);
+      const detail = err && (err.message || err.toString());
       if (localMsg) {
-        localMsg.textContent = (err && err.message)
-          || "Couldn’t process this file.";
+        localMsg.textContent = "Couldn’t process this file"
+          + (detail ? " — " + detail : "")
+          + ". Details in the console.";
       }
     } finally {
       uploadBtn.disabled = false;
