@@ -88,6 +88,16 @@ export default function monitoring(app, { session }) {
     },
   };
 
+  // Per-Requests-tab state for the donut + Recent requests drill-down.
+  // Window state lives in the active chip (read on demand). Declared
+  // up here — before activate() runs below — so the const isn't in
+  // TDZ when renderTabBody → renderRequestsBody → disposeRequestsCharts
+  // touches it on the first mount.
+  let rawPage = 1;
+  let rawTotalPages = 1;
+  const RAW_PAGE_SIZE = 50;
+  let donutChart = null;  // ECharts instance — disposed on body rebuild
+
   // ─── rail collapse (same affordance as Workspace + Home) ────
   app.querySelector("#rpMonNavCollapse").addEventListener("click", (e) => {
     nav.classList.toggle("compact");
@@ -155,13 +165,6 @@ export default function monitoring(app, { session }) {
     const view = LIST_VIEWS[tab.key];
     if (view) return renderListBody(tab, view);
   }
-
-  // Per-Requests-tab state for the Recent requests drill-down table.
-  // Window state lives in the active chip (read on demand).
-  let rawPage = 1;
-  let rawTotalPages = 1;
-  const RAW_PAGE_SIZE = 50;
-  let donutChart = null;  // ECharts instance — disposed on body rebuild
 
   function disposeRequestsCharts() {
     if (donutChart) { try { donutChart.dispose(); } catch { /* already gone */ } }
