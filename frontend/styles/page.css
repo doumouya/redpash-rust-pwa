@@ -1,0 +1,61 @@
+/* ── page ───────────────────────────────────────────────────────
+   The generic page shell — topbar above, a centred body below.
+   Used by Profile, Settings, Docs (and any future flat page); the
+   Workspace and Home keep their own shells because they need
+   different body geometry (Workspace is fixed-height; Home is a
+   project board with a custom grid). */
+
+.rp-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.rp-page__body {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--rp-sp-8) var(--rp-sp-6);
+}
+
+.rp-page__head { margin-bottom: var(--rp-sp-5); }
+.rp-page__head--row { display: flex; align-items: center; gap: var(--rp-sp-4); }
+.rp-page__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; }
+.rp-page__sub { margin: var(--rp-sp-2) 0 0; color: var(--rp-text-mute); }
+
+.rp-page__placeholder {
+  margin-top: var(--rp-sp-5);
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+  border: 1px dashed var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+}
+
+/* a card section inside the page body — used by Settings, Profile.
+   Generic, not page-specific; the same atom every flat page uses. */
+.rp-page__section {
+  margin-top: var(--rp-sp-5);
+  padding: var(--rp-sp-5) var(--rp-sp-6);
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+}
+.rp-page__section-h {
+  margin: 0 0 var(--rp-sp-3);
+  font-size: var(--rp-text-lg);
+  font-weight: 600;
+}
+.rp-page__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-4);
+  padding: var(--rp-sp-3) 0;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-page__row:first-of-type { border-top: 0; }
+.rp-page__row-label { color: var(--rp-text); font-size: var(--rp-text-md); }
+.rp-page__row-value { color: var(--rp-text-dim); font-size: var(--rp-text-md); }
+.rp-page__row-control { display: flex; gap: var(--rp-sp-2); }

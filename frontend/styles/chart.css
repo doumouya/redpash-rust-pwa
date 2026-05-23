@@ -1,0 +1,19 @@
+/* ── chart ───────────────────────────────────────────────────────
+   The Workspace body when a chart-typed file is open. The 8th atom:
+   an ECharts canvas in the same wrapper the rp-table sits in,
+   surfaced by workspace.js when the file's file_type is `chart`.
+   Sibling of the table — only one is visible at a time. */
+
+.rt-chart {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 400px;
+  padding: var(--rp-sp-4);
+}
+
+.rt-chart__state {
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+}

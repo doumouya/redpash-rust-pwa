@@ -1,0 +1,79 @@
+/* ── button ─────────────────────────────────────────────────────
+   Two button families, one concern:
+   - .rp-btn  : the chunky call-to-action (login, home).
+   - .rt-btn  : the compact 32px icon button — the redtable's rail,
+                toolbar and panels are built from it. */
+
+/* ── .rp-btn — call-to-action ──────────────────────────────────── */
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-3) var(--rp-sp-5);
+  font: inherit;
+  font-weight: 600;
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  cursor: pointer;
+  transition: transform 0.15s var(--rp-ease),
+              border-color 0.15s var(--rp-ease),
+              background 0.15s var(--rp-ease);
+}
+.rp-btn:hover { transform: translateY(-1px); }
+.rp-btn:active { transform: translateY(0); }
+.rp-btn:focus-visible { outline: 2px solid var(--rp-accent-2); outline-offset: 2px; }
+.rp-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+.rp-btn--glass {
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border-color: var(--rp-glass-border);
+}
+.rp-btn--glass:hover { border-color: rgba(205, 214, 244, 0.28); }
+.rp-btn--ghost { background: transparent; border-color: var(--rp-border); }
+
+/* ── .rt-btn — compact icon button ─────────────────────────────── */
+.rt-btn {
+  position: relative;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--rp-text-mute);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.14s var(--rp-ease),
+              color 0.14s var(--rp-ease),
+              border-color 0.14s var(--rp-ease),
+              transform 0.06s var(--rp-ease);
+}
+.rt-btn:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rt-btn:active { transform: scale(0.96); }
+.rt-btn:disabled { opacity: 0.4; cursor: default; }
+.rt-btn:disabled:hover { background: transparent; color: var(--rp-text-mute); }
+.rt-btn:focus-visible { outline: 2px solid var(--rp-accent-2); outline-offset: 1px; }
+.rt-btn.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+.rt-btn i { font-size: 15px; }
+.rt-btn--glass {
+  color: var(--rp-text);
+  background: var(--rp-glass);
+  border-color: var(--rp-glass-border);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.rt-btn--glass:hover { background: var(--rp-surface-2); }
+.rt-btn--accent { color: var(--rp-bg); background: var(--rp-accent-2); }
+.rt-btn--accent:hover { filter: brightness(1.08); }
+.rt-btn--accent i { color: var(--rp-bg); }
+.rt-btn--block { width: 100%; }

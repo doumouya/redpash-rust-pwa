@@ -1,0 +1,133 @@
+/* ── toolbar (rt-toolbar) ────────────────────────────────────────
+   One control row inside the redtable surface: panel toggles, search,
+   the mode buttons, dropdowns. */
+
+.rt-toolbar {
+  flex-shrink: 0;
+  height: 48px;
+  padding: 0 8px;
+  gap: 3px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rt-toolbar-sep { width: 1px; height: 20px; background: var(--rp-border); margin: 0 5px; }
+
+/* filter toggle — a dot when a filter is applied */
+.rt-toolbar #filterToggle.has-filter { color: var(--rp-accent-2); }
+.rt-toolbar #filterToggle.has-filter::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--rp-accent-2);
+}
+
+/* search — grows to fill the toolbar */
+.rt-search {
+  flex: 1;
+  min-width: 160px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--rp-glass);
+  border: 1px solid var(--rp-border);
+  transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
+}
+.rt-search:focus-within {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 3px var(--rp-accent-soft);
+}
+.rt-search i { color: var(--rp-text-mute); font-size: 13px; }
+.rt-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 13px;
+}
+.rt-search input::placeholder { color: var(--rp-text-mute); }
+
+/* rows-per-page pill */
+.rt-pill {
+  height: 32px;
+  padding: 0 7px 0 10px;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rt-pill:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rt-pill .chev { font-size: 11px; color: var(--rp-text-mute); }
+
+/* dropdowns */
+.rt-dd-wrap { position: relative; }
+.rt-dd {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  padding: 5px;
+  display: none;
+  z-index: 30;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 11px;
+  box-shadow: var(--rp-shadow);
+}
+.rt-dd.open { display: block; }
+.rt-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--rp-text);
+  cursor: pointer;
+  transition: background 0.12s var(--rp-ease);
+}
+.rt-dd-item:hover { background: var(--rp-hover); }
+.rt-dd-item.selected { color: var(--rp-accent-2); font-weight: 600; }
+.rt-dd-item .tick { margin-left: auto; font-size: 12px; }
+
+/* selection chip — shown in select mode */
+.rt-sel-chip {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 99px;
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rt-sel-chip.show { display: inline-flex; }
+
+/* delete-mode button armed against the current selection */
+.rt-mode[data-mode="delete"].armed {
+  color: var(--rp-accent);
+  background: rgba(243, 139, 168, 0.14);
+}
+
+@keyframes rt-spin { to { transform: rotate(360deg); } }
+.rt-spinning { animation: rt-spin 0.6s var(--rp-ease); }

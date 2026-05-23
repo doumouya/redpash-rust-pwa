@@ -1,111 +1,62 @@
-// Docs page. Public — works without a session. Full-bleed page with
-// Home-style float-bar chrome (see partials/docs.html).
-//
-// Two GETs:
-//   /api/docs           → { items: [{ slug, title, section, order }, …] }
-//   /api/docs/<slug>    → rendered HTML (server-rendered via pulldown-cmark)
-//
-// The selected slug lives in the hash query (#/docs?p=getting-started)
-// so links are deep-shareable.
+// Docs page — first fill: the index from GET /api/docs, grouped by
+// section. Each row is read-only for now; click-through to the
+// rendered doc body lands when the viewer does.
 
 import { api } from "/scripts/api.js";
+import { mountTopbar } from "/scripts/topbar.js";
 
-export default async function mount(root, ctx) {
-  const nav     = root.querySelector("#docs-nav");
-  const content = root.querySelector("#docs-content");
+export default function docs(app, { session }) {
+  mountTopbar(app.querySelector("#rp-topbar"), { active: "docs", session });
 
-  fillAvatar(root, ctx?.session ?? {});
+  const list = app.querySelector("#rp-docs-list");
 
-  // Log out — exposed for the top-right float bar's inline onclick.
-  window.doLogout = async () => {
-    try { await api.post("/auth/logout"); } catch {}
-    location.hash = "#/landing";
-    location.reload();
-  };
+  loadDocs();
 
-  let index;
-  try { index = await api.get("/docs"); }
-  catch (err) {
-    nav.innerHTML = `<p class="rp-muted">Docs API not yet implemented.</p>`;
-    return;
+  async function loadDocs() {
+    try {
+      const data = await api.get("/docs");
+      render(data?.items || []);
+    } catch (err) {
+      list.setAttribute("aria-busy", "false");
+      list.innerHTML = '<p class="rp-page__placeholder">Couldn’t load docs'
+        + (err.status ? " (" + err.status + ")" : "") + ".</p>";
+    }
   }
 
-  nav.innerHTML = renderNav(index.items ?? []);
-  nav.addEventListener("click", (e) => {
-    const a = e.target.closest("a[data-slug]");
-    if (!a) return;
-    e.preventDefault();
-    const slug = a.dataset.slug;
-    location.hash = `#/docs?p=${encodeURIComponent(slug)}`;
-    markActive(nav, slug);
-    loadSlug(slug, content);
-  });
-
-  const slug = currentSlug() ?? (index.items?.[0]?.slug);
-  if (slug) {
-    markActive(nav, slug);
-    await loadSlug(slug, content);
+  function render(items) {
+    list.setAttribute("aria-busy", "false");
+    if (!items.length) {
+      list.innerHTML = '<p class="rp-page__placeholder">No docs yet.</p>';
+      return;
+    }
+    // Group by section, preserving the server's order (which already
+    // sorts "Start here" first then section name, then per-section order).
+    const sections = new Map();
+    for (const it of items) {
+      const key = it.section || "Misc";
+      if (!sections.has(key)) sections.set(key, []);
+      sections.get(key).push(it);
+    }
+    const html = [];
+    for (const [name, entries] of sections) {
+      const rows = entries.map((d) =>
+        '<div class="rp-page__row">'
+        + '<span class="rp-page__row-label">' + esc(d.title) + "</span>"
+        + '<span class="rp-page__row-value">' + esc(d.last_modified || "—") + "</span>"
+        + "</div>"
+      ).join("");
+      html.push(
+        '<section class="rp-page__section">'
+        + '<h2 class="rp-page__section-h">' + esc(name) + "</h2>"
+        + rows
+        + "</section>"
+      );
+    }
+    list.innerHTML = html.join("");
   }
-}
 
-function currentSlug() {
-  const m = location.hash.match(/[?&]p=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-async function loadSlug(slug, content) {
-  content.innerHTML = `<p class="rp-muted">Loading…</p>`;
-  try {
-    // slug is a path-safe doc path (e.g. `api/auth`) — keep the slashes
-    // so the backend's `/api/docs/*slug` wildcard route matches.
-    const html = await fetch(`/api/docs/${slug}`).then((r) => r.text());
-    content.innerHTML = html;
-    content.scrollTop = 0;
-  } catch (err) {
-    content.innerHTML = `<p class="rp-muted">Failed to load: ${slug}</p>`;
-  }
-}
-
-// Paints the shared rp-side-nav component: a group header per section,
-// then one link per doc. markActive() toggles `.is-active` on the
-// link whose data-slug matches the open doc.
-function renderNav(items) {
-  const bySection = items.reduce((acc, it) => {
-    (acc[it.section ?? "Misc"] ??= []).push(it);
-    return acc;
-  }, {});
-  return Object.entries(bySection).map(([section, list]) => `
-    <div class="rp-side-nav__group-hdr">${section}</div>
-    ${list.map((it) => `<a class="rp-side-nav__link" href="#" data-slug="${it.slug}"><span>${it.title}</span></a>`).join("")}
-  `).join("");
-}
-
-// Light the nav entry for the open doc.
-function markActive(nav, slug) {
-  nav.querySelectorAll("a[data-slug]").forEach((a) => {
-    a.classList.toggle("is-active", a.dataset.slug === slug);
-  });
-}
-
-// Top-left float avatar — initials from the session, photo when set.
-// Mirrors home.js: a photo (when present) becomes a background-image so
-// the library's background-size:cover crops it square inside the circle.
-function fillAvatar(root, session) {
-  const avatar = root.querySelector("#docs-avatar");
-  if (!avatar) return;
-  const label = session.display_name ?? session.username ?? "··";
-  const initials = label
-    .split(/\s+/)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "··";
-  if (session.avatar_url) {
-    avatar.classList.remove("rp-initials");
-    avatar.style.backgroundImage = `url("/api/me/avatar")`;
-    avatar.textContent = "";
-    avatar.setAttribute("aria-label", label);
-  } else {
-    avatar.textContent = initials;
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
 }

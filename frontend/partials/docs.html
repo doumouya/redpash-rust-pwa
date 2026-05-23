@@ -1,58 +1,14 @@
-<!-- /docs — public docs reader. Full-bleed RedPash page with Home-style
-     float-bar chrome. The sidebar lists docs from GET /api/docs (index
-     of the docs/ folder); selecting one fetches GET /api/docs/<slug>
-     which returns server-rendered HTML (pulldown-cmark). Wired by
-     scripts/pages/docs.js.
-
-     Bootstrap Icons loaded here — the router strips per-partial <link>s
-     on navigation, so each full-bleed page loads its own copy. -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
-
-<div id="page-docs">
-
-  <!-- Top-left floating avatar — initials filled by docs.js from the
-       session (photo when present). Links to the profile page. -->
-  <a class="rp-avatar rp-avatar--lg rp-avatar--float rp-avatar--glass rp-initials rp-photo-av"
-     id="docs-avatar" href="#/profile" title="Profile">··</a>
-
-  <!-- Top-right floating bar — theme toggle + log out. -->
-  <div class="rp-float-bar rp-float-bar--tr">
-    <button class="rp-float-btn" aria-label="Toggle theme" onclick="rpToggleTheme()">
-      <i class="bi bi-sun-fill rp-theme-icon"></i>
-    </button>
-    <button class="rp-float-btn" aria-label="Log out" onclick="doLogout()">
-      <i class="bi bi-box-arrow-right"></i>
-      <span class="rp-float-label">Log out</span>
-    </button>
+<!-- Docs — documentation. First fill: the index from /api/docs,
+     grouped by section. Click-through to a doc viewer lands next. -->
+<section class="rp-page">
+  <header id="rp-topbar"></header>
+  <div class="rp-page__body">
+    <header class="rp-page__head">
+      <h1 class="rp-page__title">Docs</h1>
+      <p class="rp-page__sub">Reference and how-to guides.</p>
+    </header>
+    <div id="rp-docs-list" aria-busy="true">
+      <p class="rp-page__placeholder">Loading docs…</p>
+    </div>
   </div>
-
-  <!-- Bottom-left floating bar — jump back into the app. -->
-  <div class="rp-float-bar rp-float-bar--bl">
-    <a class="rp-float-btn" href="#/home" aria-label="Home">
-      <i class="bi bi-house-fill"></i>
-      <span class="rp-float-label">Home</span>
-    </a>
-    <a class="rp-float-btn" href="#/objects?tab=projects" aria-label="My projects">
-      <i class="bi bi-folder2-open"></i>
-      <span class="rp-float-label">Projects</span>
-    </a>
-    <a class="rp-float-btn" href="#/objects?tab=files" aria-label="My files">
-      <i class="bi bi-file-earmark-text"></i>
-      <span class="rp-float-label">Files</span>
-    </a>
-  </div>
-
-  <!-- Docs body — section nav (left) + rendered article (right).
-       docs.js paints #docs-nav from /api/docs and replaces
-       #docs-content's HTML on each selection. -->
-  <section class="rp-docs">
-    <aside class="rp-side-nav" id="docs-nav" aria-label="Docs navigation">
-      <p class="rp-muted">Loading…</p>
-    </aside>
-    <article class="rp-docs__content" id="docs-content">
-      <h1>Documentation</h1>
-      <p class="rp-muted">Pick a topic from the sidebar.</p>
-    </article>
-  </section>
-
-</div>
+</section>

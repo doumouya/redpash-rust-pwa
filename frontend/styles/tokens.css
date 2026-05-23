@@ -1,0 +1,91 @@
+/* ─────────────────────────────────────────────────────────────────
+   RedPash design tokens — the single source of every colour, space,
+   radius, type and elevation value in the app.
+
+   Authored fresh for the 2026-05-22 frontend reset; file #1 of the
+   CSS layer. Every other stylesheet consumes these vars and declares
+   no raw values of its own.
+   ───────────────────────────────────────────────────────────────── */
+:root {
+  /* surface — a calm dark base */
+  --rp-bg:        #11111b;
+  --rp-surface:   #181825;
+  --rp-surface-2: #1e1e2e;
+  --rp-border:    #313244;
+
+  /* text */
+  --rp-text:      #cdd6f4;
+  --rp-text-dim:  #a6adc8;
+  --rp-text-mute: #6c7086;
+
+  /* brand + accents */
+  --rp-accent:    #f38ba8;
+  --rp-accent-2:  #89b4fa;
+  --rp-mauve:     #cba6f7;
+  --rp-ok:        #a6e3a1;
+  --rp-warn:      #f9e2af;
+
+  /* glass + elevation */
+  --rp-glass:        rgba(30, 30, 46, 0.55);
+  --rp-glass-border: rgba(205, 214, 244, 0.12);
+  --rp-blur:         16px;
+  --rp-shadow:       0 24px 60px -16px rgba(0, 0, 0, 0.7);
+
+  /* spacing scale */
+  --rp-sp-1: 4px;
+  --rp-sp-2: 8px;
+  --rp-sp-3: 12px;
+  --rp-sp-4: 16px;
+  --rp-sp-5: 24px;
+  --rp-sp-6: 32px;
+  --rp-sp-8: 48px;
+
+  /* radius */
+  --rp-radius:    10px;
+  --rp-radius-lg: 16px;
+
+  /* type */
+  --rp-font:       system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rp-font-brand: "Savate", var(--rp-font);
+  --rp-text-sm: 13px;
+  --rp-text-md: 15px;
+  --rp-text-lg: 20px;
+  --rp-text-xl: 32px;
+
+  /* extra hues + interaction surfaces (workspace) */
+  --rp-teal:        #94e2d5;
+  --rp-peach:       #fab387;
+  --rp-hover:       rgba(255, 255, 255, 0.05);
+  --rp-accent-soft: rgba(137, 180, 250, 0.14);
+
+  /* motion */
+  --rp-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── light theme (Catppuccin Latte) — opt-in via the theme switcher.
+   Overrides only the colour tokens; spacing / radius / type / motion
+   are theme-independent and stay on :root. ─────────────────────────── */
+html[data-theme="light"] {
+  --rp-bg:        #eff1f5;
+  --rp-surface:   #ffffff;
+  --rp-surface-2: #e6e9ef;
+  --rp-border:    #ccd0da;
+
+  --rp-text:      #4c4f69;
+  --rp-text-dim:  #5c5f77;
+  --rp-text-mute: #8c8fa1;
+
+  --rp-accent:    #d20f39;
+  --rp-accent-2:  #1e66f5;
+  --rp-mauve:     #8839ef;
+  --rp-teal:      #179299;
+  --rp-peach:     #fe640b;
+  --rp-ok:        #40a02b;
+  --rp-warn:      #df8e1d;
+
+  --rp-glass:        rgba(255, 255, 255, 0.62);
+  --rp-glass-border: rgba(255, 255, 255, 0.75);
+  --rp-hover:        rgba(76, 79, 105, 0.06);
+  --rp-accent-soft:  rgba(30, 102, 245, 0.10);
+  --rp-shadow:       0 1px 2px rgba(76, 79, 105, 0.08), 0 12px 32px rgba(76, 79, 105, 0.10);
+}

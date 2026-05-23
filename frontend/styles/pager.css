@@ -1,0 +1,35 @@
+/* ── pager (rt-pager) ────────────────────────────────────────────
+   The redtable footer: a rows readout on the left, page buttons on
+   the right. */
+
+.rt-pager {
+  flex-shrink: 0;
+  height: 46px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--rp-border);
+}
+.rt-rows-info { font-size: 12.5px; color: var(--rp-text-dim); }
+
+.rt-pages { display: flex; align-items: center; gap: 2px; }
+.rt-pg {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rt-pg:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rt-pg.active { background: var(--rp-accent-2); color: var(--rp-bg); }
+.rt-pg-gap { color: var(--rp-text-mute); padding: 0 2px; }

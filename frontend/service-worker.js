@@ -21,7 +21,7 @@
 //
 // Bump CACHE_VERSION on any breaking change to invalidate old caches.
 
-const CACHE_VERSION = "v588";
+const CACHE_VERSION = "v601";
 const SHELL_CACHE   = `redpash-shell-${CACHE_VERSION}`;
 const API_CACHE     = `redpash-api-${CACHE_VERSION}`;
 
@@ -30,10 +30,11 @@ const SHELL_ASSETS = [
   "/index.html",
   "/manifest.json",
   "/styles/main.css",
+  "/styles/tokens.css",
   "/scripts/main.js",
   "/scripts/api.js",
   "/scripts/events.js",
-  "/icons/logo.svg",
+  "/icons/favicon.svg",
 ];
 
 self.addEventListener("install", (event) => {

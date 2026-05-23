@@ -1,6 +1,6 @@
 # Brainstorming: store audit results in Postgres
 
-Persist the output of the `tools/*-audit/audit-bro.js` runs into Postgres
+Persist the output of the `tools/*-audit/audit.js` runs into Postgres
 so codebase health is **trackable over time** — "conflicts went 46 → 38",
 "this divergence is new since Tuesday", "that component candidate got
 bigger". Today each run overwrites a standalone HTML report; there's no
@@ -9,7 +9,7 @@ history, no diff, no trend.
 This is the working scratchpad. Final form is a migration + an ingest
 path; this captures the reasoning and the open calls.
 
-Related: `tools/css-audit/audit-bro.js`, `tools/html-audit/audit-bro.js`,
+Related: `tools/css-audit/audit.js`, `tools/html-audit/audit.js`,
 and the parked `/api/dev/audit/:tool` endpoint idea (see below — this
 folds into it).
 
@@ -18,7 +18,7 @@ folds into it).
 ## Why bother
 
 The two audits already produce rich structured data — they just throw the
-history away. Each `node audit-bro.js` writes one `audit-bro.html` and
+history away. Each `node audit.js` writes one `audit.html` and
 clobbers the last one. So:
 
 - No trend. You can't answer "is the CSS getting cleaner or worse?"
@@ -34,13 +34,13 @@ Postgres gives all three for the price of one table-pair + an ingest step.
 Both scripts build a `data` object before rendering. That object IS the
 payload to store.
 
-**CSS audit** (`css-audit/audit-bro.js`):
+**CSS audit** (`css-audit/audit.js`):
 - `stats` — `{files, rules, declarations, classes, multiFileClasses, conflictSelectors, dupSelectors, conflictProps, divergentClasses}`
 - `selectorConflicts[]` — per exact selector declared 2+ places: `{selector, atContext, instances[], props[], conflictCount, duplicateCount, fileCount, …}`
 - `classIndex[]` — per class: `{cls, fileCount, ruleCount, divergentCount, selectors[], divergent[]}`
 - `files[]` — per file: `{path, group, lines, rules}`
 
-**HTML audit** (`html-audit/audit-bro.js`):
+**HTML audit** (`html-audit/audit.js`):
 - `stats` — `{files, elements, candidates, slotted, totalSaved, biggest}`
 - `candidates[]` — per component candidate: `{name, label, tier, occ, fileCount, size, saved, propCount, hasSlot, members[], props[], skeleton, callSite}`
 - `byFile[]` — per file: `{path, lines, covered, pct, candidates}`
@@ -134,21 +134,21 @@ finding, so regression queries are a plain `>` comparison.
 zero-dependency Node (that's a deliberate property — see the tools-suite
 thinking). Instead:
 
-1. Each `audit-bro.js` gains **one line** — alongside the `.html` write,
-   also emit the raw `data` as `audit-bro.json`:
+1. Each `audit.js` gains **one line** — alongside the `.html` write,
+   also emit the raw `data` as `audit.json`:
    ```js
-   fs.writeFileSync(path.join(__dirname, 'audit-bro.json'),
+   fs.writeFileSync(path.join(__dirname, 'audit.json'),
                     JSON.stringify(data));
    ```
 2. The **Rust backend ingests** — it already owns the sqlx pool. It reads
-   `audit-bro.json`, captures git SHA/branch via `std::process::Command`,
+   `audit.json`, captures git SHA/branch via `std::process::Command`,
    inserts one `audit.run` row, explodes `payload` into `audit.finding`
    rows, all in one transaction.
 
 This folds straight into the parked **`/api/dev/audit/:tool`** endpoint.
-That endpoint already wants to: spawn `node audit-bro.js`, then let the
+That endpoint already wants to: spawn `node audit.js`, then let the
 browser open the report. Add a third step in the middle — ingest the
-freshly-written `audit-bro.json` — and one click gives you: regenerated
+freshly-written `audit.json` — and one click gives you: regenerated
 report + a new tracked run + the diff-ready findings. Three jobs, one
 endpoint, `#[cfg(debug_assertions)]`-gated so it's compiled out of
 release builds.
@@ -207,7 +207,7 @@ new / fixed / regressed into one call the report HTML renders as a
 |---|---|---|
 | 0 | This doc — confirm schema + the HTML `finding_key` call | now |
 | 1 | Migration: `audit` schema + `run` + `finding` tables | ~30 min |
-| 2 | One-line `audit-bro.json` emit in both audit scripts | ~10 min |
+| 2 | One-line `audit.json` emit in both audit scripts | ~10 min |
 | 3 | Rust ingest: read JSON + git context → insert `run`, explode `finding` (one TX). Standalone-runnable. | ~2–3 h |
 | 4 | Fold ingest into `/api/dev/audit/:tool` (depends on that endpoint being built — see the parked button decision) | ~1 h |
 | 5 | `audit.run_diff` view/function + a "since last run" panel in the report HTML | ~2 h |
@@ -224,5 +224,5 @@ on the button decision you parked.
 - **The explode is per-tool.** CSS payload → walk `selectorConflicts[]` + `classIndex[]` (where `divergentCount > 0`). HTML payload → walk `candidates[]`. ~40 lines of Rust, one match on `tool`.
 - **git context makes the trend meaningful.** A run without `git_sha` is just a timestamp; with it, you can pin "conflicts at commit X" and bisect a regression. Capture it at ingest, not in the Node script.
 - **The HTML `finding_key` is the one fuzzy spot.** `name/tier` is the pragmatic choice. If it ever proves too lossy, the fallback is a key built from the *sorted set of member file paths* — more stable than a hash, more precise than the name. Don't reach for it until the name-key actually hurts.
-- **Zero-dependency audit scripts is a deliberate property.** The only change to them is the single `audit-bro.json` write. Resist the urge to make them talk to Postgres directly — the Rust backend already has the pool, the git access, and the transaction.
+- **Zero-dependency audit scripts is a deliberate property.** The only change to them is the single `audit.json` write. Resist the urge to make them talk to Postgres directly — the Rust backend already has the pool, the git access, and the transaction.
 - This pairs with the parked `/api/dev/audit/:tool` endpoint. If that lands as "backend dev endpoint" (option 1 from that decision), ingest is just a third line in the same handler. If it lands as "static open only," ingest runs as a standalone CLI step instead — still works, just not one-click.

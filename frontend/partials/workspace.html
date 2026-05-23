@@ -1,0 +1,132 @@
+<!-- Workspace — the redtable as a browser. The rail loads real projects
+     and files; a file click fetches /api/files/:rid (columns) and
+     /page (rows) and renders the table. The toolbar's controls
+     operate on whatever's loaded. -->
+<section class="rp-workspace">
+  <header id="rp-topbar"></header>
+
+  <div class="rp-ws-body">
+
+    <!-- ════ rail — projects + files, lazy-loaded ════ -->
+    <aside class="rt-nav" id="wsNav">
+      <div class="rt-nav-head">
+        <span class="rt-nav-title">Projects</span>
+        <button class="rt-btn" id="wsNavCollapse" type="button" title="Collapse">
+          <i class="bi bi-chevron-double-left"></i>
+        </button>
+      </div>
+      <div class="rt-nav-body" id="wsNavBody" aria-busy="true">
+        <div class="rt-nav-state">Loading projects…</div>
+      </div>
+      <div class="rt-nav-foot">
+        <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button"
+                disabled title="New project — POST /api/projects coming soon">
+          <i class="bi bi-plus-lg"></i><span>New project</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ════ main — the redtable surface ════ -->
+    <main class="rt-main">
+      <div class="rt-surface">
+
+        <!-- toolbar -->
+        <div class="rt-toolbar">
+          <button class="rt-btn" id="wsFilterToggle" type="button" title="Filter panel">
+            <i class="bi bi-funnel"></i>
+          </button>
+          <div class="rt-search">
+            <i class="bi bi-search"></i>
+            <input type="search" id="wsRowSearch" placeholder="Search rows…" />
+          </div>
+          <span class="rt-toolbar-sep"></span>
+          <button class="rt-btn rt-mode" data-mode="edit" type="button" title="Edit mode"><i class="bi bi-pencil"></i></button>
+          <button class="rt-btn rt-mode" data-mode="select" type="button" title="Select mode"><i class="bi bi-check2-square"></i></button>
+          <button class="rt-btn rt-mode" data-mode="delete" type="button" title="Delete mode"><i class="bi bi-trash3"></i></button>
+          <span class="rt-toolbar-sep"></span>
+          <button class="rt-btn" id="wsRefresh" type="button" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+          <button class="rt-btn is-active" id="wsRownum" type="button" title="Row numbers"><i class="bi bi-list-ol"></i></button>
+          <span class="rt-toolbar-sep"></span>
+          <div class="rt-dd-wrap">
+            <button class="rt-pill" data-dd="wsRowsDd" type="button" title="Rows per page">
+              <span id="wsRowsLabel">25 rows</span>
+              <i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="rt-dd" id="wsRowsDd">
+              <div class="rt-dd-item" data-rows="10">10 rows</div>
+              <div class="rt-dd-item selected" data-rows="25">25 rows <i class="bi bi-check2 tick"></i></div>
+              <div class="rt-dd-item" data-rows="50">50 rows</div>
+              <div class="rt-dd-item" data-rows="100">100 rows</div>
+              <div class="rt-dd-item" data-rows="all">All rows</div>
+            </div>
+          </div>
+          <div class="rt-dd-wrap">
+            <button class="rt-btn" data-dd="wsColsDd" type="button" title="Columns"><i class="bi bi-layout-three-columns"></i></button>
+            <div class="rt-dd" id="wsColsDd"><!-- dynamic — rebuilt when a file loads --></div>
+          </div>
+          <span class="rt-sel-chip" id="wsSelChip" title="Clear selection">
+            <i class="bi bi-check2-square"></i><span id="wsSelCount">0</span>&nbsp;selected
+          </span>
+          <span class="rt-toolbar-sep"></span>
+          <button class="rt-btn" id="wsToolsToggle" type="button" title="Tools panel">
+            <i class="bi bi-tools"></i>
+          </button>
+        </div>
+
+        <!-- body — filter panel · table · tools panel -->
+        <div class="rt-surface-body">
+
+          <aside class="rt-panel rt-panel--filter" id="wsFilterPanel">
+            <div class="rt-panel-inner">
+              <div class="rt-panel-head">
+                <span class="rt-panel-title"><i class="bi bi-funnel"></i> Filters</span>
+                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+              </div>
+              <div class="rt-panel-body">
+                <span class="rt-field-lbl">Condition groups</span>
+                <div id="wsGroupList"></div>
+                <button class="rt-btn rt-btn--glass rt-btn--block" id="wsAddGroup" type="button">
+                  <i class="bi bi-plus-lg"></i> Add group
+                </button>
+              </div>
+              <div class="rt-panel-foot">
+                <button class="rt-btn" id="wsClearFilter" type="button">Clear</button>
+                <button class="rt-btn rt-btn--accent" id="wsApplyFilter" type="button">
+                  <i class="bi bi-funnel"></i> Apply filter
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="rt-table-wrap">
+            <table class="rp-table" id="wsTable" hidden>
+              <thead><!-- dynamic — rebuilt when a file loads --></thead>
+              <tbody><!-- dynamic --></tbody>
+            </table>
+            <div class="rt-chart" id="wsChart" hidden></div>
+            <div class="rt-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
+          </div>
+
+          <aside class="rt-panel rt-panel--tools" id="wsToolsPanel">
+            <div class="rt-panel-inner">
+              <div class="rt-panel-head">
+                <span class="rt-panel-title"><i class="bi bi-tools"></i> Tools</span>
+                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+              </div>
+              <div class="rt-panel-body" id="wsToolsBody"><!-- tools.js mounts the picker + form here --></div>
+            </div>
+          </aside>
+
+        </div>
+
+        <!-- pager (static for now — real pagination lands next) -->
+        <div class="rt-pager">
+          <span class="rt-rows-info" id="wsRowsInfo">No file open.</span>
+          <div class="rt-pages" id="wsPages"></div>
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+</section>
