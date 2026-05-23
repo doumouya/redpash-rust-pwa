@@ -19,7 +19,10 @@ import { mountTools } from "/scripts/tools.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 
-const STAGE_DOT     = { import: "is-dirty", clean: "is-warn", report: "is-clean", publish: "is-clean" };
+// Stage labels mirror backend's file_stages view (migration 022,
+// 2026-06-05). Renamed from `import|report` to `new|design` — same
+// vocabulary home.js uses; keep this in sync.
+const STAGE_DOT     = { new: "is-dirty", clean: "is-warn", design: "is-clean", publish: "is-clean" };
 const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
 const DATE_DTYPES   = new Set(["date"]);
 const PAGE_SIZE_KEY = "rp-rows-per-page";
