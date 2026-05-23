@@ -1,88 +1,27 @@
 // Login page — the RedPash sign-in surface.
 //
-// It leads with the product: a live CSV scan. The textarea is pre-
-// filled with a deliberately messy sample; "Scan this CSV" POSTs the
-// raw text to /api/demo/parse (no auth, nothing stored) and shows
-// what RedPash read — rows, columns, cleanness score, and the parse
-// time.
-//
-// "Or upload a CSV" runs the same engine *in the browser* via
-// WebAssembly (see frontend/wasm/ + frontend/scripts/wasm-engine.js).
-// File is parsed client-side, gated to 5 MB by the wasm-engine size
-// cap, and `auto_clean` runs over it locally — the file never leaves
-// the page. Bigger files get the sign-up CTA.
-//
-// Then sign in: Google OAuth (a full-page redirect) or, on localhost,
-// the dev shortcut.
+// Leads with the product: upload a CSV, watch RedPash clean it in the
+// browser via WebAssembly. The file never leaves the page. Cleaning
+// summary + a mini-table preview of the cleaned rows appears under
+// the button. Then sign in: Google OAuth (a full-page redirect) or,
+// on localhost, the dev shortcut.
 
 import { api } from "/scripts/api.js";
 import { getEngine, gateBySize } from "/scripts/wasm-engine.js";
 
-// A deliberately messy CSV: a quoted comma, a value wrapped across two
-// lines, mixed date formats, mixed booleans, an all-empty row.
-const SAMPLE = [
-  "Name,Joined,Revenue,Active",
-  '"Smith, John",2021-03-01,"1,240.50",yes',
-  "Jane Doe,01/04/2021,,TRUE",
-  '"O\'Brien",2021-09-13,980,1',
-  ",,,",
-  '"Wrapped',
-  'cell",2022-02-11,"2,000",no',
-].join("\n");
+// Cap the rendered preview rows. The mini-table viewport shows 7 rows
+// + a sticky header; the user can scroll vertically through whatever
+// is rendered. Cap keeps the DOM bounded on a 5 MB-cap file that
+// could otherwise be tens of thousands of rows.
+const PREVIEW_ROW_CAP = 500;
 
 export default function login(app) {
-  // ── live demo (paste path → server) ──────────────────────────
-  const input   = app.querySelector("#rp-demo-input");
-  const runBtn  = app.querySelector("#rp-demo-run");
-  const result  = app.querySelector("#rp-demo-result");
-  const demoMsg = app.querySelector("#rp-demo-msg");
-
-  if (input) input.value = SAMPLE;
-
-  function renderResult(d) {
-    const score = Math.round(d.score);
-    const scoreEl = app.querySelector("#rp-demo-score");
-    scoreEl.textContent = score;
-    scoreEl.style.color = score >= 80 ? "var(--rp-ok)"
-                        : score >= 50 ? "var(--rp-warn)"
-                        : "var(--rp-accent)";
-    const ms = d.parse_ms < 1 ? "<1 ms" : d.parse_ms + " ms";
-    app.querySelector("#rp-demo-stats").innerHTML = [
-      "<span class=\"rp-login__stat\"><b>" + d.rows + "</b> rows</span>",
-      "<span class=\"rp-login__stat\"><b>" + d.columns + "</b> cols</span>",
-      "<span class=\"rp-login__stat\"><b>" + d.type_mismatches + "</b> type mismatches</span>",
-      "<span class=\"rp-login__stat\"><b>" + d.empty_pct.toFixed(1) + "%</b> empty</span>",
-      "<span class=\"rp-login__stat rp-login__stat--time\">parsed in <b>" + ms + "</b></span>",
-    ].join("");
-    result.hidden = false;
-  }
-
-  // Raw fetch, not api.js: /api/demo/parse takes a CSV body, not JSON.
-  runBtn?.addEventListener("click", async () => {
-    const csv = (input?.value || "").trim();
-    if (!csv) { if (demoMsg) demoMsg.textContent = "Paste some CSV first."; return; }
-    runBtn.disabled = true;
-    if (demoMsg) demoMsg.textContent = "";
-    try {
-      const res = await fetch("/api/demo/parse", {
-        method:  "POST",
-        headers: { "Content-Type": "text/csv" },
-        body:    csv,
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      renderResult(await res.json());
-    } catch {
-      if (demoMsg) demoMsg.textContent = "Scan failed — is the server running?";
-    } finally {
-      runBtn.disabled = false;
-    }
-  });
-
-  // ── upload path → wasm (file never leaves browser) ───────────
-  const fileInput    = app.querySelector("#rp-demo-file");
-  const uploadBtn    = app.querySelector("#rp-demo-upload");
-  const localResult  = app.querySelector("#rp-demo-local-result");
-  const localMsg     = app.querySelector("#rp-demo-local-msg");
+  // ─── upload path → wasm (file never leaves browser) ───────────
+  const fileInput   = app.querySelector("#rp-demo-file");
+  const uploadBtn   = app.querySelector("#rp-demo-upload");
+  const localResult = app.querySelector("#rp-demo-local-result");
+  const localMsg    = app.querySelector("#rp-demo-local-msg");
+  const tableHost   = app.querySelector("#rp-demo-local-table");
 
   uploadBtn?.addEventListener("click", () => fileInput?.click());
 
@@ -108,20 +47,16 @@ export default function login(app) {
         return;
       }
 
-      // 3. Wasm engine — same code as the server's auto_clean. Returns
-      //    { rows, summary: { cells_trimmed, junk_blanked, duplicate_rows_dropped } }.
+      // 3. Wasm engine — same code as the server's auto_clean.
       const engine  = await getEngine();
       const cleaned = JSON.parse(engine.auto_clean(JSON.stringify(rows)));
       const elapsed = Math.round(performance.now() - t0);
 
-      renderLocalResult(file.name, rows.length, cleaned.summary, elapsed);
+      renderLocalResult(file.name, rows.length, cleaned.rows || [], cleaned.summary, elapsed);
       if (localMsg) localMsg.textContent = "";
     } catch (err) {
-      // Surface whatever the wasm side gives us. Rust panics inside the
-      // wasm instance throw a RuntimeError with a terse "unreachable
-      // executed" message — useful enough to flag a wasm-side bug, but
-      // not the panic site. Better diagnostics need console_error_panic_hook
-      // on the Rust side; see Gus.md.
+      // Surface whatever the wasm side gives us; if console_error_panic_hook
+      // is installed Rust panics carry their site + payload.
       console.error("[demo upload]", err);
       const detail = err && (err.message || err.toString());
       if (localMsg) {
@@ -137,7 +72,7 @@ export default function login(app) {
     }
   });
 
-  function renderLocalResult(name, rowCount, summary, elapsedMs) {
+  function renderLocalResult(name, rowCount, rows, summary, elapsedMs) {
     app.querySelector("#rp-demo-local-file").textContent = name;
     app.querySelector("#rp-demo-local-time").textContent =
       elapsedMs < 1 ? "<1 ms" : elapsedMs + " ms";
@@ -151,10 +86,36 @@ export default function login(app) {
       '<span class="rp-login__stat"><b>' + dupes + '</b> duplicates dropped</span>',
       '<span class="rp-login__stat rp-login__stat--local">100% in your browser</span>',
     ].join("");
+    renderMinitable(rows);
     localResult.hidden = false;
   }
 
-  // ── sign in ───────────────────────────────────────────────────
+  function renderMinitable(rows) {
+    if (!tableHost) return;
+    if (!rows.length) { tableHost.innerHTML = ""; return; }
+    const headers = Object.keys(rows[0]);
+    const shown = rows.slice(0, PREVIEW_ROW_CAP);
+    const truncated = rows.length > PREVIEW_ROW_CAP;
+    const head = '<thead><tr>'
+      + headers.map((h) => '<th>' + esc(h) + '</th>').join("")
+      + '</tr></thead>';
+    const body = '<tbody>'
+      + shown.map((r) => '<tr>'
+          + headers.map((h) => {
+              const v = r[h];
+              return '<td' + (v == null ? ' class="is-null"' : '') + '>'
+                + esc(v == null ? "—" : v) + '</td>';
+            }).join("")
+          + '</tr>').join("")
+      + '</tbody>';
+    const note = truncated
+      ? '<p class="rp-login__minitable-note">Showing first '
+        + PREVIEW_ROW_CAP + ' of ' + rows.length + ' rows — sign up to keep the full file.</p>'
+      : '';
+    tableHost.innerHTML = '<table class="rp-login__minitable">' + head + body + '</table>' + note;
+  }
+
+  // ─── sign in ───────────────────────────────────────────────────
   const loginMsg = app.querySelector("#rp-login-msg");
   const dev = app.querySelector("#rp-login-dev");
 
@@ -183,10 +144,9 @@ export default function login(app) {
 // ── client-side CSV parser ──────────────────────────────────────
 // Hand-rolled state machine — handles RFC 4180 essentials: quoted
 // fields with commas + "" -escaped quotes + newlines inside quoted
-// cells. Sufficient for the demo's messy sample; production parse
-// still runs server-side via /api/files/upload + the data crate's
-// parse.rs (which catches more edge cases like custom delimiters
-// and encoding sniffing).
+// cells. Sufficient for the demo cap (5 MB); production upload paths
+// still run server-side via the data crate's parse.rs (which catches
+// more edge cases like custom delimiters and encoding sniffing).
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -226,4 +186,9 @@ function csvToObjects(text) {
     });
     return obj;
   });
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }

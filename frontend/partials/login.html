@@ -1,37 +1,19 @@
-<!-- Login — the RedPash sign-in surface. It puts the product to work
-     first: parse a messy CSV live (no auth, nothing stored), then
-     sign in. The demo hits POST /api/demo/parse. -->
+<!-- Login — the RedPash sign-in surface. Leads with the product:
+     upload a messy CSV → it stays in your browser, wasm cleans it in
+     milliseconds, then a preview of the cleaned rows. Then sign in. -->
 <section class="rp-login">
   <div class="rp-login__card">
     <header class="rp-login__head">
       <div class="rp-wordmark rp-login__mark">Red<b>Pash</b></div>
-      <p class="rp-login__tagline">Paste your messiest CSV — watch RedPash read it in milliseconds.</p>
+      <p class="rp-login__tagline">Drop in a messy CSV — RedPash cleans it in your browser, in milliseconds.</p>
     </header>
 
     <div class="rp-login__demo">
-      <label class="rp-login__demo-label" for="rp-demo-input">CSV in</label>
-      <textarea id="rp-demo-input" class="rp-login__demo-input" rows="6" spellcheck="false"></textarea>
-      <button type="button" id="rp-demo-run" class="rp-btn rp-btn--glass">Scan this CSV</button>
-
-      <div class="rp-login__result" id="rp-demo-result" hidden>
-        <div class="rp-login__score">
-          <span class="rp-login__score-n" id="rp-demo-score">—</span>
-          <span class="rp-login__score-l">cleanness</span>
-        </div>
-        <div class="rp-login__stats" id="rp-demo-stats"></div>
-      </div>
-      <p class="rp-login__msg" id="rp-demo-msg" role="status"></p>
-
-      <!-- Or upload — runs in your browser via WebAssembly; nothing
-           leaves the page. Files larger than the demo cap (5 MB) get
-           the sign-up CTA instead. -->
-      <div class="rp-login__or">
-        <input type="file" id="rp-demo-file" accept=".csv,text/csv" hidden />
-        <button type="button" id="rp-demo-upload" class="rp-btn rp-btn--ghost">
-          <i class="bi bi-upload"></i> Or upload a CSV
-        </button>
-        <p class="rp-login__hint">Stays in your browser — runs locally via WebAssembly.</p>
-      </div>
+      <input type="file" id="rp-demo-file" accept=".csv,text/csv" hidden />
+      <button type="button" id="rp-demo-upload" class="rp-btn rp-btn--glass">
+        <i class="bi bi-upload"></i> Upload a CSV
+      </button>
+      <p class="rp-login__hint">Stays in your browser — runs locally via WebAssembly. 5 MB max.</p>
 
       <div class="rp-login__result rp-login__result--local" id="rp-demo-local-result" hidden>
         <div class="rp-login__local-head">
@@ -39,6 +21,11 @@
           <span class="rp-login__local-time" id="rp-demo-local-time">—</span>
         </div>
         <div class="rp-login__stats" id="rp-demo-local-stats"></div>
+
+        <!-- mini-table — fixed 7-row viewport, scrolls horizontally
+             when columns exceed width and vertically when rows exceed
+             the viewport. Sticky header. -->
+        <div class="rp-login__minitable-wrap" id="rp-demo-local-table"></div>
       </div>
       <p class="rp-login__msg" id="rp-demo-local-msg" role="status"></p>
     </div>
