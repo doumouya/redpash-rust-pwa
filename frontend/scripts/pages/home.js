@@ -31,19 +31,28 @@ const STAGES = ["new", "clean", "design", "publish"];
 // /api/ prefix out lets the crossing audit not mistake it for one.
 const HOME_TABS = [
   // ── ORG ────────────────────────────────────────────────────
-  { group: "ORG",  key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true },
-  { group: "ORG",  key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true },
-  { group: "ORG",  key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true },
+  { group: "ORG",    key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true  },
+  { group: "ORG",    key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true  },
+  { group: "ORG",    key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true  },
   // ── DATA ───────────────────────────────────────────────────
-  { group: "DATA", key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true },
-  { group: "DATA", key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true },
-  { group: "DATA", key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/admin/charts",      wired: true },
-  { group: "DATA", key: "steps",       label: "Steps",       icon: "bi-wrench",       perm: "admin", endpoint: "/admin/steps",       wired: true },
+  { group: "DATA",   key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true  },
+  { group: "DATA",   key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true  },
+  { group: "DATA",   key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/admin/charts",      wired: true  },
+  // Steps moved to /monitoring (AUDITS group) — operational audit-
+  // trail records of cleaning ops, fits Monitoring's "what happened"
+  // framing better than Home's org/data inventory.
+  // ── MANAGE — stripped redtable variant ─────────────────────
+  // Disabled until the unified org-management endpoint lands. The
+  // button telegraphs the future surface (workspace-style filter +
+  // read-only table across users / companies / memberships); not
+  // clickable yet. Parallel pattern to Monitoring's INSPECT > Logs.
+  { group: "MANAGE", key: "org",         label: "Org",         icon: "bi-diagram-3",    perm: "admin", endpoint: "/admin/org",         wired: false },
 ];
 
 const HOME_GROUPS = [
-  { name: "ORG",  mark: "OR", color: "mauve" },
-  { name: "DATA", mark: "DA", color: "teal"  },
+  { name: "ORG",    mark: "OR", color: "mauve" },
+  { name: "DATA",   mark: "DA", color: "teal"  },
+  { name: "MANAGE", mark: "MG", color: "peach" },
 ];
 
 const HOME_DEFAULT_TAB = "projects";
@@ -133,20 +142,6 @@ export default function home(app, { session }) {
         + '<td>' + esc(c.project_name) + '</td>'
         + '<td>' + stageChip(c.stage) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
-        + '</tr>',
-    },
-    steps: {
-      title: "Steps",
-      endpoint: "/admin/steps",
-      columns: ["File", "#", "Kind", "Applied", "When"],
-      row: (s) =>
-        '<tr>'
-        + '<td>' + esc(s.file_filename) + '</td>'
-        + '<td class="is-num">' + s.ordinal + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(s.kind) + '</span></td>'
-        + '<td>' + (s.applied ? '<span class="rp-mon-method rp-mon-err-low">yes</span>'
-                              : '<span class="rp-mon-method">no</span>') + '</td>'
-        + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
     },
   };

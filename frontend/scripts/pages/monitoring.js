@@ -17,13 +17,24 @@ const MON_TABS = [
   { group: "REQUESTS", key: "requests", label: "Requests", icon: "bi-globe2",         endpoint: "/metrics",                wired: true },
   { group: "REQUESTS", key: "events",   label: "Events",   icon: "bi-envelope",       endpoint: "/monitoring/events",      wired: true },
   // ── AUDITS ─────────────────────────────────────────────────
-  { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",    endpoint: "/monitoring/audit-runs",  wired: true },
+  { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",          endpoint: "/monitoring/audit-runs",     wired: true },
   { group: "AUDITS",   key: "findings", label: "Findings", icon: "bi-exclamation-triangle", endpoint: "/monitoring/audit-findings", wired: true },
+  // Moved from Home — Steps are operational audit-trail records of
+  // cleaning ops, fits Monitoring's "what happened" framing better
+  // than Home's org/data inventory.
+  { group: "AUDITS",   key: "steps",    label: "Steps",    icon: "bi-wrench",               endpoint: "/admin/steps",               wired: true },
+  // ── INSPECT — stripped redtable variant ────────────────────
+  // Disabled until Gus ships the unified /api/monitoring/logs
+  // endpoint. The button telegraphs the surface that's coming
+  // (workspace-style filter + read-only table across event /
+  // request / audit / finding sources); not clickable yet.
+  { group: "INSPECT",  key: "logs",     label: "Logs",     icon: "bi-card-list",            endpoint: "/monitoring/logs",           wired: false },
 ];
 
 const MON_GROUPS = [
   { name: "REQUESTS", mark: "RQ", color: "blue"  },
   { name: "AUDITS",   mark: "AD", color: "peach" },
+  { name: "INSPECT",  mark: "IN", color: "mauve" },
 ];
 
 const WINDOWS = ["1h", "24h", "7d", "30d"];
@@ -84,6 +95,21 @@ export default function monitoring(app, { session }) {
         + '<td>' + esc(f.kind) + '</td>'
         + '<td>' + esc(f.finding_key) + '</td>'
         + '<td class="is-num">' + (f.severity != null ? f.severity : "—") + '</td>'
+        + '</tr>',
+    },
+    steps: {
+      title: "Steps",
+      endpoint: "/admin/steps",
+      useWindow: false,
+      columns: ["File", "#", "Kind", "Applied", "When"],
+      row: (s) =>
+        '<tr>'
+        + '<td>' + esc(s.file_filename) + '</td>'
+        + '<td class="is-num">' + s.ordinal + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(s.kind) + '</span></td>'
+        + '<td>' + (s.applied ? '<span class="rp-mon-method rp-mon-err-low">yes</span>'
+                              : '<span class="rp-mon-method">no</span>') + '</td>'
+        + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
     },
   };
