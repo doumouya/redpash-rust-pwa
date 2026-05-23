@@ -10,7 +10,7 @@ last modified date: 2026-05-22
 > **Internal — RedPash team only.** Execution plan for reconciling the
 > codebase to the locked object model. Em greenlit it 2026-05-22 ("BYE
 > REPORT AND DASHBOARD"). Canonical target:
-> [`objects/object-model.md`](../objects/object-model.md). Archive this
+> [`objects/object-model.md`](../../objects/object-model.md). Archive this
 > file once Phase 2 lands.
 
 ## Why now

@@ -10,8 +10,8 @@ last modified date: 2026-05-22
 > **Internal — `frontend-reset` rebuild checklist.** What each page does
 > *today* + what's still missing to ship. `crossing-audit` verifies API
 > wiring; this doc verifies *behavior*. Read alongside
-> [`js-rust-boundary.md`](js-rust-boundary.md) and
-> [`object-model-hard-refresh.md`](object-model-hard-refresh.md).
+> [`js-rust-boundary.md`](../architecture/js-rust-boundary.md) and
+> [`object-model-hard-refresh.md`](../architecture/object-model.md).
 
 ## Where we are
 
@@ -40,12 +40,12 @@ Run by Woz against `frontend-reset`. Compared to the inventory as written 2026-0
 
 ### New gaps surfaced by the walk
 
-- ~~**Tools panel has 6 buttons but no JS handlers.**~~ **Closed 2026-05-23.** Tools panel is now wired: [`scripts/tools.js`](../../frontend/scripts/tools.js) — one `defineTool` factory + 5 field-type renderers (column / enum / text / boolean / multi-column) + **12 tool configs** (drop_nulls, fill_nulls, cast, rename_column, snake_case_columns, replace_in_names, change_case, replace_text, fix_invalid, join_columns, split_column, format_dates) → `POST /api/files/:rid/steps`. Apply re-renders the table from the server's response. No new components added — picker uses `.rt-tool-item`, form rows reuse `.rt-pred` with `--stack` / `--inline` BEM modifiers per [ui-change-process.md](ui-change-process.md). Adds ~430 JS LOC and ~90 panel.css LOC; component count still 15.
+- ~~**Tools panel has 6 buttons but no JS handlers.**~~ **Closed 2026-05-23.** Tools panel is now wired: [`scripts/tools.js`](../../frontend/scripts/tools.js) — one `defineTool` factory + 5 field-type renderers (column / enum / text / boolean / multi-column) + **12 tool configs** (drop_nulls, fill_nulls, cast, rename_column, snake_case_columns, replace_in_names, change_case, replace_text, fix_invalid, join_columns, split_column, format_dates) → `POST /api/files/:rid/steps`. Apply re-renders the table from the server's response. No new components added — picker uses `.rt-tool-item`, form rows reuse `.rt-pred` with `--stack` / `--inline` BEM modifiers per [ui-change-process.md](../processes/ui-change-process.md). Adds ~430 JS LOC and ~90 panel.css LOC; component count still 15.
 - ~~**Stale comment, rule-7 violation in workspace.js header.**~~ **Fixed in the same commit** — refresh and tools panel removed from the stubbed list (per rule 7 of the UI process).
 
 ### Cross-cutting — still open
 
-- **Stage rename** (`import→new`, `report→design` per [hard-refresh D6](object-model-hard-refresh.md)). Backend phases 1+2 done; frontend untouched: [`home.js:11`](../../frontend/scripts/pages/home.js#L11) `STAGES = ["import","clean","report","publish"]` and [`workspace.js:18`](../../frontend/scripts/pages/workspace.js#L18) `STAGE_DOT` keys still use the old names. **Cheap visible fix.**
+- **Stage rename** (`import→new`, `report→design` per [hard-refresh D6](../architecture/object-model.md)). Backend phases 1+2 done; frontend untouched: [`home.js:11`](../../frontend/scripts/pages/home.js#L11) `STAGES = ["import","clean","report","publish"]` and [`workspace.js:18`](../../frontend/scripts/pages/workspace.js#L18) `STAGE_DOT` keys still use the old names. **Cheap visible fix.**
 - **Boot splash** — not wired.
 - **404 page** — still bare `<p>` at [`main.js:59`](../../frontend/scripts/main.js#L59).
 - **"Real auth not fully wired"** — [`main.js:30`](../../frontend/scripts/main.js#L30) still has the dev-sentinel fallback.
@@ -76,7 +76,7 @@ Three small edits, all under 30 minutes, and the merge is honest about its state
 
 ## Cross-cutting gaps (apply across pages)
 
-- **Stage rename.** [`home.js:11`](../../frontend/scripts/pages/home.js#L11) and [`workspace.js:18`](../../frontend/scripts/pages/workspace.js#L18) still use `["import", "clean", "report", "publish"]`. Per the [hard-refresh D6](object-model-hard-refresh.md), rename `import→new`, `report→design`.
+- **Stage rename.** [`home.js:11`](../../frontend/scripts/pages/home.js#L11) and [`workspace.js:18`](../../frontend/scripts/pages/workspace.js#L18) still use `["import", "clean", "report", "publish"]`. Per the [hard-refresh D6](../architecture/object-model.md), rename `import→new`, `report→design`.
 - **Boot splash.** Not wired — [memory: `project_boot_splash_launch`] still pending (navigate-to-landing-before-loadSession is the fix).
 - **404 page.** Bare `<p>` at [`main.js:59`](../../frontend/scripts/main.js#L59) — needs a real not-found surface.
 - **"Real auth not fully wired"** — [`main.js:30`](../../frontend/scripts/main.js#L30) comment. `/api/me` 404 falls back to a `dev: true` sentinel; needs the real cookie/session path.
@@ -155,7 +155,7 @@ Replaces the old cleaner + objects + reports + dashboards. The biggest open page
 
 **Stubbed — explicitly TODO**
 - **Pagination + rows-per-page refetch.** The dropdown only updates a *label* (`wsRowsLabel`). Needs the `/files/:rid/page?offset=&limit=` round-trip.
-- **The cleaning tools panel.** The toggle opens `#wsToolsPanel` — but the actual 14+ tool actions (rename / cast / dedup / joins / drop_nulls / fill_nulls / filter_columns / split_column / change_case / snake_case / replace_in_names / replace_text / fix_invalid / encoding / format_dates / join_columns — old tools dir) aren't wired. Per [boundary doc](js-rust-boundary.md): each tool collects params into a `Step` DTO, server runs it (Tier-2 perf = `StepProgram` folded into one lazy plan).
+- **The cleaning tools panel.** The toggle opens `#wsToolsPanel` — but the actual 14+ tool actions (rename / cast / dedup / joins / drop_nulls / fill_nulls / filter_columns / split_column / change_case / snake_case / replace_in_names / replace_text / fix_invalid / encoding / format_dates / join_columns — old tools dir) aren't wired. Per [boundary doc](../architecture/js-rust-boundary.md): each tool collects params into a `Step` DTO, server runs it (Tier-2 perf = `StepProgram` folded into one lazy plan).
 - **Server-side filter / sort.** Today both are client-side over the loaded page only — the boundary contract says these compile to a Rust `Filter` AST (workspace.js:374-395 is JS predicate logic, the exact thing the boundary forbids long-term). Replace with: filter UI builds AST → POST `/api/files/:rid/page` body or query.
 - **Save edits / deletes.** `setMode("edit")` lets you type; nothing PATCHes the server. `mode-delete` row removal is DOM-only. Needs PATCH `/api/files/:rid` or a step.
 - **Refresh** also doesn't re-pull the project rail (only the open file). Minor.
@@ -166,7 +166,7 @@ Replaces the old cleaner + objects + reports + dashboards. The biggest open page
 - **Chart builder** (the old Reports page = "Designer"): chart type picker, axes / legend / tooltip / style accordion (per [`unified-surface.md`](../frontend/redpash-canary/unified-surface.md) + `red-front/designer.html`). ECharts render. POST `/api/charts`. The 8th atom per Torv's queue.
 - **Dashboard view** (the old Dashboards page = "Publisher"): dashboard-files render, ECharts widgets.
 - **Project CRUD** (create / rename / delete / archive — `?project=<rid>` URL handling).
-- **File metadata edit** (rename, description) — distinct from cell content edits ([boundary doc](js-rust-boundary.md) seam ruling: metadata = plain PATCH, *not* a cleaning step).
+- **File metadata edit** (rename, description) — distinct from cell content edits ([boundary doc](../architecture/js-rust-boundary.md) seam ruling: metadata = plain PATCH, *not* a cleaning step).
 
 **Retired by the object model — do NOT rebuild**
 - Separate Reports page, separate Dashboards page, separate Objects page.

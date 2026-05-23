@@ -69,12 +69,18 @@ YAML frontmatter above).
 
 ### Internal — RedPash team only
 
-- [Runbook index](internal/runbook/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking.
-- [0001 — Orphan preferences](internal/runbook/0001-orphan-prefs.md) — Settings controls that persisted a choice no code consumed.
-- [UI change process](internal/ui-change-process.md) — the standard checklist for every HTML / CSS / JS change: read disk first, reuse components, run `audit.sh`, update the parity inventory.
-- [Excel edge-case catalog](internal/excel-edge-cases/index.md) — triage board for Workstream 4: 22 dirty multi-sheet `.xlsx` fixtures × 41 edge-case classes (EXL-01…41).
+These are team-only and live under `docs/internal/`. Reshaped 2026-05-24
+into eight sections — see [internal/index.md](internal/index.md) for
+the full map + [internal/redmap.md](internal/redmap.md) for one-page
+navigation.
+
+- [Internal index](internal/index.md) — the team-only docs root + lane ownership map.
+- [Internal REDMAP](internal/redmap.md) — find anything fast.
+- [Runbooks](internal/runbooks/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking.
+- [UI change process](internal/processes/ui-change-process.md) — the standard checklist for every HTML / CSS / JS change.
+- [Excel edge-case catalog](internal/excel-edge-cases/index.md) — triage board: 22 dirty multi-sheet `.xlsx` fixtures × 41 edge-case classes.
 - [Standup log](internal/standup/index.md) — git-mediated async team standup; one append-only file per contributor.
-- [Object model — hard refresh](internal/object-model-hard-refresh.md) — execution plan for retiring the `reports` / `dashboards` tables.
+- [Object model](internal/architecture/object-model.md) — locked 2-entity model (Project + File); the hard-refresh execution plan retired into the architecture spec.
 
 ## Reference set
 

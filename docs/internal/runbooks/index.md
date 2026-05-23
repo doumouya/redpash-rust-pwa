@@ -1,11 +1,11 @@
 ---
-title: Runbook
-section: Runbook
-order: 0
-last modified date: 2026-05-21
+title: Runbooks
+section: Internal
+order: 60
+last modified date: 2026-05-24
 ---
 
-# Runbook
+# Runbooks
 
 > **Internal — RedPash team only.** This section is not part of the
 > public product documentation.

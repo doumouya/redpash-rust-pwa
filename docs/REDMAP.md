@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-21
+last modified date: 2026-05-22
 ---
 
 # RedPash REDMAP
@@ -100,7 +100,7 @@ redpash-app/
     ├── auth/google.md                      OAuth flow + cookies + dev_user fallback
     ├── db/schema.md                        tables + migrations + RID prefixes
     ├── dev/setup.md                        prereqs, watch loop
-    ├── internal/runbook/                   team-only — post-mortems (Problem Statement / Troubleshooting steps / RCA / Solution / Post Checking)
+    ├── internal/                           team-only — 8 sections (architecture, subsystems, specs, flows, processes, runbooks, standup, archive). See internal/index.md.
     └── frontend/design.md                  tokens, dark mode, naming convention vs library
 ```
 
@@ -112,7 +112,7 @@ redpash-app/
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::user::UserProfile` |
-| **Table** | `users` (migration 001) — adds `google_sub` in migration 006 |
+| **Table** | `users` (migration 001) — `google_sub` (006), `first_name` / `last_name` (017) |
 | **RID prefix** | `USR` |
 | **DB helpers** | `db::find_user_by_id`, `find_user_by_username`, `find_user_by_google_sub`, `insert_user`, `upsert_google_user`, `update_user` (sparse merge + jsonb-merge for `prefs`), `ensure_default_project` |
 | **API** | `GET /api/me`, `PATCH /api/me` (sparse update of profile fields + shallow merge of `prefs`) |
@@ -242,14 +242,14 @@ redpash-app/
 | **Auth fallback** | `api.js` redirects here on any 401 response |
 | **Docs** | [`frontend/redpash-components-pages/landing-page/`](frontend/redpash-components-pages/landing-page/index.md) |
 
-### `#/home` — authenticated dashboard (5-step scroll-snap)
+### `#/home` — authenticated home (pipeline board)
 | Asset | Location |
 |---|---|
-| **Partial** | `partials/home.html` — full-bleed (`chrome: "full"`); float bars + step-dots + avatar; 5 `.hs-card` scroll-snap step cards |
-| **Steps** | 1 Dashboard · 2 Projects · 3 Files · 4 Reports · 5 Dashboards |
-| **CSS** | `styles/pages/home.css` — imports library home-screen / minitable / stat-strip / upload-zone / page-dots / redtable etc. |
-| **JS** | `scripts/pages/home.js` — single redtable engine + 4-entry schema registry + scroll-snap nav + Step 1 mini-tables + upload |
-| **Endpoints** | `GET /api/projects` · `GET /api/projects/:rid/files` · `GET /api/files` · `GET /api/reports` · `GET /api/dashboards` · `POST /api/files/upload` (with XLSX→CSV dispatch) · `DELETE /api/reports/:rid` · `DELETE /api/dashboards/:rid` · `POST /api/auth/logout` |
+| **Partial** | `partials/home.html` — full-bleed (`chrome: "full"`); float bars + avatar; a top strip (greeting + Projects/Files/Published counts + upload zone) above the `#home-pipe` board |
+| **Board** | four stage columns — import → clean → report → publish. Every project is a card in its computed-stage column; a card click jumps to the tool for the project's next step |
+| **CSS** | `styles/pages/home.css` — `rp-pipe` board styles; `#page-home` accent pinned to the app blue (`#60a5fa` / `#2563eb`) |
+| **JS** | `scripts/pages/home.js` — `renderBoard()` buckets `/api/projects` by stage into the four columns; upload → file-review → confirm flow |
+| **Endpoints** | `GET /api/projects` (the board) · `GET /api/reports` · `GET /api/dashboards` (the Published count) · `POST /api/files/upload` (XLSX→CSV dispatch) · `POST /api/auth/logout` |
 | **Docs** | [`frontend/redpash-components-pages/home-page/`](frontend/redpash-components-pages/home-page/index.md) |
 
 ### `#/cleaner?file=FIL_…` — redtable + tools

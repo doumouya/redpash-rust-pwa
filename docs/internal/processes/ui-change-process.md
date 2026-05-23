@@ -14,10 +14,10 @@ last modified date: 2026-05-23
 > audits don't have to be argued with.
 
 Companion docs:
-[js-rust-boundary.md](js-rust-boundary.md) ·
-[frontend-parity-inventory.md](frontend-parity-inventory.md) ·
-[object-model-hard-refresh.md](object-model-hard-refresh.md) ·
-incident log: [runbook/](runbook/).
+[js-rust-boundary.md](../architecture/js-rust-boundary.md) ·
+[frontend-parity-inventory.md](../archive/frontend-parity-inventory.md) ·
+[object-model.md](../architecture/object-model.md) ·
+incident log: [runbooks/](../runbooks/).
 
 ## Before you change anything
 
@@ -36,7 +36,7 @@ this had X"* is a bug pattern.
 
 ### 2. Confirm the contract — pixels, not data
 
-Per [`js-rust-boundary.md`](js-rust-boundary.md): **JS owns pixels,
+Per [`js-rust-boundary.md`](../architecture/js-rust-boundary.md): **JS owns pixels,
 Rust owns data.** If the change does anything beyond render /
 interact / cache / route, stop and re-check the boundary. Filter,
 sort, step, edit-data-content — all Rust.
@@ -53,7 +53,7 @@ Open-ended UI work is the tarpit that produced the 26.6k → 1.5k LOC
 reset.
 
 If the change affects what a page does, find the page in
-[`frontend-parity-inventory.md`](frontend-parity-inventory.md) —
+[`frontend-parity-inventory.md`](../archive/frontend-parity-inventory.md) —
 that's where the line goes.
 
 ## While you change it
@@ -82,7 +82,7 @@ idea (`home-btn` *and* `workspace-btn` for the same button) are a bug
 
 For concepts that exist on **both** sides of the JS/Rust boundary
 (`filter`, `step`, `chart`), apply the shared-noun + layer-verb rule
-from [`js-rust-boundary.md`](js-rust-boundary.md): same noun in
+from [`js-rust-boundary.md`](../architecture/js-rust-boundary.md): same noun in
 `filter.js` / `filter.rs` / `Filter` DTO; JS verbs `collect` /
 `render`, Rust verbs `compile` / `apply`.
 
@@ -140,7 +140,7 @@ it now, before commit. Specifically watch:
 ### 10. Update the parity inventory
 
 If the change affects what a page does, update
-[`frontend-parity-inventory.md`](frontend-parity-inventory.md). Tick a
+[`frontend-parity-inventory.md`](../archive/frontend-parity-inventory.md). Tick a
 TODO bullet, strike a retired one, or add a new line. The inventory
 is the rebuild's ship contract — let it drift and "merge back at
 parity" becomes unverifiable.

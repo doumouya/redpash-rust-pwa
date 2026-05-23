@@ -143,4 +143,4 @@ cannot be affected by this refresh. The hard part of RedPash is safe.
 ## See also
 
 - [Project](project.md) · [File](file.md) · [Chart](chart.md) · [Step](step.md)
-- Execution plan: [`internal/object-model-hard-refresh.md`](../internal/object-model-hard-refresh.md)
+- Execution plan: [`internal/object-model-hard-refresh.md`](../internal/architecture/object-model.md)

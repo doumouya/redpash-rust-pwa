@@ -70,7 +70,7 @@ selection, edit modes, pager, refresh) is what gets extracted.
 | **Row identity** | absolute row index (`row_indices`) | `redpash_id` or `id` | a `rowKey(record)` callback |
 | **Sort** | client-side over loaded page (today), server (WS#2) | same | the atom emits a `sort` DTO; source adapter sends it |
 | **Filter** | client AND/OR builder + filter panel | optional chip-row(s) | filter panel is a toolbar slot; chip-rows live above the toolbar |
-| **Search** | page-local string match | same | always client-side over loaded page (page-local search, by design — see [handoff-frontend-datatables.md §4](handoff-frontend-datatables.md)) |
+| **Search** | page-local string match | same | always client-side over loaded page (page-local search, by design — see [handoff-frontend-datatables.md §4](../archive/handoff-frontend-datatables.md)) |
 | **Column show/hide** | client toggles via CSS `display:none` | same | shared, no source-side change |
 | **Selection** | multi-select drives delete | none | toolbar slot: `select: true|false` |
 | **Edit** | cell `contenteditable` → `POST /files/:rid/steps` | none | edit mode is opt-in via toolbar slot |
