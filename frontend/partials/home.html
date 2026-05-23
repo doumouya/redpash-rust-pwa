@@ -1,39 +1,35 @@
-<!-- Home — the project launchpad. Two sections under the shared topbar:
-     a greeting hero with at-a-glance stats, and a board of project
-     cards. Each card shows the project's place in the pipeline + a
-     cleanness bar coloured by score. -->
+<!-- Home — the org command center. Same shell pattern as Workspace:
+     topbar above, then a rail (.rt-nav, static groups ORG/DATA) on
+     the left and a per-tab body on the right. The body owns its own
+     sub-controls (filter chips, sub-tabs) so we never end up with
+     stacked horizontal tab rows. -->
 <section class="rp-home">
   <header id="rp-topbar"></header>
 
-  <div class="rp-home__main">
+  <header class="rp-home__greeting">
+    <h1 class="rp-home__greeting-title" id="rp-home-greeting">Welcome.</h1>
+    <p class="rp-home__greeting-sub">Pick up a project or scan a new CSV.</p>
+  </header>
 
-    <header class="rp-home__greeting">
-      <h1 class="rp-home__greeting-title" id="rp-home-greeting">Welcome.</h1>
-      <p class="rp-home__greeting-sub">Pick up a project or scan a new CSV.</p>
-    </header>
+  <div class="rp-home__body">
 
-    <div class="rp-home__stats" id="rp-home-stats" aria-busy="true">
-      <div class="rp-home__stat">
-        <span class="rp-home__stat-label">Projects</span>
-        <span class="rp-home__stat-value" id="rp-stat-projects">—</span>
+    <!-- ════ rail — static groups (ORG + DATA) ════ -->
+    <aside class="rt-nav" id="rpHomeNav">
+      <div class="rt-nav-head">
+        <span class="rt-nav-title">Browse</span>
+        <button class="rt-btn" id="rpHomeNavCollapse" type="button" title="Collapse">
+          <i class="bi bi-chevron-double-left"></i>
+        </button>
       </div>
-      <div class="rp-home__stat">
-        <span class="rp-home__stat-label">Files</span>
-        <span class="rp-home__stat-value" id="rp-stat-files">—</span>
-      </div>
-      <div class="rp-home__stat">
-        <span class="rp-home__stat-label">Avg cleanness</span>
-        <span class="rp-home__stat-value" id="rp-stat-cleanness">—</span>
-      </div>
-    </div>
+      <div class="rt-nav-body" id="rpHomeNavBody"></div>
+    </aside>
 
-    <header class="rp-home__section">
-      <h2 class="rp-home__section-title">Projects</h2>
-      <span class="rp-home__section-count" id="rp-home-count"></span>
-    </header>
+    <!-- ════ main — body view, content depends on the active tab ════ -->
+    <main class="rp-home__main" id="rpHomeMain">
+      <div class="rp-home__view" id="rpHomeView">
+        <p class="rp-home__state">Loading…</p>
+      </div>
+    </main>
 
-    <div class="rp-home__board" id="rp-home-board" aria-busy="true">
-      <p class="rp-home__state">Loading your projects…</p>
-    </div>
   </div>
 </section>
