@@ -528,7 +528,9 @@ export default function workspace(app, { session }) {
     groupCombo = "AND";
     activeFilter = null;
     if (filterCols.length) addGroup();
-    refresh();
+    // Server-side filter (WS#2) — no client-side refresh() needed here;
+    // loadFile awaits fetchAndRender() right after this call which
+    // sends the fresh (empty) filter set to the server.
   }
 
   function predRow() {
