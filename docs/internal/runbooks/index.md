@@ -47,3 +47,9 @@ Every entry follows the same five headings:
   `/api/projects` 500'd after Phase 2 dropped `dashboards`;
   `PROJECT_SELECT`'s published-status subquery still joined the dropped
   table.
+- [0003 — Dead reference after function deletion](0003-dead-reference-after-deletion.md) —
+  WS#2 swept out `refresh()` but missed its tail-call inside
+  `rebuildFilterCols`; every tab pick on the Workspace threw
+  ReferenceError into "Couldn't load file." Discipline rule: grep for
+  function NAMES AS CALLS across the codebase, not just at the
+  semantic call sites you reasoned about.
