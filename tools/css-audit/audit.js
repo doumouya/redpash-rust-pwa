@@ -40,6 +40,7 @@ var path = require('path');
 var STYLES_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
   : '/home/mansa/redpash-app/frontend/styles';
+var FRONTEND_DIR = path.dirname(STYLES_DIR);
 var OUT = path.join(__dirname, 'audit.html');
 
 /* Component sheets @import-ed by main.css — these load globally for every
@@ -56,6 +57,17 @@ function walk(dir, acc) {
     var full = path.join(dir, e.name);
     if (e.isDirectory()) walk(full, acc);
     else if (e.isFile() && /\.css$/i.test(e.name)) acc.push(full);
+  });
+  return acc;
+}
+
+function walkExt(dir, ext, acc) {
+  var entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
+  entries.forEach(function (e) {
+    var full = path.join(dir, e.name);
+    if (e.isDirectory()) walkExt(full, ext, acc);
+    else if (e.isFile() && e.name.toLowerCase().endsWith(ext)) acc.push(full);
   });
   return acc;
 }
@@ -524,6 +536,83 @@ classIndex.sort(function (a, b) {
       || a.cls.localeCompare(b.cls);
 });
 
+/* ── view 3: reachability ────────────────────────────────────────────────────
+   Woz's "every .css deliberately authored and traceable" rule. Roots are
+   <link rel=stylesheet> tags in any HTML under frontend/; the @import graph
+   chains the rest. An orphan = a .css in styles/ no root or import reaches;
+   a dangling import = an @import whose target file doesn't exist. The check
+   answers a single question: can anyone find this sheet from a deliberate
+   root? */
+var EXTERNAL_RE  = /^(https?:)?\/\//;
+var LINK_HREF_RE = /<link\s[^>]*?\bhref=["']([^"']+\.css(?:[?#][^"']*)?)["'][^>]*>/gi;
+var IMPORT_RE    = /@import\s+(?:url\(\s*)?["']?([^"'\)\s;]+\.css)["']?\s*\)?/gi;
+
+var allCss = files.map(function (full) {
+  return path.relative(STYLES_DIR, full).split(path.sep).join('/');
+});
+var allCssSet = {};
+allCss.forEach(function (f) { allCssSet[f] = true; });
+
+var htmlFiles = walkExt(FRONTEND_DIR, '.html', []);
+var rootLinks = [];
+var rootSet = {};
+htmlFiles.forEach(function (full) {
+  var rel = path.relative(FRONTEND_DIR, full).split(path.sep).join('/');
+  var text;
+  try { text = fs.readFileSync(full, 'utf8'); } catch (e) { return; }
+  var m;
+  LINK_HREF_RE.lastIndex = 0;
+  while ((m = LINK_HREF_RE.exec(text))) {
+    var raw = m[1];
+    var external = EXTERNAL_RE.test(raw);
+    var target = external ? raw : path.basename(raw.split('?')[0]);
+    rootLinks.push({ html: rel, target: target, external: external,
+                     resolved: external || !!allCssSet[target] });
+    if (!external) rootSet[target] = true;
+  }
+});
+
+var importEdges = [];
+allCss.forEach(function (f) {
+  var text = fs.readFileSync(path.join(STYLES_DIR, f), 'utf8');
+  var m;
+  IMPORT_RE.lastIndex = 0;
+  while ((m = IMPORT_RE.exec(text))) {
+    var t = path.basename(m[1]);
+    importEdges.push({ from: f, target: t, resolved: !!allCssSet[t] });
+  }
+});
+
+// BFS from the link roots; an edge from `cur` carries reachability forward.
+var reachable = {};
+var bfsQueue = [];
+Object.keys(rootSet).forEach(function (r) {
+  if (allCssSet[r]) { reachable[r] = true; bfsQueue.push(r); }
+});
+while (bfsQueue.length) {
+  var cur = bfsQueue.shift();
+  importEdges.forEach(function (e) {
+    if (e.from === cur && e.resolved && !reachable[e.target]) {
+      reachable[e.target] = true;
+      bfsQueue.push(e.target);
+    }
+  });
+}
+
+var orphans         = allCss.filter(function (f) { return !reachable[f]; }).sort();
+var danglingImports = importEdges.filter(function (e) { return !e.resolved; });
+var unmatchedRoots  = rootLinks.filter(function (l) { return !l.external && !l.resolved; });
+
+var reachability = {
+  htmlFiles:       htmlFiles.map(function (f) { return path.relative(FRONTEND_DIR, f).split(path.sep).join('/'); }),
+  rootLinks:       rootLinks,
+  imports:         importEdges,
+  reachable:       Object.keys(reachable).sort(),
+  orphans:         orphans,
+  danglingImports: danglingImports,
+  unmatchedRoots:  unmatchedRoots
+};
+
 /* ── stats ───────────────────────────────────────────────────────────────── */
 var data = {
   generatedAt: new Date().toISOString(),
@@ -538,10 +627,15 @@ var data = {
     conflictSelectors: selectorConflicts.filter(function (s) { return s.conflictCount > 0; }).length,
     dupSelectors: selectorConflicts.length,
     conflictProps: selectorConflicts.reduce(function (n, s) { return n + s.conflictCount; }, 0),
-    divergentClasses: classIndex.filter(function (c) { return c.divergentCount > 0; }).length
+    divergentClasses: classIndex.filter(function (c) { return c.divergentCount > 0; }).length,
+    reachable:        Object.keys(reachable).length,
+    orphans:          orphans.length,
+    danglingImports:  danglingImports.length,
+    unmatchedRoots:   unmatchedRoots.length
   },
   selectorConflicts: selectorConflicts,
-  classIndex: classIndex
+  classIndex:        classIndex,
+  reachability:      reachability
 };
 
 /* ── HTML report ─────────────────────────────────────────────────────────── */
@@ -562,6 +656,7 @@ function renderHtml(d) {
 '<nav class="tabs">',
 '  <button class="tab active" data-tab="sel">Selector conflicts</button>',
 '  <button class="tab" data-tab="cls">Class index</button>',
+'  <button class="tab" data-tab="reach">Reachability</button>',
 '</nav>',
 '<div class="panel" id="panel-sel">',
 '  <div class="toolbar">',
@@ -591,6 +686,10 @@ function renderHtml(d) {
 '    <th data-k="ruleCount" class="num">Rules</th>',
 '    <th data-k="selectorCount" class="num">Selectors</th>',
 '  </tr></thead><tbody></tbody></table>',
+'</div>',
+'<div class="panel hidden" id="panel-reach">',
+'  <div class="toolbar"><span class="count" id="count-reach"></span></div>',
+'  <div id="reach-body"></div>',
 '</div>',
 '<script>var DATA=' + json + ';</script>',
 '<script>' + JS + '</script>',
@@ -702,7 +801,10 @@ var JS = [
 "  ['Duplicated selectors',D.stats.dupSelectors,'warn'],",
 "  ['Classes',D.stats.classes,''],",
 "  ['Classes in 2+ files',D.stats.multiFileClasses,'warn'],",
-"  ['Classes w/ divergence',D.stats.divergentClasses,'bad']];",
+"  ['Classes w/ divergence',D.stats.divergentClasses,'bad'],",
+"  ['Reachable',D.stats.reachable,''],",
+"  ['Orphan CSS',D.stats.orphans,'bad'],",
+"  ['Dangling imports',D.stats.danglingImports,'bad']];",
 "document.getElementById('cards').innerHTML=cards.map(function(c){",
 "  return '<div class=\\\"card '+c[2]+'\\\"><div class=\\\"n\\\">'+c[1]+",
 "    '</div><div class=\\\"l\\\">'+c[0]+'</div></div>';}).join('');",
@@ -712,7 +814,8 @@ var JS = [
 "  for(var j=0;j<tabs.length;j++)tabs[j].classList.remove('active');",
 "  this.classList.add('active');var t=this.getAttribute('data-tab');",
 "  document.getElementById('panel-sel').classList.toggle('hidden',t!=='sel');",
-"  document.getElementById('panel-cls').classList.toggle('hidden',t!=='cls');});}",
+"  document.getElementById('panel-cls').classList.toggle('hidden',t!=='cls');",
+"  document.getElementById('panel-reach').classList.toggle('hidden',t!=='reach');});}",
 "",
 "function sortRows(rows,st){rows.sort(function(a,b){var k=st.k,d;",
 "  if(typeof a[k]==='string')d=a[k].localeCompare(b[k]);else d=a[k]-b[k];",
@@ -833,6 +936,37 @@ var JS = [
 "    det.innerHTML='<td colspan=5>'+clsDetail(r)+'</td>';",
 "    expandable(tr,det);tb.appendChild(tr);tb.appendChild(det);});}",
 "",
+"/* reachability */",
+"function renderReach(){",
+"  var R=D.reachability;",
+"  var s=[];",
+"  function listSec(title,items,fmt){",
+"    if(!items.length)return;",
+"    s.push('<div class=\\\"dsec\\\"><div class=\\\"dh\\\">'+title+' ('+items.length+')</div>'+",
+"      items.map(fmt).join('')+'</div>');",
+"  }",
+"  listSec('Orphan CSS — not reached from any &lt;link&gt; or @import',R.orphans,function(f){",
+"    return '<div class=\\\"lrow\\\"><span class=\\\"pill bad\\\">orphan</span><span class=\\\"sel\\\">'+esc(f)+'</span></div>';",
+"  });",
+"  listSec('Dangling @imports — target file missing',R.danglingImports,function(e){",
+"    return '<div class=\\\"lrow\\\"><span class=\\\"pill bad\\\">dangling</span><span class=\\\"sel\\\">'+esc(e.from)+'</span><span class=\\\"ctx\\\">→</span><span class=\\\"sel\\\">'+esc(e.target)+'</span></div>';",
+"  });",
+"  listSec('Unmatched roots — &lt;link&gt; href is not a local sheet',R.unmatchedRoots,function(l){",
+"    return '<div class=\\\"lrow\\\"><span class=\\\"pill bad\\\">unmatched</span><span class=\\\"sel\\\">'+esc(l.html)+'</span><span class=\\\"ctx\\\">→</span><span class=\\\"sel\\\">'+esc(l.target)+'</span></div>';",
+"  });",
+"  if(!s.length){",
+"    s.push('<div class=\\\"dsec\\\"><div class=\\\"dh\\\">All sheets accounted for</div><div class=\\\"ctx\\\">Every .css under styles/ is reached from a deliberate &lt;link&gt; or @import; every @import resolves.</div></div>');",
+"  }",
+"  s.push('<div class=\\\"dsec\\\"><div class=\\\"dh\\\">Roots — &lt;link rel=stylesheet&gt; ('+R.rootLinks.length+')</div>'+",
+"    R.rootLinks.map(function(l){return '<div class=\\\"lrow\\\"><span class=\\\"sel\\\">'+esc(l.html)+'</span><span class=\\\"ctx\\\">→</span><span class=\\\"sel\\\">'+esc(l.target)+'</span>'+(l.external?' <span class=\\\"pill warn\\\">external</span>':'')+'</div>';}).join('')+'</div>');",
+"  s.push('<div class=\\\"dsec\\\"><div class=\\\"dh\\\">@import graph ('+R.imports.length+')</div>'+",
+"    R.imports.map(function(e){return '<div class=\\\"lrow\\\"><span class=\\\"sel\\\">'+esc(e.from)+'</span><span class=\\\"ctx\\\">→</span><span class=\\\"sel\\\">'+esc(e.target)+'</span>'+(e.resolved?'':' <span class=\\\"pill bad\\\">dangling</span>')+'</div>';}).join('')+'</div>');",
+"  var total=R.reachable.length+R.orphans.length;",
+"  var issues=R.orphans.length+R.danglingImports.length+R.unmatchedRoots.length;",
+"  document.getElementById('count-reach').textContent=issues+' issues · '+R.reachable.length+' of '+total+' sheets reachable';",
+"  document.getElementById('reach-body').innerHTML=s.join('');",
+"}",
+"",
 "document.getElementById('q-sel').addEventListener('input',renderSel);",
 "document.getElementById('only-conflict').addEventListener('change',renderSel);",
 "document.getElementById('q-cls').addEventListener('input',renderCls);",
@@ -840,7 +974,7 @@ var JS = [
 "document.getElementById('only-div').addEventListener('change',renderCls);",
 "wireSort('t-sel',selSort,renderSel);",
 "wireSort('t-cls',clsSort,renderCls);",
-"renderSel();renderCls();",
+"renderSel();renderCls();renderReach();",
 "})();"
 ].join("\n");
 
@@ -859,5 +993,27 @@ console.log('  selectors duplicated 2+ places ' + data.stats.dupSelectors);
 console.log('  classes total         ' + data.stats.classes
   + '  (' + data.stats.multiFileClasses + ' span 2+ files, '
   + data.stats.divergentClasses + ' with property divergence)');
+console.log('  reachable sheets      ' + data.stats.reachable
+  + ' of ' + (data.stats.reachable + data.stats.orphans));
+console.log('  orphan CSS            ' + data.stats.orphans
+  + (data.stats.orphans ? '   (not reached from any <link> or @import — flag)' : ''));
+console.log('  dangling @imports     ' + data.stats.danglingImports
+  + (data.stats.danglingImports ? '   (import target missing — flag)' : ''));
+if (data.stats.unmatchedRoots) {
+  console.log('  unmatched roots       ' + data.stats.unmatchedRoots
+    + '   (<link> href is not a local sheet — flag)');
+}
+if (data.stats.orphans) {
+  console.log('');
+  console.log('  orphans:');
+  data.reachability.orphans.forEach(function (f) { console.log('    ' + f); });
+}
+if (data.stats.danglingImports) {
+  console.log('');
+  console.log('  dangling imports:');
+  data.reachability.danglingImports.forEach(function (e) {
+    console.log('    ' + e.from + '   ->   ' + e.target);
+  });
+}
 console.log('');
 console.log('  report -> ' + OUT);
