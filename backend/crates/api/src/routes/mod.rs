@@ -41,6 +41,7 @@ mod events;
 mod files;
 mod group;
 mod health;
+mod admin;
 mod me;
 mod metrics;
 mod monitoring;
@@ -174,6 +175,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/events",     events::routes())
         .nest("/metrics",    metrics::routes())
         .nest("/monitoring", monitoring::routes())
+        .nest("/admin",      admin::routes())
         .nest("/demo",       demo::routes())
         .nest("/docs",       docs::routes())
         .with_state(state)
