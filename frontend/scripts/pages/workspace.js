@@ -62,9 +62,23 @@ export default function workspace(app, { session }) {
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let chartInstance = null; // echarts — lazily created on first chart render
   let groupColorIdx = 0;
-  let sortKeys      = [];   // [{ col, dir, isDate }]
+  let sortKeys      = [];   // [{ col, dir, isDate }] — col is display-column-index (≥3)
   let searchQ       = "";
-  let activeFilter  = null; // { outer:'AND'|'OR', groups:[...] }
+  let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
+  let searchDebounce = null;
+
+  // UI filter ops → canonical FilterOp on the wire (shared::filter::FilterOp).
+  // The op-list union landed in 3d29291; this is the frontend half.
+  const OP_TO_WIRE = {
+    contains: "contains",
+    is:       "eq",
+    not:      "neq",
+    starts:   "starts_with",
+    empty:    "is_null",
+    filled:   "not_null",
+  };
+  // Ops that don't carry a value (server ignores .value for these).
+  const NULL_OPS = new Set(["is_null", "not_null"]);
   let groupCombo    = "AND";
   let filterCols    = [];   // [[colIndex, name], ...] for the filter builder
   let currentPage   = 1;    // 1-indexed page (matches Page<T>.page on the wire)
@@ -279,13 +293,21 @@ export default function workspace(app, { session }) {
   }
 
   async function fetchAndRender() {
-    const qs = "?page=" + currentPage + "&size=" + pageSize;
-    const pageData = await api.get("/files/" + encodeURIComponent(activeFileRid) + "/page" + qs);
+    const params = new URLSearchParams();
+    params.set("page", String(currentPage));
+    params.set("size", String(pageSize));
+    if (searchQ) params.set("q", searchQ);
+    const sorts = buildSortsParam();
+    if (sorts && sorts.length) params.set("sorts", JSON.stringify(sorts));
+    if (activeFilter) params.set("filters", JSON.stringify(activeFilter));
+    const pageData = await api.get(
+      "/files/" + encodeURIComponent(activeFileRid) + "/page?" + params.toString());
     // Server clamps page; trust its echo so the pager reflects reality.
     currentPage = pageData?.page || 1;
     totalPages  = pageData?.pages || 1;
     rowIndices  = pageData?.row_indices || [];
     renderTable(activeColumns, pageData?.rows || []);
+    syncSortHeaders();
     const shown = pageData?.rows?.length || 0;
     const total = pageData?.total || 0;
     const from  = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -294,6 +316,48 @@ export default function workspace(app, { session }) {
       + " · " + (pageData?.ms != null ? pageData.ms + " ms" : "—");
     renderPager();
     setTableState(null);
+  }
+
+  // ─── server-query builders ────────────────────────────────────
+  // sortKeys carries display-column-indexes (≥3, after the chk + #
+  // columns); the server needs column names. Translate via
+  // activeColumns; drop any key whose column has been removed.
+  function buildSortsParam() {
+    return sortKeys
+      .map((k) => {
+        const meta = activeColumns[k.col - 3];
+        return meta ? { col: meta.name, dir: k.dir > 0 ? "asc" : "desc" } : null;
+      })
+      .filter(Boolean);
+  }
+
+  // Walk the filter builder UI, return a FilterNode tree (or null when
+  // there's no actionable predicate). One group = one FilterGroup;
+  // multiple groups wrapped under the outer combo as a top-level
+  // FilterGroup. Single group with no outer wrapping: hand the inner
+  // group out directly (saves a level of nesting on the wire).
+  function buildFilterNode() {
+    const groups = Array.from(groupList.querySelectorAll(".rt-group-card"))
+      .map(readGroup);
+    const groupNodes = groups
+      .map((g) => ({
+        op: g.combo.toLowerCase(),
+        children: g.preds.map(predToLeaf).filter(Boolean),
+      }))
+      .filter((g) => g.children.length > 0);
+    if (groupNodes.length === 0) return null;
+    if (groupNodes.length === 1) return groupNodes[0];
+    return { op: groupCombo.toLowerCase(), children: groupNodes };
+  }
+
+  function predToLeaf(p) {
+    const meta = activeColumns[p.col - 3];
+    if (!meta) return null;
+    const op = OP_TO_WIRE[p.op];
+    if (!op) return null;
+    const leaf = { col: meta.name, op };
+    if (!NULL_OPS.has(op)) leaf.value = p.val;
+    return leaf;
   }
 
   function renderTable(columns, rows) {
@@ -472,10 +536,10 @@ export default function workspace(app, { session }) {
     };
   }
   $("#wsApplyFilter").addEventListener("click", () => {
-    const groups = Array.from(groupList.querySelectorAll(".rt-group-card")).map(readGroup);
-    activeFilter = { outer: groupCombo, groups };
-    $("#wsFilterToggle").classList.toggle("has-filter", groups.some((g) => g.preds.length));
-    refresh();
+    activeFilter = buildFilterNode();
+    $("#wsFilterToggle").classList.toggle("has-filter", activeFilter != null);
+    currentPage = 1;
+    refetchPage();
   });
   $("#wsClearFilter").addEventListener("click", () => {
     groupList.innerHTML = "";
@@ -483,61 +547,29 @@ export default function workspace(app, { session }) {
     if (filterCols.length) addGroup();
     activeFilter = null;
     $("#wsFilterToggle").classList.remove("has-filter");
-    refresh();
+    currentPage = 1;
+    refetchPage();
   });
 
-  // ─── table — search · sort (over loaded rows) ──────────────────
-  const rows     = () => Array.from(tbody.rows);
-  const cellText = (row, col) => (row.cells[col - 1]?.textContent || "").trim();
-
-  function passSearch(row) {
-    if (!searchQ) return true;
-    return Array.from(row.cells).some((c) => c.textContent.toLowerCase().includes(searchQ));
-  }
-  function passFilter(row) {
-    if (!activeFilter || !activeFilter.groups.length) return true;
-    const testPred = (p) => {
-      const v = cellText(row, p.col).toLowerCase();
-      const t = (p.val || "").toLowerCase();
-      const empty = v === "" || v === "—";
-      switch (p.op) {
-        case "contains": return v.includes(t);
-        case "is":       return v === t;
-        case "not":      return v !== t;
-        case "starts":   return v.startsWith(t);
-        case "empty":    return empty;
-        case "filled":   return !empty;
-      }
-      return true;
-    };
-    const groupPass = (g) => !g.preds.length ? true
-      : (g.combo === "AND" ? g.preds.every(testPred) : g.preds.some(testPred));
-    return activeFilter.outer === "AND"
-      ? activeFilter.groups.every(groupPass)
-      : activeFilter.groups.some(groupPass);
-  }
-  function refresh() {
-    let shown = 0;
-    rows().forEach((r) => {
-      const vis = passSearch(r) && passFilter(r);
-      r.hidden = !vis;
-      if (vis) shown++;
-    });
-    if (activeFileRid) rowsInfo.textContent = shown + " of " + rows().length + " rows shown";
-  }
-  function renumber() {
-    rows().forEach((r, i) => {
-      const c = r.querySelector(".col-rownum");
-      if (c) c.textContent = i + 1;
-    });
-  }
-
+  // ─── search — debounced, server-side via PageQuery.q ─────────
+  // Page-local string match used to live here (passSearch over rendered
+  // rows); deleted along with passFilter/applySort. The boundary doc
+  // forbids JS data-engine code long-term — search now ships through
+  // the same Page<T> wire as filter + sort.
   $("#wsRowSearch").addEventListener("input", (e) => {
-    searchQ = e.target.value.trim().toLowerCase();
-    refresh();
+    const next = e.target.value.trim();
+    if (next === searchQ) return;
+    searchQ = next;
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      currentPage = 1;
+      refetchPage();
+    }, 250);
   });
 
-  // sort — delegated on thead so it survives a re-render
+  // ─── sort — server-side via PageQuery.sorts ──────────────────
+  // Shift-click extends the sort, plain click replaces. Same gesture
+  // as before; the difference is the refetch.
   thead.addEventListener("click", (e) => {
     const th = e.target.closest("th.sortable");
     if (!th) return;
@@ -551,30 +583,23 @@ export default function workspace(app, { session }) {
     } else {
       sortKeys = [{ col, dir: 1, isDate }];
     }
-    applySort();
+    refetchPage();
   });
-  function applySort() {
-    rows().sort((a, b) => {
-      for (const k of sortKeys) {
-        let x = cellText(a, k.col), y = cellText(b, k.col);
-        if (k.isDate) { x = Date.parse(x) || 0; y = Date.parse(y) || 0; }
-        else { x = x.toLowerCase(); y = y.toLowerCase(); }
-        if (x < y) return -k.dir;
-        if (x > y) return k.dir;
-      }
-      return 0;
-    }).forEach((r) => tbody.appendChild(r));
-    renumber();
+
+  // Paint sort-direction chevrons + multi-key order numbers on the
+  // header. Called from fetchAndRender after each (re)render — the
+  // header is rebuilt by renderTable, so the indicators reapply.
+  function syncSortHeaders() {
     table.querySelectorAll("th.sortable").forEach((h) => {
       const idx = sortKeys.findIndex((k) => k.col === +h.dataset.sort);
-      const ic = h.querySelector(".sort");
+      const ic  = h.querySelector(".sort");
       let ord = h.querySelector(".sort-ord");
       h.classList.toggle("sorted", idx !== -1);
       if (idx === -1) {
-        ic.className = "bi sort bi-chevron-expand";
+        if (ic) ic.className = "bi sort bi-chevron-expand";
         if (ord) ord.remove();
       } else {
-        ic.className = "bi sort " + (sortKeys[idx].dir > 0 ? "bi-chevron-up" : "bi-chevron-down");
+        if (ic) ic.className = "bi sort " + (sortKeys[idx].dir > 0 ? "bi-chevron-up" : "bi-chevron-down");
         if (sortKeys.length > 1) {
           if (!ord) { ord = document.createElement("sup"); ord.className = "sort-ord"; h.appendChild(ord); }
           ord.textContent = idx + 1;
