@@ -58,9 +58,8 @@ pub async fn find_user_by_username(pool: &PgPool, username: &str) -> sqlx::Resul
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
                 job_title, organisation, use_case, plan, locale,
-                -- prefs sourced from the user_preferences table (mig 023);
-                -- the users.prefs JSONB column is dead in Phase 1 and
-                -- gets dropped in Phase 2.
+                -- prefs from the user_preferences table (mig 023);
+                -- users.prefs JSONB column dropped in mig 024.
                 COALESCE(
                   (SELECT jsonb_object_agg(p.key, p.value)
                      FROM user_preferences p
@@ -80,9 +79,8 @@ pub async fn find_user_by_id(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Us
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
                 job_title, organisation, use_case, plan, locale,
-                -- prefs sourced from the user_preferences table (mig 023);
-                -- the users.prefs JSONB column is dead in Phase 1 and
-                -- gets dropped in Phase 2.
+                -- prefs from the user_preferences table (mig 023);
+                -- users.prefs JSONB column dropped in mig 024.
                 COALESCE(
                   (SELECT jsonb_object_agg(p.key, p.value)
                      FROM user_preferences p
@@ -105,9 +103,8 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
     let rows: Vec<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
                 job_title, organisation, use_case, plan, locale,
-                -- prefs sourced from the user_preferences table (mig 023);
-                -- the users.prefs JSONB column is dead in Phase 1 and
-                -- gets dropped in Phase 2.
+                -- prefs from the user_preferences table (mig 023);
+                -- users.prefs JSONB column dropped in mig 024.
                 COALESCE(
                   (SELECT jsonb_object_agg(p.key, p.value)
                      FROM user_preferences p
@@ -152,8 +149,8 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
 /// **Prefs do NOT flow through here.** As of migration 023, prefs live
 /// in the `user_preferences` table and the only write path is
 /// `patch_user_prefs(…)` (called from `PATCH /api/me/prefs`). The
-/// `prefs` column on `users` is dead Phase-1 storage that Phase 2
-/// drops. See `docs/internal/spec-user-preferences.md`.
+/// legacy `users.prefs` JSONB column was dropped in migration 024.
+/// See `docs/internal/spec-user-preferences.md`.
 #[allow(clippy::too_many_arguments)]
 pub async fn update_user(
     pool:         &PgPool,
@@ -288,9 +285,8 @@ pub async fn find_user_by_google_sub(pool: &PgPool, sub: &str) -> sqlx::Result<O
     let row: Option<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
                 job_title, organisation, use_case, plan, locale,
-                -- prefs sourced from the user_preferences table (mig 023);
-                -- the users.prefs JSONB column is dead in Phase 1 and
-                -- gets dropped in Phase 2.
+                -- prefs from the user_preferences table (mig 023);
+                -- users.prefs JSONB column dropped in mig 024.
                 COALESCE(
                   (SELECT jsonb_object_agg(p.key, p.value)
                      FROM user_preferences p
