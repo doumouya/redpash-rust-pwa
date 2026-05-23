@@ -3,6 +3,8 @@
 //!   GET /api/monitoring/events?page&size&window&level&kind
 //!   GET /api/monitoring/audit-runs?page&size&tool
 //!   GET /api/monitoring/audit-findings?page&size&run&tool&kind
+//!   GET /api/monitoring/requests?page&size&window&route&status&method
+//!   GET /api/monitoring/requests/stats?window
 //!
 //! All three return `Page<T>` — same shape as `/api/files/:rid/page`
 //! so the redtable on the monitoring tabs reuses the existing reader.
@@ -22,9 +24,13 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use shared::{
-    monitoring::{AuditFindingSummary, AuditRunSummary, EventSummary},
+    monitoring::{
+        AuditFindingSummary, AuditRunSummary, EventSummary,
+        RequestSummary, RequestsStats, RouteStat, Window,
+    },
     Page,
 };
+use std::collections::HashMap;
 use sqlx::Row;
 
 use crate::{error::AppError, state::AppState};
@@ -34,6 +40,8 @@ pub fn routes() -> Router<AppState> {
         .route("/events",          get(list_events))
         .route("/audit-runs",      get(list_audit_runs))
         .route("/audit-findings",  get(list_audit_findings))
+        .route("/requests",        get(list_requests))
+        .route("/requests/stats",  get(stats_requests))
 }
 
 // ── shared query plumbing ───────────────────────────────────────────────
@@ -342,4 +350,196 @@ async fn list_audit_findings(
         size,
         started,
     )))
+}
+
+// ── /api/monitoring/requests ────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RequestsQuery {
+    #[serde(default)] page:   Option<u32>,
+    #[serde(default)] size:   Option<u32>,
+    #[serde(default)] window: Option<String>,
+    /// Substring match on the normalized route (post-`/api`-strip).
+    /// `?route=/projects` matches `/projects`, `/projects/:id`, etc.
+    #[serde(default)] route:  Option<String>,
+    /// Exact status filter (e.g. `?status=401`) — keeps it simple; if
+    /// the UI needs 2xx/3xx/4xx/5xx banding, it filters status_mix
+    /// from the stats endpoint.
+    #[serde(default)] status: Option<i16>,
+    #[serde(default)] method: Option<String>,
+}
+
+async fn list_requests(
+    State(state): State<AppState>,
+    Query(q):     Query<RequestsQuery>,
+) -> Result<Json<Page<RequestSummary>>, AppError> {
+    let started = Instant::now();
+    let cutoff = window_cutoff(q.window.as_deref())?;
+    let (offset, size, page) = paginate(q.page, q.size);
+
+    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM request_log")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // /api/monitoring/* itself is filtered out so the operator's act
+    // of viewing the dashboard doesn't pollute its own table —
+    // matches the /api/metrics convention. Stored routes are
+    // post-`/api`-strip (capture_mw mounts on the nested router).
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM request_log
+          WHERE ($1::timestamptz IS NULL OR at >= $1)
+            AND route NOT LIKE '/monitoring%'
+            AND ($2::text  IS NULL OR route  ILIKE '%' || $2 || '%')
+            AND ($3::int2  IS NULL OR status = $3)
+            AND ($4::text  IS NULL OR method = $4)",
+    )
+    .bind(cutoff)
+    .bind(q.route.as_deref())
+    .bind(q.status)
+    .bind(q.method.as_deref())
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let rows = sqlx::query(
+        "SELECT id, at, method, route, status, duration_ms, request_id
+           FROM request_log
+          WHERE ($1::timestamptz IS NULL OR at >= $1)
+            AND route NOT LIKE '/monitoring%'
+            AND ($2::text  IS NULL OR route  ILIKE '%' || $2 || '%')
+            AND ($3::int2  IS NULL OR status = $3)
+            AND ($4::text  IS NULL OR method = $4)
+          ORDER BY at DESC
+          LIMIT $5 OFFSET $6",
+    )
+    .bind(cutoff)
+    .bind(q.route.as_deref())
+    .bind(q.status)
+    .bind(q.method.as_deref())
+    .bind(size as i64)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let rows: Vec<RequestSummary> = rows
+        .into_iter()
+        .map(|r| RequestSummary {
+            id:          r.try_get("id").unwrap_or(0),
+            at:          r.try_get("at").unwrap_or_else(|_| Utc::now()),
+            method:      r.try_get("method").unwrap_or_default(),
+            route:       r.try_get("route").unwrap_or_default(),
+            status:      r.try_get("status").unwrap_or(0),
+            duration_ms: r.try_get("duration_ms").unwrap_or(0),
+            request_id:  r.try_get("request_id").ok(),
+        })
+        .collect();
+
+    Ok(Json(build_page(
+        rows,
+        total as u64,
+        all_count as u64,
+        page,
+        size,
+        started,
+    )))
+}
+
+// ── /api/monitoring/requests/stats ──────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RequestsStatsQuery {
+    #[serde(default)] window: Option<String>,
+}
+
+async fn stats_requests(
+    State(state): State<AppState>,
+    Query(q):     Query<RequestsStatsQuery>,
+) -> Result<Json<RequestsStats>, AppError> {
+    let label = q.window.as_deref().unwrap_or("24h").to_string();
+    let cutoff = window_cutoff(Some(&label))?
+        .expect("window_cutoff returns Some for non-None input");
+    let until = Utc::now();
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM request_log
+          WHERE at >= $1
+            AND route NOT LIKE '/monitoring%'",
+    )
+    .bind(cutoff)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let mix_rows = sqlx::query(
+        "SELECT status::TEXT AS status_str, COUNT(*)::BIGINT AS cnt
+           FROM request_log
+          WHERE at >= $1
+            AND route NOT LIKE '/monitoring%'
+          GROUP BY status",
+    )
+    .bind(cutoff)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let mut status_mix: HashMap<String, u64> = HashMap::with_capacity(mix_rows.len());
+    for r in mix_rows {
+        let s: String = r.try_get("status_str").unwrap_or_default();
+        let c: i64    = r.try_get("cnt").unwrap_or(0);
+        if !s.is_empty() {
+            status_mix.insert(s, c as u64);
+        }
+    }
+
+    // Top routes by p95 — same percentile_cont path as /api/metrics,
+    // sorted by the p95 column descending, capped at 10. Tie-break by
+    // count descending so a 0ms route doesn't outrank a busy one.
+    let route_rows = sqlx::query(
+        "SELECT method, route,
+                COUNT(*)::BIGINT                                                              AS cnt,
+                COUNT(*) FILTER (WHERE status >= 400)::BIGINT                                 AS errs,
+                COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p50,
+                COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p95,
+                COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT AS p99
+           FROM request_log
+          WHERE at >= $1
+            AND route NOT LIKE '/monitoring%'
+          GROUP BY method, route
+          ORDER BY p95 DESC, cnt DESC
+          LIMIT 10",
+    )
+    .bind(cutoff)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let top_routes: Vec<RouteStat> = route_rows
+        .into_iter()
+        .map(|r| {
+            let cnt:  i64 = r.try_get("cnt").unwrap_or(0);
+            let errs: i64 = r.try_get("errs").unwrap_or(0);
+            RouteStat {
+                method:     r.try_get("method").unwrap_or_default(),
+                route:      r.try_get("route").unwrap_or_default(),
+                count:      cnt as u64,
+                p50_ms:     r.try_get("p50").unwrap_or(0),
+                p95_ms:     r.try_get("p95").unwrap_or(0),
+                p99_ms:     r.try_get("p99").unwrap_or(0),
+                error_rate: if cnt == 0 { 0.0 } else { errs as f64 / cnt as f64 },
+            }
+        })
+        .collect();
+
+    Ok(Json(RequestsStats {
+        window: Window {
+            label,
+            since: cutoff,
+            until,
+        },
+        total: total as u64,
+        status_mix,
+        top_routes,
+    }))
 }

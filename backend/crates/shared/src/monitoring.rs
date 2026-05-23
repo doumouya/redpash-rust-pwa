@@ -55,3 +55,61 @@ pub struct AuditFindingSummary {
     pub finding_key: String,
     #[serde(default)] pub severity: Option<i32>,
 }
+
+/// One row in `GET /api/monitoring/requests` — the drill-down redtable
+/// beneath the Requests-tab KPI strip + ECharts panels. Mirrors the
+/// `request_log` table verbatim minus internal-only columns (none in
+/// the current schema, but the projection is explicit so a future
+/// `internal_only` column won't leak by accident).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestSummary {
+    pub id:          i64,
+    pub at:          chrono::DateTime<chrono::Utc>,
+    pub method:      String,
+    pub route:       String,
+    pub status:      i16,
+    pub duration_ms: i32,
+    #[serde(default)] pub request_id: Option<String>,
+}
+
+/// One row in the `top_routes` field of `GET /api/monitoring/requests/stats`.
+/// Same shape as `/api/metrics`'s `by_route` entries, kept distinct so
+/// the two endpoints can drift independently (e.g. monitoring later
+/// adds an "ok/warn/error" band column without touching /api/metrics).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteStat {
+    pub method:     String,
+    pub route:      String,
+    pub count:      u64,
+    pub p50_ms:     i64,
+    pub p95_ms:     i64,
+    pub p99_ms:     i64,
+    pub error_rate: f64,
+}
+
+/// Aggregate returned by `GET /api/monitoring/requests/stats`. Powers
+/// the status-mix donut + ranked top-routes panels on the Requests
+/// tab; the paginated drill-down comes from the sibling list endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestsStats {
+    pub window:      crate::monitoring::Window,
+    pub total:       u64,
+    /// HTTP status-code distribution within the window — exact codes
+    /// (`"200" | "401" | "500" | …`) so the donut can color-band by
+    /// 2xx / 3xx / 4xx / 5xx on the frontend without bucket choices
+    /// being baked server-side.
+    pub status_mix:  std::collections::HashMap<String, u64>,
+    /// Routes ranked by p95 latency, descending — the operator's
+    /// "slowest 10" view. Always capped at 10 entries server-side.
+    pub top_routes:  Vec<RouteStat>,
+}
+
+/// The time window covered by a monitoring stats response. Mirrors
+/// `/api/metrics`'s `window` field so the frontend can label it
+/// identically.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Window {
+    pub label: String,
+    pub since: chrono::DateTime<chrono::Utc>,
+    pub until: chrono::DateTime<chrono::Utc>,
+}
