@@ -13,6 +13,7 @@
 import { api } from "/scripts/api.js";
 import { installErrorCapture } from "/scripts/events.js";
 import { seedPrefs } from "/scripts/prefs.js";
+import { esc } from "/scripts/dom.js";
 
 // Arm frontend error capture before anything else runs, so a
 // boot-time exception still reaches the Events log.
@@ -106,11 +107,6 @@ function errorShell(badge, title, body) {
     +   '</div>'
     + '</section>';
 }
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-
 window.addEventListener("hashchange", () => {
   // Bare in-page anchors (#section) are not routes — ignore them.
   if (location.hash && !location.hash.startsWith("#/")) return;

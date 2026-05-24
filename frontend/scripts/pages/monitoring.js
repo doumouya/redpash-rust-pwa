@@ -9,6 +9,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
+import { esc, cssEsc } from "/scripts/dom.js";
 
 // Same MON_TABS declaration shape as home.js — explicit, RBAC-friendly.
 // `endpoint` is the un-prefixed path; the /api/ literal is never in a
@@ -941,10 +942,3 @@ export default function monitoring(app, { session }) {
 
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-function cssEsc(s) {
-  return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
-}

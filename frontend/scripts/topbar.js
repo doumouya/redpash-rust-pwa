@@ -13,6 +13,7 @@
 
 import { api } from "/scripts/api.js";
 import { toggleTheme, currentTheme } from "/scripts/theme.js";
+import { esc } from "/scripts/dom.js";
 
 // Profile lives on the avatar (bottom-right of the topbar nav), not
 // as a generic rt-btn — saves a slot and the avatar already advertises
@@ -263,7 +264,3 @@ function mountOmnisearch(omniEl) {
   });
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}

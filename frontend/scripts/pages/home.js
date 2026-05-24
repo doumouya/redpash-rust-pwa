@@ -14,6 +14,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
+import { esc, cssEsc } from "/scripts/dom.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
 // 2026-06-05). Renamed from `import|report` to `new|design`:
@@ -718,10 +719,3 @@ function renderGreeting(app, session) {
   el.textContent = tod + ", " + name + ".";
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-function cssEsc(s) {
-  return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
-}

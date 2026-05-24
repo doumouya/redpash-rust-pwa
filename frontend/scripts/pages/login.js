@@ -8,6 +8,7 @@
 
 import { api } from "/scripts/api.js";
 import { getEngine, gateBySize } from "/scripts/wasm-engine.js";
+import { esc } from "/scripts/dom.js";
 
 // Cap the rendered preview rows. The mini-table viewport shows 7 rows
 // + a sticky header; the user can scroll vertically through whatever
@@ -188,7 +189,3 @@ function csvToObjects(text) {
   });
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}

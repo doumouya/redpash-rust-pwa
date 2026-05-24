@@ -10,6 +10,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { kpiBarH } from "/scripts/echarts-kpi.js";
+import { esc } from "/scripts/dom.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
 
@@ -143,17 +144,13 @@ function populateMemberships(app, me) {
   root.innerHTML = memberships.map((m) =>
     '<a class="rp-profile__membership" href="#/home?tab=companies" title="Open Companies">'
     + '<i class="bi bi-building rp-profile__membership-icon"></i>'
-    + '<span class="rp-profile__membership-name">' + escHTML(m.company_name) + '</span>'
+    + '<span class="rp-profile__membership-name">' + esc(m.company_name) + '</span>'
     + '<span class="rp-profile__membership-role rp-profile__membership-role--'
-    +   escHTML(m.role) + '">' + escHTML(m.role) + '</span>'
+    +   esc(m.role) + '">' + esc(m.role) + '</span>'
     + '</a>'
   ).join("");
 }
 
-function escHTML(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
 
 function populateConnections(app, me) {
   const email   = me.email;

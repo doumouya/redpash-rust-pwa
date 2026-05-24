@@ -12,6 +12,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { esc, cssEsc } from "/scripts/dom.js";
 
 const GROUP_COLORS = ["blue", "mauve", "teal", "peach"];
 
@@ -161,10 +162,3 @@ export default function docs(app, { session }) {
   }
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-function cssEsc(s) {
-  return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
-}

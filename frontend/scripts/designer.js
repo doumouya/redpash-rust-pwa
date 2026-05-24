@@ -24,6 +24,7 @@
 
 import { api } from "/scripts/api.js";
 import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
+import { esc } from "/scripts/dom.js";
 
 // ── chart themes (separate from chrome theme) ────────────────────────
 // Vintage is the ECharts builtin (warm/muted); Latte + Mocha mirror
@@ -788,8 +789,3 @@ export function mountDesigner(designerEl, ctx) {
   return { load, resize, unmount, addChartWidget, getOpenDashboardRid, getOpenDashboard };
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}

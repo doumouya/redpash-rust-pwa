@@ -20,6 +20,7 @@ import { mountReport } from "/scripts/report.js";
 import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
+import { esc, cssEsc } from "/scripts/dom.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
 // 2026-06-05). Renamed from `import|report` to `new|design` — same
@@ -183,9 +184,6 @@ export default function workspace(app, { session }) {
     activeFileRid = null;  // clear so loadFile's "same-rid" early-return doesn't fire
     loadFile(newRid);
   }
-  function cssEsc(s) {
-    return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
-  }
 
   // ─── rail — load projects + lazy files ─────────────────────────
   loadProjects();
@@ -229,9 +227,6 @@ export default function workspace(app, { session }) {
       first.classList.add("expanded");
       loadFilesForGroup(first);
     }
-  }
-  function cssEsc(s) {
-    return window.CSS?.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
   }
 
   function projectGroup(p) {
@@ -1423,9 +1418,4 @@ export default function workspace(app, { session }) {
     refetchPage();
   });
 
-  // ─── escape utility ────────────────────────────────────────────
-  function esc(s) {
-    return String(s ?? "").replace(/[&<>"]/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  }
 }

@@ -17,6 +17,7 @@
 //     directly from the response — no extra round-trip.
 
 import { api } from "/scripts/api.js";
+import { esc } from "/scripts/dom.js";
 
 // ─── field-type renderers ────────────────────────────────────────────
 // Each renderer returns { html, read(rootEl) }. Read returns the typed
@@ -1007,11 +1008,3 @@ export function mountTools(panelBody, ctx) {
   return { refresh: renderColumnsView };
 }
 
-// Local escape — tools.js is self-contained; workspace.js has its own.
-// Per js-rust-boundary.md naming, `esc` (the shared noun) appears in both;
-// keep them syntactically identical so future shared-primitive extraction
-// (dom.js) can collapse them with a single move.
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}

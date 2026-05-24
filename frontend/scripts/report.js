@@ -20,6 +20,7 @@
 //                yet" warnings).
 
 import { api } from "/scripts/api.js";
+import { esc } from "/scripts/dom.js";
 
 // Aggregation functions — vocabulary from shared::report::AggFn. The
 // values are exactly what the backend expects (snake_case enum).
@@ -1034,7 +1035,3 @@ export function mountReport(panelBody, ctx) {
   };
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}

@@ -17,6 +17,7 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { api } from "/scripts/api.js";
 import { applyTheme, currentTheme } from "/scripts/theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
+import { esc } from "/scripts/dom.js";
 
 // Server-side pref keys read on mount. Distinct from PREFS in prefs.js:
 // these come from /me, not the local registered enum.
@@ -112,14 +113,10 @@ function renderSentinels(app, prefs) {
   }
   root.innerHTML = list.map((v) =>
     '<span class="rp-settings__sentinel">'
-    + '<span class="rp-settings__sentinel-name">' + escHTML(v) + '</span>'
-    + '<button type="button" class="rp-settings__sentinel-x" data-value="' + escHTML(v) + '"'
-    +   ' aria-label="Remove ' + escHTML(v) + '" title="Remove">×</button>'
+    + '<span class="rp-settings__sentinel-name">' + esc(v) + '</span>'
+    + '<button type="button" class="rp-settings__sentinel-x" data-value="' + esc(v) + '"'
+    +   ' aria-label="Remove ' + esc(v) + '" title="Remove">×</button>'
     + '</span>'
   ).join("");
 }
 
-function escHTML(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
