@@ -1,8 +1,15 @@
-/* ── chart ───────────────────────────────────────────────────────
-   The Workspace body when a chart-typed file is open. The 8th atom:
-   an ECharts canvas in the same wrapper the rp-table sits in,
-   surfaced by workspace.js when the file's file_type is `chart`.
-   Sibling of the table — only one is visible at a time. */
+/* ── chart / designer surface ───────────────────────────────────
+   The Workspace body when a chart-typed file is open. The
+   .rt-designer container hosts the canvas (12-col grid of tiles)
+   on the left + a config accordion on the right.
+
+   Ported from red-front/designer.html (the prototype Em
+   showed me). Same vocabulary (.ds-*); tokens rewritten to the
+   redpash --rp-* family so chrome themes apply consistently.
+
+   The legacy single-canvas .rt-chart + chart-state classes stay
+   for /chart files rendered outside the Designer (e.g. embeds)
+   or as a fallback when ECharts didn't load. */
 
 .rt-chart {
   flex: 1;
@@ -11,121 +18,305 @@
   min-height: 400px;
   padding: var(--rp-sp-4);
 }
-
 .rt-chart__state {
   padding: var(--rp-sp-8);
   text-align: center;
   color: var(--rp-text-mute);
 }
 
-/* ── designer edit strip ────────────────────────────────────────
-   Inline chart authoring (designer.js). Lives above .rt-chart in
-   the table-wrap; shown only when a chart-typed file is open.
-   Two rows: kind tabs + title + save (top), field selects (below). */
-.rt-designer-strip {
-  flex-shrink: 0;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rp-border);
-  background: var(--rp-surface-2);
+/* ── designer shell ─────────────────────────────────────────────
+   Two columns: canvas + config accordion. Canvas scrolls; accordion
+   has its own scroll if sections expand beyond the panel height. */
+.rt-designer {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  background: var(--rp-bg);
 }
-.rt-designer-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rt-designer-row--fields { gap: 14px; }
 
-/* kind tabs — bar / line / area / pie */
-.rt-designer-kinds {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
+/* canvas ─────────────────────────────────────────────────────── */
+.ds-canvas {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+.ds-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px;
+  align-content: start;
+}
+.span-3  { grid-column: span 3; }
+.span-5  { grid-column: span 5; }
+.span-6  { grid-column: span 6; }
+.span-7  { grid-column: span 7; }
+.span-12 { grid-column: span 12; }
+
+.ds-tile {
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.07), 0 8px 24px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.14s var(--rp-ease), box-shadow 0.14s var(--rp-ease);
 }
-.rt-designer-kind {
+.ds-tile.selected {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 3px var(--rp-accent-soft);
+}
+.ds-tile-head {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 6px 0 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ds-tile-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-tile-menu {
+  color: var(--rp-text-mute);
+  font-size: 13px;
+  padding: 4px;
+}
+.ds-tile-body {
+  flex: 1;
+  min-height: 280px;
+  padding: 0 8px 8px;
+}
+.ds-chart { width: 100%; height: 100%; }
+
+.ds-empty {
+  margin: 40px auto;
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: 13px;
+}
+
+/* config accordion ───────────────────────────────────────────── */
+.ds-config {
+  flex-shrink: 0;
+  width: 320px;
+  background: var(--rp-surface-2);
+  border-left: 1px solid var(--rp-border);
+  display: flex;
+  flex-direction: column;
+}
+.ds-config-head {
+  flex-shrink: 0;
+  height: 42px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rp-border);
+}
+.ds-config-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.ds-config-title i { color: var(--rp-accent-2); font-size: 14px; }
+.ds-config-save {
+  height: 28px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--rp-text-mute);
-  font: inherit;
   font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
-  transition: color 0.12s var(--rp-ease), background 0.12s var(--rp-ease);
 }
-.rt-designer-kind i { font-size: 13px; color: var(--rp-accent-2); }
-.rt-designer-kind:hover { color: var(--rp-text); }
-.rt-designer-kind.is-active {
-  background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+.ds-config-save i { font-size: 12px; }
+.ds-config-save:disabled { opacity: 0.45; cursor: not-allowed; }
+.ds-config-body {
+  flex: 1;
+  overflow-y: auto;
 }
 
-.rt-designer-title {
-  flex: 1;
-  height: 30px;
+/* accordion section */
+.ds-sec { border-bottom: 1px solid var(--rp-border); }
+.ds-sec:last-child { border-bottom: 0; }
+.ds-sec-head {
+  width: 100%;
+  height: 40px;
   padding: 0 10px;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: var(--rp-text);
+  transition: background 0.12s var(--rp-ease);
+}
+.ds-sec-head:hover { background: var(--rp-hover); }
+.ds-sec-caret {
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  transition: transform 0.15s var(--rp-ease);
+}
+.ds-sec:not(.open) .ds-sec-caret { transform: rotate(-90deg); }
+.ds-sec-icon { font-size: 13px; color: var(--rp-accent-2); }
+.ds-sec-label {
+  flex: 1;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ds-sec-body { padding: 2px 12px 14px; }
+.ds-sec:not(.open) .ds-sec-body { display: none; }
+
+/* form atoms inside the accordion */
+.ds-lbl {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.ds-sec-body > .ds-lbl:first-child { margin-top: 4px; }
+.ds-input {
+  width: 100%;
+  height: 31px;
+  padding: 0 9px;
   border: 1px solid var(--rp-border);
   border-radius: 7px;
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
   outline: 0;
 }
-.rt-designer-title:focus { border-color: var(--rp-accent-2); }
-
-.rt-designer-save {
-  height: 30px;
-  padding: 0 14px;
-  display: inline-flex;
+.ds-input:focus {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 3px var(--rp-accent-soft);
+}
+.ds-toggle-row {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12.5px;
-  font-weight: 600;
+  color: var(--rp-text);
+  cursor: pointer;
+  padding: 4px 0;
 }
-.rt-designer-save i { font-size: 13px; }
-.rt-designer-save:disabled { opacity: 0.45; cursor: not-allowed; }
-.rt-designer-dot {
-  color: var(--rp-warn);
-  font-size: 12px;
-  line-height: 1;
+.ds-toggle-row input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--rp-accent-2);
+  cursor: pointer;
+}
+.ds-muted {
+  color: var(--rp-text-mute);
+  font-size: 11.5px;
 }
 
-/* fields row — group_by, agg_col, agg_fn */
-.rt-designer-field {
-  flex: 1;
+/* chart-type grid (per family — cartesian / pie / barh) */
+.ds-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.ds-type-btn {
+  height: 50px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 3px;
-  min-width: 0;
-}
-.rt-designer-field > span {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
-.rt-designer-field select {
-  height: 28px;
-  padding: 0 8px;
   border: 1px solid var(--rp-border);
-  border-radius: 6px;
+  border-radius: 9px;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease),
+              background 0.14s var(--rp-ease);
+}
+.ds-type-btn i { font-size: 15px; }
+.ds-type-btn:hover { color: var(--rp-text); }
+.ds-type-btn.active {
+  color: var(--rp-accent-2);
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
+
+/* Data section atoms (source chip + chip rows) */
+.ds-source {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--rp-hover);
+  font-size: 12px;
+  color: var(--rp-text);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.ds-source i { color: var(--rp-accent-2); font-size: 13px; }
+.ds-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ds-chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+  font-weight: 550;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Style section — theme picker swatches */
+.ds-theme-opts { display: flex; flex-direction: column; gap: 5px; }
+.ds-theme-opt {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
   font-size: 12.5px;
-  outline: 0;
+  cursor: pointer;
+  transition: border-color 0.14s var(--rp-ease), background 0.14s var(--rp-ease);
 }
-.rt-designer-field select:focus { border-color: var(--rp-accent-2); }
+.ds-theme-opt:hover { background: var(--rp-hover); }
+.ds-theme-opt.active {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
+.ds-sw { display: flex; gap: 2px; }
+.ds-sw i {
+  width: 11px;
+  height: 14px;
+  border-radius: 2px;
+}
+.ds-theme-opt span { flex: 1; text-align: left; font-weight: 550; }
+.ds-theme-opt .ds-check {
+  color: var(--rp-accent-2);
+  font-size: 12px;
+}

@@ -49,7 +49,6 @@ export default function workspace(app, { session }) {
   const thead      = table.tHead;
   const tbody      = table.tBodies[0];
   const tableState = $("#wsTableState");
-  const chartEl    = $("#wsChart");
   const colsDd     = $("#wsColsDd");
   const rowsInfo   = $("#wsRowsInfo");
   const selChip    = $("#wsSelChip");
@@ -375,10 +374,11 @@ export default function workspace(app, { session }) {
         syncToolbar();
         toolsCtrl?.refresh();
         reportCtrl?.refresh();
-        designerCtrl?.load(chart);
+        // Hand the designer the chart; it owns the canvas + accordion.
         $("#wsTable").hidden  = true;
         $("#wsTableState").hidden = true;
-        $("#wsChart").hidden  = false;
+        $("#wsDesigner").hidden = false;
+        designerCtrl?.load(chart);
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
         totalPages = 1;
         renderPager();
@@ -407,10 +407,10 @@ export default function workspace(app, { session }) {
       if (isChart) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
-        designerCtrl?.load(chart);
         $("#wsTable").hidden  = true;
         $("#wsTableState").hidden = true;
-        $("#wsChart").hidden  = false;
+        $("#wsDesigner").hidden = false;
+        designerCtrl?.load(chart);
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
@@ -422,11 +422,9 @@ export default function workspace(app, { session }) {
         // opens have an immediate source.
         sourceCache = { rid, columns: activeColumns };
         syncNewChartButton();
-        // Tear down any open designer (the user navigated away from
-        // a chart back to a data file).
+        // Tear down any open designer (user navigated from chart to data).
         designerCtrl?.load(null);
-        $("#wsDesignerStrip").hidden = true;
-        $("#wsChart").hidden = true;
+        $("#wsDesigner").hidden = true;
         $("#wsTable").hidden = false;
         await fetchAndRender();
       }
@@ -545,18 +543,16 @@ export default function workspace(app, { session }) {
 
   function setTableState(msg) {
     // State message — when no body is current (loading, error, no file).
-    const strip = document.getElementById("wsDesignerStrip");
+    const designer = document.getElementById("wsDesigner");
     if (msg) {
       tableState.textContent = msg;
       tableState.hidden = false;
       table.hidden = true;
-      chartEl.hidden = true;
-      if (strip) strip.hidden = true;
+      if (designer) designer.hidden = true;
     } else {
       tableState.hidden = true;
       table.hidden = false;
-      chartEl.hidden = true;
-      if (strip) strip.hidden = true;
+      if (designer) designer.hidden = true;
     }
   }
 
@@ -1106,16 +1102,16 @@ export default function workspace(app, { session }) {
   $("#wsApplyReport")?.addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
   $("#wsClearReport")?.addEventListener("click", () => reportCtrl?.clear());
 
-  // ─── designer — inline chart authoring ─────────────────────────
+  // ─── designer — canvas + accordion config ─────────────────────
   // Mounts a no-op container at boot; load(chart) lights it up when
-  // a chart-typed file is opened in loadFile. Source data lives on
-  // sourceCache (set when the user opens a data file); the designer
-  // pulls from there via getSource() so the chart's source columns
-  // are always current.
-  const designerStrip = $("#wsDesignerStrip");
-  const designerCanvas = $("#wsChart");
-  if (designerStrip && designerCanvas) {
-    designerCtrl = mountDesigner(designerStrip, designerCanvas, {
+  // a chart-typed file is opened in loadFile. Single-tile for now
+  // (the opened CHT_); dashboard files (multi-tile, new file_type)
+  // are Phase 2. Source data lives on sourceCache (populated when
+  // the user visits a data file); designer.js reads it for the
+  // Data section + future live-preview from source.
+  const designerEl = $("#wsDesigner");
+  if (designerEl) {
+    designerCtrl = mountDesigner(designerEl, {
       getSource: () => sourceCache,
       onSaved:   (saved) => {
         rowsInfo.textContent = "Chart · " + (saved?.title || "untitled");
