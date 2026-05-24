@@ -72,6 +72,11 @@
   display: flex;
   background: var(--rp-bg);
 }
+/* `display: flex` above beats the UA-level `[hidden]` rule, so the
+   designer would stay visible under a 10-row data table when
+   setTableState() flips `hidden=true`. Restore the hidden semantic
+   explicitly. */
+.rt-designer[hidden] { display: none; }
 .rt-designer.ds-config-hidden .ds-config { display: none; }
 
 /* canvas ─────────────────────────────────────────────────────── */
