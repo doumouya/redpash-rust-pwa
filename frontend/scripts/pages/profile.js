@@ -220,6 +220,10 @@ function paintUsageChart(el, items) {
     yAxis: { type: "category", data: items.map((i) => i.name) },
     series: [{
       type: "bar",
+      // Cycle the theme palette per data point (not per series) so each
+      // bar gets its own colour — without this, ECharts hands the
+      // whole series palette[0] and every bar paints the same blue.
+      colorBy: "data",
       barWidth: "60%",
       data: items.map((i) => ({ value: i.value, hash: i.hash })),
       label: { show: true, position: "right", formatter: "{c}", fontWeight: 600 },
