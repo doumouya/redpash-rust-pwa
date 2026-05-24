@@ -224,38 +224,78 @@ threshold. Three patterns worth queuing on the next audit-tool
 pass:
 
 1. **rs-audit pattern: `SELECT … FROM project_files`** queries
-   without a `WHERE … file_type …` clause. Status: `declined` →
-   `extracted` with ACK convention (Gus's reframe — match on the
-   ACK comment, not the SQL shape; same forcing function as
-   cat-1's `// AUTH-AUDIT-ACK:`). Every query site declares its
-   intent via `// PROJECT-FILES-ACK: type=<any|csv|<concrete>>`
-   or fails the audit. **Pending** — queued in Gus's lane.
+   without a `// PROJECT-FILES-ACK: type=…` declaration. Status:
+   `extracted`, **shipped** (Gus's `9257c18`). Every query site
+   declares its intent via the ACK comment or fails the audit
+   — same forcing function as cat-1's `// AUTH-AUDIT-ACK:`.
 
-2. **rs-audit pattern: `hydrate(state, &rid).await?`** call sites
-   in handlers where the caller's `Path(rid)` could be any
-   file_type (no preceding `find_file` + `file_type` check, no
-   404-on-non-csv guard). Status: `live` — hydrate's own guard
-   makes these correct-by-fallback, but tracking the count
-   surfaces preventive opportunities; cross-module callers
-   (outside `routes::files`) get a separate counter so layer
-   violations stand out. **Pending** — queued in Gus's lane.
+   The enumerated ACK taxonomy after the initial 31-site
+   annotation pass:
+
+   | `type=` | Use case | Initial site count |
+   |---|---|---|
+   | `any` | rail listings + cascade prep + owner lookups (every type valid) | 12 |
+   | `csv` | data-only consumers (joins picker, audit_distincts bin) | 2 |
+   | `chart` | chart CRUD + admin Charts tab + chart stats | 10 |
+   | `dashboard` | dashboard CRUD + project-published overlay | 5 |
+   | `mixed` | const queries with multiple subqueries (PROJECT_SELECT-style); the lookback window catches them under one ACK | 2 |
+
+   Lookback window: 20 lines (Gus's calibration — covers the
+   `PROJECT_SELECT` const where two `FROM` subqueries sit
+   ~17 lines apart, sharing one ACK at the top of the const).
+   New polymorphic constants of similar shape inherit the
+   coverage without needing to ACK twice.
+
+2. **rs-audit pattern: `hydrate(state, &rid).await?`** usage
+   counter. Status: `live`, **shipped** (Gus's `9257c18`).
+   ~21 callers in `routes::files` (healthy reuse — the canonical
+   data-frame entry); 1 cross-module reacher (`routes::group`).
+   Flips to `extracted` when DataSource ships and `Reader::open`
+   becomes the canonical read path — any hydrate outside it
+   becomes a layer violation.
 
 3. **js-audit pattern: `api.(get|post|put|delete)("/files/…/<csv-only-endpoint>")`**
    without a preceding `// DATA-ENDPOINT-ACK: caller-checks-file_type`
-   annotation. Status: `extracted`, **shipped**. The endpoint
-   set is a single constant in the audit (`page | uniques |
-   joins | export | cleanness | sentinels | dedup | cast-preview
-   | steps | snapshot`); adding a new data-only endpoint
-   server-side now requires adding it to the constant or the
-   audit underdetects. `scripts/api.js` is excluded (HTTP
-   wrapper layer with no caller context — same exclusion shape
-   as auth-audit's own source-set exemption). The 5 initial
-   call sites carry their ACKs in the same commit per the
-   lifecycle convention above.
+   annotation. Status: `extracted`, **shipped** (Torv's
+   `f31facc`). The endpoint set is a single constant in the
+   audit (`page | uniques | joins | export | cleanness |
+   sentinels | dedup | cast-preview | steps | snapshot`);
+   adding a new data-only endpoint server-side now requires
+   adding it to the constant or the audit underdetects.
+   `scripts/api.js` is excluded (HTTP wrapper layer with no
+   caller context — same exclusion shape as auth-audit's own
+   source-set exemption). The 5 initial call sites carry their
+   ACKs in the same commit per the lifecycle convention above.
 
-Patterns 1 and 2 land at the next bandwidth gap in Gus's lane.
-The discipline they enforce is identical to Pattern 3's, just on
-the SQL and Rust call-site axes.
+All three patterns shipped 2026-05-24 — the type-shape
+correctness lane is mechanically enforced. The discipline they
+encode is identical across the FE call-site axis, the Rust
+hydrate-call axis, and the SQL `project_files` query axis.
+
+### Known coverage gaps (next workstream)
+
+Pattern 3's regex catches `api.(method)(…literal-endpoint…)`
+shapes; it does **not** catch:
+
+- **Dynamic-URL helpers** — `joins.js::loadCandidates` and
+  `column-index.js::getDistinct` build their URLs in a
+  variable before passing to `api.get`. The literal endpoint
+  name never appears at the call site. Both are inside trusted
+  helpers with CSV-gated contracts, so no real risk today, but
+  no static-audit coverage either.
+- **Dynamic-suffix endpoints** — `workspace.js::doUndoRedo`
+  uses `+ "/" + action` where action is `undo`/`redo`. Same
+  miss shape; both endpoints also CSV-only.
+
+Em's framing on this (Internal-Slack 2026-05-24): the right
+answer is a **runtime-instrumentation axis** to complement the
+static-audit axis — every helper emits an event, every event is
+queryable under verbose mode, log levels filter the *view* not
+the *capture*. See [[audit-everything]] for the principle. The
+dynamic-URL gap closes structurally when the helpers route
+through a single `fs.*` funnel ([[data-shape-index]] §4) — one
+call site to ACK, one event-emit per call. Joint workstream
+with Gus + Em, queued for the polish→RBAC transition.
 
 ## Linked
 
