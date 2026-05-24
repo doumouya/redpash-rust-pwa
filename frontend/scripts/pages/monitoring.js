@@ -23,6 +23,12 @@ const MON_TABS = [
   // cleaning ops, fits Monitoring's "what happened" framing better
   // than Home's org/data inventory.
   { group: "AUDITS",   key: "steps",    label: "Steps",    icon: "bi-wrench",               endpoint: "/admin/steps",               wired: true },
+  // ── OPTIMIZATION — known opportunities × live measurements ─
+  // Spec: docs/internal/specs/optimization-map.md. Each row pairs a
+  // doc-side optimization point with the metadata to evaluate its
+  // current cost; the server returns current_value + tipped on every
+  // fetch.
+  { group: "OPTIMIZATION", key: "optimization", label: "Map", icon: "bi-wrench-adjustable", endpoint: "/monitoring/optimization-points", wired: true },
   // ── INSPECT — stripped redtable variant ────────────────────
   // Disabled until Gus ships the unified /api/monitoring/logs
   // endpoint. The button telegraphs the surface that's coming
@@ -32,9 +38,10 @@ const MON_TABS = [
 ];
 
 const MON_GROUPS = [
-  { name: "REQUESTS", mark: "RQ", color: "blue"  },
-  { name: "AUDITS",   mark: "AD", color: "peach" },
-  { name: "INSPECT",  mark: "IN", color: "mauve" },
+  { name: "REQUESTS",     mark: "RQ", color: "blue"  },
+  { name: "AUDITS",       mark: "AD", color: "peach" },
+  { name: "OPTIMIZATION", mark: "OP", color: "green" },
+  { name: "INSPECT",      mark: "IN", color: "mauve" },
 ];
 
 const WINDOWS = ["1h", "24h", "7d", "30d"];
@@ -187,7 +194,8 @@ export default function monitoring(app, { session }) {
   }
 
   function renderTabBody(tab) {
-    if (tab.key === "requests") return renderRequestsBody();
+    if (tab.key === "requests")     return renderRequestsBody();
+    if (tab.key === "optimization") return renderOptimizationBody();
     const view = LIST_VIEWS[tab.key];
     if (view) return renderListBody(tab, view);
   }
@@ -488,6 +496,138 @@ export default function monitoring(app, { session }) {
   function pagerBtn(label, page, active, disabled) {
     return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
       + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
+  }
+
+  // ─── Optimization map — known opportunities × live measurements
+  // Dedicated renderer (not LIST_VIEWS) because the KPI strip is
+  // derived from the rows (Total · Open · Tipped · Done) and the
+  // filter axis is status, not window. Spec: docs/internal/specs/
+  // optimization-map.md.
+  const OPT_STATUSES = ["all", "open", "planned", "done", "wontfix"];
+  let optStatus = "all";
+
+  function renderOptimizationBody() {
+    disposeRequestsCharts();
+    optStatus = "all";
+    view.innerHTML = ''
+      + headHTML("Optimization map", "")
+      + statusChipsHTML(optStatus)
+      + kpiStripHTML([
+          { label: "Total",   id: "rp-mon-opt-total"   },
+          { label: "Open",    id: "rp-mon-opt-open"    },
+          { label: "Tipped",  id: "rp-mon-opt-tipped"  },
+          { label: "Done",    id: "rp-mon-opt-done"    },
+        ])
+      + optTablePanel();
+
+    view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
+      const chip = e.target.closest(".rp-chip");
+      if (!chip) return;
+      view.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
+      chip.classList.add("is-active");
+      optStatus = chip.dataset.status;
+      fetchOptimization();
+    });
+
+    fetchOptimization();
+  }
+
+  async function fetchOptimization() {
+    const tbody = view.querySelector("#rp-mon-opt-tbody");
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+    setKpi("rp-mon-opt-total",  "…");
+    setKpi("rp-mon-opt-open",   "…");
+    setKpi("rp-mon-opt-tipped", "…");
+    setKpi("rp-mon-opt-done",   "…");
+    // Server's default size is plenty for ~20 rows; bump to 100 so the
+    // KPI strip totals match the whole table without paging math.
+    const qs = "?size=100" + (optStatus !== "all" ? "&status=" + encodeURIComponent(optStatus) : "");
+    try {
+      const data = await api.get("/monitoring/optimization-points" + qs);
+      const rows = data?.rows || [];
+      paintOptKpis(rows, data?.total ?? rows.length);
+      if (tbody) {
+        tbody.innerHTML = rows.length
+          ? rows.map(optRowHTML).join("")
+          : '<tr><td colspan="6">No rows.</td></tr>';
+      }
+      const head = view.querySelector(".rp-shell-head-count");
+      if (head) head.textContent = (data?.total || 0) + (optStatus !== "all" ? " " + optStatus : "");
+    } catch (err) {
+      setKpi("rp-mon-opt-total",  "—");
+      setKpi("rp-mon-opt-open",   "—");
+      setKpi("rp-mon-opt-tipped", "—");
+      setKpi("rp-mon-opt-done",   "—");
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6">Couldn’t load'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
+    }
+  }
+
+  function paintOptKpis(rows, total) {
+    const open   = rows.filter((r) => r.status === "open").length;
+    const tipped = rows.filter((r) => r.tipped === true).length;
+    const done   = rows.filter((r) => r.status === "done").length;
+    setKpi("rp-mon-opt-total",  String(total));
+    setKpi("rp-mon-opt-open",   String(open));
+    setKpi("rp-mon-opt-tipped", String(tipped));
+    setKpi("rp-mon-opt-done",   String(done));
+  }
+
+  function optRowHTML(r) {
+    // horizon + notes ride along as a hover tooltip so the table
+    // stays compact (6 cols) without losing the deep context.
+    const tip = [r.horizon, r.notes].filter(Boolean).join("\n— ");
+    return '<tr'
+      + (tip ? ' title="' + esc(tip) + '"' : "")
+      + '>'
+      + '<td>' + esc(r.subsystem) + '</td>'
+      + '<td>' + esc(r.phase) + '</td>'
+      + '<td>' + esc(r.current_cost) + '</td>'
+      + '<td class="is-num ' + (r.tipped === true ? "rp-mon-err-high" : "") + '">'
+      +   fmtMeasurement(r.current_value, r.threshold_unit)
+      + '</td>'
+      + '<td class="is-num">' + fmtMeasurement(r.threshold_value, r.threshold_unit) + '</td>'
+      + '<td>' + statusPill(r.status) + '</td>'
+      + '</tr>';
+  }
+
+  function statusChipsHTML(active) {
+    return '<div class="rp-chip-row">'
+      + OPT_STATUSES.map((s) =>
+          '<button type="button" class="rp-chip' + (s === active ? ' is-active' : '') + '"'
+          + ' data-status="' + esc(s) + '">' + esc(s) + '</button>'
+        ).join("")
+      + '</div>';
+  }
+
+  function optTablePanel() {
+    return '<section class="rp-mon-panel">'
+      + '<table class="rp-mon-table">'
+      +   '<thead><tr>'
+      +     '<th>Subsystem</th>'
+      +     '<th>Phase</th>'
+      +     '<th>Current cost</th>'
+      +     '<th>Live value</th>'
+      +     '<th>Threshold</th>'
+      +     '<th>Status</th>'
+      +   '</tr></thead>'
+      +   '<tbody id="rp-mon-opt-tbody"></tbody>'
+      + '</table>'
+      + '</section>';
+  }
+
+  // "fraction" units (e.g. error_rate_24h: 0.5) render as percentages;
+  // other units pass through. null value renders as muted "—".
+  function fmtMeasurement(value, unit) {
+    if (value == null) return '<span class="rp-mon-opt-na">—</span>';
+    if (unit === "fraction") return (Math.round(value * 100 * 10) / 10) + "%";
+    const pretty = (unit === "requests_24h") ? "req/24h" : (unit || "");
+    return fmtCount(value) + (pretty ? " " + pretty : "");
+  }
+
+  function statusPill(status) {
+    const v = String(status || "open").toLowerCase();
+    return '<span class="rp-mon-opt-pill rp-mon-opt-pill--' + esc(v) + '">' + esc(v) + '</span>';
   }
 
   // ─── /api/metrics fetch + paint ──────────────────────────────

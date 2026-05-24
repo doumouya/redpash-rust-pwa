@@ -119,3 +119,21 @@
 }
 .rp-mon-stat-chip:last-child { margin-right: 0; }
 
+/* ── optimization map — status pill + muted "—" for null live value */
+.rp-mon-opt-na { color: var(--rp-text-mute); }
+.rp-mon-opt-pill {
+  display: inline-block;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  border: 1px solid var(--rp-border);
+  text-transform: lowercase;
+}
+.rp-mon-opt-pill--open    { color: var(--rp-warn);     border-color: var(--rp-warn); }
+.rp-mon-opt-pill--planned { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-mon-opt-pill--done    { color: var(--rp-ok);       border-color: var(--rp-ok); }
+.rp-mon-opt-pill--wontfix { color: var(--rp-text-mute); }
+
