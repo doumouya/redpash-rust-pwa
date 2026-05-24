@@ -24,6 +24,44 @@
   color: var(--rp-text-mute);
 }
 
+/* ── mode swap ──────────────────────────────────────────────────
+   The Workspace surface has two modes:
+   - data:     existing toolbar + body (table + filter/history/tools
+               panels) + pager — the redtable surface.
+   - designer: chart-only toolbar + canvas + accordion config — the
+               full Designer takeover.
+   workspace.js toggles .is-designer-mode on .rt-surface when a CHT_
+   file is opened; CSS here swaps which children show. */
+
+/* default (data mode) — show data, hide designer */
+.rt-toolbar--designer { display: none; }
+
+/* designer mode — hide everything data, show the designer toolbar
+   and let the designer container own the body. */
+.rt-surface.is-designer-mode .rt-toolbar--data,
+.rt-surface.is-designer-mode .rt-pager,
+.rt-surface.is-designer-mode .rt-panel--filter,
+.rt-surface.is-designer-mode .rt-panel--history,
+.rt-surface.is-designer-mode .rt-panel--tools {
+  display: none !important;
+}
+.rt-surface.is-designer-mode .rt-toolbar--designer {
+  display: flex;
+}
+
+/* The designer toolbar reuses .rt-toolbar layout (height + padding
+   + flex), only its children differ. .ds-title is the breadcrumb. */
+.rt-toolbar--designer .ds-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rt-toolbar--designer .ds-title i { color: var(--rp-accent-2); font-size: 14px; }
+.rt-toolbar-spacer { flex: 1; }
+
 /* ── designer shell ─────────────────────────────────────────────
    Two columns: canvas + config accordion. Canvas scrolls; accordion
    has its own scroll if sections expand beyond the panel height. */
@@ -33,6 +71,7 @@
   display: flex;
   background: var(--rp-bg);
 }
+.rt-designer.ds-config-hidden .ds-config { display: none; }
 
 /* canvas ─────────────────────────────────────────────────────── */
 .ds-canvas {

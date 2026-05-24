@@ -374,7 +374,12 @@ export default function workspace(app, { session }) {
         syncToolbar();
         toolsCtrl?.refresh();
         reportCtrl?.refresh();
-        // Hand the designer the chart; it owns the canvas + accordion.
+        // Designer takes over the whole surface — toggle the mode
+        // class so CSS hides the data toolbar / pager / side panels
+        // and shows the designer toolbar.
+        $("#wsSurface").classList.add("is-designer-mode");
+        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
+        if (titleSpan) titleSpan.textContent = chart?.title || "Untitled chart";
         $("#wsTable").hidden  = true;
         $("#wsTableState").hidden = true;
         $("#wsDesigner").hidden = false;
@@ -405,8 +410,14 @@ export default function workspace(app, { session }) {
       // file_types that route through the same designer path.
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
+        // Defensive fallback — shouldn't normally hit since the
+        // CHT_ branch returns above, but legacy/wrong-prefixed rids
+        // could land here.
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
+        $("#wsSurface").classList.add("is-designer-mode");
+        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
+        if (titleSpan) titleSpan.textContent = chart?.title || envelope?.summary?.display_name || "Untitled chart";
         $("#wsTable").hidden  = true;
         $("#wsTableState").hidden = true;
         $("#wsDesigner").hidden = false;
@@ -424,6 +435,7 @@ export default function workspace(app, { session }) {
         syncNewChartButton();
         // Tear down any open designer (user navigated from chart to data).
         designerCtrl?.load(null);
+        $("#wsSurface").classList.remove("is-designer-mode");
         $("#wsDesigner").hidden = true;
         $("#wsTable").hidden = false;
         await fetchAndRender();
@@ -1115,9 +1127,21 @@ export default function workspace(app, { session }) {
       getSource: () => sourceCache,
       onSaved:   (saved) => {
         rowsInfo.textContent = "Chart · " + (saved?.title || "untitled");
+        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
+        if (titleSpan) titleSpan.textContent = saved?.title || "Untitled chart";
       },
     });
   }
+  // Designer toolbar — config-panel toggle (hides/shows the accordion
+  // when the user wants more canvas space).
+  $("#wsDesignerCfgToggle")?.addEventListener("click", (e) => {
+    const designer = $("#wsDesigner");
+    if (!designer) return;
+    const wasOpen = !designer.classList.contains("ds-config-hidden");
+    designer.classList.toggle("ds-config-hidden", wasOpen);
+    e.currentTarget.classList.toggle("is-active", !wasOpen);
+    designerCtrl?.resize();
+  });
 
   // Ensure sourceCache holds the chart's source data file. Fetches
   // /files/:rid for the source if the user opened the chart directly

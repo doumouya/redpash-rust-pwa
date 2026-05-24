@@ -36,10 +36,11 @@
 
     <!-- ════ main — the redtable surface ════ -->
     <main class="rt-main">
-      <div class="rt-surface">
+      <div class="rt-surface" id="wsSurface">
 
-        <!-- toolbar -->
-        <div class="rt-toolbar">
+        <!-- toolbar (data mode) — hidden when the surface is in
+             designer mode (chart file open) -->
+        <div class="rt-toolbar rt-toolbar--data">
           <button class="rt-btn" id="wsFilterToggle" type="button" title="Filter panel">
             <i class="bi bi-funnel"></i>
           </button>
@@ -93,6 +94,24 @@
           </button>
           <button class="rt-btn" id="wsToolsToggle" type="button" title="Tools panel">
             <i class="bi bi-tools"></i>
+          </button>
+        </div>
+
+        <!-- toolbar (designer mode) — breadcrumb + Add chart +
+             config toggle. Shown only when the surface is in
+             designer mode (chart file open). -->
+        <div class="rt-toolbar rt-toolbar--designer">
+          <span class="ds-title" id="wsDesignerTitle">
+            <i class="bi bi-bar-chart-line"></i> <span>Chart</span>
+          </span>
+          <span class="rt-toolbar-spacer"></span>
+          <button class="rt-btn rt-btn--glass" id="wsDesignerAddChart" type="button" disabled
+                  title="Add chart — Phase 2 with dashboard files">
+            <i class="bi bi-plus-lg"></i><span>Add chart</span>
+          </button>
+          <span class="rt-toolbar-sep"></span>
+          <button class="rt-btn is-active" id="wsDesignerCfgToggle" type="button" title="Chart config">
+            <i class="bi bi-sliders"></i>
           </button>
         </div>
 
