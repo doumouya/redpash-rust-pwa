@@ -35,6 +35,10 @@ BAD_TAG="${C_BAD}✗${C_RST}"
 
 fail_count=0
 warn_count=0
+# Map of tool → install hint, populated below. Failing rows append their
+# tool name to NEEDS_FIX; the footer iterates and prints the hint.
+declare -A INSTALL_HINTS
+NEEDS_FIX=()
 
 # vercmp A B → returns 0 if A >= B, 1 otherwise. Uses sort -V for natural
 # version ordering (handles 1.10 > 1.9 correctly). Strips leading "v".
@@ -63,13 +67,14 @@ short_ver() {
 probe() {
   local name="$1" cmd="$2" flag="$3" min="$4" criticality="$5" note="${6:-}"
   local version="" status="" tag=""
+  local needs_fix=0
 
   if ! command -v "$cmd" >/dev/null 2>&1; then
     version="(not installed)"
     if [ "$criticality" = "core" ]; then
-      tag="$BAD_TAG"; status="MISSING"; fail_count=$((fail_count + 1))
+      tag="$BAD_TAG"; status="MISSING"; fail_count=$((fail_count + 1)); needs_fix=1
     else
-      tag="$WARN_TAG"; status="optional"; warn_count=$((warn_count + 1))
+      tag="$WARN_TAG"; status="optional"; warn_count=$((warn_count + 1)); needs_fix=1
     fi
   else
     # Some tools (perl -v) print an empty banner line first; pick the
@@ -77,7 +82,7 @@ probe() {
     # the wrapper.
     version="$("$cmd" $flag 2>/dev/null | grep -E '[0-9]' | head -1)"
     if [ -z "$version" ]; then
-      tag="$BAD_TAG"; status="PROBE FAILED"; fail_count=$((fail_count + 1))
+      tag="$BAD_TAG"; status="PROBE FAILED"; fail_count=$((fail_count + 1)); needs_fix=1
     else
       # First number sequence (with optional .minor.patch). Accepts bare
       # integers — wasm-opt prints "version 116" with no dots.
@@ -88,12 +93,18 @@ probe() {
         tag="$OK_TAG"; status="ok"
       else
         if [ "$criticality" = "core" ]; then
-          tag="$BAD_TAG"; status="< min $min"; fail_count=$((fail_count + 1))
+          tag="$BAD_TAG"; status="< min $min"; fail_count=$((fail_count + 1)); needs_fix=1
         else
-          tag="$WARN_TAG"; status="< min $min"; warn_count=$((warn_count + 1))
+          tag="$WARN_TAG"; status="< min $min"; warn_count=$((warn_count + 1)); needs_fix=1
         fi
       fi
     fi
+  fi
+
+  # Queue this row's install hint for the footer if it failed AND a hint
+  # was registered (see INSTALL_HINTS at the bottom of the script).
+  if [ "$needs_fix" -eq 1 ] && [ -n "${INSTALL_HINTS[$name]:-}" ]; then
+    NEEDS_FIX+=("$name")
   fi
 
   printf "  %s  %-12s  %-30s  %-16s  %s\n" \
@@ -105,6 +116,26 @@ echo "${C_BOLD}RedPash stack — version probe${C_RST}    $(date -Iseconds)"
 echo
 printf "  %-2s  %-14s  %-30s  %-16s  %s\n" "" "tool" "version" "status" "note"
 printf "  ─────────────────────────────────────────────────────────────────────────\n"
+
+# ── install hints ───────────────────────────────────────────────────────────
+# Per-tool one-shot fix command. Printed at the bottom of the report ONLY for
+# tools that failed the probe — so the script doubles as a setup runbook
+# without cluttering the OK rows. Source of truth: Em's onboarding commands
+# (2026-05-24 chat); update here when a canonical path changes.
+INSTALL_HINTS[node]='curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
+nvm install --lts && nvm use --lts && nvm alias default '"'"'lts/*'"'"''
+INSTALL_HINTS[npm]='(bundled with Node — install via the `node` hint above)'
+INSTALL_HINTS[jq]='sudo apt-get install -y jq'
+INSTALL_HINTS[curl]='sudo apt-get install -y curl'
+INSTALL_HINTS[wasm-pack]='curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh'
+INSTALL_HINTS[wasm-opt]='cargo install wasm-opt   # or download a binaryen release'
+INSTALL_HINTS[rustc]='curl --proto '"'"'=https'"'"' --tlsv1.2 -sSf https://sh.rustup.rs | sh'
+INSTALL_HINTS[cargo]='(bundled with rustc — install via the `rustc` hint above)'
+INSTALL_HINTS[psql]='sudo apt-get install -y postgresql-14 postgresql-client-14'
+INSTALL_HINTS[python3]='sudo apt-get install -y python3'
+INSTALL_HINTS[git]='sudo apt-get install -y git'
+INSTALL_HINTS[bash]='(already part of any sane Linux distro; reinstall via your package manager if needed)'
 
 # ── runtimes (core) ─────────────────────────────────────────────────────────
 probe "rustc"     rustc     "--version" "1.75.0" core     "backend compile"
@@ -131,6 +162,21 @@ probe "wasm-opt"  wasm-opt  "--version" "100"    optional "binaryen, post-build 
 # ── OS context (informational, no min) ──────────────────────────────────────
 echo
 echo "  ${C_DIM}OS:${C_RST} $(uname -srm)   $(lsb_release -ds 2>/dev/null || (grep -h PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2) || echo '?')"
+
+# ── install hints for failing rows ──────────────────────────────────────────
+# Only printed when at least one row failed AND has a hint registered. The
+# OK case stays terse — the script reads as a clean health check.
+if [ "${#NEEDS_FIX[@]}" -gt 0 ]; then
+  echo
+  echo "  ${C_BOLD}fix:${C_RST}"
+  for tool in "${NEEDS_FIX[@]}"; do
+    echo
+    echo "    ${C_BOLD}${tool}${C_RST}"
+    # Indent the (possibly multi-line) hint by 6 spaces so it nests under
+    # the tool name cleanly.
+    printf '      %s\n' "${INSTALL_HINTS[$tool]}" | sed '2,$s/^/      /'
+  done
+fi
 
 echo
 if [ "$fail_count" -gt 0 ]; then
