@@ -23,6 +23,7 @@ pub mod event;
 pub mod monitoring;
 pub mod admin;
 pub mod search;
+pub mod optimization;
 
 /// One page of a paginated result. Returned by every `…/page` endpoint
 /// (files, reports, …). `rows` is generic so each resource can pick its

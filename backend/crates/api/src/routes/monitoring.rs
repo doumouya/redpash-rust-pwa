@@ -5,6 +5,7 @@
 //!   GET /api/monitoring/audit-findings?page&size&run&tool&kind
 //!   GET /api/monitoring/requests?page&size&window&route&status&method
 //!   GET /api/monitoring/requests/stats?window
+//!   GET /api/monitoring/optimization-points?page&size&subsystem&status
 //!
 //! All three return `Page<T>` — same shape as `/api/files/:rid/page`
 //! so the redtable on the monitoring tabs reuses the existing reader.
@@ -28,6 +29,7 @@ use shared::{
         AuditFindingSummary, AuditRunSummary, EventSummary,
         RequestSummary, RequestsStats, RouteStat, Window,
     },
+    optimization::OptimizationPoint,
     Page,
 };
 use std::collections::HashMap;
@@ -40,8 +42,9 @@ pub fn routes() -> Router<AppState> {
         .route("/events",          get(list_events))
         .route("/audit-runs",      get(list_audit_runs))
         .route("/audit-findings",  get(list_audit_findings))
-        .route("/requests",        get(list_requests))
-        .route("/requests/stats",  get(stats_requests))
+        .route("/requests",            get(list_requests))
+        .route("/requests/stats",      get(stats_requests))
+        .route("/optimization-points", get(list_optimization_points))
 }
 
 // ── shared query plumbing ───────────────────────────────────────────────
@@ -542,4 +545,215 @@ async fn stats_requests(
         status_mix,
         top_routes,
     }))
+}
+
+// ── /api/monitoring/optimization-points ─────────────────────────────────
+
+#[derive(Deserialize)]
+struct OptPointsQuery {
+    #[serde(default)] page:      Option<u32>,
+    #[serde(default)] size:      Option<u32>,
+    #[serde(default)] subsystem: Option<String>,
+    #[serde(default)] status:    Option<String>,
+}
+
+/// Whitelist of table names safe for `table_row_count` measurement.
+/// Keep narrow — anything that lands here gets COUNT(*)'d on every
+/// optimization-map fetch.
+const ROW_COUNT_TABLES: &[&str] = &[
+    "users", "projects", "project_files", "project_steps",
+    "request_log", "events", "user_preferences", "sentinel_submissions",
+    "audit.run", "audit.finding",
+];
+
+async fn list_optimization_points(
+    State(state): State<AppState>,
+    Query(q):     Query<OptPointsQuery>,
+) -> Result<Json<Page<OptimizationPoint>>, AppError> {
+    let started = Instant::now();
+    let (offset, size, page) = paginate(q.page, q.size);
+
+    let all_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM optimization_points",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM optimization_points
+         WHERE ($1::text IS NULL OR subsystem = $1)
+           AND ($2::text IS NULL OR status    = $2)",
+    )
+    .bind(q.subsystem.as_deref())
+    .bind(q.status.as_deref())
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Sort: open before planned before done before wontfix; then
+    // subsystem; then phase. "What's left to do" rises to the top.
+    let rows = sqlx::query(
+        "SELECT id, subsystem, phase, current_cost, horizon, status,
+                measurement_kind, measurement_key, threshold_value,
+                threshold_unit, notes, created_at, updated_at
+           FROM optimization_points
+          WHERE ($1::text IS NULL OR subsystem = $1)
+            AND ($2::text IS NULL OR status    = $2)
+          ORDER BY
+            CASE status
+              WHEN 'open'     THEN 0
+              WHEN 'planned'  THEN 1
+              WHEN 'done'     THEN 2
+              WHEN 'wontfix'  THEN 3
+              ELSE 4
+            END,
+            subsystem, phase
+          LIMIT $3 OFFSET $4",
+    )
+    .bind(q.subsystem.as_deref())
+    .bind(q.status.as_deref())
+    .bind(size as i64)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let mut points: Vec<OptimizationPoint> = Vec::with_capacity(rows.len());
+    for r in rows {
+        let mut p = OptimizationPoint {
+            id:               r.try_get("id").unwrap_or(0),
+            subsystem:        r.try_get("subsystem").unwrap_or_default(),
+            phase:            r.try_get("phase").unwrap_or_default(),
+            current_cost:     r.try_get("current_cost").unwrap_or_default(),
+            horizon:          r.try_get("horizon").unwrap_or_default(),
+            status:           r.try_get("status").unwrap_or_default(),
+            measurement_kind: r.try_get("measurement_kind").ok(),
+            measurement_key:  r.try_get("measurement_key").ok(),
+            threshold_value:  r.try_get("threshold_value").ok(),
+            threshold_unit:   r.try_get("threshold_unit").ok(),
+            notes:            r.try_get("notes").ok(),
+            created_at:       r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
+            updated_at:       r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
+            current_value:    None,
+            tipped:           None,
+        };
+        // Live evaluation per measurement_kind. Errors swallow to NULL —
+        // the row still renders the static prose; the live cell shows "—".
+        p.current_value = evaluate_measurement(
+            &state,
+            p.measurement_kind.as_deref(),
+            p.measurement_key.as_deref(),
+        ).await;
+        p.tipped = match (p.current_value, p.threshold_value) {
+            (Some(cv), Some(th)) => Some(cv >= th),
+            _                    => None,
+        };
+        points.push(p);
+    }
+
+    Ok(Json(build_page(
+        points,
+        total as u64,
+        all_count as u64,
+        page,
+        size,
+        started,
+    )))
+}
+
+/// Dispatch the live measurement per `kind`. Returns NULL on
+/// unknown kind, NULL key when one is required, or any DB error
+/// (the row still renders without a live value).
+async fn evaluate_measurement(
+    state: &AppState,
+    kind:  Option<&str>,
+    key:   Option<&str>,
+) -> Option<f64> {
+    let kind = kind?;
+    if kind == "none" { return None; }
+
+    match kind {
+        // route_count_24h — count of request_log entries matching the
+        // method+route, last 24h. Self-observation filter applies
+        // (matches the metrics endpoint convention).
+        "route_count_24h" => {
+            let (method, route) = split_method_route(key?)?;
+            let n: Result<i64, _> = sqlx::query_scalar(
+                "SELECT COUNT(*)::BIGINT FROM request_log
+                  WHERE at >= now() - interval '24 hours'
+                    AND method = $1 AND route = $2
+                    AND route NOT LIKE '/monitoring%'"
+            ).bind(method).bind(route).fetch_one(&state.db).await;
+            n.ok().map(|v| v as f64)
+        }
+
+        // route_p95_ms_24h — p95 latency for the method+route, last 24h.
+        "route_p95_ms_24h" => {
+            let (method, route) = split_method_route(key?)?;
+            let p95: Result<f64, _> = sqlx::query_scalar(
+                "SELECT COALESCE(
+                          percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms),
+                          0
+                        )::DOUBLE PRECISION
+                   FROM request_log
+                  WHERE at >= now() - interval '24 hours'
+                    AND method = $1 AND route = $2
+                    AND route NOT LIKE '/monitoring%'"
+            ).bind(method).bind(route).fetch_one(&state.db).await;
+            p95.ok()
+        }
+
+        // route_error_rate_24h — fraction in [0,1].
+        "route_error_rate_24h" => {
+            let (method, route) = split_method_route(key?)?;
+            let row = sqlx::query(
+                "SELECT COUNT(*)::BIGINT AS total,
+                        COUNT(*) FILTER (WHERE status >= 400)::BIGINT AS errs
+                   FROM request_log
+                  WHERE at >= now() - interval '24 hours'
+                    AND method = $1 AND route = $2
+                    AND route NOT LIKE '/monitoring%'"
+            ).bind(method).bind(route).fetch_one(&state.db).await.ok()?;
+            let total: i64 = row.try_get("total").unwrap_or(0);
+            let errs:  i64 = row.try_get("errs").unwrap_or(0);
+            if total == 0 { None } else { Some(errs as f64 / total as f64) }
+        }
+
+        // audit_finding_count — count of findings of a (tool/kind)
+        // pair in the latest audit.run for that tool.
+        "audit_finding_count" => {
+            let (tool, fkind) = key?.split_once('/')?;
+            let n: Result<i64, _> = sqlx::query_scalar(
+                "SELECT COUNT(*)::BIGINT
+                   FROM audit.finding f
+                   JOIN (SELECT id FROM audit.run
+                          WHERE tool = $1
+                          ORDER BY ran_at DESC LIMIT 1) latest
+                     ON f.run_id = latest.id
+                  WHERE f.kind = $2"
+            ).bind(tool).bind(fkind).fetch_one(&state.db).await;
+            n.ok().map(|v| v as f64)
+        }
+
+        // table_row_count — whitelisted table names only.
+        "table_row_count" => {
+            let table = key?;
+            if !ROW_COUNT_TABLES.contains(&table) { return None; }
+            // Safe: table is from the whitelist literal, not user input.
+            let sql = format!("SELECT COUNT(*)::BIGINT FROM {}", table);
+            let n: Result<i64, _> = sqlx::query_scalar(&sql)
+                .fetch_one(&state.db).await;
+            n.ok().map(|v| v as f64)
+        }
+
+        _ => None,
+    }
+}
+
+fn split_method_route(key: &str) -> Option<(&str, &str)> {
+    let mut parts = key.splitn(2, ' ');
+    let method = parts.next()?;
+    let route  = parts.next()?;
+    Some((method, route))
 }
