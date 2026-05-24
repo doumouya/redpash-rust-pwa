@@ -77,12 +77,15 @@ export default function home(app, { session }) {
       columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
       row: (u) =>
         '<tr>'
-        + '<td>' + esc(u.display_name) + ' <span class="rp-mon-method">@' + esc(u.username) + '</span></td>'
+        + '<td class="rp-home-user-name">'
+        +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
+        +   ' <span class="rp-home-handle">@' + esc(u.username) + '</span>'
+        + '</td>'
         + '<td>' + planChip(u.plan) + '</td>'
-        + '<td>' + esc(u.job_title || "—") + '</td>'
-        + '<td>' + esc(u.org_name || "—") + '</td>'
-        + '<td>' + (u.org_role ? roleChip(u.org_role) : "—") + '</td>'
-        + '<td>' + fmtTime(u.created_at) + '</td>'
+        + '<td class="rp-home-meta">' + esc(u.job_title || "—") + '</td>'
+        + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-home-meta">—</span>') + '</td>'
+        + '<td>' + (u.org_role ? roleChip(u.org_role) : '<span class="rp-home-meta">—</span>') + '</td>'
+        + '<td class="rp-home-meta">' + fmtTime(u.created_at) + '</td>'
         + '</tr>',
     },
     companies: {
@@ -512,6 +515,15 @@ export default function home(app, { session }) {
     const v = String(plan || "").toLowerCase();
     const tone = v === "free" ? "" : "rp-mon-err-low";
     return '<span class="rp-mon-method ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+  // Org affiliation — softer than role/plan (which carry signal). The
+  // dot prefix makes the cell read "this user belongs to: X" without
+  // a full pill that fights the colored Role chip beside it.
+  function orgChip(name) {
+    return '<span class="rp-home-org">'
+      +   '<i class="bi bi-building rp-home-org__icon"></i>'
+      +   esc(name)
+      + '</span>';
   }
 
   function chipRowHTML(chipRow, current) {

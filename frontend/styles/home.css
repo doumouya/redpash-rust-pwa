@@ -101,3 +101,38 @@
   font-variant-numeric: tabular-nums;
   color: var(--rp-text-dim);
 }
+
+/* ── Users tab row polish ───────────────────────────────────────
+   The Users row had three different concepts wearing the same
+   monospace-pill (.rp-mon-method): the @handle, the Plan, the
+   Role. Strip the handle out of pill styling (it's metadata, not
+   a category), and give Org its own soft chip so it reads as the
+   user's company affiliation rather than flat text fighting two
+   coloured chips beside it. */
+.rp-home-user-display { font-weight: 550; }
+.rp-home-handle {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.rp-home-meta {
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+}
+/* Org affiliation — outline + accent-2 tint. Reads "company" without
+   the visual weight of Plan/Role chips. */
+.rp-home-org {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(137, 180, 250, 0.10);   /* accent-2 @ 10% */
+  border: 1px solid rgba(137, 180, 250, 0.32);
+  color: var(--rp-accent-2);
+  white-space: nowrap;
+}
+.rp-home-org__icon { font-size: 10px; opacity: 0.85; }
+
