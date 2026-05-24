@@ -101,6 +101,14 @@ export default function home(app, { session }) {
           data: (s) => s.total ? Math.round((s.active_7d / s.total) * 100) : 0,
           opts: { max: 100, unit: "%" } },
       ],
+      // Placeholder matches the backend's ILIKE columns on /admin/users
+      // (username + display_name + email + organisation). Sort not yet
+      // wired backend-side; modes/columns/export disabled per the Files
+      // toolbar's first-slice convention.
+      toolbar: {
+        searchPlaceholder: "Search name, handle, org…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
       columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
       row: (u) =>
         '<tr>'
@@ -126,6 +134,10 @@ export default function home(app, { session }) {
           data: (s) => s.total ? Math.round((s.with_projects / s.total) * 100) : 0,
           opts: { max: 100, unit: "%" } },
       ],
+      toolbar: {
+        searchPlaceholder: "Search name, slug…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
       columns: ["Name", "Members", "My role", "Created"],
       row: (c) =>
         '<tr>'
@@ -155,6 +167,15 @@ export default function home(app, { session }) {
         { id: "rp-home-mem-role", title: "By role", kind: "rose",
           data: (s) => s.by_role },
       ],
+      // /admin/memberships doesn't take ?q= today — the chipRow above
+      // is the scope filter. Suppress the search box (`searchPlaceholder:
+      // false`) so the toolbar doesn't promise a non-functional input;
+      // refresh + the disabled mode/columns/export buttons keep visual
+      // parity with the other tabs.
+      toolbar: {
+        searchPlaceholder: false,
+        modes: true, refresh: true, columns: true, export: true,
+      },
       columns: ["Member", "Role", "Scope", "Joined"],
       row: (m) =>
         '<tr>'
@@ -217,6 +238,10 @@ export default function home(app, { session }) {
           data: (s) => s.total ? Math.round((s.used_in_reports / s.total) * 100) : 0,
           opts: { max: 100, unit: "%" } },
       ],
+      toolbar: {
+        searchPlaceholder: "Search chart name…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
       columns: ["Name", "Project", "Stage", "Updated"],
       // Rows are clickable — navigate to the Workspace with the
       // chart's source project + chart rid as deep-link params so
