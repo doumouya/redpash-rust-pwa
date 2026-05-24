@@ -164,3 +164,293 @@
   color: var(--rp-text);
 }
 
+/* ── M-4: error-chain row expander on /monitoring/events ─────────
+   Rows that carry context.error_chain (5xx-from-AppError events)
+   render an expandable sibling row containing the chain in a
+   <pre>. Click the primary row → toggles the expansion's hidden
+   attribute. Same atom shape as any redtable inline expander. */
+.rt-mon-row-expandable {
+  cursor: pointer;
+}
+.rt-mon-row-expandable:hover {
+  background: var(--rp-hover);
+}
+.rt-mon-row-caret {
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  margin-right: 4px;
+  transition: transform 0.12s var(--rp-ease);
+}
+.rt-mon-row-expansion td {
+  background: var(--rp-surface-2);
+  padding: 10px 14px 14px;
+  border-top: 0;
+}
+.rt-mon-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rt-mon-chain-kind {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rt-mon-chain pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  border: 1px solid var(--rp-border);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* ── M-3: panic pane on the Requests landing ───────────────────
+   The wrapper sits hidden until fetchRecentPanics finds at least
+   one panic in the active window. Accent-tinted border highlights
+   the exception nature without screaming for attention; row shape
+   reuses the .rt-mon-row-expandable atom from M-4. */
+.rp-mon-panel--panic {
+  border-color: var(--rp-accent);
+  background: linear-gradient(0deg,
+    color-mix(in srgb, var(--rp-accent) 3%, var(--rp-surface)),
+    var(--rp-surface));
+}
+.rp-mon-panel--panic .rp-mon-panel-title i {
+  color: var(--rp-accent);
+}
+.rp-mon-panel--panic td.is-mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+}
+
+/* ── M-1: request-replay modal ──────────────────────────────────
+   Fixed-position centered modal over the Monitoring page. Body
+   sits above a translucent backdrop; backdrop click + ESC + the
+   header × button all dismiss. The modal reuses .rt-mon-row-*
+   atoms inside for the event timeline so the expand UX matches
+   M-3 / M-4. */
+.rt-mon-row-clickable {
+  cursor: pointer;
+}
+.rt-mon-row-clickable:hover {
+  background: var(--rp-hover);
+}
+.rp-mon-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-mon-modal[hidden] { display: none; }
+.rp-mon-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 17, 27, 0.55);
+  backdrop-filter: blur(2px);
+}
+.rp-mon-modal-body {
+  position: relative;
+  width: min(880px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.rp-mon-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
+}
+.rp-mon-modal-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-mon-modal-title code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--rp-accent-2);
+  background: var(--rp-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.rp-mon-modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--rp-text-mute);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-mon-modal-close:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-mon-modal-content {
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+}
+.rp-mon-modal-loading,
+.rp-mon-modal-empty,
+.rp-mon-modal-error {
+  color: var(--rp-text-mute);
+  text-align: center;
+  font-size: 12.5px;
+  padding: 24px 0;
+}
+.rp-mon-modal-error { color: var(--rp-accent); }
+.rp-mon-modal-request {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+}
+.rp-mon-modal-request--missing {
+  color: var(--rp-text-mute);
+  font-style: italic;
+  font-size: 11.5px;
+}
+.rp-mon-modal-request-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.rp-mon-modal-route {
+  flex: 1 1 auto;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--rp-text);
+  word-break: break-all;
+}
+.rp-mon-modal-meta {
+  color: var(--rp-text-mute);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.rp-mon-modal-section-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rp-mon-modal-section-title .rp-mon-panel-hint {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── M-2: per-user activity picker + feed ─────────────────────
+   Top-of-body: text input + dropdown of search results from
+   /admin/users?q=. Pick → activity feed panel shows combined
+   request_log + events timeline. Picker dropdown shape mirrors
+   the .rt-ac atom in panel.css (autocomplete primitive) but
+   doesn't share the class to keep concerns scoped — Monitoring
+   doesn't need the full a11y / keyboard nav surface today. */
+.rp-mon-user-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.rp-mon-user-input-wrap {
+  position: relative;
+}
+.rp-mon-user-input-wrap input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--rp-border);
+  border-radius: 7px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  font-size: 12.5px;
+  outline: 0;
+}
+.rp-mon-user-input-wrap input:focus {
+  border-color: var(--rp-accent-2);
+}
+.rp-mon-user-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 30;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  padding: 4px;
+}
+.rp-mon-user-results[hidden] { display: none; }
+.rp-mon-user-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.rp-mon-user-result:hover {
+  background: var(--rp-hover);
+}
+.rp-mon-user-result-name {
+  font-size: 12.5px;
+  color: var(--rp-text);
+}
+.rp-mon-user-result-sub {
+  font-size: 10.5px;
+  color: var(--rp-text-mute);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rp-mon-user-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+}
+.rp-mon-user-hint {
+  font-size: 11px;
+  color: var(--rp-text-mute);
+}
+

@@ -40,6 +40,11 @@ const MON_TABS = [
   // current cost; the server returns current_value + tipped on every
   // fetch.
   { group: "OPTIMIZATION", key: "optimization", label: "Map", icon: "bi-wrench-adjustable", endpoint: "/monitoring/optimization-points", wired: true },
+  // ── USERS — per-user activity feed (M-2 from slice E) ────
+  // "What is this user doing right now?" lens — different from
+  // /admin/users (organisational inventory). Combines request_log
+  // + events into one time-ordered timeline scoped to a user_rid.
+  { group: "USERS",    key: "user_activity", label: "Activity", icon: "bi-person-lines-fill", endpoint: "/monitoring/users",        wired: true },
   // ── INSPECT — stripped redtable variant ────────────────────
   // Disabled until Gus ships the unified /api/monitoring/logs
   // endpoint. The button telegraphs the surface that's coming
@@ -52,6 +57,7 @@ const MON_GROUPS = [
   { name: "REQUESTS",     mark: "RQ", color: "blue"  },
   { name: "AUDITS",       mark: "AD", color: "peach" },
   { name: "OPTIMIZATION", mark: "OP", color: "green" },
+  { name: "USERS",        mark: "US", color: "sky"   },
   { name: "INSPECT",      mark: "IN", color: "mauve" },
 ];
 
@@ -77,15 +83,36 @@ export default function monitoring(app, { session }) {
       endpoint: "/monitoring/events",
       useWindow: true,
       columns: ["Time", "Level", "Origin", "Kind", "Message", "Status"],
-      row: (e) =>
-        '<tr>'
-        + '<td>' + fmtTime(e.occurred_at) + '</td>'
-        + '<td>' + levelChip(e.level) + '</td>'
-        + '<td>' + esc(e.origin) + '</td>'
-        + '<td>' + esc(e.kind) + '</td>'
-        + '<td>' + esc(e.message) + '</td>'
-        + '<td class="is-num">' + (e.http_status != null ? e.http_status : "—") + '</td>'
-        + '</tr>',
+      row: (e) => {
+        // M-4: 5xx-from-AppError events carry `context.error_chain`
+        // (populated by the airlock per c12b1fe — sanitized via
+        // redact_chain, capped 2048 chars). Render an expandable
+        // sibling row holding the chain in a <pre>. Click on the
+        // primary row toggles it. No expander when the field's
+        // absent — keeps non-error rows clean.
+        const chain = e.context?.error_chain;
+        const expandable = !!chain;
+        const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
+          + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+            + fmtTime(e.occurred_at) + '</td>'
+          + '<td>' + levelChip(e.level) + '</td>'
+          + '<td>' + esc(e.origin) + '</td>'
+          + '<td>' + esc(e.kind) + '</td>'
+          + '<td>' + esc(e.message) + '</td>'
+          + '<td class="is-num">' + (e.http_status != null ? e.http_status : "—") + '</td>'
+          + '</tr>';
+        if (!expandable) return primary;
+        const errKind = e.context?.error_kind ? '<span class="rt-mon-chain-kind">' + esc(e.context.error_kind) + '</span>' : '';
+        return primary
+          + '<tr class="rt-mon-row-expansion" hidden>'
+          +   '<td colspan="6">'
+          +     '<div class="rt-mon-chain">'
+          +       errKind
+          +       '<pre>' + esc(chain) + '</pre>'
+          +     '</div>'
+          +   '</td>'
+          + '</tr>';
+      },
     },
     runs: {
       title: "Audit runs",
@@ -232,8 +259,9 @@ export default function monitoring(app, { session }) {
   }
 
   function renderTabBody(tab) {
-    if (tab.key === "requests")     return renderRequestsBody();
-    if (tab.key === "optimization") return renderOptimizationBody();
+    if (tab.key === "requests")      return renderRequestsBody();
+    if (tab.key === "optimization")  return renderOptimizationBody();
+    if (tab.key === "user_activity") return renderUserActivityBody();
     const view = LIST_VIEWS[tab.key];
     if (view) return renderListBody(tab, view);
   }
@@ -256,6 +284,7 @@ export default function monitoring(app, { session }) {
           { label: "p50",        id: "rp-kpi-req-p50"   },
           { label: "p95",        id: "rp-kpi-req-p95"   },
         ])
+      + panicPanel()                       // M-3 — slot above the charts row
       + '<div class="rp-mon-charts-row">'
       +   statusMixPanel()
       +   topRoutesPanel()
@@ -264,7 +293,7 @@ export default function monitoring(app, { session }) {
                      "/monitoring/requests?bucket=1m (or similar)")
       + recentRequestsPanel();
 
-    // Window-chip click delegation — refetch all three sources.
+    // Window-chip click delegation — refetch all four sources.
     view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
       const chip = e.target.closest(".rp-chip");
       if (!chip) return;
@@ -275,6 +304,22 @@ export default function monitoring(app, { session }) {
       fetchMetrics(w);
       fetchRequestsStats(w);
       fetchRecentRequests(w);
+      fetchRecentPanics(w);
+    });
+
+    // M-3 — click-to-expand on a panic row toggles its backtrace_head pane.
+    view.querySelector("#rp-mon-panic-tbody")?.addEventListener("click", (e) => {
+      const row = e.target.closest("tr.rt-mon-row-expandable");
+      if (!row) return;
+      const expansion = row.nextElementSibling;
+      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+      const opening = expansion.hidden;
+      expansion.hidden = !opening;
+      const caret = row.querySelector(".rt-mon-row-caret");
+      if (caret) {
+        caret.classList.toggle("bi-chevron-down", opening);
+        caret.classList.toggle("bi-chevron-right", !opening);
+      }
     });
 
     // Raw-table pager.
@@ -287,14 +332,77 @@ export default function monitoring(app, { session }) {
       fetchRecentRequests(activeWindow());
     });
 
+    // M-1 — click a Recent requests row → request-replay modal.
+    // Rows without a request_id (legacy / pre-correlation entries) are
+    // not clickable; data-request-id gates the openable rows.
+    view.querySelector("#rp-mon-raw-tbody")?.addEventListener("click", (e) => {
+      const row = e.target.closest("tr[data-request-id]");
+      if (!row) return;
+      openRequestReplay(row.dataset.requestId);
+    });
+
     fetchMetrics(DEFAULT_WINDOW);
     fetchRequestsStats(DEFAULT_WINDOW);
     fetchRecentRequests(DEFAULT_WINDOW);
+    fetchRecentPanics(DEFAULT_WINDOW);
   }
 
   function activeWindow() {
     const chip = view.querySelector(".rp-chip-row .rp-chip.is-active");
     return chip?.dataset.window || DEFAULT_WINDOW;
+  }
+
+  // ─── M-3: recent panics pane on the Requests landing ─────────
+  // Fetches events?kind=panic for the active window, renders the
+  // last 5 with an inline expander showing context.backtrace_head.
+  // Empty state — the common case — hides the whole pane so the
+  // landing stays clean unless there's actually something to surface.
+  async function fetchRecentPanics(window) {
+    const wrap = view.querySelector("#rp-mon-panic-pane");
+    const tbody = view.querySelector("#rp-mon-panic-tbody");
+    const countEl = view.querySelector("#rp-mon-panic-count");
+    if (!wrap || !tbody) return;
+    try {
+      const data = await api.get(
+        "/monitoring/events?kind=panic&window=" + encodeURIComponent(window) + "&size=5"
+      );
+      const rows = data?.rows || [];
+      const total = data?.total || 0;
+      if (!rows.length) {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      if (countEl) countEl.textContent = total + (total === 1 ? " panic" : " panics") + " in " + window;
+      tbody.innerHTML = rows.map(panicRowHTML).join("");
+    } catch {
+      // Fire-and-forget surface — silent failure keeps the landing
+      // usable when the panic feed itself errors.
+      wrap.hidden = true;
+    }
+  }
+
+  function panicRowHTML(e) {
+    const head = e.context?.backtrace_head;
+    const loc  = e.context?.location;
+    const message = e.message || e.kind;
+    const expandable = !!head;
+    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
+      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+        + fmtTime(e.occurred_at) + '</td>'
+      + '<td>' + esc(message) + '</td>'
+      + '<td class="is-mono">' + (loc ? esc(loc) : "—") + '</td>'
+      + '</tr>';
+    if (!expandable) return primary;
+    return primary
+      + '<tr class="rt-mon-row-expansion" hidden>'
+      +   '<td colspan="3">'
+      +     '<div class="rt-mon-chain">'
+      +       '<span class="rt-mon-chain-kind">backtrace</span>'
+      +       '<pre>' + esc(head) + '</pre>'
+      +     '</div>'
+      +   '</td>'
+      + '</tr>';
   }
 
   // ─── /api/monitoring/requests/stats → status-code donut ──────
@@ -380,13 +488,147 @@ export default function monitoring(app, { session }) {
   }
 
   function requestRowHTML(r) {
-    return '<tr>'
+    // data-request-id gates which rows are clickable (legacy /
+    // pre-correlation requests with NULL request_id stay
+    // unclickable — there's nothing to drill into).
+    const clickable = r.request_id ? ' class="rt-mon-row-clickable" data-request-id="' + esc(r.request_id) + '"' : '';
+    return '<tr' + clickable + '>'
       + '<td>' + fmtTime(r.at) + '</td>'
       + '<td><span class="rp-mon-method">' + esc(r.method) + '</span></td>'
       + '<td class="is-num ' + statusBand(r.status) + '">' + r.status + '</td>'
       + '<td>' + esc(r.route) + '</td>'
       + '<td class="is-num">' + r.duration_ms + 'ms</td>'
       + '<td>' + (r.request_id ? '<code>' + esc(r.request_id.slice(0, 8)) + '</code>' : "—") + '</td>'
+      + '</tr>';
+  }
+
+  // ─── M-1: request-replay modal ───────────────────────────────
+  // Opens a fixed-position modal over the Monitoring page; fetches
+  // GET /api/monitoring/request/:request_id (returns { request, events })
+  // and renders a top-bar with the request line + a time-ordered
+  // event timeline. Each event row click-expands to show its full
+  // context JSONB. Backdrop click + ESC + close button all dismiss.
+  function openRequestReplay(requestId) {
+    if (!requestId) return;
+    // Reuse the same DOM node across opens — strip any prior content
+    // so a quick-second-click doesn't stack modals.
+    let modal = document.getElementById("rp-mon-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "rp-mon-modal";
+      modal.className = "rp-mon-modal";
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = ''
+      + '<div class="rp-mon-modal-backdrop"></div>'
+      + '<div class="rp-mon-modal-body" role="dialog" aria-modal="true" aria-labelledby="rp-mon-modal-title">'
+      +   '<header class="rp-mon-modal-head">'
+      +     '<h3 id="rp-mon-modal-title" class="rp-mon-modal-title">Request <code>' + esc(requestId) + '</code></h3>'
+      +     '<button type="button" class="rp-mon-modal-close" aria-label="Close">' +
+                '<i class="bi bi-x-lg"></i></button>'
+      +   '</header>'
+      +   '<div class="rp-mon-modal-content" id="rp-mon-modal-content">'
+      +     '<p class="rp-mon-modal-loading">Loading…</p>'
+      +   '</div>'
+      + '</div>';
+    modal.hidden = false;
+    modal.classList.add("is-open");
+
+    const close = () => {
+      modal.classList.remove("is-open");
+      modal.hidden = true;
+      modal.innerHTML = "";
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    modal.querySelector(".rp-mon-modal-backdrop").addEventListener("click", close);
+    modal.querySelector(".rp-mon-modal-close").addEventListener("click", close);
+
+    // Event-row expander inside the modal — same pattern as M-3 + M-4.
+    modal.querySelector(".rp-mon-modal-body").addEventListener("click", (e) => {
+      const row = e.target.closest("tr.rt-mon-row-expandable");
+      if (!row) return;
+      const expansion = row.nextElementSibling;
+      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+      const opening = expansion.hidden;
+      expansion.hidden = !opening;
+      const caret = row.querySelector(".rt-mon-row-caret");
+      if (caret) {
+        caret.classList.toggle("bi-chevron-down", opening);
+        caret.classList.toggle("bi-chevron-right", !opening);
+      }
+    });
+
+    // Fetch + render.
+    api.get("/monitoring/request/" + encodeURIComponent(requestId))
+      .then((data) => {
+        const content = modal.querySelector("#rp-mon-modal-content");
+        if (!content) return;
+        content.innerHTML = renderRequestReplay(data);
+      })
+      .catch((err) => {
+        const content = modal.querySelector("#rp-mon-modal-content");
+        if (!content) return;
+        const msg = err?.status === 404
+          ? "No record found for this request id."
+          : "Couldn’t load request" + (err?.status ? " (" + err.status + ")" : "") + ".";
+        content.innerHTML = '<p class="rp-mon-modal-error">' + esc(msg) + '</p>';
+      });
+  }
+
+  function renderRequestReplay(data) {
+    const req = data?.request;
+    const events = data?.events || [];
+    const reqLine = req
+      ? '<section class="rp-mon-modal-request">'
+        + '<div class="rp-mon-modal-request-row">'
+        +   '<span class="rp-mon-method">' + esc(req.method || "?") + '</span>'
+        +   '<span class="is-num ' + statusBand(req.status) + '">' + (req.status || "?") + '</span>'
+        +   '<span class="rp-mon-modal-route">' + esc(req.route || "—") + '</span>'
+        +   '<span class="rp-mon-modal-meta">' + (req.duration_ms ?? "?") + 'ms · ' + fmtTime(req.at) + '</span>'
+        + '</div>'
+      + '</section>'
+      : '<section class="rp-mon-modal-request rp-mon-modal-request--missing">'
+      +   'request_log row absent — events shown without the request line context'
+      + '</section>';
+
+    if (!events.length) {
+      return reqLine + '<p class="rp-mon-modal-empty">No events captured for this request.</p>';
+    }
+    return reqLine
+      + '<section class="rp-mon-modal-timeline">'
+      +   '<h4 class="rp-mon-modal-section-title">'
+      +     'Timeline <span class="rp-mon-panel-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
+      +   '</h4>'
+      +   '<table class="rp-mon-table">'
+      +     '<thead><tr><th>Time</th><th>Level</th><th>Kind</th><th>Message</th></tr></thead>'
+      +     '<tbody>' + events.map(eventTimelineRow).join("") + '</tbody>'
+      +   '</table>'
+      + '</section>';
+  }
+
+  function eventTimelineRow(e) {
+    const ctx = e.context;
+    const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
+    const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
+    const expandable = hasCtx;
+    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
+      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+        + fmtTime(e.occurred_at) + '</td>'
+      + '<td>' + levelChip(e.level) + '</td>'
+      + '<td>' + esc(e.kind) + '</td>'
+      + '<td>' + esc(e.message || "") + '</td>'
+      + '</tr>';
+    if (!expandable) return primary;
+    return primary
+      + '<tr class="rt-mon-row-expansion" hidden>'
+      +   '<td colspan="4">'
+      +     '<div class="rt-mon-chain">'
+      +       '<span class="rt-mon-chain-kind">context</span>'
+      +       '<pre>' + esc(ctxJson) + '</pre>'
+      +     '</div>'
+      +   '</td>'
       + '</tr>';
   }
 
@@ -477,6 +719,27 @@ export default function monitoring(app, { session }) {
       fetchList(viewSpec);
     });
 
+    // M-4: row-expander delegate — click an expandable primary row to
+    // toggle its sibling .rt-mon-row-expansion (the error_chain pane).
+    // Caret class flips for visual feedback. Idempotent + scoped to
+    // tbody so it doesn't fight the pager handler above.
+    const tbodyEl = view.querySelector("#rp-mon-list-tbody");
+    if (tbodyEl) {
+      tbodyEl.addEventListener("click", (e) => {
+        const row = e.target.closest("tr.rt-mon-row-expandable");
+        if (!row) return;
+        const expansion = row.nextElementSibling;
+        if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+        const opening = expansion.hidden;
+        expansion.hidden = !opening;
+        const caret = row.querySelector(".rt-mon-row-caret");
+        if (caret) {
+          caret.classList.toggle("bi-chevron-down", opening);
+          caret.classList.toggle("bi-chevron-right", !opening);
+        }
+      });
+    }
+
     fetchList(viewSpec);
   }
 
@@ -524,6 +787,192 @@ export default function monitoring(app, { session }) {
   // Dedicated renderer (not LIST_VIEWS) because the KPI strip is
   // derived from the rows (Total · Open · Tipped · Done) and the
   // filter axis is status, not window. Spec: docs/internal/specs/
+  // ─── M-2: per-user activity feed ────────────────────────────
+  // New surface (no LIST_VIEWS entry because the picker + dual-source
+  // shape doesn't fit the generic list runtime). Top-of-body: text
+  // input that searches /admin/users?q=... with debounced fetch +
+  // dropdown of matches. User pick → GET /monitoring/users/:rid/activity
+  // → render combined time-ordered redtable of requests + events.
+  // "What is this user doing right now?" lens — runtime side of /admin/users.
+  let userActivityPick = null;          // last-picked user { rid, label }
+  let userActivityPickerTimer = null;   // debounce handle for the search input
+
+  function renderUserActivityBody() {
+    disposeRequestsCharts();
+    charts.dispose();
+    userActivityPick = null;
+    view.innerHTML = ''
+      + headHTML("Per-user activity", "")
+      + '<section class="rp-mon-panel">'
+      +   '<div class="rp-mon-user-picker">'
+      +     '<label for="rp-mon-user-input" class="rt-field-lbl">User</label>'
+      +     '<div class="rp-mon-user-input-wrap">'
+      +       '<input id="rp-mon-user-input" type="text" autocomplete="off" '
+      +         'placeholder="Search by username, display name, or email…" />'
+      +       '<div id="rp-mon-user-results" class="rp-mon-user-results" hidden></div>'
+      +     '</div>'
+      +     '<span class="rp-mon-user-hint" id="rp-mon-user-hint">'
+      +       'Pick a user to see their request + event timeline (last 1h, newest first).'
+      +     '</span>'
+      +   '</div>'
+      + '</section>'
+      + '<section class="rp-mon-panel" id="rp-mon-user-activity" hidden>'
+      +   '<div class="rp-mon-panel-head">'
+      +     '<h3 class="rp-mon-panel-title" id="rp-mon-user-activity-title">Activity</h3>'
+      +     '<span class="rp-mon-panel-hint" id="rp-mon-user-activity-count">—</span>'
+      +   '</div>'
+      +   '<table class="rp-mon-table">'
+      +     '<thead><tr><th>Time</th><th>Type</th><th>Detail</th><th class="is-num">Status / Level</th></tr></thead>'
+      +     '<tbody id="rp-mon-user-activity-tbody"></tbody>'
+      +   '</table>'
+      + '</section>';
+
+    const input    = view.querySelector("#rp-mon-user-input");
+    const results  = view.querySelector("#rp-mon-user-results");
+    if (!input || !results) return;
+
+    input.addEventListener("input", () => {
+      const q = input.value.trim();
+      clearTimeout(userActivityPickerTimer);
+      if (!q) { results.hidden = true; results.innerHTML = ""; return; }
+      userActivityPickerTimer = setTimeout(() => searchUsers(q), 200);
+    });
+    input.addEventListener("focus", () => {
+      if (results.innerHTML) results.hidden = false;
+    });
+    document.addEventListener("click", (e) => {
+      if (!view.contains(e.target)) return;
+      if (e.target.closest(".rp-mon-user-input-wrap")) return;
+      results.hidden = true;
+    });
+
+    results.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-user-rid]");
+      if (!item) return;
+      const rid = item.dataset.userRid;
+      const label = item.dataset.userLabel;
+      userActivityPick = { rid, label };
+      input.value = label;
+      results.hidden = true;
+      results.innerHTML = "";
+      fetchUserActivity(rid, label);
+    });
+
+    // Activity row expander (events with context) — same atom as M-1/M-3/M-4.
+    view.querySelector("#rp-mon-user-activity-tbody")?.addEventListener("click", (e) => {
+      const row = e.target.closest("tr.rt-mon-row-expandable");
+      if (!row) return;
+      const expansion = row.nextElementSibling;
+      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+      const opening = expansion.hidden;
+      expansion.hidden = !opening;
+      const caret = row.querySelector(".rt-mon-row-caret");
+      if (caret) {
+        caret.classList.toggle("bi-chevron-down", opening);
+        caret.classList.toggle("bi-chevron-right", !opening);
+      }
+    });
+  }
+
+  async function searchUsers(q) {
+    const results = view.querySelector("#rp-mon-user-results");
+    if (!results) return;
+    try {
+      const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
+      const rows = data?.rows || [];
+      if (!rows.length) {
+        results.innerHTML = '<div class="rp-mon-user-empty">No matches.</div>';
+      } else {
+        results.innerHTML = rows.map((u) => {
+          const label = u.display_name || u.username || u.redpash_id;
+          const sub   = [u.username, u.email].filter(Boolean).join(" · ");
+          return '<div class="rp-mon-user-result" '
+            + 'data-user-rid="' + esc(u.redpash_id) + '" '
+            + 'data-user-label="' + esc(label) + '">'
+            +   '<span class="rp-mon-user-result-name">' + esc(label) + '</span>'
+            +   (sub ? '<span class="rp-mon-user-result-sub">' + esc(sub) + '</span>' : '')
+            + '</div>';
+        }).join("");
+      }
+      results.hidden = false;
+    } catch (err) {
+      results.innerHTML = '<div class="rp-mon-user-empty">Couldn’t search'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
+      results.hidden = false;
+    }
+  }
+
+  async function fetchUserActivity(rid, label) {
+    const wrap   = view.querySelector("#rp-mon-user-activity");
+    const tbody  = view.querySelector("#rp-mon-user-activity-tbody");
+    const title  = view.querySelector("#rp-mon-user-activity-title");
+    const count  = view.querySelector("#rp-mon-user-activity-count");
+    if (!wrap || !tbody) return;
+    wrap.hidden = false;
+    if (title) title.textContent = "Activity · " + label;
+    if (count) count.textContent = "Loading…";
+    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    try {
+      const data = await api.get("/monitoring/users/" + encodeURIComponent(rid) + "/activity");
+      const requests = (data?.requests || []).map((r) => ({ _kind: "request", ts: r.at, payload: r }));
+      const events   = (data?.events   || []).map((e) => ({ _kind: "event",   ts: e.occurred_at, payload: e }));
+      const merged = requests.concat(events).sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      if (!merged.length) {
+        tbody.innerHTML = '<tr><td colspan="4">No activity in the last hour.</td></tr>';
+        if (count) count.textContent = "0";
+        return;
+      }
+      if (count) count.textContent = merged.length + " · " + requests.length + " req / " + events.length + " ev";
+      tbody.innerHTML = merged.map(userActivityRow).join("");
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="4">Couldn’t load activity'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
+      if (count) count.textContent = "—";
+    }
+  }
+
+  function userActivityRow(item) {
+    if (item._kind === "request") {
+      const r = item.payload;
+      return '<tr>'
+        + '<td>' + fmtTime(r.at) + '</td>'
+        + '<td><span class="rp-mon-method">REQ</span></td>'
+        + '<td>'
+        +   '<span class="rp-mon-method">' + esc(r.method || "?") + '</span> '
+        +   '<span class="rp-mon-modal-route">' + esc(r.route || "—") + '</span>'
+        +   ' <span class="rp-mon-modal-meta">' + (r.duration_ms ?? "?") + 'ms</span>'
+        + '</td>'
+        + '<td class="is-num ' + statusBand(r.status) + '">' + (r.status || "?") + '</td>'
+        + '</tr>';
+    }
+    // event
+    const e = item.payload;
+    const ctx = e.context;
+    const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
+    const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
+    const expandable = hasCtx;
+    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
+      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+        + fmtTime(e.occurred_at) + '</td>'
+      + '<td><span class="rp-mon-method">EVT</span></td>'
+      + '<td>'
+      +   '<span class="rp-mon-method">' + esc(e.kind) + '</span> '
+      +   esc(e.message || "")
+      + '</td>'
+      + '<td class="is-num">' + levelChip(e.level) + '</td>'
+      + '</tr>';
+    if (!expandable) return primary;
+    return primary
+      + '<tr class="rt-mon-row-expansion" hidden>'
+      +   '<td colspan="4">'
+      +     '<div class="rt-mon-chain">'
+      +       '<span class="rt-mon-chain-kind">context</span>'
+      +       '<pre>' + esc(ctxJson) + '</pre>'
+      +     '</div>'
+      +   '</td>'
+      + '</tr>';
+  }
+
   // optimization-map.md.
   const OPT_STATUSES = ["all", "open", "planned", "done", "wontfix"];
   let optStatus = "all";
@@ -796,6 +1245,25 @@ export default function monitoring(app, { session }) {
       +   '<tbody id="rp-mon-raw-tbody"></tbody>'
       + '</table>'
       + '<div class="rp-list-pager" id="rp-mon-raw-pager"></div>'
+      + '</section>';
+  }
+  // M-3 — panic pane on the Requests landing. The wrapper has hidden=true
+  // by default so the panel disappears entirely when the window has no
+  // panics. The fetchRecentPanics path flips hidden + populates the
+  // count + 5 most recent rows; clicking a row expands the backtrace_head
+  // via the same expander shape used by the events redtable (M-4).
+  function panicPanel() {
+    return '<section class="rp-mon-panel rp-mon-panel--panic" id="rp-mon-panic-pane" hidden>'
+      + '<div class="rp-mon-panel-head">'
+      +   '<h3 class="rp-mon-panel-title">'
+      +     '<i class="bi bi-exclamation-octagon"></i> Recent panics'
+      +   '</h3>'
+      +   '<span class="rp-mon-panel-hint" id="rp-mon-panic-count">—</span>'
+      + '</div>'
+      + '<table class="rp-mon-table">'
+      +   '<thead><tr><th>Time</th><th>Message</th><th>Location</th></tr></thead>'
+      +   '<tbody id="rp-mon-panic-tbody"></tbody>'
+      + '</table>'
       + '</section>';
   }
   // Read a CSS custom property (theme token) at runtime so ECharts

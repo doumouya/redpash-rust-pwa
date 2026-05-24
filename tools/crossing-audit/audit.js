@@ -127,10 +127,52 @@ function jsCalls() {
     var m;
 
     /* 1. api.<method>("…") — wrapper calls. The path arg is un-prefixed
-          (the wrapper prepends /api), so we re-add it here. */
+          (the wrapper prepends /api), so we re-add it here.
+
+          When the captured literal ends in '/' it's almost always a
+          concat prefix (`api.get('/files/' + rid + '/joins')`) — stitch
+          the next ` + NAME + 'lit'` so the normalized path still has
+          the trailing segment + matches the Rust :_ param. Same shape
+          as the litRe stitch below; without it api.<method> calls with
+          stringly-built paths register as their truncated prefix
+          and falsely dangle. */
     var apiRe = /\bapi\.(get|post|patch|put|delete|getCached|invalidateCached)\(\s*([`'"])((?:\\.|(?!\2)[\s\S])*?)\2/g;
     while ((m = apiRe.exec(text))) {
-      calls.push(mkCall('/api' + m[3], rel, lineOf(text, m.index)));
+      var p = '/api' + m[3];
+      if (p.charAt(p.length - 1) === '/') {
+        // Two-step stitch: first the `+ NAME` ident expression (captures
+        // dotted / bracketed / function-call references like
+        // encodeURIComponent(rid)), THEN optionally a trailing
+        // `+ "literal"` segment. Handles both shapes:
+        //   api.get('/foo/' + rid + '/bar')   → /api/foo/:_/bar
+        //   api.get('/foo/' + rid)            → /api/foo/:_
+        // Without the second-shape branch, the path of an
+        // open-ended call (just `+ NAME` with no trailing literal)
+        // gets captured as `/api/foo/` → normalized to `/api/foo` →
+        // false-dangling against the real `/foo/:_` route.
+        // `p` ends with '/' from the captured literal. The next literal
+        // segment ALSO starts with '/', so we strip the trailing slash
+        // from `p` before appending — keeps the path single-slash-
+        // separated. Without this, '/files/' + ':_' + '/page' would
+        // produce '/files/:_/page' (right) but the literal-first variant
+        // of the stitch was originally written as '/files/' + ':_' +
+        // 'page' (dropping the leading slash from the segment), which
+        // collapses to '/files/:_page' and false-reports every multi-
+        // segment route under :rid as unused.
+        var after = text.slice(apiRe.lastIndex, apiRe.lastIndex + 240);
+        var stitchVar = after.match(/^\s*\+\s*[A-Za-z_$][\w$.\[\]()]*/);
+        if (stitchVar) {
+          p = p.replace(/\/$/, '') + '/:_';
+          var rest = after.slice(stitchVar[0].length);
+          var stitchLit = rest.match(/^\s*\+\s*([`'"])([^`'"]*)\1/);
+          if (stitchLit) {
+            var seg = stitchLit[2];
+            if (seg && seg.charAt(0) !== '/') seg = '/' + seg;
+            p = p + seg;
+          }
+        }
+      }
+      calls.push(mkCall(p, rel, lineOf(text, m.index)));
     }
 
     /* 2. api.prewarm(["…","…"]) — an array of un-prefixed list paths. */
@@ -152,7 +194,15 @@ function jsCalls() {
       if (p.charAt(p.length - 1) === '/') {
         var after = text.slice(litRe.lastIndex, litRe.lastIndex + 140);
         var cc = after.match(/^\s*\+\s*[A-Za-z_$][\w$.\[\]]*\s*\+\s*([`'"])([^`'"]*)\1/);
-        if (cc) p = p + ':_' + cc[2].replace(/^\//, '');
+        if (cc) {
+          // Same slash-preservation as the apiRe stitch above —
+          // move the slash from before :_ rather than dropping the
+          // leading slash from the captured literal, so the result
+          // is `/api/foo/:_/bar` not `/api/foo/:_bar`.
+          var seg = cc[2];
+          if (seg && seg.charAt(0) !== '/') seg = '/' + seg;
+          p = p.replace(/\/$/, '') + '/:_' + seg;
+        }
       }
       calls.push(mkCall(p, rel, lineOf(text, m.index)));
     }
