@@ -1362,6 +1362,36 @@ export default function workspace(app, { session }) {
     }
   });
 
+  // ─── new project — POST /api/projects + expand the new group ──
+  // No prompt — the project lands with a placeholder name + an empty
+  // file list. Rename lives on the Objects page (PATCH /api/projects/:rid
+  // is wired backend-side; rail inline-rename for projects isn't yet).
+  $("#wsNewProject")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const created = await api.post("/projects", { name: "Untitled project" });
+      const newRid = created?.redpash_id;
+      await loadProjects();
+      if (newRid) {
+        // The rail allows multiple groups expanded at once — adding
+        // .expanded here doesn't fight the deep-link path that already
+        // opened the previously-active group. Scroll the new group
+        // into view so the user sees where it landed.
+        const group = navBody.querySelector('.rt-group[data-rid="' + cssEsc(newRid) + '"]');
+        if (group) {
+          group.classList.add("expanded");
+          loadFilesForGroup(group);
+          group.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }
+    } catch (err) {
+      console.warn("[rail] + New project failed:", err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the
   // next expand re-fetches files, and re-render the project list from
