@@ -63,6 +63,31 @@ The key VFS insight we're stealing: **method-pointer indirection
 lets multiple implementations coexist without the caller knowing
 or caring which one is in play.**
 
+### Two halves of the same VFS borrow
+
+This spec is the **backend half** of the VFS pattern. Torv's PWA-FS
+sketch (`docs/internal/architecture/data-shape-index.md`, in
+progress) is the **frontend half** — paths, inodes, mounts that
+unify IndexedDB / SW cache / in-memory / server-fetched into one
+namespace. They compose:
+
+```
+FE issues AST  →  FS.read(path, query)
+                     ↓
+                FS resolves to a server route via mount registry
+                     ↓
+                Backend Source/Entity/Reader executes per caps()
+                     ↓
+                Response flows back through the FS
+                     ↓
+                FE FS caches by (entity_id, query.hash) inode-mtime
+```
+
+Readers see *one* VFS-shaped story; same vocabulary, two ends.
+RBAC enforcement lands at the FS-access boundary on the FE +
+`ReadContext` ACL gate on the backend — symmetric, single
+mental model.
+
 ## The three traits
 
 ### 1. `Source` — one connected data domain
@@ -81,7 +106,16 @@ trait Source {
     //   returns: { entities: [{ id, name, kind, schema }, ...] }
 
     async fn health(&self) -> Result<Health>;
-    //   freshness, last_sync, error state — drives the UI's source-status dot
+    //   freshness, last_sync, error state — drives the UI's source-
+    //   status dot. NOTE: status reports at the *entity* level, not
+    //   the Source level — a Postgres connection might back 10
+    //   tables, one of those goes stale (table dropped server-side),
+    //   the others stay fine. Per-entity granularity matches reality.
+    //   Three states: green (healthy) / amber (degraded — reads OK,
+    //   writes may fail) / red (broken — reads error). For local-file
+    //   sources, the helper returns None and the FE skips rendering
+    //   the dot entirely — no noise for the 100% case (Torv's call
+    //   from the 21:15 thread).
 }
 ```
 
@@ -124,6 +158,14 @@ trait Reader {
     async fn page(&mut self, query: Query) -> Result<Page<Row>>;
     //   Query is the redtable AST — filter / sort / search / pagination.
     //   Matches the existing [[redtable-query-builder]] shape.
+    //
+    //   **The query AST is the cache key.** Same query against the same
+    //   Reader returns the same Page deterministically; the FE FS layer
+    //   keys cache entries on (entity_id, query.hash). Two surfaces
+    //   firing the same query against the same entity (workspace +
+    //   a dashboard widget pointing at the same file) share the cached
+    //   page trivially. This is what makes the column-index reuse
+    //   pattern work — multiple consumers, one fetch.
 
     async fn distinct(&self, col: &str, q: Option<&str>, limit: usize)
         -> Result<DistinctResult>;
@@ -153,7 +195,15 @@ struct Capabilities {
     push_search:    bool,   // ILIKE / fulltext / equivalent
     push_join:      bool,   // can join two entities server-side
     push_aggregate: bool,   // GROUP BY / equivalent
-    write:          bool,   // mutations allowed?
+    // Mutations — split per-mode (Torv's refinement). Some sources
+    // allow updates but not inserts (e.g. a SQL view that's
+    // updatable but the underlying table can't take new rows from
+    // here); some allow inserts but not deletes (an append-only
+    // log table). The toolbar edit/select/delete modes read each
+    // bit independently to render their disabled-state tooltips.
+    write_update:   bool,
+    write_insert:   bool,
+    write_delete:   bool,
     schema_evolves: bool,   // can columns change while we're reading?
 }
 ```
@@ -173,6 +223,28 @@ This is the load-bearing piece: **the query planner reads `caps()`
 and routes work to the right side**. Without it the abstraction
 falls apart on the first source that can't push down something
 expensive.
+
+### One derived signal crosses the wire — `executed_locally`
+
+The FE stays source-agnostic (same controls, same handlers, no
+`caps()` lookup on the client). But one *derived* bit rides on
+the `Page<T>` response per query:
+
+```rust
+struct Page<T> {
+    // ... existing fields ...
+    executed_locally: bool,
+}
+```
+
+`true` when the planner couldn't push down a heavy op and ran it
+in-process instead. The FE shows a subtle indicator ("computed
+locally — large operations may be slow on this source") in the
+toolbar next to the row count. One bit, one tooltip, no source
+coupling on the FE — just an honest perf hint so the user
+doesn't open a 10M-row Sheets entity, filter by date, watch a
+30-second spinner, and conclude the app is broken. Torv's catch
+from the 21:15 alignment thread.
 
 ## Migration path
 
