@@ -375,10 +375,30 @@ const TOOLS = [
 //   2. form view — the active tool's fields + Apply
 //   3. status   — a small inline message on the picker (last applied / errors)
 
+// ── columns-view global actions (Slice B) ─────────────────────────────
+// Each entry references an existing TOOLS kind so tools.js stays the
+// single source of truth for label/icon/blurb/fields/toParams. The
+// columns toolbar maps each entry to a button; `hasSheet` opens the
+// in-panel modal sheet, otherwise the action runs directly with no
+// params. `enabled(summary)` gates the button on file-level state
+// (e.g. unwrap_csv needs a single-column file).
+const GLOBAL_ACTIONS = [
+  { kind: "snake_case_columns" },
+  { kind: "replace_in_names",   hasSheet: true },
+  { kind: "change_case",        hasSheet: true },
+  { kind: "unwrap_csv",
+    enabled: (summary) => (summary?.col_count ?? 0) === 1,
+    disabledTitle: "Unwrap CSV needs a single-column file." },
+];
+
+function getTool(kind) { return TOOLS.find((t) => t.kind === kind); }
+
 export function mountTools(panelBody, ctx) {
   let activeTool = null;          // the TOOLS[i] currently showing the form
   let renderedFields = [];        // [{ field, read }] for the open form — read() returns value
-  let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable, Slice A — preview)
+  let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable)
+  let activeSheet = null;         // the TOOLS entry whose modal sheet is open in columns view, or null
+  let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
 
   // Two stable containers — list view + form view; we swap visibility.
   const listEl = document.createElement("div");
@@ -464,17 +484,24 @@ export function mountTools(panelBody, ctx) {
     }
   }
 
-  // ── columns view (Slice A — read-only) ─────────────────────────────
+  // ── columns view ───────────────────────────────────────────────────
   // Rows = ColumnMeta[]; columns = #, Name, Datatype (+ sniff badge),
   // Nulls, % Null, Unique %, Sample. All fields come from the existing
   // /api/files/:rid envelope — no new endpoint. Sniff mismatch (storage
   // dtype ≠ semantic dtype) gets a small ⚠ badge so the dirty columns
   // surface visually without the user having to scan numbers.
+  //
+  // Slice B adds the global-actions toolbar above the table — the
+  // first cut of the columns-redtable's toolbar (architecture/
+  // columns-redtable.md). Dialog actions open an in-panel modal sheet
+  // that reuses the existing FIELDS renderers.
   function renderColumnsView() {
     const cols    = ctx.columns() || [];
     const summary = ctx.summary ? ctx.summary() : null;
     const total   = summary?.row_count;
     if (!cols.length) {
+      activeSheet = null;
+      sheetFields = [];
       columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
       return;
     }
@@ -504,8 +531,10 @@ export function mountTools(panelBody, ctx) {
       +     '<b>' + cols.length + '</b> column' + (cols.length === 1 ? '' : 's')
       +     (total != null ? ' · <b>' + total + '</b> row' + (total === 1 ? '' : 's') : '')
       +   '</span>'
-      +   '<span class="rt-tool-columns-flag" title="Preview — Slice A: read-only. The toolbar (edit / select / global actions) ports onto this view in slices B–H.">preview</span>'
+      +   '<span class="rt-tool-columns-flag" title="Preview — selection + edit modes land in slices C–G.">preview</span>'
       + '</div>'
+      + renderColumnsToolbar(summary)
+      + (activeSheet ? renderColumnsSheet(cols) : '')
       + '<div class="rt-tool-columns-tablewrap">'
       +   '<table class="rp-table rt-tool-columns-table">'
       +     '<thead><tr>'
@@ -516,6 +545,110 @@ export function mountTools(panelBody, ctx) {
       +     '<tbody>' + rows + '</tbody>'
       +   '</table>'
       + '</div>';
+  }
+
+  // Toolbar — the 4 global actions (Slice B). Selection-mode + edit
+  // groups land in later slices alongside their respective actions.
+  function renderColumnsToolbar(summary) {
+    const buttons = GLOBAL_ACTIONS.map((a) => {
+      const tool = getTool(a.kind);
+      if (!tool) return '';
+      const enabled = a.enabled ? a.enabled(summary) : true;
+      const title   = enabled ? (tool.blurb || tool.label)
+                              : (a.disabledTitle || tool.blurb || tool.label);
+      return '<button class="rt-btn rt-tool-columns-action" type="button"'
+        +    ' data-action-kind="' + esc(a.kind) + '"'
+        +    (enabled ? '' : ' disabled')
+        +    ' title="' + esc(title) + '">'
+        +    '<i class="bi ' + esc(tool.icon) + '"></i> '
+        +    esc(tool.label) + (a.hasSheet ? '…' : '')
+        +    '</button>';
+    }).join('');
+    return '<div class="rt-tool-columns-toolbar">'
+      +    '<span class="rt-tool-columns-toolbar-grp">Global</span>'
+      +    buttons
+      +    '</div>';
+  }
+
+  // Modal sheet — small in-panel form that reuses the existing FIELDS
+  // renderers (column/enum/text/boolean/multicolumn). Slice B uses
+  // sheets for change_case (1 enum) + replace_in_names (2 text). The
+  // sheet lives between the toolbar and the table.
+  function renderColumnsSheet(cols) {
+    if (!activeSheet) return '';
+    sheetFields = activeSheet.fields.map((f) => {
+      const renderer = FIELDS[f.type];
+      if (!renderer) throw new Error("Unknown field type: " + f.type);
+      const built = renderer({ ...f, columns: cols });
+      return { field: f, html: built.html, read: built.read };
+    });
+    return '<div class="rt-tool-columns-sheet">'
+      +    '<div class="rt-tool-columns-sheet-head">'
+      +      '<span class="rt-tool-columns-sheet-title">'
+      +        '<i class="bi ' + esc(activeSheet.icon) + '"></i> '
+      +        esc(activeSheet.label)
+      +      '</span>'
+      +      '<button class="rt-btn rt-btn--ghost rt-tool-columns-sheet-close" type="button"'
+      +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
+      +    '</div>'
+      +    (activeSheet.blurb
+            ? '<p class="rt-tool-columns-sheet-blurb">' + esc(activeSheet.blurb) + '</p>'
+            : '')
+      +    '<div class="rt-tool-columns-sheet-body">'
+      +      sheetFields.map((r) => r.html).join('')
+      +    '</div>'
+      +    '<div class="rt-tool-columns-sheet-foot">'
+      +      '<button class="rt-btn rt-tool-columns-sheet-cancel" type="button">Cancel</button>'
+      +      '<button class="rt-btn rt-btn--accent rt-tool-columns-sheet-apply" type="button">'
+      +        '<i class="bi bi-play-fill"></i> Apply'
+      +      '</button>'
+      +    '</div>'
+      +    '</div>';
+  }
+
+  // Click delegation for the columns view — toolbar buttons fire either
+  // a direct apply (no-field tools) or open a sheet (dialog tools); the
+  // sheet's Apply/Cancel buttons commit or close. Listening on columnsEl
+  // means re-renders inside that subtree don't lose the handler.
+  columnsEl.addEventListener("click", async (e) => {
+    const actBtn = e.target.closest(".rt-tool-columns-action");
+    if (actBtn && !actBtn.disabled) {
+      const tool = getTool(actBtn.dataset.actionKind);
+      if (!tool) return;
+      if (tool.fields && tool.fields.length) {
+        activeSheet = tool;
+        renderColumnsView();
+      } else {
+        // No fields — apply with the tool's no-arg params object.
+        await runStep(tool.kind, tool.toParams({}), tool.label, { busyBtn: actBtn });
+      }
+      return;
+    }
+    if (e.target.closest(".rt-tool-columns-sheet-cancel")
+        || e.target.closest(".rt-tool-columns-sheet-close")) {
+      closeSheet();
+      return;
+    }
+    const applyBtn = e.target.closest(".rt-tool-columns-sheet-apply");
+    if (applyBtn) {
+      if (!activeSheet) return;
+      const state = {};
+      sheetFields.forEach((r) => { state[r.field.key] = r.read(columnsEl); });
+      const params = activeSheet.toParams(state);
+      const tool = activeSheet;
+      // Close optimistically — runStep → onApplied → loadFile → refresh
+      // re-renders the view. On failure status shows the error inline
+      // and the user re-opens the sheet (rare path; sheets are short).
+      activeSheet = null;
+      sheetFields = [];
+      await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+    }
+  });
+
+  function closeSheet() {
+    activeSheet = null;
+    sheetFields = [];
+    renderColumnsView();
   }
 
   // ── form view ──────────────────────────────────────────────────────
