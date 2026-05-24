@@ -37,6 +37,67 @@ var BIG_LOC = 600;     // a file over this LOC is a hotspot
 var BIG_MATCH = 60;    // a `match` block over this many lines is flagged
 var DUP_MIN = 4;       // a source line recurring >= this many times is a smell
 
+/* ── pattern catalog ─────────────────────────────────────────────────────────
+   Named antipatterns + helper-usage markers from the
+   docs/internal/archive/rust-dedup-audit-2026-05-24.md audit. Each entry is
+   counted across the scan; the report's "Patterns" tab shows current state.
+
+   Statuses:
+     extracted — a helper exists; antipattern count should be 0. Non-zero is
+                 a REGRESSION — someone re-introduced the old shape.
+     declined  — duplication exists but variation is load-bearing; track count
+                 to confirm it doesn't grow enough to warrant extraction.
+     live      — observability for already-extracted helpers (count = healthy
+                 reuse, not antipattern).
+   ────────────────────────────────────────────────────────────────────────── */
+var PATTERNS = [
+  /* ── extracted: count should stay at 0 ─────────────────────────────────── */
+  { name: 'sqlx error .map_err chain', status: 'extracted',
+    rx: /\.map_err\(\|e\| AppError::internal\("db", e\.to_string\(\)\)\)/g,
+    helper: 'From<sqlx::Error> for AppError + `?`',
+    saving: 1, notes: 'commit 194ee26 retired 134 sites' },
+  { name: 'bare COUNT(*) inline scalar', status: 'extracted',
+    rx: /sqlx::query_scalar\("SELECT COUNT\(\*\)::BIGINT FROM [a-zA-Z_.]+"\)/g,
+    helper: 'db::count_total(pool, "table")',
+    saving: 3, notes: 'commit 21dcfc3 retired 14 sites' },
+  { name: 'duplicate paginate() / build_page<T>() definitions', status: 'extracted',
+    rx: /^\s*fn (paginate|build_page)\b/gm,
+    helper: 'use super::pagination::{paginate, build_page}',
+    saving: 12, notes: 'commit 355cde3 — only 1 def per name expected (in pagination.rs)' },
+
+  /* ── live: helper usage — counts here are healthy reuse, not antipattern ─ */
+  { name: 'db::count_total usage', status: 'live',
+    rx: /\bdb::count_total\(/g,
+    helper: '(this is the helper)',
+    saving: 0, notes: 'count tracks reuse spread' },
+  { name: 'group_count usage', status: 'live',
+    rx: /\bgroup_count\(/g,
+    helper: '(this is the helper)',
+    saving: 0, notes: 'count tracks reuse spread' },
+  { name: 'ensure_owner usage', status: 'live',
+    rx: /\bensure_owner\(/g,
+    helper: '(this is the helper)',
+    saving: 0, notes: 'count tracks reuse spread' },
+  { name: 'super::pagination::* import', status: 'live',
+    rx: /super::pagination::/g,
+    helper: '(this is the import path)',
+    saving: 0, notes: 'count tracks paginate/build_page reuse' },
+
+  /* ── declined: track growth; if a count crosses ~15-20, revisit ────────── */
+  { name: 'optional-filter WHERE idiom ($N::text IS NULL OR …)', status: 'declined',
+    rx: /\$\d+::[a-z]+ IS NULL OR\b/g,
+    helper: 'builder or macro — only if a 3rd identical-shape surface lands',
+    saving: 0, notes: 'audit verdict: variation per handler is load-bearing' },
+  { name: 'sparse-PATCH COALESCE update column', status: 'declined',
+    rx: /=\s*COALESCE\(\$\d+,\s*\w+\)/g,
+    helper: 'sparse_update!() macro — only if 7+ tables share the shape',
+    saving: 0, notes: 'audit verdict: column lists vary 2-11 entries' },
+  { name: 'row.try_get(_) DTO mapping', status: 'declined',
+    rx: /\.try_get\([^)]*\)\.(unwrap_or|ok\(\))/g,
+    helper: 'derive macro — adds dep risk + obscures wire shape',
+    saving: 0, notes: 'audit verdict: per-DTO variation; keep inline for auditability' }
+];
+
 /* crate name from a repo-relative path: crates/<name>/… , else first segment */
 function crateOf(rel) {
   var m = rel.match(/(?:^|\/)crates\/([^/]+)\//);
@@ -112,6 +173,14 @@ var files = [];
 var matches = [];
 var lineMap = {};      // trimmed line -> { count, files: {rel: n} }
 
+/* per-pattern accumulators: parallel array to PATTERNS, each entry
+   { total, files: { rel: count, … } }. Stripped text (no comments /
+   strings — see strip()) is scanned for the "code" regex; we keep
+   raw scans too because some pattern rx legitimately match inside
+   string literals (e.g. the bare-COUNT pattern is literally an SQL
+   string). Per-pattern, the rx decides which side to scan. */
+var patternHits = PATTERNS.map(function () { return { total: 0, files: {} }; });
+
 diskPaths.forEach(function (full) {
   var rel = path.relative(SRC_DIR, full).split(path.sep).join('/');
   var text = fs.readFileSync(full, 'utf8');
@@ -128,6 +197,20 @@ diskPaths.forEach(function (full) {
     var e = lineMap[t] || (lineMap[t] = { count: 0, files: {} });
     e.count++;
     e.files[rel] = (e.files[rel] || 0) + 1;
+  });
+
+  /* pattern scan — raw text (some rx match inside SQL string literals
+     by design; that's the antipattern's signature). Skip the audit
+     tool itself + the dedup-audit doc to avoid self-counting. */
+  if (/tools\/rs-audit\//.test(rel) || /rust-dedup-audit/.test(rel)) return;
+  PATTERNS.forEach(function (p, i) {
+    p.rx.lastIndex = 0;
+    var m, n = 0;
+    while ((m = p.rx.exec(text)) !== null) { n++; if (m.index === p.rx.lastIndex) p.rx.lastIndex++; }
+    if (n > 0) {
+      patternHits[i].total += n;
+      patternHits[i].files[rel] = (patternHits[i].files[rel] || 0) + n;
+    }
   });
 });
 
@@ -163,10 +246,29 @@ var crateList = Object.keys(crates).map(function (k) { return crates[k]; })
 var totalLoc = files.reduce(function (n, f) { return n + f.loc; }, 0);
 var redundantLines = repeats.reduce(function (n, r) { return n + (r.count - 1); }, 0);
 
+/* per-pattern roll-up — joined with the catalog so the report shows
+   name/status/helper/saving alongside count + per-file breakdown. */
+var patterns = PATTERNS.map(function (p, i) {
+  var h = patternHits[i];
+  return {
+    name: p.name, status: p.status, helper: p.helper, saving: p.saving, notes: p.notes,
+    total: h.total,
+    files: Object.keys(h.files).sort().map(function (f) { return { file: f, n: h.files[f] }; })
+  };
+});
+
+/* counts for the headline cards: regressions = extracted patterns
+   with non-zero counts; pending = declined patterns whose count
+   crossed the revisit threshold. */
+var REVISIT_THRESHOLD = 20;
+var regressions = patterns.filter(function (p) { return p.status === 'extracted' && p.total > 0; }).length;
+var pending     = patterns.filter(function (p) { return p.status === 'declined'  && p.total > REVISIT_THRESHOLD; }).length;
+
 var data = {
   generatedAt: new Date().toISOString(),
   srcDir: SRC_DIR,
   bigLoc: BIG_LOC, bigMatch: BIG_MATCH, dupMin: DUP_MIN,
+  revisitThreshold: REVISIT_THRESHOLD,
   stats: {
     files: files.length,
     loc: totalLoc,
@@ -174,12 +276,15 @@ var data = {
     bigFiles: files.filter(function (f) { return f.big; }).length,
     repeatGroups: repeats.length,
     redundantLines: redundantLines,
-    bigMatches: bigMatches.length
+    bigMatches: bigMatches.length,
+    regressions: regressions,
+    pendingDeclined: pending
   },
   crateList: crateList,
   files: files,
   repeats: repeats,
-  bigMatches: bigMatches
+  bigMatches: bigMatches,
+  patterns: patterns
 };
 
 /* ── HTML report ─────────────────────────────────────────────────────────── */
@@ -201,6 +306,7 @@ function renderHtml(d) {
     '  <button class="tab active" data-tab="files">Files</button>',
     '  <button class="tab" data-tab="repeats">Repeated lines</button>',
     '  <button class="tab" data-tab="matches">Big matches</button>',
+    '  <button class="tab" data-tab="patterns">Patterns</button>',
     '</nav>',
     '<div class="panel" id="panel-files">',
     '  <div class="toolbar"><input id="q-files" placeholder="Filter files…" autocomplete="off">',
@@ -222,6 +328,17 @@ function renderHtml(d) {
     '  <div class="toolbar"><span class="count" id="count-matches"></span></div>',
     '  <table id="t-matches"><thead><tr>',
     '    <th data-k="span" class="num">Lines</th><th data-k="file">match block</th>',
+    '  </tr></thead><tbody></tbody></table>',
+    '</div>',
+    '<div class="panel hidden" id="panel-patterns">',
+    '  <div class="toolbar">',
+    '    <label class="chk"><input type="checkbox" id="only-regressions"> regressions only</label>',
+    '    <span class="count" id="count-patterns"></span></div>',
+    '  <table id="t-patterns"><thead><tr>',
+    '    <th data-k="status">Status</th>',
+    '    <th data-k="name">Pattern</th>',
+    '    <th data-k="total" class="num">Hits</th>',
+    '    <th data-k="helper">Helper / verdict</th>',
     '  </tr></thead><tbody></tbody></table>',
     '</div>',
     '<script>var DATA=' + json + ';</script>',
@@ -279,6 +396,8 @@ var CSS = [
   'font-weight:600;margin-left:6px}',
   '.pill.bad{background:rgba(255,93,108,.15);color:var(--bad)}',
   '.pill.warn{background:rgba(224,166,75,.16);color:var(--warn)}',
+  '.pill.ok{background:rgba(63,181,107,.16);color:var(--ok)}',
+  '.pill.dim{background:#1d2433;color:var(--muted)}',
   '.where{color:var(--muted);font-size:11px;margin-top:3px;',
   'font-family:ui-monospace,Menlo,Consolas,monospace}',
   '.empty{padding:40px;text-align:center;color:var(--muted)}'
@@ -296,7 +415,9 @@ var JS = [
   "['Hotspots (>'+D.bigLoc+')',D.stats.bigFiles,'warn'],",
   "['Repeated-line groups',D.stats.repeatGroups,'warn'],",
   "['Redundant lines',D.stats.redundantLines,'bad'],",
-  "['Big matches (>'+D.bigMatch+')',D.stats.bigMatches,'bad']];",
+  "['Big matches (>'+D.bigMatch+')',D.stats.bigMatches,'bad'],",
+  "['Pattern regressions',D.stats.regressions,D.stats.regressions?'bad':''],",
+  "['Declined over threshold',D.stats.pendingDeclined,D.stats.pendingDeclined?'warn':'']];",
   "document.getElementById('cards').innerHTML=cards.map(function(c){",
   "return '<div class=\"card '+c[2]+'\"><div class=\"n\">'+c[1]+",
   "'</div><div class=\"l\">'+c[0]+'</div></div>';}).join('');",
@@ -304,7 +425,7 @@ var JS = [
   "for(var i=0;i<tabs.length;i++)tabs[i].addEventListener('click',function(){",
   "for(var j=0;j<tabs.length;j++)tabs[j].classList.remove('active');",
   "this.classList.add('active');var t=this.getAttribute('data-tab');",
-  "['files','repeats','matches'].forEach(function(p){",
+  "['files','repeats','matches','patterns'].forEach(function(p){",
   "document.getElementById('panel-'+p).classList.toggle('hidden',p!==t);});});",
   "function sortRows(rows,st){rows.sort(function(a,b){var x=a[st.k],y=b[st.k],d;",
   "if(typeof x==='string')d=x.localeCompare(y);else d=x-y;return st.asc?d:-d;});}",
@@ -349,12 +470,36 @@ var JS = [
   "return '<tr><td class=num>'+r.span+'</td>'+",
   "'<td><span class=\"mono\">'+esc(r.file)+':'+r.line+'</span></td></tr>';",
   "}).join(''):'<tr><td colspan=2 class=empty>No match block over '+D.bigMatch+' lines.</td></tr>';}",
+  /* Patterns panel — status pill + hit count + helper / verdict. */
+  "var pSort={k:'total',asc:false};",
+  "function statusPill(s,total){",
+  "var cls=s==='extracted'?(total>0?'bad':'ok')",
+  ":s==='declined'?(total>D.revisitThreshold?'warn':'dim')",
+  ":'dim';",
+  "return '<span class=\"pill '+cls+'\">'+s+'</span>';}",
+  "function renderPatterns(){",
+  "var or=document.getElementById('only-regressions').checked;",
+  "var rows=D.patterns.filter(function(r){",
+  "return !or||(r.status==='extracted'&&r.total>0);});",
+  "sortRows(rows,pSort);",
+  "document.getElementById('count-patterns').textContent=rows.length+' of '+D.patterns.length;",
+  "var tb=document.querySelector('#t-patterns tbody');",
+  "tb.innerHTML=rows.length?rows.map(function(r){",
+  "var where=r.files.length?",
+  "'<div class=\"where\">'+r.files.map(function(f){return esc(f.file)+' ('+f.n+')';}).join('  ·  ')+'</div>':'';",
+  "return '<tr><td>'+statusPill(r.status,r.total)+'</td>'+",
+  "'<td><span class=\"mono\">'+esc(r.name)+'</span>'+",
+  "(r.notes?'<div class=\"where\">'+esc(r.notes)+'</div>':'')+where+'</td>'+",
+  "'<td class=num>'+r.total+'</td>'+",
+  "'<td>'+esc(r.helper)+'</td></tr>';",
+  "}).join(''):'<tr><td colspan=4 class=empty>No patterns matched.</td></tr>';}",
   "document.getElementById('q-files').addEventListener('input',renderFiles);",
   "document.getElementById('only-big').addEventListener('change',renderFiles);",
   "document.getElementById('q-repeats').addEventListener('input',renderRepeats);",
+  "document.getElementById('only-regressions').addEventListener('change',renderPatterns);",
   "wireSort('t-files',fSort,renderFiles);wireSort('t-repeats',rSort,renderRepeats);",
-  "wireSort('t-matches',mSort,renderMatches);",
-  "renderFiles();renderRepeats();renderMatches();})();"
+  "wireSort('t-matches',mSort,renderMatches);wireSort('t-patterns',pSort,renderPatterns);",
+  "renderFiles();renderRepeats();renderMatches();renderPatterns();})();"
 ].join('\n');
 
 /* ── emit ────────────────────────────────────────────────────────────────── */
@@ -370,6 +515,12 @@ console.log('  hotspots          ' + data.stats.bigFiles + '   (> ' + BIG_LOC + 
 console.log('  repeated lines    ' + data.stats.repeatGroups
   + ' groups, ' + redundantLines + ' redundant lines (recurring ≥ ' + DUP_MIN + '×)');
 console.log('  big matches       ' + data.stats.bigMatches + '   (> ' + BIG_MATCH + ' lines)');
+console.log('  patterns          '
+  + patterns.filter(function (p) { return p.status === 'extracted'; }).length + ' extracted, '
+  + patterns.filter(function (p) { return p.status === 'live'; }).length      + ' live, '
+  + patterns.filter(function (p) { return p.status === 'declined'; }).length  + ' declined'
+  + (regressions ? '   ⚠ ' + regressions + ' regression(s)' : '')
+  + (pending ? '   ⚠ ' + pending + ' declined > ' + REVISIT_THRESHOLD : ''));
 if (files[0]) {
   console.log('');
   console.log('  largest files:');
