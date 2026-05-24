@@ -197,10 +197,13 @@ async fn patch_project(
     // `user` is the project's current owner (ensure_owner just confirmed
     // it) — update_project_meta needs it to clear their existing default
     // when `is_default` flips on.
+    let name_trim = body.name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let desc_trim = body.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let any_field = name_trim.is_some() || desc_trim.is_some() || body.is_default.is_some()
+        || new_owner.is_some() || new_company.is_some() || new_status.is_some();
     let updated = db::update_project_meta(
         &state.db, &rid, &user,
-        body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        body.description.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        name_trim, desc_trim,
         body.is_default,
         new_owner,
         new_company,
@@ -208,6 +211,30 @@ async fn patch_project(
     )
     .await?
     .ok_or_else(|| AppError::not_found("not_found", "project not found"))?;
+
+    // Heuristic (per Gus's auth-audit pass): empty PATCH body → no
+    // audit-trail emit. Otherwise carry which buckets actually changed
+    // so a triage query can spot rename-only vs reassignment without
+    // diffing the row.
+    if any_field {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "project_patch".into(),
+            message: format!("patched project {rid}"),
+            user:    Some(user.clone()),
+            context: serde_json::json!({
+                "project":     rid.clone(),
+                "renamed":     name_trim.is_some(),
+                "described":   desc_trim.is_some(),
+                "default":     body.is_default.is_some(),
+                "reassigned":  new_owner.is_some(),
+                "scoped":      new_company.is_some(),
+                "status":      new_status.is_some(),
+            }),
+            ..Default::default()
+        });
+    }
     Ok(Json(updated))
 }
 
@@ -242,9 +269,23 @@ async fn delete_project(
         ));
     }
 
-    for fid in file_rids {
-        state.files.remove(&fid);
-        let _ = tokio::fs::remove_file(state.file_path(&fid)).await;
+    let file_count = file_rids.len();
+    for fid in &file_rids {
+        state.files.remove(fid);
+        let _ = tokio::fs::remove_file(state.file_path(fid)).await;
     }
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "project_delete".into(),
+        message: format!("deleted project {rid} (cascade: {file_count} files)"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "project":         rid.clone(),
+            "cascade_files":   file_count,
+        }),
+        ..Default::default()
+    });
     Ok(StatusCode::NO_CONTENT)
 }

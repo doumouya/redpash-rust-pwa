@@ -45,16 +45,39 @@ async fn patch_one(
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
+    let title_trim = body.title.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let desc_trim  = body.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let folder_trim = body.folder.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let any_field = title_trim.is_some() || desc_trim.is_some() || folder_trim.is_some()
+        || body.is_favorite.is_some() || body.is_public.is_some();
     let d = db::patch_dashboard_meta(
         &state.db, &rid,
-        body.title.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        body.description.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        body.folder.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        body.is_favorite,
-        body.is_public,
+        title_trim, desc_trim, folder_trim,
+        body.is_favorite, body.is_public,
     )
     .await?
     .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
+
+    // Heuristic: an empty PATCH body is a no-op on the audit trail —
+    // don't record an event when no field actually changed.
+    if any_field {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "dashboard_patch".into(),
+            message: format!("patched dashboard {rid}"),
+            user:    Some(user.clone()),
+            context: serde_json::json!({
+                "dashboard":   rid.clone(),
+                "renamed":     title_trim.is_some(),
+                "described":   desc_trim.is_some(),
+                "moved":       folder_trim.is_some(),
+                "favorited":   body.is_favorite.is_some(),
+                "visibility":  body.is_public.is_some(),
+            }),
+            ..Default::default()
+        });
+    }
     Ok(Json(d))
 }
 
@@ -85,6 +108,19 @@ async fn create(
         req.description.as_deref().filter(|s| !s.is_empty()),
     )
     .await?;
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "dashboard_create".into(),
+        message: format!("created dashboard {} ({rid})", req.title),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "dashboard": rid.clone(),
+            "project":   req.project_redpash_id.clone(),
+        }),
+        ..Default::default()
+    });
     Ok(Json(dashboard))
 }
 
@@ -115,6 +151,16 @@ async fn update(
     )
     .await?
     .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "dashboard_update".into(),
+        message: format!("updated dashboard {rid} ({})", req.title),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "dashboard": rid.clone() }),
+        ..Default::default()
+    });
     Ok(Json(d))
 }
 
@@ -126,6 +172,20 @@ async fn delete_one(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
     let removed = db::delete_dashboard(&state.db, &rid).await?;
+
+    // Heuristic (per Gus's auth-audit pass): only audit-trail an actual
+    // delete — a 404 shouldn't leave a phantom row.
+    if removed {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "dashboard_delete".into(),
+            message: format!("deleted dashboard {rid}"),
+            user:    Some(user.clone()),
+            context: serde_json::json!({ "dashboard": rid.clone() }),
+            ..Default::default()
+        });
+    }
     Ok(if removed { axum::http::StatusCode::NO_CONTENT } else { axum::http::StatusCode::NOT_FOUND })
 }
 
@@ -142,5 +202,15 @@ async fn set_favorite(
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
     let d = db::set_dashboard_favorite(&state.db, &rid, body.value).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "dashboard_favorite".into(),
+        message: format!("{} dashboard {rid}", if body.value { "favorited" } else { "unfavorited" }),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "dashboard": rid.clone(), "value": body.value }),
+        ..Default::default()
+    });
     Ok(Json(d))
 }
