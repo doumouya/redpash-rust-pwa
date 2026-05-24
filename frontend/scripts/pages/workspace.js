@@ -16,6 +16,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
+import { mountReport } from "/scripts/report.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 
@@ -67,6 +68,7 @@ export default function workspace(app, { session }) {
   let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
   let searchDebounce = null;
   let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
+  let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
 
   // UI filter ops → canonical FilterOp on the wire (shared::filter::FilterOp).
   // The op-list union landed in 3d29291; this is the frontend half.
@@ -350,6 +352,11 @@ export default function workspace(app, { session }) {
       // (picker form re-derives field options; columns view re-projects
       // the rows). Picker idle state is a no-op.
       toolsCtrl?.refresh();
+      // Report builder is column-bound too — re-render so the group-by
+      // dropdown + agg col options reflect the new file. Stale spec
+      // (group-by names that don't exist) gets filtered visually on
+      // re-render; Apply would surface a server error if user submits.
+      reportCtrl?.refresh();
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
         // Designer mode — body becomes the chart, not the data table.
@@ -1002,6 +1009,50 @@ export default function workspace(app, { session }) {
       loadFile(rid);
     },
   });
+
+  // ─── report builder — second tab in the filter panel ──────────
+  // Edits a ReportSpec and previews it via POST /api/group/preview.
+  // The builder lives in the filter panel's Report tab; the sample
+  // subtotals table renders inline below the builder so the user
+  // sees the result without losing the source-data table.
+  reportCtrl = mountReport($("#wsReportBody"), {
+    fileRid: () => activeFileRid,
+    columns: () => activeColumns,
+    setStatus: (text, kind) => {
+      // Borrow the rt-tool-status visual idiom for now — separate
+      // status element could land later if the two surfaces diverge.
+      console[(kind === "err" ? "warn" : "log")]("[report]", text);
+    },
+  });
+
+  // Filter / Report tab switcher in the panel head. The panel widens
+  // to 500px when Report is active so the builder + sample preview
+  // table have room; back to 250px on Filter.
+  $("#wsFilterTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tab]");
+    if (!btn) return;
+    setFilterPanelTab(btn.dataset.tab);
+  });
+  function setFilterPanelTab(tab) {
+    const panel = $("#wsFilterPanel");
+    panel.querySelectorAll("[data-tab]").forEach((el) => {
+      const match = el.dataset.tab === tab;
+      if (el.tagName === "BUTTON" && el.parentElement?.id === "wsFilterTabs") {
+        el.classList.toggle("is-active", match);
+      } else {
+        el.hidden = !match;
+        if (el.classList.contains("rt-panel-tab")
+            || el.classList.contains("rt-panel-tab-foot")) {
+          el.classList.toggle("is-active", match);
+        }
+      }
+    });
+    panel.classList.toggle("has-report", tab === "report");
+    if (tab === "report") reportCtrl?.refresh();
+  }
+
+  $("#wsApplyReport").addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
+  $("#wsClearReport").addEventListener("click", () => reportCtrl?.clear());
 
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the

@@ -29,6 +29,12 @@
 .rt-panel--tools.has-columns.open { width: 50vw; }
 .rt-panel--tools.has-columns .rt-panel-inner { width: 50vw; }
 
+/* Filter panel widens to 500px when its Report tab is active — the
+   group-by + aggregations builder + sample preview table need more
+   room than the filter UI's 250px. Snaps back to 250px on Filter. */
+.rt-panel--filter.has-report.open { width: 500px; }
+.rt-panel--filter.has-report .rt-panel-inner { width: 500px; }
+
 .rt-panel-head {
   flex-shrink: 0;
   height: 42px;
@@ -709,3 +715,188 @@
 .rt-tool-columns-sheet.rt-cast-confirm .rt-tool-columns-sheet-blurb b {
   color: var(--rp-warn);
 }
+
+/* ── filter panel — tab strip in the head ───────────────────────
+   Filter / Report tabs share the panel head; clicking a tab swaps
+   the body + foot sections (.rt-panel-tab / .rt-panel-tab-foot).
+   The strip replaces the single .rt-panel-title text — same width
+   budget. */
+.rt-panel-tabs {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  margin-right: auto;
+}
+.rt-panel-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s var(--rp-ease), border-color 0.12s var(--rp-ease);
+}
+.rt-panel-tabs button:hover { color: var(--rp-text); }
+.rt-panel-tabs button.is-active {
+  color: var(--rp-text);
+  border-bottom-color: var(--rp-accent-2);
+}
+.rt-panel-tabs button i { font-size: 13px; color: var(--rp-accent-2); }
+.rt-panel-tab[hidden],
+.rt-panel-tab-foot[hidden] { display: none; }
+
+/* ── report builder (C1) ────────────────────────────────────────
+   Two sections inside the Report tab body: Group by (chip picker)
+   and Aggregations (col + fn + alias rows). Sample preview table
+   renders inline below the builder so the user sees the result
+   without losing the source-data table. Windows + Top-N land as
+   extra sections (no rewires). */
+.rt-report-status {
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  color: var(--rp-text-dim);
+}
+.rt-report-status[data-kind="err"] { color: var(--rp-accent); border-color: var(--rp-accent); }
+
+.rt-report-sect { margin-bottom: 14px; }
+.rt-report-sect:last-child { margin-bottom: 0; }
+.rt-report-empty {
+  margin: 4px 0 8px;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+  font-style: italic;
+}
+
+.rt-report-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0 8px;
+}
+.rt-report-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rt-report-chip-del {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--rp-accent-2);
+  cursor: pointer;
+}
+.rt-report-chip-del:hover { background: rgba(243, 139, 168, 0.18); color: var(--rp-accent); }
+.rt-report-chip-del i { font-size: 11px; }
+
+.rt-report-add { margin-top: 4px; }
+
+.rt-report-aggs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.rt-report-agg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 5px;
+}
+.rt-report-agg select,
+.rt-report-agg input {
+  height: 28px;
+  padding: 0 7px;
+  min-width: 0;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+.rt-report-agg select:focus,
+.rt-report-agg input:focus { border-color: var(--rp-accent-2); }
+.rt-report-add-agg {
+  width: 100%;
+  justify-content: center;
+}
+
+/* sample preview table — capped rows + grand-total row */
+.rt-report-preview {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rp-border);
+}
+.rt-report-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rt-report-preview-meta {
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+}
+.rt-report-preview-meta b { color: var(--rp-text); font-weight: 650; }
+.rt-report-preview-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  background: var(--rp-surface);
+}
+.rt-report-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rt-report-preview-table th,
+.rt-report-preview-table td {
+  padding: 5px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--rp-border);
+  white-space: nowrap;
+}
+.rt-report-preview-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-mute);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  z-index: 1;
+}
+.rt-report-preview-table td.is-num { text-align: right; }
+.rt-report-preview-table tr.is-total td {
+  background: var(--rp-accent-soft);
+  font-weight: 700;
+  border-top: 1px solid var(--rp-accent-2);
+}
+.rt-report-preview-table .is-muted { color: var(--rp-text-mute); }

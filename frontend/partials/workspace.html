@@ -98,21 +98,41 @@
           <aside class="rt-panel rt-panel--filter" id="wsFilterPanel">
             <div class="rt-panel-inner">
               <div class="rt-panel-head">
-                <span class="rt-panel-title"><i class="bi bi-funnel"></i> Filters</span>
+                <div class="rt-panel-tabs" id="wsFilterTabs">
+                  <button class="is-active" type="button" data-tab="filter" title="Filter source rows">
+                    <i class="bi bi-funnel"></i> Filter
+                  </button>
+                  <button type="button" data-tab="report" title="Group + aggregate (report builder)">
+                    <i class="bi bi-bar-chart-line"></i> Report
+                  </button>
+                </div>
                 <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
               <div class="rt-panel-body">
-                <span class="rt-field-lbl">Condition groups</span>
-                <div id="wsGroupList"></div>
-                <button class="rt-btn rt-btn--glass rt-btn--block" id="wsAddGroup" type="button">
-                  <i class="bi bi-plus-lg"></i> Add group
-                </button>
+                <div class="rt-panel-tab is-active" data-tab="filter">
+                  <span class="rt-field-lbl">Condition groups</span>
+                  <div id="wsGroupList"></div>
+                  <button class="rt-btn rt-btn--glass rt-btn--block" id="wsAddGroup" type="button">
+                    <i class="bi bi-plus-lg"></i> Add group
+                  </button>
+                </div>
+                <div class="rt-panel-tab" data-tab="report" id="wsReportBody" hidden>
+                  <!-- report.js mounts the builder here -->
+                </div>
               </div>
               <div class="rt-panel-foot">
-                <button class="rt-btn" id="wsClearFilter" type="button">Clear</button>
-                <button class="rt-btn rt-btn--accent" id="wsApplyFilter" type="button">
-                  <i class="bi bi-funnel"></i> Apply filter
-                </button>
+                <div class="rt-panel-tab-foot is-active" data-tab="filter">
+                  <button class="rt-btn" id="wsClearFilter" type="button">Clear</button>
+                  <button class="rt-btn rt-btn--accent" id="wsApplyFilter" type="button">
+                    <i class="bi bi-funnel"></i> Apply filter
+                  </button>
+                </div>
+                <div class="rt-panel-tab-foot" data-tab="report" hidden>
+                  <button class="rt-btn" id="wsClearReport" type="button">Clear</button>
+                  <button class="rt-btn rt-btn--accent" id="wsApplyReport" type="button">
+                    <i class="bi bi-play-fill"></i> Run preview
+                  </button>
+                </div>
               </div>
             </div>
           </aside>
