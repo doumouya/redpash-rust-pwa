@@ -89,26 +89,90 @@ export function mountDesigner(designerEl, ctx) {
   const saveBtn = designerEl.querySelector(".ds-config-save");
 
   // ── load ──────────────────────────────────────────────────────────
-  // Called from workspace.js when a chart file opens. C2 is single-
-  // chart: blow away any prior tiles, mount this one, select it.
-  function load(chart) {
+  // Called from workspace.js when a chart or dashboard file opens.
+  //   payload = { type: "chart", chart }
+  //     → single-tile canvas, the open CHT_ takes the full row.
+  //   payload = { type: "dashboard", dashboard }
+  //     → multi-tile canvas, one tile per chart-kind widget.
+  //       Widgets are { slot, kind, spec: { chart_id, ... } }; we
+  //       fetch each chart in parallel via /api/charts/:id, then
+  //       render. Other widget kinds (kpi/table/text/report) defer.
+  //   payload = null → teardown to empty state.
+  let dashboard = null;
+  async function load(payload) {
     teardown();
-    if (!chart) { renderCanvasEmpty(); return; }
+    if (!payload) { renderCanvasEmpty(); return; }
+    if (payload.type === "chart") {
+      mountChartTile(payload.chart, /* span */ "span-12", /* selected */ true);
+      return;
+    }
+    if (payload.type === "dashboard") {
+      dashboard = payload.dashboard;
+      const widgets = (dashboard?.spec?.widgets || []).filter((w) => w.kind === "chart");
+      if (!widgets.length) {
+        renderCanvasEmpty();
+        if (gridEl) gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+        return;
+      }
+      // Fetch every chart in parallel — multi-tile dashboards open
+      // faster when the fetches go simultaneous rather than serial.
+      // Failed fetches render an error placeholder tile; one bad
+      // chart doesn't blank the whole canvas.
+      gridEl.innerHTML = '<p class="ds-empty">Loading widgets…</p>';
+      const fetches = widgets.map((w) =>
+        api.get("/charts/" + encodeURIComponent(w.spec?.chart_id || "")).catch((err) => ({ __err: err, widget: w })));
+      const results = await Promise.all(fetches);
+      gridEl.innerHTML = "";
+      results.forEach((res, i) => {
+        const w = widgets[i];
+        if (res?.__err) {
+          gridEl.appendChild(makeErrorTile(w, res.__err));
+          return;
+        }
+        // Default span — alternate 6/6 for now. Slot/template-aware
+        // sizing comes when the template registry lands.
+        const span = "span-6";
+        mountChartTile(res, span, /* selected */ false, w);
+      });
+      // Select the first successfully-loaded tile so the accordion
+      // has content.
+      if (tiles.length) selectTile(tiles[0]);
+      return;
+    }
+  }
+
+  // Mount a chart-kind tile into the canvas + push to the tiles[]
+  // registry. Returns the entry. Used by both single-chart and
+  // dashboard load paths.
+  function mountChartTile(chart, spanClass, selected, widget) {
+    if (!chart) return null;
     const cfg = mergeCfg(chart);
-    const tileEl = makeTile(chart, cfg, /* selected */ true);
-    gridEl.innerHTML = "";
+    const tileEl = makeTile(chart, cfg, !!selected, spanClass || "span-12");
     gridEl.appendChild(tileEl);
     const inst = window.echarts?.init(tileEl.querySelector(".ds-chart"));
     if (inst) inst.setOption(buildOption(cfg, THEMES[cfg.theme] || THEMES.vintage));
-    const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl };
+    const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl, widget: widget || null };
     tiles.push(entry);
-    selectTile(entry);
+    return entry;
+  }
+
+  function makeErrorTile(widget, err) {
+    const el = document.createElement("div");
+    el.className = "ds-tile ds-tile--error span-6";
+    el.innerHTML = ''
+      + '<div class="ds-tile-head"><span class="ds-tile-title">Chart unavailable</span></div>'
+      + '<div class="ds-tile-body"><div class="ds-tile-err">'
+      +   '<i class="bi bi-exclamation-triangle"></i> '
+      +   esc(err?.body?.message || err?.message || "couldn\'t fetch widget")
+      + '</div></div>';
+    return el;
   }
 
   function teardown() {
     tiles.forEach((t) => t.inst?.dispose?.());
     tiles = [];
     sel = null;
+    dashboard = null;
     dirty = false;
     busy = false;
     if (gridEl) gridEl.innerHTML = "";
@@ -155,9 +219,9 @@ export function mountDesigner(designerEl, ctx) {
   }
 
   // ── canvas / tiles ────────────────────────────────────────────────
-  function makeTile(chart, cfg, selected) {
+  function makeTile(chart, cfg, selected, spanClass) {
     const el = document.createElement("div");
-    el.className = "ds-tile" + (selected ? " selected" : "") + " span-12";
+    el.className = "ds-tile" + (selected ? " selected" : "") + " " + (spanClass || "span-12");
     el.dataset.rid = chart.redpash_id;
     el.innerHTML = ''
       + '<div class="ds-tile-head">'
@@ -435,6 +499,44 @@ export function mountDesigner(designerEl, ctx) {
 
   saveBtn.addEventListener("click", () => void save());
 
+  // ── dashboard mutations ───────────────────────────────────────────
+  // Append a chart widget to the open dashboard's spec + persist via
+  // PUT /api/dashboards/:rid + mount the new tile. No-op when not in
+  // dashboard mode (the workspace falls back to creating a standalone
+  // chart in that case).
+  async function addChartWidget(chart) {
+    if (!dashboard || !chart) return false;
+    const widgets = [...(dashboard.spec?.widgets || []), {
+      slot: "w" + ((dashboard.spec?.widgets?.length || 0) + 1),
+      kind: "chart",
+      spec: { chart_id: chart.redpash_id },
+    }];
+    const nextSpec = { ...(dashboard.spec || { template_id: "" }), widgets };
+    try {
+      const saved = await api.put("/dashboards/" + encodeURIComponent(dashboard.redpash_id), {
+        project_redpash_id: dashboard.project_redpash_id,
+        title:              dashboard.title,
+        spec:               nextSpec,
+        description:        dashboard.description || null,
+        folder:             dashboard.folder || null,
+      });
+      dashboard = saved;
+      // Clear the "Empty dashboard" placeholder on first add.
+      if (tiles.length === 0 && gridEl) gridEl.innerHTML = "";
+      const entry = mountChartTile(chart, "span-6", true);
+      if (entry) selectTile(entry);
+      return true;
+    } catch (err) {
+      console.warn("[designer] addChartWidget failed:", err);
+      return false;
+    }
+  }
+
+  // Reveal the dashboard id (useful for the workspace's create-chart
+  // helper — it needs to know whether to add the new chart as a
+  // widget or just open it standalone).
+  function getOpenDashboardRid() { return dashboard?.redpash_id || null; }
+
   // ── lifecycle hooks ───────────────────────────────────────────────
   function resize() { tiles.forEach((t) => t.inst?.resize?.()); }
   function unmount() {
@@ -442,10 +544,10 @@ export function mountDesigner(designerEl, ctx) {
     designerEl.innerHTML = "";
   }
 
-  // Initial empty state until load(chart) fires.
+  // Initial empty state until load(...) fires.
   renderCanvasEmpty();
 
-  return { load, resize, unmount };
+  return { load, resize, unmount, addChartWidget, getOpenDashboardRid };
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────

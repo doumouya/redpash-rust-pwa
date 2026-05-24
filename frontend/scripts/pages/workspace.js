@@ -291,9 +291,11 @@ export default function workspace(app, { session }) {
   function fileTab(f) {
     const dot = STAGE_DOT[f.stage] || "is-dirty";
     const name = f.display_name || f.filename || "(unnamed)";
-    // Icon per file_type — charts get the bar-chart glyph so the
-    // Designer-bound rows are visually distinct from data files.
-    const icon = f.file_type === "chart" ? "bi-bar-chart-line" : "bi-filetype-csv";
+    // Icon per file_type — Designer-bound rows (chart, dashboard)
+    // get distinct glyphs so the rail reads at a glance.
+    const icon = f.file_type === "chart"     ? "bi-bar-chart-line"
+              : f.file_type === "dashboard"  ? "bi-grid-1x2"
+              :                                 "bi-filetype-csv";
     return '<button class="rt-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
       +   '<i class="bi ' + icon + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(name) + '</span>'
@@ -365,25 +367,8 @@ export default function workspace(app, { session }) {
       if (rid.startsWith("CHT_")) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
-        // Reset data-file state so the report builder + tools panel
-        // don't show columns from a previously-open file while we're
-        // on a chart.
-        activeColumns = [];
-        activeSteps   = [];
-        activeSummary = null;
-        syncToolbar();
-        toolsCtrl?.refresh();
-        reportCtrl?.refresh();
-        // Designer takes over the whole surface — toggle the mode
-        // class so CSS hides the data toolbar / pager / side panels
-        // and shows the designer toolbar.
-        $("#wsSurface").classList.add("is-designer-mode");
-        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
-        if (titleSpan) titleSpan.textContent = chart?.title || "Untitled chart";
-        $("#wsTable").hidden  = true;
-        $("#wsTableState").hidden = true;
-        $("#wsDesigner").hidden = false;
-        designerCtrl?.load(chart);
+        enterDesignerMode(chart?.title || "Untitled chart");
+        designerCtrl?.load({ type: "chart", chart });
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
         totalPages = 1;
         renderPager();
@@ -408,21 +393,28 @@ export default function workspace(app, { session }) {
       reportCtrl?.refresh();
       // Defensive fallback for legacy CHT_-prefix mistakes or future
       // file_types that route through the same designer path.
-      const isChart = envelope?.summary?.file_type === "chart";
-      if (isChart) {
+      const fileType = envelope?.summary?.file_type;
+      if (fileType === "chart") {
         // Defensive fallback — shouldn't normally hit since the
         // CHT_ branch returns above, but legacy/wrong-prefixed rids
         // could land here.
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
-        $("#wsSurface").classList.add("is-designer-mode");
-        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
-        if (titleSpan) titleSpan.textContent = chart?.title || envelope?.summary?.display_name || "Untitled chart";
-        $("#wsTable").hidden  = true;
-        $("#wsTableState").hidden = true;
-        $("#wsDesigner").hidden = false;
-        designerCtrl?.load(chart);
+        enterDesignerMode(chart?.title || envelope?.summary?.display_name || "Untitled chart");
+        designerCtrl?.load({ type: "chart", chart });
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
+        totalPages = 1;
+        renderPager();
+        syncNewChartButton();
+      } else if (fileType === "dashboard") {
+        // Dashboards = FIL_-prefix project_files rows with
+        // file_type='dashboard'. Spec carries widgets[] each
+        // referencing a chart by id. Designer fetches each in
+        // parallel and renders the multi-tile canvas.
+        const dashboard = await api.get("/dashboards/" + encodeURIComponent(rid));
+        enterDesignerMode(dashboard?.title || envelope?.summary?.display_name || "Untitled dashboard", "dashboard");
+        designerCtrl?.load({ type: "dashboard", dashboard });
+        rowsInfo.textContent = "Dashboard · " + (dashboard?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
         syncNewChartButton();
@@ -435,9 +427,7 @@ export default function workspace(app, { session }) {
         syncNewChartButton();
         // Tear down any open designer (user navigated from chart to data).
         designerCtrl?.load(null);
-        $("#wsSurface").classList.remove("is-designer-mode");
-        $("#wsDesigner").hidden = true;
-        $("#wsTable").hidden = false;
+        exitDesignerMode();
         await fetchAndRender();
       }
     } catch (err) {
@@ -1143,6 +1133,37 @@ export default function workspace(app, { session }) {
     designerCtrl?.resize();
   });
 
+  // Reset data-file state + swap the surface into designer mode.
+  // mode = "chart" | "dashboard" — drives the toolbar icon + the
+  // Add-chart label so the user knows what kind of file is open.
+  function enterDesignerMode(title, mode) {
+    activeColumns = [];
+    activeSteps   = [];
+    activeSummary = null;
+    syncToolbar();
+    toolsCtrl?.refresh();
+    reportCtrl?.refresh();
+    $("#wsSurface").classList.add("is-designer-mode");
+    $("#wsSurface").dataset.designerKind = mode || "chart";
+    const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
+    if (titleSpan) titleSpan.textContent = title || "Untitled";
+    const titleIcon = $("#wsDesignerTitle")?.querySelector("i");
+    if (titleIcon) {
+      titleIcon.className = mode === "dashboard"
+        ? "bi bi-grid-1x2"
+        : "bi bi-bar-chart-line";
+    }
+    $("#wsTable").hidden  = true;
+    $("#wsTableState").hidden = true;
+    $("#wsDesigner").hidden = false;
+  }
+  function exitDesignerMode() {
+    $("#wsSurface").classList.remove("is-designer-mode");
+    delete $("#wsSurface").dataset.designerKind;
+    $("#wsDesigner").hidden = true;
+    $("#wsTable").hidden = false;
+  }
+
   // Ensure sourceCache holds the chart's source data file. Fetches
   // /files/:rid for the source if the user opened the chart directly
   // without visiting the source first.
@@ -1204,11 +1225,75 @@ export default function workspace(app, { session }) {
   }
 
   $("#wsNewChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
-  // Designer-toolbar Add chart — same flow, sources from the open
-  // chart's source data file. With single-tile slices this lands the
-  // user on a fresh chart (the previous one is saved on its own row
-  // in the rail). Multi-tile add-to-canvas waits for Phase 2.
-  $("#wsDesignerAddChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
+
+  // Designer-toolbar Add chart — branches on context:
+  //   In a dashboard → create a new chart from the project's first
+  //   data file (sourceCache) AND append it as a widget to the open
+  //   dashboard (no navigation, the new tile appears on the canvas).
+  //   In a single chart → create + navigate (existing flow).
+  $("#wsDesignerAddChart")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const dashRid = designerCtrl?.getOpenDashboardRid?.();
+    if (!dashRid) { createChartFromSource(btn); return; }
+    if (!sourceCache.rid) {
+      console.warn("[designer] addChart: open a data file first so the new chart has a source");
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const firstCol = sourceCache.columns[0]?.name || "";
+      const chart = await api.post("/charts", {
+        source_file_id: sourceCache.rid,
+        title:          "Untitled chart",
+        spec: { kind: "bar", group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
+      });
+      // Hand off to the designer — it appends a widget to the open
+      // dashboard's spec, PUTs, and mounts the tile.
+      await designerCtrl?.addChartWidget?.(chart);
+      // Refresh the rail so the new CHT_ row appears alongside.
+      await loadProjects();
+    } catch (err) {
+      console.warn("[designer] addChart failed:", err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // + New dashboard rail button — POST /api/dashboards in the active
+  // project (the group containing the active tab; falls back to the
+  // first group). Auto-opens the new dashboard.
+  function activeProjectRid() {
+    const activeTab = navBody.querySelector(".rt-tab.active");
+    const group = (activeTab && activeTab.closest(".rt-group"))
+               || navBody.querySelector(".rt-group");
+    return group?.dataset?.rid || null;
+  }
+  $("#wsNewDashboard")?.addEventListener("click", async (e) => {
+    const projRid = activeProjectRid();
+    if (!projRid) {
+      console.warn("[designer] + New dashboard: no active project");
+      return;
+    }
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const created = await api.post("/dashboards", {
+        project_redpash_id: projRid,
+        title:              "Untitled dashboard",
+        spec:               { template_id: "free", widgets: [] },
+      });
+      const newRid = created?.redpash_id;
+      await loadProjects();
+      if (newRid) {
+        activeFileRid = null;
+        await loadFile(newRid);
+      }
+    } catch (err) {
+      console.warn("[designer] + New dashboard failed:", err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the

@@ -141,7 +141,20 @@
   text-align: center;
   color: var(--rp-text-mute);
   font-size: 13px;
+  grid-column: 1 / -1;          /* span all 12 cols so it centres */
 }
+
+/* Tile that couldn't load — chart fetch returned an error. */
+.ds-tile--error { border-color: var(--rp-warn); }
+.ds-tile-err {
+  padding: 16px;
+  color: var(--rp-warn);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ds-tile-err i { font-size: 14px; }
 
 /* config accordion ───────────────────────────────────────────── */
 .ds-config {
