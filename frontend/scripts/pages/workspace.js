@@ -66,6 +66,7 @@ export default function workspace(app, { session }) {
   let searchQ       = "";
   let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
   let searchDebounce = null;
+  let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
 
   // UI filter ops → canonical FilterOp on the wire (shared::filter::FilterOp).
   // The op-list union landed in 3d29291; this is the frontend half.
@@ -344,6 +345,11 @@ export default function workspace(app, { session }) {
       activeSteps   = envelope?.steps   || [];
       activeSummary = envelope?.summary || null;
       syncToolbar();
+      // Tools panel binds columns + summary lazily via getters — when
+      // the file changes, tell it to re-render whichever view is open
+      // (picker form re-derives field options; columns view re-projects
+      // the rows). Picker idle state is a no-op.
+      toolsCtrl?.refresh();
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
         // Designer mode — body becomes the chart, not the data table.
@@ -981,7 +987,7 @@ export default function workspace(app, { session }) {
   });
 
   // ─── tools panel — parameterised, one factory + 15 configs ─────
-  mountTools($("#wsToolsBody"), {
+  toolsCtrl = mountTools($("#wsToolsBody"), {
     fileRid: () => activeFileRid,
     columns: () => activeColumns,
     summary: () => activeSummary,  // FileSummary — per-tool context reads

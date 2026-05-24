@@ -378,6 +378,7 @@ const TOOLS = [
 export function mountTools(panelBody, ctx) {
   let activeTool = null;          // the TOOLS[i] currently showing the form
   let renderedFields = [];        // [{ field, read }] for the open form — read() returns value
+  let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable, Slice A — preview)
 
   // Two stable containers — list view + form view; we swap visibility.
   const listEl = document.createElement("div");
@@ -395,8 +396,28 @@ export function mountTools(panelBody, ctx) {
   const colsEl = document.createElement("div");
   colsEl.className = "rt-tool-cols";
   colsEl.append(listEl, formEl);
+
+  // View switcher — flips between the tools picker and the columns-as-
+  // rows redtable (the WS#5 unification target spec'd in
+  // architecture/columns-redtable.md). Slice A: the columns view is
+  // read-only — no actions, no checkboxes, no cell-edit. It exists to
+  // validate the layout + the data binding from activeColumns +
+  // activeSummary before we port the 15 toolbar actions onto it.
+  const switchEl = document.createElement("div");
+  switchEl.className = "rt-tool-viewswitch rt-seg";
+  switchEl.innerHTML =
+      '<button class="is-active" type="button" data-view="tools" title="Tools picker">'
+    +   '<i class="bi bi-tools"></i> Tools'
+    + '</button>'
+    + '<button type="button" data-view="columns" title="Columns table — preview, read-only">'
+    +   '<i class="bi bi-grid-3x3"></i> Columns'
+    + '</button>';
+  const columnsEl = document.createElement("div");
+  columnsEl.className = "rt-tool-columns";
+  columnsEl.hidden = true;
+
   panelBody.innerHTML = "";
-  panelBody.append(statusEl, colsEl);
+  panelBody.append(switchEl, statusEl, colsEl, columnsEl);
 
   // ── list view ──────────────────────────────────────────────────────
   // Picker rows show name + icon only — the per-tool blurb lives on the
@@ -414,6 +435,88 @@ export function mountTools(panelBody, ctx) {
     if (!btn) return;
     openForm(TOOLS[+btn.dataset.i]);
   });
+
+  // ── view switcher ──────────────────────────────────────────────────
+  switchEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-view]");
+    if (!btn) return;
+    setView(btn.dataset.view);
+  });
+
+  function setView(v) {
+    if (v !== "tools" && v !== "columns") return;
+    viewMode = v;
+    switchEl.querySelectorAll("[data-view]").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.view === v));
+    const panel = panelBody.closest(".rt-panel");
+    if (v === "columns") {
+      // Close any open form before switching so the .has-form 500px
+      // width doesn't fight with the columns view's .has-columns 50vw.
+      if (activeTool) closeForm();
+      colsEl.hidden = true;
+      columnsEl.hidden = false;
+      panel?.classList.add("has-columns");
+      renderColumnsView();
+    } else {
+      colsEl.hidden = false;
+      columnsEl.hidden = true;
+      panel?.classList.remove("has-columns");
+    }
+  }
+
+  // ── columns view (Slice A — read-only) ─────────────────────────────
+  // Rows = ColumnMeta[]; columns = #, Name, Datatype (+ sniff badge),
+  // Nulls, % Null, Unique %, Sample. All fields come from the existing
+  // /api/files/:rid envelope — no new endpoint. Sniff mismatch (storage
+  // dtype ≠ semantic dtype) gets a small ⚠ badge so the dirty columns
+  // surface visually without the user having to scan numbers.
+  function renderColumnsView() {
+    const cols    = ctx.columns() || [];
+    const summary = ctx.summary ? ctx.summary() : null;
+    const total   = summary?.row_count;
+    if (!cols.length) {
+      columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
+      return;
+    }
+    const rows = cols.map((c, i) => {
+      const pct       = c.null_pct == null ? null : Math.max(0, Math.min(100, c.null_pct));
+      const nullCount = pct != null && total != null ? Math.round(pct * total / 100) : null;
+      const band      = pct == null ? "" : pct >= 50 ? "is-warn-high" : pct >= 10 ? "is-warn-mid" : "";
+      const uniqPct   = c.unique_pct == null ? null : Math.max(0, Math.min(100, c.unique_pct));
+      const sample    = c.sample == null ? "" : String(c.sample);
+      const sniff     = c.semantic_dtype && c.dtype && c.semantic_dtype !== c.dtype
+                          ? ' <span class="rt-col-sniff" title="Sniffed as ' + esc(c.semantic_dtype)
+                            + ' — stored as ' + esc(c.dtype) + '">⚠</span>'
+                          : '';
+      return '<tr>'
+        + '<td class="is-num is-muted">' + (i + 1) + '</td>'
+        + '<td class="is-name">' + esc(c.name) + '</td>'
+        + '<td>' + esc(c.dtype || "—") + sniff + '</td>'
+        + '<td class="is-num ' + band + '">' + (nullCount != null ? nullCount : "—") + '</td>'
+        + '<td class="is-num ' + band + '">' + (pct != null ? pct.toFixed(1) + "%" : "—") + '</td>'
+        + '<td class="is-num">' + (uniqPct != null ? uniqPct.toFixed(1) + "%" : "—") + '</td>'
+        + '<td class="is-sample" title="' + esc(sample) + '">' + esc(sample) + '</td>'
+        + '</tr>';
+    }).join("");
+    columnsEl.innerHTML =
+        '<div class="rt-tool-columns-head">'
+      +   '<span class="rt-tool-columns-meta">'
+      +     '<b>' + cols.length + '</b> column' + (cols.length === 1 ? '' : 's')
+      +     (total != null ? ' · <b>' + total + '</b> row' + (total === 1 ? '' : 's') : '')
+      +   '</span>'
+      +   '<span class="rt-tool-columns-flag" title="Preview — Slice A: read-only. The toolbar (edit / select / global actions) ports onto this view in slices B–H.">preview</span>'
+      + '</div>'
+      + '<div class="rt-tool-columns-tablewrap">'
+      +   '<table class="rp-table rt-tool-columns-table">'
+      +     '<thead><tr>'
+      +       '<th>#</th><th>Name</th><th>Type</th>'
+      +       '<th class="is-num">Nulls</th><th class="is-num">% Null</th>'
+      +       '<th class="is-num">Unique %</th><th>Sample</th>'
+      +     '</tr></thead>'
+      +     '<tbody>' + rows + '</tbody>'
+      +   '</table>'
+      + '</div>';
+  }
 
   // ── form view ──────────────────────────────────────────────────────
   function openForm(tool) {
@@ -549,10 +652,17 @@ export function mountTools(panelBody, ctx) {
 
   renderList();
   return {
-    refresh() { /* if columns change underneath us, rebuild the form */
+    refresh() {
+      // Columns / summary moved underneath us — re-render whatever view
+      // is showing. The form rebuilds because its field renderers
+      // capture the columns list at openForm time; the columns view
+      // rebuilds because it's a pure projection of ctx.columns() +
+      // ctx.summary().
       if (activeTool) openForm(activeTool);
+      if (viewMode === "columns") renderColumnsView();
     },
     reset() { closeForm(); statusEl.hidden = true; },
+    setView,
   };
 }
 
