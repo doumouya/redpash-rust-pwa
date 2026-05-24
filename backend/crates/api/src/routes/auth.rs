@@ -47,6 +47,7 @@ async fn start(State(state): State<AppState>) -> Result<Response, AppError> {
         status:  StatusCode::SERVICE_UNAVAILABLE,
         kind:    "oauth_disabled",
         message: "Google OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI.".into(),
+        inner:   None,
     })?;
 
     // Random CSRF token. 128 bits of entropy via two UUIDs is plenty.
@@ -110,6 +111,7 @@ async fn callback(
         status:  StatusCode::SERVICE_UNAVAILABLE,
         kind:    "oauth_disabled",
         message: "Google OAuth is not configured.".into(),
+        inner:   None,
     })?;
 
     // Google returns `?error=…` when the user denies consent.
@@ -247,6 +249,7 @@ async fn dev_login(
             status:  StatusCode::FORBIDDEN,
             kind:    "dev_login_disabled",
             message: "dev-login is disabled — set REDPASH_DEV_LOGIN=1 to enable (dev only)".into(),
+            inner:   None,
         });
     }
     // Target must be a real user — clean 404 rather than minting a

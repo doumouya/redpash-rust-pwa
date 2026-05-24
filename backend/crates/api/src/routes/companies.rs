@@ -42,7 +42,7 @@ fn db_err(e: sqlx::Error) -> AppError {
     AppError::internal("db", e.to_string())
 }
 fn forbidden(msg: &'static str) -> AppError {
-    AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into() }
+    AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into(), inner: None }
 }
 
 /// Resolve the caller's role in a company, 404ing when they aren't a

@@ -262,12 +262,17 @@ async fn get_avatar(
             status:  StatusCode::BAD_GATEWAY,
             kind:    "avatar_fetch_failed",
             message: e.to_string(),
+            // reqwest::Error carries the URL + redirect chain + IO
+            // source — preserve for Channel A triage when avatar
+            // fetches start failing at scale.
+            inner:   Some(eyre::Report::new(e)),
         })?;
     if !resp.status().is_success() {
         return Err(AppError {
             status:  StatusCode::BAD_GATEWAY,
             kind:    "avatar_fetch_failed",
             message: format!("upstream returned {}", resp.status()),
+            inner:   None,
         });
     }
     let content_type = resp.headers().get(header::CONTENT_TYPE)
@@ -279,6 +284,7 @@ async fn get_avatar(
             status:  StatusCode::BAD_GATEWAY,
             kind:    "avatar_fetch_failed",
             message: format!("non-image content-type: {content_type}"),
+            inner:   None,
         });
     }
     let bytes = resp.bytes().await
@@ -286,6 +292,7 @@ async fn get_avatar(
             status:  StatusCode::BAD_GATEWAY,
             kind:    "avatar_fetch_failed",
             message: e.to_string(),
+            inner:   Some(eyre::Report::new(e)),
         })?
         .to_vec();
     state.avatars.insert(url.clone(), (bytes.clone(), content_type.clone()));
@@ -331,6 +338,7 @@ pub async fn resolve_user_rid(state: &AppState, headers: &HeaderMap) -> Result<S
             status:  StatusCode::UNAUTHORIZED,
             kind:    "unauthenticated",
             message: "no session cookie".into(),
+            inner:   None,
         });
     }
     Ok(state.dev_user.as_ref().clone())

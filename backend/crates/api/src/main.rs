@@ -30,11 +30,22 @@ async fn main() -> anyhow::Result<()> {
     // spans + per-request access logs surface) + `sqlx=info` (every query
     // logged for I-5 / I-2 investigation paths) + `hyper=warn` (hyper's
     // own info is too chatty to be useful). Tighten before market.
+    //
+    // JSON output with .flatten_event(true) — the structured-output
+    // half of "verbose pre-market" per [[audit-everything]] memory.
+    // Each log line becomes a single JSON object with span fields
+    // (including request_id from request_id_mw) at the top level —
+    // jq-queryable, joins cleanly to the events table via request_id.
+    // Pretty-printed text was operator-friendly in dev but lost the
+    // span context to grep noise; JSON is operator-friendly in BOTH
+    // surfaces (jq for local dev, log-aggregator-ready for prod).
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| EnvFilter::new("info,sqlx=info,hyper=warn,tower_http=info")),
         )
+        .json()
+        .flatten_event(true)
         .init();
 
     // Step 3 — app state (db pool, caches). Stubbed until Phase 2.
@@ -46,6 +57,17 @@ async fn main() -> anyhow::Result<()> {
     // doc — without this hook, a tokio task that panics logs to stderr
     // and disappears. The default hook is preserved (stderr backtrace +
     // thread name) by calling it first.
+    //
+    // ALSO emits a `tracing::error!` so panics land in Channel A's
+    // structured JSON stream — without this, the JSON logs would have
+    // a hole where the panic happened (only stderr + events table
+    // captured it). request_id auto-attaches from the current span
+    // when the panic happens inside a request task. Captures
+    // `Backtrace::force_capture()` so the stack frames reach the
+    // structured log even when RUST_BACKTRACE is unset — panics are
+    // rare; the capture cost is only paid when one happens, and a
+    // structured backtrace is the difference between "operator
+    // diagnoses in 30s" and "operator pages a dev".
     {
         let pool = state.db.clone();
         let default_hook = std::panic::take_hook();
@@ -58,10 +80,22 @@ async fn main() -> anyhow::Result<()> {
             let location = info.location()
                 .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
                 .unwrap_or_else(|| "unknown".to_string());
-            // event::record spawns onto the current tokio runtime — works
-            // from a panicking task. A boot-time panic before the runtime
-            // is up skips the DB write (no runtime to spawn on) and
-            // falls through to the default hook's stderr output.
+            let backtrace = std::backtrace::Backtrace::force_capture();
+
+            // Channel A — structured JSON log. Span context (request_id,
+            // handler args from #[instrument]) attaches automatically.
+            tracing::error!(
+                panic.payload  = %payload,
+                panic.location = %location,
+                panic.backtrace = %backtrace,
+                "process panic"
+            );
+
+            // Channel B — events table via the fire-and-forget path.
+            // event::record spawns onto the current tokio runtime; a
+            // boot-time panic before the runtime is up skips the DB
+            // write (no runtime to spawn on) and falls through to the
+            // tracing emit above + the default hook's stderr output.
             if tokio::runtime::Handle::try_current().is_ok() {
                 event::record(&pool, event::EventDraft {
                     origin:  "backend",
