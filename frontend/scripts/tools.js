@@ -392,25 +392,43 @@ const GLOBAL_ACTIONS = [
     disabledTitle: "Unwrap CSV needs a single-column file." },
 ];
 
-// SELECT_ACTIONS (Slices C–D): step(s) over the columns the user picked
-// via row checkboxes. `min` is the minimum selection size — buttons
-// render disabled below the threshold. `label` overrides the picker's
+// SELECT_ACTIONS (Slices C–E): step(s) over the columns the user picked
+// via row checkboxes. `min` / `max` gate the button — disabled when the
+// selection size is wrong for the action. `label` overrides the picker's
 // name when it would read awkwardly as a toolbar button.
 //
-// Three apply shapes:
-// - default (Slice C): one step with `{ cols: string[] }`. Engine takes
-//   the list natively (steps.rs: arr_strings(params, "cols")).
+// Apply shapes (the click handler picks one per entry):
+// - default: one step with `{ cols: string[] }`. Engine takes the list
+//   natively (steps.rs: arr_strings(params, "cols")). Examples:
+//   drop_columns, filter_columns, drop_nulls.
+// - `colsParam: "columns"`: same one-step shape but renames the cols
+//   key for engines that already have a `cols` of their own (fix_invalid
+//   takes `columns: [string]`).
 // - `hasSheet`: opens an in-panel sheet for extra params; selection
-//   pre-populates so column fields are dropped from the form.
-// - `perColumn` + `hasSheet`: fires one step per selected column, with
-//   `{ ...sheetState, column: name }`. The engine for these kinds
-//   takes singular `column` (fill_nulls, replace_text, etc.); the
-//   per-column loop also gives the user one undo entry per column.
+//   pre-populates so column / multicolumn fields are dropped from the
+//   form (the chips ARE the column choice).
+// - `perColumn`: fires one step per selected column with
+//   `{ ...sheetState, column: name }`. Engine takes singular `column`
+//   (fill_nulls, replace_text, …); the loop also gives one undo entry
+//   per column.
+// - `mapCols(cols)`: returns extra params derived from the picked
+//   column order — used by join_columns which needs `col1` + `col2`
+//   as distinct named params.
 const SELECT_ACTIONS = [
-  { kind: "drop_columns",   min: 1, label: "Delete selected",         icon: "bi-trash3" },
-  { kind: "filter_columns", min: 1, label: "Keep only selected",      icon: "bi-check-square" },
-  { kind: "drop_nulls",     min: 1, label: "Drop nulls in selected",  icon: "bi-eraser" },
-  { kind: "fill_nulls",     min: 1, label: "Fill nulls in selected…", icon: "bi-pencil-square",
+  { kind: "drop_columns",   min: 1,         label: "Delete selected",          icon: "bi-trash3" },
+  { kind: "filter_columns", min: 1,         label: "Keep only selected",       icon: "bi-check-square" },
+  { kind: "drop_nulls",     min: 1,         label: "Drop nulls in selected",   icon: "bi-eraser" },
+  { kind: "fill_nulls",     min: 1,         label: "Fill nulls in selected…",  icon: "bi-pencil-square",
+    hasSheet: true, perColumn: true },
+  { kind: "replace_text",   min: 1, max: 1, label: "Replace text in selected…", icon: "bi-arrow-repeat",
+    hasSheet: true, perColumn: true },
+  { kind: "fix_invalid",    min: 1,         label: "Fix invalid in selected…", icon: "bi-wrench-adjustable",
+    hasSheet: true, colsParam: "columns" },
+  { kind: "join_columns",   min: 2, max: 2, label: "Concatenate selected…",    icon: "bi-link-45deg",
+    hasSheet: true, mapCols: (cols) => ({ col1: cols[0], col2: cols[1] }) },
+  { kind: "split_column",   min: 1, max: 1, label: "Split selected…",          icon: "bi-scissors",
+    hasSheet: true, perColumn: true },
+  { kind: "format_dates",   min: 1, max: 1, label: "Format dates in selected…", icon: "bi-calendar3",
     hasSheet: true, perColumn: true },
 ];
 
@@ -615,10 +633,21 @@ export function mountTools(panelBody, ctx) {
     const selBtns = SELECT_ACTIONS.map((a) => {
       const tool = getTool(a.kind);
       if (!tool) return '';
-      const enabled = selCount >= a.min;
-      const title   = enabled
-        ? a.label + ' (' + selCount + ' column' + (selCount === 1 ? '' : 's') + ')'
-        : 'Select ≥' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+      const meetsMin = selCount >= a.min;
+      const meetsMax = a.max == null || selCount <= a.max;
+      const enabled  = meetsMin && meetsMax;
+      // Title spells out the gating reason so the disabled state isn't
+      // a mystery — "exactly 1" / "exactly 2" / "≥N" are the three shapes.
+      let title;
+      if (enabled) {
+        title = a.label + ' (' + selCount + ' column' + (selCount === 1 ? '' : 's') + ')';
+      } else if (a.min === a.max) {
+        title = 'Select exactly ' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+      } else if (!meetsMin) {
+        title = 'Select ≥' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+      } else {
+        title = 'Select ≤' + a.max + ' column' + (a.max === 1 ? '' : 's') + ' (currently ' + selCount + ').';
+      }
       return '<button class="rt-btn rt-tool-columns-action" type="button"'
         +    ' data-select-kind="' + esc(a.kind) + '"'
         +    (enabled ? '' : ' disabled')
@@ -671,9 +700,9 @@ export function mountTools(panelBody, ctx) {
       return { field: f, html: built.html, read: built.read };
     });
     const chips = isSelect
-      ? '<div class="rt-tool-columns-sheet-chips" title="Columns this action will run on">'
+      ? '<div class="rt-tool-columns-sheet-chips" title="Columns this action will run on, in file order">'
         + '<span class="rt-tool-columns-sheet-chips-lbl">Acting on</span>'
-        + Array.from(selectedCols).map((n) =>
+        + pickedInOrder().map((n) =>
             '<span class="rt-tool-columns-sheet-chip">' + esc(n) + '</span>').join('')
         + '</div>'
       : '';
@@ -733,7 +762,7 @@ export function mountTools(panelBody, ctx) {
       const tool = getTool(kind);
       const cfg  = SELECT_ACTIONS.find((a) => a.kind === kind);
       if (!tool || !cfg) return;
-      const cols = Array.from(selectedCols);
+      const cols = pickedInOrder();
       if (!cols.length) return;
       if (cfg.hasSheet) {
         activeSheet = tool;
@@ -741,8 +770,9 @@ export function mountTools(panelBody, ctx) {
         sheetCfg    = cfg;
         renderColumnsView();
       } else {
+        const colsParam = cfg.colsParam || "cols";
         const label = (cfg.label || tool.label) + ' (' + cols.length + ')';
-        await runStep(kind, { cols }, label, { busyBtn: selBtn });
+        await runStep(kind, { [colsParam]: cols }, label, { busyBtn: selBtn });
       }
       return;
     }
@@ -766,7 +796,7 @@ export function mountTools(panelBody, ctx) {
       const tool   = activeSheet;
       const source = sheetSource;
       const cfg    = sheetCfg;
-      const cols   = Array.from(selectedCols);
+      const cols   = pickedInOrder();
       // Close optimistically — runStep → onApplied → loadFile → refresh
       // re-renders the view. On failure status shows the error inline
       // and the user re-opens the sheet (rare path; sheets are short).
@@ -776,20 +806,29 @@ export function mountTools(panelBody, ctx) {
       sheetFields = [];
       if (source === "select" && cfg?.perColumn) {
         // One step per selected column. The engine for these kinds
-        // (fill_nulls, replace_text, …) takes singular `column`; the
-        // per-column loop also gives each fill its own undo entry.
-        // Sequential awaits because each step's response is the input
-        // to the next (file envelope refetch via onApplied).
+        // (fill_nulls, replace_text, split_column, format_dates) takes
+        // singular `column`; the per-column loop also gives each one
+        // its own undo entry. Sequential awaits because each step's
+        // response is the input to the next (envelope refetch via
+        // onApplied).
         for (const c of cols) {
           const params = tool.toParams({ ...state, column: c });
           const label  = (cfg.label || tool.label) + ' — ' + c;
           await runStep(tool.kind, params, label, { busyBtn: applyBtn });
         }
+      } else if (source === "select" && cfg?.mapCols) {
+        // Custom selection-to-param mapping — join_columns needs
+        // col1 + col2 from the picked column order.
+        const params = { ...tool.toParams(state), ...cfg.mapCols(cols) };
+        const label  = (cfg.label || tool.label) + ' (' + cols.join(' + ') + ')';
+        await runStep(tool.kind, params, label, { busyBtn: applyBtn });
       } else if (source === "select") {
-        // Sheet result + selection collapses into one step with `cols`.
-        // No multi-col SELECT_ACTIONS use this branch yet — reserved
-        // for future kinds that accept `{ cols, ...sheetState }`.
-        const params = { ...tool.toParams(state), cols };
+        // Sheet result + selection collapses into one step. Cols go
+        // under `colsParam` (default "cols", overridden to "columns"
+        // for engines that already have a `cols` of their own —
+        // fix_invalid).
+        const colsParam = cfg?.colsParam || "cols";
+        const params = { ...tool.toParams(state), [colsParam]: cols };
         const label  = (cfg?.label || tool.label) + ' (' + cols.length + ')';
         await runStep(tool.kind, params, label, { busyBtn: applyBtn });
       } else {
@@ -827,6 +866,16 @@ export function mountTools(panelBody, ctx) {
     sheetCfg    = null;
     sheetFields = [];
     renderColumnsView();
+  }
+
+  // Picked columns in file order — checking order is unpredictable
+  // (Set insertion order = the order the user clicked), but for
+  // multi-col actions the user expects "in order from top to bottom"
+  // (join_columns explicitly relies on this; the others gain in
+  // readability — the chip strip + step labels read in column order).
+  function pickedInOrder() {
+    const live = ctx.columns() || [];
+    return live.filter((c) => selectedCols.has(c.name)).map((c) => c.name);
   }
 
   // ── form view ──────────────────────────────────────────────────────
