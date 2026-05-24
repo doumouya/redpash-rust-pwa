@@ -177,40 +177,12 @@
   border-color: color-mix(in srgb, var(--rp-accent-2) 50%, transparent);
 }
 
-/* ─── Usage stat strip (4 clickable tiles) ───────────────────── */
-.rp-profile__stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--rp-sp-3);
-}
-.rp-profile__stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: var(--rp-sp-4);
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius-lg);
-  cursor: pointer;
-  transition: transform 0.15s var(--rp-ease), border-color 0.15s var(--rp-ease);
-}
-.rp-profile__stat:hover {
-  transform: translateY(-1px);
-  border-color: rgba(205, 214, 244, 0.28);
-}
-.rp-profile__stat-val {
-  font-size: var(--rp-text-xl);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--rp-text);
-}
-.rp-profile__stat-lbl {
-  font-size: var(--rp-text-sm);
-  color: var(--rp-text-mute);
+/* ─── Usage chart (ECharts horizontal bar) ─────────────────────
+   Container only; the chart paints into here on profile.js load.
+   Fixed height so the section doesn't reflow when counts arrive. */
+.rp-profile__usage-chart {
+  width: 100%;
+  height: 180px;
 }
 
 /* ─── Plan card ──────────────────────────────────────────────── */

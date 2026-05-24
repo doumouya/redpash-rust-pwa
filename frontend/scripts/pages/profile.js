@@ -93,13 +93,6 @@ export default async function profile(app, { session }) {
     setTimeout(() => { icon.className = orig; }, 1200);
   });
 
-  // ── Usage tile click → navigate ─────────────────────────────────
-  app.querySelectorAll(".rp-profile__stat").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const h = btn.dataset.hash;
-      if (h) location.hash = h;
-    });
-  });
 }
 
 function populateIdentity(app, me) {
@@ -180,6 +173,8 @@ function populateConnections(app, me) {
 // Charts substitutes for "Reports" on prerelease (the object model
 // merged charts/reports into chart-typed project_files rows).
 async function loadUsage(app) {
+  const el = app.querySelector("#rp-profile-usage-chart");
+  if (!el) return;
   const [projects, charts, dashboards] = await Promise.allSettled([
     api.get("/projects"),
     api.get("/charts"),
@@ -189,10 +184,85 @@ async function loadUsage(app) {
   const ch   = charts.value?.items     ?? [];
   const dash = dashboards.value?.items ?? [];
   const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
-  animateNumber(app.querySelector("#rp-profile-stat-projects"),   proj.length);
-  animateNumber(app.querySelector("#rp-profile-stat-files"),      fileCount);
-  animateNumber(app.querySelector("#rp-profile-stat-charts"),     ch.length);
-  animateNumber(app.querySelector("#rp-profile-stat-dashboards"), dash.length);
+  paintUsageChart(el, [
+    { name: "Dashboards", value: dash.length, hash: "#/home",                token: "--rp-ok"       },
+    { name: "Charts",     value: ch.length,   hash: "#/home?tab=charts",     token: "--rp-mauve"    },
+    { name: "Files",      value: fileCount,   hash: "#/home?tab=files",      token: "--rp-teal"     },
+    { name: "Projects",   value: proj.length, hash: "#/home?tab=projects",   token: "--rp-accent-2" },
+  ]);
+}
+
+// Horizontal bar chart via ECharts (loaded globally in index.html).
+// Items are bottom-to-top in the order passed: ECharts paints the
+// category axis upward, so we hand it Projects last to put it on top.
+// Bars are clickable — each item carries `hash`, dispatched on click.
+function paintUsageChart(el, items) {
+  if (!window.echarts) {
+    el.textContent = "Chart unavailable.";
+    return;
+  }
+  const chart  = window.echarts.init(el);
+  const text   = getCSSVar("--rp-text");
+  const dim    = getCSSVar("--rp-text-dim");
+  const mute   = getCSSVar("--rp-text-mute");
+  const grid   = getCSSVar("--rp-border");
+  chart.setOption({
+    animation: true,
+    animationDuration: 700,
+    grid: { left: 90, right: 32, top: 8, bottom: 8, containLabel: false },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params) => {
+        const p = params[0];
+        return `<b>${p.name}</b> · ${p.value}`;
+      },
+    },
+    xAxis: {
+      type: "value",
+      // Always show a sensible right edge even when every bar is 0.
+      min: 0,
+      axisLine:  { lineStyle: { color: grid } },
+      axisLabel: { color: mute, fontSize: 10 },
+      splitLine: { lineStyle: { color: grid, type: "dashed", opacity: 0.4 } },
+    },
+    yAxis: {
+      type: "category",
+      data: items.map((i) => i.name),
+      axisLine:  { show: false },
+      axisTick:  { show: false },
+      axisLabel: { color: text, fontSize: 12, fontWeight: 600 },
+    },
+    series: [{
+      type: "bar",
+      barWidth: "60%",
+      data: items.map((i) => ({
+        value: i.value,
+        itemStyle: { color: getCSSVar(i.token), borderRadius: [0, 4, 4, 0] },
+        hash: i.hash,
+      })),
+      label: {
+        show: true,
+        position: "right",
+        color: dim,
+        fontSize: 12,
+        fontWeight: 600,
+        formatter: "{c}",
+      },
+      cursor: "pointer",
+      emphasis: { itemStyle: { opacity: 0.85 } },
+    }],
+  });
+  chart.on("click", (params) => {
+    const h = params.data?.hash;
+    if (h) location.hash = h;
+  });
+  chart.resize();
+}
+
+function getCSSVar(name) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || "#6c7086";
 }
 
 // Lock/unlock the personal-info card.
@@ -229,20 +299,4 @@ function initialsFrom(label) {
     .join("")
     .slice(0, 2)
     .toUpperCase() || "··";
-}
-
-// requestAnimationFrame counter — eases from 0 to `to` over 900ms.
-// Skips no-op when `to` is 0 (still paints "0", but no loop overhead).
-function animateNumber(el, to) {
-  if (!el) return;
-  if (to === 0) { el.textContent = "0"; return; }
-  const dur = 900;
-  const t0  = performance.now();
-  function step(now) {
-    const p = Math.min((now - t0) / dur, 1);
-    const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = Math.round(eased * to).toString();
-    if (p < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
 }

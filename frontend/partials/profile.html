@@ -107,31 +107,12 @@
       <!-- ─── RIGHT: Usage strip + Plan card + Connections ─── -->
       <div class="rp-profile__side">
 
-        <!-- Usage strip — 4 clickable counter tiles -->
+        <!-- Usage — horizontal bar chart (ECharts, already global on
+             this page). Bars are clickable; each routes to the matching
+             Home tab. -->
         <section class="rp-page__section">
           <h2 class="rp-page__section-h">Usage</h2>
-          <div class="rp-profile__stats">
-            <button class="rp-profile__stat" type="button"
-                    data-hash="#/home?tab=projects" title="Open projects">
-              <span class="rp-profile__stat-val" id="rp-profile-stat-projects">—</span>
-              <span class="rp-profile__stat-lbl">Projects</span>
-            </button>
-            <button class="rp-profile__stat" type="button"
-                    data-hash="#/home?tab=files" title="Open files">
-              <span class="rp-profile__stat-val" id="rp-profile-stat-files">—</span>
-              <span class="rp-profile__stat-lbl">Files</span>
-            </button>
-            <button class="rp-profile__stat" type="button"
-                    data-hash="#/home?tab=charts" title="Open charts">
-              <span class="rp-profile__stat-val" id="rp-profile-stat-charts">—</span>
-              <span class="rp-profile__stat-lbl">Charts</span>
-            </button>
-            <button class="rp-profile__stat" type="button"
-                    data-hash="#/home" title="Dashboards">
-              <span class="rp-profile__stat-val" id="rp-profile-stat-dashboards">—</span>
-              <span class="rp-profile__stat-lbl">Dashboards</span>
-            </button>
-          </div>
+          <div class="rp-profile__usage-chart" id="rp-profile-usage-chart"></div>
         </section>
 
         <!-- Plan card -->
