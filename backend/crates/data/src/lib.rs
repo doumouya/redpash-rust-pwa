@@ -25,6 +25,7 @@ pub mod parse;
 pub mod dtype;
 pub mod dedup;
 pub mod joins;
+pub mod distinct;
 pub mod group_by;
 pub mod steps;
 pub mod stats;

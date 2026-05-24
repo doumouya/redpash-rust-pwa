@@ -140,15 +140,34 @@ pub fn execute(
 
 /// Pairwise distinct-set builder used by the join detector. Also
 /// re-used by `bin/audit_distincts.rs` to measure distinct-payload
-/// shape across the dev DB before locking the column-index cache
-/// architecture (Torv ↔ Gus 2026-05-24).
+/// shape across the dev DB and by `data::distinct::for_column` to
+/// power the workspace's filter-autocomplete.
+///
+/// **Top-N-by-frequency, not first-N-seen.** When a column has more
+/// than `cap` distinct values, the set kept is the *most frequent*
+/// `cap` of them — not the first seen in row order (Torv ↔ Gus
+/// 2026-05-24). Two reasons:
+///   1. Filter autocomplete cares about what the user is likely to
+///      type, which correlates with frequency.
+///   2. Joins detection's FK→PK signal is strictly improved: the
+///      most-frequent values on the small side are disproportionately
+///      likely to overlap the other side too.
+///
+/// Below-cap columns are unaffected — every distinct value is kept,
+/// frequency order doesn't matter.
 pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, HashSet<String>>> {
     let mut out: HashMap<String, HashSet<String>> = HashMap::with_capacity(df.width());
     for c in df.get_columns() {
         let name = c.name().to_string();
-        let mut set: HashSet<String> = HashSet::new();
+
+        // First pass: count occurrences. HashMap<value, count> grows
+        // as wide as the column's full distinct cardinality (uncapped
+        // here intentionally — we need the full count distribution to
+        // pick the top N at the end). At dev-DB scale (P99 ≈ 17k
+        // distincts on a 400k-row file) this is tens of KB resident
+        // per column; comfortable.
+        let mut counts: HashMap<String, u32> = HashMap::new();
         for i in 0..c.len() {
-            if set.len() >= cap { break; }
             let v = c.get(i).map_err(DataError::from)?;
             let s = match v {
                 AnyValue::Null            => continue,
@@ -156,9 +175,24 @@ pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, Hash
                 AnyValue::StringOwned(s)  => s.to_string(),
                 other                     => other.to_string(),
             };
-            if !s.is_empty() { set.insert(s); }
+            if !s.is_empty() { *counts.entry(s).or_insert(0) += 1; }
         }
-        out.insert(name, set);
+
+        // If the column fits under the cap, every distinct value
+        // stays — skip the sort entirely.
+        if counts.len() <= cap {
+            out.insert(name, counts.into_keys().collect());
+            continue;
+        }
+
+        // Otherwise pick the top-N by count. Tie-break alphabetically
+        // so the cut is deterministic across runs (ID-heavy columns
+        // are all count=1; without a tie-break the kept set would
+        // vary run-to-run).
+        let mut by_count: Vec<(String, u32)> = counts.into_iter().collect();
+        by_count.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        by_count.truncate(cap);
+        out.insert(name, by_count.into_iter().map(|(v, _)| v).collect());
     }
     Ok(out)
 }

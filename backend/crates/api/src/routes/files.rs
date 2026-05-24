@@ -626,10 +626,25 @@ async fn dedup(
 // ─── uniques (filter-panel autocomplete) ───────────────────────
 
 #[derive(serde::Deserialize)]
-struct UniquesQuery { col: String, limit: Option<usize> }
+struct UniquesQuery {
+    col:   String,
+    #[serde(default)] q:     Option<String>,
+    #[serde(default)] limit: Option<usize>,
+}
 
+/// One distinct-value slice for a column. `total` = pre-`q` distinct
+/// count (so the FE can show "X of N matched"); `truncated` flips
+/// true when the underlying distinct set hit MAX_UNIQUE=5000 and the
+/// kept set is a top-N-by-frequency pick — gives the FE a "5000+"
+/// signal vs promising completeness. Existing single-value
+/// `{ values }` callers (cleaner filter dropdown) still parse fine
+/// because the new fields are additive.
 #[derive(serde::Serialize)]
-struct UniquesResponse { values: Vec<String> }
+struct UniquesResponse {
+    values:    Vec<String>,
+    total:     u32,
+    truncated: bool,
+}
 
 async fn uniques(
     State(state): State<AppState>,
@@ -640,14 +655,22 @@ async fn uniques(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
     let entry = hydrate(&state, &rid).await?;
-    let frame = Arc::clone(&entry.frame);
-    let col   = q.col.clone();
-    let limit = q.limit.unwrap_or(200).clamp(1, 1000);
+    let frame  = Arc::clone(&entry.frame);
+    let col    = q.col.clone();
+    let needle = q.q.clone();
+    let limit  = q.limit.unwrap_or(50).clamp(1, 500);
 
-    let values = tokio::task::spawn_blocking(move || data::stats::unique_values(&frame, &col, limit))
-        .await
-        .map_err(|e| AppError::internal("join", e.to_string()))??;
-    Ok(Json(UniquesResponse { values }))
+    let result = tokio::task::spawn_blocking(move ||
+        data::distinct::for_column(&frame, &col, needle.as_deref(), limit)
+    )
+    .await
+    .map_err(|e| AppError::internal("join", e.to_string()))??;
+
+    Ok(Json(UniquesResponse {
+        values:    result.values,
+        total:     result.total,
+        truncated: result.truncated,
+    }))
 }
 
 // ─── sentinels (fix-invalid modal — surface what's actually in the file) ───
