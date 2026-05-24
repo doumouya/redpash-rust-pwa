@@ -159,7 +159,10 @@
   font-weight: 650;
 }
 
-/* filter predicate row */
+/* filter predicate row — 250px filter panel, two-row layout:
+   Row 1: column-select | op-select | delete-btn
+   Row 2: value-slot (spans full width — fits comma-lists / two-input
+          ranges / wide date pickers without squeezing col+op). */
 .rt-pred {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -170,6 +173,7 @@
   height: 30px;
   padding: 0 7px;
   min-width: 0;
+  width: 100%;
   border: 1px solid var(--rp-border);
   border-radius: 7px;
   background: var(--rp-surface);
@@ -180,6 +184,34 @@
 }
 .rt-pred select:focus, .rt-pred input:focus { border-color: var(--rp-accent-2); }
 .rt-pred input:disabled { opacity: 0.45; }
+.rt-pred select optgroup {
+  color: var(--rp-text-mute);
+  font-size: 11px;
+  font-style: normal;
+}
+.rt-pred select option {
+  color: var(--rp-text);
+  font-size: 12.5px;
+}
+.rt-pred-val-slot {
+  grid-column: 1 / -1;            /* full-width row 2 */
+  min-width: 0;                    /* allow nested inputs to shrink */
+}
+.rt-pred-val-slot:empty { display: none; }
+/* Hidden inputs (presence ops) collapse the row 2 visually. */
+.rt-pred-val-slot:has(input[type="hidden"]) { display: none; }
+/* Two-input range (between) — min | "to" | max. */
+.rt-pred-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 5px;
+  align-items: center;
+}
+.rt-pred-range-sep {
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  text-align: center;
+}
 .rt-pred-del {
   width: 30px;
   height: 30px;

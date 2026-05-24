@@ -82,18 +82,65 @@ export default function workspace(app, { session }) {
   let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
   let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
 
-  // UI filter ops → canonical FilterOp on the wire (shared::filter::FilterOp).
-  // The op-list union landed in 3d29291; this is the frontend half.
-  const OP_TO_WIRE = {
-    contains: "contains",
-    is:       "eq",
-    not:      "neq",
-    starts:   "starts_with",
-    empty:    "is_null",
-    filled:   "not_null",
-  };
+  // Filter ops — canonical FilterOp on the wire (shared::filter::FilterOp).
+  // OP_SPECS drives three things at render time:
+  //   1. Which ops show in the dropdown for a given column's dtype.
+  //   2. How the dropdown groups them (<optgroup> labels match `group`).
+  //   3. What value control(s) the predicate row renders (text / number /
+  //      date / two-input range / comma-separated list / no value).
+  // The dropdown stores the wire op directly in <option value>, so there's
+  // no UI-key → wire-op indirection — predToLeaf reads .value as-is.
+  const STR_DTYPES_FILTER  = ["string", "empty"];
+  const NUM_DTYPES_FILTER  = ["int", "float"];
+  const DATE_DTYPES_FILTER = ["date"];
+  const ALL_DTYPES_FILTER  = ["string", "int", "float", "date", "bool", "empty"];
+  const ORDERED_DTYPES     = ["int", "float", "date"];   // ops that need an ordering
+  const OP_SPECS = [
+    // [wire-op, label, group, applicable-dtypes, value-kind]
+    ["eq",           "is",                "Equality",   ALL_DTYPES_FILTER, "text"],
+    ["neq",          "is not",            "Equality",   ALL_DTYPES_FILTER, "text"],
+    ["contains",     "contains",          "Text",       STR_DTYPES_FILTER, "text"],
+    ["not_contains", "does not contain",  "Text",       STR_DTYPES_FILTER, "text"],
+    ["starts_with",  "starts with",       "Text",       STR_DTYPES_FILTER, "text"],
+    ["ends_with",    "ends with",         "Text",       STR_DTYPES_FILTER, "text"],
+    ["gt",           "> greater than",    "Comparison", NUM_DTYPES_FILTER, "number"],
+    ["gte",          "≥ at least",        "Comparison", NUM_DTYPES_FILTER, "number"],
+    ["lt",           "< less than",       "Comparison", NUM_DTYPES_FILTER, "number"],
+    ["lte",          "≤ at most",         "Comparison", NUM_DTYPES_FILTER, "number"],
+    ["between",      "between",           "Range",      ORDERED_DTYPES,    "range"],
+    ["before",       "before",            "Range",      DATE_DTYPES_FILTER, "date"],
+    ["after",        "after",             "Range",      DATE_DTYPES_FILTER, "date"],
+    ["in",           "in (any of)",       "Set",        ALL_DTYPES_FILTER, "list"],
+    ["not_in",       "not in",            "Set",        ALL_DTYPES_FILTER, "list"],
+    ["is_null",      "is empty",          "Presence",   ALL_DTYPES_FILTER, "none"],
+    ["not_null",     "is not empty",      "Presence",   ALL_DTYPES_FILTER, "none"],
+  ];
+  const OP_BY_WIRE = Object.fromEntries(OP_SPECS.map((s) => [s[0], { label: s[1], group: s[2], dtypes: s[3], value: s[4] }]));
   // Ops that don't carry a value (server ignores .value for these).
   const NULL_OPS = new Set(["is_null", "not_null"]);
+  // value-kind for a (op, column) combo — used to pick the right input
+  // for `between` (numeric vs date) and date-typed eq/neq (uses a
+  // calendar picker rather than free text).
+  function valueKindFor(op, meta) {
+    const spec = OP_BY_WIRE[op];
+    if (!spec) return "text";
+    if (spec.value === "range") return DATE_DTYPES_FILTER.includes(colDtype(meta)) ? "range-date" : "range-number";
+    if (spec.value === "text" && DATE_DTYPES_FILTER.includes(colDtype(meta))) return "date";
+    return spec.value;
+  }
+  // Storage dtype with the empty-as-string promotion `data::stats` does
+  // for un-typed columns. `semantic_dtype` is the user-promised type;
+  // fall back to storage `dtype` for older rows.
+  function colDtype(meta) {
+    if (!meta) return "string";
+    return meta.semantic_dtype || meta.dtype || "string";
+  }
+  // The ops applicable to a column — used both at render and at every
+  // column-change to re-shape the op <select>.
+  function opsForColumn(meta) {
+    const dtype = colDtype(meta);
+    return OP_SPECS.filter((s) => s[3].includes(dtype));
+  }
   let groupCombo    = "AND";
   let filterCols    = [];   // [[colIndex, name], ...] for the filter builder
   let currentPage   = 1;    // 1-indexed page (matches Page<T>.page on the wire)
@@ -592,14 +639,55 @@ export default function workspace(app, { session }) {
     return { op: groupCombo.toLowerCase(), children: groupNodes };
   }
 
+  // Per-op value coercion before sending to the server. Single source of
+  // truth lives on OP_BY_WIRE[.value]; that resolves to a value-kind
+  // ("text" / "number" / "date" / "list" / "range-*" / "none") and we
+  // shape the wire payload accordingly. Returns null when the predicate
+  // is incomplete (e.g. between with one empty side) — buildFilterNode
+  // drops null leaves, so a half-filled row doesn't poison the request.
   function predToLeaf(p) {
     const meta = activeColumns[p.col - 3];
     if (!meta) return null;
-    const op = OP_TO_WIRE[p.op];
-    if (!op) return null;
-    const leaf = { col: meta.name, op };
-    if (!NULL_OPS.has(op)) leaf.value = p.val;
-    return leaf;
+    const spec = OP_BY_WIRE[p.op];
+    if (!spec) return null;
+    const op = p.op;
+    if (NULL_OPS.has(op)) return { col: meta.name, op };
+
+    // Between → [min, max], typed per column dtype.
+    if (op === "between") {
+      const [a, b] = Array.isArray(p.val) ? p.val : ["", ""];
+      if (a === "" || b === "") return null;
+      const isDateCol = DATE_DTYPES_FILTER.includes(colDtype(meta));
+      const value = isDateCol ? [a, b] : [Number(a), Number(b)];
+      // Reject when number parsing failed — Number("abc") = NaN sneaks
+      // through; the engine would 400 on NaN anyway, fail fast.
+      if (!isDateCol && (Number.isNaN(value[0]) || Number.isNaN(value[1]))) return null;
+      return { col: meta.name, op, value };
+    }
+
+    // In / not_in → array of values, parsed from comma-separated text.
+    // Numeric column gets numbers; otherwise strings.
+    if (op === "in" || op === "not_in") {
+      const items = String(p.val || "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (!items.length) return null;
+      const isNumCol = NUM_DTYPES_FILTER.includes(colDtype(meta));
+      const value = isNumCol ? items.map(Number) : items;
+      if (isNumCol && value.some(Number.isNaN)) return null;
+      return { col: meta.name, op, value };
+    }
+
+    // Numeric comparison ops — coerce to number.
+    if (["gt", "gte", "lt", "lte"].includes(op)) {
+      if (p.val === "") return null;
+      const n = Number(p.val);
+      if (Number.isNaN(n)) return null;
+      return { col: meta.name, op, value: n };
+    }
+
+    // Everything else (eq, neq, contains, before/after, …) takes a
+    // string value as-is. Empty string drops the predicate.
+    if (p.val === "") return null;
+    return { col: meta.name, op, value: p.val };
   }
 
   function renderTable(columns, rows) {
@@ -662,11 +750,13 @@ export default function workspace(app, { session }) {
   });
 
   // ─── filter builder — COLS dynamic per file ────────────────────
-  const OPS = [["contains", "contains"], ["is", "is"], ["not", "is not"],
-               ["starts", "starts with"], ["empty", "is empty"], ["filled", "is not empty"]];
+  // OP_SPECS above is the single source of truth for ops; predRow() and
+  // the col-change handler below project it through opsForColumn().
 
   function rebuildFilterCols(columns) {
-    filterCols = columns.map((c, i) => [i + 3, c.name]);
+    // Keep (colIndex, name, meta) so opsForColumn() can dtype-filter
+    // the op dropdown without re-resolving activeColumns on every render.
+    filterCols = columns.map((c, i) => [i + 3, c.name, c]);
     groupList.innerHTML = "";
     groupCombo = "AND";
     activeFilter = null;
@@ -676,7 +766,64 @@ export default function workspace(app, { session }) {
     // sends the fresh (empty) filter set to the server.
   }
 
+  // Op <select> innerHTML for the given column meta. <optgroup> labels
+  // come straight from OP_SPECS[2]; ops are filtered by dtype.
+  function opSelectHTML(meta, selected) {
+    const ops = opsForColumn(meta);
+    const groups = {};
+    ops.forEach((o) => { (groups[o[2]] = groups[o[2]] || []).push(o); });
+    return Object.keys(groups).map((g) =>
+      '<optgroup label="' + esc(g) + '">'
+      + groups[g].map((o) =>
+          '<option value="' + o[0] + '"' + (o[0] === selected ? ' selected' : '') + '>' + esc(o[1]) + '</option>'
+        ).join("")
+      + '</optgroup>'
+    ).join("");
+  }
+
+  // Value-input HTML for an (op, column) pair. Six shapes:
+  //   none       — hidden (presence ops)
+  //   text       — single text input
+  //   number     — single numeric input
+  //   date       — single date picker
+  //   list       — single text input, comma-separated parsed by predToLeaf
+  //   range-*    — two inputs side-by-side, parsed as [min, max]
+  function valueInputHTML(op, meta) {
+    const kind = valueKindFor(op, meta);
+    if (kind === "none") {
+      return '<input class="rt-pred-val" type="hidden" />';
+    }
+    if (kind === "number") {
+      return '<input class="rt-pred-val" type="number" step="any" placeholder="value" />';
+    }
+    if (kind === "date") {
+      return '<input class="rt-pred-val" type="date" placeholder="YYYY-MM-DD" />';
+    }
+    if (kind === "list") {
+      return '<input class="rt-pred-val" type="text" placeholder="a, b, c (comma-separated)" />';
+    }
+    if (kind === "range-number") {
+      return '<span class="rt-pred-range">'
+        + '<input class="rt-pred-val rt-pred-val-a" type="number" step="any" placeholder="min" />'
+        + '<span class="rt-pred-range-sep">to</span>'
+        + '<input class="rt-pred-val rt-pred-val-b" type="number" step="any" placeholder="max" />'
+        + '</span>';
+    }
+    if (kind === "range-date") {
+      return '<span class="rt-pred-range">'
+        + '<input class="rt-pred-val rt-pred-val-a" type="date" />'
+        + '<span class="rt-pred-range-sep">to</span>'
+        + '<input class="rt-pred-val rt-pred-val-b" type="date" />'
+        + '</span>';
+    }
+    return '<input class="rt-pred-val" type="text" placeholder="value" />';
+  }
+
   function predRow() {
+    const firstCol  = filterCols[0];
+    const firstMeta = firstCol?.[2];
+    const ops       = opsForColumn(firstMeta);
+    const firstOp   = ops[0]?.[0] || "eq";
     const d = document.createElement("div");
     d.className = "rt-pred";
     d.innerHTML =
@@ -684,9 +831,9 @@ export default function workspace(app, { session }) {
       + filterCols.map((c) => '<option value="' + c[0] + '">' + esc(c[1]) + "</option>").join("")
       + "</select>"
       + '<select class="rt-pred-op">'
-      + OPS.map((o) => '<option value="' + o[0] + '">' + o[1] + "</option>").join("")
+      + opSelectHTML(firstMeta, firstOp)
       + "</select>"
-      + '<input class="rt-pred-val" placeholder="value" />'
+      + '<span class="rt-pred-val-slot">' + valueInputHTML(firstOp, firstMeta) + '</span>'
       + '<button class="rt-pred-del" type="button" title="Remove condition"><i class="bi bi-x"></i></button>';
     return d;
   }
@@ -745,21 +892,54 @@ export default function workspace(app, { session }) {
     }
   });
   groupList.addEventListener("change", (e) => {
+    const pred = e.target.closest(".rt-pred");
+    if (!pred) return;
+    // Column changed → dtype may have changed → rebuild the op
+    // dropdown (drop ops that don't apply) + the value slot. Keep
+    // the currently-selected op if still valid; otherwise default
+    // to the first op of the new dtype.
+    if (e.target.classList.contains("rt-pred-col")) {
+      const meta = filterColMeta(e.target.value);
+      const opSel = pred.querySelector(".rt-pred-op");
+      const ops = opsForColumn(meta);
+      const wantOp = ops.find((o) => o[0] === opSel.value)?.[0] || ops[0]?.[0] || "eq";
+      opSel.innerHTML = opSelectHTML(meta, wantOp);
+      pred.querySelector(".rt-pred-val-slot").innerHTML = valueInputHTML(wantOp, meta);
+      return;
+    }
+    // Op changed → swap the value-input slot if the value-kind
+    // shifted (text → number, single → range, etc.).
     if (e.target.classList.contains("rt-pred-op")) {
-      const val = e.target.closest(".rt-pred").querySelector(".rt-pred-val");
-      val.disabled = ["empty", "filled"].includes(e.target.value);
-      if (val.disabled) val.value = "";
+      const meta = filterColMeta(pred.querySelector(".rt-pred-col").value);
+      pred.querySelector(".rt-pred-val-slot").innerHTML = valueInputHTML(e.target.value, meta);
     }
   });
+
+  // colIndex (the <select> value, a stringified number) → ColumnMeta.
+  // filterCols carries [idx, name, meta] tuples; we lookup by index.
+  function filterColMeta(idxValue) {
+    const idx = Number(idxValue);
+    return filterCols.find((c) => c[0] === idx)?.[2];
+  }
   function readGroup(card) {
     return {
       combo: card.querySelector(".rt-group-card-combo .is-active").dataset.combo,
-      preds: Array.from(card.querySelectorAll(".rt-pred")).map((p) => ({
-        col: +p.querySelector(".rt-pred-col").value,
-        op:  p.querySelector(".rt-pred-op").value,
-        val: p.querySelector(".rt-pred-val").value.trim(),
-      })),
+      preds: Array.from(card.querySelectorAll(".rt-pred")).map(readPred),
     };
+  }
+  // Read a predicate row → a normalized intermediate shape. Range ops
+  // (between) emit `val: [a, b]`; everything else emits a single string.
+  // Empty / whitespace-only values pass through unchanged — predToLeaf
+  // is the validator that drops incomplete predicates.
+  function readPred(p) {
+    const op = p.querySelector(".rt-pred-op").value;
+    const col = +p.querySelector(".rt-pred-col").value;
+    if (op === "between") {
+      const a = p.querySelector(".rt-pred-val-a")?.value.trim() || "";
+      const b = p.querySelector(".rt-pred-val-b")?.value.trim() || "";
+      return { col, op, val: [a, b] };
+    }
+    return { col, op, val: p.querySelector(".rt-pred-val").value.trim() };
   }
   $("#wsApplyFilter").addEventListener("click", () => {
     activeFilter = buildFilterNode();
