@@ -358,6 +358,34 @@ export default function workspace(app, { session }) {
     setTableState("Loading…");
     rowsInfo.textContent = "Loading…";
     try {
+      // Charts and data files take different load paths. Rid prefix
+      // disambiguates without a probe call — CHT_* is a chart row in
+      // project_files; FIL_* is a data file. The /files/:rid endpoint
+      // 500s on chart rids (no row/column metadata), so we MUST not
+      // hit it for charts.
+      if (rid.startsWith("CHT_")) {
+        const chart = await api.get("/charts/" + encodeURIComponent(rid));
+        await ensureSourceCache(chart?.source_file_id);
+        // Reset data-file state so the report builder + tools panel
+        // don't show columns from a previously-open file while we're
+        // on a chart.
+        activeColumns = [];
+        activeSteps   = [];
+        activeSummary = null;
+        syncToolbar();
+        toolsCtrl?.refresh();
+        reportCtrl?.refresh();
+        designerCtrl?.load(chart);
+        $("#wsTable").hidden  = true;
+        $("#wsTableState").hidden = true;
+        $("#wsChart").hidden  = false;
+        rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
+        totalPages = 1;
+        renderPager();
+        syncNewChartButton();
+        return;
+      }
+
       const envelope = await api.get("/files/" + encodeURIComponent(rid));
       activeColumns = envelope?.columns || [];
       activeSteps   = envelope?.steps   || [];
@@ -373,25 +401,19 @@ export default function workspace(app, { session }) {
       // (group-by names that don't exist) gets filtered visually on
       // re-render; Apply would surface a server error if user submits.
       reportCtrl?.refresh();
+      // Defensive fallback for legacy CHT_-prefix mistakes or future
+      // file_types that route through the same designer path.
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
-        // Designer mode — the chart canvas + the edit strip take over
-        // the table area. The chart's source data file (chart.source_
-        // file_id) drives the live preview, NOT the chart file's own
-        // envelope (which has no rows). The designer holds the most
-        // recent data-file rid+columns in sourceCache so the source
-        // is always available even after the user navigates around.
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
         designerCtrl?.load(chart);
-        // Hide the table/state surfaces — the designer owns the area.
         $("#wsTable").hidden  = true;
         $("#wsTableState").hidden = true;
         $("#wsChart").hidden  = false;
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
-        // Enable + New chart since we now know a valid source.
         syncNewChartButton();
       } else {
         rebuildColsDropdown(activeColumns);
