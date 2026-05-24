@@ -138,7 +138,11 @@ pub fn execute(
         .map_err(DataError::from)
 }
 
-fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, HashSet<String>>> {
+/// Pairwise distinct-set builder used by the join detector. Also
+/// re-used by `bin/audit_distincts.rs` to measure distinct-payload
+/// shape across the dev DB before locking the column-index cache
+/// architecture (Torv ↔ Gus 2026-05-24).
+pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, HashSet<String>>> {
     let mut out: HashMap<String, HashSet<String>> = HashMap::with_capacity(df.width());
     for c in df.get_columns() {
         let name = c.name().to_string();

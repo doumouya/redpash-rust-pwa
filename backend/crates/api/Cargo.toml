@@ -21,6 +21,10 @@ path = "src/main.rs"
 name = "redpash-audit-ingest"
 path = "src/bin/audit_ingest.rs"
 
+[[bin]]
+name = "redpash-audit-distincts"
+path = "src/bin/audit_distincts.rs"
+
 [dependencies]
 shared = { path = "../shared" }
 data   = { path = "../data" }
