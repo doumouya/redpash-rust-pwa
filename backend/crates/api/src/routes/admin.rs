@@ -58,8 +58,7 @@ pub fn routes() -> Router<AppState> {
 
 // ── shared query plumbing (private to this module) ──────────────────────
 
-const DEFAULT_PAGE_SIZE: u32 = 50;
-const MAX_PAGE_SIZE: u32 = 500;
+use super::pagination::{build_page, paginate};
 
 #[derive(Deserialize)]
 struct AdminQuery {
@@ -95,38 +94,6 @@ struct StepsQuery {
     #[serde(default)] file:    Option<String>, // file_redpash_id
     #[serde(default)] kind:    Option<String>,
     #[serde(default)] applied: Option<bool>,
-}
-
-fn paginate(page: Option<u32>, size: Option<u32>) -> (i64, u32, u32) {
-    let size = size.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE);
-    let page = page.unwrap_or(1).max(1);
-    let offset = ((page - 1) as i64) * (size as i64);
-    (offset, size, page)
-}
-
-fn build_page<T>(
-    rows: Vec<T>,
-    total: u64,
-    all_count: u64,
-    page: u32,
-    size: u32,
-    started: Instant,
-) -> Page<T> {
-    let pages = if total == 0 {
-        0
-    } else {
-        ((total + size as u64 - 1) / size as u64) as u32
-    };
-    Page {
-        rows,
-        total,
-        all_count,
-        page,
-        size,
-        pages,
-        ms: started.elapsed().as_millis() as u32,
-        row_indices: Vec::new(),
-    }
 }
 
 // ── /api/admin/users ────────────────────────────────────────────────────

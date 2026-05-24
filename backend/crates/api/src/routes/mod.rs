@@ -45,6 +45,7 @@ mod admin;
 mod me;
 mod metrics;
 mod monitoring;
+mod pagination;
 mod projects;
 mod search;
 mod users;
