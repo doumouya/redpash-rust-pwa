@@ -383,7 +383,6 @@ export default function home(app, { session }) {
 
     view.innerHTML = ''
       + headHTML(spec.title, "")
-      + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + (spec.chipRows || []).map((cr) => chipRowHTML(cr, chipState[cr.name])).join("")
       + kpiStripHTML([
           { label: "Total",      id: "rp-home-list-total" },
@@ -392,6 +391,7 @@ export default function home(app, { session }) {
           { label: "Last fetch", id: "rp-home-list-ms"   },
         ])
       + chartsStripHTML(spec.charts || [])
+      + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
       + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
 
