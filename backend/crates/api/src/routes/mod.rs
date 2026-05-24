@@ -28,6 +28,7 @@ use tower_http::{
     services::ServeDir,
     trace::TraceLayer,
 };
+use tracing::Instrument;
 
 use crate::state::AppState;
 
@@ -84,15 +85,28 @@ const MAX_BODY_BYTES: usize = 256 * 1024 * 1024;
 #[derive(Clone)]
 struct RequestId(String);
 
-/// Outermost `/api` middleware — mint a request id.
+/// Outermost `/api` middleware — mint a request id, store it in the
+/// request extensions, echo it as the `X-Request-Id` response header,
+/// AND open a `tracing` span so every log line emitted during the
+/// request (handler code, sqlx queries, downstream task logs) inherits
+/// `request_id` as a span field. That's the spine of investigation I-2:
+/// once a 500 happens, the operator pivots from the events table to the
+/// stdout log by grep'ing the request_id — and the stdout lines now
+/// carry it because the span context is part of the default fmt output.
 async fn request_id_mw(mut req: Request, next: Next) -> Response {
     let rid = format!("req_{}", uuid::Uuid::new_v4().simple());
     req.extensions_mut().insert(RequestId(rid.clone()));
-    let mut resp = next.run(req).await;
-    if let Ok(hv) = HeaderValue::from_str(&rid) {
-        resp.headers_mut().insert("x-request-id", hv);
+
+    let span = tracing::info_span!("api", request_id = %rid);
+    async move {
+        let mut resp = next.run(req).await;
+        if let Ok(hv) = HeaderValue::from_str(&rid) {
+            resp.headers_mut().insert("x-request-id", hv);
+        }
+        resp
     }
-    resp
+    .instrument(span)
+    .await
 }
 
 /// Capture middleware — after the handler runs, persist any 4xx/5xx
@@ -117,10 +131,22 @@ async fn capture_mw(
     let status = resp.status();
     let ms = started.elapsed().as_millis() as i32;
 
-    // Every request — fire-and-forget — feeds the performance metrics.
+    // Resolve the caller's user_redpash_id from the session cookie. Runs
+    // AFTER the response is computed and BEFORE the request_log /
+    // event::record fire-and-forget hand-offs, so it adds no latency to
+    // the user-facing response — but it does run on every request (pre-
+    // market verbose mode). When the lookup proves measurable in prod
+    // we'll cache it per session_id at the AppState layer.
+    let user = match &session {
+        Some(sid) => crate::db::find_session_user(&state.db, sid).await.ok().flatten(),
+        None      => None,
+    };
+
+    // Every request — fire-and-forget — feeds the performance metrics +
+    // per-user / per-session investigations (I-1 / I-7).
     crate::request_log::record(
         &state.db, method.clone(), route, status.as_u16() as i16, ms,
-        req_id.clone(),
+        req_id.clone(), user.clone(), session.clone(),
     );
 
     if status.as_u16() >= 400 {
@@ -132,12 +158,6 @@ async fn capture_mw(
         let context = match err_kind {
             Some(k) => serde_json::json!({ "error_kind": k }),
             None    => serde_json::json!({}),
-        };
-        // Resolve the user off the session cookie — best-effort, only on
-        // the (rare) error path, so the extra lookup isn't a hot cost.
-        let user = match &session {
-            Some(sid) => crate::db::find_session_user(&state.db, sid).await.ok().flatten(),
-            None      => None,
         };
         crate::event::record(&state.db, crate::event::EventDraft {
             origin:      "backend",

@@ -58,6 +58,11 @@ var SURFACES = [
     expectFile: 'request_log.rs',
     rx: /request_id\s*:\s*Option<String>/,
     notes: 'every request row stamps the id — sub-second join key' },
+  { id: 'B-CORR.span', cat: 'B-CORR', kind: 'check', label: 'request_id_mw opens a tracing span with request_id field',
+    roots: ['backend/crates/api/src/routes'],
+    expectFile: 'mod.rs',
+    rx: /tracing::info_span!\s*\(\s*"api"\s*,\s*request_id/,
+    notes: 'every tracing macro emitted during the request inherits the request_id field — log↔DB pivot for I-2' },
 
   /* ─── BACKEND: structured logging ──────────────────────────────────── */
   { id: 'B-LOG.tracing-macros', cat: 'B-LOG', kind: 'count', label: 'tracing::{error,warn,info,debug,trace}! call sites',
@@ -97,6 +102,11 @@ var SURFACES = [
     expectFile: 'request_log.rs',
     rx: /pub fn normalize_route/,
     notes: 'dynamic-id paths aggregate on route key' },
+  { id: 'B-REQ.user-session', cat: 'B-REQ', kind: 'check', label: 'request_log::record carries user_redpash_id + session_id',
+    roots: ['backend/crates/api/src'],
+    expectFile: 'request_log.rs',
+    rx: /user_redpash_id:\s*Option<String>[\s\S]{0,200}?session_id:\s*Option<String>/,
+    notes: 'per-user / per-session investigation columns (I-1 / I-7); slice B migration 027' },
 
   /* ─── BACKEND: perf instrumentation ────────────────────────────────── */
   { id: 'B-PERF.instrument', cat: 'B-PERF', kind: 'count', label: '#[tracing::instrument] spans on async fns',

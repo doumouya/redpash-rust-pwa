@@ -15,25 +15,35 @@ use sqlx::PgPool;
 /// Persist a request's metrics without blocking the caller. The INSERT
 /// runs on a detached `tokio` task; a failure is `warn!`-logged and
 /// dropped.
+///
+/// `user_redpash_id` + `session_id` carry the request's identity for
+/// per-user / per-session investigations (I-1 / I-7 in the
+/// observability investigations doc). Anonymous requests pass `None`.
 pub fn record(
-    pool:        &PgPool,
-    method:      String,
-    route:       String,
-    status:      i16,
-    duration_ms: i32,
-    request_id:  Option<String>,
+    pool:            &PgPool,
+    method:          String,
+    route:           String,
+    status:          i16,
+    duration_ms:     i32,
+    request_id:      Option<String>,
+    user_redpash_id: Option<String>,
+    session_id:      Option<String>,
 ) {
     let pool = pool.clone();
     tokio::spawn(async move {
         let res = sqlx::query(
-            "INSERT INTO request_log (method, route, status, duration_ms, request_id)
-             VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO request_log
+                 (method, route, status, duration_ms,
+                  request_id, user_redpash_id, session_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(method)
         .bind(route)
         .bind(status)
         .bind(duration_ms)
         .bind(request_id)
+        .bind(user_redpash_id)
+        .bind(session_id)
         .execute(&pool)
         .await;
         if let Err(e) = res {
