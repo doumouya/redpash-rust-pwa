@@ -157,7 +157,7 @@ export default function docs(app, { session }) {
 
   function renderEmpty() {
     view.innerHTML = '<p class="rp-shell-state">No docs yet — '
-      + 'drop a markdown file into <code>docs/</code> and it'll appear.</p>';
+      + 'drop a markdown file into <code>docs/</code> and it’ll appear.</p>';
   }
 }
 
