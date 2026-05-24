@@ -84,6 +84,16 @@ export function mountReport(panelBody, ctx) {
   let previewTimer = null;
   let lastPage     = null;     // last successful GroupPage, for refresh-without-refetch
 
+  // ── undo / redo (C4) ──────────────────────────────────────────────
+  // JSON-snapshot history; every previewSoon() call captures via
+  // captureSnapshot() so any spec-mutating action is in the chain
+  // without per-handler hooks. Ctrl/Cmd+Z is undo, Ctrl/Cmd+Y or
+  // Ctrl/Cmd+Shift+Z is redo — only when the Report tab is active.
+  const undoStack = [];      // snapshots BEFORE the user's latest change
+  const redoStack = [];      // snapshots forward of the current state
+  let lastSnap    = "";      // JSON of the current spec — dedupe + capture source
+  let suspendCapture = false; // applyState sets this so the redo step doesn't re-snapshot
+
   // ── containers ────────────────────────────────────────────────────
   const statusEl = document.createElement("div");
   statusEl.className = "rt-report-status";
@@ -105,11 +115,27 @@ export function mountReport(panelBody, ctx) {
       return;
     }
     builderEl.innerHTML =
-        renderGroupBySection(cols)
+        renderUndoStrip()
+      + renderGroupBySection(cols)
       + renderAggregationsSection(cols)
       + renderWindowsSection()
       + renderTopNSection()
       + renderShowSection();
+    renderUndoButtons();
+  }
+
+  // Compact undo/redo strip at the top of the builder. Keyboard
+  // shortcuts (Ctrl/Cmd+Z, Ctrl/Cmd+Y) are the primary access; the
+  // buttons make the affordance discoverable.
+  function renderUndoStrip() {
+    return '<div class="rt-report-undo-strip">'
+      + '<button class="rt-btn rt-btn--glass rt-report-undo-btn" type="button"'
+      +   ' title="Undo (Ctrl/Cmd+Z)" disabled>'
+      +   '<i class="bi bi-arrow-return-left"></i></button>'
+      + '<button class="rt-btn rt-btn--glass rt-report-redo-btn" type="button"'
+      +   ' title="Redo (Ctrl/Cmd+Y)" disabled>'
+      +   '<i class="bi bi-arrow-return-right"></i></button>'
+      + '</div>';
   }
 
   // Subtotals columns = group_by + agg aliases. Computed client-side
@@ -518,6 +544,9 @@ export function mountReport(panelBody, ctx) {
       renderBuilder(); previewSoon();
       return;
     }
+    // ── undo / redo ──────────────────────────────────────────────
+    if (e.target.closest(".rt-report-undo-btn")) { doUndo(); return; }
+    if (e.target.closest(".rt-report-redo-btn")) { doRedo(); return; }
     // ── top-N ────────────────────────────────────────────────────
     const topnPart = e.target.closest("[data-topn-part]");
     if (topnPart && topN) {
@@ -617,6 +646,24 @@ export function mountReport(panelBody, ctx) {
     }
   });
 
+  // Keyboard shortcuts — undo / redo. Active only when the Report
+  // tab is the visible one (panel has .has-report). Skipped when the
+  // user is typing into a text/number input — let the browser's
+  // native undo handle the field text.
+  document.addEventListener("keydown", (e) => {
+    if (!panelBody.closest(".rt-panel--filter.has-report")) return;
+    const tag = e.target.tagName;
+    const inText = (tag === "INPUT" && /^(text|search|number|)$/i.test(e.target.type || ""))
+                || tag === "TEXTAREA";
+    if (inText) return;
+    const meta = e.ctrlKey || e.metaKey;
+    if (!meta) return;
+    if (e.key === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); }
+    else if (e.key === "y" || (e.key === "z" && e.shiftKey)) {
+      e.preventDefault(); doRedo();
+    }
+  });
+
   // ── spec build + apply ────────────────────────────────────────────
   function buildSpec() {
     // Aggregations: drop empty alias keys so the backend infers a
@@ -681,11 +728,81 @@ export function mountReport(panelBody, ctx) {
 
   // Debounced preview — collapses bursts of spec edits into one
   // /group/preview round-trip. Skipped when there's no file open
-  // (no surface to preview against).
+  // (no surface to preview against). Every call also captures a
+  // snapshot for undo/redo so any spec-mutating path gets history
+  // for free.
   function previewSoon() {
+    captureSnapshot();
     if (!ctx.fileRid()) return;
     if (previewTimer) clearTimeout(previewTimer);
     previewTimer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS);
+  }
+
+  // Snapshot capture: push the *previous* spec snapshot when the
+  // current one differs. That means undo rolls back the change the
+  // user just made (the stack tail is the pre-change state). Any
+  // forward redoStack gets blown away on a fresh mutation — standard
+  // undo-tree semantics.
+  function captureSnapshot() {
+    if (suspendCapture) return;
+    const current = JSON.stringify(snapshotShape());
+    if (current === lastSnap) return;
+    if (lastSnap) {
+      undoStack.push(lastSnap);
+      if (undoStack.length > 200) undoStack.shift();
+      redoStack.length = 0;
+    }
+    lastSnap = current;
+    renderUndoButtons();
+  }
+  function snapshotShape() {
+    return {
+      groupBy:      [...groupBy],
+      aggregations: aggregations.map((a) => ({ ...a })),
+      windows:      windows.map((w) => ({ ...w, partition_by: [...(w.partition_by || [])] })),
+      showDetails, showSubtotals, showTotal,
+      topN:         topN ? { ...topN, partition_by: [...(topN.partition_by || [])] } : null,
+      sortList:     sortList.map((s) => ({ ...s })),
+    };
+  }
+  function applySnap(json) {
+    if (!json) return;
+    const s = JSON.parse(json);
+    suspendCapture = true;
+    groupBy       = s.groupBy || [];
+    aggregations  = s.aggregations || [];
+    windows       = s.windows || [];
+    showDetails   = !!s.showDetails;
+    showSubtotals = !!s.showSubtotals;
+    showTotal     = !!s.showTotal;
+    topN          = s.topN || null;
+    sortList      = s.sortList || [];
+    lastSnap      = json;
+    renderBuilder();
+    renderUndoButtons();
+    suspendCapture = false;
+    // Fire the preview against the restored state so the sample
+    // table matches what the user just undid/redid into.
+    if (ctx.fileRid()) {
+      if (previewTimer) clearTimeout(previewTimer);
+      previewTimer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS);
+    }
+  }
+  function doUndo() {
+    if (!undoStack.length) return;
+    redoStack.push(lastSnap);
+    applySnap(undoStack.pop());
+  }
+  function doRedo() {
+    if (!redoStack.length) return;
+    undoStack.push(lastSnap);
+    applySnap(redoStack.pop());
+  }
+  function renderUndoButtons() {
+    const undoBtn = builderEl.querySelector(".rt-report-undo-btn");
+    const redoBtn = builderEl.querySelector(".rt-report-redo-btn");
+    if (undoBtn) undoBtn.disabled = !undoStack.length;
+    if (redoBtn) redoBtn.disabled = !redoStack.length;
   }
   async function runPreview(busyBtn) {
     const rid = ctx.fileRid();
@@ -720,6 +837,12 @@ export function mountReport(panelBody, ctx) {
     sortList = [];
     lastPage = null;
     if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+    // Treat Clear as a fresh start — wipe history so undo doesn't
+    // resurrect the cleared spec. The user can re-run preview to
+    // start a fresh chain.
+    undoStack.length = 0;
+    redoStack.length = 0;
+    lastSnap = JSON.stringify(snapshotShape());
     renderBuilder();
     renderPreview(null);
   }

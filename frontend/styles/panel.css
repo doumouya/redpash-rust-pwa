@@ -954,6 +954,24 @@
   font-size: 11px;
 }
 
+/* Undo / redo strip (C4) — compact icon buttons at the top of the
+   builder. Keyboard (Ctrl/Cmd+Z, Ctrl/Cmd+Y) is the primary access. */
+.rt-report-undo-strip {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.rt-report-undo-strip button {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rt-report-undo-strip button:disabled { opacity: 0.35; cursor: not-allowed; }
+.rt-report-undo-strip button i { font-size: 13px; }
+
 /* Top-N (C3) — keep top/bottom N rows per partition. */
 .rt-report-topn { margin-top: 8px; }
 .rt-report-topn-row {
