@@ -60,3 +60,12 @@ Every entry follows the same five headings:
   Discipline rule: use the curly U+2019 (`'`) for contractions in
   single-quoted strings — the convention the rest of the file
   already uses.
+- [0005 — ECharts `colorBy` default paints every bar the same colour](0005-echarts-colorby-series-default.md) —
+  fresh `redpash-mocha` theme with 8 palette colours, but every bar
+  on the Profile usage chart painted `palette[0]`. RCA: ECharts
+  defaults `colorBy` to `"series"`, not `"data"` — a single bar
+  series of N categorical points gets one colour for the whole
+  series. Discipline rule: when registering a multi-colour theme,
+  set `colorBy: "data"` on any series whose points are distinct
+  categories (bar / line / scatter); the default works only for
+  multi-series overlays.
