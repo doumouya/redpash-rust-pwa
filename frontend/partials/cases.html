@@ -114,9 +114,21 @@
             <option value="epic">Epic</option>
           </select>
         </div>
-        <div class="rp-cases-side-section">
+        <div class="rp-cases-side-section rp-cases-side-section--picker">
           <label class="rp-cases-side-label">Assignee</label>
-          <div class="rp-cases-side-value" id="rp-cases-side-assignee">— unassigned —</div>
+          <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
+                  type="button" title="Change assignee">
+            <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
+            <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
+          </button>
+          <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
+            <div class="rp-user-picker-wrap">
+              <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
+                     placeholder="Search by name, username, email…" />
+              <div id="rp-cases-side-assignee-results"
+                   class="rp-user-picker-results" hidden></div>
+            </div>
+          </div>
         </div>
         <div class="rp-cases-side-section">
           <label class="rp-cases-side-label">Reporter</label>

@@ -252,12 +252,17 @@ export default function cases(app, { session }) {
   const sideStatus   = app.querySelector("#rp-cases-side-status");
   const sidePriority = app.querySelector("#rp-cases-side-priority");
   const sideType     = app.querySelector("#rp-cases-side-type");
-  const sideAssignee = app.querySelector("#rp-cases-side-assignee");
+  const sideAssignee        = app.querySelector("#rp-cases-side-assignee");
+  const sideAssigneeBtn     = app.querySelector("#rp-cases-side-assignee-btn");
+  const sideAssigneePicker  = app.querySelector("#rp-cases-side-assignee-picker");
+  const sideAssigneeInput   = app.querySelector("#rp-cases-side-assignee-input");
+  const sideAssigneeResults = app.querySelector("#rp-cases-side-assignee-results");
   const sideReporter = app.querySelector("#rp-cases-side-reporter");
   const sideCreated  = app.querySelector("#rp-cases-side-created");
   const sideUpdated  = app.querySelector("#rp-cases-side-updated");
 
   let currentDetailRid = null;
+  let assigneePickerTimer = null;
 
   tabsEl?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-tab]");
@@ -287,6 +292,82 @@ export default function cases(app, { session }) {
     if (!body || !currentDetailRid) return;
     postComment(body);
   });
+
+  // ── assignee picker — shared atom from user-picker.css, hits the
+  //    same /admin/users?q= shape as Monitoring's M-2 surface. Click
+  //    the side-panel value → reveals the picker; pick a user →
+  //    PATCH /cases/:rid { assignee_id }; outside-click closes.
+  sideAssigneeBtn?.addEventListener("click", () => {
+    if (!sideAssigneePicker) return;
+    const opening = sideAssigneePicker.hidden;
+    sideAssigneePicker.hidden = !opening;
+    if (opening && sideAssigneeInput) {
+      sideAssigneeInput.value = "";
+      sideAssigneeInput.focus();
+    }
+    if (!opening && sideAssigneeResults) {
+      sideAssigneeResults.hidden = true;
+      sideAssigneeResults.innerHTML = "";
+    }
+  });
+  sideAssigneeInput?.addEventListener("input", () => {
+    const q = sideAssigneeInput.value.trim();
+    clearTimeout(assigneePickerTimer);
+    if (!q) {
+      if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
+      return;
+    }
+    assigneePickerTimer = setTimeout(() => searchAssignees(q), 200);
+  });
+  sideAssigneeResults?.addEventListener("click", (e) => {
+    const item = e.target.closest("[data-user-rid]");
+    if (!item) return;
+    const rid = item.dataset.userRid;
+    pickAssignee(rid);
+  });
+  // Outside-click closes the picker — scoped to the detail panel so
+  // hash navigation away from /cases?id=… doesn't fight this handler.
+  document.addEventListener("click", (e) => {
+    if (!sideAssigneePicker || sideAssigneePicker.hidden) return;
+    if (e.target.closest("#rp-cases-side-assignee-btn")) return;
+    if (e.target.closest("#rp-cases-side-assignee-picker")) return;
+    sideAssigneePicker.hidden = true;
+    if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
+  });
+
+  async function searchAssignees(q) {
+    if (!sideAssigneeResults) return;
+    try {
+      const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
+      const rows = data?.rows || [];
+      if (!rows.length) {
+        sideAssigneeResults.innerHTML = '<div class="rp-user-picker-empty">No matches.</div>';
+      } else {
+        sideAssigneeResults.innerHTML = rows.map((u) => {
+          const label = u.display_name || u.username || u.redpash_id;
+          const sub   = [u.username, u.email].filter(Boolean).join(" · ");
+          return '<div class="rp-user-picker-result" '
+            + 'data-user-rid="' + esc(u.redpash_id) + '">'
+            +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
+            +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
+            + '</div>';
+        }).join("");
+      }
+      sideAssigneeResults.hidden = false;
+    } catch (err) {
+      sideAssigneeResults.innerHTML = '<div class="rp-user-picker-empty">Couldn’t search'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
+      sideAssigneeResults.hidden = false;
+    }
+  }
+
+  async function pickAssignee(userRid) {
+    if (!currentDetailRid || !userRid) return;
+    // Close picker optimistically; patchCase will repaint the value.
+    if (sideAssigneePicker) sideAssigneePicker.hidden = true;
+    if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
+    await patchCase({ assignee_id: userRid });
+  }
 
   async function loadCaseDetail(rid) {
     currentDetailRid = rid;

@@ -438,6 +438,53 @@
   padding: 4px 0;
 }
 
+/* Editable side-panel value — click reveals the picker below.
+   Used for the assignee field; reporter is read-only (set at
+   creation, owned by the case-create flow). The picker primitive
+   is the shared .rp-user-picker atom in user-picker.css. */
+.rp-cases-side-section--picker {
+  position: relative;
+}
+.rp-cases-side-edit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.rp-cases-side-edit:hover {
+  background: var(--rp-hover);
+  border-color: var(--rp-border);
+}
+.rp-cases-side-edit-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-cases-side-edit-icon {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+}
+.rp-cases-side-edit:hover .rp-cases-side-edit-icon {
+  color: var(--rp-text);
+}
+.rp-cases-side-picker {
+  margin-top: 6px;
+}
+.rp-cases-side-picker[hidden] { display: none; }
+
 /* ── shared empty states ──────────────────────────────────────── */
 .rp-cases-empty {
   margin: 0;
