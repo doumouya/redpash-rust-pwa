@@ -63,6 +63,14 @@ export default function workspace(app, { session }) {
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let activeSummary = null; // FileSummary — drives per-tool context renderers
+  // The project the user is currently focused on — independent of which
+  // file (if any) is open. Updates on group-head click, on file open
+  // (inherits the file's project), and on the initial deep-link expand.
+  // Read by activeProjectRid / activeProjectName so the rail-foot
+  // buttons (Upload, New chart, New dashboard, + New project) target
+  // the visible project even when the user clicked a group head
+  // without opening a file inside it.
+  let focusedProjectRid = null;
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }] — col is display-column-index (≥3)
   let searchQ       = "";
@@ -197,16 +205,30 @@ export default function workspace(app, { session }) {
     if (labelEl && originalLabel) labelEl.textContent = originalLabel;
   }
 
-  // The project name of the currently-active file (if any). Sent as
-  // ?project_name= so a logged-in user uploading from inside Project
-  // X gets the new file routed to X (find-or-create) instead of the
-  // default. When no file is open, return null → server defaults to
-  // the user's default project.
-  function activeProjectName() {
+  // The .rt-group node for the user's current project focus, or null.
+  // Prefers the explicit focusedProjectRid (set on group-head click +
+  // file-open) over the active-file's parent group. Both rail-foot
+  // resolvers (activeProjectName for upload, activeProjectRid for
+  // dashboard / chart / new-project) read from this so they target
+  // the visible project even when no file is open inside it.
+  function focusedProjectGroup() {
+    if (focusedProjectRid) {
+      const g = navBody.querySelector('.rt-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
+      if (g) return g;
+    }
+    // Fall back to the active-file's group when focus hasn't been
+    // explicitly set (e.g. brand-new session before any group click).
     const activeTab = navBody.querySelector(".rt-tab.active");
-    if (!activeTab) return null;
-    const group = activeTab.closest(".rt-group");
-    return group?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+    if (activeTab) return activeTab.closest(".rt-group");
+    return null;
+  }
+
+  // The project name of the focused project (or active file's project
+  // when focus is unset). Sent as ?project_name= so uploads route to
+  // the visible project (find-or-create). Returns null when there's
+  // no project context → server uses the user's default project.
+  function activeProjectName() {
+    return focusedProjectGroup()?.querySelector(".rt-group-name")?.textContent?.trim() || null;
   }
 
   async function refreshAndOpen(newRid, projRid) {
@@ -269,6 +291,10 @@ export default function workspace(app, { session }) {
       if (wantRid && first.dataset.rid === wantRid) first.dataset.default = "1";
       if (wantFile) first.dataset.wantFile = wantFile;
       first.classList.add("expanded");
+      // Seed project focus with the deep-link / default / first group so
+      // a brand-new session targets the visible project without needing
+      // a head-click first.
+      if (!focusedProjectRid) focusedProjectRid = first.dataset.rid || null;
       loadFilesForGroup(first);
     }
   }
@@ -348,6 +374,10 @@ export default function workspace(app, { session }) {
     const head = e.target.closest(".rt-group-head");
     if (head) {
       const group = head.closest(".rt-group");
+      // Group head click = explicit "I'm focused on this project"
+      // signal. Update even when collapsing — collapse is a UI tweak,
+      // the user is still in this project.
+      focusedProjectRid = group.dataset.rid || null;
       const wasExpanded = group.classList.contains("expanded");
       group.classList.toggle("expanded");
       if (!wasExpanded) loadFilesForGroup(group);
@@ -377,6 +407,11 @@ export default function workspace(app, { session }) {
     if (tab) {
       navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
+      // Clicking a tab = "I'm focused on this file's project" — update
+      // even when loadFile() no-ops (rid already active), so the rail-
+      // foot buttons retarget back to A after a sidetrip through B.
+      const tabGroup = tab.closest(".rt-group");
+      if (tabGroup) focusedProjectRid = tabGroup.dataset.rid || focusedProjectRid;
       loadFile(tab.dataset.rid);
     }
   });
@@ -408,6 +443,8 @@ export default function workspace(app, { session }) {
         await ensureSourceCache(chart?.source_file_id);
         enterDesignerMode(chart?.title || "Untitled chart");
         designerCtrl?.load({ type: "chart", chart });
+        // Opening a chart inherits its project as the focus.
+        if (chart?.project_redpash_id) focusedProjectRid = chart.project_redpash_id;
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
         totalPages = 1;
         renderPager();
@@ -419,6 +456,11 @@ export default function workspace(app, { session }) {
       activeColumns = envelope?.columns || [];
       activeSteps   = envelope?.steps   || [];
       activeSummary = envelope?.summary || null;
+      // Opening a data file inherits its project as the focus, so the
+      // rail-foot buttons target the file's project on the next click.
+      if (envelope?.summary?.project_redpash_id) {
+        focusedProjectRid = envelope.summary.project_redpash_id;
+      }
       syncToolbar();
       // Tools panel binds columns + summary lazily via getters — when
       // the file changes, tell it to re-render whichever view is open
@@ -1368,14 +1410,14 @@ export default function workspace(app, { session }) {
     }
   });
 
-  // + New dashboard rail button — POST /api/dashboards in the active
-  // project (the group containing the active tab; falls back to the
-  // first group). Auto-opens the new dashboard.
+  // + New dashboard rail button — POST /api/dashboards in the focused
+  // project (group-head-clicked OR the active file's group); last-ditch
+  // falls back to the first rendered group so a brand-new session with
+  // a default project still routes correctly. Auto-opens the new dash.
   function activeProjectRid() {
-    const activeTab = navBody.querySelector(".rt-tab.active");
-    const group = (activeTab && activeTab.closest(".rt-group"))
-               || navBody.querySelector(".rt-group");
-    return group?.dataset?.rid || null;
+    return focusedProjectGroup()?.dataset?.rid
+        || navBody.querySelector(".rt-group")?.dataset?.rid
+        || null;
   }
   $("#wsNewDashboard")?.addEventListener("click", async (e) => {
     const projRid = activeProjectRid();
@@ -1426,6 +1468,10 @@ export default function workspace(app, { session }) {
           loadFilesForGroup(group);
           group.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
+        // Seed focus to the new project — the next Upload / New chart /
+        // New dashboard click should target it, even though no file
+        // inside it is open yet (it's empty).
+        focusedProjectRid = newRid;
       }
     } catch (err) {
       console.warn("[rail] + New project failed:", err);
