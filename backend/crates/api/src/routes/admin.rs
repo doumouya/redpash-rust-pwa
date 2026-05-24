@@ -85,6 +85,9 @@ struct FilesQuery {
     /// Filter by computed `file_stages.stage` (import | clean | report | publish).
     #[serde(default)] stage:     Option<String>,
     #[serde(default)] project:   Option<String>, // project_redpash_id
+    /// ILIKE search over filename + display_name + project name —
+    /// drives the toolbar search box on the Home Files tab.
+    #[serde(default)] q:         Option<String>,
     /// Click-to-sort header support. Validated against SORTABLE_FILES;
     /// bad values fall back to `created_at`. dir → "asc"|"desc"
     /// (default "desc").
@@ -406,14 +409,20 @@ async fn list_files(
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT
            FROM project_files f
+           JOIN projects p ON p.redpash_id = f.project_redpash_id
            LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
           WHERE ($1::text IS NULL OR f.file_type = $1)
             AND ($2::text IS NULL OR COALESCE(s.stage, 'new') = $2)
-            AND ($3::text IS NULL OR f.project_redpash_id = $3)",
+            AND ($3::text IS NULL OR f.project_redpash_id = $3)
+            AND ($4::text IS NULL OR
+                 f.filename                 ILIKE '%' || $4 || '%' OR
+                 COALESCE(f.display_name, '') ILIKE '%' || $4 || '%' OR
+                 p.name                     ILIKE '%' || $4 || '%')",
     )
     .bind(q.file_type.as_deref())
     .bind(q.stage.as_deref())
     .bind(q.project.as_deref())
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -434,14 +443,19 @@ async fn list_files(
           WHERE ($1::text IS NULL OR f.file_type = $1)
             AND ($2::text IS NULL OR COALESCE(s.stage, 'new') = $2)
             AND ($3::text IS NULL OR f.project_redpash_id = $3)
+            AND ($4::text IS NULL OR
+                 f.filename                 ILIKE '%' || $4 || '%' OR
+                 COALESCE(f.display_name, '') ILIKE '%' || $4 || '%' OR
+                 p.name                     ILIKE '%' || $4 || '%')
           ORDER BY {} {} NULLS LAST
-          LIMIT $4 OFFSET $5",
+          LIMIT $5 OFFSET $6",
         sort_col, sort_dir,
     );
     let rows = sqlx::query(&sql)
     .bind(q.file_type.as_deref())
     .bind(q.stage.as_deref())
     .bind(q.project.as_deref())
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
