@@ -375,13 +375,14 @@ const TOOLS = [
 //   2. form view — the active tool's fields + Apply
 //   3. status   — a small inline message on the picker (last applied / errors)
 
-// ── columns-view global actions (Slice B) ─────────────────────────────
+// ── columns-view actions ──────────────────────────────────────────────
 // Each entry references an existing TOOLS kind so tools.js stays the
-// single source of truth for label/icon/blurb/fields/toParams. The
-// columns toolbar maps each entry to a button; `hasSheet` opens the
-// in-panel modal sheet, otherwise the action runs directly with no
-// params. `enabled(summary)` gates the button on file-level state
-// (e.g. unwrap_csv needs a single-column file).
+// single source of truth for label/icon/blurb/fields/toParams.
+//
+// GLOBAL_ACTIONS (Slice B): no selection, no per-cell work. `hasSheet`
+// opens an in-panel modal sheet, otherwise the action runs directly.
+// `enabled(summary)` gates the button on file-level state (e.g.
+// unwrap_csv needs a single-column file).
 const GLOBAL_ACTIONS = [
   { kind: "snake_case_columns" },
   { kind: "replace_in_names",   hasSheet: true },
@@ -389,6 +390,19 @@ const GLOBAL_ACTIONS = [
   { kind: "unwrap_csv",
     enabled: (summary) => (summary?.col_count ?? 0) === 1,
     disabledTitle: "Unwrap CSV needs a single-column file." },
+];
+
+// SELECT_ACTIONS (Slice C): one step over the columns the user picked
+// via row checkboxes. All three take `cols: string[]`; the engine
+// signature is identical for drop_columns, filter_columns, and
+// drop_nulls (steps.rs: arr_strings(params, "cols")). `min` is the
+// minimum selection size — buttons render disabled below the threshold.
+// `label` overrides the picker's name when it would read awkwardly as
+// a toolbar button (e.g. "Drop nulls in selected" vs. "Drop nulls").
+const SELECT_ACTIONS = [
+  { kind: "drop_columns",   min: 1, label: "Delete selected",        icon: "bi-trash3" },
+  { kind: "filter_columns", min: 1, label: "Keep only selected",     icon: "bi-check-square" },
+  { kind: "drop_nulls",     min: 1, label: "Drop nulls in selected", icon: "bi-eraser" },
 ];
 
 function getTool(kind) { return TOOLS.find((t) => t.kind === kind); }
@@ -399,6 +413,7 @@ export function mountTools(panelBody, ctx) {
   let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable)
   let activeSheet = null;         // the TOOLS entry whose modal sheet is open in columns view, or null
   let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
+  let selectedCols = new Set();   // column names selected via row checkboxes — drives SELECT_ACTIONS
 
   // Two stable containers — list view + form view; we swap visibility.
   const listEl = document.createElement("div");
@@ -502,9 +517,20 @@ export function mountTools(panelBody, ctx) {
     if (!cols.length) {
       activeSheet = null;
       sheetFields = [];
+      selectedCols.clear();
       columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
       return;
     }
+    // Intersect the current selection with the live column set — a
+    // prior step (drop_columns, rename_column, etc.) may have removed
+    // or renamed columns that the user had selected. Stale names get
+    // silently dropped so the toolbar's count stays honest.
+    const live = new Set(cols.map((c) => c.name));
+    for (const n of selectedCols) if (!live.has(n)) selectedCols.delete(n);
+
+    const allSelected  = cols.length > 0 && cols.every((c) => selectedCols.has(c.name));
+    const someSelected = !allSelected && cols.some((c) => selectedCols.has(c.name));
+
     const rows = cols.map((c, i) => {
       const pct       = c.null_pct == null ? null : Math.max(0, Math.min(100, c.null_pct));
       const nullCount = pct != null && total != null ? Math.round(pct * total / 100) : null;
@@ -515,7 +541,10 @@ export function mountTools(panelBody, ctx) {
                           ? ' <span class="rt-col-sniff" title="Sniffed as ' + esc(c.semantic_dtype)
                             + ' — stored as ' + esc(c.dtype) + '">⚠</span>'
                           : '';
-      return '<tr>'
+      const checked   = selectedCols.has(c.name);
+      return '<tr' + (checked ? ' class="is-selected"' : '') + '>'
+        + '<td class="is-check"><input type="checkbox" class="rt-chk rt-col-check"'
+        +   ' data-col="' + esc(c.name) + '"' + (checked ? ' checked' : '') + ' /></td>'
         + '<td class="is-num is-muted">' + (i + 1) + '</td>'
         + '<td class="is-name">' + esc(c.name) + '</td>'
         + '<td>' + esc(c.dtype || "—") + sniff + '</td>'
@@ -531,13 +560,15 @@ export function mountTools(panelBody, ctx) {
       +     '<b>' + cols.length + '</b> column' + (cols.length === 1 ? '' : 's')
       +     (total != null ? ' · <b>' + total + '</b> row' + (total === 1 ? '' : 's') : '')
       +   '</span>'
-      +   '<span class="rt-tool-columns-flag" title="Preview — selection + edit modes land in slices C–G.">preview</span>'
+      +   '<span class="rt-tool-columns-flag" title="Preview — edit mode lands in slices F–G.">preview</span>'
       + '</div>'
       + renderColumnsToolbar(summary)
       + (activeSheet ? renderColumnsSheet(cols) : '')
       + '<div class="rt-tool-columns-tablewrap">'
       +   '<table class="rp-table rt-tool-columns-table">'
       +     '<thead><tr>'
+      +       '<th class="is-check"><input type="checkbox" class="rt-chk rt-col-check-all"'
+      +         (allSelected ? ' checked' : '') + ' /></th>'
       +       '<th>#</th><th>Name</th><th>Type</th>'
       +       '<th class="is-num">Nulls</th><th class="is-num">% Null</th>'
       +       '<th class="is-num">Unique %</th><th>Sample</th>'
@@ -545,12 +576,16 @@ export function mountTools(panelBody, ctx) {
       +     '<tbody>' + rows + '</tbody>'
       +   '</table>'
       + '</div>';
+    // Header checkbox indeterminate state can't be set via HTML attr.
+    const head = columnsEl.querySelector(".rt-col-check-all");
+    if (head) head.indeterminate = someSelected;
   }
 
-  // Toolbar — the 4 global actions (Slice B). Selection-mode + edit
-  // groups land in later slices alongside their respective actions.
+  // Toolbar — global actions (Slice B) + select actions (Slice C).
+  // Edit mode lands in slices F–G alongside cell-edit affordances.
   function renderColumnsToolbar(summary) {
-    const buttons = GLOBAL_ACTIONS.map((a) => {
+    const selCount = selectedCols.size;
+    const globalBtns = GLOBAL_ACTIONS.map((a) => {
       const tool = getTool(a.kind);
       if (!tool) return '';
       const enabled = a.enabled ? a.enabled(summary) : true;
@@ -564,9 +599,39 @@ export function mountTools(panelBody, ctx) {
         +    esc(tool.label) + (a.hasSheet ? '…' : '')
         +    '</button>';
     }).join('');
+    const selBtns = SELECT_ACTIONS.map((a) => {
+      const tool = getTool(a.kind);
+      if (!tool) return '';
+      const enabled = selCount >= a.min;
+      const title   = enabled
+        ? a.label + ' (' + selCount + ' column' + (selCount === 1 ? '' : 's') + ')'
+        : 'Select ≥' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+      return '<button class="rt-btn rt-tool-columns-action" type="button"'
+        +    ' data-select-kind="' + esc(a.kind) + '"'
+        +    (enabled ? '' : ' disabled')
+        +    ' title="' + esc(title) + '">'
+        +    '<i class="bi ' + esc(a.icon) + '"></i> '
+        +    esc(a.label)
+        +    '</button>';
+    }).join('');
+    // Selection chip — count + clear; click clears the selection.
+    // Visually muted when nothing is picked so it doesn't shout
+    // "0 selected" at the user constantly.
+    const chip =
+      '<span class="rt-tool-columns-selchip' + (selCount ? ' is-active' : '') + '"'
+      + (selCount ? ' title="Click to clear selection"' : '') + '>'
+      +   '<i class="bi bi-check2-square"></i>'
+      +   '<b>' + selCount + '</b> selected'
+      +   (selCount ? '<button class="rt-tool-columns-selchip-clear" type="button"'
+                      + ' title="Clear selection"><i class="bi bi-x"></i></button>' : '')
+      + '</span>';
     return '<div class="rt-tool-columns-toolbar">'
       +    '<span class="rt-tool-columns-toolbar-grp">Global</span>'
-      +    buttons
+      +    globalBtns
+      +    '<span class="rt-tool-columns-toolbar-sep"></span>'
+      +    '<span class="rt-tool-columns-toolbar-grp">Selected</span>'
+      +    selBtns
+      +    chip
       +    '</div>';
   }
 
@@ -611,7 +676,8 @@ export function mountTools(panelBody, ctx) {
   // sheet's Apply/Cancel buttons commit or close. Listening on columnsEl
   // means re-renders inside that subtree don't lose the handler.
   columnsEl.addEventListener("click", async (e) => {
-    const actBtn = e.target.closest(".rt-tool-columns-action");
+    // Global action — opens sheet or runs directly.
+    const actBtn = e.target.closest(".rt-tool-columns-action[data-action-kind]");
     if (actBtn && !actBtn.disabled) {
       const tool = getTool(actBtn.dataset.actionKind);
       if (!tool) return;
@@ -619,11 +685,35 @@ export function mountTools(panelBody, ctx) {
         activeSheet = tool;
         renderColumnsView();
       } else {
-        // No fields — apply with the tool's no-arg params object.
         await runStep(tool.kind, tool.toParams({}), tool.label, { busyBtn: actBtn });
       }
       return;
     }
+    // Select action — fires one step over the picked columns.
+    const selBtn = e.target.closest(".rt-tool-columns-action[data-select-kind]");
+    if (selBtn && !selBtn.disabled) {
+      const kind = selBtn.dataset.selectKind;
+      const tool = getTool(kind);
+      if (!tool) return;
+      const cols = Array.from(selectedCols);
+      if (!cols.length) return;
+      // Engine signature for all three Slice C kinds is { cols: string[] }
+      // (steps.rs: arr_strings(params, "cols")). drop_columns + the
+      // affected columns vanish after apply → the intersect in
+      // renderColumnsView clears the stale selection. filter_columns
+      // keeps the picked set; drop_nulls keeps columns but removes rows.
+      const label = (SELECT_ACTIONS.find((a) => a.kind === kind)?.label || tool.label)
+                    + ' (' + cols.length + ')';
+      await runStep(kind, { cols }, label, { busyBtn: selBtn });
+      return;
+    }
+    // Selection chip — clear the lot.
+    if (e.target.closest(".rt-tool-columns-selchip-clear")) {
+      selectedCols.clear();
+      renderColumnsView();
+      return;
+    }
+    // Sheet controls.
     if (e.target.closest(".rt-tool-columns-sheet-cancel")
         || e.target.closest(".rt-tool-columns-sheet-close")) {
       closeSheet();
@@ -642,6 +732,27 @@ export function mountTools(panelBody, ctx) {
       activeSheet = null;
       sheetFields = [];
       await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+    }
+  });
+
+  // Row + header checkboxes — listen on `change` (not click) so keyboard
+  // toggles work too. The header checkbox toggles every row; row clicks
+  // mutate selectedCols by column name (stable across re-orders).
+  columnsEl.addEventListener("change", (e) => {
+    const head = e.target.closest(".rt-col-check-all");
+    if (head) {
+      const cols = ctx.columns() || [];
+      if (head.checked) cols.forEach((c) => selectedCols.add(c.name));
+      else              selectedCols.clear();
+      renderColumnsView();
+      return;
+    }
+    const row = e.target.closest(".rt-col-check");
+    if (row) {
+      const name = row.dataset.col;
+      if (row.checked) selectedCols.add(name);
+      else             selectedCols.delete(name);
+      renderColumnsView();
     }
   });
 

@@ -711,3 +711,72 @@
   border-top: 1px solid var(--rp-border);
 }
 .rt-tool-columns-sheet-foot .rt-btn--accent { flex: 1; }
+
+/* ── select-mode toolbar additions (Slice C) ────────────────────
+   The toolbar gains a "Selected" group between Global and edit.
+   Buttons go disabled when the selection size is wrong for the
+   action. A selection chip on the right shows the count and
+   offers a one-click clear. */
+.rt-tool-columns-toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--rp-border);
+  margin: 0 4px;
+}
+.rt-tool-columns-selchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 4px 0 10px;
+  border-radius: 99px;
+  border: 1px solid var(--rp-border);
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font-size: 11.5px;
+}
+.rt-tool-columns-selchip i { font-size: 12px; }
+.rt-tool-columns-selchip b { color: var(--rp-text-mute); font-weight: 650; }
+.rt-tool-columns-selchip.is-active {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+}
+.rt-tool-columns-selchip.is-active b,
+.rt-tool-columns-selchip.is-active i { color: var(--rp-accent-2); }
+.rt-tool-columns-selchip-clear {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+}
+.rt-tool-columns-selchip-clear:hover {
+  background: rgba(243, 139, 168, 0.18);
+  color: var(--rp-accent);
+}
+.rt-tool-columns-selchip-clear i { font-size: 12px; }
+
+/* Checkbox column on the columns table. Narrow, centered, and a
+   selected row gets a subtle accent tint so the picked set is
+   visible at a glance even when scrolled. */
+.rt-tool-columns-table th.is-check,
+.rt-tool-columns-table td.is-check {
+  width: 28px;
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 4px;
+}
+.rt-tool-columns-table tr.is-selected td { background: var(--rp-accent-soft); }
+.rt-tool-columns-table tr.is-selected td.is-name { color: var(--rp-accent-2); }
+.rt-tool-columns-table input.rt-col-check,
+.rt-tool-columns-table input.rt-col-check-all {
+  cursor: pointer;
+  margin: 0;
+}
