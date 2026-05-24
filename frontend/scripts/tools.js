@@ -392,17 +392,26 @@ const GLOBAL_ACTIONS = [
     disabledTitle: "Unwrap CSV needs a single-column file." },
 ];
 
-// SELECT_ACTIONS (Slice C): one step over the columns the user picked
-// via row checkboxes. All three take `cols: string[]`; the engine
-// signature is identical for drop_columns, filter_columns, and
-// drop_nulls (steps.rs: arr_strings(params, "cols")). `min` is the
-// minimum selection size — buttons render disabled below the threshold.
-// `label` overrides the picker's name when it would read awkwardly as
-// a toolbar button (e.g. "Drop nulls in selected" vs. "Drop nulls").
+// SELECT_ACTIONS (Slices C–D): step(s) over the columns the user picked
+// via row checkboxes. `min` is the minimum selection size — buttons
+// render disabled below the threshold. `label` overrides the picker's
+// name when it would read awkwardly as a toolbar button.
+//
+// Three apply shapes:
+// - default (Slice C): one step with `{ cols: string[] }`. Engine takes
+//   the list natively (steps.rs: arr_strings(params, "cols")).
+// - `hasSheet`: opens an in-panel sheet for extra params; selection
+//   pre-populates so column fields are dropped from the form.
+// - `perColumn` + `hasSheet`: fires one step per selected column, with
+//   `{ ...sheetState, column: name }`. The engine for these kinds
+//   takes singular `column` (fill_nulls, replace_text, etc.); the
+//   per-column loop also gives the user one undo entry per column.
 const SELECT_ACTIONS = [
-  { kind: "drop_columns",   min: 1, label: "Delete selected",        icon: "bi-trash3" },
-  { kind: "filter_columns", min: 1, label: "Keep only selected",     icon: "bi-check-square" },
-  { kind: "drop_nulls",     min: 1, label: "Drop nulls in selected", icon: "bi-eraser" },
+  { kind: "drop_columns",   min: 1, label: "Delete selected",         icon: "bi-trash3" },
+  { kind: "filter_columns", min: 1, label: "Keep only selected",      icon: "bi-check-square" },
+  { kind: "drop_nulls",     min: 1, label: "Drop nulls in selected",  icon: "bi-eraser" },
+  { kind: "fill_nulls",     min: 1, label: "Fill nulls in selected…", icon: "bi-pencil-square",
+    hasSheet: true, perColumn: true },
 ];
 
 function getTool(kind) { return TOOLS.find((t) => t.kind === kind); }
@@ -412,6 +421,8 @@ export function mountTools(panelBody, ctx) {
   let renderedFields = [];        // [{ field, read }] for the open form — read() returns value
   let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable)
   let activeSheet = null;         // the TOOLS entry whose modal sheet is open in columns view, or null
+  let sheetSource = null;         // "global" | "select" — context for sheet apply + chips header
+  let sheetCfg    = null;         // the SELECT_ACTIONS entry when sheetSource === "select" (carries perColumn etc.)
   let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
   let selectedCols = new Set();   // column names selected via row checkboxes — drives SELECT_ACTIONS
 
@@ -516,6 +527,8 @@ export function mountTools(panelBody, ctx) {
     const total   = summary?.row_count;
     if (!cols.length) {
       activeSheet = null;
+      sheetSource = null;
+      sheetCfg    = null;
       sheetFields = [];
       selectedCols.clear();
       columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
@@ -636,22 +649,39 @@ export function mountTools(panelBody, ctx) {
   }
 
   // Modal sheet — small in-panel form that reuses the existing FIELDS
-  // renderers (column/enum/text/boolean/multicolumn). Slice B uses
-  // sheets for change_case (1 enum) + replace_in_names (2 text). The
-  // sheet lives between the toolbar and the table.
+  // renderers (column/enum/text/boolean/multicolumn). Lives between the
+  // toolbar and the table. Two open paths:
+  //
+  // - Global sheet (Slice B): every tool field renders; e.g. change_case
+  //   shows its enum, replace_in_names shows its 2 text fields.
+  // - Select sheet (Slice D): rendered with an "Acting on" chip strip
+  //   showing the selection. Column-picker fields are dropped (the
+  //   chips ARE the column choice); other fields render as normal.
+  //   e.g. fill_nulls shows only strategy + value.
   function renderColumnsSheet(cols) {
     if (!activeSheet) return '';
-    sheetFields = activeSheet.fields.map((f) => {
+    const isSelect = sheetSource === "select";
+    const visibleFields = isSelect
+      ? activeSheet.fields.filter((f) => f.type !== "column" && f.type !== "multicolumn")
+      : activeSheet.fields;
+    sheetFields = visibleFields.map((f) => {
       const renderer = FIELDS[f.type];
       if (!renderer) throw new Error("Unknown field type: " + f.type);
       const built = renderer({ ...f, columns: cols });
       return { field: f, html: built.html, read: built.read };
     });
+    const chips = isSelect
+      ? '<div class="rt-tool-columns-sheet-chips" title="Columns this action will run on">'
+        + '<span class="rt-tool-columns-sheet-chips-lbl">Acting on</span>'
+        + Array.from(selectedCols).map((n) =>
+            '<span class="rt-tool-columns-sheet-chip">' + esc(n) + '</span>').join('')
+        + '</div>'
+      : '';
     return '<div class="rt-tool-columns-sheet">'
       +    '<div class="rt-tool-columns-sheet-head">'
       +      '<span class="rt-tool-columns-sheet-title">'
       +        '<i class="bi ' + esc(activeSheet.icon) + '"></i> '
-      +        esc(activeSheet.label)
+      +        esc((isSelect && sheetCfg) ? sheetCfg.label : activeSheet.label)
       +      '</span>'
       +      '<button class="rt-btn rt-btn--ghost rt-tool-columns-sheet-close" type="button"'
       +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
@@ -659,6 +689,7 @@ export function mountTools(panelBody, ctx) {
       +    (activeSheet.blurb
             ? '<p class="rt-tool-columns-sheet-blurb">' + esc(activeSheet.blurb) + '</p>'
             : '')
+      +    chips
       +    '<div class="rt-tool-columns-sheet-body">'
       +      sheetFields.map((r) => r.html).join('')
       +    '</div>'
@@ -683,28 +714,36 @@ export function mountTools(panelBody, ctx) {
       if (!tool) return;
       if (tool.fields && tool.fields.length) {
         activeSheet = tool;
+        sheetSource = "global";
+        sheetCfg    = null;
         renderColumnsView();
       } else {
         await runStep(tool.kind, tool.toParams({}), tool.label, { busyBtn: actBtn });
       }
       return;
     }
-    // Select action — fires one step over the picked columns.
+    // Select action — branches by config:
+    //   hasSheet → open a select sheet (column fields dropped, chips
+    //              header shows the picked columns).
+    //   else     → fire one step with `{ cols: string[] }` (Slice C
+    //              shape: drop_columns / filter_columns / drop_nulls).
     const selBtn = e.target.closest(".rt-tool-columns-action[data-select-kind]");
     if (selBtn && !selBtn.disabled) {
       const kind = selBtn.dataset.selectKind;
       const tool = getTool(kind);
-      if (!tool) return;
+      const cfg  = SELECT_ACTIONS.find((a) => a.kind === kind);
+      if (!tool || !cfg) return;
       const cols = Array.from(selectedCols);
       if (!cols.length) return;
-      // Engine signature for all three Slice C kinds is { cols: string[] }
-      // (steps.rs: arr_strings(params, "cols")). drop_columns + the
-      // affected columns vanish after apply → the intersect in
-      // renderColumnsView clears the stale selection. filter_columns
-      // keeps the picked set; drop_nulls keeps columns but removes rows.
-      const label = (SELECT_ACTIONS.find((a) => a.kind === kind)?.label || tool.label)
-                    + ' (' + cols.length + ')';
-      await runStep(kind, { cols }, label, { busyBtn: selBtn });
+      if (cfg.hasSheet) {
+        activeSheet = tool;
+        sheetSource = "select";
+        sheetCfg    = cfg;
+        renderColumnsView();
+      } else {
+        const label = (cfg.label || tool.label) + ' (' + cols.length + ')';
+        await runStep(kind, { cols }, label, { busyBtn: selBtn });
+      }
       return;
     }
     // Selection chip — clear the lot.
@@ -724,14 +763,40 @@ export function mountTools(panelBody, ctx) {
       if (!activeSheet) return;
       const state = {};
       sheetFields.forEach((r) => { state[r.field.key] = r.read(columnsEl); });
-      const params = activeSheet.toParams(state);
-      const tool = activeSheet;
+      const tool   = activeSheet;
+      const source = sheetSource;
+      const cfg    = sheetCfg;
+      const cols   = Array.from(selectedCols);
       // Close optimistically — runStep → onApplied → loadFile → refresh
       // re-renders the view. On failure status shows the error inline
       // and the user re-opens the sheet (rare path; sheets are short).
       activeSheet = null;
+      sheetSource = null;
+      sheetCfg    = null;
       sheetFields = [];
-      await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+      if (source === "select" && cfg?.perColumn) {
+        // One step per selected column. The engine for these kinds
+        // (fill_nulls, replace_text, …) takes singular `column`; the
+        // per-column loop also gives each fill its own undo entry.
+        // Sequential awaits because each step's response is the input
+        // to the next (file envelope refetch via onApplied).
+        for (const c of cols) {
+          const params = tool.toParams({ ...state, column: c });
+          const label  = (cfg.label || tool.label) + ' — ' + c;
+          await runStep(tool.kind, params, label, { busyBtn: applyBtn });
+        }
+      } else if (source === "select") {
+        // Sheet result + selection collapses into one step with `cols`.
+        // No multi-col SELECT_ACTIONS use this branch yet — reserved
+        // for future kinds that accept `{ cols, ...sheetState }`.
+        const params = { ...tool.toParams(state), cols };
+        const label  = (cfg?.label || tool.label) + ' (' + cols.length + ')';
+        await runStep(tool.kind, params, label, { busyBtn: applyBtn });
+      } else {
+        // Global sheet — one step from the form alone.
+        const params = tool.toParams(state);
+        await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+      }
     }
   });
 
@@ -758,6 +823,8 @@ export function mountTools(panelBody, ctx) {
 
   function closeSheet() {
     activeSheet = null;
+    sheetSource = null;
+    sheetCfg    = null;
     sheetFields = [];
     renderColumnsView();
   }
