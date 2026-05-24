@@ -148,12 +148,13 @@ export default function monitoring(app, { session }) {
   let rawTotalPages = 1;
   let donutChart = null;  // ECharts instance — disposed on body rebuild
 
-  // Honors the user's `rowsPerPage` pref (set on /settings). "all" maps
-  // to a large one-shot page so the same paginated path stays in
-  // service. Read on each fetch so a mid-session pref change picks up
-  // on the next navigation. Matches workspace.js + home.js.
+  // Honors the user's `rowsPerPageMonitoring` pref (set on /settings).
+  // "all" maps to a large one-shot page so the same paginated path
+  // stays in service. Read on each fetch so a mid-session pref change
+  // picks up on the next navigation. Workspace + Home have their own
+  // per-surface keys (rowsPerPageWorkspace / rowsPerPageHome).
   function pageSizeFromPref() {
-    const raw = getPref("rowsPerPage");
+    const raw = getPref("rowsPerPageMonitoring");
     if (raw === "all") return 500; // backend MAX_PAGE_SIZE
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;

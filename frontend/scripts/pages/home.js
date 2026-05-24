@@ -334,12 +334,13 @@ export default function home(app, { session }) {
   //     Charts / Steps) — one renderer driven by a LIST_VIEWS spec.
   let listPage = 1;
   let listTotalPages = 1;
-  // Honors the user's `rowsPerPage` pref (set on /settings). "all" maps
-  // to a large one-shot page so the same paginated path stays in
+  // Honors the user's `rowsPerPageHome` pref (set on /settings). "all"
+  // maps to a large one-shot page so the same paginated path stays in
   // service. Read on each fetch so a mid-session pref change picks up
-  // on the next navigation. Matches workspace.js's pageSizeFromPref.
+  // on the next navigation. Workspace + Monitoring have their own
+  // per-surface keys (rowsPerPageWorkspace / rowsPerPageMonitoring).
   function listPageSize() {
-    const raw = getPref("rowsPerPage");
+    const raw = getPref("rowsPerPageHome");
     if (raw === "all") return 500; // backend MAX_PAGE_SIZE
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;

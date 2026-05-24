@@ -42,13 +42,16 @@
       </div>
     </section>
 
-    <!-- ── Workspace ─────────────────────────────────────────── -->
+    <!-- ── Tables ───────────────────────────────────────────────
+         Rows-per-page is split per surface so the Workspace's tight
+         editing size doesn't pollute the wider Home/Monitoring
+         browse sizes (or vice versa). -->
     <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Workspace</h2>
+      <h2 class="rp-page__section-h">Tables</h2>
 
       <div class="rp-page__row">
-        <span class="rp-page__row-label">Rows per page</span>
-        <div class="rp-page__row-control" data-pref="rowsPerPage">
+        <span class="rp-page__row-label">Rows per page · Workspace</span>
+        <div class="rp-page__row-control" data-pref="rowsPerPageWorkspace">
           <button class="rt-btn" type="button" data-value="10">10</button>
           <button class="rt-btn" type="button" data-value="25">25</button>
           <button class="rt-btn" type="button" data-value="50">50</button>
@@ -56,6 +59,33 @@
           <button class="rt-btn" type="button" data-value="all">All</button>
         </div>
       </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Rows per page · Home</span>
+        <div class="rp-page__row-control" data-pref="rowsPerPageHome">
+          <button class="rt-btn" type="button" data-value="10">10</button>
+          <button class="rt-btn" type="button" data-value="25">25</button>
+          <button class="rt-btn" type="button" data-value="50">50</button>
+          <button class="rt-btn" type="button" data-value="100">100</button>
+          <button class="rt-btn" type="button" data-value="all">All</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Rows per page · Monitoring</span>
+        <div class="rp-page__row-control" data-pref="rowsPerPageMonitoring">
+          <button class="rt-btn" type="button" data-value="10">10</button>
+          <button class="rt-btn" type="button" data-value="25">25</button>
+          <button class="rt-btn" type="button" data-value="50">50</button>
+          <button class="rt-btn" type="button" data-value="100">100</button>
+          <button class="rt-btn" type="button" data-value="all">All</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Workspace ─────────────────────────────────────────── -->
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Workspace</h2>
 
       <div class="rp-page__row">
         <span class="rp-page__row-label">Show row numbers</span>

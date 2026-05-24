@@ -27,7 +27,14 @@ import { api } from "/scripts/api.js";
 export const PREFS = {
   density:        { values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density"      },
   fontSize:       { values: ["sm", "md", "lg"],                 default: "md",   attr: "fontSize"     },
-  rowsPerPage:    { values: ["10", "25", "50", "100", "all"],   default: "25",   attr: null           },
+  // Per-page rows-per-page — each table surface gets its own pref so
+  // the Workspace's working size doesn't pollute the Home/Monitoring
+  // browse size (and vice versa). Migration of the old shared
+  // `rowsPerPage` key into all three happens once at module load (see
+  // SPLIT_LEGACY_KEYS below).
+  rowsPerPageWorkspace:  { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
+  rowsPerPageHome:       { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
+  rowsPerPageMonitoring: { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
   showRowNumbers: { values: ["1", "0"],                         default: "1",    attr: "showRownum"   },
   showStageDots:  { values: ["1", "0"],                         default: "1",    attr: "showStageDots"},
   // Defaults the cleaner + export flows read. None of them reshape
@@ -64,6 +71,25 @@ try {
       localStorage.setItem(storageKey(name), JSON.stringify(v));
     }
     localStorage.removeItem(legacyKey);
+  }
+} catch { /* private mode — non-fatal */ }
+
+// ── one-shot split of legacy rowsPerPage → per-surface keys ──────────
+// The old single `rowsPerPage` pref governed every table on every page.
+// 2026-05-24 split it into three (workspace/home/monitoring); this
+// block carries the user's existing choice into all three so they
+// don't lose their setting. Runs once: if any new key is already set,
+// it's left alone. Old key is removed after the split.
+try {
+  const legacyRows = localStorage.getItem(storageKey("rowsPerPage"));
+  if (legacyRows != null) {
+    for (const surface of ["Workspace", "Home", "Monitoring"]) {
+      const newKey = storageKey("rowsPerPage" + surface);
+      if (localStorage.getItem(newKey) == null) {
+        localStorage.setItem(newKey, legacyRows);
+      }
+    }
+    localStorage.removeItem(storageKey("rowsPerPage"));
   }
 } catch { /* private mode — non-fatal */ }
 
