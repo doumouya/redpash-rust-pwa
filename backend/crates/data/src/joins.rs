@@ -29,9 +29,20 @@ const MIN_UNIQUE: usize = 1;
 pub struct JoinCandidate {
     pub this_col:  String,
     pub other_col: String,
+    /// Overlap coefficient — `matches / min(this_uniques, other_uniques)`.
+    /// Used as the sort key (FK→PK signal: a 100-row test export fully
+    /// covered by a 100k-row prod export ranks first). Invisible to the
+    /// end user; the frontend renders raw counts instead.
     pub score:     f32,
     /// Count of overlapping values within the capped unique sets.
     pub matches:   u32,
+    /// Unique-value count on the base file's column (after MAX_UNIQUE
+    /// cap). Powers the user-facing "X of N base values match" string.
+    pub this_uniques:  u32,
+    /// Unique-value count on the other file's column (after MAX_UNIQUE
+    /// cap). Powers the "(other file has N unique)" tail of the same
+    /// string — gives the user cardinality at a glance.
+    pub other_uniques: u32,
     pub samples:   Vec<String>,
 }
 
@@ -62,10 +73,12 @@ pub fn detect_pair(
             let score = if denom > 0.0 { hits as f32 / denom } else { 0.0 };
             if score >= threshold {
                 out.push(JoinCandidate {
-                    this_col:  tc.clone(),
-                    other_col: oc.clone(),
+                    this_col:      tc.clone(),
+                    other_col:     oc.clone(),
                     score,
-                    matches:   hits,
+                    matches:       hits,
+                    this_uniques:  ta.len() as u32,
+                    other_uniques: ob.len() as u32,
                     samples,
                 });
             }

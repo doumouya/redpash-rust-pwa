@@ -2,7 +2,7 @@
 title: Joins
 section: Features
 order: 4
-last modified date: 2026-05-16
+last modified date: 2026-05-24
 ---
 
 # Joins
@@ -40,8 +40,12 @@ algorithm, ported to Polars in `data::joins`.
 5. Sort descending by score, cap at `max_results`.
 
 Result: a list of `JoinCandidate { this_col, other_col, score,
-matches, samples }`, enriched with up to 5 overlapping values so the
-user can spot-check before applying.
+matches, this_uniques, other_uniques, samples }`. `score` is the sort
+key (invisible to the user); the frontend renders raw counts —
+`matches of this_uniques base values match (other file has
+other_uniques unique)` — so coverage + cardinality read at a glance.
+Up to 5 sample values per pair let the user spot-check before
+applying.
 
 ## Filter-aware
 
@@ -57,8 +61,13 @@ the filter panel.
 ## Apply
 
 `POST /api/files/:rid/joins`: stream-writes the joined frame to disk.
+Body: `{ other_file, this_cols: [], other_cols: [], join_type, name?,
+filters? }` — `this_cols` and `other_cols` are arrays paired by
+position, so single-key joins pass `len == 1` and **compound (multi-
+column) joins pass `len == N`**. `join_type` is `inner | left |
+right | outer` (default `inner`).
 
-- Polars `LazyFrame.join(other, left_on, right_on, JoinType::Left)`.
+- Polars `LazyFrame.join(other, left_on, right_on, JoinType::<jt>)`.
 - Both key columns are cast to `String` before joining — heterogeneous
   dtypes (e.g. int vs str matricules) would otherwise fail.
 - Output is written via `CsvWriter::new(file)` directly to disk — no
@@ -73,6 +82,12 @@ candidate list with score, match count, sample values, and a "use" /
 
 ## Future
 
-- Right / inner / outer joins (currently left only).
-- Composite keys (multi-column join).
 - Cross-project joins.
+
+> **Shipped since the original doc** (moved out of Future
+> 2026-05-24): all four join types (`inner | left | right | outer`,
+> default `inner`); compound (multi-column) keys via paired
+> `this_cols` / `other_cols` arrays. The backend has supported these
+> since the joins endpoint landed; the UI is the gap and a workspace
+> Joins panel rewrite is queued (see `Internal-Slack/Torv.md` —
+> 2026-05-24 design thread).
