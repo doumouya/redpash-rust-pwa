@@ -9,6 +9,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { chartTheme } from "/scripts/echarts-theme.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
 
@@ -185,70 +186,43 @@ async function loadUsage(app) {
   const dash = dashboards.value?.items ?? [];
   const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
   paintUsageChart(el, [
-    { name: "Dashboards", value: dash.length, hash: "#/home",                token: "--rp-ok"       },
-    { name: "Charts",     value: ch.length,   hash: "#/home?tab=charts",     token: "--rp-mauve"    },
-    { name: "Files",      value: fileCount,   hash: "#/home?tab=files",      token: "--rp-teal"     },
-    { name: "Projects",   value: proj.length, hash: "#/home?tab=projects",   token: "--rp-accent-2" },
+    { name: "Dashboards", value: dash.length, hash: "#/home" },
+    { name: "Charts",     value: ch.length,   hash: "#/home?tab=charts"   },
+    { name: "Files",      value: fileCount,   hash: "#/home?tab=files"    },
+    { name: "Projects",   value: proj.length, hash: "#/home?tab=projects" },
   ]);
 }
 
 // Horizontal bar chart via ECharts (loaded globally in index.html).
-// Items are bottom-to-top in the order passed: ECharts paints the
-// category axis upward, so we hand it Projects last to put it on top.
+// Theme = redpash-mocha/latte (registered in echarts-theme.js): the
+// palette + axis chrome + tooltip colours all come from the theme,
+// so this builder only declares the option shape — no hardcoded
+// hexes. Items are bottom-to-top in the order passed: the category
+// axis paints upward, so we hand it Projects last to put it on top.
 // Bars are clickable — each item carries `hash`, dispatched on click.
 function paintUsageChart(el, items) {
   if (!window.echarts) {
     el.textContent = "Chart unavailable.";
     return;
   }
-  const chart  = window.echarts.init(el);
-  const text   = getCSSVar("--rp-text");
-  const dim    = getCSSVar("--rp-text-dim");
-  const mute   = getCSSVar("--rp-text-mute");
-  const grid   = getCSSVar("--rp-border");
+  const chart = window.echarts.init(el, chartTheme());
   chart.setOption({
-    animation: true,
     animationDuration: 700,
     grid: { left: 90, right: 32, top: 8, bottom: 8, containLabel: false },
     tooltip: {
       trigger: "axis",
-      axisPointer: { type: "shadow" },
       formatter: (params) => {
         const p = params[0];
         return `<b>${p.name}</b> · ${p.value}`;
       },
     },
-    xAxis: {
-      type: "value",
-      // Always show a sensible right edge even when every bar is 0.
-      min: 0,
-      axisLine:  { lineStyle: { color: grid } },
-      axisLabel: { color: mute, fontSize: 10 },
-      splitLine: { lineStyle: { color: grid, type: "dashed", opacity: 0.4 } },
-    },
-    yAxis: {
-      type: "category",
-      data: items.map((i) => i.name),
-      axisLine:  { show: false },
-      axisTick:  { show: false },
-      axisLabel: { color: text, fontSize: 12, fontWeight: 600 },
-    },
+    xAxis: { type: "value", min: 0 },
+    yAxis: { type: "category", data: items.map((i) => i.name) },
     series: [{
       type: "bar",
       barWidth: "60%",
-      data: items.map((i) => ({
-        value: i.value,
-        itemStyle: { color: getCSSVar(i.token), borderRadius: [0, 4, 4, 0] },
-        hash: i.hash,
-      })),
-      label: {
-        show: true,
-        position: "right",
-        color: dim,
-        fontSize: 12,
-        fontWeight: 600,
-        formatter: "{c}",
-      },
+      data: items.map((i) => ({ value: i.value, hash: i.hash })),
+      label: { show: true, position: "right", formatter: "{c}", fontWeight: 600 },
       cursor: "pointer",
       emphasis: { itemStyle: { opacity: 0.85 } },
     }],
@@ -258,11 +232,6 @@ function paintUsageChart(el, items) {
     if (h) location.hash = h;
   });
   chart.resize();
-}
-
-function getCSSVar(name) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || "#6c7086";
 }
 
 // Lock/unlock the personal-info card.
