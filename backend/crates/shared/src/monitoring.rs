@@ -102,6 +102,24 @@ pub struct RequestsStats {
     /// Routes ranked by p95 latency, descending — the operator's
     /// "slowest 10" view. Always capped at 10 entries server-side.
     pub top_routes:  Vec<RouteStat>,
+    /// Bucketed latency time-series across the window — drives a smooth
+    /// p95 line on the frontend. Grain is server-picked per window
+    /// (~24-30 buckets across any window). Empty buckets are omitted;
+    /// the frontend can gap-fill if its chart kind requires it.
+    /// `#[serde(default)]` keeps the wire backwards-compatible.
+    #[serde(default)]
+    pub buckets:     Vec<LatencyBucket>,
+}
+
+/// One time bucket in the latency-over-time series. `ts` is the start
+/// of the bucket (UTC); `count` is the number of requests inside it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyBucket {
+    pub ts:     chrono::DateTime<chrono::Utc>,
+    pub count:  u64,
+    pub p50_ms: i64,
+    pub p95_ms: i64,
+    pub p99_ms: i64,
 }
 
 /// The time window covered by a monitoring stats response. Mirrors

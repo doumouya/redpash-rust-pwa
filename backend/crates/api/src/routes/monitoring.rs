@@ -27,7 +27,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use shared::{
     monitoring::{
-        AuditFindingSummary, AuditRunSummary, EventSummary,
+        AuditFindingSummary, AuditRunSummary, EventSummary, LatencyBucket,
         RequestSummary, RequestsStats, RouteStat, Window,
     },
     optimization::OptimizationPoint,
@@ -96,6 +96,20 @@ fn window_cutoff(w: Option<&str>) -> Result<Option<DateTime<Utc>>, AppError> {
         }
     };
     Ok(Some(Utc::now() - dur))
+}
+
+/// SQL interval per window label — targets ~24-30 buckets across any
+/// window so a smooth-line chart reads clean at any zoom. Returns a
+/// string that Postgres's `date_bin($interval::interval, ...)` parses
+/// directly. Same window vocabulary as `window_cutoff`.
+fn bucket_interval(label: &str) -> &'static str {
+    match label {
+        "1h"  => "2 minutes",   //  ~30 buckets
+        "24h" => "1 hour",      //  24 buckets
+        "7d"  => "6 hours",     //  28 buckets
+        "30d" => "1 day",       //  30 buckets
+        _     => "1 hour",      //  defensive; window_cutoff already 400s anything else
+    }
 }
 
 /// Convert (page, size) → (zero-based offset, clamped size, clamped page).
@@ -537,6 +551,43 @@ async fn stats_requests(
         })
         .collect();
 
+    // Latency-over-time buckets (~24-30 points across the window).
+    // `date_bin` is Postgres-14+ and lands the bucket on a clean clock
+    // origin (2000-01-01) so consecutive windows align identically.
+    // Empty buckets are omitted; frontend gap-fills if its chart kind
+    // needs continuous x.
+    let bucket_rows = sqlx::query(
+        "SELECT date_bin($1::interval, at, TIMESTAMPTZ '2000-01-01') AS ts,
+                COUNT(*)::BIGINT                                                                AS cnt,
+                COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT  AS p50,
+                COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT  AS p95,
+                COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms), 0)::BIGINT  AS p99
+           FROM request_log
+          WHERE at >= $2
+            AND route NOT LIKE '/monitoring%'
+          GROUP BY ts
+          ORDER BY ts",
+    )
+    .bind(bucket_interval(&label))
+    .bind(cutoff)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let buckets: Vec<LatencyBucket> = bucket_rows
+        .into_iter()
+        .map(|r| {
+            let cnt: i64 = r.try_get("cnt").unwrap_or(0);
+            LatencyBucket {
+                ts:     r.try_get("ts").unwrap_or_else(|_| Utc::now()),
+                count:  cnt as u64,
+                p50_ms: r.try_get("p50").unwrap_or(0),
+                p95_ms: r.try_get("p95").unwrap_or(0),
+                p99_ms: r.try_get("p99").unwrap_or(0),
+            }
+        })
+        .collect();
+
     Ok(Json(RequestsStats {
         window: Window {
             label,
@@ -546,6 +597,7 @@ async fn stats_requests(
         total: total as u64,
         status_mix,
         top_routes,
+        buckets,
     }))
 }
 
