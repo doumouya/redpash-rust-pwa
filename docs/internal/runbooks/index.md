@@ -69,3 +69,15 @@ Every entry follows the same five headings:
   set `colorBy: "data"` on any series whose points are distinct
   categories (bar / line / scatter); the default works only for
   multi-series overlays.
+- [0006 — Spec-only file types leak into data-file code paths](0006-spec-only-file-types-in-data-paths.md) —
+  EISDIR 500s + `not_a_data_file` 400s when the workspace touched a
+  dashboard rid via data endpoints. Root cause: `project_files` is a
+  polymorphic carrier table (csv / chart / dashboard share the table;
+  charts + dashboards carry empty `storage_path` because the payload
+  lives in the `spec` JSONB column). Every consumer that implicitly
+  assumed "every `project_files` row → CSV blob" was a latent bug.
+  Fixed at four layers (hydrate guard / get_summary short-circuit /
+  FE data-panel scope / joins sibling SQL filter). Discipline rule:
+  prefer positive-form `file_type = 'csv'` queries over negative-form
+  exclusions — future spec-only types (notebook, saved query) inherit
+  the exclusion automatically.
