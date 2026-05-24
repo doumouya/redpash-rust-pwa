@@ -497,3 +497,146 @@
   padding: 4px 0;
   text-align: left;
 }
+
+/* ── create-case modal ───────────────────────────────────────────
+   Form dialog opened from the "New case" button. Same fixed-card
+   shape as Monitoring's M-1 (.rp-mon-modal); not extracted to a
+   shared atom yet — when a third caller lands we lift it. The
+   attachments slot renders a "backend pending" placeholder until
+   POST /api/cases/:rid/attachments ships (queued for Gus). */
+.rp-cases-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-cases-modal[hidden] { display: none; }
+.rp-cases-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 17, 27, 0.55);
+  backdrop-filter: blur(2px);
+}
+.rp-cases-modal-body {
+  position: relative;
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.rp-cases-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
+}
+.rp-cases-modal-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-cases-modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--rp-text-mute);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-cases-modal-close:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-cases-modal-content {
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rp-cases-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rp-cases-modal-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rp-cases-modal-input,
+.rp-cases-modal-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 7px;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 13px;
+  outline: 0;
+  resize: vertical;
+}
+.rp-cases-modal-input:focus,
+.rp-cases-modal-textarea:focus {
+  border-color: var(--rp-accent-2);
+}
+.rp-cases-modal-textarea {
+  min-height: 96px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.rp-cases-modal-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+}
+.rp-cases-modal-attachments-pending {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--rp-border);
+  border-radius: 7px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-mute);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.rp-cases-modal-attachments-pending i {
+  font-size: 14px;
+  color: var(--rp-accent-2);
+  margin-top: 1px;
+}
+.rp-cases-modal-attachments-pending code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--rp-accent-2);
+  background: var(--rp-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.rp-cases-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid transparent;
+}

@@ -97,7 +97,7 @@ export default function cases(app, { session }) {
     }, 200);
   });
 
-  newCaseBtn?.addEventListener("click", () => createCase());
+  newCaseBtn?.addEventListener("click", () => openCreateModal());
 
   // Click delegate on the cols host — handles both card-click
   // (→ detail) and click-cycle-status (the per-spec v1 affordance).
@@ -219,15 +219,57 @@ export default function cases(app, { session }) {
     }
   }
 
-  async function createCase() {
-    // v1 minimum: prompt for a title; everything else defaults
-    // (type=task, priority=medium, status=backlog) per the schema.
-    // A modal form is the v2 polish — ship the workflow first.
-    const title = prompt("Case title?");
-    if (!title || !title.trim()) return;
+  // ── create modal ────────────────────────────────────────────
+  // Replaces the v1.0 prompt() flow — collects title + description
+  // (and, once Gus's backend ships, attachments) in a single dialog
+  // before the POST. The attachments slot in the modal is wired
+  // into the DOM today with a "backend pending" placeholder so the
+  // layout doesn't shift when the upload affordance lights up.
+  const createModal     = app.querySelector("#rp-cases-create-modal");
+  const createForm      = app.querySelector("#rp-cases-create-form");
+  const createTitleEl   = app.querySelector("#rp-cases-create-title-input");
+  const createDescEl    = app.querySelector("#rp-cases-create-desc-input");
+  const createSubmitBtn = app.querySelector("#rp-cases-create-submit");
+
+  function openCreateModal() {
+    if (!createModal) return;
+    createModal.hidden = false;
+    if (createForm) createForm.reset();
+    if (createTitleEl) {
+      createTitleEl.value = "";
+      // Defer focus to next tick so the [hidden] removal applies
+      // before the browser tries to move focus into the input.
+      setTimeout(() => createTitleEl.focus(), 0);
+    }
+  }
+  function closeCreateModal() {
+    if (createModal) createModal.hidden = true;
+  }
+
+  createModal?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-modal-dismiss]")) {
+      e.preventDefault();
+      closeCreateModal();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && createModal && !createModal.hidden) {
+      closeCreateModal();
+    }
+  });
+
+  createForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = (createTitleEl?.value || "").trim();
+    if (!title) { createTitleEl?.focus(); return; }
+    const description = (createDescEl?.value || "").trim();
+    if (createSubmitBtn) createSubmitBtn.disabled = true;
     try {
-      const created = await api.post("/cases", { title: title.trim() });
+      const body = { title };
+      if (description) body.description = description;
+      const created = await api.post("/cases", body);
       const rid = created?.redpash_id || created?.rid;
+      closeCreateModal();
       if (rid) {
         location.hash = "#/cases?id=" + encodeURIComponent(rid);
       } else {
@@ -236,8 +278,10 @@ export default function cases(app, { session }) {
     } catch (err) {
       const msg = err?.body?.message || err?.body?.error || err?.message || "Create failed";
       alert(msg + (err?.status ? " (" + err.status + ")" : ""));
+    } finally {
+      if (createSubmitBtn) createSubmitBtn.disabled = false;
     }
-  }
+  });
 
   // ── detail view ─────────────────────────────────────────────
   const ridEl      = app.querySelector("#rp-cases-detail-rid");
