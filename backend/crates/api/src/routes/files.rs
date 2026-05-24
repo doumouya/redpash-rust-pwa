@@ -258,6 +258,25 @@ async fn get_summary(
 ) -> Result<Json<FileEnvelope>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+
+    // chart-/dashboard-typed project_files rows have no on-disk blob —
+    // their spec lives in the project_files.spec JSON column (see
+    // db::insert_chart / db::insert_dashboard which write storage_path
+    // = '' by design). Hydrate would then EISDIR on the empty path. We
+    // short-circuit to a metadata-only envelope so the FE can dispatch
+    // by `summary.file_type` to /api/charts/:rid or /api/dashboards/:rid
+    // (workspace.js:loadFile already reads the file_type from this
+    // envelope and routes accordingly).
+    let meta = db::find_file(&state.db, &rid).await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("file {rid}")))?;
+    if meta.summary.file_type != "csv" {
+        return Ok(Json(FileEnvelope {
+            summary: meta.summary,
+            columns: vec![],
+            steps:   vec![],
+        }));
+    }
+
     let entry = hydrate(&state, &rid).await?;
     let steps = db::list_steps(&state.db, &rid).await?;
     Ok(Json(FileEnvelope { summary: entry.summary, columns: entry.columns, steps }))
