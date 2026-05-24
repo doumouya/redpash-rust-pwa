@@ -98,7 +98,7 @@ export default function workspace(app, { session }) {
   // numeric pageSize the fetch uses. "all" maps to a large one-shot
   // page so the rest of the code stays in a single paginated path.
   function pageSizeFromPref() {
-    const raw = getPref("rowsPerPage");
+    const raw = getPref("rowsPerPageWorkspace");
     if (raw === "all") return ALL_ROWS_SIZE;
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
@@ -111,48 +111,90 @@ export default function workspace(app, { session }) {
       ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
   });
 
-  // ─── upload — POST /api/files/upload (multipart) ───────────────
-  // File picked from #wsUploadInput → uploaded into the project of
-  // the currently-active file (or default when nothing's open). After
-  // the FileEnvelope returns, refresh the rail + auto-expand the
-  // target project's group + auto-open the new file.
+  // ─── upload — POST /api/files/upload (multipart), N at a time ──
+  // Files picked from #wsUploadInput → uploaded sequentially into the
+  // project of the currently-active file (or default when nothing's
+  // open). Sequential (not parallel) so the user sees per-file progress
+  // ("Uploading 2 of 5…") and the server doesn't get a request burst.
+  // After the batch finishes, refresh the rail once + auto-open the
+  // last successful upload (most-recent = natural focus). Individual
+  // failures don't abort the batch — they're collected and reported
+  // at the end alongside the success count.
   const uploadInput = $("#wsUploadInput");
   const uploadBtn   = $("#wsUpload");
   uploadBtn.addEventListener("click", () => uploadInput.click());
   uploadInput.addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await doUpload(file);
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    await doUpload(files);
     uploadInput.value = "";  // reset so re-picking the same file fires change
   });
 
-  async function doUpload(file) {
+  async function doUpload(files) {
     const targetProject = activeProjectName();
-    const fd = new FormData();
-    fd.append("file", file);
-    if (targetProject) fd.append("project_name", targetProject);
+    const total = files.length;
+    const labelEl = uploadBtn.querySelector("span");
+    const originalLabel = labelEl?.textContent;
 
     uploadBtn.disabled = true;
     uploadBtn.classList.add("is-busy");
-    const labelEl = uploadBtn.querySelector("span");
-    const originalLabel = labelEl?.textContent;
-    if (labelEl) labelEl.textContent = "Uploading…";
 
-    try {
-      // FormData → api.js skips JSON encoding (sees the instance type).
-      const env = await api.post("/files/upload", fd);
-      const newRid  = env?.summary?.redpash_id;
-      const projRid = env?.summary?.project_redpash_id;
-      if (!newRid) throw new Error("Upload succeeded but the server returned no file id.");
-      await refreshAndOpen(newRid, projRid);
-    } catch (err) {
-      const msg = err?.body?.message || err?.body?.error || err?.message || "Upload failed";
-      rowsInfo.textContent = msg + (err?.status ? " (" + err.status + ")" : "");
-    } finally {
-      uploadBtn.disabled = false;
-      uploadBtn.classList.remove("is-busy");
-      if (labelEl && originalLabel) labelEl.textContent = originalLabel;
+    let succeeded   = 0;
+    let lastEnv     = null;
+    const failures  = [];
+
+    for (let i = 0; i < total; i++) {
+      const file = files[i];
+      if (labelEl) {
+        labelEl.textContent = total === 1
+          ? "Uploading…"
+          : "Uploading " + (i + 1) + " of " + total + "…";
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      if (targetProject) fd.append("project_name", targetProject);
+      try {
+        // FormData → api.js skips JSON encoding (sees the instance type).
+        const env = await api.post("/files/upload", fd);
+        if (!env?.summary?.redpash_id) {
+          throw new Error("upload succeeded but the server returned no file id");
+        }
+        lastEnv = env;
+        succeeded++;
+      } catch (err) {
+        const msg = err?.body?.message || err?.body?.error || err?.message || "upload failed";
+        failures.push({ name: file.name, msg, status: err?.status });
+      }
     }
+
+    // Rail-side refresh: once at the end, opening the last successful
+    // upload. Skips when every file failed (nothing to open).
+    if (lastEnv) {
+      const newRid  = lastEnv.summary.redpash_id;
+      const projRid = lastEnv.summary.project_redpash_id;
+      await refreshAndOpen(newRid, projRid);
+    }
+
+    // Status line summary — leans on rowsInfo since the upload toast
+    // path is via the workspace footer status text. Three shapes:
+    // all-failed / mixed / all-succeeded-but-multi. Single-file +
+    // single-success leaves the file-opened status alone (loadFile
+    // sets rowsInfo to the active file's "X rows · Y cols" string).
+    if (failures.length && succeeded === 0) {
+      const first = failures[0];
+      rowsInfo.textContent = total === 1
+        ? first.msg + (first.status ? " (" + first.status + ")" : "")
+        : "All " + total + " uploads failed — first: " + first.name + " · " + first.msg;
+    } else if (failures.length) {
+      rowsInfo.textContent = "Uploaded " + succeeded + " of " + total
+        + "; failed: " + failures.map((f) => f.name).join(", ");
+    } else if (total > 1) {
+      rowsInfo.textContent = "Uploaded " + total + " files.";
+    }
+
+    uploadBtn.disabled = false;
+    uploadBtn.classList.remove("is-busy");
+    if (labelEl && originalLabel) labelEl.textContent = originalLabel;
   }
 
   // The project name of the currently-active file (if any). Sent as
@@ -1425,22 +1467,23 @@ export default function workspace(app, { session }) {
   // by /scripts/dropdown.js — bindDropdown() at app boot in main.js.
 
   // Rows-per-page — setPref persists through prefs.js (server PATCH +
-  // local cache + the unified rp-pref-rowsPerPage key). The numeric
-  // pageSize stays a workspace-local concern (the "all" wire value
-  // expands to ALL_ROWS_SIZE for the fetch).
+  // local cache + the unified rp-pref-rowsPerPageWorkspace key). Home
+  // + Monitoring keep their own per-page rows-per-page prefs; this
+  // surface is workspace-scoped so the tight editing size doesn't
+  // pollute the wider browse sizes on those pages.
   syncRowsDropdown();
   $("#wsRowsDd").addEventListener("click", (e) => {
     const item = e.target.closest(".rt-dd-item");
     if (!item) return;
     const raw = item.dataset.rows;
-    setPref("rowsPerPage", raw);
+    setPref("rowsPerPageWorkspace", raw);
     pageSize = raw === "all" ? ALL_ROWS_SIZE : parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
     currentPage = 1;
     syncRowsDropdown();
     refetchPage();
   });
   function syncRowsDropdown() {
-    const raw = getPref("rowsPerPage");
+    const raw = getPref("rowsPerPageWorkspace");
     $("#wsRowsDd").querySelectorAll(".rt-dd-item").forEach((i) => {
       i.classList.remove("selected");
       const t = i.querySelector(".tick");
