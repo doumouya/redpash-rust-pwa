@@ -757,13 +757,18 @@ impl From<FileRow> for FileFull {
 }
 
 pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
+    // Returns every file in the project — including chart-typed rows.
+    // Charts used to be filtered out here because the (deleted)
+    // Reports page owned the chart surface; now that the Designer
+    // is inline in the Workspace, the rail needs to list them too
+    // so the user can re-open a saved chart for editing.
     let rows: Vec<FileRow> = sqlx::query_as(
         "SELECT pf.redpash_id, pf.project_redpash_id, pf.filename, pf.display_name, pf.file_type,
                 fs.stage, pf.row_count, pf.col_count, pf.file_size_bytes, pf.cleanness_pct,
                 pf.encoding, pf.delimiter, pf.storage_path, pf.created_at, pf.updated_at
          FROM project_files pf
          JOIN file_stages fs ON fs.file_redpash_id = pf.redpash_id
-         WHERE pf.project_redpash_id = $1 AND pf.file_type <> 'chart'
+         WHERE pf.project_redpash_id = $1
          ORDER BY pf.created_at ASC",
     )
     .bind(project_rid)

@@ -140,8 +140,13 @@ export default function home(app, { session }) {
       title: "Charts",
       endpoint: "/admin/charts",
       columns: ["Name", "Project", "Stage", "Updated"],
+      // Rows are clickable — navigate to the Workspace with the
+      // chart's source project + chart rid as deep-link params so
+      // the Designer opens directly on this chart.
       row: (c) =>
-        '<tr>'
+        '<tr class="rp-home-row--clickable"'
+        + ' data-href="#/workspace?project=' + encodeURIComponent(c.project_redpash_id)
+        + '&file=' + encodeURIComponent(c.redpash_id) + '">'
         + '<td>' + esc(c.display_name || c.filename) + '</td>'
         + '<td>' + esc(c.project_name) + '</td>'
         + '<td>' + stageChip(c.stage) + '</td>'
@@ -315,6 +320,14 @@ export default function home(app, { session }) {
       if (!Number.isFinite(target) || target < 1 || target > listTotalPages || target === listPage) return;
       listPage = target;
       fetchList(spec, chipState);
+    });
+
+    // Row click → navigate. Delegated on the table so the binding
+    // survives re-renders (every fetchList rewrites tbody.innerHTML).
+    view.querySelector("#rp-home-list-tbody")?.addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-href]");
+      if (!tr) return;
+      location.hash = tr.dataset.href.replace(/^#/, "");
     });
 
     fetchList(spec, chipState);

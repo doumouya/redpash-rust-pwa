@@ -209,17 +209,24 @@ export default function workspace(app, { session }) {
       return;
     }
     navBody.innerHTML = items.map(projectGroup).join("");
-    // Deep-link via #/workspace?project=<rid> — auto-open that project.
-    // Falls back to is_default, then first group.
-    const params  = new URLSearchParams(location.hash.split("?")[1] || "");
-    const wantRid = params.get("project");
+    // Deep-link via #/workspace?project=<rid>&file=<rid>. Project
+    // auto-opens that project; file (optional) jumps straight to
+    // that file instead of the project's first tab — used by Home
+    // to land the user on a specific chart or csv. Falls back to
+    // is_default, then first group.
+    const params   = new URLSearchParams(location.hash.split("?")[1] || "");
+    const wantRid  = params.get("project");
+    const wantFile = params.get("file");
     const first = (wantRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(wantRid) + '"]'))
                || navBody.querySelector('.rt-group[data-default="1"]')
                || navBody.querySelector(".rt-group");
     if (first) {
       // Mark the target group so loadFilesForGroup auto-opens its first
-      // file (the auto-open path is dataset.default === "1").
+      // file (the auto-open path is dataset.default === "1"). When a
+      // file deep-link is set, stash it so loadFilesForGroup picks it
+      // instead of the first tab.
       if (wantRid && first.dataset.rid === wantRid) first.dataset.default = "1";
+      if (wantFile) first.dataset.wantFile = wantFile;
       first.classList.add("expanded");
       loadFilesForGroup(first);
     }
@@ -254,13 +261,17 @@ export default function workspace(app, { session }) {
       const data = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
       renderFiles(body, data?.items || []);
       group.dataset.filesLoaded = "1";
-      // First load of the default group — auto-open its first file.
+      // Default group — auto-open. If a deep-linked file rid is
+      // stashed on the group (?file=<rid>), pick that tab; otherwise
+      // pick the first.
       if (!activeFileRid && group.dataset.default === "1") {
-        const firstTab = body.querySelector(".rt-tab");
-        if (firstTab) {
+        const wantFile = group.dataset.wantFile;
+        const tab = (wantFile && body.querySelector('.rt-tab[data-rid="' + cssEsc(wantFile) + '"]'))
+                 || body.querySelector(".rt-tab");
+        if (tab) {
           navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
-          firstTab.classList.add("active");
-          loadFile(firstTab.dataset.rid);
+          tab.classList.add("active");
+          loadFile(tab.dataset.rid);
         }
       }
     } catch {
@@ -281,8 +292,11 @@ export default function workspace(app, { session }) {
   function fileTab(f) {
     const dot = STAGE_DOT[f.stage] || "is-dirty";
     const name = f.display_name || f.filename || "(unnamed)";
+    // Icon per file_type — charts get the bar-chart glyph so the
+    // Designer-bound rows are visually distinct from data files.
+    const icon = f.file_type === "chart" ? "bi-bar-chart-line" : "bi-filetype-csv";
     return '<button class="rt-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
-      +   '<i class="bi bi-filetype-csv rt-tab-icon"></i>'
+      +   '<i class="bi ' + icon + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(name) + '</span>'
       +   '<span class="rt-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
       +   '<span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>'

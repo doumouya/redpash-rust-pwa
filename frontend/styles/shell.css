@@ -94,6 +94,12 @@
   margin-top: var(--rp-sp-3);
 }
 
+/* Clickable list rows — navigate via data-href on click. Used by
+   /home's charts tab to land users in the Designer for a picked
+   chart. Cursor + hover affordance to mark the row interactive. */
+.rp-home-row--clickable { cursor: pointer; }
+.rp-home-row--clickable:hover td { background: var(--rp-hover); }
+
 /* ── --wide modifier ────────────────────────────────────────────
    Opt-in: page wants the body to span the full available width
    beside the rail (like the Workspace's redtable). Drops the main
