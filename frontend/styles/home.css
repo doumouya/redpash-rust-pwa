@@ -136,12 +136,3 @@
 }
 .rp-home-org__icon { font-size: 10px; opacity: 0.85; }
 
-/* Home reclaims the .rp-shell-main padding — KPI strip + charts +
-   toolbar + table want the full body width. The shared shell rule in
-   shell.css adds var(--rp-sp-6); .rp-shell--wide on the partial
-   (alongside Monitoring + Docs) drops the .rp-shell-view max-width
-   cap so the body can run edge-to-edge. The ID-scoped padding-0
-   here overrides the 14px the wide modifier still applies — Em
-   wants the redtable to bleed all the way to the gutters. */
-#rpHomeMain { padding: 0; }
-
