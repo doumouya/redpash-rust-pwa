@@ -804,12 +804,12 @@ export default function monitoring(app, { session }) {
     view.innerHTML = ''
       + headHTML("Per-user activity", "")
       + '<section class="rp-mon-panel">'
-      +   '<div class="rp-mon-user-picker">'
+      +   '<div class="rp-mon-user-picker-shell">'
       +     '<label for="rp-mon-user-input" class="rt-field-lbl">User</label>'
-      +     '<div class="rp-mon-user-input-wrap">'
+      +     '<div class="rp-user-picker-wrap">'
       +       '<input id="rp-mon-user-input" type="text" autocomplete="off" '
       +         'placeholder="Search by username, display name, or email…" />'
-      +       '<div id="rp-mon-user-results" class="rp-mon-user-results" hidden></div>'
+      +       '<div id="rp-mon-user-results" class="rp-user-picker-results" hidden></div>'
       +     '</div>'
       +     '<span class="rp-mon-user-hint" id="rp-mon-user-hint">'
       +       'Pick a user to see their request + event timeline (last 1h, newest first).'
@@ -842,7 +842,7 @@ export default function monitoring(app, { session }) {
     });
     document.addEventListener("click", (e) => {
       if (!view.contains(e.target)) return;
-      if (e.target.closest(".rp-mon-user-input-wrap")) return;
+      if (e.target.closest(".rp-user-picker-wrap")) return;
       results.hidden = true;
     });
 
@@ -881,22 +881,22 @@ export default function monitoring(app, { session }) {
       const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       if (!rows.length) {
-        results.innerHTML = '<div class="rp-mon-user-empty">No matches.</div>';
+        results.innerHTML = '<div class="rp-user-picker-empty">No matches.</div>';
       } else {
         results.innerHTML = rows.map((u) => {
           const label = u.display_name || u.username || u.redpash_id;
           const sub   = [u.username, u.email].filter(Boolean).join(" · ");
-          return '<div class="rp-mon-user-result" '
+          return '<div class="rp-user-picker-result" '
             + 'data-user-rid="' + esc(u.redpash_id) + '" '
             + 'data-user-label="' + esc(label) + '">'
-            +   '<span class="rp-mon-user-result-name">' + esc(label) + '</span>'
-            +   (sub ? '<span class="rp-mon-user-result-sub">' + esc(sub) + '</span>' : '')
+            +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
+            +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
             + '</div>';
         }).join("");
       }
       results.hidden = false;
     } catch (err) {
-      results.innerHTML = '<div class="rp-mon-user-empty">Couldn’t search'
+      results.innerHTML = '<div class="rp-user-picker-empty">Couldn’t search'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       results.hidden = false;
     }

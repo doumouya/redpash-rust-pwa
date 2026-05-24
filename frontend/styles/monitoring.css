@@ -385,73 +385,16 @@
 /* ── M-2: per-user activity picker + feed ─────────────────────
    Top-of-body: text input + dropdown of search results from
    /admin/users?q=. Pick → activity feed panel shows combined
-   request_log + events timeline. Picker dropdown shape mirrors
-   the .rt-ac atom in panel.css (autocomplete primitive) but
-   doesn't share the class to keep concerns scoped — Monitoring
-   doesn't need the full a11y / keyboard nav surface today. */
-.rp-mon-user-picker {
+   request_log + events timeline. Picker primitive (input +
+   results) is the shared `.rp-user-picker` atom in
+   user-picker.css; this rule only owns the monitoring-specific
+   outer chrome (panel padding for visual separation from the
+   activity table that sits below it). */
+.rp-mon-user-picker-shell {
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 12px;
-}
-.rp-mon-user-input-wrap {
-  position: relative;
-}
-.rp-mon-user-input-wrap input {
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--rp-border);
-  border-radius: 7px;
-  background: var(--rp-surface-2);
-  color: var(--rp-text);
-  font-size: 12.5px;
-  outline: 0;
-}
-.rp-mon-user-input-wrap input:focus {
-  border-color: var(--rp-accent-2);
-}
-.rp-mon-user-results {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  z-index: 30;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
-  padding: 4px;
-}
-.rp-mon-user-results[hidden] { display: none; }
-.rp-mon-user-result {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.rp-mon-user-result:hover {
-  background: var(--rp-hover);
-}
-.rp-mon-user-result-name {
-  font-size: 12.5px;
-  color: var(--rp-text);
-}
-.rp-mon-user-result-sub {
-  font-size: 10.5px;
-  color: var(--rp-text-mute);
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-}
-.rp-mon-user-empty {
-  padding: 16px;
-  text-align: center;
-  font-size: 11.5px;
-  color: var(--rp-text-mute);
 }
 .rp-mon-user-hint {
   font-size: 11px;

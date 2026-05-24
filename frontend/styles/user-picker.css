@@ -1,0 +1,79 @@
+/* User picker atom — debounced search input + result dropdown.
+
+   Callers wire the JS (debounce, fetch /admin/users?q=, result-click
+   handler); the atom owns the visual primitive: input under a wrap,
+   absolutely-positioned dropdown below, two-line result rows
+   (display_name + sub).
+
+   Today's callers:
+     • Monitoring · M-2 per-user activity (the picker that drives
+       /monitoring/users/:rid/activity)
+     • Cases · detail-page assignee field (PATCH /cases/:rid)
+
+   New callers should reuse this atom rather than re-style. The shape
+   is intentionally permissive — the parent decides outer padding /
+   gap; the atom only owns input + dropdown internals. */
+
+.rp-user-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-user-picker-wrap {
+  position: relative;
+}
+.rp-user-picker-wrap input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--rp-border);
+  border-radius: 7px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  font-size: 12.5px;
+  outline: 0;
+}
+.rp-user-picker-wrap input:focus {
+  border-color: var(--rp-accent-2);
+}
+.rp-user-picker-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 30;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  padding: 4px;
+}
+.rp-user-picker-results[hidden] { display: none; }
+.rp-user-picker-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.rp-user-picker-result:hover {
+  background: var(--rp-hover);
+}
+.rp-user-picker-result-name {
+  font-size: 12.5px;
+  color: var(--rp-text);
+}
+.rp-user-picker-result-sub {
+  font-size: 10.5px;
+  color: var(--rp-text-mute);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rp-user-picker-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+}
