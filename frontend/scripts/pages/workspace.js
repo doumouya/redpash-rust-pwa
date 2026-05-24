@@ -511,21 +511,6 @@ export default function workspace(app, { session }) {
         focusedProjectRid = envelope.summary.project_redpash_id;
       }
       syncToolbar();
-      // Tools panel binds columns + summary lazily via getters — when
-      // the file changes, tell it to re-render whichever view is open
-      // (picker form re-derives field options; columns view re-projects
-      // the rows). Picker idle state is a no-op.
-      toolsCtrl?.refresh();
-      // Joins picker is sibling-file-aware — if it was already mounted
-      // (user visited the Joins tab) the cached candidates are stale on
-      // a file change, so re-fetch. If joinsCtrl is null we'll mount
-      // lazily on first Joins-tab activate.
-      joinsCtrl?.refresh();
-      // Report builder is column-bound too — re-render so the group-by
-      // dropdown + agg col options reflect the new file. Stale spec
-      // (group-by names that don't exist) gets filtered visually on
-      // re-render; Apply would surface a server error if user submits.
-      reportCtrl?.refresh();
       // Defensive fallback for legacy CHT_-prefix mistakes or future
       // file_types that route through the same designer path.
       const fileType = envelope?.summary?.file_type;
@@ -563,6 +548,15 @@ export default function workspace(app, { session }) {
         // Tear down any open designer (user navigated from chart to data).
         designerCtrl?.load(null);
         exitDesignerMode();
+        // Data-file-only panels — Tools (cleaning + joins) and Report
+        // builder operate on rows/columns/steps that don't exist for
+        // chart/dashboard rids. Firing these before the file_type
+        // switch caused joinsCtrl.refresh() to 400 against the
+        // not_a_data_file guard when a dashboard loaded — they now
+        // run only on the CSV branch.
+        toolsCtrl?.refresh();
+        joinsCtrl?.refresh();
+        reportCtrl?.refresh();
         await fetchAndRender();
       }
     } catch (err) {
