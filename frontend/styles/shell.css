@@ -94,6 +94,34 @@
   margin-top: var(--rp-sp-3);
 }
 
+/* Toolbar above a list — emits from list-page.js's listToolbarHTML.
+   Reuses workspace's .rt-toolbar atoms (button + search input +
+   dropdown wrap) so styling carries over; this just spaces it
+   above the KPI/charts/list block. */
+.rp-list-toolbar { margin-bottom: var(--rp-sp-3); }
+
+/* Sortable column headers — click-to-sort. Cursor + hover affordance
+   on the <th>; the active sort col has a distinct chevron via
+   .is-asc / .is-desc, and a low-contrast chevron otherwise so the
+   user can spot which cols are clickable. */
+.rp-list-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.rp-list-sortable:hover { color: var(--rp-text); }
+.rp-list-sort-icon {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.45;
+  transition: opacity 0.12s var(--rp-ease);
+}
+.rp-list-sortable:hover .rp-list-sort-icon,
+.rp-list-sortable.is-asc .rp-list-sort-icon,
+.rp-list-sortable.is-desc .rp-list-sort-icon { opacity: 1; }
+.rp-list-sortable.is-asc  .rp-list-sort-icon::before { content: "\F285"; }
+.rp-list-sortable.is-desc .rp-list-sort-icon::before { content: "\F282"; }
+
 /* Clickable list rows — navigate via data-href on click. Used by
    /home's charts tab to land users in the Designer for a picked
    chart. Cursor + hover affordance to mark the row interactive. */

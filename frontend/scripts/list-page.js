@@ -91,13 +91,130 @@ export function windowChipsHTML(windows, active) {
     + '</div>';
 }
 
+// `columns` accepts either a plain string (label only) OR an object
+// `{ label, key, sortable }` so callers can flag which headers
+// click-to-sort. Sortable headers get a data-sort attribute the
+// page's delegated click handler reads. Backwards compatible: every
+// existing caller passes a string array and renders identically.
 export function listPanel(columns, tbodyId) {
+  const th = columns.map((c) => {
+    if (typeof c === "string") return '<th>' + esc(c) + '</th>';
+    const { label, key, sortable } = c;
+    if (!sortable) return '<th>' + esc(label) + '</th>';
+    return '<th class="rp-list-sortable" data-sort="' + esc(key || label) + '">'
+      + esc(label)
+      + '<i class="bi bi-chevron-expand rp-list-sort-icon"></i>'
+      + '</th>';
+  }).join("");
   return '<section class="rp-mon-panel">'
     + '<table class="rp-mon-table">'
-    +   '<thead><tr>' + columns.map((c) => '<th>' + esc(c) + '</th>').join("") + '</tr></thead>'
+    +   '<thead><tr>' + th + '</tr></thead>'
     +   '<tbody id="' + esc(tbodyId) + '"></tbody>'
     + '</table>'
     + '</section>';
+}
+
+// Toolbar shell — mirrors the Workspace's `.rt-toolbar` shape using
+// the same atoms (.rt-btn, .rt-search, .rt-sel-chip, .rt-dd-wrap)
+// so styling carries over. Each section is opt-in via the spec so
+// per-page tabs decide which tools to expose:
+//
+//   { searchPlaceholder, modes: bool, undoRedo: bool, refresh: bool,
+//     columns: bool, export: bool, history: bool }
+//
+// The button IDs are namespaced (#rp-list-toolbar-*) so the home/
+// monitoring renderers can wire them via querySelector without
+// colliding with workspace's #ws* ids.
+export function listToolbarHTML(spec) {
+  const s = spec || {};
+  const parts = ['<div class="rt-toolbar rt-toolbar--data rp-list-toolbar">'];
+
+  if (s.searchPlaceholder !== false) {
+    parts.push(
+      '<div class="rt-search">'
+      + '<i class="bi bi-search"></i>'
+      + '<input type="search" id="rp-list-toolbar-search" '
+      +   'placeholder="' + esc(s.searchPlaceholder || "Search…") + '" />'
+      + '</div>',
+      '<span class="rt-toolbar-sep"></span>',
+    );
+  }
+
+  if (s.modes) {
+    parts.push(
+      '<button class="rt-btn rt-mode" data-mode="edit"   type="button" '
+      +   'title="Edit mode" disabled><i class="bi bi-pencil"></i></button>',
+      '<button class="rt-btn rt-mode" data-mode="select" type="button" '
+      +   'title="Select mode" disabled><i class="bi bi-check2-square"></i></button>',
+      '<button class="rt-btn rt-mode" data-mode="delete" type="button" '
+      +   'title="Delete mode" disabled><i class="bi bi-trash3"></i></button>',
+      '<span class="rt-toolbar-sep"></span>',
+    );
+  }
+
+  // undo/redo render disabled — Home lists don't model history; the
+  // buttons are here for visual parity with the Workspace toolbar.
+  if (s.undoRedo) {
+    parts.push(
+      '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
+      +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
+      '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
+      +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
+    );
+  }
+
+  if (s.refresh !== false) {
+    parts.push(
+      '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
+      +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
+      '<span class="rt-toolbar-sep"></span>',
+    );
+  }
+
+  // Selection chip — shows in the toolbar but stays hidden until
+  // the select mode is wired (next slice). Reserves visual space.
+  if (s.modes) {
+    parts.push(
+      '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
+      + '<i class="bi bi-check2-square"></i>'
+      + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
+      + '</span>',
+    );
+  }
+
+  if (s.columns) {
+    parts.push(
+      '<div class="rt-dd-wrap">'
+      + '<button class="rt-btn" data-dd="rp-list-toolbar-cols-dd" type="button" '
+      +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
+      + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- next slice --></div>'
+      + '</div>',
+    );
+  }
+
+  if (s.export) {
+    parts.push(
+      '<div class="rt-dd-wrap">'
+      + '<button class="rt-btn" data-dd="rp-list-toolbar-export-dd" type="button" '
+      +   'title="Export" disabled><i class="bi bi-download"></i></button>'
+      + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
+      +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
+      +   '<div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>'
+      +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
+      + '</div>'
+      + '</div>',
+    );
+  }
+
+  if (s.history) {
+    parts.push(
+      '<button class="rt-btn" id="rp-list-toolbar-history" type="button" disabled '
+      +   'title="No history on list views"><i class="bi bi-clock-history"></i></button>',
+    );
+  }
+
+  parts.push('</div>');
+  return parts.join("");
 }
 
 // Single pager button. Disabled buttons drop the data-page attr so

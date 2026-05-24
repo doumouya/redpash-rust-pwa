@@ -16,7 +16,7 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref } from "/scripts/prefs.js";
 import {
-  headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML,
+  headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML, listToolbarHTML,
   listPanel as _listPanel,
   setKpi as _setKpi,
   renderListPager as _renderListPager,
@@ -176,7 +176,26 @@ export default function home(app, { session }) {
         { id: "rp-home-files-clean", title: "Cleanness", kind: "gauge",
           data: (s) => s.avg_cleanness ?? 0, opts: { max: 100, unit: "%" } },
       ],
-      columns: ["Filename", "Project", "Type", "Stage", "Rows", "Updated"],
+      // Toolbar — first validation slice (Em's 2026-05-24 ask). Search
+      // + sort + refresh are wired; modes/columns/export buttons
+      // render disabled until the next slice. undoRedo + history
+      // intentionally omitted (no list-level history to model).
+      toolbar: {
+        searchPlaceholder: "Search filename, project…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
+      // Sortable columns map to /admin/files's SORTABLE_FILES allowlist
+      // (filename / file_type / stage / row_count / updated_at). Project
+      // intentionally not sortable — name lives on a JOIN and isn't in
+      // the allowlist yet.
+      columns: [
+        { label: "Filename", key: "filename",   sortable: true  },
+        { label: "Project",  key: "project",    sortable: false },
+        { label: "Type",     key: "file_type",  sortable: true  },
+        { label: "Stage",    key: "stage",      sortable: true  },
+        { label: "Rows",     key: "row_count",  sortable: true  },
+        { label: "Updated",  key: "updated_at", sortable: true  },
+      ],
       row: (f) =>
         '<tr>'
         + '<td>' + esc(f.display_name || f.filename) + '</td>'
@@ -346,8 +365,16 @@ export default function home(app, { session }) {
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
+  // Per-tab toolbar state — search query + active sort. Reset on each
+  // renderListBody so tab-switching doesn't carry one tab's filter
+  // into another.
+  let listSearch = "";
+  let listSort   = null;  // { col, dir } | null
+
   function renderListBody(tab, spec) {
-    listPage = 1;
+    listPage   = 1;
+    listSearch = "";
+    listSort   = null;
     // Per-chip-row state — { chipRowName → current value }. Sent to
     // the endpoint as additional query params; click on a chip flips
     // the value + resets page to 1 + refetches.
@@ -356,6 +383,7 @@ export default function home(app, { session }) {
 
     view.innerHTML = ''
       + headHTML(spec.title, "")
+      + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + (spec.chipRows || []).map((cr) => chipRowHTML(cr, chipState[cr.name])).join("")
       + kpiStripHTML([
           { label: "Total",      id: "rp-home-list-total" },
@@ -412,6 +440,63 @@ export default function home(app, { session }) {
       fetchList(spec, chipState);
     });
 
+    // Toolbar handlers — only wired when spec.toolbar is declared.
+    if (spec.toolbar) {
+      // Search — debounced so we don't fire on every keystroke. 200ms
+      // matches the topbar omnisearch dropdown's debounce.
+      const searchEl = view.querySelector("#rp-list-toolbar-search");
+      if (searchEl) {
+        let timer = null;
+        searchEl.addEventListener("input", () => {
+          const q = searchEl.value.trim();
+          if (q === listSearch) return;
+          listSearch = q;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => {
+            listPage = 1;
+            fetchList(spec, chipState);
+          }, 200);
+        });
+      }
+
+      // Refresh — re-runs the fetch with the current page/sort/search.
+      view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", () => {
+        fetchList(spec, chipState);
+      });
+
+      // Click-to-sort — header delegation. Three-state per column:
+      // first click sets desc, second flips to asc, third clears.
+      // After clearing, the backend falls back to its default sort.
+      view.querySelector(".rp-mon-table thead")?.addEventListener("click", (e) => {
+        const th = e.target.closest("th.rp-list-sortable");
+        if (!th) return;
+        const key = th.dataset.sort;
+        if (!key) return;
+        if (!listSort || listSort.col !== key) {
+          listSort = { col: key, dir: "desc" };
+        } else if (listSort.dir === "desc") {
+          listSort = { col: key, dir: "asc" };
+        } else {
+          listSort = null;
+        }
+        paintSortHeaders();
+        listPage = 1;
+        fetchList(spec, chipState);
+      });
+
+      // Apply visual indicator to the active sort header. Idempotent —
+      // called on each click + once after the initial fetchList paints
+      // the table so a refresh keeps the chevron visible.
+      function paintSortHeaders() {
+        view.querySelectorAll("th.rp-list-sortable").forEach((th) => {
+          th.classList.remove("is-asc", "is-desc");
+          if (listSort && th.dataset.sort === listSort.col) {
+            th.classList.add(listSort.dir === "asc" ? "is-asc" : "is-desc");
+          }
+        });
+      }
+    }
+
     // Row click → navigate. Delegated on the table so the binding
     // survives re-renders (every fetchList rewrites tbody.innerHTML).
     view.querySelector("#rp-home-list-tbody")?.addEventListener("click", (e) => {
@@ -435,6 +520,8 @@ export default function home(app, { session }) {
     const params = new URLSearchParams();
     params.set("page", String(listPage));
     params.set("size", String(listPageSize()));
+    if (listSearch) params.set("q", listSearch);
+    if (listSort)   { params.set("sort", listSort.col); params.set("dir", listSort.dir); }
     for (const [name, value] of Object.entries(chipState || {})) {
       if (value != null && value !== "") params.set(name, value);
     }
