@@ -9,6 +9,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
+import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import {
   headHTML, kpiStripHTML, chartsStripHTML,
   windowChipsHTML as _windowChipsHTML,
@@ -297,7 +298,10 @@ export default function monitoring(app, { session }) {
   function paintDonut(statusMix) {
     const el = view.querySelector("#rp-mon-donut");
     if (!el || !window.echarts) return;
-    if (!donutChart) donutChart = window.echarts.init(el);
+    if (!donutChart) {
+      ensureRegisteredThemes();
+      donutChart = window.echarts.init(el, chartTheme());
+    }
     // Map { "200": 457, "500": 48, ... } → ECharts pie data, coloured
     // by status band (2xx green / 3xx blue / 4xx amber / 5xx red).
     const entries = Object.entries(statusMix)
