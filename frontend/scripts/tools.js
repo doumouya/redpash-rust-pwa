@@ -135,12 +135,32 @@ const TOOLS = [
         + '<div class="rt-tool-context-summary">'
         +   '<span><b>' + (total != null ? total : "—") + '</b> rows</span>'
         +   '<span><b>—</b> fully-null rows</span>'
+        +   '<button class="rt-btn rt-btn--ghost rt-tool-context-cta" type="button"'
+        +     ' data-action="drop-fully-null"'
+        +     ' title="Drop every row where every column is null (uses filter_rows)">'
+        +     '<i class="bi bi-trash3"></i> Drop fully-null rows'
+        +   '</button>'
         + '</div>'
         + '<table class="rt-tool-context-table">'
         +   '<thead><tr><th>Column</th><th class="is-num">Nulls</th><th class="is-num">%</th></tr></thead>'
         +   '<tbody>' + rows + '</tbody>'
         + '</table>'
         + more;
+    },
+    // CTA in the context block fires a filter_rows step that KEEPS any
+    // row where at least one column is not_null — i.e. drops rows where
+    // every column is null. No new step kind needed; the engine already
+    // accepts filter_rows with a flat OR of `{col, op: "not_null"}`
+    // predicates (see steps.rs's filter_rows arm).
+    handleAction: async (action, { ctx, runStep, btn }) => {
+      if (action !== "drop-fully-null") return;
+      const cols = ctx.columns() || [];
+      if (!cols.length) return;
+      const predicates = cols.map((c) => ({ column: c.name, op: "not_null" }));
+      await runStep("filter_rows",
+                    { combinator: "or", predicates },
+                    "Drop fully-null rows",
+                    { busyBtn: btn });
     },
   }),
 
@@ -461,31 +481,48 @@ export function mountTools(panelBody, ctx) {
     panelBody.closest(".rt-panel")?.classList.remove("has-form");
   }
 
-  async function applyActive() {
-    if (!activeTool) return;
-    const applyBtn = formEl.querySelector(".rt-tool-apply");
-    applyBtn.disabled = true;
-    applyBtn.classList.add("is-busy");
-
-    const state = {};
-    renderedFields.forEach((r) => { state[r.field.key] = r.read(formEl); });
-    const params = activeTool.toParams(state);
-
+  // POST a step + run the standard post-apply lifecycle (close the
+  // form, set status, fire ctx.onApplied so the workspace refetches).
+  // Shared between the form's Apply button and the context block's
+  // action buttons (tool.handleAction can call runStep too).
+  async function runStep(kind, params, label, opts = {}) {
     const rid = ctx.fileRid();
+    if (!rid) { setStatus("Open a file before running a tool.", "warn"); return; }
+    const busyBtn = opts.busyBtn;
+    if (busyBtn) { busyBtn.disabled = true; busyBtn.classList.add("is-busy"); }
     try {
       const res = await api.post("/files/" + encodeURIComponent(rid) + "/steps",
-                                 { kind: activeTool.kind, params });
-      const label = activeTool.label;
+                                 { kind, params });
       closeForm();
       setStatus("Applied: " + label, "ok");
       ctx.onApplied?.(res);
     } catch (err) {
       const msg = (err && (err.body?.message || err.body?.error)) || err?.message || "Apply failed";
       setStatus(msg + (err?.status ? " (" + err.status + ")" : ""), "err");
-      applyBtn.disabled = false;
-      applyBtn.classList.remove("is-busy");
+      if (busyBtn) { busyBtn.disabled = false; busyBtn.classList.remove("is-busy"); }
     }
   }
+
+  async function applyActive() {
+    if (!activeTool) return;
+    const applyBtn = formEl.querySelector(".rt-tool-apply");
+    const state = {};
+    renderedFields.forEach((r) => { state[r.field.key] = r.read(formEl); });
+    const params = activeTool.toParams(state);
+    await runStep(activeTool.kind, params, activeTool.label, { busyBtn: applyBtn });
+  }
+
+  // Delegated click on the context block — tool.handleAction(action, helpers)
+  // gets called when an element with data-action is clicked. Lets a tool's
+  // context surface ship its own CTAs (e.g. drop_nulls' "Drop fully-null
+  // rows" button) without each tool inventing its own wiring. `helpers`
+  // gives the action handler ctx + runStep so it can fire any step.
+  formEl.addEventListener("click", async (e) => {
+    const actionBtn = e.target.closest(".rt-tool-context [data-action]");
+    if (!actionBtn || !activeTool?.handleAction) return;
+    const action = actionBtn.dataset.action;
+    await activeTool.handleAction(action, { ctx, runStep, btn: actionBtn });
+  });
 
   function setStatus(text, kind /* "ok" | "warn" | "err" */) {
     statusEl.textContent = text;
