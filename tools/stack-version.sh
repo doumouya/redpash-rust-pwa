@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Re-exec under bash when invoked with `sh script.sh` (which ignores the
+# shebang). The script uses `declare -A` + array literals; dash chokes on
+# both. This guard is pure POSIX sh so dash parses it fine.
+if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # ── stack-version.sh ─────────────────────────────────────────────────────────
 # Probe + report the version of every tool the RedPash stack uses. Run before
 # a release / when something feels off / when onboarding a new machine.
