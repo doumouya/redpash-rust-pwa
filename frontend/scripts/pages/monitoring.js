@@ -529,6 +529,29 @@ export default function monitoring(app, { session }) {
       fetchOptimization();
     });
 
+    // Status pill change → PATCH then full refetch (the refetch is
+    // what re-sorts the row into its new status bucket + refreshes
+    // KPIs). Optimistic disable + on-error rollback keeps a flapping
+    // server clean.
+    view.querySelector("#rp-mon-opt-tbody").addEventListener("change", async (e) => {
+      const sel = e.target.closest(".rp-mon-opt-status-select");
+      if (!sel) return;
+      const id   = sel.dataset.optId;
+      const prev = sel.dataset.prev;
+      const next = sel.value;
+      if (next === prev) return;
+      sel.disabled = true;
+      try {
+        await api.patch("/monitoring/optimization-points/" + id, { status: next });
+        fetchOptimization();
+      } catch (err) {
+        sel.value = prev;
+        sel.disabled = false;
+        alert("Couldn’t update status"
+          + (err?.status ? " (" + err.status + ")" : "") + ".");
+      }
+    });
+
     fetchOptimization();
   }
 
@@ -587,7 +610,7 @@ export default function monitoring(app, { session }) {
       +   fmtMeasurement(r.current_value, r.threshold_unit)
       + '</td>'
       + '<td class="is-num">' + fmtMeasurement(r.threshold_value, r.threshold_unit) + '</td>'
-      + '<td>' + statusPill(r.status) + '</td>'
+      + '<td>' + statusPill(r.id, r.status) + '</td>'
       + '</tr>';
   }
 
@@ -625,9 +648,23 @@ export default function monitoring(app, { session }) {
     return fmtCount(value) + (pretty ? " " + pretty : "");
   }
 
-  function statusPill(status) {
+  // Status pill rendered as a styled <select> so clicking it flips
+  // the row's status via PATCH /optimization-points/:id. The four
+  // editable values mirror the server's CHECK constraint; "all" only
+  // exists as a filter chip, not a row value.
+  const OPT_STATUS_VALUES = ["open", "planned", "done", "wontfix"];
+  function statusPill(id, status) {
     const v = String(status || "open").toLowerCase();
-    return '<span class="rp-mon-opt-pill rp-mon-opt-pill--' + esc(v) + '">' + esc(v) + '</span>';
+    return '<select class="rp-mon-opt-pill rp-mon-opt-pill--' + esc(v)
+      + ' rp-mon-opt-status-select"'
+      + ' data-opt-id="' + esc(String(id)) + '"'
+      + ' data-prev="'   + esc(v) + '"'
+      + ' title="Click to change status">'
+      + OPT_STATUS_VALUES.map((s) =>
+          '<option value="' + esc(s) + '"' + (s === v ? ' selected' : '') + '>'
+          + esc(s) + '</option>'
+        ).join("")
+      + '</select>';
   }
 
   // ─── /api/metrics fetch + paint ──────────────────────────────
