@@ -1320,3 +1320,141 @@
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── autocomplete atom (.rt-ac) ────────────────────────────────────
+   Focus-driven suggestion list anchored under an <input> via the
+   .rt-ac-wrap parent. Separate atom from .rt-dd (the toggle-click
+   dropdown bound by /scripts/dropdown.js) so the bindDropdown
+   document handler doesn't fight the autocomplete's focus/blur
+   semantics. Outside-click handling lives in autocomplete.js,
+   scoped to the wrap. */
+.rt-ac-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.rt-ac-wrap > input {
+  width: 100%;
+}
+.rt-ac {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 30;
+  display: none;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  box-shadow: var(--rp-shadow);
+  padding: 4px;
+  font-size: 12px;
+}
+.rt-ac.open { display: block; }
+.rt-ac-head {
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--rp-border);
+  color: var(--rp-text-mute);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.rt-ac-item {
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: var(--rp-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+.rt-ac-item:hover,
+.rt-ac-item.is-active {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rt-ac-item.is-active {
+  outline: 1px solid var(--rp-accent-2);
+}
+.rt-ac-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: 11.5px;
+}
+
+/* ── chip-picker (.rt-chip-picker) — value input for in / not_in ─
+   Replaces the comma-separated text input with a chip-list + an
+   inline add-input that autocompletes through .rt-ac. Backspace at
+   empty input drops the last chip. Click anywhere on the picker
+   focuses the input so the user can keep typing without a precise
+   click on the input itself. */
+.rt-chip-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 5px;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 7px;
+  cursor: text;
+}
+.rt-chip-picker:focus-within { border-color: var(--rp-accent-2); }
+.rt-chip-list {
+  display: contents;            /* chips flow inline with the input */
+}
+.rt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 7px;
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-chip-x {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+.rt-chip-x:hover {
+  background: rgba(243, 139, 168, 0.18);
+  color: var(--rp-accent);
+}
+.rt-chip-input {
+  flex: 1 1 80px;
+  min-width: 80px;
+  height: 24px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 4px;
+}
+.rt-chip-input:focus { outline: 0; }

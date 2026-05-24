@@ -18,6 +18,8 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
 import { mountJoins } from "/scripts/joins.js";
 import { mountReport } from "/scripts/report.js";
+import { attachAutocomplete, mountChipPicker } from "/scripts/autocomplete.js";
+import { invalidateFile as invalidateColumnIndex } from "/scripts/column-index.js";
 import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
@@ -665,10 +667,13 @@ export default function workspace(app, { session }) {
       return { col: meta.name, op, value };
     }
 
-    // In / not_in → array of values, parsed from comma-separated text.
-    // Numeric column gets numbers; otherwise strings.
+    // In / not_in → array of values. readPred emits either:
+    //   string[] when the chip-picker is mounted (the v1 UX)
+    //   string   from a comma-separated fallback (defensive path)
     if (op === "in" || op === "not_in") {
-      const items = String(p.val || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const items = Array.isArray(p.val)
+        ? p.val.map((s) => String(s).trim()).filter(Boolean)
+        : String(p.val || "").split(",").map((s) => s.trim()).filter(Boolean);
       if (!items.length) return null;
       const isNumCol = NUM_DTYPES_FILTER.includes(colDtype(meta));
       const value = isNumCol ? items.map(Number) : items;
@@ -835,7 +840,46 @@ export default function workspace(app, { session }) {
       + "</select>"
       + '<span class="rt-pred-val-slot">' + valueInputHTML(firstOp, firstMeta) + '</span>'
       + '<button class="rt-pred-del" type="button" title="Remove condition"><i class="bi bi-x"></i></button>';
+    // Wire the value-input slot — autocomplete for single-value ops,
+    // chip-picker for in/not_in. No-op for numeric/date/between/null
+    // ops (free input is right; nothing to suggest).
+    wireValueSlot(d);
     return d;
+  }
+
+  // Autocomplete / chip-picker wiring against column-index. Reads the
+  // current op + col from the predicate's dropdowns (so ctx.colName
+  // re-resolves dynamically when the user switches columns).
+  // Single-value text ops get attachAutocomplete on the input; list
+  // ops (in/not_in) get mountChipPicker on the slot.
+  const SINGLE_VALUE_AC_OPS = new Set(["eq", "neq", "contains", "not_contains", "starts_with", "ends_with"]);
+  const LIST_OPS            = new Set(["in", "not_in"]);
+  function wireValueSlot(pred) {
+    const opSel = pred.querySelector(".rt-pred-op");
+    const op = opSel?.value || "eq";
+    const slot = pred.querySelector(".rt-pred-val-slot");
+    if (!slot) return;
+    const ctx = {
+      fileRid: () => activeFileRid,
+      colName: () => {
+        const colSel = pred.querySelector(".rt-pred-col");
+        const idx = Number(colSel?.value);
+        return filterCols.find((c) => c[0] === idx)?.[1] || null;
+      },
+    };
+    if (LIST_OPS.has(op)) {
+      // Chip-picker replaces the slot's content with the chip-list +
+      // add-input. Stash the controller on the slot so readPred can
+      // pull `.values()` out.
+      slot._chipCtrl = mountChipPicker(slot, ctx);
+      return;
+    }
+    if (SINGLE_VALUE_AC_OPS.has(op)) {
+      const input = slot.querySelector(".rt-pred-val");
+      if (input && input.type !== "hidden") attachAutocomplete(input, ctx);
+    }
+    // Other ops (numeric / date / between / null) — no wiring; the
+    // input shape from valueInputHTML is the right primitive.
   }
   function groupCard() {
     const card = document.createElement("div");
@@ -904,14 +948,20 @@ export default function workspace(app, { session }) {
       const ops = opsForColumn(meta);
       const wantOp = ops.find((o) => o[0] === opSel.value)?.[0] || ops[0]?.[0] || "eq";
       opSel.innerHTML = opSelectHTML(meta, wantOp);
-      pred.querySelector(".rt-pred-val-slot").innerHTML = valueInputHTML(wantOp, meta);
+      const slot = pred.querySelector(".rt-pred-val-slot");
+      slot._chipCtrl = null;
+      slot.innerHTML = valueInputHTML(wantOp, meta);
+      wireValueSlot(pred);
       return;
     }
     // Op changed → swap the value-input slot if the value-kind
     // shifted (text → number, single → range, etc.).
     if (e.target.classList.contains("rt-pred-op")) {
       const meta = filterColMeta(pred.querySelector(".rt-pred-col").value);
-      pred.querySelector(".rt-pred-val-slot").innerHTML = valueInputHTML(e.target.value, meta);
+      const slot = pred.querySelector(".rt-pred-val-slot");
+      slot._chipCtrl = null;
+      slot.innerHTML = valueInputHTML(e.target.value, meta);
+      wireValueSlot(pred);
     }
   });
 
@@ -928,9 +978,11 @@ export default function workspace(app, { session }) {
     };
   }
   // Read a predicate row → a normalized intermediate shape. Range ops
-  // (between) emit `val: [a, b]`; everything else emits a single string.
-  // Empty / whitespace-only values pass through unchanged — predToLeaf
-  // is the validator that drops incomplete predicates.
+  // (between) emit `val: [a, b]`; list ops (in/not_in) emit `val:
+  // string[]` from the chip-picker's selected set; everything else
+  // emits a single string. Empty / whitespace-only values pass through
+  // unchanged — predToLeaf is the validator that drops incomplete
+  // predicates.
   function readPred(p) {
     const op = p.querySelector(".rt-pred-op").value;
     const col = +p.querySelector(".rt-pred-col").value;
@@ -939,7 +991,18 @@ export default function workspace(app, { session }) {
       const b = p.querySelector(".rt-pred-val-b")?.value.trim() || "";
       return { col, op, val: [a, b] };
     }
-    return { col, op, val: p.querySelector(".rt-pred-val").value.trim() };
+    if (op === "in" || op === "not_in") {
+      const slot = p.querySelector(".rt-pred-val-slot");
+      const chips = slot?._chipCtrl?.values() || [];
+      // Fall back to comma-split if the chip-picker isn't mounted
+      // (e.g. user typed in plain input and op flipped to in/not_in
+      // before the picker rendered). Defensive — shouldn't normally
+      // hit since wireValueSlot mounts the picker synchronously.
+      if (chips.length > 0) return { col, op, val: chips };
+      const raw = p.querySelector(".rt-pred-val")?.value.trim() || "";
+      return { col, op, val: raw };
+    }
+    return { col, op, val: p.querySelector(".rt-pred-val")?.value.trim() || "" };
   }
   $("#wsApplyFilter").addEventListener("click", () => {
     activeFilter = buildFilterNode();
@@ -1130,6 +1193,8 @@ export default function workspace(app, { session }) {
       const res = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
       if (res?.columns) activeColumns = res.columns;
       if (res?.steps)   activeSteps   = res.steps;
+      // Step landed → cached distinct values are stale for this file.
+      invalidateColumnIndex(activeFileRid);
       syncToolbar();
       await refetchPage();
     } catch (err) {
@@ -1160,6 +1225,9 @@ export default function workspace(app, { session }) {
       const env = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/" + action);
       if (env?.columns) activeColumns = env.columns;
       if (env?.steps)   activeSteps   = env.steps;
+      // Undo/redo replays the step stack → cached distinct values are
+      // stale (a re-applied or rewound delete-row, fill-null, etc.).
+      invalidateColumnIndex(activeFileRid);
       syncToolbar();
       await refetchPage();
     } catch (err) {
@@ -1314,9 +1382,13 @@ export default function workspace(app, { session }) {
     // simplest path: re-run loadFile on the same rid (it would normally
     // no-op since the rid is unchanged, so null the cached rid first).
     // Same trick the Refresh button uses.
+    // Also invalidate the column-index cache for this file — the step
+    // may have changed rows or schema, so cached distinct values are
+    // stale.
     onApplied: () => {
       if (!activeFileRid) return;
       const rid = activeFileRid;
+      invalidateColumnIndex(rid);
       activeFileRid = null;
       loadFile(rid);
     },
