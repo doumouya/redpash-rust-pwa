@@ -536,6 +536,9 @@ export function mountDesigner(designerEl, ctx) {
   // helper — it needs to know whether to add the new chart as a
   // widget or just open it standalone).
   function getOpenDashboardRid() { return dashboard?.redpash_id || null; }
+  // Full dashboard object — workspace reads project_redpash_id from
+  // it when resolving a source data file for + Add chart.
+  function getOpenDashboard() { return dashboard; }
 
   // ── lifecycle hooks ───────────────────────────────────────────────
   function resize() { tiles.forEach((t) => t.inst?.resize?.()); }
@@ -547,7 +550,7 @@ export function mountDesigner(designerEl, ctx) {
   // Initial empty state until load(...) fires.
   renderCanvasEmpty();
 
-  return { load, resize, unmount, addChartWidget, getOpenDashboardRid };
+  return { load, resize, unmount, addChartWidget, getOpenDashboardRid, getOpenDashboard };
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────

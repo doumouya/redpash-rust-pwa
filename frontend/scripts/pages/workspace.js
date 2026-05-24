@@ -1227,23 +1227,39 @@ export default function workspace(app, { session }) {
   $("#wsNewChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
 
   // Designer-toolbar Add chart — branches on context:
-  //   In a dashboard → create a new chart from the project's first
-  //   data file (sourceCache) AND append it as a widget to the open
-  //   dashboard (no navigation, the new tile appears on the canvas).
+  //   In a dashboard → create a new chart sourced from a data file
+  //   in the dashboard's project AND append as a widget to the open
+  //   dashboard (no navigation, new tile mounts on the canvas).
   //   In a single chart → create + navigate (existing flow).
   $("#wsDesignerAddChart")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     const dashRid = designerCtrl?.getOpenDashboardRid?.();
     if (!dashRid) { createChartFromSource(btn); return; }
-    if (!sourceCache.rid) {
-      console.warn("[designer] addChart: open a data file first so the new chart has a source");
-      return;
-    }
     btn.disabled = true;
     try {
-      const firstCol = sourceCache.columns[0]?.name || "";
+      // Resolve a source data file. Preference order:
+      //   1. sourceCache (most recently opened data file).
+      //   2. First non-chart / non-dashboard file in the dashboard's
+      //      own project (covers "user opened the dashboard cold").
+      const dashboard = designerCtrl.getOpenDashboard?.();
+      const projRid   = dashboard?.project_redpash_id;
+      let src = sourceCache;
+      if (!src.rid && projRid) {
+        const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
+        const dataFile = (list?.items || []).find((f) =>
+          f.file_type !== "chart" && f.file_type !== "dashboard");
+        if (dataFile) {
+          const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
+          src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
+        }
+      }
+      if (!src.rid) {
+        rowsInfo.textContent = "Add chart: this project has no data file to chart yet — upload one first.";
+        return;
+      }
+      const firstCol = src.columns[0]?.name || "";
       const chart = await api.post("/charts", {
-        source_file_id: sourceCache.rid,
+        source_file_id: src.rid,
         title:          "Untitled chart",
         spec: { kind: "bar", group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
       });
@@ -1254,6 +1270,7 @@ export default function workspace(app, { session }) {
       await loadProjects();
     } catch (err) {
       console.warn("[designer] addChart failed:", err);
+      rowsInfo.textContent = "Add chart failed: " + (err?.body?.message || err?.message || "see console");
     } finally {
       btn.disabled = false;
     }
