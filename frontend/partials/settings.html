@@ -74,6 +74,75 @@
       </div>
     </section>
 
+    <!-- ── Data & Export ─────────────────────────────────────── -->
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Data &amp; Export</h2>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">CSV delimiter
+          <small class="rp-settings__hint">applied when opening files</small>
+        </span>
+        <div class="rp-page__row-control" data-pref="csvDelimiter">
+          <button class="rt-btn" type="button" data-value="auto">Auto</button>
+          <button class="rt-btn" type="button" data-value="comma" title="Comma">,</button>
+          <button class="rt-btn" type="button" data-value="semi"  title="Semicolon">;</button>
+          <button class="rt-btn" type="button" data-value="tab"   title="Tab">↹</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Default encoding
+          <small class="rp-settings__hint">fallback when RedPash can't detect</small>
+        </span>
+        <div class="rp-page__row-control" data-pref="csvEncoding">
+          <button class="rt-btn" type="button" data-value="auto" title="Auto-detect (chardetng)">Auto</button>
+          <button class="rt-btn" type="button" data-value="utf-8">UTF-8</button>
+          <button class="rt-btn" type="button" data-value="utf-16le">UTF-16 LE</button>
+          <button class="rt-btn" type="button" data-value="utf-16be">UTF-16 BE</button>
+          <button class="rt-btn" type="button" data-value="windows-1252">Win-1252</button>
+          <button class="rt-btn" type="button" data-value="iso-8859-1">Latin-1</button>
+          <button class="rt-btn" type="button" data-value="iso-8859-15">Latin-9</button>
+          <button class="rt-btn" type="button" data-value="windows-1250">Win-1250</button>
+          <button class="rt-btn" type="button" data-value="macintosh">MacRoman</button>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Export format
+          <small class="rp-settings__hint">default for downloading cleaned data</small>
+        </span>
+        <div class="rp-page__row-control" data-pref="exportFormat">
+          <button class="rt-btn" type="button" data-value="csv"><i class="bi bi-filetype-csv"></i> CSV</button>
+          <button class="rt-btn" type="button" data-value="xlsx"><i class="bi bi-filetype-xlsx"></i> Excel</button>
+          <button class="rt-btn" type="button" data-value="json"><i class="bi bi-filetype-json"></i> JSON</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Cleaner ────────────────────────────────────────────── -->
+    <section class="rp-page__section">
+      <h2 class="rp-page__section-h">Cleaner</h2>
+
+      <div class="rp-page__row rp-page__row--col">
+        <span class="rp-page__row-label">Personal sentinel values
+          <small class="rp-settings__hint">junk placeholders you've flagged in Fix invalid values. Add via the Cleaner; remove here.</small>
+        </span>
+        <div class="rp-settings__sentinels" id="rp-settings-sentinels">
+          <span class="rp-settings__sentinels-empty">Loading…</span>
+        </div>
+      </div>
+
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">Share with all users
+          <small class="rp-settings__hint">your sentinels join the global vocabulary after 2+ users flag the same value. Only the placeholder string is shared.</small>
+        </span>
+        <div class="rp-page__row-control" data-pref="share_sentinels">
+          <button class="rt-btn" type="button" data-value="true">On</button>
+          <button class="rt-btn" type="button" data-value="false">Off</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Account ───────────────────────────────────────────── -->
     <section class="rp-page__section">
       <h2 class="rp-page__section-h">Account</h2>
@@ -90,6 +159,21 @@
         <span class="rp-page__row-label">Sign out</span>
         <div class="rp-page__row-control">
           <button class="rt-btn" type="button" id="rp-settings-signout"><i class="bi bi-box-arrow-right"></i> Sign out</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── About ──────────────────────────────────────────────── -->
+    <section class="rp-page__section rp-settings__about">
+      <div class="rp-page__row">
+        <span class="rp-page__row-label">
+          <span class="rp-settings__about-brand">RedPash</span>
+          <small class="rp-settings__hint" id="rp-settings-version">prerelease build</small>
+        </span>
+        <div class="rp-page__row-control">
+          <a class="rt-btn" href="#/docs">Docs</a>
+          <a class="rt-btn" href="#/docs?slug=vision">Vision</a>
+          <a class="rt-btn" href="#/docs?slug=getting-started">Getting started</a>
         </div>
       </div>
     </section>

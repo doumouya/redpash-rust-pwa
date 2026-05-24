@@ -30,6 +30,14 @@ export const PREFS = {
   rowsPerPage:    { values: ["10", "25", "50", "100", "all"],   default: "25",   attr: null           },
   showRowNumbers: { values: ["1", "0"],                         default: "1",    attr: "showRownum"   },
   showStageDots:  { values: ["1", "0"],                         default: "1",    attr: "showStageDots"},
+  // Defaults the cleaner + export flows read. None of them reshape
+  // <html>, so no attr; they're consumed by the upload / export
+  // handlers when they pick a sensible default.
+  csvDelimiter:   { values: ["auto", "comma", "semi", "tab"],   default: "auto", attr: null           },
+  csvEncoding:    { values: ["auto", "utf-8", "utf-16le", "utf-16be",
+                             "windows-1252", "iso-8859-1", "iso-8859-15",
+                             "windows-1250", "macintosh"],      default: "auto", attr: null           },
+  exportFormat:   { values: ["csv", "xlsx", "json"],            default: "csv",  attr: null           },
 };
 
 const KEY_PREFIX = "rp-pref-";

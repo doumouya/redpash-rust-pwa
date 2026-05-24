@@ -15,6 +15,7 @@
 @import "home.css";      /* the home launchpad */
 @import "page.css";      /* generic page shell — profile, settings, docs */
 @import "profile.css";   /* /profile only — identity card, usage strip, plan */
+@import "settings.css";  /* /settings only — sentinel chips, About brand row */
 @import "shell.css";     /* rail-page shell — home, monitoring */
 @import "sw-update.css"; /* service-worker update banner */
 @import "monitoring.css"; /* /monitoring — window chips, panels, top-routes table */
