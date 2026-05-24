@@ -53,3 +53,10 @@ Every entry follows the same five headings:
   ReferenceError into "Couldn't load file." Discipline rule: grep for
   function NAMES AS CALLS across the codebase, not just at the
   semantic call sites you reasoned about.
+- [0004 — Unescaped apostrophe blanks the page](0004-unescaped-apostrophe-blanks-page.md) —
+  `it'll` inside a single-quoted JS string closed the literal early;
+  the `/docs` page failed at parser time with "unexpected token:
+  identifier" and rendered the generic mount-failure shell.
+  Discipline rule: use the curly U+2019 (`'`) for contractions in
+  single-quoted strings — the convention the rest of the file
+  already uses.
