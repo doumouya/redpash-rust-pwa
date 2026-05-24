@@ -177,3 +177,38 @@
   font-weight: 700;
   color: var(--rp-text);
 }
+
+/* Chart strip — 1-N viz cards above the list. Sibling of .rp-kpi-
+   strip, same auto-fit grid breakpoints. Each card carries a small
+   title + a 180px-tall ECharts canvas; echarts-kpi.js inits the
+   instance against the canvas. */
+.rp-home-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-6);
+}
+.rp-home-chart-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--rp-sp-3) var(--rp-sp-3) var(--rp-sp-2);
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border: 1px solid var(--rp-glass-border);
+  border-radius: var(--rp-radius);
+}
+.rp-home-chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  margin-bottom: var(--rp-sp-2);
+}
+.rp-home-chart-canvas {
+  flex: 1;
+  width: 100%;
+  height: 180px;
+  min-height: 180px;
+}

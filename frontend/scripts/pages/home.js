@@ -13,6 +13,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
 // 2026-06-05). Renamed from `import|report` to `new|design`:
@@ -125,6 +126,15 @@ export default function home(app, { session }) {
     files: {
       title: "Files",
       endpoint: "/admin/files",
+      statsEndpoint: "/admin/files/stats",
+      charts: [
+        { id: "rp-home-files-stage", title: "By stage",  kind: "donut",
+          data: (s) => s.by_stage },
+        { id: "rp-home-files-type",  title: "By type",   kind: "bar",
+          data: (s) => s.by_type },
+        { id: "rp-home-files-clean", title: "Cleanness", kind: "gauge",
+          data: (s) => s.avg_cleanness ?? 0, opts: { max: 100, unit: "%" } },
+      ],
       columns: ["Filename", "Project", "Type", "Stage", "Rows", "Updated"],
       row: (f) =>
         '<tr>'
@@ -294,8 +304,20 @@ export default function home(app, { session }) {
           { label: "Page",       id: "rp-home-list-page" },
           { label: "Last fetch", id: "rp-home-list-ms"   },
         ])
+      + chartsStripHTML(spec.charts || [])
       + listPanel(spec.columns)
       + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
+
+    // Tear down any charts from a prior tab + mount this tab's
+    // (if it declares any) against the /stats endpoint. Each tab's
+    // charts share one stats fetch — small payload, three viz from
+    // the same response.
+    disposeListCharts();
+    if (spec.charts && spec.charts.length) {
+      mountListCharts(spec).catch((err) => {
+        console.warn("[home] charts mount failed:", err);
+      });
+    }
 
     // Wire each chip row's click handler.
     view.querySelectorAll(".rp-chip-row").forEach((row) => {
@@ -478,6 +500,68 @@ export default function home(app, { session }) {
           + '</div>'
         ).join("")
       + '</div>';
+  }
+
+  // Chart strip — one card per chart declared in the spec. Each
+  // card carries the chart's title + a 180px-tall canvas; the kpi
+  // helper inits ECharts against the canvas once the /stats fetch
+  // resolves. Empty until spec.charts is non-empty.
+  function chartsStripHTML(charts) {
+    if (!charts.length) return "";
+    return '<div class="rp-home-charts">'
+      + charts.map((c) =>
+          '<div class="rp-home-chart-card">'
+          + '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
+          + '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+          + '</div>'
+        ).join("")
+      + '</div>';
+  }
+
+  // Per-tab chart instances — kept so we can dispose on tab switch
+  // (an ECharts instance leaks memory + survives across tabs if you
+  // don't .dispose() it explicitly).
+  let listCharts = [];
+  function disposeListCharts() {
+    listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
+    listCharts = [];
+  }
+
+  // KIND → helper map. Decoupled from the spec so a tab's spec just
+  // declares "donut" and we look up the function — no per-tab
+  // import gymnastics, and adding kinds is a one-line addition here.
+  const CHART_KINDS = {
+    donut: kpiDonut, bar: kpiBar, barH: kpiBarH, gauge: kpiGauge,
+    line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
+  };
+
+  async function mountListCharts(spec) {
+    const statsUrl = spec.statsEndpoint || (spec.endpoint + "/stats");
+    let stats;
+    try { stats = await api.get(statsUrl); }
+    catch (err) {
+      console.warn("[home] stats fetch failed for", statsUrl, err);
+      return;
+    }
+    spec.charts.forEach((c) => {
+      const el = view.querySelector("#" + c.id);
+      if (!el) return;
+      const fn = CHART_KINDS[c.kind];
+      if (!fn) { console.warn("[home] unknown chart kind:", c.kind); return; }
+      const data = c.data ? c.data(stats) : stats;
+      const inst = fn(el, data, c.opts || {});
+      if (inst) listCharts.push(inst);
+    });
+  }
+
+  // Resize on window resize so charts reflow with the page. One
+  // listener, attached lazily on first chart mount; we never remove
+  // it — the cost is one resize call per tab swap, well under 1ms.
+  if (!window.__rpHomeResizeWired) {
+    window.__rpHomeResizeWired = true;
+    window.addEventListener("resize", () => {
+      listCharts.forEach((inst) => { try { inst.resize(); } catch { /* ignore */ } });
+    });
   }
   function setKpi(id, val) {
     const el = view.querySelector("#" + id);
