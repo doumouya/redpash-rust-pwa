@@ -331,8 +331,13 @@ needed.
    new endpoints + `case_*` event-kind coverage (live counters,
    same pattern as the existing event::record surface).
 6. **`/cases` page** — kanban board (5 columns matching status
-   enum), card-style rows, drag-drop status flips, per-card
-   click-through to detail page.
+   enum), card-style rows, **click-cycle status flips** (click a
+   card to advance: backlog → todo → in_progress → in_review →
+   done; cycle wraps back to backlog on done-click), per-card
+   click-through to detail page via a separate hit target.
+   Drag-drop deferred to v2 — RedPash has no other drag patterns
+   in v1; click-cycle ships faster and matches the existing
+   interaction vocabulary.
 7. **`/cases/:rid` detail page** — title, description, metadata
    sidebar (assignee, priority, project, company), tabbed
    comments thread + activity feed (events query).
