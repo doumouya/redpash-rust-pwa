@@ -19,6 +19,7 @@ messages, PR refs, and past conversations link here. Frozen on entry
 | [js-refactor-review](js-refactor-review.md) | one-shot review of frontend JS hygiene during the rebuild | rebuild done; the rules live in [processes/](../processes/ui-change-process.md) |
 | [workspace-migration](workspace-migration.md) | journal of the workspace-page migration | workspace shipped; the running shape is captured in [subsystems/workspace-shell](../subsystems/workspace-shell.md) |
 | [woz-2026-05-25-suspension-report](woz-2026-05-25-suspension-report.md) | self-written accounting after the suspension | feedback memories captured the lessons; the report itself is history |
+| [rust-dedup-audit-2026-05-24](rust-dedup-audit-2026-05-24.md) | one-shot survey of repeating patterns in the api crate, with measured ROI per pattern | open until Em greenlights / declines each "ship" item; retires once the three quick-wins land or get rejected |
 
 ## How to add to archive
 
