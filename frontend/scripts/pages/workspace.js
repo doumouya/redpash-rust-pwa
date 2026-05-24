@@ -17,6 +17,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
 import { mountReport } from "/scripts/report.js";
+import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 
@@ -61,7 +62,6 @@ export default function workspace(app, { session }) {
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let activeSummary = null; // FileSummary — drives per-tool context renderers
-  let chartInstance = null; // echarts — lazily created on first chart render
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }] — col is display-column-index (≥3)
   let searchQ       = "";
@@ -69,6 +69,8 @@ export default function workspace(app, { session }) {
   let searchDebounce = null;
   let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
   let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
+  let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
+  let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
 
   // UI filter ops → canonical FilterOp on the wire (shared::filter::FilterOp).
   // The op-list union landed in 3d29291; this is the frontend half.
@@ -359,15 +361,37 @@ export default function workspace(app, { session }) {
       reportCtrl?.refresh();
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
-        // Designer mode — body becomes the chart, not the data table.
+        // Designer mode — the chart canvas + the edit strip take over
+        // the table area. The chart's source data file (chart.source_
+        // file_id) drives the live preview, NOT the chart file's own
+        // envelope (which has no rows). The designer holds the most
+        // recent data-file rid+columns in sourceCache so the source
+        // is always available even after the user navigates around.
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
-        renderChart(chart);
+        await ensureSourceCache(chart?.source_file_id);
+        designerCtrl?.load(chart);
+        // Hide the table/state surfaces — the designer owns the area.
+        $("#wsTable").hidden  = true;
+        $("#wsTableState").hidden = true;
+        $("#wsChart").hidden  = false;
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
+        // Enable + New chart since we now know a valid source.
+        syncNewChartButton();
       } else {
         rebuildColsDropdown(activeColumns);
         rebuildFilterCols(activeColumns);
+        // Cache the open data file so + New chart + future designer
+        // opens have an immediate source.
+        sourceCache = { rid, columns: activeColumns };
+        syncNewChartButton();
+        // Tear down any open designer (the user navigated away from
+        // a chart back to a data file).
+        designerCtrl?.load(null);
+        $("#wsDesignerStrip").hidden = true;
+        $("#wsChart").hidden = true;
+        $("#wsTable").hidden = false;
         await fetchAndRender();
       }
     } catch (err) {
@@ -485,35 +509,19 @@ export default function workspace(app, { session }) {
 
   function setTableState(msg) {
     // State message — when no body is current (loading, error, no file).
+    const strip = document.getElementById("wsDesignerStrip");
     if (msg) {
       tableState.textContent = msg;
       tableState.hidden = false;
       table.hidden = true;
       chartEl.hidden = true;
+      if (strip) strip.hidden = true;
     } else {
       tableState.hidden = true;
       table.hidden = false;
       chartEl.hidden = true;
+      if (strip) strip.hidden = true;
     }
-  }
-
-  function renderChart(chart) {
-    // Designer mode — render the file's baked ECharts option into the
-    // chart container. The spec is opaque to the backend; the frontend
-    // expects spec.option (or the spec itself, defensively).
-    tableState.hidden = true;
-    table.hidden = true;
-    chartEl.hidden = false;
-    const opt = chart?.spec?.option || chart?.spec;
-    if (!opt || !window.echarts) {
-      chartEl.innerHTML = '<div class="rt-chart__state">Chart preview unavailable'
-        + (window.echarts ? '' : ' — ECharts didn’t load') + '.</div>';
-      return;
-    }
-    chartEl.innerHTML = "";
-    if (!chartInstance) chartInstance = window.echarts.init(chartEl);
-    chartInstance.setOption(opt, true);
-    chartInstance.resize();
   }
 
   // ─── columns dropdown — rebuilt per file ───────────────────────
@@ -1061,6 +1069,82 @@ export default function workspace(app, { session }) {
   }
   $("#wsApplyReport")?.addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
   $("#wsClearReport")?.addEventListener("click", () => reportCtrl?.clear());
+
+  // ─── designer — inline chart authoring ─────────────────────────
+  // Mounts a no-op container at boot; load(chart) lights it up when
+  // a chart-typed file is opened in loadFile. Source data lives on
+  // sourceCache (set when the user opens a data file); the designer
+  // pulls from there via getSource() so the chart's source columns
+  // are always current.
+  const designerStrip = $("#wsDesignerStrip");
+  const designerCanvas = $("#wsChart");
+  if (designerStrip && designerCanvas) {
+    designerCtrl = mountDesigner(designerStrip, designerCanvas, {
+      getSource: () => sourceCache,
+      onSaved:   (saved) => {
+        rowsInfo.textContent = "Chart · " + (saved?.title || "untitled");
+      },
+    });
+  }
+
+  // Ensure sourceCache holds the chart's source data file. Fetches
+  // /files/:rid for the source if the user opened the chart directly
+  // without visiting the source first.
+  async function ensureSourceCache(sourceRid) {
+    if (!sourceRid) return;
+    if (sourceCache.rid === sourceRid && sourceCache.columns.length) return;
+    try {
+      const env = await api.get("/files/" + encodeURIComponent(sourceRid));
+      sourceCache = { rid: sourceRid, columns: env?.columns || [] };
+    } catch {
+      // Best-effort — designer surfaces "source file unavailable" if
+      // it can't fetch. Don't block chart load.
+    }
+  }
+
+  function syncNewChartButton() {
+    const btn = $("#wsNewChart");
+    if (!btn) return;
+    const hasSource = !!sourceCache.rid && sourceCache.columns.length > 0;
+    btn.disabled = !hasSource;
+    btn.title = hasSource
+      ? "Create a new chart sourced from this file"
+      : "Open a data file first; the chart will source from it";
+  }
+  syncNewChartButton();
+
+  // + New chart — POST /api/charts with a default spec, then open
+  // the new chart for editing.
+  $("#wsNewChart")?.addEventListener("click", async (e) => {
+    if (!sourceCache.rid) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const firstCol = sourceCache.columns[0]?.name || "";
+      const created = await api.post("/charts", {
+        source_file_id: sourceCache.rid,
+        title:          "Untitled chart",
+        spec: {
+          kind:     "bar",
+          group_by: firstCol,
+          agg_col:  "*",
+          agg_fn:   "count",
+          title:    "",
+        },
+      });
+      // Reload the rail so the new CHT_ row appears + auto-open it.
+      const newRid = created?.redpash_id;
+      await loadProjects();
+      if (newRid) {
+        activeFileRid = null;     // force loadFile to re-open
+        await loadFile(newRid);
+      }
+    } catch (err) {
+      console.warn("[designer] create failed:", err);
+    } finally {
+      syncNewChartButton();
+    }
+  });
 
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the

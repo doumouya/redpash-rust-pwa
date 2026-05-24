@@ -17,3 +17,115 @@
   text-align: center;
   color: var(--rp-text-mute);
 }
+
+/* ── designer edit strip ────────────────────────────────────────
+   Inline chart authoring (designer.js). Lives above .rt-chart in
+   the table-wrap; shown only when a chart-typed file is open.
+   Two rows: kind tabs + title + save (top), field selects (below). */
+.rt-designer-strip {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rt-designer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rt-designer-row--fields { gap: 14px; }
+
+/* kind tabs — bar / line / area / pie */
+.rt-designer-kinds {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+}
+.rt-designer-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s var(--rp-ease), background 0.12s var(--rp-ease);
+}
+.rt-designer-kind i { font-size: 13px; color: var(--rp-accent-2); }
+.rt-designer-kind:hover { color: var(--rp-text); }
+.rt-designer-kind.is-active {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+}
+
+.rt-designer-title {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--rp-border);
+  border-radius: 7px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: 0;
+}
+.rt-designer-title:focus { border-color: var(--rp-accent-2); }
+
+.rt-designer-save {
+  height: 30px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.rt-designer-save i { font-size: 13px; }
+.rt-designer-save:disabled { opacity: 0.45; cursor: not-allowed; }
+.rt-designer-dot {
+  color: var(--rp-warn);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* fields row — group_by, agg_col, agg_fn */
+.rt-designer-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rt-designer-field > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rt-designer-field select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12.5px;
+  outline: 0;
+}
+.rt-designer-field select:focus { border-color: var(--rp-accent-2); }

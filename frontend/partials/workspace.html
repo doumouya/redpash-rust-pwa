@@ -23,6 +23,10 @@
         <button class="rt-btn rt-btn--glass" id="wsUpload" type="button">
           <i class="bi bi-upload"></i><span>Upload file</span>
         </button>
+        <button class="rt-btn rt-btn--glass" id="wsNewChart" type="button"
+                disabled title="Open a data file first; the chart will source from it">
+          <i class="bi bi-bar-chart-line"></i><span>New chart</span>
+        </button>
         <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button"
                 disabled title="New project — POST /api/projects coming soon">
           <i class="bi bi-plus-lg"></i><span>New project</span>
@@ -142,6 +146,7 @@
               <thead><!-- dynamic — rebuilt when a file loads --></thead>
               <tbody><!-- dynamic --></tbody>
             </table>
+            <div class="rt-designer-strip" id="wsDesignerStrip" hidden><!-- designer.js mounts the edit strip here --></div>
             <div class="rt-chart" id="wsChart" hidden></div>
             <div class="rt-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
