@@ -129,6 +129,27 @@ Ranked by **net LOC saved × confidence** (highest first).
 4. **T3** — `dropdown.js`. Quick win after T2.
 5. **T4, T5** — deferred, re-evaluate after T1–T3 land.
 
+## Audit pattern catalog
+
+`tools/js-audit/audit.js` carries a pattern catalog mirroring the
+`tools/rs-audit` discipline (Gus's idea, Slack 2026-05-24). Each
+pattern is one regex + a status tag:
+
+- **extracted** — helper exists; hit-count should stay 0 (T1's
+  `esc`/`cssEsc`, T3's `$$("[data-dd]")` sweep, theme-less
+  `echarts.init(el)`). Non-zero = regression.
+- **live** — helper-usage tracker. Counts callers (skips the
+  helper's own file) so `chartTheme()`, `dom.js` imports,
+  `kpi*()`, `list-page.js` imports, `bindDropdown()`, and
+  `ensureRegisteredThemes()` show their reuse spread.
+- **declined** — duplication exists but variation is load-bearing.
+  Tracked to flag growth past `REVISIT_THRESHOLD = 20` (inline-HTML
+  concat, ad-hoc `setTimeout`). A crossing means "look again", not
+  "extract now".
+
+`bash tools/audit.sh` prints the catalog under `patterns:`. The HTML
+report's **Patterns** tab carries the per-file breakdown.
+
 ## What we **don't** refactor (and why)
 
 - **mount factories** (`mountDesigner` / `mountTools` / `mountReport` /
