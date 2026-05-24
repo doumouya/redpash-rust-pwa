@@ -339,6 +339,22 @@ async fn patch_file(
     if new_encoding.is_some() || new_project.is_some() {
         state.files.remove(&rid);
     }
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_patch".into(),
+        message: format!("patched file {rid}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "file":         rid.clone(),
+            "renamed":      display_owned.is_some(),
+            "moved":        new_project.is_some(),
+            "re_encoded":   new_encoding.is_some(),
+            "redelimited":  body.delimiter.as_deref().filter(|s| !s.is_empty()).is_some(),
+        }),
+        ..Default::default()
+    });
     Ok(Json(updated.summary))
 }
 
@@ -928,6 +944,25 @@ async fn create_join(
     // hydrate it from disk on first access. Keeps memory pressure
     // predictable on bursts of join creation.
 
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_join_create".into(),
+        message: format!("joined {rid} with {} → {new_rid}", body.other_file),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "file":            new_rid.clone(),
+            "left_file":       rid.clone(),
+            "right_file":      body.other_file.clone(),
+            "join_type":       body.join_type.clone(),
+            "key_count":       body.this_cols.len(),
+            "rows":            h,
+            "cols":            w,
+            "filtered_input":  body.filters.is_some(),
+        }),
+        ..Default::default()
+    });
+
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
 }
 
@@ -1017,6 +1052,21 @@ async fn snapshot(
         updated_at:         now,
         fully_null_rows:    Some(fully_null_rows),
     };
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_snapshot".into(),
+        message: format!("snapshot of {rid} → {new_rid}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "file":   new_rid.clone(),
+            "source": rid.clone(),
+            "rows":   h,
+            "cols":   w,
+        }),
+        ..Default::default()
+    });
 
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
 }
@@ -1117,6 +1167,16 @@ async fn set_encoding(
     let _ = hydrate(&state, &rid).await?;
     db::update_file_encoding(&state.db, &rid, &body.encoding).await?;
     state.files.remove(&rid);
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_re_encode".into(),
+        message: format!("set encoding {} on {rid}", body.encoding),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "file": rid.clone(), "encoding": body.encoding.clone() }),
+        ..Default::default()
+    });
     rebuild_envelope(&state, &rid).await
 }
 
@@ -1190,6 +1250,22 @@ async fn compute_cleanness(
     let mut updated = entry.clone();
     updated.summary.cleanness_pct = new_score;
     state.files.insert(rid.clone(), updated.clone());
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "file_cleanness_recompute".into(),
+        message: match new_score {
+            Some(pct) => format!("recomputed cleanness on {rid}: {pct:.1}%"),
+            None      => format!("recomputed cleanness on {rid} (no score)"),
+        },
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "file":      rid.clone(),
+            "score_pct": new_score,
+        }),
+        ..Default::default()
+    });
     Ok(Json(updated.summary))
 }
 
