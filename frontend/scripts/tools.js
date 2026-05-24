@@ -98,82 +98,6 @@ const TOOLS = [
     blurb: "Remove rows where the chosen column is empty.",
     fields: [{ type: "column", key: "column", label: "Column" }],
     toParams: (s) => ({ column: s.column }),
-    // Diagnostic: rank the columns by null density so the user picks
-    // the one that's actually dirty. null_pct comes from the file
-    // envelope (ColumnMeta.null_pct); null_count derives from
-    // null_pct × summary.row_count. The cross-column fully_null_rows
-    // count comes from Gus's `0768cc3` — populated on hydrate / upload
-    // / join / snapshot. `null` means "DB-only read, hydrate hasn't
-    // run yet" — the slot still renders, just dashed.
-    context: (ctx) => {
-      const cols    = ctx.columns() || [];
-      const summary = ctx.summary ? ctx.summary() : null;
-      const total   = summary?.row_count;
-      const fullyNull = summary?.fully_null_rows;
-      const ranked  = cols
-        .map((c) => ({
-          name:  c.name,
-          pct:   c.null_pct == null ? null : Math.max(0, Math.min(100, c.null_pct)),
-        }))
-        .map((c) => ({
-          ...c,
-          count: c.pct != null && total != null ? Math.round(c.pct * total / 100) : null,
-        }))
-        .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
-      if (!ranked.length) return "";
-      const rows = ranked.slice(0, 8).map((c) => {
-        const band = c.pct == null ? "" : c.pct >= 50 ? "is-warn-high" : c.pct >= 10 ? "is-warn-mid" : "";
-        return '<tr>'
-          + '<td>' + esc(c.name) + '</td>'
-          + '<td class="is-num ' + band + '">' + (c.count != null ? c.count : "—") + '</td>'
-          + '<td class="is-num ' + band + '">' + (c.pct != null ? c.pct.toFixed(1) + "%" : "—") + '</td>'
-          + '</tr>';
-      }).join("");
-      const more = ranked.length > 8
-        ? '<p class="rt-tool-context-note">' + (ranked.length - 8) + ' more columns…</p>'
-        : "";
-      // CTA conditional on the known count: visibly disabled when zero
-      // (no rows to drop); enabled and counted when > 0; enabled with
-      // the original generic label when the count is unknown.
-      const ctaDisabled = fullyNull === 0;
-      const ctaLabel    = fullyNull == null
-                            ? "Drop fully-null rows"
-                            : fullyNull === 0
-                              ? "No fully-null rows"
-                              : "Drop " + fullyNull + " fully-null rows";
-      const ctaBand     = fullyNull != null && fullyNull > 0 ? "is-warn-high" : "";
-      return ''
-        + '<div class="rt-tool-context-summary">'
-        +   '<span><b>' + (total != null ? total : "—") + '</b> rows</span>'
-        +   '<span><b class="' + ctaBand + '">' + (fullyNull != null ? fullyNull : "—") + '</b> fully-null rows</span>'
-        +   '<button class="rt-btn rt-btn--ghost rt-tool-context-cta" type="button"'
-        +     ' data-action="drop-fully-null"'
-        +     (ctaDisabled ? ' disabled' : '')
-        +     ' title="Drop every row where every column is null (uses filter_rows)">'
-        +     '<i class="bi bi-trash3"></i> ' + esc(ctaLabel)
-        +   '</button>'
-        + '</div>'
-        + '<table class="rt-tool-context-table">'
-        +   '<thead><tr><th>Column</th><th class="is-num">Nulls</th><th class="is-num">%</th></tr></thead>'
-        +   '<tbody>' + rows + '</tbody>'
-        + '</table>'
-        + more;
-    },
-    // CTA in the context block fires a filter_rows step that KEEPS any
-    // row where at least one column is not_null — i.e. drops rows where
-    // every column is null. No new step kind needed; the engine already
-    // accepts filter_rows with a flat OR of `{col, op: "not_null"}`
-    // predicates (see steps.rs's filter_rows arm).
-    handleAction: async (action, { ctx, runStep, btn }) => {
-      if (action !== "drop-fully-null") return;
-      const cols = ctx.columns() || [];
-      if (!cols.length) return;
-      const predicates = cols.map((c) => ({ column: c.name, op: "not_null" }));
-      await runStep("filter_rows",
-                    { combinator: "or", predicates },
-                    "Drop fully-null rows",
-                    { busyBtn: btn });
-    },
   }),
 
   defineTool({
@@ -435,119 +359,51 @@ const SELECT_ACTIONS = [
 function getTool(kind) { return TOOLS.find((t) => t.kind === kind); }
 
 export function mountTools(panelBody, ctx) {
-  let activeTool = null;          // the TOOLS[i] currently showing the form
-  let renderedFields = [];        // [{ field, read }] for the open form — read() returns value
-  let viewMode = "tools";         // "tools" (picker) | "columns" (columns-redtable)
-  let activeSheet = null;         // the TOOLS entry whose modal sheet is open in columns view, or null
+  let activeSheet = null;         // the TOOLS entry whose modal sheet is open, or null
   let sheetSource = null;         // "global" | "select" — context for sheet apply + chips header
   let sheetCfg    = null;         // the SELECT_ACTIONS entry when sheetSource === "select" (carries perColumn etc.)
   let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
   let selectedCols = new Set();   // column names selected via row checkboxes — drives SELECT_ACTIONS
-  let editingName  = null;        // column name whose Name cell is being edited (Slice F), or null
-  let editingDtype = null;        // column name whose Datatype cell is being edited (Slice G), or null
+  let editingName  = null;        // column name whose Name cell is being edited, or null
+  let editingDtype = null;        // column name whose Datatype cell is being edited, or null
   let castConfirm  = null;        // { column, dtype, total, would_null, samples } — open confirm sheet, or null
 
   // Target dtypes for cast — pulled from the cast tool's enum field so
-  // the picker form (still alive until Slice H) and the columns view
-  // share one source of truth.
+  // the toolbar (Slice G cast-preview flow) and any future re-introduced
+  // picker share one source of truth.
   const DTYPE_OPTIONS = (TOOLS.find((t) => t.kind === "cast")?.fields || [])
     .find((f) => f.key === "dtype")?.options || [];
 
-  // Two stable containers — list view + form view; we swap visibility.
-  const listEl = document.createElement("div");
-  listEl.className = "rt-tool-list";
-  const formEl = document.createElement("div");
-  formEl.className = "rt-tool-form";
-  formEl.hidden = true;
+  // Two stable children — the status line (last-applied / errors) and
+  // the columns surface itself. The tools panel is now single-surface
+  // (the picker + form retired in Slice H); .has-columns goes on the
+  // panel root at mount so the natural #wsToolsToggle opens it at 50vw.
   const statusEl = document.createElement("div");
   statusEl.className = "rt-tool-status";
   statusEl.hidden = true;
-
-  // colsEl wraps list + form so when the panel widens (.has-form), the
-  // two become flex row siblings without dragging statusEl into the
-  // row layout. statusEl stays above as a regular block.
-  const colsEl = document.createElement("div");
-  colsEl.className = "rt-tool-cols";
-  colsEl.append(listEl, formEl);
-
-  // View switcher — flips between the tools picker and the columns-as-
-  // rows redtable (the WS#5 unification target spec'd in
-  // architecture/columns-redtable.md). Slice A: the columns view is
-  // read-only — no actions, no checkboxes, no cell-edit. It exists to
-  // validate the layout + the data binding from activeColumns +
-  // activeSummary before we port the 15 toolbar actions onto it.
-  const switchEl = document.createElement("div");
-  switchEl.className = "rt-tool-viewswitch rt-seg";
-  switchEl.innerHTML =
-      '<button class="is-active" type="button" data-view="tools" title="Tools picker">'
-    +   '<i class="bi bi-tools"></i> Tools'
-    + '</button>'
-    + '<button type="button" data-view="columns" title="Columns table — preview, read-only">'
-    +   '<i class="bi bi-grid-3x3"></i> Columns'
-    + '</button>';
   const columnsEl = document.createElement("div");
   columnsEl.className = "rt-tool-columns";
-  columnsEl.hidden = true;
 
   panelBody.innerHTML = "";
-  panelBody.append(switchEl, statusEl, colsEl, columnsEl);
-
-  // ── list view ──────────────────────────────────────────────────────
-  // Picker rows show name + icon only — the per-tool blurb lives on the
-  // form (rt-tool-form-blurb), no need to repeat it here. Keeps the
-  // 15-tool catalog scrollable in a single screen.
-  function renderList() {
-    listEl.innerHTML = TOOLS.map((t, i) =>
-      '<button class="rt-tool-item" type="button" data-i="' + i + '" title="' + esc(t.blurb || t.label) + '">'
-      +   '<i class="bi ' + esc(t.icon) + '"></i>'
-      +   '<span class="rt-tool-item-name">' + esc(t.label) + '</span>'
-      + '</button>').join("");
-  }
-  listEl.addEventListener("click", (e) => {
-    const btn = e.target.closest(".rt-tool-item");
-    if (!btn) return;
-    openForm(TOOLS[+btn.dataset.i]);
-  });
-
-  // ── view switcher ──────────────────────────────────────────────────
-  switchEl.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-view]");
-    if (!btn) return;
-    setView(btn.dataset.view);
-  });
-
-  function setView(v) {
-    if (v !== "tools" && v !== "columns") return;
-    viewMode = v;
-    switchEl.querySelectorAll("[data-view]").forEach((b) =>
-      b.classList.toggle("is-active", b.dataset.view === v));
-    const panel = panelBody.closest(".rt-panel");
-    if (v === "columns") {
-      // Close any open form before switching so the .has-form 500px
-      // width doesn't fight with the columns view's .has-columns 50vw.
-      if (activeTool) closeForm();
-      colsEl.hidden = true;
-      columnsEl.hidden = false;
-      panel?.classList.add("has-columns");
-      renderColumnsView();
-    } else {
-      colsEl.hidden = false;
-      columnsEl.hidden = true;
-      panel?.classList.remove("has-columns");
-    }
-  }
+  panelBody.append(statusEl, columnsEl);
+  panelBody.closest(".rt-panel")?.classList.add("has-columns");
 
   // ── columns view ───────────────────────────────────────────────────
-  // Rows = ColumnMeta[]; columns = #, Name, Datatype (+ sniff badge),
-  // Nulls, % Null, Unique %, Sample. All fields come from the existing
-  // /api/files/:rid envelope — no new endpoint. Sniff mismatch (storage
-  // dtype ≠ semantic dtype) gets a small ⚠ badge so the dirty columns
-  // surface visually without the user having to scan numbers.
+  // The full columns-redtable per architecture/columns-redtable.md.
+  // Rows = ColumnMeta[]; columns = ☑, #, Name (click to rename),
+  // Datatype (click to cast w/ preview), Nulls, % Null, Unique %,
+  // Sample. All fields come from the existing /api/files/:rid envelope
+  // — no new endpoint. Sniff mismatch (storage dtype ≠ semantic dtype)
+  // gets a small ⚠ badge so the dirty columns surface visually.
   //
-  // Slice B adds the global-actions toolbar above the table — the
-  // first cut of the columns-redtable's toolbar (architecture/
-  // columns-redtable.md). Dialog actions open an in-panel modal sheet
-  // that reuses the existing FIELDS renderers.
+  // Toolbar groups the actions by mode:
+  //   Global   — snake_case, replace_in_names, change_case, unwrap_csv
+  //   Selected — drop, keep, drop_nulls, fill_nulls, replace_text,
+  //              fix_invalid, join, split, format_dates
+  //
+  // Head meta strip surfaces a "Drop K fully-null rows" CTA when the
+  // summary has any (fully-null is a row-level cleanup that uses
+  // column-level info — the only cross-cutting action on this surface).
   function renderColumnsView() {
     const cols    = ctx.columns() || [];
     const summary = ctx.summary ? ctx.summary() : null;
@@ -626,13 +482,26 @@ export function mountTools(panelBody, ctx) {
         + '<td class="is-sample" title="' + esc(sample) + '">' + esc(sample) + '</td>'
         + '</tr>';
     }).join("");
+    // Fully-null-rows pill — row-level cleanup that uses cross-column
+    // info. Surfaces only when there's something to drop; clicking
+    // fires a filter_rows step that KEEPS rows where any column is
+    // not_null (i.e. drops the all-null rows). No new step kind —
+    // see steps.rs's filter_rows arm.
+    const fullyNull = summary?.fully_null_rows;
+    const fullyNullPill = fullyNull != null && fullyNull > 0
+      ? ' · <button class="rt-tool-columns-fullynull" type="button"'
+        + ' title="Drop every row where every column is null">'
+        + '<i class="bi bi-trash3"></i> Drop <b>' + fullyNull + '</b> fully-null row'
+        + (fullyNull === 1 ? '' : 's')
+        + '</button>'
+      : '';
     columnsEl.innerHTML =
         '<div class="rt-tool-columns-head">'
       +   '<span class="rt-tool-columns-meta">'
       +     '<b>' + cols.length + '</b> column' + (cols.length === 1 ? '' : 's')
       +     (total != null ? ' · <b>' + total + '</b> row' + (total === 1 ? '' : 's') : '')
+      +     fullyNullPill
       +   '</span>'
-      +   '<span class="rt-tool-columns-flag" title="Preview — edit mode lands in slices F–G.">preview</span>'
       + '</div>'
       + renderColumnsToolbar(summary)
       + (activeSheet ? renderColumnsSheet(cols) : '')
@@ -831,6 +700,21 @@ export function mountTools(panelBody, ctx) {
     if (e.target.closest(".rt-tool-columns-selchip-clear")) {
       selectedCols.clear();
       renderColumnsView();
+      return;
+    }
+    // Drop fully-null rows — head-strip CTA. KEEPS any row where at
+    // least one column is not_null (i.e. drops rows where every column
+    // is null). No new step kind; reuses filter_rows with a flat OR
+    // of `{column, op: "not_null"}` predicates over every column.
+    const fullyBtn = e.target.closest(".rt-tool-columns-fullynull");
+    if (fullyBtn) {
+      const cols = ctx.columns() || [];
+      if (!cols.length) return;
+      const predicates = cols.map((c) => ({ column: c.name, op: "not_null" }));
+      await runStep("filter_rows",
+                    { combinator: "or", predicates },
+                    "Drop fully-null rows",
+                    { busyBtn: fullyBtn });
       return;
     }
     // Sheet controls.
@@ -1088,88 +972,9 @@ export function mountTools(panelBody, ctx) {
     return live.filter((c) => selectedCols.has(c.name)).map((c) => c.name);
   }
 
-  // ── form view ──────────────────────────────────────────────────────
-  function openForm(tool) {
-    if (!ctx.fileRid()) {
-      setStatus("Open a file before running a tool.", "warn");
-      return;
-    }
-    activeTool = tool;
-    const columns = ctx.columns();
-    renderedFields = tool.fields.map((f) => {
-      const renderer = FIELDS[f.type];
-      if (!renderer) throw new Error("Unknown field type: " + f.type);
-      const built = renderer({ ...f, columns });
-      return { field: f, html: built.html, read: built.read };
-    });
-
-    // Per-tool diagnostics surface — surfaces what the user needs to
-    // pick *before* picking. Each tool can opt in by declaring a
-    // `context(ctx)` function that returns HTML; null/empty skips.
-    // Examples: drop_nulls ranks columns by null %; replace_text
-    // could surface match counts; format_dates could surface
-    // unparseable cell count. The slot is reserved on every tool form
-    // so the pattern grows tool by tool without re-rendering anyone.
-    const contextHTML = tool.context ? (tool.context(ctx) || "") : "";
-
-    formEl.innerHTML =
-      '<div class="rt-tool-form-head">'
-      + '<button class="rt-btn rt-btn--ghost rt-tool-back" type="button" title="Back to tools">'
-      +   '<i class="bi bi-chevron-left"></i>'
-      + '</button>'
-      + '<span class="rt-tool-form-title">'
-      +   '<i class="bi ' + esc(tool.icon) + '"></i> ' + esc(tool.label)
-      + '</span>'
-      + '</div>'
-      + (tool.blurb ? '<p class="rt-tool-form-blurb">' + esc(tool.blurb) + '</p>' : '')
-      + (contextHTML ? '<div class="rt-tool-context">' + contextHTML + '</div>' : '')
-      + '<div class="rt-tool-form-body">'
-      +   (renderedFields.length
-            ? renderedFields.map((r) => r.html).join("")
-            : '<p class="rt-tool-form-blurb">No options — just apply.</p>')
-      + '</div>'
-      + '<div class="rt-tool-form-foot">'
-      +   '<button class="rt-btn rt-tool-cancel" type="button">Cancel</button>'
-      +   '<button class="rt-btn rt-btn--accent rt-tool-apply" type="button">'
-      +     '<i class="bi bi-play-fill"></i> Apply'
-      +   '</button>'
-      + '</div>';
-
-    // List stays visible — the panel widens, list keeps its 250px
-    // column on the left, form takes the new 250px on the right. The
-    // user can pick a different tool without going back first.
-    formEl.hidden = false;
-    panelBody.closest(".rt-panel")?.classList.add("has-form");
-    // Mark the active tool in the list so the user sees which form
-    // they're looking at.
-    listEl.querySelectorAll(".rt-tool-item.is-active").forEach((b) => b.classList.remove("is-active"));
-    const idx = TOOLS.indexOf(tool);
-    if (idx >= 0) listEl.querySelector('.rt-tool-item[data-i="' + idx + '"]')?.classList.add("is-active");
-  }
-
-  formEl.addEventListener("click", async (e) => {
-    if (e.target.closest(".rt-tool-back") || e.target.closest(".rt-tool-cancel")) {
-      closeForm();
-      return;
-    }
-    if (e.target.closest(".rt-tool-apply")) {
-      await applyActive();
-    }
-  });
-
-  function closeForm() {
-    activeTool = null;
-    renderedFields = [];
-    formEl.innerHTML = "";
-    formEl.hidden = true;
-    listEl.querySelectorAll(".rt-tool-item.is-active").forEach((b) => b.classList.remove("is-active"));
-    panelBody.closest(".rt-panel")?.classList.remove("has-form");
-  }
-
-  // POST a step + run the standard post-apply lifecycle (close the
-  // form, set status, fire ctx.onApplied so the workspace refetches).
-  // Shared between the form's Apply button and the context block's
-  // action buttons (tool.handleAction can call runStep too).
+  // POST a step + run the standard post-apply lifecycle (set status,
+  // fire ctx.onApplied so the workspace refetches and the columns
+  // view re-renders).
   async function runStep(kind, params, label, opts = {}) {
     const rid = ctx.fileRid();
     if (!rid) { setStatus("Open a file before running a tool.", "warn"); return; }
@@ -1178,7 +983,6 @@ export function mountTools(panelBody, ctx) {
     try {
       const res = await api.post("/files/" + encodeURIComponent(rid) + "/steps",
                                  { kind, params });
-      closeForm();
       setStatus("Applied: " + label, "ok");
       ctx.onApplied?.(res);
     } catch (err) {
@@ -1187,27 +991,6 @@ export function mountTools(panelBody, ctx) {
       if (busyBtn) { busyBtn.disabled = false; busyBtn.classList.remove("is-busy"); }
     }
   }
-
-  async function applyActive() {
-    if (!activeTool) return;
-    const applyBtn = formEl.querySelector(".rt-tool-apply");
-    const state = {};
-    renderedFields.forEach((r) => { state[r.field.key] = r.read(formEl); });
-    const params = activeTool.toParams(state);
-    await runStep(activeTool.kind, params, activeTool.label, { busyBtn: applyBtn });
-  }
-
-  // Delegated click on the context block — tool.handleAction(action, helpers)
-  // gets called when an element with data-action is clicked. Lets a tool's
-  // context surface ship its own CTAs (e.g. drop_nulls' "Drop fully-null
-  // rows" button) without each tool inventing its own wiring. `helpers`
-  // gives the action handler ctx + runStep so it can fire any step.
-  formEl.addEventListener("click", async (e) => {
-    const actionBtn = e.target.closest(".rt-tool-context [data-action]");
-    if (!actionBtn || !activeTool?.handleAction) return;
-    const action = actionBtn.dataset.action;
-    await activeTool.handleAction(action, { ctx, runStep, btn: actionBtn });
-  });
 
   function setStatus(text, kind /* "ok" | "warn" | "err" */) {
     statusEl.textContent = text;
@@ -1220,20 +1003,8 @@ export function mountTools(panelBody, ctx) {
     }
   }
 
-  renderList();
-  return {
-    refresh() {
-      // Columns / summary moved underneath us — re-render whatever view
-      // is showing. The form rebuilds because its field renderers
-      // capture the columns list at openForm time; the columns view
-      // rebuilds because it's a pure projection of ctx.columns() +
-      // ctx.summary().
-      if (activeTool) openForm(activeTool);
-      if (viewMode === "columns") renderColumnsView();
-    },
-    reset() { closeForm(); statusEl.hidden = true; },
-    setView,
-  };
+  renderColumnsView();
+  return { refresh: renderColumnsView };
 }
 
 // Local escape — tools.js is self-contained; workspace.js has its own.

@@ -21,18 +21,11 @@
   transition: width 0.18s var(--rp-ease);
 }
 
-/* Tools panel widens to 500px when a tool's form is open — gives
-   multi-field forms (and the eventual preview / diagnostics surface)
-   room to breathe. tools.js toggles .has-form on the panel root in
-   openForm / closeForm; inner + outer animate together. */
-.rt-panel--tools.has-form.open { width: 500px; }
-.rt-panel--tools.has-form .rt-panel-inner { width: 500px; }
-
-/* Third state — `.has-columns` opens the columns-redtable surface
-   (architecture/columns-redtable.md, Slice A: read-only preview).
-   The view switcher inside the tools panel toggles it; the panel
-   widens to 50vw so the 7-column table fits without horizontal
-   scroll on typical screens. Mutually exclusive with .has-form. */
+/* The tools panel hosts the columns-redtable surface (architecture/
+   columns-redtable.md). The class is set at mount time so the panel
+   widens to 50vw as soon as #wsToolsToggle opens it — no second
+   toggle, no swap. The picker + form-swap (.has-form, .rt-tool-list,
+   .rt-tool-form) were retired in Slice H. */
 .rt-panel--tools.has-columns.open { width: 50vw; }
 .rt-panel--tools.has-columns .rt-panel-inner { width: 50vw; }
 
@@ -251,34 +244,10 @@
 }
 .rt-group-sep button:hover { background: var(--rp-accent-soft); }
 
-/* tools grid — kept for any future static tool surfaces */
-.rt-tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.rt-tool-btn {
-  height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--rp-border);
-  border-radius: 9px;
-  background: var(--rp-surface);
-  color: var(--rp-text-dim);
-  cursor: pointer;
-  transition: color 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease),
-              background 0.14s var(--rp-ease), transform 0.06s var(--rp-ease);
-}
-.rt-tool-btn i { font-size: 17px; }
-.rt-tool-btn:hover {
-  color: var(--rp-accent-2);
-  border-color: var(--rp-accent-2);
-  background: var(--rp-accent-soft);
-}
-.rt-tool-btn:active { transform: scale(0.95); }
+/* ── cleaning tools panel — status row ──────────────────────────
+   Inline last-applied / error message at the top of the panel body.
+   The columns-redtable surface (.rt-tool-columns) sits below it. */
 
-/* ── cleaning tools panel — picker (list) + per-tool form ──────
-   Lives inside the existing rt-panel--tools; adds no new component,
-   only modifiers + sub-elements per js-rust-boundary.md naming. */
-
-/* the inline message at the top of the panel — last-applied / error */
 .rt-tool-status {
   margin-bottom: 10px;
   padding: 7px 10px;
@@ -291,164 +260,6 @@
 .rt-tool-status[data-kind="ok"]   { color: var(--rp-ok);   border-color: var(--rp-ok); }
 .rt-tool-status[data-kind="warn"] { color: var(--rp-warn); border-color: var(--rp-warn); }
 .rt-tool-status[data-kind="err"]  { color: var(--rp-accent); border-color: var(--rp-accent); }
-
-/* When a tool form is open, the tools panel widens to 500px and the
-   list+form (wrapped in .rt-tool-cols) becomes a 2-column flex row:
-   list on the left (its original ~230px column), form on the right.
-   A 1px divider separates them. closeForm collapses .has-form back
-   to the original single-column layout. statusEl stays above the
-   columns as a block sibling. */
-.rt-tool-cols {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.rt-panel--tools.has-form .rt-tool-cols {
-  flex-direction: row;
-  gap: 12px;
-  align-items: stretch;
-}
-.rt-panel--tools.has-form .rt-tool-list {
-  flex: 0 0 230px;
-  border-right: 1px solid var(--rp-border);
-  padding-right: 12px;
-  overflow-y: auto;
-  min-height: 0;
-}
-.rt-panel--tools.has-form .rt-tool-form {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-}
-
-/* the picker — vertical list of tool cards. Single-line rows since
-   the per-tool blurb moved to the form (rt-tool-form-blurb); keeps
-   all 15 tools visible without scrolling on a typical viewport. */
-.rt-tool-list { display: flex; flex-direction: column; gap: 4px; }
-.rt-tool-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
-  border: 1px solid var(--rp-border);
-  border-radius: 8px;
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.14s var(--rp-ease), background 0.14s var(--rp-ease);
-}
-.rt-tool-item:hover { border-color: var(--rp-accent-2); background: var(--rp-accent-soft); }
-.rt-tool-item.is-active {
-  border-color: var(--rp-accent-2);
-  background: var(--rp-accent-soft);
-}
-
-/* ── tool context — per-tool diagnostics surface ────────────────
-   Optional block injected above the form fields by tool.context().
-   Drop nulls uses it for the per-column null table; future tools
-   bring their own. Lives only inside .rt-tool-form (the wide right
-   column when .has-form is on). */
-.rt-tool-context {
-  margin-bottom: 12px;
-  padding: 10px;
-  background: rgba(137, 180, 250, 0.04);
-  border: 1px solid var(--rp-border);
-  border-radius: 8px;
-}
-.rt-tool-context-summary {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 8px;
-  font-size: 11.5px;
-  color: var(--rp-text-mute);
-}
-.rt-tool-context-summary b { color: var(--rp-text); font-weight: 650; }
-.rt-tool-context-cta {
-  margin-left: auto;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11.5px;
-}
-.rt-tool-context-cta i { font-size: 12px; }
-.rt-tool-context-cta.is-busy { opacity: 0.6; cursor: progress; }
-.rt-tool-context-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-}
-.rt-tool-context-table th,
-.rt-tool-context-table td {
-  padding: 4px 6px;
-  text-align: left;
-  border-bottom: 1px solid var(--rp-border);
-}
-.rt-tool-context-table thead th {
-  color: var(--rp-text-mute);
-  font-weight: 600;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.rt-tool-context-table tbody tr:last-child td { border-bottom: 0; }
-.rt-tool-context-table td.is-num { text-align: right; }
-.rt-tool-context-table td.is-num.is-warn-mid  { color: var(--rp-warn); }
-.rt-tool-context-table td.is-num.is-warn-high { color: var(--rp-accent); font-weight: 600; }
-.rt-tool-context-note {
-  margin: 6px 0 0;
-  font-size: 10.5px;
-  color: var(--rp-text-mute);
-  text-align: center;
-}
-
-.rt-tool-item > i { font-size: 15px; color: var(--rp-accent-2); flex-shrink: 0; }
-.rt-tool-item-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--rp-text);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* the per-tool form */
-.rt-tool-form { display: flex; flex-direction: column; }
-.rt-tool-form-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.rt-tool-form-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  font-weight: 650;
-  color: var(--rp-text);
-}
-.rt-tool-form-title i { color: var(--rp-accent-2); }
-.rt-tool-form-blurb {
-  margin: 0 0 12px;
-  font-size: 11.5px;
-  color: var(--rp-text-mute);
-  line-height: 1.4;
-}
-.rt-tool-form-body { display: flex; flex-direction: column; }
-.rt-tool-form-foot {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--rp-border);
-}
-.rt-tool-form-foot .rt-btn--accent { flex: 1; }
 
 /* `rt-pred--stack` — label-on-top variant of the filter row.
    The base `rt-pred` is a 1fr/1fr/auto grid for the filter panel;
@@ -516,25 +327,11 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── columns view (Slice A — read-only preview) ─────────────────
-   The view-switcher sits at the top of the tools panel body; the
-   columns surface replaces the picker/form when activated. Reuses
-   the .rt-seg atom (AND/OR toggle) so the switcher matches the
-   rest of the surface visually. */
-.rt-tool-viewswitch {
-  display: flex;
-  margin-bottom: 10px;
-  width: 100%;
-}
-.rt-tool-viewswitch button {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.rt-tool-viewswitch button i { font-size: 12px; }
-
+/* ── columns view ────────────────────────────────────────────────
+   The single surface inside the tools panel (architecture/
+   columns-redtable.md). Rows = ColumnMeta[]; toolbar = global +
+   selected action groups; cells = read or edit (Name → rename,
+   Datatype → cast with preview). */
 .rt-tool-columns {
   flex: 1;
   min-height: 0;
@@ -550,16 +347,31 @@
   color: var(--rp-text-mute);
 }
 .rt-tool-columns-meta b { color: var(--rp-text); font-weight: 650; }
-.rt-tool-columns-flag {
-  padding: 2px 7px;
+
+/* Fully-null-rows pill — shown in the meta strip only when the
+   summary has fully-null rows to drop. The only row-level action
+   on the columns surface (everything else is column-scoped). */
+.rt-tool-columns-fullynull {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  margin-left: 2px;
   border-radius: 99px;
-  border: 1px solid var(--rp-border);
-  background: var(--rp-surface);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--rp-accent-2);
+  border: 1px solid var(--rp-warn);
+  background: rgba(249, 226, 175, 0.10);
+  color: var(--rp-warn);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
+.rt-tool-columns-fullynull i { font-size: 11px; }
+.rt-tool-columns-fullynull b { color: var(--rp-warn); font-weight: 700; }
+.rt-tool-columns-fullynull:hover {
+  background: rgba(249, 226, 175, 0.20);
+}
+.rt-tool-columns-fullynull.is-busy { opacity: 0.6; cursor: progress; }
 .rt-tool-columns-tablewrap {
   flex: 1;
   min-height: 0;
