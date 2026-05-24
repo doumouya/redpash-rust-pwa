@@ -98,6 +98,50 @@ const TOOLS = [
     blurb: "Remove rows where the chosen column is empty.",
     fields: [{ type: "column", key: "column", label: "Column" }],
     toParams: (s) => ({ column: s.column }),
+    // Diagnostic: rank the columns by null density so the user picks
+    // the one that's actually dirty. null_pct comes from the file
+    // envelope (ColumnMeta.null_pct, computed at parse + replay time);
+    // null_count derives from null_pct × summary.row_count. The
+    // "fully-null rows" line is a placeholder until Gus adds an
+    // endpoint for the cross-column count — flagged with "—" so the
+    // slot is visible.
+    context: (ctx) => {
+      const cols    = ctx.columns() || [];
+      const summary = ctx.summary ? ctx.summary() : null;
+      const total   = summary?.row_count;
+      const ranked  = cols
+        .map((c) => ({
+          name:  c.name,
+          pct:   c.null_pct == null ? null : Math.max(0, Math.min(100, c.null_pct)),
+        }))
+        .map((c) => ({
+          ...c,
+          count: c.pct != null && total != null ? Math.round(c.pct * total / 100) : null,
+        }))
+        .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+      if (!ranked.length) return "";
+      const rows = ranked.slice(0, 8).map((c) => {
+        const band = c.pct == null ? "" : c.pct >= 50 ? "is-warn-high" : c.pct >= 10 ? "is-warn-mid" : "";
+        return '<tr>'
+          + '<td>' + esc(c.name) + '</td>'
+          + '<td class="is-num ' + band + '">' + (c.count != null ? c.count : "—") + '</td>'
+          + '<td class="is-num ' + band + '">' + (c.pct != null ? c.pct.toFixed(1) + "%" : "—") + '</td>'
+          + '</tr>';
+      }).join("");
+      const more = ranked.length > 8
+        ? '<p class="rt-tool-context-note">' + (ranked.length - 8) + ' more columns…</p>'
+        : "";
+      return ''
+        + '<div class="rt-tool-context-summary">'
+        +   '<span><b>' + (total != null ? total : "—") + '</b> rows</span>'
+        +   '<span><b>—</b> fully-null rows</span>'
+        + '</div>'
+        + '<table class="rt-tool-context-table">'
+        +   '<thead><tr><th>Column</th><th class="is-num">Nulls</th><th class="is-num">%</th></tr></thead>'
+        +   '<tbody>' + rows + '</tbody>'
+        + '</table>'
+        + more;
+    },
   }),
 
   defineTool({
@@ -354,6 +398,15 @@ export function mountTools(panelBody, ctx) {
       return { field: f, html: built.html, read: built.read };
     });
 
+    // Per-tool diagnostics surface — surfaces what the user needs to
+    // pick *before* picking. Each tool can opt in by declaring a
+    // `context(ctx)` function that returns HTML; null/empty skips.
+    // Examples: drop_nulls ranks columns by null %; replace_text
+    // could surface match counts; format_dates could surface
+    // unparseable cell count. The slot is reserved on every tool form
+    // so the pattern grows tool by tool without re-rendering anyone.
+    const contextHTML = tool.context ? (tool.context(ctx) || "") : "";
+
     formEl.innerHTML =
       '<div class="rt-tool-form-head">'
       + '<button class="rt-btn rt-btn--ghost rt-tool-back" type="button" title="Back to tools">'
@@ -364,6 +417,7 @@ export function mountTools(panelBody, ctx) {
       + '</span>'
       + '</div>'
       + (tool.blurb ? '<p class="rt-tool-form-blurb">' + esc(tool.blurb) + '</p>' : '')
+      + (contextHTML ? '<div class="rt-tool-context">' + contextHTML + '</div>' : '')
       + '<div class="rt-tool-form-body">'
       +   (renderedFields.length
             ? renderedFields.map((r) => r.html).join("")

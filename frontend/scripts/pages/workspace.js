@@ -59,6 +59,7 @@ export default function workspace(app, { session }) {
   let activeFileRid = null;
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
+  let activeSummary = null; // FileSummary — drives per-tool context renderers
   let chartInstance = null; // echarts — lazily created on first chart render
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }] — col is display-column-index (≥3)
@@ -341,6 +342,7 @@ export default function workspace(app, { session }) {
       const envelope = await api.get("/files/" + encodeURIComponent(rid));
       activeColumns = envelope?.columns || [];
       activeSteps   = envelope?.steps   || [];
+      activeSummary = envelope?.summary || null;
       syncToolbar();
       const isChart = envelope?.summary?.file_type === "chart";
       if (isChart) {
@@ -978,10 +980,11 @@ export default function workspace(app, { session }) {
     });
   });
 
-  // ─── tools panel — parameterised, one factory + 12 configs ─────
+  // ─── tools panel — parameterised, one factory + 15 configs ─────
   mountTools($("#wsToolsBody"), {
     fileRid: () => activeFileRid,
     columns: () => activeColumns,
+    summary: () => activeSummary,  // FileSummary — per-tool context reads
     // After a step lands, the server returned a fresh envelope. The
     // simplest path: re-run loadFile on the same rid (it would normally
     // no-op since the rid is unchanged, so null the cached rid first).
