@@ -64,6 +64,7 @@ export function mountReport(panelBody, ctx) {
   //                 order_by, offset}] — derived cols on subtotals.
   // show*:        which sections the engine should materialise.
   let groupBy      = [];
+  let pivotBy      = [];           // group_by_cols — second-axis grouping for matrix preview
   let aggregations = [];
   let windows      = [];
   let showDetails   = false;
@@ -117,6 +118,7 @@ export function mountReport(panelBody, ctx) {
     builderEl.innerHTML =
         renderUndoStrip()
       + renderGroupBySection(cols)
+      + renderPivotSection(cols)
       + renderAggregationsSection(cols)
       + renderWindowsSection()
       + renderTopNSection()
@@ -180,6 +182,40 @@ export function mountReport(panelBody, ctx) {
       +    (groupBy.length
             ? '<div class="rt-report-chips">' + chips + '</div>'
             : '<p class="rt-report-empty">No group columns — preview returns one grand row.</p>')
+      +    addDd
+      +    '</section>';
+  }
+
+  // Pivot columns — second-axis grouping (shared::report::group_by_cols).
+  // When non-empty alongside group_by, the preview switches to matrix
+  // mode: rows = group_by values, columns = pivot values × aggregations.
+  // Same chip-picker shape as group_by; only available columns (not
+  // already in group_by or pivot) appear in the dropdown.
+  function renderPivotSection(cols) {
+    const chips = pivotBy.map((name) =>
+      '<span class="rt-report-chip rt-report-chip--pivot">'
+      +   esc(name)
+      +   '<button class="rt-report-chip-del" type="button" data-pivot-del="'
+      +     esc(name) + '" title="Remove"><i class="bi bi-x"></i></button>'
+      + '</span>').join('');
+    const available = cols.filter((c) => !groupBy.includes(c.name) && !pivotBy.includes(c.name));
+    const addDd = available.length
+      ? '<div class="rt-dd-wrap rt-report-add">'
+        + '<button class="rt-btn rt-btn--glass" type="button" data-dd="rtReportPivotDd">'
+        +   '<i class="bi bi-plus-lg"></i> Add column'
+        + '</button>'
+        + '<div class="rt-dd" id="rtReportPivotDd">'
+        +   available.map((c) =>
+              '<div class="rt-dd-item" data-pivot-add="' + esc(c.name) + '">'
+              + esc(c.name) + '</div>').join('')
+        + '</div>'
+        + '</div>'
+      : '<p class="rt-report-empty">Every remaining column is either grouped or pivoted.</p>';
+    return '<section class="rt-report-sect">'
+      +    '<span class="rt-field-lbl">Pivot columns <span class="rt-report-muted">— matrix mode</span></span>'
+      +    (pivotBy.length
+            ? '<div class="rt-report-chips">' + chips + '</div>'
+            : '<p class="rt-report-empty">No pivot — preview shows a flat subtotals table.</p>')
       +    addDd
       +    '</section>';
   }
@@ -381,6 +417,13 @@ export function mountReport(panelBody, ctx) {
       previewEl.innerHTML = '<p class="rt-report-empty">No rows in this preview.</p>';
       return;
     }
+    // Matrix mode — group_by × pivotBy. The backend returns long-
+    // format rows; the frontend pivots into rows × columns for display.
+    if (groupBy.length && pivotBy.length) {
+      previewEl.hidden = false;
+      previewEl.innerHTML = renderMatrix(page);
+      return;
+    }
     const MAX = 50;
     const shown = sub.rows.slice(0, MAX);
     const more  = Math.max(0, sub.rows.length - MAX);
@@ -463,6 +506,115 @@ export function mountReport(panelBody, ctx) {
     });
   }
 
+  // Matrix renderer — pivots the long-format subtotals into a wide
+  // cross-tab: rows = groupBy values, columns = pivotBy values, cells
+  // = aggregation values. First aggregation drives the cell metric
+  // (multi-agg matrices repeat the pivot block per metric — defer for
+  // now; the historic Phase-3 also shipped single-metric first).
+  // Numeric row/column totals + grand total rendered when show_total
+  // is on AND at least one cell is numeric.
+  function renderMatrix(page) {
+    const sub = page.subtotals;
+    const columns = sub.columns;
+    const rows    = sub.rows;
+    const rowDimIdxs = groupBy.map((n) => columns.indexOf(n)).filter((i) => i >= 0);
+    const colDimIdxs = pivotBy.map((n) => columns.indexOf(n)).filter((i) => i >= 0);
+    const metricIdx  = rowDimIdxs.length + colDimIdxs.length;
+    const metricName = columns[metricIdx] || "value";
+
+    const rowKeyOf = (r) => rowDimIdxs.map((i) => r[i] ?? "∅").join("␟");
+    const colKeyOf = (r) => colDimIdxs.map((i) => r[i] ?? "∅").join("␟");
+
+    const rowKeyValues = new Map();   // rowKey → original cell array
+    const colKeyValues = new Map();
+    const cellMap      = new Map();   // rowKey + "␞" + colKey → value
+    for (const row of rows) {
+      const rk = rowKeyOf(row);
+      const ck = colKeyOf(row);
+      if (!rowKeyValues.has(rk)) rowKeyValues.set(rk, rowDimIdxs.map((i) => row[i]));
+      if (!colKeyValues.has(ck)) colKeyValues.set(ck, colDimIdxs.map((i) => row[i]));
+      cellMap.set(rk + "␞" + ck, row[metricIdx]);
+    }
+    const rowKeys = Array.from(rowKeyValues.keys()).sort();
+    const colKeys = Array.from(colKeyValues.keys()).sort();
+
+    const wantTotals = showTotal;
+    let anyNumeric = false;
+    const rowTotals = {};
+    const colTotals = {};
+    let grand = 0;
+    if (wantTotals) {
+      for (const rk of rowKeys) {
+        let s = 0;
+        for (const ck of colKeys) {
+          const v = cellMap.get(rk + "␞" + ck);
+          const n = v == null ? NaN : Number(v);
+          if (!Number.isNaN(n)) { s += n; anyNumeric = true; }
+        }
+        rowTotals[rk] = s;
+      }
+      for (const ck of colKeys) {
+        let s = 0;
+        for (const rk of rowKeys) {
+          const v = cellMap.get(rk + "␞" + ck);
+          const n = v == null ? NaN : Number(v);
+          if (!Number.isNaN(n)) s += n;
+        }
+        colTotals[ck] = s;
+      }
+      grand = Object.values(rowTotals).reduce((a, b) => a + b, 0);
+    }
+
+    const totalsOn = wantTotals && anyNumeric;
+    const headerCells = [
+      ...groupBy.map((d) => '<th>' + esc(d) + '</th>'),
+      ...colKeys.map((ck) =>
+        '<th>' + esc(colKeyValues.get(ck).map((v) => v == null ? "∅" : String(v)).join(" / ")) + '</th>'),
+      ...(totalsOn ? ['<th>Total</th>'] : []),
+    ].join('');
+
+    const body = rowKeys.map((rk) => {
+      const rv = rowKeyValues.get(rk);
+      const dimCells = rv.map((v) =>
+        v == null ? '<td class="is-muted">∅</td>' : '<td>' + esc(String(v)) + '</td>').join('');
+      const valCells = colKeys.map((ck) => {
+        const v = cellMap.get(rk + "␞" + ck);
+        return v == null
+          ? '<td class="is-muted">∅</td>'
+          : '<td class="is-num">' + esc(String(v)) + '</td>';
+      }).join('');
+      const total = totalsOn
+        ? '<td class="is-num rt-report-matrix-rowtotal">' + esc(String(rowTotals[rk])) + '</td>'
+        : '';
+      return '<tr>' + dimCells + valCells + total + '</tr>';
+    }).join('');
+
+    const foot = totalsOn
+      ? '<tfoot><tr class="is-total">'
+        + '<td colspan="' + groupBy.length + '">Grand total</td>'
+        + colKeys.map((ck) => '<td class="is-num">' + esc(String(colTotals[ck])) + '</td>').join('')
+        + '<td class="is-num">' + esc(String(grand)) + '</td>'
+        + '</tr></tfoot>'
+      : '';
+
+    return ''
+      + '<div class="rt-report-preview-head">'
+      +   '<span class="rt-report-preview-meta">'
+      +     '<b>' + rowKeys.length + '</b> row' + (rowKeys.length === 1 ? '' : 's')
+      +     ' × <b>' + colKeys.length + '</b> col' + (colKeys.length === 1 ? '' : 's')
+      +     ' · metric: <b>' + esc(metricName) + '</b>'
+      +     ' · ' + page.ms + ' ms'
+      +   '</span>'
+      + '</div>'
+      + '<div class="rt-report-preview-wrap">'
+      +   '<table class="rp-table rt-report-preview-table rt-report-matrix-table">'
+      +     '<thead><tr>' + headerCells + '</tr></thead>'
+      +     '<tbody>' + body + '</tbody>'
+      +     foot
+      +   '</table>'
+      + '</div>';
+  }
+
   // ── click delegation ──────────────────────────────────────────────
   // Every spec-mutating handler calls previewSoon() at the end so
   // the inline sample table re-renders without an explicit Apply.
@@ -497,6 +649,23 @@ export function mountReport(panelBody, ctx) {
     const delBtn = e.target.closest("[data-group-del]");
     if (delBtn) {
       groupBy = groupBy.filter((n) => n !== delBtn.dataset.groupDel);
+      renderBuilder(); previewSoon();
+      return;
+    }
+    // ── pivot columns (matrix mode) ─────────────────────────────
+    const pivAdd = e.target.closest("[data-pivot-add]");
+    if (pivAdd) {
+      const name = pivAdd.dataset.pivotAdd;
+      if (name && !pivotBy.includes(name) && !groupBy.includes(name)) {
+        pivotBy.push(name);
+        renderBuilder(); previewSoon();
+      }
+      pivAdd.closest(".rt-dd")?.classList.remove("open");
+      return;
+    }
+    const pivDel = e.target.closest("[data-pivot-del]");
+    if (pivDel) {
+      pivotBy = pivotBy.filter((n) => n !== pivDel.dataset.pivotDel);
       renderBuilder(); previewSoon();
       return;
     }
@@ -706,7 +875,7 @@ export function mountReport(panelBody, ctx) {
     });
     return {
       group_by:       [...groupBy],
-      group_by_cols:  [],
+      group_by_cols:  [...pivotBy],
       aggregations:   aggs,
       filter:         null,
       show_details:   showDetails,
@@ -758,6 +927,7 @@ export function mountReport(panelBody, ctx) {
   function snapshotShape() {
     return {
       groupBy:      [...groupBy],
+      pivotBy:      [...pivotBy],
       aggregations: aggregations.map((a) => ({ ...a })),
       windows:      windows.map((w) => ({ ...w, partition_by: [...(w.partition_by || [])] })),
       showDetails, showSubtotals, showTotal,
@@ -770,6 +940,7 @@ export function mountReport(panelBody, ctx) {
     const s = JSON.parse(json);
     suspendCapture = true;
     groupBy       = s.groupBy || [];
+    pivotBy       = s.pivotBy || [];
     aggregations  = s.aggregations || [];
     windows       = s.windows || [];
     showDetails   = !!s.showDetails;
@@ -828,6 +999,7 @@ export function mountReport(panelBody, ctx) {
 
   function clear() {
     groupBy = [];
+    pivotBy = [];
     aggregations = [];
     windows = [];
     showDetails = false;

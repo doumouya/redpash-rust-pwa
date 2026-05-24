@@ -812,6 +812,14 @@
 .rt-report-chip-del:hover { background: rgba(243, 139, 168, 0.18); color: var(--rp-accent); }
 .rt-report-chip-del i { font-size: 11px; }
 
+/* Pivot-column chip — same shape as the group-by chip, mauve accent
+   so the second-axis grouping reads as visually distinct. */
+.rt-report-chip--pivot {
+  border-color: var(--rp-accent);
+  color: var(--rp-accent);
+}
+.rt-report-chip--pivot .rt-report-chip-del { color: var(--rp-accent); }
+
 .rt-report-add { margin-top: 4px; }
 
 .rt-report-aggs {
@@ -1104,3 +1112,18 @@
   border-top: 1px solid var(--rp-accent-2);
 }
 .rt-report-preview-table .is-muted { color: var(--rp-text-mute); }
+
+/* Matrix mode (C5) — pivoted cross-tab. Row totals + grand-total
+   row+col reuse the .is-total / .is-num atoms; an extra accent on
+   the row-total column makes the totals strip easy to read. */
+.rt-report-matrix-table td.rt-report-matrix-rowtotal {
+  font-weight: 700;
+  background: var(--rp-hover);
+}
+.rt-report-matrix-table tfoot tr.is-total td {
+  position: sticky;
+  bottom: 0;
+  background: var(--rp-accent-soft);
+  font-weight: 700;
+  border-top: 1px solid var(--rp-accent-2);
+}
