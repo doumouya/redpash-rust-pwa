@@ -100,15 +100,16 @@ const TOOLS = [
     toParams: (s) => ({ column: s.column }),
     // Diagnostic: rank the columns by null density so the user picks
     // the one that's actually dirty. null_pct comes from the file
-    // envelope (ColumnMeta.null_pct, computed at parse + replay time);
-    // null_count derives from null_pct × summary.row_count. The
-    // "fully-null rows" line is a placeholder until Gus adds an
-    // endpoint for the cross-column count — flagged with "—" so the
-    // slot is visible.
+    // envelope (ColumnMeta.null_pct); null_count derives from
+    // null_pct × summary.row_count. The cross-column fully_null_rows
+    // count comes from Gus's `0768cc3` — populated on hydrate / upload
+    // / join / snapshot. `null` means "DB-only read, hydrate hasn't
+    // run yet" — the slot still renders, just dashed.
     context: (ctx) => {
       const cols    = ctx.columns() || [];
       const summary = ctx.summary ? ctx.summary() : null;
       const total   = summary?.row_count;
+      const fullyNull = summary?.fully_null_rows;
       const ranked  = cols
         .map((c) => ({
           name:  c.name,
@@ -131,14 +132,25 @@ const TOOLS = [
       const more = ranked.length > 8
         ? '<p class="rt-tool-context-note">' + (ranked.length - 8) + ' more columns…</p>'
         : "";
+      // CTA conditional on the known count: visibly disabled when zero
+      // (no rows to drop); enabled and counted when > 0; enabled with
+      // the original generic label when the count is unknown.
+      const ctaDisabled = fullyNull === 0;
+      const ctaLabel    = fullyNull == null
+                            ? "Drop fully-null rows"
+                            : fullyNull === 0
+                              ? "No fully-null rows"
+                              : "Drop " + fullyNull + " fully-null rows";
+      const ctaBand     = fullyNull != null && fullyNull > 0 ? "is-warn-high" : "";
       return ''
         + '<div class="rt-tool-context-summary">'
         +   '<span><b>' + (total != null ? total : "—") + '</b> rows</span>'
-        +   '<span><b>—</b> fully-null rows</span>'
+        +   '<span><b class="' + ctaBand + '">' + (fullyNull != null ? fullyNull : "—") + '</b> fully-null rows</span>'
         +   '<button class="rt-btn rt-btn--ghost rt-tool-context-cta" type="button"'
         +     ' data-action="drop-fully-null"'
+        +     (ctaDisabled ? ' disabled' : '')
         +     ' title="Drop every row where every column is null (uses filter_rows)">'
-        +     '<i class="bi bi-trash3"></i> Drop fully-null rows'
+        +     '<i class="bi bi-trash3"></i> ' + esc(ctaLabel)
         +   '</button>'
         + '</div>'
         + '<table class="rt-tool-context-table">'
