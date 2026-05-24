@@ -8,6 +8,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
 
 // Same MON_TABS declaration shape as home.js — explicit, RBAC-friendly.
 // `endpoint` is the un-prefixed path; the /api/ literal is never in a
@@ -108,6 +109,13 @@ export default function monitoring(app, { session }) {
       title: "Steps",
       endpoint: "/admin/steps",
       useWindow: false,
+      charts: [
+        { id: "rp-mon-steps-kind", title: "By kind (top 10)", kind: "barH",
+          data: (s) => s.by_kind, opts: { top: 10 } },
+        { id: "rp-mon-steps-24h",  title: "Active last 24h",  kind: "gauge",
+          data: (s) => s.total ? Math.round((s.last_24h / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+      ],
       columns: ["File", "#", "Kind", "Applied", "When"],
       row: (s) =>
         '<tr>'
@@ -207,6 +215,7 @@ export default function monitoring(app, { session }) {
 
   function renderRequestsBody() {
     disposeRequestsCharts();
+    disposeListCharts();
     rawPage = 1;
     view.innerHTML = ''
       + headHTML("Requests", "")
@@ -395,6 +404,7 @@ export default function monitoring(app, { session }) {
 
   function renderListBody(tab, viewSpec) {
     disposeRequestsCharts();  // user switching away from Requests
+    disposeListCharts();      // user switching between list tabs
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
     view.innerHTML = ''
@@ -406,8 +416,14 @@ export default function monitoring(app, { session }) {
           { label: "Page",      id: "rp-mon-list-page"   },
           { label: "Last fetch", id: "rp-mon-list-ms"    },
         ])
+      + chartsStripHTML(viewSpec.charts || [])
       + listPanel(viewSpec.columns)
       + '<div class="rp-list-pager" id="rp-mon-list-pager"></div>';
+
+    if (viewSpec.charts && viewSpec.charts.length) {
+      mountListCharts(viewSpec).catch((err) =>
+        console.warn("[monitoring] charts mount failed:", err));
+    }
 
     if (viewSpec.useWindow) {
       view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
@@ -747,6 +763,56 @@ export default function monitoring(app, { session }) {
           + '</div>'
         ).join("")
       + '</div>';
+  }
+
+  // Chart strip — sibling of the KPI strip, one card per chart
+  // declared in the LIST_VIEWS spec's `charts` array. Same shape as
+  // home.js's renderer + echarts-kpi.js helpers do the actual work.
+  function chartsStripHTML(charts) {
+    if (!charts.length) return "";
+    return '<div class="rp-home-charts">'
+      + charts.map((c) =>
+          '<div class="rp-home-chart-card">'
+          + '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
+          + '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+          + '</div>'
+        ).join("")
+      + '</div>';
+  }
+  const CHART_KINDS = {
+    donut: kpiDonut, bar: kpiBar, barH: kpiBarH, gauge: kpiGauge,
+    line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
+  };
+  let listCharts = [];
+  function disposeListCharts() {
+    listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
+    listCharts = [];
+  }
+  async function mountListCharts(spec) {
+    const statsUrl = spec.statsEndpoint || (spec.endpoint + "/stats");
+    let stats;
+    try { stats = await api.get(statsUrl); }
+    catch (err) {
+      console.warn("[monitoring] stats fetch failed for", statsUrl, err);
+      return;
+    }
+    spec.charts.forEach((c) => {
+      const el = view.querySelector("#" + c.id);
+      if (!el) return;
+      const fn = CHART_KINDS[c.kind];
+      if (!fn) { console.warn("[monitoring] unknown chart kind:", c.kind); return; }
+      const data = c.data ? c.data(stats) : stats;
+      const inst = fn(el, data, c.opts || {});
+      if (inst) listCharts.push(inst);
+    });
+  }
+  // Lazy resize handler (one listener for the page, attached on
+  // first chart mount, never removed).
+  if (!window.__rpMonResizeWired) {
+    window.__rpMonResizeWired = true;
+    window.addEventListener("resize", () => {
+      listCharts.forEach((inst) => { try { inst.resize(); } catch { /* ignore */ } });
+    });
   }
   function topRoutesPanel() {
     return '<section class="rp-mon-panel">'
