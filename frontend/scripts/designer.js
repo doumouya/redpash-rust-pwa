@@ -27,17 +27,33 @@ import { api } from "/scripts/api.js";
 // ── chart themes (separate from chrome theme) ────────────────────────
 // Vintage is the ECharts builtin (warm/muted); Latte + Mocha mirror
 // the app's chrome palettes so a chart can read consistent with the
-// surrounding UI when wanted.
+// surrounding UI when wanted. Macarons / Roma / Shine / Infographic
+// are palettes lifted from the Apache ECharts theme builder bundles
+// — keeping them as plain THEMES entries avoids registering with
+// ECharts at runtime, but the bundled scripts are the canonical
+// source if anyone wants to enrich (e.g. gauge axis bands).
 const THEMES = {
-  vintage: { name: "Vintage",
+  vintage:     { name: "Vintage",
     series: ["#d87c7c","#919e8b","#d7ab82","#6e7074","#61a0a8","#efa18d","#787464","#cc7e63"],
     text: "#333333", axis: "#333333", split: "#dcdcdc", bg: "#fef8ef" },
-  latte:   { name: "Latte",
+  latte:       { name: "Latte",
     series: ["#1e66f5","#8839ef","#179299","#fe640b","#d20f39","#df8e1d"],
     text: "#4c4f69", axis: "#9ca0b0", split: "rgba(76,79,105,.12)", bg: "transparent" },
-  mocha:   { name: "Mocha",
+  mocha:       { name: "Mocha",
     series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af"],
     text: "#cdd6f4", axis: "#6c7086", split: "rgba(255,255,255,.08)", bg: "transparent" },
+  macarons:    { name: "Macarons",
+    series: ["#2ec7c9","#b6a2de","#5ab1ef","#ffb980","#d87a80","#8d98b3","#e5cf0d","#97b552"],
+    text: "#333333", axis: "#008acd", split: "#eeeeee", bg: "transparent" },
+  roma:        { name: "Roma",
+    series: ["#E01F54","#001852","#f5e8c8","#b8d2c7","#c6b38e","#a4d8c2","#f3d999","#d3758f"],
+    text: "#333333", axis: "#999999", split: "rgba(0,0,0,0.06)", bg: "transparent" },
+  shine:       { name: "Shine",
+    series: ["#c12e34","#e6b600","#0098d9","#2b821d","#005eaa","#339ca8","#cda819","#32a487"],
+    text: "#333333", axis: "#666666", split: "rgba(0,0,0,0.08)", bg: "transparent" },
+  infographic: { name: "Infographic",
+    series: ["#C1232B","#27727B","#FCCE10","#E87C25","#B5C334","#FE8463","#9BCA63","#FAD860"],
+    text: "#27727B", axis: "#27727B", split: "rgba(0,0,0,0.08)", bg: "transparent" },
 };
 
 // Chart kinds — grouped by family. Picking a type sets both the
