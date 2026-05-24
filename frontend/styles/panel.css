@@ -1228,3 +1228,63 @@
 }
 .rt-join-card__more:hover,
 .rt-join-card__less:hover { background: var(--rp-hover); }
+
+/* row pick checkbox + selected-row tint */
+.rt-join-table th.is-pick,
+.rt-join-table td.is-pick {
+  width: 28px;
+  text-align: center;
+  padding-right: 0;
+}
+.rt-join-pick {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--rp-accent-2);
+  cursor: pointer;
+}
+.rt-join-table tr.is-picked { background: var(--rp-accent-soft); }
+.rt-join-table tr.is-picked .rt-join-col { background: var(--rp-surface); }
+
+/* per-card foot — hint + join-type dropdown + Apply button. Three
+   cells on one line; the hint flexes to fill so the controls stay
+   pinned to the right. */
+.rt-join-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--rp-border);
+  background: var(--rp-hover);
+}
+.rt-join-card__hint {
+  flex: 1 1 auto;
+  color: var(--rp-text-mute);
+  font-size: 11.5px;
+}
+.rt-join-card__type {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.rt-join-card__apply {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.rt-join-card__apply[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.rt-join-card__apply .bi-arrow-repeat {
+  animation: rt-join-spin 0.9s linear infinite;
+  display: inline-block;
+}
+@keyframes rt-join-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

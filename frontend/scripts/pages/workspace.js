@@ -1142,6 +1142,13 @@ export default function workspace(app, { session }) {
         joinsCtrl = mountJoins(joinsBody, {
           fileRid:      () => activeFileRid,
           activeFilter: () => activeFilter,
+          // POST /joins returned a fresh FileEnvelope for the new join
+          // file. Refresh the rail + open the new file so the user sees
+          // the join result immediately — same path as upload's
+          // "refresh + auto-open" via refreshAndOpen().
+          onApplied: ({ newFileRid, projectRid }) => {
+            if (newFileRid) refreshAndOpen(newFileRid, projectRid);
+          },
         });
       }
     }
