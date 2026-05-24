@@ -1015,26 +1015,35 @@ export default function workspace(app, { session }) {
   // The builder lives in the filter panel's Report tab; the sample
   // subtotals table renders inline below the builder so the user
   // sees the result without losing the source-data table.
-  reportCtrl = mountReport($("#wsReportBody"), {
-    fileRid: () => activeFileRid,
-    columns: () => activeColumns,
-    setStatus: (text, kind) => {
-      // Borrow the rt-tool-status visual idiom for now — separate
-      // status element could land later if the two surfaces diverge.
-      console[(kind === "err" ? "warn" : "log")]("[report]", text);
-    },
-  });
-
+  //
+  // Every binding here is null-guarded — when a partial is served
+  // from a stale cache (without the new IDs), we don't want mount()
+  // to throw and bring the whole page down via the router's error
+  // shell, which then breaks the queued loadProjects continuation.
+  const reportBody = $("#wsReportBody");
+  if (reportBody) {
+    reportCtrl = mountReport(reportBody, {
+      fileRid: () => activeFileRid,
+      columns: () => activeColumns,
+      setStatus: (text, kind) => {
+        console[(kind === "err" ? "warn" : "log")]("[report]", text);
+      },
+    });
+  }
+  const filterTabs = $("#wsFilterTabs");
+  if (filterTabs) {
+    filterTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn) return;
+      setFilterPanelTab(btn.dataset.tab);
+    });
+  }
   // Filter / Report tab switcher in the panel head. The panel widens
   // to 500px when Report is active so the builder + sample preview
   // table have room; back to 250px on Filter.
-  $("#wsFilterTabs").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tab]");
-    if (!btn) return;
-    setFilterPanelTab(btn.dataset.tab);
-  });
   function setFilterPanelTab(tab) {
     const panel = $("#wsFilterPanel");
+    if (!panel) return;
     panel.querySelectorAll("[data-tab]").forEach((el) => {
       const match = el.dataset.tab === tab;
       if (el.tagName === "BUTTON" && el.parentElement?.id === "wsFilterTabs") {
@@ -1050,9 +1059,8 @@ export default function workspace(app, { session }) {
     panel.classList.toggle("has-report", tab === "report");
     if (tab === "report") reportCtrl?.refresh();
   }
-
-  $("#wsApplyReport").addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
-  $("#wsClearReport").addEventListener("click", () => reportCtrl?.clear());
+  $("#wsApplyReport")?.addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
+  $("#wsClearReport")?.addEventListener("click", () => reportCtrl?.clear());
 
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the
