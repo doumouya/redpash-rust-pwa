@@ -1030,8 +1030,12 @@ export default function workspace(app, { session }) {
     });
   });
 
-  // ─── tools panel — parameterised, one factory + 15 configs ─────
-  toolsCtrl = mountTools($("#wsToolsBody"), {
+  // ─── tools panel — Clean tab (parameterised, one factory + 15 configs) ─
+  // The Tools panel now hosts two tabs via .rt-panel-tabs in the head
+  // (same atom as the filter panel's Filter|Report split — see panel.css
+  // L720-L753). Clean = the cleaning columns-redtable (this mount); Joins
+  // = sibling-file join picker, mounted on first activate (slice B).
+  toolsCtrl = mountTools($("#wsToolsCleanBody"), {
     fileRid: () => activeFileRid,
     columns: () => activeColumns,
     summary: () => activeSummary,  // FileSummary — per-tool context reads
@@ -1098,6 +1102,32 @@ export default function workspace(app, { session }) {
   }
   $("#wsApplyReport")?.addEventListener("click", (e) => reportCtrl?.apply(e.currentTarget));
   $("#wsClearReport")?.addEventListener("click", () => reportCtrl?.clear());
+
+  // Clean / Joins tab switcher in the Tools panel head — same atom +
+  // selector shape as setFilterPanelTab above. Joins module is lazy-
+  // mounted on first activate (slice B); slice A leaves the Joins tab
+  // body as a placeholder.
+  const toolsTabs = $("#wsToolsTabs");
+  if (toolsTabs) {
+    toolsTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn) return;
+      setToolsPanelTab(btn.dataset.tab);
+    });
+  }
+  function setToolsPanelTab(tab) {
+    const panel = $("#wsToolsPanel");
+    if (!panel) return;
+    panel.querySelectorAll("[data-tab]").forEach((el) => {
+      const match = el.dataset.tab === tab;
+      if (el.tagName === "BUTTON" && el.parentElement?.id === "wsToolsTabs") {
+        el.classList.toggle("is-active", match);
+      } else if (el.classList.contains("rt-panel-tab")) {
+        el.hidden = !match;
+        el.classList.toggle("is-active", match);
+      }
+    });
+  }
 
   // ─── designer — canvas + accordion config ─────────────────────
   // Mounts a no-op container at boot; load(chart) lights it up when
