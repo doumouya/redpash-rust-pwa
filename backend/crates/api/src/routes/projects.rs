@@ -33,8 +33,7 @@ async fn list(
 ) -> Result<Json<ProjectList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let items = db::list_projects(&state.db, &user)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(ProjectList { items }))
 }
 
@@ -46,8 +45,7 @@ async fn list_files(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
     let items = db::list_files_in_project(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(ProjectFiles { items }))
 }
 
@@ -62,8 +60,7 @@ async fn get_one(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
     db::get_project(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .map(Json)
         .ok_or_else(|| AppError::not_found("not_found", format!("project {rid}")))
 }
@@ -104,8 +101,7 @@ async fn create_project(
 
     if let Some(cid) = company_id {
         if db::company_role(&state.db, cid, &user)
-            .await
-            .map_err(|e| AppError::internal("db", e.to_string()))?
+            .await?
             .is_none()
         {
             return Err(AppError::not_found("not_found", "company not found"));
@@ -117,8 +113,7 @@ async fn create_project(
         &state.db, &rid, &user, name, description, company_id,
         body.is_default.unwrap_or(false),
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     crate::event::record(&state.db, crate::event::EventDraft {
         origin:  "backend",
@@ -171,8 +166,7 @@ async fn patch_project(
         // Reassignment target must be a real user — surface a clean
         // 404 rather than letting the FK violation bubble up as a 500.
         if db::find_user_by_id(&state.db, oid)
-            .await
-            .map_err(|e| AppError::internal("db", e.to_string()))?
+            .await?
             .is_none()
         {
             return Err(AppError::not_found("not_found", "owner user not found"));
@@ -184,8 +178,7 @@ async fn patch_project(
         // Can only scope a project to a company the editor belongs to —
         // resolving the caller's role doubles as the existence check.
         if db::company_role(&state.db, cid, &user)
-            .await
-            .map_err(|e| AppError::internal("db", e.to_string()))?
+            .await?
             .is_none()
         {
             return Err(AppError::not_found("not_found", "company not found"));
@@ -213,8 +206,7 @@ async fn patch_project(
         new_company,
         new_status,
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .await?
     .ok_or_else(|| AppError::not_found("not_found", "project not found"))?;
     Ok(Json(updated))
 }
@@ -237,12 +229,10 @@ async fn delete_project(
     // Grab the file RIDs before the cascade clears the rows — needed to
     // evict the hot-frame cache and unlink the blobs afterwards.
     let file_rids = db::project_file_rids(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let deleted = db::delete_project(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     if !deleted {
         // `ensure_owner` already confirmed the project exists, so a
         // no-op delete means it's the owner's default project.

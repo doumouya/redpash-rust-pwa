@@ -92,8 +92,7 @@ async fn search(
     .bind(&q_owned)
     .bind(PER_KIND_LIMIT)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     for r in rows {
         let rid: String = r.try_get("redpash_id").unwrap_or_default();
@@ -142,8 +141,7 @@ async fn search(
     .bind(&q_owned)
     .bind(PER_KIND_LIMIT)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     for r in rows {
         let rid: String = r.try_get("redpash_id").unwrap_or_default();

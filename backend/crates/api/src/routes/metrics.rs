@@ -110,8 +110,7 @@ async fn metrics(
     )
     .bind(since)
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let total: i64 = overall_row.try_get("total").unwrap_or(0);
     let errors: i64 = overall_row.try_get("errors").unwrap_or(0);
@@ -145,8 +144,7 @@ async fn metrics(
     )
     .bind(since)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let by_route: Vec<RouteStats> = route_rows
         .into_iter()

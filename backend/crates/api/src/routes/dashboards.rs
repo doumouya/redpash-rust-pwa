@@ -53,8 +53,7 @@ async fn patch_one(
         body.is_favorite,
         body.is_public,
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .await?
     .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
     Ok(Json(d))
 }
@@ -65,8 +64,7 @@ async fn list(
 ) -> Result<Json<DashboardsList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let items = db::list_dashboards(&state.db, &user)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(DashboardsList { items }))
 }
 
@@ -86,8 +84,7 @@ async fn create(
         req.folder.as_deref().filter(|s| !s.is_empty()),
         req.description.as_deref().filter(|s| !s.is_empty()),
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
     Ok(Json(dashboard))
 }
 
@@ -98,8 +95,7 @@ async fn get_one(
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
-    let d = db::find_dashboard(&state.db, &rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let d = db::find_dashboard(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
     Ok(Json(d))
 }
@@ -117,8 +113,7 @@ async fn update(
         req.folder.as_deref().filter(|s| !s.is_empty()),
         req.description.as_deref().filter(|s| !s.is_empty()),
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .await?
     .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
     Ok(Json(d))
 }
@@ -130,8 +125,7 @@ async fn delete_one(
 ) -> Result<axum::http::StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
-    let removed = db::delete_dashboard(&state.db, &rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    let removed = db::delete_dashboard(&state.db, &rid).await?;
     Ok(if removed { axum::http::StatusCode::NO_CONTENT } else { axum::http::StatusCode::NOT_FOUND })
 }
 
@@ -146,8 +140,7 @@ async fn set_favorite(
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
-    let d = db::set_dashboard_favorite(&state.db, &rid, body.value).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let d = db::set_dashboard_favorite(&state.db, &rid, body.value).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
     Ok(Json(d))
 }

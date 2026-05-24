@@ -63,7 +63,7 @@ pub(crate) fn ensure_owner(
 ) -> Result<(), crate::error::AppError> {
     use crate::error::AppError;
     let owner = owner_lookup
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        ?
         .ok_or_else(|| AppError::not_found("not_found", format!("{label} {rid}")))?;
     if owner != expected {
         return Err(AppError::not_found("not_found", format!("{label} {rid}")));

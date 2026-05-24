@@ -51,8 +51,7 @@ async fn list(
     let level = q.level.as_deref().filter(|s| !s.is_empty());
     let kind  = q.kind.as_deref().filter(|s| !s.is_empty());
     let items = db::list_events(&state.db, level, kind, limit)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(EventList { items }))
 }
 
@@ -62,8 +61,7 @@ async fn get_one(
     Path(rid):    Path<String>,
 ) -> Result<Json<Event>, AppError> {
     let ev = db::find_event(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("event {rid}")))?;
     Ok(Json(ev))
 }

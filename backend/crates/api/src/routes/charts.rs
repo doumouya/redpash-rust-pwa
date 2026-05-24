@@ -37,8 +37,7 @@ async fn list(
 ) -> Result<Json<ChartsList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let items = db::list_charts(&state.db, &user)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(ChartsList { items }))
 }
 
@@ -55,8 +54,7 @@ async fn create(
         db::file_owner(&state.db, &req.source_file_id).await,
         &user, "file", &req.source_file_id,
     )?;
-    let file = db::find_file(&state.db, &req.source_file_id).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let file = db::find_file(&state.db, &req.source_file_id).await?
         .ok_or_else(|| AppError::not_found("not_found", "source file"))?;
 
     let rid = id::new("CHT");
@@ -64,8 +62,7 @@ async fn create(
         &state.db, &rid, &file.summary.project_redpash_id,
         &req.source_file_id, &req.title, &req.spec,
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
     Ok(Json(chart))
 }
 
@@ -76,8 +73,7 @@ async fn get_one(
 ) -> Result<Json<Chart>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
-    let chart = db::find_chart(&state.db, &rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let chart = db::find_chart(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;
     Ok(Json(chart))
 }
@@ -93,8 +89,7 @@ async fn update_one(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
     let chart = db::update_chart(&state.db, &rid, &req.title, &req.spec)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;
     Ok(Json(chart))
 }
@@ -106,7 +101,6 @@ async fn delete_one(
 ) -> Result<axum::http::StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
-    let removed = db::delete_chart(&state.db, &rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    let removed = db::delete_chart(&state.db, &rid).await?;
     Ok(if removed { axum::http::StatusCode::NO_CONTENT } else { axum::http::StatusCode::NOT_FOUND })
 }

@@ -39,8 +39,7 @@ async fn list(
 ) -> Result<Json<UserList>, AppError> {
     super::resolve_user_rid(&state, &headers).await?;
     let items = db::list_users(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     Ok(Json(UserList { items }))
 }
 
@@ -81,8 +80,7 @@ async fn get_one(
 ) -> Result<Json<UserProfile>, AppError> {
     super::resolve_user_rid(&state, &headers).await?;
     let u = db::find_user_by_id(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?;
     Ok(Json(u))
 }
@@ -151,8 +149,7 @@ async fn delete_one(
 ) -> Result<Json<serde_json::Value>, AppError> {
     super::resolve_user_rid(&state, &headers).await?;
     let removed = db::delete_user(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     if !removed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }

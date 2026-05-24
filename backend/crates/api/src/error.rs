@@ -81,3 +81,17 @@ impl From<anyhow::Error> for AppError {
         AppError::internal("internal", e.to_string())
     }
 }
+
+/// Every DB error funnels through `?` as an internal 500 with kind
+/// `"db"` — same shape as the 134+ hand-written `.map_err(|e|
+/// AppError::internal("db", e.to_string()))?` chains that lived on
+/// every sqlx call before this impl landed (rust-dedup-audit-2026-05-24,
+/// item A). NOT mapping `RowNotFound → 404`: most queries use
+/// `.fetch_optional()` for legitimate missing rows; mapping
+/// RowNotFound here would change response codes for handlers that
+/// already model "not found" explicitly.
+impl From<sqlx::Error> for AppError {
+    fn from(e: sqlx::Error) -> Self {
+        AppError::internal("db", e.to_string())
+    }
+}

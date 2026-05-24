@@ -171,20 +171,17 @@ async fn callback(
         display,
         info.picture.as_deref(),
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     // Every user needs a default project — uploads land in it when
     // the request doesn't specify one. Idempotent on returning users.
     db::ensure_default_project(&state.db, &user.redpash_id)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // Mint a session, drop the state cookie, set the session cookie,
     // redirect home.
     let sid = db::create_session(&state.db, &user.redpash_id, SESSION_TTL_DAYS)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     crate::event::record(&state.db, crate::event::EventDraft {
         origin:     "backend",
@@ -255,13 +252,11 @@ async fn dev_login(
     // Target must be a real user — clean 404 rather than minting a
     // session pointing at a non-existent RID.
     let user = db::find_user_by_id(&state.db, &body.user_id)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", "user not found"))?;
 
     let sid = db::create_session(&state.db, &user.redpash_id, SESSION_TTL_DAYS)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let mut out = HeaderMap::new();
     out.insert(SET_COOKIE, HeaderValue::from_str(&session_cookie(&sid)).unwrap());

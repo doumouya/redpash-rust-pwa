@@ -50,17 +50,14 @@ async fn get_me(
 ) -> Result<Json<MeResponse>, AppError> {
     let user_rid = resolve_user_rid(&state, &headers).await?;
     let mut user = db::find_user_by_id(&state.db, &user_rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
     // Hydrate company memberships so the Profile page can show the
     // user's real org affiliations (the editable `organisation`
     // field is a free-text bio, distinct from these).
     user.memberships = db::list_memberships_for_user(&state.db, &user_rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
-    let global_sentinels = db::list_global_sentinels(&state.db).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
+    let global_sentinels = db::list_global_sentinels(&state.db).await?;
     Ok(Json(MeResponse { user, global_sentinels }))
 }
 
@@ -119,8 +116,7 @@ async fn patch_me(
         body.first_name.as_deref(),
         body.last_name.as_deref(),
     )
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .await?
     .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
 
     Ok(Json(user))
@@ -159,20 +155,17 @@ async fn apply_prefs_patch(
     // Pre-patch snapshot — used to find newly-added entries below.
     // Worst case (lookup race / fresh user) the set is empty and
     // every entry is treated as new.
-    let prior_learned = db::find_user_by_id(&state.db, user_rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let prior_learned = db::find_user_by_id(&state.db, user_rid).await?
         .and_then(|u| canon_str_array(u.prefs.get("learned_sentinels")))
         .unwrap_or_default();
 
-    db::patch_user_prefs(&state.db, user_rid, patch).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+    db::patch_user_prefs(&state.db, user_rid, patch).await?;
 
     // Post-patch read for the share_sentinels gate. We re-read the
     // full prefs (not just the patch) because share_sentinels may
     // have been set on a prior PATCH and learned_sentinels patched
     // on this one — both states need to land for the gate to fire.
-    let after_user = db::find_user_by_id(&state.db, user_rid).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+    let after_user = db::find_user_by_id(&state.db, user_rid).await?
         .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
 
     let share: bool = after_user.prefs.get("share_sentinels")
@@ -210,8 +203,7 @@ async fn get_avatar(
 ) -> Result<([(header::HeaderName, String); 2], Vec<u8>), AppError> {
     let user_rid = resolve_user_rid(&state, &headers).await?;
     let user = db::find_user_by_id(&state.db, &user_rid)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
         .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
     let url = user.avatar_url
         .ok_or_else(|| AppError::not_found("no_avatar", "user has no avatar"))?;
@@ -289,8 +281,7 @@ fn canon_str_array(v: Option<&serde_json::Value>) -> Option<Vec<String>> {
 pub async fn resolve_user_rid(state: &AppState, headers: &HeaderMap) -> Result<String, AppError> {
     if let Some(sid) = super::read_cookie(headers, "rp_session") {
         if let Some(uid) = db::find_session_user(&state.db, &sid)
-            .await
-            .map_err(|e| AppError::internal("db", e.to_string()))?
+            .await?
         {
             return Ok(uid);
         }

@@ -107,8 +107,7 @@ async fn list_users(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM users")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // ILIKE-search over username + display_name + email + organisation
     // when ?q= is set. Single $1 used four times — Postgres caches the
@@ -123,8 +122,7 @@ async fn list_users(
     )
     .bind(q.q.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     // LEFT JOIN LATERAL pulls the user's "top" company_memberships row:
     // owner before admin before member, ties broken by most-recent
@@ -163,8 +161,7 @@ async fn list_users(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<UserSummary> = rows
         .into_iter()
@@ -198,8 +195,7 @@ async fn list_companies(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM companies")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM companies
@@ -207,8 +203,7 @@ async fn list_companies(
     )
     .bind(q.q.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url,
@@ -223,8 +218,7 @@ async fn list_companies(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<CompanySummary> = rows
         .into_iter()
@@ -271,8 +265,7 @@ async fn list_memberships(
            (SELECT COUNT(*) FROM company_memberships)",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     // Scope-specific query — two different tables with parallel schemas.
     // Joined to users (display_name + username) and the scope parent
@@ -321,16 +314,14 @@ async fn list_memberships(
     let total: i64 = sqlx::query_scalar(count_sql)
         .bind(q.role.as_deref())
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let rows = sqlx::query(rows_sql)
         .bind(q.role.as_deref())
         .bind(size as i64)
         .bind(offset)
         .fetch_all(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let rows: Vec<MembershipSummary> = rows
         .into_iter()
@@ -360,8 +351,7 @@ async fn list_files(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_files")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // `status` was dropped in the object-model hard-refresh; `file_stages.stage`
     // is the computed replacement (import | clean | report | publish). LEFT JOIN
@@ -380,8 +370,7 @@ async fn list_files(
     .bind(q.stage.as_deref())
     .bind(q.project.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT f.redpash_id, f.project_redpash_id,
@@ -405,8 +394,7 @@ async fn list_files(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<AdminFileSummary> = rows
         .into_iter()
@@ -446,8 +434,7 @@ async fn list_charts(
         "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files
@@ -458,8 +445,7 @@ async fn list_charts(
     )
     .bind(q.q.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT f.redpash_id, f.project_redpash_id, p.name AS project_name,
@@ -480,8 +466,7 @@ async fn list_charts(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<ChartSummary> = rows
         .into_iter()
@@ -511,8 +496,7 @@ async fn list_steps(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_steps")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_steps
@@ -524,8 +508,7 @@ async fn list_steps(
     .bind(q.kind.as_deref())
     .bind(q.applied)
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT s.redpash_id, s.file_redpash_id, f.filename AS file_filename,
@@ -544,8 +527,7 @@ async fn list_steps(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<StepSummary> = rows
         .into_iter()
@@ -577,8 +559,7 @@ pub(super) async fn group_count(
 ) -> Result<HashMap<String, u64>, AppError> {
     let rows = sqlx::query(query)
         .fetch_all(pool)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     let mut out = HashMap::with_capacity(rows.len());
     for r in rows {
         let key: String = r.try_get(0).unwrap_or_default();
@@ -595,8 +576,7 @@ pub(super) async fn group_count(
 async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM users")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // Active proxy: any event captured against the user in the last 7d.
     // SET NULL on events.user_redpash_id (per the migration) means events
@@ -608,8 +588,7 @@ async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, A
             AND occurred_at >= now() - interval '7 days'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let by_plan = group_count(
         &state.db,
@@ -628,8 +607,7 @@ async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, A
 async fn stats_companies(State(state): State<AppState>) -> Result<Json<CompanyStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM companies")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // Activity proxy: any file in any of the company's projects has
     // updated_at in the last 30d. EXISTS rather than DISTINCT-join so
@@ -645,16 +623,14 @@ async fn stats_companies(State(state): State<AppState>) -> Result<Json<CompanySt
           )",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let with_projects: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM companies c
           WHERE EXISTS (SELECT 1 FROM projects p WHERE p.company_id = c.redpash_id)",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     Ok(Json(CompanyStats {
         total: total as u64,
@@ -696,8 +672,7 @@ async fn stats_memberships(
 
     let total: i64 = sqlx::query_scalar(count_sql)
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
     let by_role = group_count(&state.db, group_sql).await?;
 
     Ok(Json(MembershipStats {
@@ -712,8 +687,7 @@ async fn stats_memberships(
 async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_files")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let by_stage = group_count(
         &state.db,
@@ -736,8 +710,7 @@ async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, A
           WHERE cleanness_pct IS NOT NULL",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     Ok(Json(FileStats {
         total: total as u64,
@@ -754,8 +727,7 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
         "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let last_7d: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files
@@ -763,8 +735,7 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
             AND created_at >= now() - interval '7 days'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     // The "report" criterion per the object model: a project counts as
     // a report when it contains ≥1 chart-typed file. So `used_in_reports`
@@ -775,8 +746,7 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
           WHERE file_type = 'chart'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     Ok(Json(ChartStats {
         total: total as u64,
@@ -790,8 +760,7 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
 async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_steps")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let by_kind = group_count(
         &state.db,
@@ -803,8 +772,7 @@ async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, A
           WHERE created_at >= now() - interval '24 hours'",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     Ok(Json(StepStats {
         total: total as u64,

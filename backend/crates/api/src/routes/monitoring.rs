@@ -133,8 +133,7 @@ async fn list_events(
     // events ever logged" alongside the windowed/filtered total.
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // Post-filter total + the page rows. Three optional filters
     // (window, level, kind) folded into a single SQL via the
@@ -149,8 +148,7 @@ async fn list_events(
     .bind(q.level.as_deref())
     .bind(q.kind.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT redpash_id, occurred_at, origin, level, kind, message,
@@ -168,8 +166,7 @@ async fn list_events(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<EventSummary> = rows
         .into_iter()
@@ -206,8 +203,7 @@ async fn list_audit_runs(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.run")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.run
@@ -215,8 +211,7 @@ async fn list_audit_runs(
     )
     .bind(q.tool.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT id, tool, ran_at, git_sha, git_branch, stats
@@ -229,8 +224,7 @@ async fn list_audit_runs(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<AuditRunSummary> = rows
         .into_iter()
@@ -278,16 +272,14 @@ async fn list_audit_findings(
         )
         .bind(q.tool.as_deref())
         .fetch_optional(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .await?
     };
 
     let all_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.finding",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.finding
@@ -299,8 +291,7 @@ async fn list_audit_findings(
     .bind(q.tool.as_deref())
     .bind(q.kind.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT run_id, tool, kind, finding_key, severity
@@ -317,8 +308,7 @@ async fn list_audit_findings(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<AuditFindingSummary> = rows
         .into_iter()
@@ -368,8 +358,7 @@ async fn list_requests(
 
     let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM request_log")
         .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .await?;
 
     // /api/monitoring/* itself is filtered out so the operator's act
     // of viewing the dashboard doesn't pollute its own table —
@@ -388,8 +377,7 @@ async fn list_requests(
     .bind(q.status)
     .bind(q.method.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows = sqlx::query(
         "SELECT id, at, method, route, status, duration_ms, request_id
@@ -409,8 +397,7 @@ async fn list_requests(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let rows: Vec<RequestSummary> = rows
         .into_iter()
@@ -458,8 +445,7 @@ async fn stats_requests(
     )
     .bind(cutoff)
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let mix_rows = sqlx::query(
         "SELECT status::TEXT AS status_str, COUNT(*)::BIGINT AS cnt
@@ -470,8 +456,7 @@ async fn stats_requests(
     )
     .bind(cutoff)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let mut status_mix: HashMap<String, u64> = HashMap::with_capacity(mix_rows.len());
     for r in mix_rows {
@@ -501,8 +486,7 @@ async fn stats_requests(
     )
     .bind(cutoff)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let top_routes: Vec<RouteStat> = route_rows
         .into_iter()
@@ -541,8 +525,7 @@ async fn stats_requests(
     .bind(bucket_interval(&label))
     .bind(cutoff)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let buckets: Vec<LatencyBucket> = bucket_rows
         .into_iter()
@@ -595,8 +578,7 @@ async fn stats_events(
     } else {
         sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events")
             .fetch_one(&state.db).await
-    }
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    }?;
 
     let by_level_query = if cutoff.is_some() {
         "SELECT level, COUNT(*)::BIGINT FROM events WHERE occurred_at >= $1 GROUP BY level"
@@ -605,8 +587,7 @@ async fn stats_events(
     };
     let by_level = if let Some(c) = cutoff {
         let rows = sqlx::query(by_level_query).bind(c)
-            .fetch_all(&state.db).await
-            .map_err(|e| AppError::internal("db", e.to_string()))?;
+            .fetch_all(&state.db).await?;
         let mut out = HashMap::with_capacity(rows.len());
         for r in rows {
             let k: String = r.try_get(0).unwrap_or_default();
@@ -621,8 +602,7 @@ async fn stats_events(
     let last_24h: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM events WHERE occurred_at >= now() - interval '24 hours'",
     )
-    .fetch_one(&state.db).await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .fetch_one(&state.db).await?;
 
     Ok(Json(EventsStats {
         total:    total as u64,
@@ -641,8 +621,7 @@ async fn stats_audit_runs(
     State(state): State<AppState>,
 ) -> Result<Json<AuditRunsStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.run")
-        .fetch_one(&state.db).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .fetch_one(&state.db).await?;
 
     let by_tool = crate::routes::admin::group_count(
         &state.db,
@@ -652,8 +631,7 @@ async fn stats_audit_runs(
     let last_7d: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.run WHERE ran_at >= now() - interval '7 days'",
     )
-    .fetch_one(&state.db).await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .fetch_one(&state.db).await?;
 
     Ok(Json(AuditRunsStats {
         total:   total as u64,
@@ -672,8 +650,7 @@ async fn stats_audit_findings(
     State(state): State<AppState>,
 ) -> Result<Json<AuditFindingsStats>, AppError> {
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.finding")
-        .fetch_one(&state.db).await
-        .map_err(|e| AppError::internal("db", e.to_string()))?;
+        .fetch_one(&state.db).await?;
 
     // Bucket boundaries: low ≤ 5, med 6-15, high > 15. NULL severity
     // folds into "low" since "no severity flagged" is the gentlest
@@ -733,8 +710,7 @@ async fn list_optimization_points(
         "SELECT COUNT(*)::BIGINT FROM optimization_points",
     )
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM optimization_points
@@ -744,8 +720,7 @@ async fn list_optimization_points(
     .bind(q.subsystem.as_deref())
     .bind(q.status.as_deref())
     .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     // Sort: open before planned before done before wontfix; then
     // subsystem; then phase. "What's left to do" rises to the top.
@@ -772,8 +747,7 @@ async fn list_optimization_points(
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?;
+    .await?;
 
     let mut points: Vec<OptimizationPoint> = Vec::with_capacity(rows.len());
     for r in rows {
@@ -953,8 +927,7 @@ async fn patch_optimization_point(
     .bind(id)
     .bind(new_status)
     .fetch_optional(&state.db)
-    .await
-    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .await?
     .ok_or_else(|| AppError::not_found("not_found", format!("optimization_point {id}")))?;
 
     let mut p = OptimizationPoint {
