@@ -49,6 +49,12 @@ pub struct Comment {
     pub redpash_id: String,
     pub case_id:    String,
     #[serde(default)] pub author_id: Option<String>,
+    /// Hydrated server-side via LEFT JOIN users. The FE thread render
+    /// (`.rp-cases-comment-author`) reads `display_name || rid || "—"`
+    /// so the user sees a readable name instead of `USR_abc123…`. Null
+    /// when the author no longer exists (FK is ON DELETE SET NULL —
+    /// the comment outlives the deletion).
+    #[serde(default)] pub author_display_name: Option<String>,
     pub body:       String,
     pub is_edited:  bool,
     pub created_at: DateTime<Utc>,

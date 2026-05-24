@@ -2256,36 +2256,46 @@ pub async fn delete_case(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
 
 #[derive(FromRow)]
 struct CommentRow {
-    redpash_id: String,
-    case_id:    String,
-    author_id:  Option<String>,
-    body:       String,
-    is_edited:  bool,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    redpash_id:           String,
+    case_id:              String,
+    author_id:            Option<String>,
+    author_display_name:  Option<String>,
+    body:                 String,
+    is_edited:            bool,
+    created_at:           DateTime<Utc>,
+    updated_at:           DateTime<Utc>,
 }
 impl From<CommentRow> for Comment {
     fn from(r: CommentRow) -> Self {
         Self {
-            redpash_id: r.redpash_id,
-            case_id:    r.case_id,
-            author_id:  r.author_id,
-            body:       r.body,
-            is_edited:  r.is_edited,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            redpash_id:           r.redpash_id,
+            case_id:              r.case_id,
+            author_id:            r.author_id,
+            author_display_name:  r.author_display_name,
+            body:                 r.body,
+            is_edited:            r.is_edited,
+            created_at:           r.created_at,
+            updated_at:           r.updated_at,
         }
     }
 }
 
-const COMMENT_COLS: &str =
-    "redpash_id, case_id, author_id, body, is_edited, created_at, updated_at";
+/// SELECT list for comment queries that hydrate the author's display
+/// name via LEFT JOIN to users. Mirrors the CASE_SELECT shape.
+/// `cm.` alias on the comments row, `u.` on the optional author user.
+const COMMENT_SELECT: &str =
+    "cm.redpash_id, cm.case_id, cm.author_id,
+     u.display_name AS author_display_name,
+     cm.body, cm.is_edited, cm.created_at, cm.updated_at";
+
+const COMMENT_USER_JOIN: &str =
+    "LEFT JOIN users u ON u.redpash_id = cm.author_id";
 
 pub async fn list_comments_for_case(pool: &PgPool, case_id: &str) -> sqlx::Result<Vec<Comment>> {
     let rows: Vec<CommentRow> = sqlx::query_as(&format!(
-        "SELECT {COMMENT_COLS} FROM comments
-         WHERE case_id = $1
-         ORDER BY created_at ASC"
+        "SELECT {COMMENT_SELECT} FROM comments cm {COMMENT_USER_JOIN}
+         WHERE cm.case_id = $1
+         ORDER BY cm.created_at ASC"
     ))
     .bind(case_id)
     .fetch_all(pool)
@@ -2295,7 +2305,8 @@ pub async fn list_comments_for_case(pool: &PgPool, case_id: &str) -> sqlx::Resul
 
 pub async fn find_comment(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Comment>> {
     let row: Option<CommentRow> = sqlx::query_as(&format!(
-        "SELECT {COMMENT_COLS} FROM comments WHERE redpash_id = $1"
+        "SELECT {COMMENT_SELECT} FROM comments cm {COMMENT_USER_JOIN}
+         WHERE cm.redpash_id = $1"
     ))
     .bind(rid)
     .fetch_optional(pool)
@@ -2303,6 +2314,9 @@ pub async fn find_comment(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Comme
     Ok(row.map(Into::into))
 }
 
+/// INSERT … RETURNING via a CTE so we can chain the LEFT JOIN against
+/// `users` and produce the hydrated Comment shape in one round-trip.
+/// Same pattern as insert_case.
 pub async fn insert_comment(
     pool:      &PgPool,
     rid:       &str,
@@ -2311,9 +2325,12 @@ pub async fn insert_comment(
     body:      &str,
 ) -> sqlx::Result<Comment> {
     let row: CommentRow = sqlx::query_as(&format!(
-        "INSERT INTO comments (redpash_id, case_id, author_id, body)
-         VALUES ($1, $2, $3, $4)
-         RETURNING {COMMENT_COLS}"
+        "WITH cm AS (
+             INSERT INTO comments (redpash_id, case_id, author_id, body)
+             VALUES ($1, $2, $3, $4)
+             RETURNING *
+         )
+         SELECT {COMMENT_SELECT} FROM cm {COMMENT_USER_JOIN}"
     ))
     .bind(rid)
     .bind(case_id)
@@ -2326,10 +2343,13 @@ pub async fn insert_comment(
 
 pub async fn update_comment(pool: &PgPool, rid: &str, body: &str) -> sqlx::Result<Option<Comment>> {
     let row: Option<CommentRow> = sqlx::query_as(&format!(
-        "UPDATE comments
-         SET body = $2, is_edited = true, updated_at = now()
-         WHERE redpash_id = $1
-         RETURNING {COMMENT_COLS}"
+        "WITH cm AS (
+             UPDATE comments
+             SET body = $2, is_edited = true, updated_at = now()
+             WHERE redpash_id = $1
+             RETURNING *
+         )
+         SELECT {COMMENT_SELECT} FROM cm {COMMENT_USER_JOIN}"
     ))
     .bind(rid)
     .bind(body)
