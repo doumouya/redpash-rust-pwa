@@ -444,6 +444,14 @@ export function mountTools(panelBody, ctx) {
   let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
   let selectedCols = new Set();   // column names selected via row checkboxes — drives SELECT_ACTIONS
   let editingName  = null;        // column name whose Name cell is being edited (Slice F), or null
+  let editingDtype = null;        // column name whose Datatype cell is being edited (Slice G), or null
+  let castConfirm  = null;        // { column, dtype, total, would_null, samples } — open confirm sheet, or null
+
+  // Target dtypes for cast — pulled from the cast tool's enum field so
+  // the picker form (still alive until Slice H) and the columns view
+  // share one source of truth.
+  const DTYPE_OPTIONS = (TOOLS.find((t) => t.kind === "cast")?.fields || [])
+    .find((f) => f.key === "dtype")?.options || [];
 
   // Two stable containers — list view + form view; we swap visibility.
   const listEl = document.createElement("div");
@@ -550,13 +558,17 @@ export function mountTools(panelBody, ctx) {
       sheetCfg    = null;
       sheetFields = [];
       selectedCols.clear();
-      editingName = null;
+      editingName  = null;
+      editingDtype = null;
+      castConfirm  = null;
       columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
       return;
     }
-    // Drop a stale edit target if the column it pointed at no longer
+    // Drop stale edit targets if the column they point at no longer
     // exists (file change, rename via another path, drop_columns step).
-    if (editingName && !live.has(editingName)) editingName = null;
+    if (editingName  && !live.has(editingName))  editingName  = null;
+    if (editingDtype && !live.has(editingDtype)) editingDtype = null;
+    if (castConfirm  && !live.has(castConfirm.column)) castConfirm = null;
     // Intersect the current selection with the live column set — a
     // prior step (drop_columns, rename_column, etc.) may have removed
     // or renamed columns that the user had selected. Stale names get
@@ -588,12 +600,26 @@ export function mountTools(panelBody, ctx) {
           + ' data-orig="' + esc(c.name) + '" autocomplete="off" spellcheck="false" /></td>'
         : '<td class="is-name is-editable" data-col="' + esc(c.name) + '"'
           + ' title="Click to rename">' + esc(c.name) + '</td>';
+      // Datatype cell — click swaps to a <select> of DTYPE_OPTIONS;
+      // picking a new value triggers the cast-preview flow (Slice G).
+      const isEditingDtype = editingDtype === c.name;
+      const dtypeCell = isEditingDtype
+        ? '<td class="is-dtype is-editing" data-col="' + esc(c.name) + '">'
+          + '<select class="rt-col-dtype-select" data-orig="' + esc(c.dtype || "") + '">'
+          +   DTYPE_OPTIONS.map(([v, l]) =>
+                '<option value="' + esc(v) + '"'
+                + (v === c.dtype ? ' selected' : '') + '>'
+                + esc(l) + '</option>').join("")
+          + '</select></td>'
+        : '<td class="is-dtype is-editable" data-col="' + esc(c.name) + '"'
+          + ' title="Click to change type">'
+          + esc(c.dtype || "—") + sniff + '</td>';
       return '<tr' + (checked ? ' class="is-selected"' : '') + '>'
         + '<td class="is-check"><input type="checkbox" class="rt-chk rt-col-check"'
         +   ' data-col="' + esc(c.name) + '"' + (checked ? ' checked' : '') + ' /></td>'
         + '<td class="is-num is-muted">' + (i + 1) + '</td>'
         + nameCell
-        + '<td>' + esc(c.dtype || "—") + sniff + '</td>'
+        + dtypeCell
         + '<td class="is-num ' + band + '">' + (nullCount != null ? nullCount : "—") + '</td>'
         + '<td class="is-num ' + band + '">' + (pct != null ? pct.toFixed(1) + "%" : "—") + '</td>'
         + '<td class="is-num">' + (uniqPct != null ? uniqPct.toFixed(1) + "%" : "—") + '</td>'
@@ -610,6 +636,7 @@ export function mountTools(panelBody, ctx) {
       + '</div>'
       + renderColumnsToolbar(summary)
       + (activeSheet ? renderColumnsSheet(cols) : '')
+      + (castConfirm ? renderCastConfirm() : '')
       + '<div class="rt-tool-columns-tablewrap">'
       +   '<table class="rp-table rt-tool-columns-table">'
       +     '<thead><tr>'
@@ -925,12 +952,130 @@ export function mountTools(panelBody, ctx) {
     renderColumnsView();
   }
 
+  // ── Slice G — edit mode: Datatype cell (cast with preview) ─────────
+  // Click on the Datatype cell swaps it for a <select> of DTYPE_OPTIONS.
+  // Picking a value runs /cast-preview; if no rows would be nulled, the
+  // cast fires immediately. Otherwise a confirm sheet shows the cost
+  // (would_null + sample source values) before the destructive apply.
+  columnsEl.addEventListener("click", (e) => {
+    const cell = e.target.closest(".rt-tool-columns-table td.is-dtype.is-editable");
+    if (!cell || editingDtype) return;
+    editingDtype = cell.dataset.col || null;
+    if (editingDtype) renderColumnsView();
+  });
+
+  columnsEl.addEventListener("change", async (e) => {
+    const select = e.target.closest(".rt-col-dtype-select");
+    if (!select || !editingDtype) return;
+    const from = select.dataset.orig;
+    const to   = select.value;
+    const col  = editingDtype;
+    editingDtype = null;
+    if (!to || to === from) { renderColumnsView(); return; }
+    await previewAndCast(col, to);
+  });
+
+  columnsEl.addEventListener("keydown", (e) => {
+    const select = e.target.closest(".rt-col-dtype-select");
+    if (!select) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      editingDtype = null;
+      renderColumnsView();
+    }
+  });
+
+  // Cast confirm sheet — close/cancel re-render; apply fires the cast.
+  columnsEl.addEventListener("click", async (e) => {
+    if (e.target.closest(".rt-cast-confirm-close")
+        || e.target.closest(".rt-cast-confirm-cancel")) {
+      castConfirm = null;
+      renderColumnsView();
+      return;
+    }
+    const applyBtn = e.target.closest(".rt-cast-confirm-apply");
+    if (!applyBtn || !castConfirm) return;
+    const { column, dtype } = castConfirm;
+    castConfirm = null;
+    await runStep("cast", { column, dtype },
+                  "Cast " + column + " → " + dtype,
+                  { busyBtn: applyBtn });
+  });
+
+  // Cast-preview gate — dry-run the cast against the cached frame and
+  // surface the cost before applying. The endpoint returns
+  // { total, would_null, samples }; would_null === 0 means a clean
+  // cast that we apply immediately.
+  async function previewAndCast(column, dtype) {
+    const rid = ctx.fileRid();
+    if (!rid) return;
+    let resp;
+    try {
+      resp = await api.post("/files/" + encodeURIComponent(rid) + "/cast-preview",
+                            { column, dtype });
+    } catch (err) {
+      const msg = (err && (err.body?.message || err.body?.error)) || err?.message || "Preview failed";
+      setStatus(msg + (err?.status ? " (" + err.status + ")" : ""), "err");
+      return;
+    }
+    if ((resp?.would_null ?? 0) === 0) {
+      await runStep("cast", { column, dtype }, "Cast " + column + " → " + dtype);
+      return;
+    }
+    castConfirm = {
+      column,
+      dtype,
+      total:      resp.total      ?? 0,
+      would_null: resp.would_null ?? 0,
+      samples:    resp.samples    ?? [],
+    };
+    renderColumnsView();
+  }
+
   function closeSheet() {
     activeSheet = null;
     sheetSource = null;
     sheetCfg    = null;
     sheetFields = [];
     renderColumnsView();
+  }
+
+  // Slice G — cast confirm sheet. Shown when /cast-preview reports
+  // would_null > 0 so the user sees the cost (how many cells will
+  // become null, and which source values caused it) before applying.
+  // would_null === 0 skips this and fires the step directly.
+  function renderCastConfirm() {
+    if (!castConfirm) return '';
+    const { column, dtype, total, would_null, samples } = castConfirm;
+    const dtypeLbl = (DTYPE_OPTIONS.find((o) => o[0] === dtype) || [dtype, dtype])[1];
+    return '<div class="rt-tool-columns-sheet rt-cast-confirm">'
+      +    '<div class="rt-tool-columns-sheet-head">'
+      +      '<span class="rt-tool-columns-sheet-title">'
+      +        '<i class="bi bi-exclamation-triangle"></i> '
+      +        'Cast ' + esc(column) + ' → ' + esc(dtypeLbl)
+      +      '</span>'
+      +      '<button class="rt-btn rt-btn--ghost rt-cast-confirm-close" type="button"'
+      +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
+      +    '</div>'
+      +    '<p class="rt-tool-columns-sheet-blurb">'
+      +      '<b>' + would_null + '</b> of ' + total + ' cell'
+      +      (total === 1 ? '' : 's') + ' won\'t parse and will become null. '
+      +      'Use <i>Fix invalid</i> first if you\'d rather clean the source values.'
+      +    '</p>'
+      +    (samples.length
+            ? '<div class="rt-tool-columns-sheet-chips" title="Sample source values that would be nulled">'
+              + '<span class="rt-tool-columns-sheet-chips-lbl">Examples</span>'
+              + samples.map((s) => '<span class="rt-tool-columns-sheet-chip">'
+                  + esc(s) + '</span>').join('')
+              + '</div>'
+            : '')
+      +    '<div class="rt-tool-columns-sheet-foot">'
+      +      '<button class="rt-btn rt-cast-confirm-cancel" type="button">Cancel</button>'
+      +      '<button class="rt-btn rt-btn--accent rt-cast-confirm-apply" type="button">'
+      +        '<i class="bi bi-play-fill"></i> Apply cast'
+      +      '</button>'
+      +    '</div>'
+      +    '</div>';
   }
 
   // Picked columns in file order — checking order is unpredictable

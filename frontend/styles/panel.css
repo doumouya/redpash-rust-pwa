@@ -851,3 +851,49 @@
   border-color: var(--rp-accent-2);
   box-shadow: 0 0 0 2px var(--rp-accent-soft);
 }
+
+/* ── editable Datatype cell (Slice G) ───────────────────────────
+   Click swaps the dtype text for a <select> of target types;
+   picking triggers /cast-preview. Hover/focus mirrors the Name
+   cell's affordance for visual consistency. */
+.rt-tool-columns-table td.is-dtype.is-editable {
+  cursor: pointer;
+}
+.rt-tool-columns-table td.is-dtype.is-editable:hover {
+  background: var(--rp-hover);
+  outline: 1px dashed var(--rp-border);
+  outline-offset: -1px;
+}
+.rt-tool-columns-table td.is-dtype.is-editing {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.rt-col-dtype-select {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--rp-accent-2);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+.rt-col-dtype-select:focus {
+  box-shadow: 0 0 0 2px var(--rp-accent-soft);
+}
+
+/* Cast-confirm sheet — uses the warn vocab (not the accent-soft
+   one the regular sheet uses) so the destructive cost reads
+   distinctly from a routine action. */
+.rt-tool-columns-sheet.rt-cast-confirm {
+  border-color: var(--rp-warn);
+  background: rgba(249, 226, 175, 0.10);
+}
+.rt-tool-columns-sheet.rt-cast-confirm .rt-tool-columns-sheet-title i {
+  color: var(--rp-warn);
+}
+.rt-tool-columns-sheet.rt-cast-confirm .rt-tool-columns-sheet-blurb b {
+  color: var(--rp-warn);
+}
