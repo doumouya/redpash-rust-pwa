@@ -119,32 +119,57 @@ SELECT * FROM events
 ```
 
 **Surfaces needed:** `events` (✓), `request_log` (✓), correlation by
-`request_id` (✓).
+`request_id` (✓), structured JSON log stream (✓ — slice B/C `f2b3d72`).
 
-**Gap.** Two:
+**The log↔DB pivot (canonical I-2 workflow).** With slice B + Torv's
+airlock (f2b3d72) in place, the stdout JSON log line for the 500 looks
+like:
 
-1. **The "user's last 10 actions" trail is mostly empty for non-error
-   paths.** `events` captures lifecycle events (project_create,
-   file_upload, chart_create, etc) — but most navigation, panel-opens,
-   filter-applies, etc don't emit events. The trail is sparse.
+```json
+{"timestamp": "...", "level": "ERROR",
+ "fields": {"status": "500", "kind": "db", "message": "internal database error",
+            "error.chain": "sqlx::Error: connection lost: 08006: ...",
+            "error.debug": "Report { ... backtrace if RUST_BACKTRACE=1 ... }"},
+ "span": {"request_id": "req_abc…", "name": "api"}}
+```
 
-2. **The server-side tracing line lives in stdout, not in the database.**
-   The `tower_http::TraceLayer::new_for_http()` default doesn't
-   include request_id in the log line. To grep the rotated stdout file
-   for `request_id=req_abc…` you need the id already, AND the line
-   doesn't print it. So the operator can pivot DB→log but not log→DB.
+Operator workflow:
 
-> **Slice candidate (gap 1):** broaden `event::record` coverage to
-> the "interesting user actions" set (route navigations, modal opens,
-> filter applies) — keeps the user trail meaningful for non-error
-> investigations. Slice into FE (mostly Torv's lane) + BE (route-handler
-> entry events).
->
-> **Slice candidate (gap 2):** configure tower_http's TraceLayer with
-> `on_request`/`on_response` callbacks that include request_id in the
-> log line. Or switch to `tracing::info_span!` per-request with
-> `request_id` as a span field — every macro inside the span inherits
-> it. ~30 LOC in `routes/mod.rs` + `main.rs`.
+```bash
+# 1. pull the 500 event, grab request_id
+$ psql -c "SELECT request_id FROM events WHERE level='error' AND user_redpash_id='USR_…' ORDER BY occurred_at DESC LIMIT 1"
+ request_id
+ ────────────
+ req_abc…
+
+# 2. pivot to the JSON log stream for the rich chain
+$ jq 'select(.span.request_id == "req_abc…")' app.log
+{"level": "ERROR", "fields": {"error.chain": "...", "error.debug": "..."}, ...}
+
+# 3. for cross-handler timing inside the same request
+$ jq 'select(.span.request_id == "req_abc…") | {ts: .timestamp, target, message: .fields.message}' app.log
+```
+
+The `error.chain` field carries the full source walk (sqlx →
+PgError → connection details); `error.debug` adds the backtrace
+when RUST_BACKTRACE is set. Channel B (the events row) carries
+only sanitized `kind` + `message` per the airlock discipline — the
+radioactive payload (eyre::Report) lives in Channel A only and
+is dropped after the log emit.
+
+**Remaining gap.** The "user's last 10 actions" trail is mostly
+empty for non-error paths. `events` captures lifecycle events
+(project_create, file_upload, chart_create, etc) — but most
+navigation, panel-opens, filter-applies don't emit events. The
+trail is sparse on the FE side.
+
+> **Slice candidate:** broaden interaction-event coverage on the
+> FE via the `track(kind, context)` helper extension to
+> `scripts/events.js` (Torv's lane, slice C/D). Each "meaningful
+> action" call site emits via one funnel + auto-attaches
+> request_id from the response header. Then I-2's "last 10
+> actions" feed is rich enough to reconstruct what the user was
+> doing.
 
 ---
 
@@ -295,19 +320,28 @@ today logs to stderr (default panic handler) but doesn't record to
 
 ## Gap summary (priority-ordered)
 
-Slice-B+ shopping list, sorted by "biggest gap closed for least cost".
+Status as of 2026-05-24 23:00 — slice B (1b47643) + Torv's airlock
+(f2b3d72) closed gaps 1, 2, 3, 8 + delivered the JSON-output bonus.
+The audit catalog has surfaces for each new piece (B-LOG.json-format,
+B-LOG.airlock-inner, B-LOG.airlock-discipline, B-LOG.severity-split,
+B-PANIC.tracing-emit, B-PANIC.backtrace, B-CORR.span, B-REQ.user-session).
 
-| # | Gap | Investigations | Cost | Notes |
-|---|-----|----------------|------|-------|
-| **1** | tower_http TraceLayer doesn't print request_id in log line | I-2 | ~30 LOC | log↔DB pivot is the single most-used operator move |
-| **2** | `request_log` missing `user_redpash_id` + `session_id` columns | I-1, I-7 | ~15 LOC + mig | unlocks per-user / per-session investigations on the success path |
-| **3** | `panic::set_hook` absent → background panics invisible | I-8 | ~15 LOC | worst-case observability hole — fix early |
-| **4** | FE doesn't read `X-Request-Id` from fetch responses | I-2 (indirectly) | ~10 LOC + threading | reportEvent accepts the field; nothing populates it from FE side |
-| **5** | FE interactions (nav / modal / filter) don't emit events | I-2, I-7 | medium | "user's last 10 actions" is too sparse without this |
-| **6** | No `#[tracing::instrument]` spans → no automatic sub-handler timing | I-5 | medium | scattered `Instant::now()` calls today; spans unify them |
-| **7** | No `trace_id` for multi-request user actions | I-3 | ~40 LOC + mig | defer; I-1+I-2 cover most cases |
-| **8** | `RUST_LOG` defaults to `info` — verbose pre-market wants `debug` | (all) | 1 LOC | trivial; pair with #1 |
-| **9** | `console.log` proliferation (15 sites) — invisible to operator | I-7 (cleanup) | low ongoing | migrate to reportEvent as cleanup-cadence per [[feedback-cleaning-cadence]] |
+| # | Gap | Investigations | Status | Notes |
+|---|-----|----------------|--------|-------|
+| **1** | tower_http log line doesn't print request_id | I-2 | ✅ slice B `1b47643` | request_id_mw opens `info_span!("api", request_id=…)`; every macro inside the request inherits the field |
+| **2** | `request_log` missing `user_redpash_id` + `session_id` | I-1, I-7 | ✅ slice B `1b47643` | migration 027 + capture_mw populates both on every request |
+| **3** | `panic::set_hook` absent | I-8 | ✅ slice B `1b47643` + airlock `f2b3d72` | hook records to events table AND emits `tracing::error!` with `Backtrace::force_capture()` |
+| **8** | `RUST_LOG` defaults to `info` — verbose pre-market wants `sqlx=info` | (all) | ✅ slice B `1b47643` | default now `info,sqlx=info,hyper=warn,tower_http=info` |
+| **A** | AppError carries no source chain — Channel A loses sqlx PgError details | I-2 | ✅ airlock `f2b3d72` | `inner: Option<eyre::Report>` + `error.chain` + `error.debug` fields; radioactive payload dropped at the wire |
+| **B** | tracing output is pretty-text — `jq` filtering impossible | I-2, I-5, I-7 | ✅ airlock `f2b3d72` | `.json().flatten_event(true)`; span fields at the top level |
+| **C** | All errors emit at WARN level — losing the severity signal | (all) | ✅ airlock `f2b3d72` | AppError::into_response splits 5xx-with-Report→ERROR / 4xx→WARN |
+| **4** | FE doesn't read `X-Request-Id` from fetch responses | I-2 indirectly | 🔲 slice C (Torv) | reportEvent accepts the field; no caller populates it |
+| **5** | FE interactions (nav / modal / filter) don't emit events | I-2, I-7 | 🔲 slice C/D (Torv) | `track(kind, context)` helper extension to `scripts/events.js`; one funnel, auto-attaches request_id |
+| **6** | No `#[tracing::instrument]` spans → no sub-handler timing | I-5 | 🔲 slice E candidate | scattered `Instant::now()` today; spans unify |
+| **7** | No `trace_id` for multi-request user actions | I-3 | 🔲 deferred | I-1+I-2 cover most cases |
+| **9** | `console.log` proliferation (15 sites) — invisible to operator | I-7 (cleanup) | 🔲 cleanup-cadence | migrate to reportEvent per [[feedback-cleaning-cadence]] |
+| **D** | PII leak risk in `error.chain` ({:#} on PgError can stringify binds) | (all post-RBAC) | 🔲 slice D | redaction wrapper + known-sensitive-field list; pair with body-logging discipline |
+| **E** | 4xx-inner discipline ("constructors don't set inner") is convention, not types | (all) | 🔲 audit-catalog add | mechanical scan of `AppError::bad_request/not_found/conflict` callsites |
 
 ---
 
