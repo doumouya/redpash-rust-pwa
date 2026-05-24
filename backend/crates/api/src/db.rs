@@ -1712,6 +1712,29 @@ pub async fn add_company_member(
     Ok(())
 }
 
+/// Strict UPDATE — used by `PATCH /:rid/members/:user_id`. Returns
+/// whether the membership existed; the route handler `?`s into a
+/// 404 when it didn't. Distinct from `add_company_member`'s upsert
+/// path so a client that thinks it's editing an existing member
+/// doesn't silently create one when the FK isn't there.
+pub async fn update_company_member_role(
+    pool:        &PgPool,
+    company_rid: &str,
+    user_rid:    &str,
+    role:        &str,
+) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        "UPDATE company_memberships SET role = $3
+          WHERE company_id = $1 AND user_redpash_id = $2",
+    )
+    .bind(company_rid)
+    .bind(user_rid)
+    .bind(role)
+    .execute(pool)
+    .await?;
+    Ok(n.rows_affected() > 0)
+}
+
 pub async fn remove_company_member(
     pool:        &PgPool,
     company_rid: &str,

@@ -33,7 +33,8 @@ pub fn routes() -> Router<AppState> {
         .route("/",                      get(list).post(create))
         .route("/:rid",                  get(get_one).patch(patch).delete(delete_one))
         .route("/:rid/members",          get(members).post(add_member))
-        .route("/:rid/members/:user_id", axum::routing::delete(remove_member))
+        .route("/:rid/members/:user_id",
+            axum::routing::patch(patch_member_role).delete(remove_member))
 }
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -281,6 +282,55 @@ async fn remove_member(
         return Err(forbidden("admins can't remove an owner"));
     }
     db::remove_company_member(&state.db, &rid, &user_id)
+        .await
+        .map_err(db_err)?;
+    let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
+    Ok(Json(MemberList { items }))
+}
+
+#[derive(Deserialize)]
+struct PatchMemberBody {
+    role: String,
+}
+
+/// `PATCH /api/companies/:rid/members/:user_id` — change a member's
+/// role without the DELETE + re-add round-trip. Strict update: 404
+/// if the target user isn't a member of this company.
+///
+/// Same gates as `add_member`'s upsert path: caller must be
+/// owner/admin; only an owner can grant the owner role; demoting
+/// the last owner is blocked.
+async fn patch_member_role(
+    State(state):          State<AppState>,
+    headers:               HeaderMap,
+    Path((rid, user_id)):  Path<(String, String)>,
+    Json(body):            Json<PatchMemberBody>,
+) -> Result<Json<MemberList>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let role = require_member(&state, &rid, &user).await?;
+    require_manage(&role)?;
+
+    let new_role = body.role.trim();
+    if !matches!(new_role, "owner" | "admin" | "member") {
+        return Err(AppError::bad_request("invalid", "role must be owner, admin or member"));
+    }
+    if new_role == "owner" && role != "owner" {
+        return Err(forbidden("only an owner can grant the owner role"));
+    }
+
+    let current = db::company_role(&state.db, &rid, &user_id)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(|| AppError::not_found("not_found", "membership not found"))?;
+
+    if current == "owner"
+        && new_role != "owner"
+        && db::company_owner_count(&state.db, &rid).await.map_err(db_err)? <= 1
+    {
+        return Err(forbidden("can't demote the last owner — promote another first"));
+    }
+
+    db::update_company_member_role(&state.db, &rid, &user_id, new_role)
         .await
         .map_err(db_err)?;
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
