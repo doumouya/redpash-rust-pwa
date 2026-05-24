@@ -1972,3 +1972,49 @@ pub async fn find_event(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Event>>
     .await?;
     Ok(row.map(Into::into))
 }
+
+/// Every event row tagged with `request_id`, ordered ascending so the
+/// operator reads the timeline top-to-bottom. Powers the M-1
+/// request-replay drill-down on the Monitoring page (investigation
+/// I-2). No limit — request-scoped event lists are bounded by the
+/// number of fire-and-forget event::record sites a single handler can
+/// trigger; in practice 0-5 rows.
+pub async fn list_events_for_request(pool: &PgPool, request_id: &str) -> sqlx::Result<Vec<Event>> {
+    let rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "SELECT {EVENT_COLS} FROM events
+         WHERE request_id = $1
+         ORDER BY occurred_at ASC"
+    ))
+    .bind(request_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// Every event for a user within a time window, newest first. Powers
+/// the M-2 per-user activity feed (investigations I-1 / I-7). The
+/// window bounds the result set; the caller decides them based on the
+/// operator's UI (default 1h on the Monitoring page).
+pub async fn list_events_for_user(
+    pool:    &PgPool,
+    user_rid:&str,
+    from:    chrono::DateTime<chrono::Utc>,
+    to:      chrono::DateTime<chrono::Utc>,
+    limit:   i64,
+) -> sqlx::Result<Vec<Event>> {
+    let rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "SELECT {EVENT_COLS} FROM events
+         WHERE user_redpash_id = $1
+           AND occurred_at >= $2
+           AND occurred_at <  $3
+         ORDER BY occurred_at DESC
+         LIMIT $4"
+    ))
+    .bind(user_rid)
+    .bind(from)
+    .bind(to)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}

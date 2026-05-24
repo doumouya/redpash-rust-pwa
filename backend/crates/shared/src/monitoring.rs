@@ -164,3 +164,33 @@ pub struct Window {
     pub since: chrono::DateTime<chrono::Utc>,
     pub until: chrono::DateTime<chrono::Utc>,
 }
+
+/// Returned by `GET /api/monitoring/request/:request_id` — the
+/// per-request investigation drill-down. `request` is the request_log
+/// row keyed on `request_id`; `events` is every event row carrying the
+/// same `request_id`, ordered ascending so the operator reads the
+/// timeline top-to-bottom.
+///
+/// Powers slice E of the audit-everything workstream — investigation
+/// I-2 ("user got a 500 — root-cause it") in
+/// docs/internal/observability/investigations.md.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestDetail {
+    pub request: RequestSummary,
+    pub events:  Vec<crate::event::Event>,
+}
+
+/// Returned by `GET /api/monitoring/users/:rid/activity?from=&to=` —
+/// the per-user investigation feed. `requests` + `events` are
+/// independent slices (UNION'd on the frontend for a single
+/// time-ordered redtable), each filtered to `user_redpash_id = $rid`
+/// over the requested window.
+///
+/// Powers investigations I-1 ("user X reports slow Workspace") and
+/// I-7 ("replay user's session") via the per-user index slice B
+/// added to `request_log` (migration 027).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserActivity {
+    pub requests: Vec<RequestSummary>,
+    pub events:   Vec<crate::event::Event>,
+}

@@ -106,13 +106,19 @@ impl IntoResponse for AppError {
         }
 
         // ── Channel B ── EventInfo on response extensions for
-        // capture_mw. Carries only the sanitized kind + message — the
-        // events table stays clean of internal chains. Joined to
-        // Channel A via the request_id stamped by the middleware on
-        // both sides.
+        // capture_mw. Carries the sanitized kind + message + (when
+        // there's an inner Report) a redacted rendering of the chain
+        // so the Monitoring page's M-4 error-chain expander has the
+        // PgError details at-a-glance. The full unredacted chain
+        // stays in Channel A only — discipline gate is
+        // `crate::redact::redact_chain`.
+        let chain_redacted = self.inner.as_ref().map(|report| {
+            crate::redact::redact_chain(&format!("{report:#}"))
+        });
         let info = crate::event::EventInfo {
             kind:    self.kind,
             message: self.message.clone(),
+            chain_redacted,
         };
 
         // ── Wire ── self.inner DROPPED here. The eyre::Report never

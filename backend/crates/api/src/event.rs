@@ -81,8 +81,16 @@ pub fn record(pool: &PgPool, draft: EventDraft) {
 /// Stashed in an error `Response`'s extensions by `AppError::into_response`
 /// so the capture middleware can read the error's kind + message after
 /// the handler has returned (the `AppError` itself is long gone by then).
+///
+/// `chain_redacted` carries a sanitized rendering of the underlying
+/// `eyre::Report` (when AppError had `inner: Some(_)`) — runs through
+/// `crate::redact::redact_chain` at the airlock. `None` for 4xx errors
+/// (the message IS the explanation) AND for 5xx without inner (the
+/// rare hand-constructed `internal()` calls). Powers the Monitoring
+/// page's M-4 error-chain expander (slice E).
 #[derive(Debug, Clone)]
 pub struct EventInfo {
-    pub kind:    &'static str,
-    pub message: String,
+    pub kind:           &'static str,
+    pub message:        String,
+    pub chain_redacted: Option<String>,
 }

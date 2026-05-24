@@ -13,6 +13,7 @@ mod db;
 mod error;
 mod event;
 mod id;
+mod redact;
 mod request_log;
 mod routes;
 mod state;
@@ -96,13 +97,22 @@ async fn main() -> anyhow::Result<()> {
             // boot-time panic before the runtime is up skips the DB
             // write (no runtime to spawn on) and falls through to the
             // tracing emit above + the default hook's stderr output.
+            //
+            // backtrace_head: redact + cap the first 20 frames into
+            // events.context so the Monitoring panic pane (M-3, slice E)
+            // has top-of-stack at-a-glance. The full backtrace stays
+            // in Channel A's panic.backtrace field (deep-dive consumer).
             if tokio::runtime::Handle::try_current().is_ok() {
+                let bt_head = redact::backtrace_head(&backtrace.to_string(), 20);
                 event::record(&pool, event::EventDraft {
                     origin:  "backend",
                     level:   "error",
                     kind:    "panic".into(),
-                    message: payload,
-                    context: serde_json::json!({ "location": location }),
+                    message: redact::redact_chain(&payload),
+                    context: serde_json::json!({
+                        "location":       location,
+                        "backtrace_head": bt_head,
+                    }),
                     ..Default::default()
                 });
             }

@@ -150,14 +150,19 @@ async fn capture_mw(
     );
 
     if status.as_u16() >= 400 {
-        let (err_kind, message) = match resp.extensions().get::<crate::event::EventInfo>() {
-            Some(info) => (Some(info.kind), info.message.clone()),
-            None => (None, status.canonical_reason().unwrap_or("error").to_string()),
+        let (err_kind, message, chain_redacted) = match resp.extensions().get::<crate::event::EventInfo>() {
+            Some(info) => (Some(info.kind), info.message.clone(), info.chain_redacted.clone()),
+            None => (None, status.canonical_reason().unwrap_or("error").to_string(), None),
         };
         let level = if status.as_u16() >= 500 { "error" } else { "warn" };
-        let context = match err_kind {
-            Some(k) => serde_json::json!({ "error_kind": k }),
-            None    => serde_json::json!({}),
+        // Mirror the redacted chain into events.context.error_chain
+        // when AppError carried an inner Report — feeds the Monitoring
+        // page's M-4 error-chain expander (slice E). The redactor at
+        // the airlock guarantees: length cap + sensitive-key masking.
+        let context = match (err_kind, chain_redacted) {
+            (Some(k), Some(chain)) => serde_json::json!({ "error_kind": k, "error_chain": chain }),
+            (Some(k), None)        => serde_json::json!({ "error_kind": k }),
+            (None,    _)           => serde_json::json!({}),
         };
         crate::event::record(&state.db, crate::event::EventDraft {
             origin:      "backend",

@@ -32,7 +32,7 @@ use shared::{
     monitoring::{
         AuditFindingSummary, AuditFindingsStats, AuditRunSummary, AuditRunsStats,
         EventSummary, EventsStats, LatencyBucket,
-        RequestSummary, RequestsStats, RouteStat, Window,
+        RequestDetail, RequestSummary, RequestsStats, RouteStat, UserActivity, Window,
     },
     optimization::OptimizationPoint,
     Page,
@@ -52,6 +52,12 @@ pub fn routes() -> Router<AppState> {
         .route("/audit-findings/stats",  get(stats_audit_findings))
         .route("/requests",            get(list_requests))
         .route("/requests/stats",      get(stats_requests))
+        // Per-request drill-down (M-1, slice E). Singular path so it
+        // can't collide with /requests/stats — :request_id is opaque
+        // to axum's matcher and would otherwise swallow "stats".
+        .route("/request/:request_id", get(request_detail))
+        // Per-user investigation feed (M-2, slice E).
+        .route("/users/:user_rid/activity", get(user_activity))
         .route("/optimization-points",      get(list_optimization_points))
         .route("/optimization-points/:rid", patch(patch_optimization_point))
 }
@@ -669,6 +675,108 @@ async fn stats_audit_findings(
         by_severity,
         by_kind,
     }))
+}
+
+// ── /api/monitoring/request/:request_id  (M-1 — slice E) ────────────────
+
+/// Per-request investigation drill-down. Pulls the `request_log` row
+/// keyed on `request_id`, plus every event tagged with the same
+/// request_id, ordered ascending so the operator reads the timeline
+/// top-to-bottom. 404 when neither the request row nor any event
+/// exists for the id — protects against a typo'd id returning an
+/// empty drill-down with no signal.
+async fn request_detail(
+    State(state):       State<AppState>,
+    Path(request_id):   Path<String>,
+) -> Result<Json<RequestDetail>, AppError> {
+    let row = sqlx::query(
+        "SELECT id, at, method, route, status, duration_ms, request_id
+           FROM request_log
+          WHERE request_id = $1
+          ORDER BY at DESC
+          LIMIT 1",
+    )
+    .bind(&request_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let request = match row {
+        Some(r) => RequestSummary {
+            id:          r.try_get("id").unwrap_or(0),
+            at:          r.try_get("at").unwrap_or_else(|_| Utc::now()),
+            method:      r.try_get("method").unwrap_or_default(),
+            route:       r.try_get("route").unwrap_or_default(),
+            status:      r.try_get("status").unwrap_or(0),
+            duration_ms: r.try_get("duration_ms").unwrap_or(0),
+            request_id:  r.try_get("request_id").ok(),
+        },
+        None => return Err(AppError::not_found("not_found", format!("request {request_id}"))),
+    };
+
+    let events = db::list_events_for_request(&state.db, &request_id).await?;
+
+    Ok(Json(RequestDetail { request, events }))
+}
+
+// ── /api/monitoring/users/:user_rid/activity  (M-2 — slice E) ───────────
+
+#[derive(Deserialize)]
+struct UserActivityQuery {
+    /// Window start (RFC3339). Defaults to `now - 1h` when absent.
+    #[serde(default)] from: Option<chrono::DateTime<chrono::Utc>>,
+    /// Window end (RFC3339). Defaults to `now` when absent.
+    #[serde(default)] to:   Option<chrono::DateTime<chrono::Utc>>,
+    /// Per-side cap (requests AND events). Default 500. Caps prevent
+    /// the operator's "give me all of last week" mistype from pulling
+    /// 10M rows; the FE pages back narrower windows when the cap hits.
+    #[serde(default)] limit: Option<i64>,
+}
+
+/// Per-user activity feed. Returns the user's request_log rows + events
+/// over the requested window, each capped to `limit` (default 500).
+/// Both slices are independent — the FE UNIONs them for a single
+/// time-ordered redtable view.
+async fn user_activity(
+    State(state):    State<AppState>,
+    Path(user_rid):  Path<String>,
+    Query(q):        Query<UserActivityQuery>,
+) -> Result<Json<UserActivity>, AppError> {
+    let now   = Utc::now();
+    let to    = q.to.unwrap_or(now);
+    let from  = q.from.unwrap_or_else(|| now - Duration::hours(1));
+    let limit = q.limit.unwrap_or(500).clamp(1, 5000);
+
+    let request_rows = sqlx::query(
+        "SELECT id, at, method, route, status, duration_ms, request_id
+           FROM request_log
+          WHERE user_redpash_id = $1
+            AND at >= $2 AND at < $3
+          ORDER BY at DESC
+          LIMIT $4",
+    )
+    .bind(&user_rid)
+    .bind(from)
+    .bind(to)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await?;
+
+    let requests: Vec<RequestSummary> = request_rows
+        .into_iter()
+        .map(|r| RequestSummary {
+            id:          r.try_get("id").unwrap_or(0),
+            at:          r.try_get("at").unwrap_or_else(|_| Utc::now()),
+            method:      r.try_get("method").unwrap_or_default(),
+            route:       r.try_get("route").unwrap_or_default(),
+            status:      r.try_get("status").unwrap_or(0),
+            duration_ms: r.try_get("duration_ms").unwrap_or(0),
+            request_id:  r.try_get("request_id").ok(),
+        })
+        .collect();
+
+    let events = db::list_events_for_user(&state.db, &user_rid, from, to, limit).await?;
+
+    Ok(Json(UserActivity { requests, events }))
 }
 
 // ── /api/monitoring/optimization-points ─────────────────────────────────
