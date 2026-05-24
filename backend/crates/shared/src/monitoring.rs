@@ -122,6 +122,39 @@ pub struct LatencyBucket {
     pub p99_ms: i64,
 }
 
+/// Aggregate returned by `GET /api/monitoring/events/stats`. Powers
+/// the Events tab's KPI strip (by-level donut + last-24h gauge).
+/// Same single-shape vocabulary as the `/api/admin/*/stats` family.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventsStats {
+    pub total:    u64,
+    pub by_level: std::collections::HashMap<String, u64>,
+    pub last_24h: u64,
+}
+
+/// Aggregate returned by `GET /api/monitoring/audit-runs/stats`.
+/// Powers the Audit Runs tab's KPI strip (by-tool horizontal bar +
+/// last-7d cadence gauge).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditRunsStats {
+    pub total:   u64,
+    pub by_tool: std::collections::HashMap<String, u64>,
+    pub last_7d: u64,
+}
+
+/// Aggregate returned by `GET /api/monitoring/audit-findings/stats`.
+/// Powers the Findings tab's KPI strip (severity donut + by-kind
+/// horizontal bar). `severity` is bucketed server-side because the
+/// raw column is an integer 0-28+; the frontend wants three bands.
+///
+///   low  ≤ 5      med  6-15      high  > 15
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditFindingsStats {
+    pub total:        u64,
+    pub by_severity:  std::collections::HashMap<String, u64>,
+    pub by_kind:      std::collections::HashMap<String, u64>,
+}
+
 /// The time window covered by a monitoring stats response. Mirrors
 /// `/api/metrics`'s `window` field so the frontend can label it
 /// identically.

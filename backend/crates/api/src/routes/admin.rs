@@ -601,7 +601,10 @@ async fn list_steps(
 /// Run a `SELECT key, COUNT(*) FROM …` and collect into a HashMap<String, u64>.
 /// Used by every `by_*` distribution below — keeps the per-handler code
 /// to the SQL string + the result Map name.
-async fn group_count(
+///
+/// pub(super) so `routes::monitoring`'s stats handlers can share the
+/// same one-liner without duplicating the boilerplate.
+pub(super) async fn group_count(
     pool:  &sqlx::PgPool,
     query: &str,
 ) -> Result<HashMap<String, u64>, AppError> {

@@ -7,6 +7,9 @@
 //!   GET /api/monitoring/requests/stats?window
 //!   GET   /api/monitoring/optimization-points?page&size&subsystem&status
 //!   PATCH /api/monitoring/optimization-points/:rid     (status flip)
+//!   GET /api/monitoring/events/stats?window=
+//!   GET /api/monitoring/audit-runs/stats
+//!   GET /api/monitoring/audit-findings/stats
 //!
 //! All three return `Page<T>` — same shape as `/api/files/:rid/page`
 //! so the redtable on the monitoring tabs reuses the existing reader.
@@ -27,7 +30,8 @@ use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use shared::{
     monitoring::{
-        AuditFindingSummary, AuditRunSummary, EventSummary, LatencyBucket,
+        AuditFindingSummary, AuditFindingsStats, AuditRunSummary, AuditRunsStats,
+        EventSummary, EventsStats, LatencyBucket,
         RequestSummary, RequestsStats, RouteStat, Window,
     },
     optimization::OptimizationPoint,
@@ -40,9 +44,12 @@ use crate::{error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/events",          get(list_events))
-        .route("/audit-runs",      get(list_audit_runs))
-        .route("/audit-findings",  get(list_audit_findings))
+        .route("/events",                get(list_events))
+        .route("/events/stats",          get(stats_events))
+        .route("/audit-runs",            get(list_audit_runs))
+        .route("/audit-runs/stats",      get(stats_audit_runs))
+        .route("/audit-findings",        get(list_audit_findings))
+        .route("/audit-findings/stats",  get(stats_audit_findings))
         .route("/requests",            get(list_requests))
         .route("/requests/stats",      get(stats_requests))
         .route("/optimization-points",      get(list_optimization_points))
@@ -598,6 +605,138 @@ async fn stats_requests(
         status_mix,
         top_routes,
         buckets,
+    }))
+}
+
+// ── /api/monitoring/events/stats ────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct EventsStatsQuery {
+    #[serde(default)] window: Option<String>,
+}
+
+/// `GET /api/monitoring/events/stats?window=` — single-shape aggregate
+/// for the Events tab KPI strip: total + level distribution + last-24h
+/// count. Window narrows total + by_level; last_24h is always fixed
+/// at 24h regardless. Shape parallels `/api/admin/*/stats`.
+async fn stats_events(
+    State(state): State<AppState>,
+    Query(q):     Query<EventsStatsQuery>,
+) -> Result<Json<EventsStats>, AppError> {
+    let cutoff = window_cutoff(q.window.as_deref())?;
+
+    let total: i64 = if let Some(c) = cutoff {
+        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events WHERE occurred_at >= $1")
+            .bind(c)
+            .fetch_one(&state.db).await
+    } else {
+        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events")
+            .fetch_one(&state.db).await
+    }
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let by_level_query = if cutoff.is_some() {
+        "SELECT level, COUNT(*)::BIGINT FROM events WHERE occurred_at >= $1 GROUP BY level"
+    } else {
+        "SELECT level, COUNT(*)::BIGINT FROM events GROUP BY level"
+    };
+    let by_level = if let Some(c) = cutoff {
+        let rows = sqlx::query(by_level_query).bind(c)
+            .fetch_all(&state.db).await
+            .map_err(|e| AppError::internal("db", e.to_string()))?;
+        let mut out = HashMap::with_capacity(rows.len());
+        for r in rows {
+            let k: String = r.try_get(0).unwrap_or_default();
+            let c: i64    = r.try_get(1).unwrap_or(0);
+            if !k.is_empty() { out.insert(k, c as u64); }
+        }
+        out
+    } else {
+        crate::routes::admin::group_count(&state.db, by_level_query).await?
+    };
+
+    let last_24h: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM events WHERE occurred_at >= now() - interval '24 hours'",
+    )
+    .fetch_one(&state.db).await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(EventsStats {
+        total:    total as u64,
+        by_level,
+        last_24h: last_24h as u64,
+    }))
+}
+
+// ── /api/monitoring/audit-runs/stats ────────────────────────────────────
+
+/// `GET /api/monitoring/audit-runs/stats` — KPI strip for the Runs
+/// tab: total + by-tool distribution + last-7d cadence. No window
+/// param: audit runs are infrequent (a handful per day at most), so
+/// total over all time is the right top-line.
+async fn stats_audit_runs(
+    State(state): State<AppState>,
+) -> Result<Json<AuditRunsStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.run")
+        .fetch_one(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    let by_tool = crate::routes::admin::group_count(
+        &state.db,
+        "SELECT tool, COUNT(*)::BIGINT FROM audit.run GROUP BY tool",
+    ).await?;
+
+    let last_7d: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM audit.run WHERE ran_at >= now() - interval '7 days'",
+    )
+    .fetch_one(&state.db).await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    Ok(Json(AuditRunsStats {
+        total:   total as u64,
+        by_tool,
+        last_7d: last_7d as u64,
+    }))
+}
+
+// ── /api/monitoring/audit-findings/stats ────────────────────────────────
+
+/// `GET /api/monitoring/audit-findings/stats` — KPI strip for the
+/// Findings tab: total + severity bucket distribution + by-kind
+/// horizontal bar. Severity is bucketed low/med/high in SQL (raw
+/// column is integer 0-28+); the frontend wants three bands.
+async fn stats_audit_findings(
+    State(state): State<AppState>,
+) -> Result<Json<AuditFindingsStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.finding")
+        .fetch_one(&state.db).await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    // Bucket boundaries: low ≤ 5, med 6-15, high > 15. NULL severity
+    // folds into "low" since "no severity flagged" is the gentlest
+    // band — keeps the donut from showing a fourth slice the frontend
+    // doesn't know how to colour.
+    let by_severity = crate::routes::admin::group_count(
+        &state.db,
+        "SELECT CASE
+                  WHEN severity IS NULL OR severity <= 5  THEN 'low'
+                  WHEN severity <= 15                     THEN 'med'
+                  ELSE 'high'
+                END AS bucket,
+                COUNT(*)::BIGINT
+           FROM audit.finding
+          GROUP BY bucket",
+    ).await?;
+
+    let by_kind = crate::routes::admin::group_count(
+        &state.db,
+        "SELECT kind, COUNT(*)::BIGINT FROM audit.finding GROUP BY kind",
+    ).await?;
+
+    Ok(Json(AuditFindingsStats {
+        total: total as u64,
+        by_severity,
+        by_kind,
     }))
 }
 
