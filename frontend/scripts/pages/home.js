@@ -75,6 +75,13 @@ export default function home(app, { session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      charts: [
+        { id: "rp-home-users-plan",   title: "By plan",       kind: "donut",
+          data: (s) => s.by_plan },
+        { id: "rp-home-users-active", title: "Active last 7d", kind: "gauge",
+          data: (s) => s.total ? Math.round((s.active_7d / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+      ],
       columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
       row: (u) =>
         '<tr>'
@@ -92,6 +99,14 @@ export default function home(app, { session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      charts: [
+        { id: "rp-home-co-active", title: "Active last 30d", kind: "gauge",
+          data: (s) => s.total ? Math.round((s.active_30d / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+        { id: "rp-home-co-proj",   title: "With projects",   kind: "gauge",
+          data: (s) => s.total ? Math.round((s.with_projects / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+      ],
       columns: ["Name", "Members", "My role", "Created"],
       row: (c) =>
         '<tr>'
@@ -114,6 +129,13 @@ export default function home(app, { session }) {
         ],
         default: "project",
       }],
+      // Stats endpoint also reads ?scope=; mountListCharts threads
+      // chipState through via spec.chipRows when statsEndpoint is
+      // unset (default behavior).
+      charts: [
+        { id: "rp-home-mem-role", title: "By role", kind: "rose",
+          data: (s) => s.by_role },
+      ],
       columns: ["Member", "Role", "Scope", "Joined"],
       row: (m) =>
         '<tr>'
@@ -149,6 +171,14 @@ export default function home(app, { session }) {
     charts: {
       title: "Charts",
       endpoint: "/admin/charts",
+      charts: [
+        { id: "rp-home-cht-recent", title: "Created last 7d", kind: "gauge",
+          data: (s) => s.total ? Math.round((s.last_7d / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+        { id: "rp-home-cht-reports", title: "In a report",    kind: "gauge",
+          data: (s) => s.total ? Math.round((s.used_in_reports / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+      ],
       columns: ["Name", "Project", "Stage", "Updated"],
       // Rows are clickable — navigate to the Workspace with the
       // chart's source project + chart rid as deep-link params so
@@ -311,10 +341,11 @@ export default function home(app, { session }) {
     // Tear down any charts from a prior tab + mount this tab's
     // (if it declares any) against the /stats endpoint. Each tab's
     // charts share one stats fetch — small payload, three viz from
-    // the same response.
+    // the same response. chipState threads through so memberships'
+    // ?scope= flips the stats payload alongside the list.
     disposeListCharts();
     if (spec.charts && spec.charts.length) {
-      mountListCharts(spec).catch((err) => {
+      mountListCharts(spec, chipState).catch((err) => {
         console.warn("[home] charts mount failed:", err);
       });
     }
@@ -331,6 +362,14 @@ export default function home(app, { session }) {
         chip.classList.add("is-active");
         listPage = 1;
         fetchList(spec, chipState);
+        // Chip flip can change the stats shape too (memberships'
+        // ?scope=…). Refetch + re-render the charts so the cards
+        // stay in sync with the list.
+        if (spec.charts && spec.charts.length) {
+          disposeListCharts();
+          mountListCharts(spec, chipState).catch((err) =>
+            console.warn("[home] charts refetch failed:", err));
+        }
       });
     });
 
@@ -535,8 +574,22 @@ export default function home(app, { session }) {
     line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
   };
 
-  async function mountListCharts(spec) {
-    const statsUrl = spec.statsEndpoint || (spec.endpoint + "/stats");
+  // Build the stats URL — flat string or a function of chipState
+  // (memberships uses ?scope=project|company; others are flat).
+  function statsUrlFor(spec, chipState) {
+    if (typeof spec.statsEndpoint === "function") return spec.statsEndpoint(chipState || {});
+    if (spec.statsEndpoint) return spec.statsEndpoint;
+    const base = spec.endpoint + "/stats";
+    const chips = spec.chipRows || [];
+    if (!chips.length || !chipState) return base;
+    const params = new URLSearchParams();
+    chips.forEach((cr) => { if (chipState[cr.name]) params.set(cr.name, chipState[cr.name]); });
+    const qs = params.toString();
+    return qs ? base + "?" + qs : base;
+  }
+
+  async function mountListCharts(spec, chipState) {
+    const statsUrl = statsUrlFor(spec, chipState);
     let stats;
     try { stats = await api.get(statsUrl); }
     catch (err) {
