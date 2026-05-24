@@ -33,6 +33,7 @@ export default async function profile(app, { session }) {
 
   populateIdentity(app, me);
   populateForm(app, me);
+  populateMemberships(app, me);
   populateConnections(app, me);
   setEditMode(app, false);
   loadUsage(app);
@@ -62,7 +63,6 @@ export default async function profile(app, { session }) {
     const body = {
       display_name: app.querySelector("#rp-profile-display-name").value.trim() || null,
       job_title:    app.querySelector("#rp-profile-job-title").value.trim()    || null,
-      organisation: app.querySelector("#rp-profile-organisation").value.trim() || null,
       use_case:     ucEl?.dataset.value ?? null,
     };
     const save = app.querySelector("#rp-profile-save");
@@ -122,13 +122,43 @@ function populateForm(app, me) {
   app.querySelector("#rp-profile-username").value     = me.username ?? "";
   app.querySelector("#rp-profile-email").value        = me.email ?? "";
   app.querySelector("#rp-profile-job-title").value    = me.job_title ?? "";
-  app.querySelector("#rp-profile-organisation").value = me.organisation ?? "";
   app.querySelector("#rp-profile-rid").value          = me.redpash_id ?? "";
   if (me.use_case && USE_CASES.includes(me.use_case)) {
     app.querySelectorAll("#rp-profile-use-case .rp-profile__opt").forEach((p) => {
       p.classList.toggle("is-active", p.dataset.value === me.use_case);
     });
   }
+}
+
+// Real company affiliations from /me.memberships. Read-only here —
+// joining / leaving / role changes happen on Home → Companies.
+// Distinct from `users.organisation` (a free-text bio field that the
+// Users tab on Home already moved away from for the same reason).
+function populateMemberships(app, me) {
+  const root = app.querySelector("#rp-profile-memberships");
+  if (!root) return;
+  const memberships = Array.isArray(me.memberships) ? me.memberships : [];
+  if (!memberships.length) {
+    root.innerHTML =
+      '<span class="rp-profile__memberships-empty">'
+      + 'Not a member of any company yet. '
+      + '<a href="#/home?tab=companies">Open Companies</a> to create or join one.'
+      + '</span>';
+    return;
+  }
+  root.innerHTML = memberships.map((m) =>
+    '<a class="rp-profile__membership" href="#/home?tab=companies" title="Open Companies">'
+    + '<i class="bi bi-building rp-profile__membership-icon"></i>'
+    + '<span class="rp-profile__membership-name">' + escHTML(m.company_name) + '</span>'
+    + '<span class="rp-profile__membership-role rp-profile__membership-role--'
+    +   escHTML(m.role) + '">' + escHTML(m.role) + '</span>'
+    + '</a>'
+  ).join("");
+}
+
+function escHTML(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 function populateConnections(app, me) {

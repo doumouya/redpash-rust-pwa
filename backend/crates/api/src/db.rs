@@ -96,6 +96,36 @@ pub async fn find_user_by_id(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Us
     Ok(row.map(Into::into))
 }
 
+/// One user's company memberships — ordered owner → admin → member,
+/// ties broken by most-recent joined_at. Used by `/api/me` so the
+/// Profile page can show the user's real org affiliations alongside
+/// the editable free-text `organisation` bio field.
+pub async fn list_memberships_for_user(
+    pool:     &PgPool,
+    user_rid: &str,
+) -> sqlx::Result<Vec<UserMembership>> {
+    let rows = sqlx::query(
+        "SELECT cm.company_id, c.name AS company_name, cm.role
+           FROM company_memberships cm
+           JOIN companies c ON c.redpash_id = cm.company_id
+          WHERE cm.user_redpash_id = $1
+          ORDER BY CASE cm.role
+                     WHEN 'owner'  THEN 0
+                     WHEN 'admin'  THEN 1
+                     ELSE 2
+                   END,
+                   cm.joined_at DESC",
+    )
+    .bind(user_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| UserMembership {
+        company_id:   r.get("company_id"),
+        company_name: r.get("company_name"),
+        role:         r.get("role"),
+    }).collect())
+}
+
 /// Every user — powers the Objects page's owner-reassignment picker.
 /// No org scoping yet (single-tenant); add a `WHERE org_id = …` when
 /// organisations land.

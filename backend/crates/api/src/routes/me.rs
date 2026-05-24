@@ -49,10 +49,16 @@ async fn get_me(
     headers:      HeaderMap,
 ) -> Result<Json<MeResponse>, AppError> {
     let user_rid = resolve_user_rid(&state, &headers).await?;
-    let user = db::find_user_by_id(&state.db, &user_rid)
+    let mut user = db::find_user_by_id(&state.db, &user_rid)
         .await
         .map_err(|e| AppError::internal("db", e.to_string()))?
         .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
+    // Hydrate company memberships so the Profile page can show the
+    // user's real org affiliations (the editable `organisation`
+    // field is a free-text bio, distinct from these).
+    user.memberships = db::list_memberships_for_user(&state.db, &user_rid)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?;
     let global_sentinels = db::list_global_sentinels(&state.db).await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
     Ok(Json(MeResponse { user, global_sentinels }))

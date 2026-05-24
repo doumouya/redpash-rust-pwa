@@ -112,6 +112,46 @@
 }
 .rp-profile__rid { width: 320px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 11px; }
 
+/* ─── Memberships (real company affiliations from /me) ──────── */
+.rp-profile__memberships {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rp-sp-2);
+}
+.rp-profile__memberships-empty {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+}
+.rp-profile__memberships-empty a { color: var(--rp-accent-2); }
+.rp-profile__membership {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-accent-2);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--rp-accent-2) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rp-accent-2) 32%, transparent);
+  border-radius: 999px;
+  transition: background 0.15s var(--rp-ease);
+}
+.rp-profile__membership:hover { background: color-mix(in srgb, var(--rp-accent-2) 18%, transparent); }
+.rp-profile__membership-icon { font-size: 11px; opacity: 0.85; }
+.rp-profile__membership-name { font-weight: 550; }
+.rp-profile__membership-role {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  color: var(--rp-text-dim);
+  text-transform: lowercase;
+}
+.rp-profile__membership-role--owner { color: var(--rp-accent);   border-color: color-mix(in srgb, var(--rp-accent)   35%, transparent); }
+.rp-profile__membership-role--admin { color: var(--rp-warn);     border-color: color-mix(in srgb, var(--rp-warn)     35%, transparent); }
+.rp-profile__membership-role--member{ color: var(--rp-ok);       border-color: color-mix(in srgb, var(--rp-ok)       35%, transparent); }
+
 /* ─── Use-case option pills ──────────────────────────────────── */
 .rp-profile__opts {
   display: grid;
