@@ -197,6 +197,22 @@ export function mountReport(panelBody, ctx) {
 
   // ── click delegation ──────────────────────────────────────────────
   builderEl.addEventListener("click", (e) => {
+    // "Add column" dropdown toggle. The builder is rendered after the
+    // mount-time $$("[data-dd]") sweep in workspace.js, so we handle
+    // the toggle locally. The page-level outside-click closer in
+    // workspace.js still closes it because we use the same .rt-dd.open
+    // vocabulary.
+    const ddBtn = e.target.closest("[data-dd]");
+    if (ddBtn) {
+      e.stopPropagation();
+      const dd = builderEl.querySelector("#" + ddBtn.dataset.dd);
+      if (dd) {
+        const wasOpen = dd.classList.contains("open");
+        document.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open"));
+        dd.classList.toggle("open", !wasOpen);
+      }
+      return;
+    }
     const addBtn = e.target.closest("[data-group-add]");
     if (addBtn) {
       const name = addBtn.dataset.groupAdd;
@@ -204,7 +220,6 @@ export function mountReport(panelBody, ctx) {
         groupBy.push(name);
         renderBuilder();
       }
-      // Close the dropdown if it's a global rt-dd-wrap.
       addBtn.closest(".rt-dd")?.classList.remove("open");
       return;
     }
