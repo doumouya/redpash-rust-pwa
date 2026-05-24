@@ -1301,6 +1301,19 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
     }
     let meta = db::find_file(&state.db, rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("file {rid}")))?;
+    // Chart / dashboard rows share the `project_files` table but have
+    // no on-disk bytes (storage_path is empty by construction in
+    // `insert_chart` / `insert_dashboard`). A frontend that lands a
+    // chart RID on a data endpoint (/page, /uniques, /joins, …) used
+    // to hit `tokio::fs::read(data_dir.join(""))` and 500 with `Is a
+    // directory`. Reject early with a clean 400 so the FE bug surfaces
+    // instead of looking like a server fault.
+    if meta.storage_path.is_empty() {
+        return Err(AppError::bad_request(
+            "not_a_data_file",
+            format!("{rid} is a {} — no underlying data file", meta.summary.file_type),
+        ));
+    }
     let steps_all = db::list_steps(&state.db, rid).await?;
 
     let path = state.data_dir.join(&meta.storage_path);
