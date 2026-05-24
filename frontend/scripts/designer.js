@@ -65,6 +65,18 @@ const THEMES = {
     series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af","#a6e3a1","#74c7ec"] },
   "redpash-latte": { name: "RedPash Latte", registered: true,
     series: ["#1e66f5","#8839ef","#179299","#fe640b","#d20f39","#df8e1d","#40a02b","#04a5e5"] },
+  // Four more from apache/echarts theme/ — dark is the official
+  // ECharts dark theme (darkMode: true so it knows to flip
+  // tooltip surfaces too); tech-blue, v5 (the default ECharts 5
+  // styled theme), and gray fill the remaining picker slots.
+  dark:        { name: "Dark", registered: true,
+    series: ["#4992ff","#7cffb2","#fddd60","#ff6e76","#58d9f9","#05c091","#ff8a45","#8d48e3"] },
+  "tech-blue": { name: "Tech Blue", registered: true,
+    series: ["#4d4d4d","#3a5897","#007bb6","#7094db","#0080ff","#b3b3ff","#00bdec","#33ccff"] },
+  v5:          { name: "ECharts v5", registered: true,
+    series: ["#5470c6","#91cc75","#fac858","#ee6666","#73c0de","#3ba272","#fc8452","#9a60b4"] },
+  gray:        { name: "Gray", registered: true,
+    series: ["#757575","#c7c7c7","#dadada","#8b8b8b","#b5b5b5","#e9e9e9"] },
 };
 
 // One-time registration of Gus's themes. Loads the JSON files
