@@ -708,6 +708,7 @@ impl From<FileRow> for FileFull {
             delimiter:          r.delimiter,
             created_at:         r.created_at,
             updated_at:         r.updated_at,
+            fully_null_rows:    None, // populated by hydrate, not persisted
         };
         Self { summary, storage_path: r.storage_path }
     }

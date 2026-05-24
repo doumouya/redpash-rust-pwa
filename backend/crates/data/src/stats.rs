@@ -465,6 +465,31 @@ fn av_to_owned(v: AnyValue) -> Option<String> {
     }
 }
 
+/// Count rows where *every* column is null. Cross-column — can't be
+/// derived from per-column null_pct (a column with 50% nulls and
+/// another with 50% nulls might have zero rows where both are null).
+/// Drives the Drop-nulls form's context surface so the user can see
+/// the obvious-junk count before picking a strategy.
+///
+/// Width-0 / height-0 frames return 0. O(rows × cols), pure scan.
+pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
+    let n = df.height();
+    if n == 0 || df.width() == 0 { return 0; }
+    let cols = df.get_columns();
+    let mut count = 0u64;
+    for i in 0..n {
+        let mut all_null = true;
+        for c in cols {
+            if !matches!(c.get(i), Ok(AnyValue::Null)) {
+                all_null = false;
+                break;
+            }
+        }
+        if all_null { count += 1; }
+    }
+    count
+}
+
 /// Up to `limit` distinct non-null values from `col`, sorted.
 pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<String>> {
     let column = df.column(col).map_err(DataError::from)?;

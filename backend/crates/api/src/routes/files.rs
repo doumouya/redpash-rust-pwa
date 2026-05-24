@@ -198,11 +198,12 @@ async fn upload(
         // The uploader's personal additions get applied later via
         // compute_cleanness when they explicitly request it.
         let cleanness = data::stats::cleanness(&df, &cols, &globals);
-        Ok((df, enc, cols, cleanness))
+        let fully_null = data::stats::count_fully_null_rows(&df);
+        Ok((df, enc, cols, cleanness, fully_null))
     })
     .await
     .map_err(|e| AppError::internal("join", e.to_string()))??;
-    let (df, encoding, columns, cleanness) = parsed;
+    let (df, encoding, columns, cleanness, fully_null_rows) = parsed;
 
     // Strip the upload extension off the DB-stored filename (mig 011).
     // file_type owns the extension; filename is the user-facing stem.
@@ -244,6 +245,7 @@ async fn upload(
         delimiter:          Some(",".into()),
         created_at:         now,
         updated_at:         now,
+        fully_null_rows:    Some(fully_null_rows),
     };
     state.files.insert(
         rid,
@@ -847,7 +849,7 @@ async fn create_join(
 
     let globals = db::list_global_sentinels(&state.db).await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
-    let (columns, h, w, cleanness) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
+    let (columns, h, w, cleanness, fully_null_rows) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
         let mut joined = data::joins::execute(&this_frame, &other_frame, &lks, &rks, &jt)?;
         let h = joined.height();
         let w = joined.width();
@@ -856,6 +858,7 @@ async fn create_join(
         // the caller can recompute against their personal additions
         // via compute_cleanness afterward.
         let cleanness = data::stats::cleanness(&joined, &columns, &globals);
+        let fully_null = data::stats::count_fully_null_rows(&joined);
         let file = std::fs::File::create(&path_for_blocking)
             .map_err(data::DataError::Io)?;
         use polars::prelude::SerWriter;
@@ -863,7 +866,7 @@ async fn create_join(
             .include_header(true)
             .finish(&mut joined)
             .map_err(data::DataError::from)?;
-        Ok((columns, h, w, cleanness))
+        Ok((columns, h, w, cleanness, fully_null))
     })
     .await
     .map_err(|e| AppError::internal("join", e.to_string()))??;
@@ -911,6 +914,7 @@ async fn create_join(
         delimiter:          Some(",".into()),
         created_at:         now,
         updated_at:         now,
+        fully_null_rows:    Some(fully_null_rows),
     };
 
     // Don't cache the frame eagerly — the next /files/:rid GET will
@@ -947,13 +951,14 @@ async fn snapshot(
 
     let globals = db::list_global_sentinels(&state.db).await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
-    let (columns, h, w, cleanness) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
+    let (columns, h, w, cleanness, fully_null_rows) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
         let mut df = (*frame).clone();
         let h = df.height();
         let w = df.width();
         let columns = data::dtype::summarize(&df)?;
         // Snapshot scored against the shared vocabulary (globals).
         let cleanness = data::stats::cleanness(&df, &columns, &globals);
+        let fully_null = data::stats::count_fully_null_rows(&df);
         let file = std::fs::File::create(&path_for_blocking)
             .map_err(data::DataError::Io)?;
         use polars::prelude::SerWriter;
@@ -961,7 +966,7 @@ async fn snapshot(
             .include_header(true)
             .finish(&mut df)
             .map_err(data::DataError::from)?;
-        Ok((columns, h, w, cleanness))
+        Ok((columns, h, w, cleanness, fully_null))
     })
     .await
     .map_err(|e| AppError::internal("join", e.to_string()))??;
@@ -1005,6 +1010,7 @@ async fn snapshot(
         delimiter:          Some(",".into()),
         created_at:         now,
         updated_at:         now,
+        fully_null_rows:    Some(fully_null_rows),
     };
 
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
@@ -1246,7 +1252,7 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
     // Persisted encoding wins on rehydrate — the user may have overridden
     // chardetng's guess through the cleaner sidebar.
     let encoding = meta.summary.encoding.clone();
-    let (df, columns, cleanness) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
+    let (df, columns, cleanness, fully_null_rows) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
         let base = match encoding {
             Some(enc) => data::parse::from_csv_bytes_with_encoding(&bytes, &enc)?,
             None      => data::parse::from_csv_bytes(&bytes, None)?.0,
@@ -1259,7 +1265,8 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
         // Recomputed on every (cache-miss) hydrate, so it tracks the
         // current step cursor for free.
         let cleanness = data::stats::cleanness(&df, &cols, &globals);
-        Ok((df, cols, cleanness))
+        let fully_null = data::stats::count_fully_null_rows(&df);
+        Ok((df, cols, cleanness, fully_null))
     })
     .await
     .map_err(|e| AppError::internal("join", e.to_string()))??;
@@ -1274,9 +1281,10 @@ pub(super) async fn hydrate(state: &AppState, rid: &str) -> Result<FileEntry, Ap
     }
 
     let mut summary = meta.summary;
-    summary.row_count    = Some(df.height() as u64);
-    summary.col_count    = Some(df.width() as u32);
-    summary.cleanness_pct = cleanness;
+    summary.row_count       = Some(df.height() as u64);
+    summary.col_count       = Some(df.width() as u32);
+    summary.cleanness_pct   = cleanness;
+    summary.fully_null_rows = Some(fully_null_rows);
 
     let entry = FileEntry { summary, columns, frame: Arc::new(df) };
     state.files.insert(rid.to_string(), entry.clone());

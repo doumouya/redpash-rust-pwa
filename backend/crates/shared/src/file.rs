@@ -15,6 +15,12 @@ pub struct FileSummary {
     pub col_count:          Option<u32>,
     pub file_size_bytes:    Option<u64>,
     pub cleanness_pct:      Option<f32>,
+    /// Rows where *every* column is null. Cross-column stat — can't be
+    /// derived from per-column `ColumnMeta.null_pct`. Populated on
+    /// hydrate / upload / snapshot / join; `None` for DB-only reads
+    /// (project file lists, admin pager) until first hydrate.
+    #[serde(default)]
+    pub fully_null_rows:    Option<u64>,
     pub encoding:           Option<String>,
     pub delimiter:          Option<String>,
     pub created_at:         DateTime<Utc>,
