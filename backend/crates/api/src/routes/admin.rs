@@ -85,6 +85,11 @@ struct FilesQuery {
     /// Filter by computed `file_stages.stage` (import | clean | report | publish).
     #[serde(default)] stage:     Option<String>,
     #[serde(default)] project:   Option<String>, // project_redpash_id
+    /// Click-to-sort header support. Validated against SORTABLE_FILES;
+    /// bad values fall back to `created_at`. dir → "asc"|"desc"
+    /// (default "desc").
+    #[serde(default)] sort:      Option<String>,
+    #[serde(default)] dir:       Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -94,6 +99,30 @@ struct StepsQuery {
     #[serde(default)] file:    Option<String>, // file_redpash_id
     #[serde(default)] kind:    Option<String>,
     #[serde(default)] applied: Option<bool>,
+}
+
+/// Resolve a (sort, dir) query pair against a per-endpoint allowlist
+/// of sortable column references. Returns `(col_sql, dir_sql)` strings
+/// safe to splice into an `ORDER BY {col} {dir}` clause — never user
+/// input directly. Bad / missing sort col falls back to `default_col`;
+/// bad / missing dir falls back to `DESC`.
+///
+/// Click-to-sort headers on the Home redtable toolbar send the column
+/// the user clicked; this gates the SQL injection vector at the
+/// allowlist boundary. New endpoints declare their own SORTABLE_*
+/// constant — keep it short, keep it audited.
+pub(super) fn sort_clause(
+    sort:        Option<&str>,
+    dir:         Option<&str>,
+    allow:       &[&str],
+    default_col: &str,
+) -> (String, &'static str) {
+    let col = sort
+        .and_then(|s| if allow.contains(&s) { Some(s) } else { None })
+        .unwrap_or(default_col)
+        .to_string();
+    let dir = if matches!(dir, Some(d) if d.eq_ignore_ascii_case("asc")) { "ASC" } else { "DESC" };
+    (col, dir)
 }
 
 // ── /api/admin/users ────────────────────────────────────────────────────
@@ -338,12 +367,34 @@ async fn list_memberships(
 
 // ── /api/admin/files ────────────────────────────────────────────────────
 
+/// Sortable columns on `/admin/files`. Keys are the wire vocabulary
+/// the click-to-sort header sends; values are the SQL column refs
+/// spliced into ORDER BY. Keep small — every entry is a public-surface
+/// promise that the user can sort by it.
+const SORTABLE_FILES: &[&str] = &[
+    "filename", "file_type", "stage", "row_count", "updated_at", "created_at",
+];
+
 async fn list_files(
     State(state): State<AppState>,
     Query(q):     Query<FilesQuery>,
 ) -> Result<Json<Page<AdminFileSummary>>, AppError> {
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
+    // Wire-key → SQL-column ref. `stage` is the computed COALESCE
+    // alias; everything else lives on f.* directly. Sort happens
+    // post-JOIN so the SQL alias resolves.
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_FILES, "created_at",
+    );
+    let sort_col = match sort_key.as_str() {
+        "filename"   => "f.filename",
+        "file_type"  => "f.file_type",
+        "stage"      => "COALESCE(s.stage, 'new')",
+        "row_count"  => "f.row_count",
+        "updated_at" => "f.updated_at",
+        _            => "f.created_at",
+    };
 
     let all_count: i64 = db::count_total(&state.db, "project_files").await?;
 
@@ -366,7 +417,11 @@ async fn list_files(
     .fetch_one(&state.db)
     .await?;
 
-    let rows = sqlx::query(
+    // ORDER BY is built via format! because sqlx can't bind identifiers;
+    // sort_col is sourced from the SORTABLE_FILES allowlist (never user
+    // input directly), so SQL injection is closed at the boundary.
+    // NULLS LAST keeps null row_counts at the tail when sorting ASC.
+    let sql = format!(
         "SELECT f.redpash_id, f.project_redpash_id,
                 p.name AS project_name,
                 f.filename, f.display_name, f.file_type,
@@ -379,9 +434,11 @@ async fn list_files(
           WHERE ($1::text IS NULL OR f.file_type = $1)
             AND ($2::text IS NULL OR COALESCE(s.stage, 'new') = $2)
             AND ($3::text IS NULL OR f.project_redpash_id = $3)
-          ORDER BY f.created_at DESC
+          ORDER BY {} {} NULLS LAST
           LIMIT $4 OFFSET $5",
-    )
+        sort_col, sort_dir,
+    );
+    let rows = sqlx::query(&sql)
     .bind(q.file_type.as_deref())
     .bind(q.stage.as_deref())
     .bind(q.project.as_deref())
