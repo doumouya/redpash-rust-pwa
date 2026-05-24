@@ -619,23 +619,11 @@ export function mountReport(panelBody, ctx) {
   // ── click delegation ──────────────────────────────────────────────
   // Every spec-mutating handler calls previewSoon() at the end so
   // the inline sample table re-renders without an explicit Apply.
+  // The [data-dd] dropdown toggle is handled globally by
+  // /scripts/dropdown.js (bindDropdown() at app boot) — no per-
+  // builder wiring needed for the "Add column" / "Add pivot"
+  // dropdowns, even though they're rendered dynamically.
   builderEl.addEventListener("click", (e) => {
-    // "Add column" dropdown toggle. The builder is rendered after the
-    // mount-time $$("[data-dd]") sweep in workspace.js, so we handle
-    // the toggle locally. The page-level outside-click closer in
-    // workspace.js still closes it because we use the same .rt-dd.open
-    // vocabulary.
-    const ddBtn = e.target.closest("[data-dd]");
-    if (ddBtn) {
-      e.stopPropagation();
-      const dd = builderEl.querySelector("#" + ddBtn.dataset.dd);
-      if (dd) {
-        const wasOpen = dd.classList.contains("open");
-        document.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open"));
-        dd.classList.toggle("open", !wasOpen);
-      }
-      return;
-    }
     const addBtn = e.target.closest("[data-group-add]");
     if (addBtn) {
       const name = addBtn.dataset.groupAdd;
@@ -644,7 +632,9 @@ export function mountReport(panelBody, ctx) {
         renderBuilder();
         previewSoon();
       }
-      addBtn.closest(".rt-dd")?.classList.remove("open");
+      // Dropdown auto-closes via the global click handler in
+      // dropdown.js — the item click bubbles to document which
+      // closes every open .rt-dd. No manual close needed here.
       return;
     }
     const delBtn = e.target.closest("[data-group-del]");
@@ -661,7 +651,7 @@ export function mountReport(panelBody, ctx) {
         pivotBy.push(name);
         renderBuilder(); previewSoon();
       }
-      pivAdd.closest(".rt-dd")?.classList.remove("open");
+      // Auto-closed by dropdown.js's global click handler.
       return;
     }
     const pivDel = e.target.closest("[data-pivot-del]");

@@ -1336,17 +1336,8 @@ export default function workspace(app, { session }) {
     setPref("showRowNumbers", on ? "1" : "0");
   });
 
-  // ─── dropdowns (rows-per-page, columns) ────────────────────────
-  $$("[data-dd]").forEach((btn) =>
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const dd = $("#" + btn.dataset.dd);
-      const wasOpen = dd.classList.contains("open");
-      app.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open"));
-      dd.classList.toggle("open", !wasOpen);
-    }));
-  document.addEventListener("click", () =>
-    app.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open")));
+  // Dropdown toggles (rows-per-page, columns) handled centrally
+  // by /scripts/dropdown.js — bindDropdown() at app boot in main.js.
 
   // Rows-per-page — setPref persists through prefs.js (server PATCH +
   // local cache + the unified rp-pref-rowsPerPage key). The numeric

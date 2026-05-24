@@ -120,6 +120,14 @@ window.addEventListener("hashchange", () => {
 import { mountSwUpdate } from "/scripts/sw-update.js";
 window.addEventListener("load", mountSwUpdate);
 
+// ─── Dropdown atom — one delegated handler covers every page ────
+// `[data-dd]` trigger + `.rt-dd` body, click-to-toggle + click-
+// elsewhere-to-close. Lives in dropdown.js so per-page mount code
+// (workspace, report builder, etc.) doesn't have to wire its own
+// — and so dynamically-rendered buttons work without a re-sweep.
+import { bindDropdown } from "/scripts/dropdown.js";
+bindDropdown();
+
 // ─── Boot ───────────────────────────────────────────────────────
 (async () => {
   await loadSession();
