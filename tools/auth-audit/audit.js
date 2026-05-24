@@ -150,17 +150,20 @@ function extractsRid(params) {
   return /\bPath\s*\(\s*(?:\(.*?\)|\w+)\s*\)/.test(params);
 }
 
-/* Has an ownership-gate call somewhere in the body. Three canonical
+/* Has an ownership-gate call somewhere in the body. Four canonical
    gates today, all auditable:
      - ensure_owner — generic, used for FIL_/PRJ_/CHT_/DSH_ resources
      - require_member — company_memberships-backed; companies.rs lane
      - company_role — same family, returns the role for admin/owner
        gating in the same family of handlers
+     - users_share_company — events read-gate; cross-user reads only
+       allowed inside the same company
    Add the next gate name here when it lands. */
 function callsOwnershipGate(body) {
   return /\b(?:super::)?ensure_(?:\w+_)?owner\s*\(/.test(body)
       || /\b(?:super::)?require_member\s*\(/.test(body)
-      || /\bdb::company_role\s*\(/.test(body);
+      || /\bdb::company_role\s*\(/.test(body)
+      || /\bdb::users_share_company\s*\(/.test(body);
 }
 
 /* Mutates the DB. Either calls db::insert_/update_/delete_ OR

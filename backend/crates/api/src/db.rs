@@ -1634,6 +1634,34 @@ pub async fn company_role(
     Ok(row.map(|(r,)| r))
 }
 
+/// Two users share at least one company (i.e. there exists a company
+/// where both hold a `company_memberships` row). Used by the events
+/// read-gate so another company can't see another company's logs;
+/// RBAC will tighten this further to per-role checks. Self-match
+/// (user_a == user_b) returns true without touching the DB — saves
+/// the join when the caller is the event's own user.
+pub async fn users_share_company(
+    pool:   &PgPool,
+    user_a: &str,
+    user_b: &str,
+) -> sqlx::Result<bool> {
+    if user_a == user_b { return Ok(true); }
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT 1::BIGINT
+           FROM company_memberships a
+           JOIN company_memberships b
+             ON b.company_id = a.company_id
+          WHERE a.user_redpash_id = $1
+            AND b.user_redpash_id = $2
+          LIMIT 1",
+    )
+    .bind(user_a)
+    .bind(user_b)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
 /// Count of owners — guards the "can't strand a company without an
 /// owner" rule on member removal / demotion.
 pub async fn company_owner_count(pool: &PgPool, company_rid: &str) -> sqlx::Result<i64> {

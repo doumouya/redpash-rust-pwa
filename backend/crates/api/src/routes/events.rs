@@ -9,9 +9,11 @@
 //!                           `rp_session` cookie, never trusted from
 //!                           the request body.
 //!
-//! The two GETs are the internal monitoring read surface — open today
-//! (solo / localhost); gate behind the company-admin role when RBAC
-//! lands. The POST is the frontend capture funnel.
+//! `list` is the internal monitoring read surface — open today (solo
+//! / localhost); gate behind the company-admin role when RBAC lands.
+//! `get_one` is company-scoped: the caller must share a company with
+//! the event's user (system events pass through). The POST is the
+//! frontend capture funnel.
 
 use axum::{
     extract::{Path, Query, State},
@@ -55,14 +57,24 @@ async fn list(
     Ok(Json(EventList { items }))
 }
 
-/// `GET /api/events/:rid` — a single event by RID.
+/// `GET /api/events/:rid` — a single event by RID. Caller must share a
+/// company with the event's user; system events (no user) pass through.
+/// 404 (not 403) on a cross-company hit so the gate doesn't leak that
+/// the rid exists.
 async fn get_one(
     State(state): State<AppState>,
+    headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<Event>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
     let ev = db::find_event(&state.db, &rid)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("event {rid}")))?;
+    if let Some(ev_user) = ev.user_redpash_id.as_deref() {
+        if !db::users_share_company(&state.db, &caller, ev_user).await? {
+            return Err(AppError::not_found("not_found", format!("event {rid}")));
+        }
+    }
     Ok(Json(ev))
 }
 
