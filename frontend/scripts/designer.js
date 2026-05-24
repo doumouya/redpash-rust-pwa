@@ -40,23 +40,54 @@ const THEMES = {
     text: "#cdd6f4", axis: "#6c7086", split: "rgba(255,255,255,.08)", bg: "transparent" },
 };
 
-// Chart kinds — grouped by family. Picking a type in one family
-// switches the kind too (cartesian/pie/barh have different ECharts
-// shapes). Family vocab + buildOption logic ported from the
-// prototype's TYPES + buildOption.
+// Chart kinds — grouped by family. Picking a type sets both the
+// type AND the kind it belongs to (cartesian/pie/barh/etc. each
+// have different ECharts shapes). The Type section in the accordion
+// flattens all families into one grid so the user can switch any
+// chart to any other kind without leaving the picker.
 const TYPES = {
-  cartesian: [["bar","bi-bar-chart","Bar"], ["line","bi-graph-up","Line"], ["area","bi-graph-up-arrow","Area"]],
-  pie:       [["pie","bi-pie-chart-fill","Pie"], ["donut","bi-circle","Donut"]],
-  barh:      [["barh","bi-bar-chart-steps","Bar"]],
+  cartesian: [
+    ["bar",        "bi-bar-chart",         "Bar"],
+    ["line",       "bi-graph-up",          "Line"],
+    ["area",       "bi-graph-up-arrow",    "Area"],
+  ],
+  barh: [
+    ["barh",       "bi-bar-chart-steps",   "Horizontal"],
+  ],
+  scatter: [
+    ["scatter",    "bi-circle",            "Scatter"],
+  ],
+  pie: [
+    ["pie",        "bi-pie-chart-fill",    "Pie"],
+    ["donut",      "bi-circle",            "Donut"],
+    ["half_donut", "bi-circle-half",       "Half-donut"],
+    ["rose",       "bi-flower2",           "Rose"],
+  ],
+  radar: [
+    ["radar",      "bi-pentagon",          "Radar"],
+  ],
+  gauge: [
+    ["gauge",      "bi-speedometer",       "Gauge"],
+  ],
+  pictorial: [
+    ["pictorial",  "bi-dice-3",            "Pictorial"],
+  ],
 };
 const TYPE_TO_KIND = {};
 Object.entries(TYPES).forEach(([kind, list]) => list.forEach(([t]) => { TYPE_TO_KIND[t] = kind; }));
+// Flat ordered list of all types — drives the Type grid (one button
+// per type, family-grouped by adjacency).
+const TYPE_LIST = Object.values(TYPES).flat();
+// Kinds that respect the smooth modifier (line family).
+const SMOOTHABLE = new Set(["line", "area"]);
 
-// Defaults applied to a new chart cfg. Mirrors the prototype's D.
+// Defaults applied to a new chart cfg. Mirrors the prototype's D
+// plus the modifiers added in C3.1 (smooth for line/area).
 const DEFAULTS = {
   legend: false, legendPos: "bottom",
   tooltip: true, splitLines: true, axisLine: true,
   theme: "vintage",
+  smooth: false,
 };
 
 export function mountDesigner(designerEl, ctx) {
@@ -206,6 +237,7 @@ export function mountDesigner(designerEl, ctx) {
       tooltip:    s.tooltip    ?? DEFAULTS.tooltip,
       splitLines: s.splitLines ?? DEFAULTS.splitLines,
       axisLine:   s.axisLine   ?? DEFAULTS.axisLine,
+      smooth:     s.smooth     ?? DEFAULTS.smooth,
       theme:      s.theme      || DEFAULTS.theme,
       // Keep around so the prior baked option can render until the
       // user re-saves (live re-build replaces it on any edit).
@@ -239,7 +271,11 @@ export function mountDesigner(designerEl, ctx) {
   function renderAccordion() {
     if (!sel) { accEl.innerHTML = ""; return; }
     const cfg = sel.cfg;
-    const typeBtns = (TYPES[cfg.kind] || []).map(([t, icon, label]) =>
+    // Flattened type grid — every kind in one place so the user can
+    // switch any chart to any other shape without leaving the picker.
+    // Family grouping is implicit in adjacency (cartesian first, then
+    // barh, scatter, pie variants, radar, gauge, pictorial).
+    const typeBtns = TYPE_LIST.map(([t, icon, label]) =>
       '<button type="button" class="ds-type-btn' + (t === cfg.type ? " active" : "") + '"'
       + ' data-type="' + esc(t) + '"><i class="bi ' + esc(icon) + '"></i>' + esc(label)
       + '</button>').join('');
@@ -273,8 +309,8 @@ export function mountDesigner(designerEl, ctx) {
           +     esc(cfg.agg_col === "*" ? "*" : cfg.agg_col) + ')</span>'
           + '</div>')
       + section("axes",    "bi-rulers",         "Axes", false,
-          (cfg.kind === "pie"
-            ? '<p class="ds-muted">Axes don\'t apply to pie charts.</p>'
+          (["pie", "gauge", "radar"].includes(cfg.kind)
+            ? '<p class="ds-muted">Axes don\'t apply to this chart kind.</p>'
             : toggleRow("splitLines", cfg.splitLines, "Show split lines")
               + toggleRow("axisLine", cfg.axisLine, "Show axis line")))
       + section("legend",  "bi-list-ul",        "Legend", false,
@@ -287,7 +323,10 @@ export function mountDesigner(designerEl, ctx) {
       + section("tooltip", "bi-chat-square-text", "Tooltip", false,
           toggleRow("tooltip", cfg.tooltip, "Show tooltip on hover"))
       + section("style",   "bi-palette",        "Style", false,
-          '<span class="ds-lbl">Chart theme</span>'
+          (SMOOTHABLE.has(cfg.type)
+            ? toggleRow("smooth", cfg.smooth, "Smooth lines")
+            : "")
+          + '<span class="ds-lbl">Chart theme</span>'
           + '<div class="ds-theme-opts">' + themeRows + '</div>');
   }
   function section(name, icon, label, open, body) {
@@ -313,9 +352,12 @@ export function mountDesigner(designerEl, ctx) {
     renderAccordion();
   }
 
-  // ── ECharts option builder — ported from the prototype ────────────
-  // Handles cartesian (bar/line/area), pie (with donut variant), and
-  // horizontal bar. Reads theme tokens for color/text/axis/split/bg.
+  // ── ECharts option builder ────────────────────────────────────────
+  // Routes by kind to a per-family branch. Each branch reads theme
+  // tokens for color/text/axis/split/bg + the baked data from a
+  // previously-saved spec.option (so re-renders survive type/theme
+  // changes). On a fresh chart with no baked data, a small fallback
+  // dataset keeps the canvas from looking blank.
   function buildOption(cfg, t) {
     const leg = {
       show: cfg.legend, type: "scroll", icon: "roundRect",
@@ -326,51 +368,149 @@ export function mountDesigner(designerEl, ctx) {
       color: t.series, backgroundColor: t.bg,
       textStyle: { color: t.text, fontFamily: "system-ui" },
       legend: leg,
-      tooltip: { show: cfg.tooltip, trigger: cfg.kind === "pie" ? "item" : "axis" },
+      tooltip: { show: cfg.tooltip,
+        trigger: (cfg.kind === "pie" || cfg.kind === "gauge" || cfg.kind === "radar") ? "item" : "axis" },
       animationDuration: 600,
     };
     const padT = cfg.legend && cfg.legendPos === "top" ? 34 : 14;
     const padB = cfg.legend && cfg.legendPos === "bottom" ? 34 : 10;
-    // Source data: re-use the previously-baked option's series/data
-    // when present (the chart was saved with concrete numbers). Falls
-    // back to a tiny placeholder so the canvas isn't empty on a
-    // freshly-created chart.
+    // Source data: read from the previously-baked option when present,
+    // else fall back to a small placeholder so the canvas isn't empty
+    // on a freshly-created chart that hasn't fetched its data yet.
     const baked = cfg.option || null;
     const fallbackX = ["A","B","C","D","E"];
     const fallbackY = [12, 19, 8, 15, 22];
+    // Pull cartesian-shaped data (labels + values) wherever it lives
+    // — used by bar / line / area / scatter / radar / gauge / pictorial.
+    const labels = baked?.xAxis?.data || baked?.yAxis?.data || fallbackX;
+    const values = baked?.series?.[0]?.data?.length
+      ? baked.series[0].data.map((v) => (typeof v === "object" && v && "value" in v) ? v.value : v)
+      : fallbackY;
+    // Pie-shaped data — list of { name, value } objects.
+    const pieData = (baked?.series?.[0]?.data?.length
+        && typeof baked.series[0].data[0] === "object")
+      ? baked.series[0].data
+      : labels.map((n, i) => ({ name: String(n), value: Number(values[i]) || 0 }));
+
     if (cfg.kind === "pie") {
-      const data = (baked?.series?.[0]?.data) || [
-        { name: "A", value: 12 }, { name: "B", value: 19 }, { name: "C", value: 8 },
-      ];
+      // Variants: pie | donut | half_donut | rose. radius + startAngle
+      // / endAngle + roseType drive the visual; data shape is the
+      // same { name, value }[].
+      const isDonut = cfg.type === "donut" || cfg.type === "half_donut";
+      const isHalf  = cfg.type === "half_donut";
+      const isRose  = cfg.type === "rose";
+      const radius  = isDonut ? ["52%", "76%"] : isRose ? ["20%", "78%"] : ["0%", "72%"];
+      const angles  = isHalf ? { startAngle: 180, endAngle: 360 } : {};
       return { ...base, series: [{
         type: "pie",
-        radius: cfg.type === "donut" ? ["52%", "76%"] : ["0%", "72%"],
-        center: ["50%", cfg.legend && cfg.legendPos === "bottom" ? "44%" : "50%"],
-        data, label: { color: t.text },
+        radius,
+        ...angles,
+        roseType: isRose ? "area" : undefined,
+        center: ["50%", isHalf ? "70%" : (cfg.legend && cfg.legendPos === "bottom" ? "44%" : "50%")],
+        data: pieData, label: { color: t.text },
         itemStyle: { borderColor: t.bg === "transparent" ? "rgba(0,0,0,0)" : t.bg, borderWidth: 2 },
       }]};
     }
+
     if (cfg.kind === "barh") {
-      const cats = (baked?.yAxis?.data) || fallbackX;
-      const data = (baked?.series?.[0]?.data) || fallbackY;
       return { ...base,
         grid: { left: 6, right: 18, top: padT, bottom: padB, containLabel: true },
         xAxis: { type: "value",
           axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
           splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
           axisLabel: { color: t.text } },
-        yAxis: { type: "category", data: cats, axisTick: { show: false },
+        yAxis: { type: "category", data: labels, axisTick: { show: false },
           axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
           axisLabel: { color: t.text } },
-        series: [{ type: "bar", data, barWidth: "56%",
+        series: [{ type: "bar", data: values, barWidth: "56%",
           itemStyle: { borderRadius: [0, 4, 4, 0] } }],
       };
     }
-    // cartesian
-    const xData  = (baked?.xAxis?.data) || fallbackX;
+
+    if (cfg.kind === "scatter") {
+      // Two-numeric-axis scatter. We don't have a paired (x,y) shape
+      // in the single-agg spec — plot value vs row index. Future:
+      // when multi-agg charts land, x can come from the second agg.
+      const points = values.map((v, i) => [i, Number(v) || 0]);
+      return { ...base,
+        grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
+        xAxis: { type: "value",
+          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
+          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
+          axisLabel: { color: t.text } },
+        yAxis: { type: "value",
+          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
+          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
+          axisLabel: { color: t.text } },
+        series: [{ type: "scatter", data: points, symbolSize: 10 }],
+      };
+    }
+
+    if (cfg.kind === "radar") {
+      // One series, multiple indicators (one per category). Max per
+      // indicator = the overall max so the polygon fits.
+      const max = Math.max(...values.map((v) => Number(v) || 0)) || 1;
+      return { ...base,
+        radar: {
+          indicator: labels.map((n) => ({ name: String(n), max })),
+          axisLine:  { lineStyle: { color: t.split } },
+          splitLine: { lineStyle: { color: t.split } },
+          splitArea: { areaStyle: { color: ["transparent"] } },
+          axisName:  { color: t.text },
+        },
+        series: [{ type: "radar", data: [{ value: values, name: cfg.title || "series",
+          areaStyle: { opacity: 0.22 }, lineStyle: { width: 2 } }] }],
+      };
+    }
+
+    if (cfg.kind === "gauge") {
+      // Single-value KPI gauge. Uses the FIRST baked value when
+      // available; otherwise the sum of values (matches user
+      // expectations for "what's the headline number?").
+      const v = Number(values[0]) || values.reduce((a, b) => a + (Number(b) || 0), 0);
+      const max = Math.max(v, ...values.map((x) => Number(x) || 0)) * 1.25 || 100;
+      return { ...base,
+        series: [{
+          type: "gauge",
+          min: 0, max,
+          axisLine: { lineStyle: { width: 14, color: [[1, t.series[0]]] } },
+          pointer: { length: "60%" },
+          progress: { show: true, width: 14 },
+          detail: { formatter: "{value}", color: t.text, fontSize: 18 },
+          data: [{ value: Math.round(v * 100) / 100, name: cfg.title || "" }],
+        }],
+      };
+    }
+
+    if (cfg.kind === "pictorial") {
+      // Bar replaced with repeated symbols (or one stretched symbol).
+      // Defaults to a circle "dotted bar" — symbol + symbol_repeat
+      // pickers come in a follow-up.
+      return { ...base,
+        grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
+        xAxis: { type: "category", data: labels,
+          axisTick: { show: false }, splitLine: { show: false },
+          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
+          axisLabel: { color: t.text } },
+        yAxis: { type: "value",
+          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
+          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
+          axisLabel: { color: t.text } },
+        series: [{
+          type: "pictorialBar",
+          symbol: cfg.symbol || "circle",
+          symbolRepeat: cfg.symbol_repeat !== false,
+          symbolSize: [14, 14],
+          data: values,
+        }],
+      };
+    }
+
+    // cartesian — bar / line / area
+    const xData  = baked?.xAxis?.data || labels;
     const series = baked?.series?.length
       ? baked.series.map((s) => ({ name: s.name, data: s.data }))
-      : [{ name: cfg.agg_fn + "(" + cfg.agg_col + ")", data: fallbackY }];
+      : [{ name: cfg.agg_fn + "(" + cfg.agg_col + ")", data: values }];
     return { ...base,
       grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
       xAxis: { type: "category", data: xData, boundaryGap: cfg.type === "bar",
@@ -384,7 +524,7 @@ export function mountDesigner(designerEl, ctx) {
       series: series.map((s) => ({
         name: s.name, data: s.data,
         type: cfg.type === "area" ? "line" : cfg.type,
-        smooth: cfg.type !== "bar",
+        smooth: SMOOTHABLE.has(cfg.type) ? !!cfg.smooth : false,
         areaStyle: cfg.type === "area" ? { opacity: 0.18 } : undefined,
         barWidth: "56%",
         itemStyle: cfg.type === "bar" ? { borderRadius: [4, 4, 0, 0] } : undefined,
@@ -422,6 +562,7 @@ export function mountDesigner(designerEl, ctx) {
           tooltip:    sel.cfg.tooltip,
           splitLines: sel.cfg.splitLines,
           axisLine:   sel.cfg.axisLine,
+          smooth:     sel.cfg.smooth,
           theme:      sel.cfg.theme,
           group_by:   sel.cfg.group_by,
           agg_col:    sel.cfg.agg_col,
@@ -488,7 +629,7 @@ export function mountDesigner(designerEl, ctx) {
     const fld = e.target.closest("[data-key]");
     if (!fld) return;
     const key = fld.dataset.key;
-    if (["legend", "tooltip", "splitLines", "axisLine"].includes(key)) {
+    if (["legend", "tooltip", "splitLines", "axisLine", "smooth"].includes(key)) {
       sel.cfg[key] = e.target.checked;
     } else if (key === "legendPos") {
       sel.cfg.legendPos = e.target.value;
