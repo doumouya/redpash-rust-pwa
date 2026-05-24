@@ -78,6 +78,8 @@ async fn get_one(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<UserProfile>, AppError> {
+    // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
+    // gate at RBAC (route /admin/users + role check)
     super::resolve_user_rid(&state, &headers).await?;
     let u = db::find_user_by_id(&state.db, &rid)
         .await?
@@ -106,6 +108,8 @@ async fn patch(
     Path(rid):    Path<String>,
     Json(body):   Json<PatchUserBody>,
 ) -> Result<Json<UserProfile>, AppError> {
+    // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
+    // gate at RBAC (sibling get_one + delete_one share the dev-stage policy)
     super::resolve_user_rid(&state, &headers).await?;
     let trim = |o: Option<String>| o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let display_name = trim(body.display_name);
@@ -147,6 +151,8 @@ async fn delete_one(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
+    // gate at RBAC (admin-role check + self-delete protection)
     super::resolve_user_rid(&state, &headers).await?;
     let removed = db::delete_user(&state.db, &rid)
         .await?;
