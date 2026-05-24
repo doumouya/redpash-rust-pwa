@@ -108,9 +108,6 @@ export function mountReport(panelBody, ctx) {
   // delete button. The first row of count(*) is implicit when the
   // list is empty (engine returns one count column per group).
   function renderAggregationsSection(cols) {
-    const colOptions = '<option value="">(count *)</option>'
-      + cols.map((c) =>
-          '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('');
     const rows = aggregations.map((a, i) =>
       '<div class="rt-report-agg" data-i="' + i + '">'
       + '<select class="rt-pred-col" data-key="col">'
@@ -118,7 +115,7 @@ export function mountReport(panelBody, ctx) {
             '<option value="' + esc(c.name) + '"'
             + (c.name === a.col ? ' selected' : '') + '>'
             + esc(c.name) + '</option>').join('')
-      +   '<option value=""' + (a.col === "" ? ' selected' : '') + '>(count *)</option>'
+      +   '<option value="*"' + (a.col === "*" ? ' selected' : '') + '>(count *)</option>'
       + '</select>'
       + '<select class="rt-pred-op" data-key="fn">'
       +   AGG_FNS.map(([v, l]) =>
@@ -237,12 +234,10 @@ export function mountReport(panelBody, ctx) {
       return;
     }
     if (e.target.closest(".rt-report-add-agg")) {
-      const cols = ctx.columns() || [];
-      aggregations.push({
-        col:   cols[0]?.name || "",
-        fn:    "count",
-        alias: "",
-      });
+      // New rows default to count(*) — the safe shortcut that works
+      // without picking a column. Engine treats col === "*" as a
+      // count-of-rows literal (group_by.rs:218).
+      aggregations.push({ col: "*", fn: "count", alias: "" });
       renderBuilder();
     }
   });
