@@ -14,11 +14,13 @@
 import { api } from "/scripts/api.js";
 import { toggleTheme, currentTheme } from "/scripts/theme.js";
 
+// Profile lives on the avatar (bottom-right of the topbar nav), not
+// as a generic rt-btn — saves a slot and the avatar already advertises
+// "this is you", so clicking it for "your profile" is the natural read.
 const NAV = [
   { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
   { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
   { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring" },
-  { id: "profile",    hash: "#/profile",    icon: "bi-person",      label: "Profile" },
   { id: "settings",   hash: "#/settings",   icon: "bi-gear",        label: "Settings" },
   { id: "docs",       hash: "#/docs",       icon: "bi-book-half",   label: "Docs" },
 ];
@@ -51,7 +53,8 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     +     '<i class="bi bi-sun"></i></button>'
     +   '<button class="rt-btn" type="button" data-act="signout" title="Sign out">'
     +     '<i class="bi bi-box-arrow-right"></i></button>'
-    +   '<span class="rp-avatar" data-avatar>··</span>'
+    +   '<a class="rp-avatar' + (active === "profile" ? ' is-active' : '') + '"'
+    +     ' href="#/profile" data-avatar title="Profile">··</a>'
     + '</nav>';
 
   // avatar — the signed-in user's initials

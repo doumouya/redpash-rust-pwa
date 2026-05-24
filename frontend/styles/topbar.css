@@ -185,6 +185,13 @@
   font-weight: 700;
   color: var(--rp-bg);
   background: linear-gradient(135deg, var(--rp-accent-2), var(--rp-teal));
+  text-decoration: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.15s var(--rp-ease), transform 0.15s var(--rp-ease);
 }
+a.rp-avatar { cursor: pointer; }
+a.rp-avatar:hover { transform: scale(1.06); }
+a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
 /* Size variant — same atom, larger usage (Profile head). */
 .rp-avatar--lg { width: 64px; height: 64px; margin-left: 0; font-size: 22px; }
