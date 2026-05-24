@@ -322,14 +322,18 @@
   overflow-y: auto;
 }
 .rp-mon-modal-loading,
-.rp-mon-modal-empty,
-.rp-mon-modal-error {
+.rp-mon-modal-empty {
   color: var(--rp-text-mute);
   text-align: center;
   font-size: 12.5px;
   padding: 24px 0;
 }
-.rp-mon-modal-error { color: var(--rp-accent); }
+.rp-mon-modal-error {
+  color: var(--rp-accent);
+  text-align: center;
+  font-size: 12.5px;
+  padding: 24px 0;
+}
 .rp-mon-modal-request {
   margin-bottom: 14px;
   padding: 10px 12px;

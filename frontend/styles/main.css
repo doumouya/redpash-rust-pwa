@@ -19,6 +19,7 @@
 @import "shell.css";     /* rail-page shell — home, monitoring */
 @import "sw-update.css"; /* service-worker update banner */
 @import "monitoring.css"; /* /monitoring — window chips, panels, top-routes table */
+@import "cases.css";      /* /cases — kanban board + case detail page */
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 
 /* the Workspace — the redtable-as-a-browser, one file per component */

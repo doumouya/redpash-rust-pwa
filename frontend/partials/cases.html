@@ -1,0 +1,136 @@
+<!-- Cases — the team's coordination surface. Migrates the per-agent
+     Internal-Slack channels to a queryable Kanban + comments system
+     (workstream spec: docs/internal/jira-flow-proposition/proposition.md).
+     v1 ships the board (5 columns) + the detail page; sprints + story
+     points come in v2; customer-facing reporter path in v3.
+
+     Two surfaces hosted in one partial — JS toggles between them
+     based on `?id=CAS_…` in the URL hash:
+       • no `?id`         → kanban board (#rp-cases-board)
+       • `?id=CAS_xyz`    → case detail   (#rp-cases-detail)
+     Page-specific styles live in cases.css. -->
+<section class="rp-shell rp-shell--wide">
+  <header id="rp-topbar"></header>
+
+  <!-- ════ kanban board view (default) ════ -->
+  <div id="rp-cases-board" class="rp-cases-board">
+    <header class="rp-cases-board-head">
+      <div class="rp-cases-board-title">
+        <h1>Cases</h1>
+        <p class="rp-cases-board-sub">Workstreams, agent coordination, bug reports — one queue.</p>
+      </div>
+      <div class="rp-cases-board-actions">
+        <div class="rp-cases-filter">
+          <input type="search" id="rp-cases-search" class="rp-cases-search"
+                 placeholder="Search cases…" autocomplete="off" />
+        </div>
+        <button class="rt-btn rt-btn--accent" id="rp-cases-new" type="button">
+          <i class="bi bi-plus-lg"></i> New case
+        </button>
+      </div>
+    </header>
+
+    <div class="rp-cases-cols" id="rp-cases-cols">
+      <!-- JS renders 5 .rp-cases-col elements here, one per status
+           (backlog / todo / in_progress / in_review / done). Cards
+           live inside; click-cycle forwards the status. -->
+    </div>
+  </div>
+
+  <!-- ════ detail view (hidden until ?id=CAS_… deep-link) ════ -->
+  <div id="rp-cases-detail" class="rp-cases-detail" hidden>
+    <header class="rp-cases-detail-head">
+      <a href="#/cases" class="rt-btn rt-btn--glass rp-cases-back" title="Back to board">
+        <i class="bi bi-arrow-left"></i> Cases
+      </a>
+      <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
+    </header>
+
+    <div class="rp-cases-detail-body">
+      <main class="rp-cases-detail-main">
+        <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
+        <div class="rp-cases-detail-meta-strip" id="rp-cases-detail-meta-strip">
+          <!-- status chip + priority chip + type chip — JS renders -->
+        </div>
+        <section class="rp-cases-detail-description" id="rp-cases-detail-description">
+          <!-- JS renders <pre> for now; markdown render is a v2 polish -->
+        </section>
+
+        <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
+          <button class="is-active" type="button" data-tab="comments" title="Comments thread">
+            <i class="bi bi-chat-left-text"></i> Comments
+          </button>
+          <button type="button" data-tab="activity" title="Activity feed (events)">
+            <i class="bi bi-clock-history"></i> Activity
+          </button>
+        </nav>
+
+        <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
+          <div class="rp-cases-comments-list" id="rp-cases-comments-list">
+            <!-- JS renders comments here -->
+          </div>
+          <form class="rp-cases-comment-form" id="rp-cases-comment-form">
+            <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
+                      placeholder="Write a comment…" rows="3"></textarea>
+            <button class="rt-btn rt-btn--accent" type="submit">
+              <i class="bi bi-send"></i> Post
+            </button>
+          </form>
+        </section>
+
+        <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
+          <div class="rp-cases-activity-list" id="rp-cases-activity-list">
+            <!-- JS renders activity-feed events (case_* kinds) -->
+          </div>
+        </section>
+      </main>
+
+      <aside class="rp-cases-detail-side">
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Status</label>
+          <select class="rp-cases-side-select" id="rp-cases-side-status">
+            <option value="backlog">Backlog</option>
+            <option value="todo">Todo</option>
+            <option value="in_progress">In progress</option>
+            <option value="in_review">In review</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Priority</label>
+          <select class="rp-cases-side-select" id="rp-cases-side-priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Type</label>
+          <select class="rp-cases-side-select" id="rp-cases-side-type">
+            <option value="task" selected>Task</option>
+            <option value="bug">Bug</option>
+            <option value="feature">Feature</option>
+            <option value="epic">Epic</option>
+          </select>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Assignee</label>
+          <div class="rp-cases-side-value" id="rp-cases-side-assignee">— unassigned —</div>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Reporter</label>
+          <div class="rp-cases-side-value" id="rp-cases-side-reporter">—</div>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Created</label>
+          <div class="rp-cases-side-value" id="rp-cases-side-created">—</div>
+        </div>
+        <div class="rp-cases-side-section">
+          <label class="rp-cases-side-label">Updated</label>
+          <div class="rp-cases-side-value" id="rp-cases-side-updated">—</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>

@@ -21,6 +21,7 @@ import { esc } from "/scripts/dom.js";
 const NAV = [
   { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
   { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
+  { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
   { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring" },
   { id: "settings",   hash: "#/settings",   icon: "bi-gear",        label: "Settings" },
   { id: "docs",       hash: "#/docs",       icon: "bi-book-half",   label: "Docs" },
