@@ -1,0 +1,255 @@
+/* ── profile ─────────────────────────────────────────────────────
+   Page-specific styles for /profile only. Inherits the page shell
+   (.rp-page + .rp-page__section + .rp-page__row) from page.css and
+   the avatar atom from topbar.css. Owns the 2-column grid, the
+   identity card, the use-case option pills, the usage stat strip,
+   the plan card, and the connected-accounts list.
+   Ported from main's Step-1 Profile (commit f690550-era), trimmed
+   to features backed by existing endpoints. */
+
+.rp-profile { max-width: 1080px; }
+
+/* 2-col layout: form on the left, stacked side-panels on the right.
+   Collapses to one column under 880px so phones get a vertical read. */
+.rp-profile__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--rp-sp-5);
+  align-items: start;
+}
+.rp-profile__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-5);
+}
+@media (max-width: 880px) {
+  .rp-profile__grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Identity row inside the form card ──────────────────────── */
+.rp-profile__id {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-4);
+  padding-bottom: var(--rp-sp-4);
+  margin-bottom: var(--rp-sp-2);
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-profile__id-meta { flex: 1; min-width: 0; }
+.rp-profile__id-name {
+  margin: 0;
+  font-size: var(--rp-text-lg);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-profile__id-email {
+  margin: 2px 0 6px;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+}
+.rp-profile__plan-pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--rp-ok);
+  background: color-mix(in srgb, var(--rp-ok) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rp-ok) 35%, transparent);
+}
+.rp-profile__id-actions {
+  display: flex;
+  gap: var(--rp-sp-2);
+  flex-shrink: 0;
+}
+.rp-profile__id-actions .rp-btn.is-active {
+  border-color: var(--rp-accent-2);
+  color: var(--rp-accent-2);
+}
+
+/* ─── Hint text under row labels ─────────────────────────────── */
+.rp-profile__hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--rp-text-mute);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* ─── Inputs — readonly looks flat, editable gets a border ───── */
+.rp-input {
+  width: 280px;
+  max-width: 100%;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--rp-radius);
+  transition: border-color 0.15s var(--rp-ease), background 0.15s var(--rp-ease);
+}
+.rp-input:read-only {
+  background: transparent;
+  color: var(--rp-text-dim);
+  cursor: default;
+}
+.rp-input:not(:read-only) {
+  border-color: var(--rp-border);
+  background: var(--rp-surface);
+}
+.rp-input:focus { outline: 2px solid var(--rp-accent-2); outline-offset: 1px; }
+
+/* Row variant: label on top, control beneath (for the use-case grid) */
+.rp-page__row--col { flex-direction: column; align-items: stretch; gap: var(--rp-sp-3); }
+
+/* ─── Account ID wrap (input + copy button) ──────────────────── */
+.rp-profile__rid-wrap {
+  display: flex;
+  gap: var(--rp-sp-2);
+  align-items: center;
+}
+.rp-profile__rid { width: 320px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 11px; }
+
+/* ─── Use-case option pills ──────────────────────────────────── */
+.rp-profile__opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--rp-sp-2);
+}
+.rp-profile__opt {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s var(--rp-ease), color 0.15s var(--rp-ease);
+}
+.rp-profile__opt:hover    { border-color: rgba(205, 214, 244, 0.28); color: var(--rp-text); }
+.rp-profile__opt.is-active {
+  color: var(--rp-accent-2);
+  background: color-mix(in srgb, var(--rp-accent-2) 10%, transparent);
+  border-color: color-mix(in srgb, var(--rp-accent-2) 50%, transparent);
+}
+
+/* ─── Usage stat strip (4 clickable tiles) ───────────────────── */
+.rp-profile__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--rp-sp-3);
+}
+.rp-profile__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--rp-sp-4);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+  cursor: pointer;
+  transition: transform 0.15s var(--rp-ease), border-color 0.15s var(--rp-ease);
+}
+.rp-profile__stat:hover {
+  transform: translateY(-1px);
+  border-color: rgba(205, 214, 244, 0.28);
+}
+.rp-profile__stat-val {
+  font-size: var(--rp-text-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--rp-text);
+}
+.rp-profile__stat-lbl {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+}
+
+/* ─── Plan card ──────────────────────────────────────────────── */
+.rp-profile__plan-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rp-sp-3);
+}
+.rp-profile__plan-name {
+  font-size: var(--rp-text-lg);
+  font-weight: 650;
+  color: var(--rp-text);
+}
+.rp-profile__plan-sub {
+  margin-top: 2px;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+}
+.rp-profile__plan-features {
+  list-style: none;
+  margin: var(--rp-sp-4) 0 0;
+  padding: 0;
+}
+.rp-profile__plan-features li {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+  padding: 4px 0;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+}
+.rp-profile__plan-features i { color: var(--rp-ok); font-size: 13px; }
+
+/* ─── Connected accounts ─────────────────────────────────────── */
+.rp-profile__conn {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-3);
+  padding: var(--rp-sp-3) 0;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-profile__conn:first-of-type { border-top: 0; }
+.rp-profile__conn-icon {
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.rp-profile__conn-info { flex: 1; min-width: 0; }
+.rp-profile__conn-name { font-size: var(--rp-text-sm); color: var(--rp-text); }
+.rp-profile__conn-detail {
+  font-size: 11px;
+  color: var(--rp-text-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-profile__conn-state {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--rp-text-mute);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+}
+.rp-profile__conn-state.is-connected {
+  color: var(--rp-ok);
+  background: color-mix(in srgb, var(--rp-ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--rp-ok) 35%, transparent);
+}
+
+/* Generic "Soon" badge — reused on plan + connections rows */
+.rp-profile__soon {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--rp-text-mute);
+  background: var(--rp-surface-2);
+  border: 1px dashed var(--rp-border);
+}

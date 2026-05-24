@@ -1,28 +1,200 @@
-<!-- Profile — the user's account surface. First fill: identity from
-     the session. Editable fields land here next. -->
+<!-- Profile — the user's account surface.
+     Ported from main's Step-1 Profile (commit f690550-era), adapted to
+     the prerelease design language (.rp-page shell + glass cards +
+     catppuccin tokens). Features pinned to existing endpoints; avatar
+     upload / active sessions / delete account / billing email omitted
+     until their backends land. -->
 <section class="rp-page">
   <header id="rp-topbar"></header>
-  <div class="rp-page__body">
-    <header class="rp-page__head rp-page__head--row">
-      <span class="rp-avatar rp-avatar--lg" id="rp-profile-avatar">··</span>
-      <div>
-        <h1 class="rp-page__title" id="rp-profile-name">—</h1>
-        <p class="rp-page__sub" id="rp-profile-handle">@—</p>
-      </div>
-    </header>
+  <div class="rp-page__body rp-profile">
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Account</h2>
-      <div class="rp-page__row">
-        <span class="rp-page__row-label">Display name</span>
-        <span class="rp-page__row-value" id="rp-profile-display">—</span>
-      </div>
-      <div class="rp-page__row">
-        <span class="rp-page__row-label">Username</span>
-        <span class="rp-page__row-value" id="rp-profile-username">—</span>
-      </div>
-    </section>
+    <div class="rp-profile__grid">
 
-    <div class="rp-page__placeholder">Editable fields land here — display name, email, avatar, password.</div>
+      <!-- ─── LEFT: Personal info form card ─── -->
+      <form class="rp-page__section rp-profile__form" id="rp-profile-form" novalidate>
+
+        <!-- Identity row: avatar + name/email + plan pill + edit/save -->
+        <div class="rp-profile__id">
+          <span class="rp-avatar rp-avatar--lg" id="rp-profile-avatar">··</span>
+          <div class="rp-profile__id-meta">
+            <h1 class="rp-profile__id-name" id="rp-profile-id-name">—</h1>
+            <p class="rp-profile__id-email" id="rp-profile-id-email">—</p>
+            <span class="rp-profile__plan-pill" id="rp-profile-plan-pill">Free</span>
+          </div>
+          <div class="rp-profile__id-actions">
+            <button type="button" class="rp-btn rp-btn--ghost rp-btn--sm" id="rp-profile-edit"
+                    aria-pressed="false" title="Edit mode">
+              <i class="bi bi-pencil-fill"></i>
+            </button>
+            <button type="submit" class="rp-btn rp-btn--sm" id="rp-profile-save"
+                    title="Save changes" disabled>
+              <i class="bi bi-floppy-fill"></i>
+            </button>
+          </div>
+        </div>
+
+        <h2 class="rp-page__section-h">Personal info</h2>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Display name</span>
+          <span class="rp-page__row-control">
+            <input id="rp-profile-display-name" name="display_name" type="text"
+                   class="rp-input" autocomplete="name" readonly />
+          </span>
+        </div>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Username
+            <small class="rp-profile__hint">server-assigned, can't be edited</small>
+          </span>
+          <span class="rp-page__row-control">
+            <input id="rp-profile-username" type="text" class="rp-input" readonly />
+          </span>
+        </div>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Email
+            <small class="rp-profile__hint">from your Google account</small>
+          </span>
+          <span class="rp-page__row-control">
+            <input id="rp-profile-email" type="email" class="rp-input" readonly />
+          </span>
+        </div>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Job title</span>
+          <span class="rp-page__row-control">
+            <input id="rp-profile-job-title" name="job_title" type="text"
+                   class="rp-input" placeholder="e.g. Data Analyst" readonly />
+          </span>
+        </div>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Organisation
+            <small class="rp-profile__hint">free-text; distinct from your company membership</small>
+          </span>
+          <span class="rp-page__row-control">
+            <input id="rp-profile-organisation" name="organisation" type="text"
+                   class="rp-input" autocomplete="organization"
+                   placeholder="Your company" readonly />
+          </span>
+        </div>
+
+        <div class="rp-page__row rp-page__row--col">
+          <span class="rp-page__row-label">Use case
+            <small class="rp-profile__hint">helps RedPash tailor suggestions to your context</small>
+          </span>
+          <div class="rp-profile__opts" id="rp-profile-use-case">
+            <button type="button" class="rp-profile__opt" data-value="operational">Operational analysis</button>
+            <button type="button" class="rp-profile__opt" data-value="research">Student / Research</button>
+            <button type="button" class="rp-profile__opt" data-value="reporting">Business reporting</button>
+            <button type="button" class="rp-profile__opt" data-value="other">Other</button>
+          </div>
+        </div>
+
+        <div class="rp-page__row">
+          <span class="rp-page__row-label">Account ID
+            <small class="rp-profile__hint">reference this when contacting support</small>
+          </span>
+          <span class="rp-page__row-control rp-profile__rid-wrap">
+            <input id="rp-profile-rid" type="text" class="rp-input rp-profile__rid" readonly />
+            <button type="button" class="rp-btn rp-btn--ghost rp-btn--sm" id="rp-profile-copy"
+                    title="Copy ID to clipboard">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </span>
+        </div>
+      </form>
+
+      <!-- ─── RIGHT: Usage strip + Plan card + Connections ─── -->
+      <div class="rp-profile__side">
+
+        <!-- Usage strip — 4 clickable counter tiles -->
+        <section class="rp-page__section">
+          <h2 class="rp-page__section-h">Usage</h2>
+          <div class="rp-profile__stats">
+            <button class="rp-profile__stat" type="button"
+                    data-hash="#/home?tab=projects" title="Open projects">
+              <span class="rp-profile__stat-val" id="rp-profile-stat-projects">—</span>
+              <span class="rp-profile__stat-lbl">Projects</span>
+            </button>
+            <button class="rp-profile__stat" type="button"
+                    data-hash="#/home?tab=files" title="Open files">
+              <span class="rp-profile__stat-val" id="rp-profile-stat-files">—</span>
+              <span class="rp-profile__stat-lbl">Files</span>
+            </button>
+            <button class="rp-profile__stat" type="button"
+                    data-hash="#/home?tab=charts" title="Open charts">
+              <span class="rp-profile__stat-val" id="rp-profile-stat-charts">—</span>
+              <span class="rp-profile__stat-lbl">Charts</span>
+            </button>
+            <button class="rp-profile__stat" type="button"
+                    data-hash="#/home" title="Dashboards">
+              <span class="rp-profile__stat-val" id="rp-profile-stat-dashboards">—</span>
+              <span class="rp-profile__stat-lbl">Dashboards</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Plan card -->
+        <section class="rp-page__section">
+          <h2 class="rp-page__section-h">Plan</h2>
+          <div class="rp-profile__plan">
+            <div class="rp-profile__plan-top">
+              <div>
+                <div class="rp-profile__plan-name" id="rp-profile-plan-name">Free</div>
+                <div class="rp-profile__plan-sub" id="rp-profile-plan-sub">
+                  3 projects, 5 files per project, CSV export only.
+                </div>
+              </div>
+              <span class="rp-profile__soon">Upgrade · Soon</span>
+            </div>
+            <ul class="rp-profile__plan-features">
+              <li><i class="bi bi-check-lg"></i> Up to 3 projects on the free tier</li>
+              <li><i class="bi bi-check-lg"></i> Up to 5 files per project (CSV / Excel)</li>
+              <li><i class="bi bi-check-lg"></i> All cleaning tools + join wizard</li>
+              <li><i class="bi bi-check-lg"></i> Charts + dashboards (CSV export)</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Connected accounts -->
+        <section class="rp-page__section">
+          <h2 class="rp-page__section-h">Connected accounts</h2>
+          <div class="rp-profile__conn">
+            <span class="rp-profile__conn-icon">
+              <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" width="20" height="20">
+                <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+                <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+                <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+              </svg>
+            </span>
+            <div class="rp-profile__conn-info">
+              <div class="rp-profile__conn-name">Google</div>
+              <div class="rp-profile__conn-detail" id="rp-profile-google-email">—</div>
+            </div>
+            <span class="rp-profile__conn-state" id="rp-profile-google-state">—</span>
+          </div>
+          <div class="rp-profile__conn">
+            <span class="rp-profile__conn-icon" style="color:#00a4ef"><i class="bi bi-microsoft"></i></span>
+            <div class="rp-profile__conn-info">
+              <div class="rp-profile__conn-name">Microsoft</div>
+              <div class="rp-profile__conn-detail">Not connected</div>
+            </div>
+            <span class="rp-profile__soon">Soon</span>
+          </div>
+          <div class="rp-profile__conn">
+            <span class="rp-profile__conn-icon"><i class="bi bi-apple"></i></span>
+            <div class="rp-profile__conn-info">
+              <div class="rp-profile__conn-name">Apple</div>
+              <div class="rp-profile__conn-detail">Not connected</div>
+            </div>
+            <span class="rp-profile__soon">Soon</span>
+          </div>
+        </section>
+      </div>
+
+    </div><!-- /grid -->
   </div>
 </section>

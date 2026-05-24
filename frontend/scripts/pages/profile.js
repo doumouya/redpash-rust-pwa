@@ -1,25 +1,218 @@
-// Profile page — the user's account surface. First fill: render
-// identity from the session (avatar + name + handle, mirrored in the
-// account section). Editable fields and the rest land here next.
+// Profile page — the user's account surface.
+//
+// Loads /api/me, paints the identity card + editable fields, and
+// fetches usage counters from the existing CRUD lists (/projects,
+// /charts, /dashboards). Edit-mode toggles the form between read-
+// only and editable; Save fires PATCH /api/me with the changed
+// fields and re-locks on success. Ported from main's Step-1 Profile,
+// trimmed to the surface backed by existing endpoints.
 
+import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 
-export default function profile(app, { session }) {
+const USE_CASES = ["operational", "research", "reporting", "other"];
+
+const PLAN_LABELS = {
+  free:  "Free",
+  pro:   "Pro",
+  trial: "30-day trial",
+};
+
+export default async function profile(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "profile", session });
 
-  const name     = (session?.display_name || session?.username || "—").trim();
-  const username = session?.username || "—";
-  const initials = name && name !== "—"
-    ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
-    : "··";
+  let me;
+  try {
+    me = await api.get("/me");
+  } catch (err) {
+    app.querySelector(".rp-profile").innerHTML =
+      '<p class="rp-page__placeholder">Couldn’t load profile'
+      + (err?.status ? " (" + err.status + ")" : "") + '.</p>';
+    return;
+  }
 
-  const set = (sel, text) => {
-    const el = app.querySelector(sel);
-    if (el) el.textContent = text;
-  };
-  set("#rp-profile-avatar",   initials);
-  set("#rp-profile-name",     name);
-  set("#rp-profile-handle",   "@" + username);
-  set("#rp-profile-display",  name);
-  set("#rp-profile-username", username);
+  populateIdentity(app, me);
+  populateForm(app, me);
+  populateConnections(app, me);
+  setEditMode(app, false);
+  loadUsage(app);
+
+  // ── Use-case option pills ───────────────────────────────────────
+  app.querySelectorAll("#rp-profile-use-case .rp-profile__opt").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // Only respond when in edit mode — the pointer-events:none guard
+      // in setEditMode handles the visual lock; this is the data guard.
+      if (!app.querySelector("#rp-profile-form").classList.contains("is-editing")) return;
+      app.querySelectorAll("#rp-profile-use-case .rp-profile__opt").forEach((p) => {
+        p.classList.toggle("is-active", p === btn);
+      });
+    });
+  });
+
+  // ── Edit toggle ─────────────────────────────────────────────────
+  app.querySelector("#rp-profile-edit").addEventListener("click", () => {
+    const editing = app.querySelector("#rp-profile-form").classList.contains("is-editing");
+    setEditMode(app, !editing);
+  });
+
+  // ── Save (PATCH /me) ────────────────────────────────────────────
+  app.querySelector("#rp-profile-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ucEl = app.querySelector("#rp-profile-use-case .rp-profile__opt.is-active");
+    const body = {
+      display_name: app.querySelector("#rp-profile-display-name").value.trim() || null,
+      job_title:    app.querySelector("#rp-profile-job-title").value.trim()    || null,
+      organisation: app.querySelector("#rp-profile-organisation").value.trim() || null,
+      use_case:     ucEl?.dataset.value ?? null,
+    };
+    const save = app.querySelector("#rp-profile-save");
+    save.disabled = true;
+    try {
+      const updated = await api.patch("/me", body);
+      // Re-paint identity inline so name changes show without remount.
+      app.querySelector("#rp-profile-id-name").textContent =
+        updated.display_name ?? updated.username ?? "—";
+      const av = app.querySelector("#rp-profile-avatar");
+      av.textContent = initialsFrom(updated.display_name ?? updated.username);
+      setEditMode(app, false);
+    } catch (err) {
+      save.disabled = false;
+      alert("Save failed" + (err?.status ? " (" + err.status + ")" : "") + ".");
+    }
+  });
+
+  // ── Copy Account ID ─────────────────────────────────────────────
+  app.querySelector("#rp-profile-copy").addEventListener("click", async () => {
+    const rid = app.querySelector("#rp-profile-rid").value;
+    try { await navigator.clipboard.writeText(rid); }
+    catch { /* clipboard blocked (no https / no permission) — silent */ }
+    const btn  = app.querySelector("#rp-profile-copy");
+    const icon = btn.querySelector("i");
+    const orig = icon.className;
+    icon.className = "bi bi-check-lg";
+    setTimeout(() => { icon.className = orig; }, 1200);
+  });
+
+  // ── Usage tile click → navigate ─────────────────────────────────
+  app.querySelectorAll(".rp-profile__stat").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const h = btn.dataset.hash;
+      if (h) location.hash = h;
+    });
+  });
+}
+
+function populateIdentity(app, me) {
+  const av = app.querySelector("#rp-profile-avatar");
+  if (me.avatar_url) {
+    av.style.backgroundImage = `url("${me.avatar_url}")`;
+    av.textContent = "";
+  } else {
+    av.textContent = initialsFrom(me.display_name ?? me.username);
+  }
+  app.querySelector("#rp-profile-id-name").textContent  = me.display_name ?? me.username ?? "—";
+  app.querySelector("#rp-profile-id-email").textContent = me.email ?? "—";
+  const planLabel = PLAN_LABELS[me.plan] ?? me.plan ?? "Free";
+  app.querySelector("#rp-profile-plan-pill").textContent = planLabel;
+  app.querySelector("#rp-profile-plan-name").textContent = planLabel;
+}
+
+function populateForm(app, me) {
+  app.querySelector("#rp-profile-display-name").value = me.display_name ?? "";
+  app.querySelector("#rp-profile-username").value     = me.username ?? "";
+  app.querySelector("#rp-profile-email").value        = me.email ?? "";
+  app.querySelector("#rp-profile-job-title").value    = me.job_title ?? "";
+  app.querySelector("#rp-profile-organisation").value = me.organisation ?? "";
+  app.querySelector("#rp-profile-rid").value          = me.redpash_id ?? "";
+  if (me.use_case && USE_CASES.includes(me.use_case)) {
+    app.querySelectorAll("#rp-profile-use-case .rp-profile__opt").forEach((p) => {
+      p.classList.toggle("is-active", p.dataset.value === me.use_case);
+    });
+  }
+}
+
+function populateConnections(app, me) {
+  const email   = me.email;
+  const gEmail  = app.querySelector("#rp-profile-google-email");
+  const gState  = app.querySelector("#rp-profile-google-state");
+  if (email) {
+    gEmail.textContent = email;
+    gState.textContent = "Connected";
+    gState.classList.add("is-connected");
+  } else {
+    gEmail.textContent = "Not connected";
+    gState.textContent = "Not connected";
+  }
+}
+
+// Counts the four entity types the Home page surfaces. Files count is
+// summed from project.file_count so we don't need a dedicated endpoint.
+// Charts substitutes for "Reports" on prerelease (the object model
+// merged charts/reports into chart-typed project_files rows).
+async function loadUsage(app) {
+  const [projects, charts, dashboards] = await Promise.allSettled([
+    api.get("/projects"),
+    api.get("/charts"),
+    api.get("/dashboards"),
+  ]);
+  const proj = projects.value?.items   ?? [];
+  const ch   = charts.value?.items     ?? [];
+  const dash = dashboards.value?.items ?? [];
+  const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
+  animateNumber(app.querySelector("#rp-profile-stat-projects"),   proj.length);
+  animateNumber(app.querySelector("#rp-profile-stat-files"),      fileCount);
+  animateNumber(app.querySelector("#rp-profile-stat-charts"),     ch.length);
+  animateNumber(app.querySelector("#rp-profile-stat-dashboards"), dash.length);
+}
+
+// Lock/unlock the personal-info card.
+//   editing=true  → inputs lose `readonly`, use-case pills become
+//                   interactive, Save enables, edit button reads
+//                   as pressed.
+//   editing=false → reverse. Readonly meta inputs (username, email,
+//                   account id) have no name and are skipped.
+function setEditMode(app, editing) {
+  const form = app.querySelector("#rp-profile-form");
+  const edit = app.querySelector("#rp-profile-edit");
+  const save = app.querySelector("#rp-profile-save");
+  if (!form) return;
+
+  form.classList.toggle("is-editing", editing);
+  form.querySelectorAll("input[name]").forEach((inp) => { inp.readOnly = !editing; });
+  const grp = form.querySelector("#rp-profile-use-case");
+  if (grp) {
+    grp.style.pointerEvents = editing ? "" : "none";
+    grp.style.opacity       = editing ? "" : "0.55";
+  }
+  if (edit) {
+    edit.classList.toggle("is-active", editing);
+    edit.setAttribute("aria-pressed", String(editing));
+    edit.title = editing ? "Lock fields" : "Edit mode";
+  }
+  if (save) save.disabled = !editing;
+}
+
+function initialsFrom(label) {
+  return (label ?? "")
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "··";
+}
+
+// requestAnimationFrame counter — eases from 0 to `to` over 900ms.
+// Skips no-op when `to` is 0 (still paints "0", but no loop overhead).
+function animateNumber(el, to) {
+  if (!el) return;
+  if (to === 0) { el.textContent = "0"; return; }
+  const dur = 900;
+  const t0  = performance.now();
+  function step(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(eased * to).toString();
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
