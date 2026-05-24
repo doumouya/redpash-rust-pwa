@@ -54,7 +54,39 @@ const THEMES = {
   infographic: { name: "Infographic",
     series: ["#C1232B","#27727B","#FCCE10","#E87C25","#B5C334","#FE8463","#9BCA63","#FAD860"],
     text: "#27727B", axis: "#27727B", split: "rgba(0,0,0,0.08)", bg: "transparent" },
+  // Gus's full ECharts themes — palette + axis + tooltip + gauge
+  // bands + candlestick + boxplot defaults baked into the JSON.
+  // `registered: true` flips buildOption into pass-through mode
+  // (no explicit color/text/axis settings — let the theme drive)
+  // and tells mount/rerender to dispose+reinit when swapping.
+  "redpash-mocha": { name: "RedPash Mocha", registered: true,
+    series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af","#a6e3a1","#74c7ec"] },
+  "redpash-latte": { name: "RedPash Latte", registered: true,
+    series: ["#1e66f5","#8839ef","#179299","#fe640b","#d20f39","#df8e1d","#40a02b","#04a5e5"] },
 };
+
+// One-time registration of Gus's themes. Loads the JSON files
+// from /echarts-themes/ and calls echarts.registerTheme — must run
+// before any chart that uses one is initialised. The promise is
+// awaited by mountDesigner so the first paint already has the theme
+// in place; subsequent mounts skip the fetch via the cache.
+let themesReadyP = null;
+function ensureRegisteredThemes() {
+  if (themesReadyP) return themesReadyP;
+  if (!window.echarts) return Promise.resolve();
+  const wanted = ["redpash-mocha", "redpash-latte"];
+  themesReadyP = Promise.all(wanted.map(async (name) => {
+    try {
+      const r = await fetch("/echarts-themes/" + name + ".json");
+      if (!r.ok) return;
+      const json = await r.json();
+      window.echarts.registerTheme(name, json);
+    } catch {
+      /* silent — theme falls through to vintage in buildOption */
+    }
+  }));
+  return themesReadyP;
+}
 
 // Chart kinds — grouped by family. Picking a type sets both the
 // type AND the kind it belongs to (cartesian/pie/barh/etc. each
@@ -107,10 +139,16 @@ const DEFAULTS = {
 };
 
 export function mountDesigner(designerEl, ctx) {
+  // Kick off theme registration once per page so the first chart
+  // init that uses redpash-mocha / redpash-latte already has them
+  // loaded. Fire-and-forget — failed loads fall through to the
+  // inline themes silently.
+  ensureRegisteredThemes();
+
   // state — tiles[] holds one entry per chart in the canvas. For
   // C2 / single-chart there's at most one entry (the open CHT_
   // file). The shape generalises to multi-tile when dashboards land.
-  let tiles = [];        // [{ rid, chart, cfg, inst, tileEl }]
+  let tiles = [];        // [{ rid, chart, cfg, inst, tileEl, themeName }]
   let sel   = null;      // currently-selected tile entry
   let dirty = false;     // any unsaved spec changes
   let busy  = false;     // PUT in flight
@@ -196,9 +234,12 @@ export function mountDesigner(designerEl, ctx) {
     const cfg = mergeCfg(chart);
     const tileEl = makeTile(chart, cfg, !!selected, spanClass || "span-12");
     gridEl.appendChild(tileEl);
-    const inst = window.echarts?.init(tileEl.querySelector(".ds-chart"));
-    if (inst) inst.setOption(buildOption(cfg, THEMES[cfg.theme] || THEMES.vintage));
-    const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl, widget: widget || null };
+    const t = THEMES[cfg.theme] || THEMES.vintage;
+    const themeName = t.registered ? cfg.theme : undefined;
+    const inst = window.echarts?.init(tileEl.querySelector(".ds-chart"), themeName);
+    if (inst) inst.setOption(buildOption(cfg, t));
+    const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl,
+                    widget: widget || null, themeName };
     tiles.push(entry);
     return entry;
   }
@@ -375,19 +416,39 @@ export function mountDesigner(designerEl, ctx) {
   // changes). On a fresh chart with no baked data, a small fallback
   // dataset keeps the canvas from looking blank.
   function buildOption(cfg, t) {
+    // Registered themes (Gus's redpash-mocha / redpash-latte) carry
+    // their own color / text / axis defaults via echarts.registerTheme.
+    // Skip the explicit settings in that mode so the theme drives —
+    // otherwise our setOption color/text/etc. would override the
+    // registered defaults and the theme would lose most of its value.
+    const reg = !!t.registered;
     const leg = {
       show: cfg.legend, type: "scroll", icon: "roundRect",
-      itemWidth: 14, itemHeight: 9, textStyle: { color: t.text },
+      itemWidth: 14, itemHeight: 9,
+      ...(reg ? {} : { textStyle: { color: t.text } }),
     };
     leg[cfg.legendPos] = cfg.legendPos === "top" ? 4 : 0;
     const base = {
-      color: t.series, backgroundColor: t.bg,
-      textStyle: { color: t.text, fontFamily: "system-ui" },
+      ...(reg ? {} : {
+        color: t.series, backgroundColor: t.bg,
+        textStyle: { color: t.text, fontFamily: "system-ui" },
+      }),
       legend: leg,
       tooltip: { show: cfg.tooltip,
         trigger: (cfg.kind === "pie" || cfg.kind === "gauge" || cfg.kind === "radar") ? "item" : "axis" },
       animationDuration: 600,
     };
+    // Per-axis color helpers — return the theme's color when explicit,
+    // empty object when registered (so the registered theme's axis
+    // defaults stick). axisShow keeps the show toggle in both modes
+    // since that's a user preference, not a colour.
+    const axisLineStyle  = (show) => reg
+      ? { show }
+      : { show, lineStyle: { color: t.axis } };
+    const splitLineStyle = (show) => reg
+      ? { show }
+      : { show, lineStyle: { color: t.split } };
+    const axisLabelStyle = reg ? {} : { color: t.text };
     const padT = cfg.legend && cfg.legendPos === "top" ? 34 : 14;
     const padB = cfg.legend && cfg.legendPos === "bottom" ? 34 : 10;
     // Source data: read from the previously-baked option when present,
@@ -423,8 +484,11 @@ export function mountDesigner(designerEl, ctx) {
         ...angles,
         roseType: isRose ? "area" : undefined,
         center: ["50%", isHalf ? "70%" : (cfg.legend && cfg.legendPos === "bottom" ? "44%" : "50%")],
-        data: pieData, label: { color: t.text },
-        itemStyle: { borderColor: t.bg === "transparent" ? "rgba(0,0,0,0)" : t.bg, borderWidth: 2 },
+        data: pieData,
+        ...(reg ? {} : {
+          label: { color: t.text },
+          itemStyle: { borderColor: t.bg === "transparent" ? "rgba(0,0,0,0)" : t.bg, borderWidth: 2 },
+        }),
       }]};
     }
 
@@ -432,12 +496,12 @@ export function mountDesigner(designerEl, ctx) {
       return { ...base,
         grid: { left: 6, right: 18, top: padT, bottom: padB, containLabel: true },
         xAxis: { type: "value",
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          splitLine: splitLineStyle(cfg.splitLines),
+          axisLabel: axisLabelStyle },
         yAxis: { type: "category", data: labels, axisTick: { show: false },
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          axisLabel: axisLabelStyle },
         series: [{ type: "bar", data: values, barWidth: "56%",
           itemStyle: { borderRadius: [0, 4, 4, 0] } }],
       };
@@ -451,13 +515,13 @@ export function mountDesigner(designerEl, ctx) {
       return { ...base,
         grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
         xAxis: { type: "value",
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          splitLine: splitLineStyle(cfg.splitLines),
+          axisLabel: axisLabelStyle },
         yAxis: { type: "value",
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          splitLine: splitLineStyle(cfg.splitLines),
+          axisLabel: axisLabelStyle },
         series: [{ type: "scatter", data: points, symbolSize: 10 }],
       };
     }
@@ -469,10 +533,12 @@ export function mountDesigner(designerEl, ctx) {
       return { ...base,
         radar: {
           indicator: labels.map((n) => ({ name: String(n), max })),
-          axisLine:  { lineStyle: { color: t.split } },
-          splitLine: { lineStyle: { color: t.split } },
-          splitArea: { areaStyle: { color: ["transparent"] } },
-          axisName:  { color: t.text },
+          ...(reg ? {} : {
+            axisLine:  { lineStyle: { color: t.split } },
+            splitLine: { lineStyle: { color: t.split } },
+            splitArea: { areaStyle: { color: ["transparent"] } },
+            axisName:  { color: t.text },
+          }),
         },
         series: [{ type: "radar", data: [{ value: values, name: cfg.title || "series",
           areaStyle: { opacity: 0.22 }, lineStyle: { width: 2 } }] }],
@@ -482,17 +548,21 @@ export function mountDesigner(designerEl, ctx) {
     if (cfg.kind === "gauge") {
       // Single-value KPI gauge. Uses the FIRST baked value when
       // available; otherwise the sum of values (matches user
-      // expectations for "what's the headline number?").
+      // expectations for "what's the headline number?"). Registered
+      // themes ship richer gauge axis bands; we keep our flat band
+      // only in inline mode so we don't clobber Gus's stops.
       const v = Number(values[0]) || values.reduce((a, b) => a + (Number(b) || 0), 0);
       const max = Math.max(v, ...values.map((x) => Number(x) || 0)) * 1.25 || 100;
       return { ...base,
         series: [{
           type: "gauge",
           min: 0, max,
-          axisLine: { lineStyle: { width: 14, color: [[1, t.series[0]]] } },
+          ...(reg ? {} : {
+            axisLine: { lineStyle: { width: 14, color: [[1, t.series[0]]] } },
+            detail:   { formatter: "{value}", color: t.text, fontSize: 18 },
+          }),
           pointer: { length: "60%" },
           progress: { show: true, width: 14 },
-          detail: { formatter: "{value}", color: t.text, fontSize: 18 },
           data: [{ value: Math.round(v * 100) / 100, name: cfg.title || "" }],
         }],
       };
@@ -506,12 +576,12 @@ export function mountDesigner(designerEl, ctx) {
         grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
         xAxis: { type: "category", data: labels,
           axisTick: { show: false }, splitLine: { show: false },
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          axisLabel: axisLabelStyle },
         yAxis: { type: "value",
-          axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-          splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
-          axisLabel: { color: t.text } },
+          axisLine: axisLineStyle(cfg.axisLine),
+          splitLine: splitLineStyle(cfg.splitLines),
+          axisLabel: axisLabelStyle },
         series: [{
           type: "pictorialBar",
           symbol: cfg.symbol || "circle",
@@ -531,12 +601,12 @@ export function mountDesigner(designerEl, ctx) {
       grid: { left: 6, right: 14, top: padT, bottom: padB, containLabel: true },
       xAxis: { type: "category", data: xData, boundaryGap: cfg.type === "bar",
         axisTick: { show: false }, splitLine: { show: false },
-        axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-        axisLabel: { color: t.text } },
+        axisLine: axisLineStyle(cfg.axisLine),
+        axisLabel: axisLabelStyle },
       yAxis: { type: "value",
-        axisLine: { show: cfg.axisLine, lineStyle: { color: t.axis } },
-        splitLine: { show: cfg.splitLines, lineStyle: { color: t.split } },
-        axisLabel: { color: t.text } },
+        axisLine: axisLineStyle(cfg.axisLine),
+        splitLine: splitLineStyle(cfg.splitLines),
+        axisLabel: axisLabelStyle },
       series: series.map((s) => ({
         name: s.name, data: s.data,
         type: cfg.type === "area" ? "line" : cfg.type,
@@ -551,10 +621,21 @@ export function mountDesigner(designerEl, ctx) {
   }
 
   // ── rerender / dirty / save ───────────────────────────────────────
+  // Theme swap requires dispose+reinit when EITHER the old or new
+  // theme is registered (ECharts can't swap themes after init).
+  // Same-theme rerenders just setOption.
   function rerender(entry) {
-    if (!entry?.inst) return;
+    if (!entry?.tileEl) return;
     const t = THEMES[entry.cfg.theme] || THEMES.vintage;
-    entry.inst.setOption(buildOption(entry.cfg, t), true);
+    const nextThemeName = t.registered ? entry.cfg.theme : undefined;
+    if (entry.themeName !== nextThemeName) {
+      entry.inst?.dispose?.();
+      const el = entry.tileEl.querySelector(".ds-chart");
+      if (el) el.innerHTML = "";
+      entry.inst = window.echarts?.init(el, nextThemeName);
+      entry.themeName = nextThemeName;
+    }
+    entry.inst?.setOption?.(buildOption(entry.cfg, t), true);
   }
   function setDirty(on) {
     dirty = on;
