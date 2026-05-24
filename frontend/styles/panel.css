@@ -1445,8 +1445,11 @@
   background: rgba(243, 139, 168, 0.18);
   color: var(--rp-accent);
 }
-.rt-chip-input {
+/* `.rt-pred input { width: 100% }` would dominate here on specificity;
+   the picker-scoped selector beats it and restores flex-grow sizing. */
+.rt-chip-picker .rt-chip-input {
   flex: 1 1 80px;
+  width: auto;
   min-width: 80px;
   height: 24px;
   border: 0;
@@ -1457,4 +1460,4 @@
   font-size: 12px;
   padding: 0 4px;
 }
-.rt-chip-input:focus { outline: 0; }
+.rt-chip-picker .rt-chip-input:focus { outline: 0; }
