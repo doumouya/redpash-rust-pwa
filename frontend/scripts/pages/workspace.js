@@ -1169,12 +1169,14 @@ export default function workspace(app, { session }) {
   }
   syncNewChartButton();
 
-  // + New chart — POST /api/charts with a default spec, then open
-  // the new chart for editing.
-  $("#wsNewChart")?.addEventListener("click", async (e) => {
+  // Create a new chart sourced from the user's current data file.
+  // Used by both the rail-foot + New chart button (sourceCache from
+  // the open data file) and the designer toolbar's Add chart button
+  // (sourceCache = the open chart's source). POST /api/charts +
+  // navigate.
+  async function createChartFromSource(busyBtn) {
     if (!sourceCache.rid) return;
-    const btn = e.currentTarget;
-    btn.disabled = true;
+    if (busyBtn) busyBtn.disabled = true;
     try {
       const firstCol = sourceCache.columns[0]?.name || "";
       const created = await api.post("/charts", {
@@ -1188,7 +1190,6 @@ export default function workspace(app, { session }) {
           title:    "",
         },
       });
-      // Reload the rail so the new CHT_ row appears + auto-open it.
       const newRid = created?.redpash_id;
       await loadProjects();
       if (newRid) {
@@ -1200,7 +1201,14 @@ export default function workspace(app, { session }) {
     } finally {
       syncNewChartButton();
     }
-  });
+  }
+
+  $("#wsNewChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
+  // Designer-toolbar Add chart — same flow, sources from the open
+  // chart's source data file. With single-tile slices this lands the
+  // user on a fresh chart (the previous one is saved on its own row
+  // in the rail). Multi-tile add-to-canvas waits for Phase 2.
+  $("#wsDesignerAddChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
 
   // ─── refresh — re-fetch the project rail + the open file ──────
   // The rail is lazy by group; we drop the group-loaded marker so the
