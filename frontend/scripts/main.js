@@ -118,11 +118,11 @@ window.addEventListener("hashchange", () => {
 });
 
 // ─── Service worker ─────────────────────────────────────────────
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
-  });
-}
+// Registration + update banner — when a new version takes control,
+// sw-update.js shows a refresh prompt instead of leaving users on
+// stale JS until they happen to hard-refresh.
+import { mountSwUpdate } from "/scripts/sw-update.js";
+window.addEventListener("load", mountSwUpdate);
 
 // ─── Boot ───────────────────────────────────────────────────────
 (async () => {
