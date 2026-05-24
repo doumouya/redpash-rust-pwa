@@ -101,6 +101,15 @@ async fn patch_me(
         apply_prefs_patch(&state, &user_rid, patch).await?;
     }
 
+    let mut fields: Vec<&str> = Vec::new();
+    if body.display_name.is_some() { fields.push("display_name"); }
+    if body.first_name.is_some()   { fields.push("first_name");   }
+    if body.last_name.is_some()    { fields.push("last_name");    }
+    if body.job_title.is_some()    { fields.push("job_title");    }
+    if body.organisation.is_some() { fields.push("organisation"); }
+    if body.use_case.is_some()     { fields.push("use_case");     }
+    if body.locale.is_some()       { fields.push("locale");       }
+
     let user = db::update_user(
         &state.db,
         &user_rid,
@@ -118,6 +127,18 @@ async fn patch_me(
     )
     .await?
     .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
+
+    if !fields.is_empty() {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "me_update".into(),
+            message: format!("updated own profile ({} fields)", fields.len()),
+            user:    Some(user_rid.clone()),
+            context: serde_json::json!({ "user": user_rid, "fields": fields }),
+            ..Default::default()
+        });
+    }
 
     Ok(Json(user))
 }
@@ -139,7 +160,24 @@ async fn patch_me_prefs(
     Json(body):   Json<PrefsPatch>,
 ) -> Result<StatusCode, AppError> {
     let user_rid = resolve_user_rid(&state, &headers).await?;
+    let keys: Vec<String> = body.prefs.as_object()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
     apply_prefs_patch(&state, &user_rid, &body.prefs).await?;
+    if !keys.is_empty() {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "me_prefs_update".into(),
+            message: format!("updated own preferences ({} keys)", keys.len()),
+            user:    Some(user_rid.clone()),
+            // Keys only — pref values may contain user-content like
+            // learned_sentinels that we don't want to mirror into the
+            // events stream.
+            context: serde_json::json!({ "user": user_rid, "keys": keys }),
+            ..Default::default()
+        });
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -63,6 +63,19 @@ async fn create(
         &req.source_file_id, &req.title, &req.spec,
     )
     .await?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "chart_create".into(),
+        message: format!("created chart {}", req.title),
+        user:    Some(user.clone()),
+        context: serde_json::json!({
+            "chart":   rid,
+            "file":    req.source_file_id,
+            "project": file.summary.project_redpash_id,
+        }),
+        ..Default::default()
+    });
     Ok(Json(chart))
 }
 
@@ -91,6 +104,15 @@ async fn update_one(
     let chart = db::update_chart(&state.db, &rid, &req.title, &req.spec)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "chart_update".into(),
+        message: format!("updated chart {}", chart.title),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "chart": rid }),
+        ..Default::default()
+    });
     Ok(Json(chart))
 }
 
@@ -102,5 +124,16 @@ async fn delete_one(
     let user = super::resolve_user_rid(&state, &headers).await?;
     super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
     let removed = db::delete_chart(&state.db, &rid).await?;
+    if removed {
+        crate::event::record(&state.db, crate::event::EventDraft {
+            origin:  "backend",
+            level:   "info",
+            kind:    "chart_delete".into(),
+            message: format!("deleted chart {rid}"),
+            user:    Some(user.clone()),
+            context: serde_json::json!({ "chart": rid }),
+            ..Default::default()
+        });
+    }
     Ok(if removed { axum::http::StatusCode::NO_CONTENT } else { axum::http::StatusCode::NOT_FOUND })
 }

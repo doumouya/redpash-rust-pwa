@@ -124,6 +124,15 @@ async fn create(
     let company = db::create_company(&state.db, &rid, name, &slug, &user)
         .await
         .map_err(db_err)?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "company_create".into(),
+        message: format!("created company {name}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "company": rid, "slug": slug }),
+        ..Default::default()
+    });
     Ok(Json(company))
 }
 
@@ -163,7 +172,11 @@ async fn patch(
 ) -> Result<Json<Company>, AppError> {
     // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
     // (siblings delete_one + patch share the dev-stage policy)
-    let _user = super::resolve_user_rid(&state, &headers).await?;
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let mut fields: Vec<&str> = Vec::new();
+    if body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("name");       }
+    if body.slug.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("slug");       }
+    if body.avatar_url.as_deref().map(str::trim).is_some()                            { fields.push("avatar_url"); }
     let res = db::update_company(
         &state.db, &rid,
         body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()),
@@ -177,6 +190,15 @@ async fn patch(
         }
         Err(e) => return Err(AppError::internal("db", e.to_string())),
     };
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "company_update".into(),
+        message: format!("updated company {}", company.name),
+        user:    Some(user),
+        context: serde_json::json!({ "company": rid, "fields": fields }),
+        ..Default::default()
+    });
     Ok(Json(company))
 }
 
@@ -190,10 +212,19 @@ async fn delete_one(
     // multi-tenant prod — left open while the app is in active dev so
     // the Objects-page Companies tab can freely manipulate seed data.
     // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
-    let _user = super::resolve_user_rid(&state, &headers).await?;
+    let user = super::resolve_user_rid(&state, &headers).await?;
     if !db::delete_company(&state.db, &rid).await.map_err(db_err)? {
         return Err(AppError::not_found("not_found", format!("company {rid}")));
     }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "warn",
+        kind:    "company_delete".into(),
+        message: format!("deleted company {rid}"),
+        user:    Some(user),
+        context: serde_json::json!({ "company": rid }),
+        ..Default::default()
+    });
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -251,6 +282,19 @@ async fn add_member(
     db::add_company_member(&state.db, &rid, &body.user_id, &body.role)
         .await
         .map_err(db_err)?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "company_member_add".into(),
+        message: format!("added {} to company {rid} as {}", body.user_id, body.role),
+        user:    Some(user),
+        context: serde_json::json!({
+            "company": rid,
+            "member":  body.user_id,
+            "role":    body.role,
+        }),
+        ..Default::default()
+    });
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }
@@ -287,6 +331,21 @@ async fn remove_member(
     db::remove_company_member(&state.db, &rid, &user_id)
         .await
         .map_err(db_err)?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   if is_self { "info" } else { "warn" },
+        kind:    if is_self { "company_member_leave".into() } else { "company_member_remove".into() },
+        message: if is_self { format!("left company {rid}") }
+                 else        { format!("removed {user_id} from company {rid}") },
+        user:    Some(user),
+        context: serde_json::json!({
+            "company":      rid,
+            "member":       user_id,
+            "was_self":     is_self,
+            "target_role":  target_role,
+        }),
+        ..Default::default()
+    });
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }
@@ -336,6 +395,20 @@ async fn patch_member_role(
     db::update_company_member_role(&state.db, &rid, &user_id, new_role)
         .await
         .map_err(db_err)?;
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "company_member_role_change".into(),
+        message: format!("{user_id} role in {rid}: {current} -> {new_role}"),
+        user:    Some(user),
+        context: serde_json::json!({
+            "company":     rid,
+            "member":      user_id,
+            "prior_role":  current,
+            "new_role":    new_role,
+        }),
+        ..Default::default()
+    });
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }

@@ -55,7 +55,7 @@ async fn create(
     headers:      HeaderMap,
     Json(body):   Json<CreateUserBody>,
 ) -> Result<Json<UserProfile>, AppError> {
-    super::resolve_user_rid(&state, &headers).await?;
+    let caller = super::resolve_user_rid(&state, &headers).await?;
     let username     = body.username.trim();
     let display_name = body.display_name.trim();
     if username.is_empty() || display_name.is_empty() {
@@ -65,7 +65,18 @@ async fn create(
     let rid   = id::new("USR");
     let res   = db::insert_user(&state.db, &rid, username, display_name, email).await;
     match res {
-        Ok(u) => Ok(Json(u)),
+        Ok(u) => {
+            crate::event::record(&state.db, crate::event::EventDraft {
+                origin:  "backend",
+                level:   "info",
+                kind:    "user_create".into(),
+                message: format!("created user {username}"),
+                user:    Some(caller),
+                context: serde_json::json!({ "user": rid, "username": username }),
+                ..Default::default()
+            });
+            Ok(Json(u))
+        }
         Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
             Err(AppError::conflict("username_taken", "username already in use"))
         }
@@ -110,7 +121,7 @@ async fn patch(
 ) -> Result<Json<UserProfile>, AppError> {
     // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
     // gate at RBAC (sibling get_one + delete_one share the dev-stage policy)
-    super::resolve_user_rid(&state, &headers).await?;
+    let caller = super::resolve_user_rid(&state, &headers).await?;
     let trim = |o: Option<String>| o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let display_name = trim(body.display_name);
     let first_name   = trim(body.first_name);
@@ -123,6 +134,18 @@ async fn patch(
     let organisation = trim(body.organisation);
     let use_case     = trim(body.use_case);
     let locale       = trim(body.locale);
+    let mut fields: Vec<&str> = Vec::new();
+    if display_name.is_some() { fields.push("display_name"); }
+    if first_name.is_some()   { fields.push("first_name");   }
+    if last_name.is_some()    { fields.push("last_name");    }
+    if username.is_some()     { fields.push("username");     }
+    if email.is_some()        { fields.push("email");        }
+    if plan.is_some()         { fields.push("plan");         }
+    if avatar_url.is_some()   { fields.push("avatar_url");   }
+    if job_title.is_some()    { fields.push("job_title");    }
+    if organisation.is_some() { fields.push("organisation"); }
+    if use_case.is_some()     { fields.push("use_case");     }
+    if locale.is_some()       { fields.push("locale");       }
     let res = db::update_user(
         &state.db, &rid,
         display_name.as_deref(),
@@ -138,7 +161,19 @@ async fn patch(
         last_name.as_deref(),
     ).await;
     match res {
-        Ok(opt) => Ok(Json(opt.ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?)),
+        Ok(opt) => {
+            let user = opt.ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?;
+            crate::event::record(&state.db, crate::event::EventDraft {
+                origin:  "backend",
+                level:   "info",
+                kind:    "user_update".into(),
+                message: format!("updated user {rid}"),
+                user:    Some(caller),
+                context: serde_json::json!({ "user": rid, "fields": fields }),
+                ..Default::default()
+            });
+            Ok(Json(user))
+        }
         Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
             Err(AppError::conflict("username_taken", "username already in use"))
         }
@@ -153,11 +188,20 @@ async fn delete_one(
 ) -> Result<Json<serde_json::Value>, AppError> {
     // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
     // gate at RBAC (admin-role check + self-delete protection)
-    super::resolve_user_rid(&state, &headers).await?;
+    let caller = super::resolve_user_rid(&state, &headers).await?;
     let removed = db::delete_user(&state.db, &rid)
         .await?;
     if !removed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "warn",
+        kind:    "user_delete".into(),
+        message: format!("deleted user {rid}"),
+        user:    Some(caller),
+        context: serde_json::json!({ "user": rid }),
+        ..Default::default()
+    });
     Ok(Json(serde_json::json!({ "ok": true })))
 }
