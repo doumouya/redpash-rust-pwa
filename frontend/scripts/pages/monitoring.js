@@ -138,6 +138,11 @@ export default function monitoring(app, { session }) {
   let rawTotalPages = 1;
   const RAW_PAGE_SIZE = 50;
   let donutChart = null;  // ECharts instance — disposed on body rebuild
+  // List-tab chart instances — hoisted here so the dispose path on
+  // the Requests-tab branch (activate → renderRequestsBody →
+  // disposeListCharts) doesn't hit TDZ on the let declaration that
+  // used to live next to mountListCharts further down.
+  let listCharts = [];
 
   // ─── rail collapse (same affordance as Workspace + Home) ────
   app.querySelector("#rpMonNavCollapse").addEventListener("click", (e) => {
@@ -783,7 +788,10 @@ export default function monitoring(app, { session }) {
     donut: kpiDonut, bar: kpiBar, barH: kpiBarH, gauge: kpiGauge,
     line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
   };
-  let listCharts = [];
+  // listCharts is hoisted to the top of monitoring() so the
+  // dispose call in renderRequestsBody (which fires before this
+  // point during a fresh page mount via activate → renderTabBody)
+  // doesn't trip TDZ.
   function disposeListCharts() {
     listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
     listCharts = [];

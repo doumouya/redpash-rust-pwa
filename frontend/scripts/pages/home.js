@@ -66,6 +66,13 @@ export default function home(app, { session }) {
   const navBody = app.querySelector("#rpHomeNavBody");
   const view    = app.querySelector("#rpHomeView");
 
+  // List-tab chart instances — hoisted to the top of home() so the
+  // dispose call in renderListBody (which fires before this point
+  // during a fresh page mount via activate → renderTabBody) doesn't
+  // trip TDZ on the let declaration that used to live next to
+  // mountListCharts further down.
+  let listCharts = [];
+
   // List-view specs for the six non-Projects tabs. Same Page<T> shape
   // across every /api/admin/* endpoint, so one generic renderer
   // (renderListBody + fetchList) drives all six — only columns, row
@@ -559,8 +566,10 @@ export default function home(app, { session }) {
 
   // Per-tab chart instances — kept so we can dispose on tab switch
   // (an ECharts instance leaks memory + survives across tabs if you
-  // don't .dispose() it explicitly).
-  let listCharts = [];
+  // don't .dispose() it explicitly). The `let listCharts = []` is
+  // hoisted to the top of home() to avoid TDZ on the dispose call
+  // that fires during the initial activate() — earlier in the
+  // function than the declaration would naturally land.
   function disposeListCharts() {
     listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
     listCharts = [];
