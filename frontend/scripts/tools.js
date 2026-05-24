@@ -443,6 +443,7 @@ export function mountTools(panelBody, ctx) {
   let sheetCfg    = null;         // the SELECT_ACTIONS entry when sheetSource === "select" (carries perColumn etc.)
   let sheetFields = [];           // [{ field, read }] for the open sheet — read() returns value
   let selectedCols = new Set();   // column names selected via row checkboxes — drives SELECT_ACTIONS
+  let editingName  = null;        // column name whose Name cell is being edited (Slice F), or null
 
   // Two stable containers — list view + form view; we swap visibility.
   const listEl = document.createElement("div");
@@ -549,9 +550,13 @@ export function mountTools(panelBody, ctx) {
       sheetCfg    = null;
       sheetFields = [];
       selectedCols.clear();
+      editingName = null;
       columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
       return;
     }
+    // Drop a stale edit target if the column it pointed at no longer
+    // exists (file change, rename via another path, drop_columns step).
+    if (editingName && !live.has(editingName)) editingName = null;
     // Intersect the current selection with the live column set — a
     // prior step (drop_columns, rename_column, etc.) may have removed
     // or renamed columns that the user had selected. Stale names get
@@ -573,11 +578,21 @@ export function mountTools(panelBody, ctx) {
                             + ' — stored as ' + esc(c.dtype) + '">⚠</span>'
                           : '';
       const checked   = selectedCols.has(c.name);
+      const isEditing = editingName === c.name;
+      // Name cell swaps to an inline <input> when its column is being
+      // edited (Slice F). data-col on the cell lets the click handler
+      // resolve back to the column name without walking the row.
+      const nameCell  = isEditing
+        ? '<td class="is-name is-editing" data-col="' + esc(c.name) + '">'
+          + '<input class="rt-col-name-input" type="text" value="' + esc(c.name) + '"'
+          + ' data-orig="' + esc(c.name) + '" autocomplete="off" spellcheck="false" /></td>'
+        : '<td class="is-name is-editable" data-col="' + esc(c.name) + '"'
+          + ' title="Click to rename">' + esc(c.name) + '</td>';
       return '<tr' + (checked ? ' class="is-selected"' : '') + '>'
         + '<td class="is-check"><input type="checkbox" class="rt-chk rt-col-check"'
         +   ' data-col="' + esc(c.name) + '"' + (checked ? ' checked' : '') + ' /></td>'
         + '<td class="is-num is-muted">' + (i + 1) + '</td>'
-        + '<td class="is-name">' + esc(c.name) + '</td>'
+        + nameCell
         + '<td>' + esc(c.dtype || "—") + sniff + '</td>'
         + '<td class="is-num ' + band + '">' + (nullCount != null ? nullCount : "—") + '</td>'
         + '<td class="is-num ' + band + '">' + (pct != null ? pct.toFixed(1) + "%" : "—") + '</td>'
@@ -610,6 +625,15 @@ export function mountTools(panelBody, ctx) {
     // Header checkbox indeterminate state can't be set via HTML attr.
     const head = columnsEl.querySelector(".rt-col-check-all");
     if (head) head.indeterminate = someSelected;
+    // Auto-focus + select the editing input so the user can immediately
+    // type the new name. requestAnimationFrame avoids the focus being
+    // stolen back by the originating click event.
+    if (editingName) {
+      const input = columnsEl.querySelector(".rt-col-name-input");
+      if (input) {
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+      }
+    }
   }
 
   // Toolbar — global actions (Slice B) + select actions (Slice C).
@@ -859,6 +883,47 @@ export function mountTools(panelBody, ctx) {
       renderColumnsView();
     }
   });
+
+  // ── Slice F — edit mode: Name cell ─────────────────────────────────
+  // Click on the Name cell (when not already editing) swaps it to an
+  // <input>. Enter commits a rename_column step; Esc cancels; blur
+  // commits to match spreadsheet UX. Empty-or-unchanged exits cleanly
+  // with no step. A duplicate name surfaces the server's 400 via the
+  // existing status row.
+  columnsEl.addEventListener("click", (e) => {
+    const cell = e.target.closest(".rt-tool-columns-table td.is-name.is-editable");
+    if (!cell || editingName) return;
+    editingName = cell.dataset.col || null;
+    if (editingName) renderColumnsView();
+  });
+
+  columnsEl.addEventListener("keydown", (e) => {
+    const input = e.target.closest(".rt-col-name-input");
+    if (!input) return;
+    if (e.key === "Enter")      { e.preventDefault(); commitNameEdit(input); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelNameEdit(); }
+  });
+
+  // focusout commits — guarded by the editingName check so the
+  // re-render from a commit doesn't double-fire.
+  columnsEl.addEventListener("focusout", (e) => {
+    const input = e.target.closest(".rt-col-name-input");
+    if (input && editingName) commitNameEdit(input);
+  });
+
+  async function commitNameEdit(input) {
+    const from = input.dataset.orig;
+    const to   = (input.value || "").trim();
+    editingName = null;
+    if (!to || to === from) { renderColumnsView(); return; }
+    await runStep("rename_column", { from, to },
+                  "Rename " + from + " → " + to);
+  }
+
+  function cancelNameEdit() {
+    editingName = null;
+    renderColumnsView();
+  }
 
   function closeSheet() {
     activeSheet = null;

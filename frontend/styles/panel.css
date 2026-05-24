@@ -816,3 +816,38 @@
   font-weight: 600;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
+
+/* ── editable Name cell (Slice F) ───────────────────────────────
+   Click the Name cell to swap it for an inline input → Enter
+   commits a rename_column step. Hover affordance hints the
+   action without a pencil icon (keeps the row light). */
+.rt-tool-columns-table td.is-name.is-editable {
+  cursor: text;
+  position: relative;
+}
+.rt-tool-columns-table td.is-name.is-editable:hover {
+  background: var(--rp-hover);
+  outline: 1px dashed var(--rp-border);
+  outline-offset: -1px;
+}
+.rt-tool-columns-table td.is-name.is-editing {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.rt-col-name-input {
+  width: 100%;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--rp-accent-2);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  outline: 0;
+}
+.rt-col-name-input:focus {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 2px var(--rp-accent-soft);
+}
