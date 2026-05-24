@@ -406,6 +406,10 @@ async fn list_files(
     // because a brand-new file row predates its file_stages entry by a
     // transaction tick — render those as the default `import` stage rather
     // than dropping them from the list.
+    //
+    // PROJECT-FILES-ACK: type=any — admin Files tab; q.file_type optionally
+    // filters the response, but the SQL is polymorphic by default (admin
+    // surface lists every file_type unless the caller narrows).
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT
            FROM project_files f
@@ -430,6 +434,9 @@ async fn list_files(
     // sort_col is sourced from the SORTABLE_FILES allowlist (never user
     // input directly), so SQL injection is closed at the boundary.
     // NULLS LAST keeps null row_counts at the tail when sorting ASC.
+    //
+    // PROJECT-FILES-ACK: type=any — same admin Files listing as the
+    // total-count query above; q.file_type optionally narrows.
     let sql = format!(
         "SELECT f.redpash_id, f.project_redpash_id,
                 p.name AS project_name,
@@ -495,12 +502,16 @@ async fn list_charts(
     // Charts live in project_files with file_type='chart'. Two counts:
     //   all_count — every chart row ever (the Charts tab's true total).
     //   total     — post-search filter.
+    //
+    // PROJECT-FILES-ACK: type=chart — admin Charts tab; all three
+    // queries below filter to file_type='chart' inline.
     let all_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
     )
     .fetch_one(&state.db)
     .await?;
 
+    // PROJECT-FILES-ACK: type=chart — post-search count for the Charts tab.
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files
          WHERE file_type = 'chart'
@@ -512,6 +523,7 @@ async fn list_charts(
     .fetch_one(&state.db)
     .await?;
 
+    // PROJECT-FILES-ACK: type=chart — row data for the Charts tab.
     let rows = sqlx::query(
         "SELECT f.redpash_id, f.project_redpash_id, p.name AS project_name,
                 f.filename, f.display_name,
@@ -746,6 +758,8 @@ async fn stats_memberships(
 async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, AppError> {
     let total: i64 = db::count_total(&state.db, "project_files").await?;
 
+    // PROJECT-FILES-ACK: type=any — stage histogram for the Home Files
+    // tab; every file_type contributes to its stage's count.
     let by_stage = group_count(
         &state.db,
         "SELECT COALESCE(s.stage, 'new') AS stage, COUNT(*)::BIGINT
@@ -754,6 +768,8 @@ async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, A
           GROUP BY COALESCE(s.stage, 'new')",
     ).await?;
 
+    // PROJECT-FILES-ACK: type=any — file_type histogram; the whole
+    // point is to count every type.
     let by_type = group_count(
         &state.db,
         "SELECT file_type, COUNT(*)::BIGINT FROM project_files GROUP BY file_type",
@@ -761,6 +777,10 @@ async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, A
 
     // AVG over the non-null subset. Returns NULL if every row is NULL —
     // map that to None so the KPI strip shows a dash instead of 0%.
+    //
+    // PROJECT-FILES-ACK: type=any — cleanness_pct is only populated
+    // on csv rows (chart/dashboard rows store NULL), so the WHERE
+    // self-filters; no need to gate by file_type.
     let avg_cleanness: Option<f64> = sqlx::query_scalar(
         "SELECT AVG(cleanness_pct)::DOUBLE PRECISION
            FROM project_files
@@ -780,12 +800,15 @@ async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, A
 // ── /api/admin/charts/stats ─────────────────────────────────────────────
 
 async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>, AppError> {
+    // PROJECT-FILES-ACK: type=chart — Charts tab stats card; all
+    // three queries below filter to file_type='chart' inline.
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
     )
     .fetch_one(&state.db)
     .await?;
 
+    // PROJECT-FILES-ACK: type=chart — recent-charts gauge.
     let last_7d: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_files
           WHERE file_type = 'chart'
@@ -797,6 +820,8 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
     // The "report" criterion per the object model: a project counts as
     // a report when it contains ≥1 chart-typed file. So `used_in_reports`
     // = distinct projects that have at least one chart.
+    //
+    // PROJECT-FILES-ACK: type=chart — distinct projects with ≥1 chart.
     let used_in_reports: i64 = sqlx::query_scalar(
         "SELECT COUNT(DISTINCT project_redpash_id)::BIGINT
            FROM project_files

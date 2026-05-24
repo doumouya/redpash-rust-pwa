@@ -113,6 +113,10 @@ async fn search(
     // identical queries. Per-kind cap is enforced post-hoc; the
     // ROW_NUMBER() bounds it inside SQL so a busy file_type can't
     // monopolise the result set.
+    //
+    // PROJECT-FILES-ACK: type=any — omnisearch surfaces every file_type
+    // (the PARTITION BY file_type is what makes the row mix balanced
+    // across types).
     let rows = sqlx::query(
         "WITH ranked AS (
             SELECT f.redpash_id, f.filename, f.display_name, f.file_type,

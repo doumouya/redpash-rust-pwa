@@ -60,6 +60,9 @@ async fn main() -> Result<()> {
     // dashboards/charts have no row data). Sort by row_count DESC NULLS
     // LAST so the biggest files are scanned first — the run halts
     // early on Ctrl-C still gets the most-interesting rows reported.
+    //
+    // PROJECT-FILES-ACK: type=csv — distincts audit only runs on the
+    // data-bearing rows; spec-only types have no frame to scan.
     let rows = sqlx::query(
         "SELECT pf.redpash_id, pf.filename, pf.storage_path, pf.encoding,
                 pf.row_count, pf.col_count

@@ -570,6 +570,11 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 // stored column, with a 'published' overlay when the project has a
 // public dashboard (the stored draft/active/archived is what the
 // inline edit-cell writes; 'published' is never persisted).
+//
+// PROJECT-FILES-ACK: type=mixed — two project_files subqueries:
+//   1) EXISTS check filtered to dashboard rows for the 'published'
+//      overlay, 2) COUNT excluding charts for the user-facing
+//      file_count (charts aren't surfaced as files in the rail).
 const PROJECT_SELECT: &str =
     "SELECT p.redpash_id, p.name, p.description, p.is_default, p.owner_id, p.company_id,
             (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
@@ -690,6 +695,8 @@ pub async fn update_project_meta(
 /// cache and unlink the on-disk blobs (the FK cascade only drops DB
 /// rows, not the files on disk).
 pub async fn project_file_rids(pool: &PgPool, project_rid: &str) -> sqlx::Result<Vec<String>> {
+    // PROJECT-FILES-ACK: type=any — cascade-delete prep needs every
+    // file_type so on-disk blobs + hot-frame cache evict for all rows.
     let rows = sqlx::query("SELECT redpash_id FROM project_files WHERE project_redpash_id = $1")
         .bind(project_rid)
         .fetch_all(pool)
@@ -803,6 +810,7 @@ impl From<FileRow> for FileFull {
 }
 
 pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
+    // PROJECT-FILES-ACK: type=any — rail listing in the Workspace.
     // Returns every file in the project — including chart-typed rows.
     // Charts used to be filtered out here because the (deleted)
     // Reports page owned the chart surface; now that the Designer
@@ -829,6 +837,9 @@ pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Re
 /// list_files_in_project above: charts are first-class files since
 /// the Designer landed inline in the Workspace.
 pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
+    // PROJECT-FILES-ACK: type=any — Home Files tab + cross-project
+    // inventory; every file_type surfaces (charts open the Designer,
+    // dashboards open the dashboard view, csvs open the Workspace).
     let rows: Vec<FileRow> = sqlx::query_as(
         "SELECT f.redpash_id, f.project_redpash_id, f.filename, f.display_name,
                 f.file_type, fs.stage, f.row_count, f.col_count, f.file_size_bytes,
@@ -861,6 +872,9 @@ pub async fn list_files_in_project_except(
     project_rid:  &str,
     exclude_rid:  &str,
 ) -> sqlx::Result<Vec<(String, String)>> {
+    // PROJECT-FILES-ACK: type=csv — joins picker; chart/dashboard rows
+    // have no readable frame (storage_path=''), so they're filtered
+    // out at the SQL boundary (commit f49e030).
     let rows = sqlx::query(
         "SELECT redpash_id, COALESCE(display_name, filename) AS title
          FROM project_files
@@ -878,6 +892,9 @@ pub async fn list_files_in_project_except(
 }
 
 pub async fn find_file(pool: &PgPool, rid: &str) -> sqlx::Result<Option<FileFull>> {
+    // PROJECT-FILES-ACK: type=any — single-row lookup by rid; the
+    // caller dispatches on file_type from the returned FileSummary
+    // (workspace.js::loadFile is the canonical consumer).
     let row: Option<FileRow> = sqlx::query_as(
         "SELECT pf.redpash_id, pf.project_redpash_id, pf.filename, pf.display_name, pf.file_type,
                 fs.stage, pf.row_count, pf.col_count, pf.file_size_bytes, pf.cleanness_pct,
@@ -898,6 +915,10 @@ pub async fn find_file(pool: &PgPool, rid: &str) -> sqlx::Result<Option<FileFull
 /// Returns whether a row was actually removed (false → caller
 /// surfaces a 404).
 pub async fn delete_file(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    // PROJECT-FILES-ACK: type=any — delete by rid; ownership check
+    // upstream gates which rids the caller can touch, type-agnostic
+    // here. delete_chart / delete_dashboard exist as type-scoped
+    // variants for the dedicated CRUD lanes.
     let res = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1")
         .bind(rid)
         .execute(pool)
@@ -1061,6 +1082,7 @@ const CHART_COLS: &str = "redpash_id, project_redpash_id, source_file_id,
                           spec, created_at, updated_at";
 
 pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>> {
+    // PROJECT-FILES-ACK: type=chart — owner's saved charts.
     // Single-table SELECT — a JOIN to `projects` collides the shared,
     // unqualified CHART_COLS on redpash_id / created_at / updated_at
     // ("column reference redpash_id is ambiguous"). Owner filter runs as
@@ -1080,6 +1102,8 @@ pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>>
 }
 
 pub async fn find_chart(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Chart>> {
+    // PROJECT-FILES-ACK: type=chart — single chart by rid; type-filter
+    // guards against a non-chart rid leaking into the chart deserializer.
     let row: Option<ChartRow> = sqlx::query_as(&format!(
         "SELECT {CHART_COLS} FROM project_files
          WHERE redpash_id = $1 AND file_type = 'chart'"
@@ -1136,6 +1160,8 @@ pub async fn update_chart(
 }
 
 pub async fn delete_chart(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    // PROJECT-FILES-ACK: type=chart — type-scoped delete; ensures a
+    // dashboard rid passed in by mistake doesn't get clobbered.
     let n = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1 AND file_type = 'chart'")
         .bind(rid)
         .execute(pool)
@@ -1144,6 +1170,9 @@ pub async fn delete_chart(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
 }
 
 pub async fn chart_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    // PROJECT-FILES-ACK: type=chart — chart ownership lookup; the
+    // type-filter ensures a non-chart rid returns None (no auth-leak
+    // via cross-type rid collision).
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT p.owner_id FROM project_files pf
          JOIN projects p ON p.redpash_id = pf.project_redpash_id
@@ -1204,6 +1233,7 @@ const DASHBOARD_COLS: &str = "redpash_id, project_redpash_id,
                               folder, created_at, updated_at";
 
 pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Dashboard>> {
+    // PROJECT-FILES-ACK: type=dashboard — owner's saved dashboards.
     let rows: Vec<DashboardRow> = sqlx::query_as(
         "SELECT d.redpash_id, d.project_redpash_id,
                 COALESCE(d.display_name, d.filename) AS title,
@@ -1225,6 +1255,9 @@ pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Das
 }
 
 pub async fn find_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Dashboard>> {
+    // PROJECT-FILES-ACK: type=dashboard — single dashboard by rid;
+    // type-filter prevents a non-dashboard rid leaking into the
+    // dashboard deserializer.
     let row: Option<DashboardRow> = sqlx::query_as(&format!(
         "SELECT {DASHBOARD_COLS} FROM project_files
          WHERE redpash_id = $1 AND file_type = 'dashboard'"
@@ -1290,6 +1323,8 @@ pub async fn update_dashboard(
 }
 
 pub async fn delete_dashboard(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    // PROJECT-FILES-ACK: type=dashboard — type-scoped delete; mirrors
+    // delete_chart shape (caller's CRUD lane stays type-isolated).
     let n = sqlx::query("DELETE FROM project_files WHERE redpash_id = $1 AND file_type = 'dashboard'")
         .bind(rid)
         .execute(pool)
@@ -1429,6 +1464,11 @@ pub async fn insert_step(
     // shows it as Active (since opening the cleaner puts it in the
     // user's open-projects set). No-op when the project isn't
     // archived. Runs in-tx so the step + the unarchive land together.
+    //
+    // PROJECT-FILES-ACK: type=any — subquery resolves a file rid to
+    // its project regardless of file_type (charts/dashboards can also
+    // be unarchive triggers in principle, though today only csv steps
+    // reach this path).
     sqlx::query(
         "UPDATE projects
          SET status = 'draft', updated_at = now()
@@ -1521,6 +1561,8 @@ pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Stri
 }
 
 pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    // PROJECT-FILES-ACK: type=dashboard — dashboard ownership lookup;
+    // type-filter prevents auth-leak via cross-type rid collision.
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT p.owner_id FROM project_files pf
          JOIN projects p ON p.redpash_id = pf.project_redpash_id
@@ -1533,6 +1575,11 @@ pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<St
 }
 
 pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    // PROJECT-FILES-ACK: type=any — owner lookup by rid, type-agnostic
+    // (charts + dashboards + csvs all share the same ownership chain
+    // through projects.owner_id). chart_owner / dashboard_owner are
+    // type-scoped variants used where the CRUD lane needs the
+    // type-collision guard.
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT p.owner_id FROM project_files f
          JOIN projects p ON p.redpash_id = f.project_redpash_id

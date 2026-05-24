@@ -82,6 +82,19 @@ var PATTERNS = [
     rx: /super::pagination::/g,
     helper: '(this is the import path)',
     saving: 0, notes: 'count tracks paginate/build_page reuse' },
+  /* hydrate is the canonical "give me the parsed Polars frame" entry —
+     pub(super) in routes/files.rs, called from sibling routes::files
+     handlers and one cross-module reacher (routes/group.rs). The
+     live counter tracks reach. The per-file breakdown in the report
+     surfaces cross-module callers — those flip from healthy reuse to
+     layer-violation when DataSource ships and Reader::open becomes
+     the canonical read path. Until then, group.rs is the only
+     legitimate cross-module caller; new ones outside routes::files
+     warrant a look. */
+  { name: 'hydrate(state, …) usage', status: 'live',
+    rx: /\bhydrate\s*\(/g,
+    helper: '(canonical data-frame entry — pub(super) in routes/files.rs)',
+    saving: 0, notes: 'cross-module callers (outside routes::files) are the interesting signal — group.rs is the only one today' },
 
   /* ── declined: track growth; if a count crosses ~15-20, revisit ────────── */
   { name: 'optional-filter WHERE idiom ($N::text IS NULL OR …)', status: 'declined',
@@ -96,6 +109,34 @@ var PATTERNS = [
     rx: /\.try_get\([^)]*\)\.(unwrap_or|ok\(\))/g,
     helper: 'derive macro — adds dep risk + obscures wire shape',
     saving: 0, notes: 'audit verdict: per-DTO variation; keep inline for auditability' }
+];
+
+/* ── ACK scanners ────────────────────────────────────────────────────────────
+   Lookback-style scans modelled on auth-audit's AUTH-AUDIT-ACK pattern.
+   Each scan finds occurrences of a structural construct (e.g. SQL on a
+   polymorphic table) and requires a `// <ACK-name>: <intent>` comment
+   within `lookback` lines above the match. Unacknowledged occurrences
+   are regression candidates. Type-shape correctness lane — distinct
+   from the regex PATTERNS above which count tokens, not declared intent.
+   ────────────────────────────────────────────────────────────────────────── */
+var ACK_SCANS = [
+  /* Every `FROM project_files` (case-insensitive) must declare its
+     intended file_type scope. project_files is the polymorphic table
+     backing the 2-entity object model — any query without a declared
+     type intent risks the runbook-0006 class (spec-only rows leaking
+     into data-only code paths). Three valid intents:
+       type=any        — intentionally polymorphic (rail listing,
+                          cascade-delete targets, file_owner lookup)
+       type=csv        — data files only (hydrate read path)
+       type=<concrete> — single-type filter visible in the SQL
+                          (chart / dashboard / mixed). */
+  { name: 'project_files query intent (PROJECT-FILES-ACK)',
+    status: 'ack',
+    rx: /\bFROM\s+project_files\b/gi,
+    ackRx: /\/\/\s*PROJECT-FILES-ACK:\s*type\s*=\s*([a-z_-]+)/i,
+    lookback: 20,
+    helper: 'add `// PROJECT-FILES-ACK: type=any|csv|<concrete>` 1-20 lines above the FROM',
+    notes: 'forces type-shape intent at every project_files query site — runbook 0006' },
 ];
 
 /* crate name from a repo-relative path: crates/<name>/… , else first segment */
@@ -181,6 +222,11 @@ var lineMap = {};      // trimmed line -> { count, files: {rel: n} }
    string). Per-pattern, the rx decides which side to scan. */
 var patternHits = PATTERNS.map(function () { return { total: 0, files: {} }; });
 
+/* per-ACK-scan accumulator: { total, byType: { 'any': N, 'csv': M, … },
+   unacked: [{ file, line }, …] }. Each scan reads the lookback window
+   above every match for the ACK comment + captured type. */
+var ackHits = ACK_SCANS.map(function () { return { total: 0, byType: {}, unacked: [] }; });
+
 diskPaths.forEach(function (full) {
   var rel = path.relative(SRC_DIR, full).split(path.sep).join('/');
   var text = fs.readFileSync(full, 'utf8');
@@ -210,6 +256,29 @@ diskPaths.forEach(function (full) {
     if (n > 0) {
       patternHits[i].total += n;
       patternHits[i].files[rel] = (patternHits[i].files[rel] || 0) + n;
+    }
+  });
+
+  /* ACK scans — lookback-style. For each match, walk back `lookback`
+     lines and try to capture the ACK type from a `// <Name>: type=…`
+     comment. Unacknowledged matches go into ackHits[i].unacked. */
+  var lines = text.split('\n');
+  ACK_SCANS.forEach(function (s, i) {
+    s.rx.lastIndex = 0;
+    var m;
+    while ((m = s.rx.exec(text)) !== null) {
+      var line = lineOf(text, m.index);                                  // 1-based
+      var start = Math.max(0, line - s.lookback - 1);                    // 0-based for slice
+      var snippet = lines.slice(start, line).join('\n');
+      var am = snippet.match(s.ackRx);
+      ackHits[i].total++;
+      if (am) {
+        var t = am[1].toLowerCase();
+        ackHits[i].byType[t] = (ackHits[i].byType[t] || 0) + 1;
+      } else {
+        ackHits[i].unacked.push({ file: rel, line: line });
+      }
+      if (m.index === s.rx.lastIndex) s.rx.lastIndex++;
     }
   });
 });
@@ -264,6 +333,20 @@ var REVISIT_THRESHOLD = 20;
 var regressions = patterns.filter(function (p) { return p.status === 'extracted' && p.total > 0; }).length;
 var pending     = patterns.filter(function (p) { return p.status === 'declined'  && p.total > REVISIT_THRESHOLD; }).length;
 
+/* ACK scan rollup — sibling array to `patterns`, but with byType +
+   unacked instead of files. ackUnacked is the headline regression
+   count (sites that need the ACK comment but don't have it). */
+var ackScans = ACK_SCANS.map(function (s, i) {
+  var h = ackHits[i];
+  return {
+    name: s.name, status: s.status, helper: s.helper, notes: s.notes,
+    total: h.total, byType: h.byType, unacked: h.unacked.slice().sort(function (a, b) {
+      return a.file.localeCompare(b.file) || a.line - b.line;
+    })
+  };
+});
+var ackUnacked = ackScans.reduce(function (n, s) { return n + s.unacked.length; }, 0);
+
 var data = {
   generatedAt: new Date().toISOString(),
   srcDir: SRC_DIR,
@@ -278,13 +361,15 @@ var data = {
     redundantLines: redundantLines,
     bigMatches: bigMatches.length,
     regressions: regressions,
-    pendingDeclined: pending
+    pendingDeclined: pending,
+    ackUnacked: ackUnacked
   },
   crateList: crateList,
   files: files,
   repeats: repeats,
   bigMatches: bigMatches,
-  patterns: patterns
+  patterns: patterns,
+  ackScans: ackScans
 };
 
 /* ── HTML report ─────────────────────────────────────────────────────────── */
@@ -521,6 +606,24 @@ console.log('  patterns          '
   + patterns.filter(function (p) { return p.status === 'declined'; }).length  + ' declined'
   + (regressions ? '   ⚠ ' + regressions + ' regression(s)' : '')
   + (pending ? '   ⚠ ' + pending + ' declined > ' + REVISIT_THRESHOLD : ''));
+ackScans.forEach(function (s) {
+  var byType = Object.keys(s.byType).sort()
+    .map(function (k) { return s.byType[k] + ' ' + k; }).join(', ');
+  console.log('  ' + s.name);
+  console.log('    total ' + s.total
+    + (byType ? '   acked: ' + byType : '')
+    + (s.unacked.length ? '   ⚠ ' + s.unacked.length + ' unacked' : '   ✓'));
+  if (s.unacked.length && s.unacked.length <= 20) {
+    s.unacked.forEach(function (u) {
+      console.log('      · ' + u.file + ':' + u.line);
+    });
+  } else if (s.unacked.length) {
+    s.unacked.slice(0, 10).forEach(function (u) {
+      console.log('      · ' + u.file + ':' + u.line);
+    });
+    console.log('      · … ' + (s.unacked.length - 10) + ' more');
+  }
+});
 if (files[0]) {
   console.log('');
   console.log('  largest files:');
