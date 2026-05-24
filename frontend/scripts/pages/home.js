@@ -74,13 +74,14 @@ export default function home(app, { session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
-      columns: ["Name", "Plan", "Job", "Org", "Joined"],
+      columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
       row: (u) =>
         '<tr>'
         + '<td>' + esc(u.display_name) + ' <span class="rp-mon-method">@' + esc(u.username) + '</span></td>'
         + '<td>' + planChip(u.plan) + '</td>'
         + '<td>' + esc(u.job_title || "—") + '</td>'
-        + '<td>' + esc(u.organisation || "—") + '</td>'
+        + '<td>' + esc(u.org_name || "—") + '</td>'
+        + '<td>' + (u.org_role ? roleChip(u.org_role) : "—") + '</td>'
         + '<td>' + fmtTime(u.created_at) + '</td>'
         + '</tr>',
     },

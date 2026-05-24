@@ -159,16 +159,37 @@ async fn list_users(
     .await
     .map_err(|e| AppError::internal("db", e.to_string()))?;
 
+    // LEFT JOIN LATERAL pulls the user's "top" company_memberships row:
+    // owner before admin before member, ties broken by most-recent
+    // joined_at. One company per user — the Home Users tab shows the
+    // primary org affiliation, multi-org users can drill into
+    // /admin/memberships for the full list.
     let rows = sqlx::query(
-        "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, plan, created_at
-           FROM users
+        "SELECT u.redpash_id, u.username, u.email, u.display_name, u.avatar_url,
+                u.job_title, u.organisation, u.plan, u.created_at,
+                m.company_id   AS org_id,
+                m.company_name AS org_name,
+                m.role         AS org_role
+           FROM users u
+           LEFT JOIN LATERAL (
+             SELECT cm.company_id, c.name AS company_name, cm.role
+               FROM company_memberships cm
+               JOIN companies c ON c.redpash_id = cm.company_id
+              WHERE cm.user_redpash_id = u.redpash_id
+              ORDER BY CASE cm.role
+                         WHEN 'owner'  THEN 0
+                         WHEN 'admin'  THEN 1
+                         ELSE 2
+                       END,
+                       cm.joined_at DESC
+              LIMIT 1
+           ) m ON TRUE
           WHERE ($1::text IS NULL OR
-                 username     ILIKE '%' || $1 || '%' OR
-                 display_name ILIKE '%' || $1 || '%' OR
-                 COALESCE(email,        '') ILIKE '%' || $1 || '%' OR
-                 COALESCE(organisation, '') ILIKE '%' || $1 || '%')
-          ORDER BY created_at DESC
+                 u.username     ILIKE '%' || $1 || '%' OR
+                 u.display_name ILIKE '%' || $1 || '%' OR
+                 COALESCE(u.email,        '') ILIKE '%' || $1 || '%' OR
+                 COALESCE(u.organisation, '') ILIKE '%' || $1 || '%')
+          ORDER BY u.created_at DESC
           LIMIT $2 OFFSET $3",
     )
     .bind(q.q.as_deref())
@@ -189,6 +210,9 @@ async fn list_users(
             job_title:    r.try_get("job_title").ok(),
             organisation: r.try_get("organisation").ok(),
             plan:         r.try_get("plan").unwrap_or_default(),
+            org_id:       r.try_get("org_id").ok(),
+            org_name:     r.try_get("org_name").ok(),
+            org_role:     r.try_get("org_role").ok(),
             created_at:   r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
         })
         .collect();
