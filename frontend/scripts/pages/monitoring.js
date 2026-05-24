@@ -8,8 +8,15 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
-import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
 import { esc, cssEsc } from "/scripts/dom.js";
+import {
+  headHTML, kpiStripHTML, chartsStripHTML,
+  windowChipsHTML as _windowChipsHTML,
+  listPanel as _listPanel,
+  setKpi as _setKpi,
+  renderListPager as _renderListPager,
+  createListCharts,
+} from "/scripts/list-page.js";
 
 // Same MON_TABS declaration shape as home.js — explicit, RBAC-friendly.
 // `endpoint` is the un-prefixed path; the /api/ literal is never in a
@@ -139,11 +146,15 @@ export default function monitoring(app, { session }) {
   let rawTotalPages = 1;
   const RAW_PAGE_SIZE = 50;
   let donutChart = null;  // ECharts instance — disposed on body rebuild
-  // List-tab chart instances — hoisted here so the dispose path on
-  // the Requests-tab branch (activate → renderRequestsBody →
-  // disposeListCharts) doesn't hit TDZ on the let declaration that
-  // used to live next to mountListCharts further down.
-  let listCharts = [];
+
+  // List-page bindings — partial-apply view + ID prefixes once so
+  // call sites keep their original short-arg signatures. Charts
+  // controller is the dispose/mount handle.
+  const charts          = createListCharts(view, { logPrefix: "monitoring" });
+  const setKpi          = (id, val) => _setKpi(view, id, val);
+  const renderListPager = () =>
+    _renderListPager(view, "rp-mon-list-pager", { page: listPage, totalPages: listTotalPages });
+  const listPanel       = (columns) => _listPanel(columns, "rp-mon-list-tbody");
 
   // ─── rail collapse (same affordance as Workspace + Home) ────
   app.querySelector("#rpMonNavCollapse").addEventListener("click", (e) => {
@@ -221,7 +232,7 @@ export default function monitoring(app, { session }) {
 
   function renderRequestsBody() {
     disposeRequestsCharts();
-    disposeListCharts();
+    charts.dispose();
     rawPage = 1;
     view.innerHTML = ''
       + headHTML("Requests", "")
@@ -410,7 +421,7 @@ export default function monitoring(app, { session }) {
 
   function renderListBody(tab, viewSpec) {
     disposeRequestsCharts();  // user switching away from Requests
-    disposeListCharts();      // user switching between list tabs
+    charts.dispose();      // user switching between list tabs
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
     view.innerHTML = ''
@@ -427,7 +438,7 @@ export default function monitoring(app, { session }) {
       + '<div class="rp-list-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
-      mountListCharts(viewSpec).catch((err) =>
+      charts.mount(viewSpec).catch((err) =>
         console.warn("[monitoring] charts mount failed:", err));
     }
 
@@ -492,32 +503,6 @@ export default function monitoring(app, { session }) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Couldn’t load'
         + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
     }
-  }
-
-  function renderListPager() {
-    const el = view.querySelector("#rp-mon-list-pager");
-    if (!el || listTotalPages < 1) { if (el) el.innerHTML = ""; return; }
-    const p = listPage, last = listTotalPages;
-    const out = [];
-    out.push(pagerBtn("‹", p - 1, false, p === 1));
-    if (last <= 7) {
-      for (let i = 1; i <= last; i++) out.push(pagerBtn(String(i), i, i === p, false));
-    } else {
-      const want = new Set([1, last, p, p - 1, p + 1]);
-      let prev = 0;
-      for (let i = 1; i <= last; i++) {
-        if (!want.has(i)) continue;
-        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
-        out.push(pagerBtn(String(i), i, i === p, false));
-        prev = i;
-      }
-    }
-    out.push(pagerBtn("›", p + 1, false, p === last));
-    el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
-  }
-  function pagerBtn(label, page, active, disabled) {
-    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
-      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
   }
 
   // ─── Optimization map — known opportunities × live measurements
@@ -746,83 +731,10 @@ export default function monitoring(app, { session }) {
   }
 
   // ─── render utilities ────────────────────────────────────────
-  function headHTML(title, count) {
-    return '<header class="rp-shell-head">'
-      +   '<h2 class="rp-shell-head-title">' + esc(title) + '</h2>'
-      +   '<span class="rp-shell-head-count">' + esc(count) + '</span>'
-      + '</header>';
-  }
-  function windowChipsHTML(active) {
-    return '<div class="rp-chip-row">'
-      + WINDOWS.map((w) =>
-          '<button type="button" class="rp-chip' + (w === active ? ' is-active' : '') + '"'
-          + ' data-window="' + esc(w) + '">' + esc(w) + '</button>'
-        ).join("")
-      + '</div>';
-  }
-  function kpiStripHTML(tiles) {
-    return '<div class="rp-kpi-strip">'
-      + tiles.map((t) =>
-          '<div class="rp-kpi">'
-          + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
-          + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
-          + '</div>'
-        ).join("")
-      + '</div>';
-  }
+  // windowChipsHTML in this page is partial-applied with the local
+  // WINDOWS list — wraps the shared module helper.
+  function windowChipsHTML(active) { return _windowChipsHTML(WINDOWS, active); }
 
-  // Chart strip — sibling of the KPI strip, one card per chart
-  // declared in the LIST_VIEWS spec's `charts` array. Same shape as
-  // home.js's renderer + echarts-kpi.js helpers do the actual work.
-  function chartsStripHTML(charts) {
-    if (!charts.length) return "";
-    return '<div class="rp-home-charts">'
-      + charts.map((c) =>
-          '<div class="rp-home-chart-card">'
-          + '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-          + '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
-          + '</div>'
-        ).join("")
-      + '</div>';
-  }
-  const CHART_KINDS = {
-    donut: kpiDonut, bar: kpiBar, barH: kpiBarH, gauge: kpiGauge,
-    line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
-  };
-  // listCharts is hoisted to the top of monitoring() so the
-  // dispose call in renderRequestsBody (which fires before this
-  // point during a fresh page mount via activate → renderTabBody)
-  // doesn't trip TDZ.
-  function disposeListCharts() {
-    listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
-    listCharts = [];
-  }
-  async function mountListCharts(spec) {
-    const statsUrl = spec.statsEndpoint || (spec.endpoint + "/stats");
-    let stats;
-    try { stats = await api.get(statsUrl); }
-    catch (err) {
-      console.warn("[monitoring] stats fetch failed for", statsUrl, err);
-      return;
-    }
-    spec.charts.forEach((c) => {
-      const el = view.querySelector("#" + c.id);
-      if (!el) return;
-      const fn = CHART_KINDS[c.kind];
-      if (!fn) { console.warn("[monitoring] unknown chart kind:", c.kind); return; }
-      const data = c.data ? c.data(stats) : stats;
-      const inst = fn(el, data, c.opts || {});
-      if (inst) listCharts.push(inst);
-    });
-  }
-  // Lazy resize handler (one listener for the page, attached on
-  // first chart mount, never removed).
-  if (!window.__rpMonResizeWired) {
-    window.__rpMonResizeWired = true;
-    window.addEventListener("resize", () => {
-      listCharts.forEach((inst) => { try { inst.resize(); } catch { /* ignore */ } });
-    });
-  }
   function topRoutesPanel() {
     return '<section class="rp-mon-panel">'
       + '<div class="rp-mon-panel-head">'
@@ -878,10 +790,6 @@ export default function monitoring(app, { session }) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return v || "#6c7086";
   }
-  function setKpi(id, val) {
-    const el = view.querySelector("#" + id);
-    if (el) el.textContent = val;
-  }
   function errBand(rate) {
     if (rate == null) return "";
     if (rate < 1)  return "rp-mon-err-low";
@@ -931,14 +839,5 @@ export default function monitoring(app, { session }) {
     }
     return chips.length ? chips.join(" ") : "—";
   }
-  function listPanel(columns) {
-    return '<section class="rp-mon-panel">'
-      + '<table class="rp-mon-table">'
-      +   '<thead><tr>' + columns.map((c) => '<th>' + esc(c) + '</th>').join("") + '</tr></thead>'
-      +   '<tbody id="rp-mon-list-tbody"></tbody>'
-      + '</table>'
-      + '</section>';
-  }
-
 }
 

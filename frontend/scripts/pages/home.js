@@ -13,8 +13,14 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
-import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/scripts/echarts-kpi.js";
 import { esc, cssEsc } from "/scripts/dom.js";
+import {
+  headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML,
+  listPanel as _listPanel,
+  setKpi as _setKpi,
+  renderListPager as _renderListPager,
+  createListCharts,
+} from "/scripts/list-page.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
 // 2026-06-05). Renamed from `import|report` to `new|design`:
@@ -67,12 +73,16 @@ export default function home(app, { session }) {
   const navBody = app.querySelector("#rpHomeNavBody");
   const view    = app.querySelector("#rpHomeView");
 
-  // List-tab chart instances — hoisted to the top of home() so the
-  // dispose call in renderListBody (which fires before this point
-  // during a fresh page mount via activate → renderTabBody) doesn't
-  // trip TDZ on the let declaration that used to live next to
-  // mountListCharts further down.
-  let listCharts = [];
+  // List-page bindings — partial-apply the view + the page-specific
+  // ID prefixes once so call sites keep their original short-arg
+  // signatures (setKpi(id, val), renderListPager(), listPanel(cols)).
+  // The chart controller hosts mount/dispose against the shared
+  // /scripts/list-page.js runtime.
+  const charts          = createListCharts(view, { logPrefix: "home" });
+  const setKpi          = (id, val) => _setKpi(view, id, val);
+  const renderListPager = () =>
+    _renderListPager(view, "rp-home-list-pager", { page: listPage, totalPages: listTotalPages });
+  const listPanel       = (columns) => _listPanel(columns, "rp-home-list-tbody");
 
   // List-view specs for the six non-Projects tabs. Same Page<T> shape
   // across every /api/admin/* endpoint, so one generic renderer
@@ -137,7 +147,7 @@ export default function home(app, { session }) {
         ],
         default: "project",
       }],
-      // Stats endpoint also reads ?scope=; mountListCharts threads
+      // Stats endpoint also reads ?scope=; the charts controller threads
       // chipState through via spec.chipRows when statsEndpoint is
       // unset (default behavior).
       charts: [
@@ -351,9 +361,9 @@ export default function home(app, { session }) {
     // charts share one stats fetch — small payload, three viz from
     // the same response. chipState threads through so memberships'
     // ?scope= flips the stats payload alongside the list.
-    disposeListCharts();
+    charts.dispose();
     if (spec.charts && spec.charts.length) {
-      mountListCharts(spec, chipState).catch((err) => {
+      charts.mount(spec, chipState).catch((err) => {
         console.warn("[home] charts mount failed:", err);
       });
     }
@@ -374,8 +384,8 @@ export default function home(app, { session }) {
         // ?scope=…). Refetch + re-render the charts so the cards
         // stay in sync with the list.
         if (spec.charts && spec.charts.length) {
-          disposeListCharts();
-          mountListCharts(spec, chipState).catch((err) =>
+          charts.dispose();
+          charts.mount(spec, chipState).catch((err) =>
             console.warn("[home] charts refetch failed:", err));
         }
       });
@@ -445,32 +455,6 @@ export default function home(app, { session }) {
     }
   }
 
-  function renderListPager() {
-    const el = view.querySelector("#rp-home-list-pager");
-    if (!el || listTotalPages < 1) { if (el) el.innerHTML = ""; return; }
-    const p = listPage, last = listTotalPages;
-    const out = [];
-    out.push(pagerBtn("‹", p - 1, false, p === 1));
-    if (last <= 7) {
-      for (let i = 1; i <= last; i++) out.push(pagerBtn(String(i), i, i === p, false));
-    } else {
-      const want = new Set([1, last, p, p - 1, p + 1]);
-      let prev = 0;
-      for (let i = 1; i <= last; i++) {
-        if (!want.has(i)) continue;
-        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
-        out.push(pagerBtn(String(i), i, i === p, false));
-        prev = i;
-      }
-    }
-    out.push(pagerBtn("›", p + 1, false, p === last));
-    el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
-  }
-  function pagerBtn(label, page, active, disabled) {
-    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
-      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
-  }
-
   function paintProjectKpis(items) {
     const withFiles = items.filter((p) => (p.file_count || 0) > 0).length;
     const cleans = items.map((p) => p.cleanness_pct).filter((v) => v != null);
@@ -532,104 +516,6 @@ export default function home(app, { session }) {
   }
 
   // ─── small render utilities ──────────────────────────────────
-  function headHTML(title, count) {
-    return '<header class="rp-shell-head">'
-      +   '<h2 class="rp-shell-head-title">' + esc(title) + '</h2>'
-      +   '<span class="rp-shell-head-count">' + esc(count) + '</span>'
-      + '</header>';
-  }
-  function kpiStripHTML(tiles) {
-    return '<div class="rp-kpi-strip">'
-      + tiles.map((t) =>
-          '<div class="rp-kpi">'
-          + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
-          + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
-          + '</div>'
-        ).join("")
-      + '</div>';
-  }
-
-  // Chart strip — one card per chart declared in the spec. Each
-  // card carries the chart's title + a 180px-tall canvas; the kpi
-  // helper inits ECharts against the canvas once the /stats fetch
-  // resolves. Empty until spec.charts is non-empty.
-  function chartsStripHTML(charts) {
-    if (!charts.length) return "";
-    return '<div class="rp-home-charts">'
-      + charts.map((c) =>
-          '<div class="rp-home-chart-card">'
-          + '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-          + '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
-          + '</div>'
-        ).join("")
-      + '</div>';
-  }
-
-  // Per-tab chart instances — kept so we can dispose on tab switch
-  // (an ECharts instance leaks memory + survives across tabs if you
-  // don't .dispose() it explicitly). The `let listCharts = []` is
-  // hoisted to the top of home() to avoid TDZ on the dispose call
-  // that fires during the initial activate() — earlier in the
-  // function than the declaration would naturally land.
-  function disposeListCharts() {
-    listCharts.forEach((inst) => { try { inst.dispose(); } catch { /* already gone */ } });
-    listCharts = [];
-  }
-
-  // KIND → helper map. Decoupled from the spec so a tab's spec just
-  // declares "donut" and we look up the function — no per-tab
-  // import gymnastics, and adding kinds is a one-line addition here.
-  const CHART_KINDS = {
-    donut: kpiDonut, bar: kpiBar, barH: kpiBarH, gauge: kpiGauge,
-    line:  kpiLine,  pie: kpiPie, rose:  kpiRose,
-  };
-
-  // Build the stats URL — flat string or a function of chipState
-  // (memberships uses ?scope=project|company; others are flat).
-  function statsUrlFor(spec, chipState) {
-    if (typeof spec.statsEndpoint === "function") return spec.statsEndpoint(chipState || {});
-    if (spec.statsEndpoint) return spec.statsEndpoint;
-    const base = spec.endpoint + "/stats";
-    const chips = spec.chipRows || [];
-    if (!chips.length || !chipState) return base;
-    const params = new URLSearchParams();
-    chips.forEach((cr) => { if (chipState[cr.name]) params.set(cr.name, chipState[cr.name]); });
-    const qs = params.toString();
-    return qs ? base + "?" + qs : base;
-  }
-
-  async function mountListCharts(spec, chipState) {
-    const statsUrl = statsUrlFor(spec, chipState);
-    let stats;
-    try { stats = await api.get(statsUrl); }
-    catch (err) {
-      console.warn("[home] stats fetch failed for", statsUrl, err);
-      return;
-    }
-    spec.charts.forEach((c) => {
-      const el = view.querySelector("#" + c.id);
-      if (!el) return;
-      const fn = CHART_KINDS[c.kind];
-      if (!fn) { console.warn("[home] unknown chart kind:", c.kind); return; }
-      const data = c.data ? c.data(stats) : stats;
-      const inst = fn(el, data, c.opts || {});
-      if (inst) listCharts.push(inst);
-    });
-  }
-
-  // Resize on window resize so charts reflow with the page. One
-  // listener, attached lazily on first chart mount; we never remove
-  // it — the cost is one resize call per tab swap, well under 1ms.
-  if (!window.__rpHomeResizeWired) {
-    window.__rpHomeResizeWired = true;
-    window.addEventListener("resize", () => {
-      listCharts.forEach((inst) => { try { inst.resize(); } catch { /* ignore */ } });
-    });
-  }
-  function setKpi(id, val) {
-    const el = view.querySelector("#" + id);
-    if (el) el.textContent = val;
-  }
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function fmtDate(iso) {
     const d = new Date(iso);
@@ -686,23 +572,6 @@ export default function home(app, { session }) {
       + '</span>';
   }
 
-  function chipRowHTML(chipRow, current) {
-    return '<div class="rp-chip-row" data-chip-name="' + esc(chipRow.name) + '">'
-      + (chipRow.label ? '<span class="rp-chip-row-label">' + esc(chipRow.label) + '</span>' : "")
-      + chipRow.options.map((opt) =>
-          '<button type="button" class="rp-chip' + (opt.value === current ? ' is-active' : '') + '"'
-          + ' data-value="' + esc(opt.value) + '">' + esc(opt.label) + '</button>'
-        ).join("")
-      + '</div>';
-  }
-  function listPanel(columns) {
-    return '<section class="rp-mon-panel">'
-      + '<table class="rp-mon-table">'
-      +   '<thead><tr>' + columns.map((c) => '<th>' + esc(c) + '</th>').join("") + '</tr></thead>'
-      +   '<tbody id="rp-home-list-tbody"></tbody>'
-      + '</table>'
-      + '</section>';
-  }
 }
 
 // Time-of-day salutation + first_name (display_name fallback).
