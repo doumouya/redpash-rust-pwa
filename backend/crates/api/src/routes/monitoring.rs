@@ -5,7 +5,8 @@
 //!   GET /api/monitoring/audit-findings?page&size&run&tool&kind
 //!   GET /api/monitoring/requests?page&size&window&route&status&method
 //!   GET /api/monitoring/requests/stats?window
-//!   GET /api/monitoring/optimization-points?page&size&subsystem&status
+//!   GET   /api/monitoring/optimization-points?page&size&subsystem&status
+//!   PATCH /api/monitoring/optimization-points/:rid     (status flip)
 //!
 //! All three return `Page<T>` — same shape as `/api/files/:rid/page`
 //! so the redtable on the monitoring tabs reuses the existing reader.
@@ -18,8 +19,8 @@
 use std::time::Instant;
 
 use axum::{
-    extract::{Query, State},
-    routing::get,
+    extract::{Path, Query, State},
+    routing::{get, patch},
     Json, Router,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -44,7 +45,8 @@ pub fn routes() -> Router<AppState> {
         .route("/audit-findings",  get(list_audit_findings))
         .route("/requests",            get(list_requests))
         .route("/requests/stats",      get(stats_requests))
-        .route("/optimization-points", get(list_optimization_points))
+        .route("/optimization-points",      get(list_optimization_points))
+        .route("/optimization-points/:rid", patch(patch_optimization_point))
 }
 
 // ── shared query plumbing ───────────────────────────────────────────────
@@ -756,4 +758,76 @@ fn split_method_route(key: &str) -> Option<(&str, &str)> {
     let method = parts.next()?;
     let route  = parts.next()?;
     Some((method, route))
+}
+
+// Allowed `status` values — mirrors the CHECK on optimization_points.
+const OPT_STATUSES: &[&str] = &["open", "planned", "done", "wontfix"];
+
+#[derive(Deserialize)]
+struct PatchOptPointBody {
+    status: String,
+}
+
+/// `PATCH /api/monitoring/optimization-points/:rid` — flip a row's
+/// status (`open → planned → done → wontfix`). Returns the updated
+/// row with live measurement re-evaluated, same shape as the list.
+///
+/// Open to any authed user today, matching the rest of the monitoring
+/// surface; RBAC-gate to company-admin when [[rbac-corporate-ready]]
+/// lands. Spec: docs/internal/specs/optimization-map.md §7.
+async fn patch_optimization_point(
+    State(state): State<AppState>,
+    Path(rid):    Path<String>,
+    Json(body):   Json<PatchOptPointBody>,
+) -> Result<Json<OptimizationPoint>, AppError> {
+    let new_status = body.status.trim();
+    if !OPT_STATUSES.contains(&new_status) {
+        return Err(AppError::bad_request("invalid",
+            "status must be open / planned / done / wontfix"));
+    }
+    let id: i64 = rid.parse()
+        .map_err(|_| AppError::bad_request("invalid", "id must be a number"))?;
+
+    let row = sqlx::query(
+        "UPDATE optimization_points
+            SET status = $2, updated_at = now()
+          WHERE id = $1
+      RETURNING id, subsystem, phase, current_cost, horizon, status,
+                measurement_kind, measurement_key, threshold_value,
+                threshold_unit, notes, created_at, updated_at",
+    )
+    .bind(id)
+    .bind(new_status)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?
+    .ok_or_else(|| AppError::not_found("not_found", format!("optimization_point {id}")))?;
+
+    let mut p = OptimizationPoint {
+        id:               row.try_get("id").unwrap_or(0),
+        subsystem:        row.try_get("subsystem").unwrap_or_default(),
+        phase:            row.try_get("phase").unwrap_or_default(),
+        current_cost:     row.try_get("current_cost").unwrap_or_default(),
+        horizon:          row.try_get("horizon").unwrap_or_default(),
+        status:           row.try_get("status").unwrap_or_default(),
+        measurement_kind: row.try_get("measurement_kind").ok(),
+        measurement_key:  row.try_get("measurement_key").ok(),
+        threshold_value:  row.try_get("threshold_value").ok(),
+        threshold_unit:   row.try_get("threshold_unit").ok(),
+        notes:            row.try_get("notes").ok(),
+        created_at:       row.try_get("created_at").unwrap_or_else(|_| Utc::now()),
+        updated_at:       row.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
+        current_value:    None,
+        tipped:           None,
+    };
+    p.current_value = evaluate_measurement(
+        &state,
+        p.measurement_kind.as_deref(),
+        p.measurement_key.as_deref(),
+    ).await;
+    p.tipped = match (p.current_value, p.threshold_value) {
+        (Some(cv), Some(th)) => Some(cv >= th),
+        _                    => None,
+    };
+    Ok(Json(p))
 }
