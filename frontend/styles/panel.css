@@ -1127,3 +1127,104 @@
   font-weight: 700;
   border-top: 1px solid var(--rp-accent-2);
 }
+
+/* ── joins picker (Tools panel · Joins tab, slice B) ───────────────
+   Accordion of per-sibling-file cards. Each card has a header (file
+   title + candidate count), a candidate-pairs table (top-5 visible
+   by default; show-more reveals the tail), and — in slice C — a foot
+   with the join-type dropdown + Apply button. Layout matches the
+   Tools panel's existing cleaning surface — same card chrome, same
+   table density. */
+.rt-join-intro {
+  margin: 0 4px 10px;
+  color: var(--rp-text-mute);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rt-join-card {
+  margin-bottom: 12px;
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  background: var(--rp-surface);
+  overflow: hidden;
+}
+.rt-join-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--rp-hover);
+  border-bottom: 1px solid var(--rp-border);
+  font-size: 12.5px;
+}
+.rt-join-card__head i { color: var(--rp-accent-2); }
+.rt-join-card__title  { font-weight: 600; color: var(--rp-text); flex: 1 1 auto; }
+.rt-join-card__count  { color: var(--rp-text-mute); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rt-join-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rt-join-table thead th {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rp-text-mute);
+  border-bottom: 1px solid var(--rp-border);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rt-join-table tbody tr { border-bottom: 1px solid var(--rp-border); }
+.rt-join-table tbody tr:last-child { border-bottom: 0; }
+.rt-join-table tbody td { padding: 6px 8px; vertical-align: top; }
+.rt-join-table td.is-strength {
+  width: 36px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--rp-text-mute);
+}
+.rt-join-table td.is-strength.is-strong { color: var(--rp-ok); }
+.rt-join-table td.is-strength.is-medium { color: var(--rp-accent-2); }
+.rt-join-table td.is-strength.is-weak   { color: var(--rp-text-mute); }
+.rt-join-col {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--rp-hover);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--rp-text);
+}
+.rt-join-table td.is-matches {
+  color: var(--rp-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rt-join-meta { color: var(--rp-text-mute); font-size: 11px; }
+.rt-join-table td.is-samples {
+  color: var(--rp-text-mute);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-join-card__more,
+.rt-join-card__less {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-top: 1px solid var(--rp-border);
+  background: transparent;
+  color: var(--rp-accent-2);
+  font-size: 11.5px;
+  text-align: center;
+  cursor: pointer;
+}
+.rt-join-card__more:hover,
+.rt-join-card__less:hover { background: var(--rp-hover); }

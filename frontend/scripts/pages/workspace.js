@@ -16,6 +16,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountTools } from "/scripts/tools.js";
+import { mountJoins } from "/scripts/joins.js";
 import { mountReport } from "/scripts/report.js";
 import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
@@ -68,6 +69,7 @@ export default function workspace(app, { session }) {
   let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
   let searchDebounce = null;
   let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
+  let joinsCtrl     = null; // mountJoins' control surface — refresh() re-fetches sibling candidates
   let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
   let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
   let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
@@ -381,6 +383,11 @@ export default function workspace(app, { session }) {
       // (picker form re-derives field options; columns view re-projects
       // the rows). Picker idle state is a no-op.
       toolsCtrl?.refresh();
+      // Joins picker is sibling-file-aware — if it was already mounted
+      // (user visited the Joins tab) the cached candidates are stale on
+      // a file change, so re-fetch. If joinsCtrl is null we'll mount
+      // lazily on first Joins-tab activate.
+      joinsCtrl?.refresh();
       // Report builder is column-bound too — re-render so the group-by
       // dropdown + agg col options reflect the new file. Stale spec
       // (group-by names that don't exist) gets filtered visually on
@@ -1127,6 +1134,17 @@ export default function workspace(app, { session }) {
         el.classList.toggle("is-active", match);
       }
     });
+    // Lazy-mount the Joins picker on first activate — saves the
+    // /joins API call for users who never open the tab.
+    if (tab === "joins" && !joinsCtrl) {
+      const joinsBody = $("#wsToolsJoinsBody");
+      if (joinsBody) {
+        joinsCtrl = mountJoins(joinsBody, {
+          fileRid:      () => activeFileRid,
+          activeFilter: () => activeFilter,
+        });
+      }
+    }
   }
 
   // ─── designer — canvas + accordion config ─────────────────────
