@@ -31,21 +31,48 @@ export RP_API=http://localhost:8080/api
 ```
 
 All examples below use `$RP_API` so they survive a future host
-change. No auth header needed pre-RBAC — the backend resolves the
-caller via the bootstrap dev_user fallback ([routes/me.rs:281](../../../backend/crates/api/src/routes/me.rs#L281)).
+change.
 
-JSON bodies on POST/PATCH need `Content-Type: application/json`. Add
-once to every mutation; you can stub it via a shell alias if you
-prefer:
+**Auth (dev).** OAuth is wired in dev — every endpoint that resolves
+the caller (and that's nearly all mutating endpoints) requires a
+session cookie. Two ways to get one:
+
+1. **Mint a dev session** (preferred for agents) — gated behind
+   `REDPASH_DEV_LOGIN=1` env flag on the backend process:
+
+   ```bash
+   # Mint a session for the bootstrap dev user
+   curl -sS -i -X POST $RP_API/auth/dev-login \
+     -H 'Content-Type: application/json' \
+     -d '{"user_id":"USR_FF48C3D5270B47D9B355DF4127B3FE73"}'
+   # Read `set-cookie: rp_session=SES_…` from the response.
+   export RP_SID=SES_…
+   ```
+
+   Substitute any other user RID (find them via `GET $RP_API/admin/users`,
+   which is open today per [[redpash-stage]]). Dev sessions live for
+   30 days; mint once per session.
+
+2. **Borrow your browser session** — F12 → Application → Cookies →
+   copy `rp_session` value. Faster one-off, breaks when the browser
+   logout fires.
+
+Every mutating example below adds `-H "Cookie: rp_session=$RP_SID"`.
+Read-only `/admin/*` endpoints work without it today (audit
+acknowledges them as dev-permissive), but mutations need it.
+
+**Optional aliases** for the JSON header + cookie noise:
 
 ```bash
-alias rp_post='curl -sS -H "Content-Type: application/json" -X POST'
-alias rp_patch='curl -sS -H "Content-Type: application/json" -X PATCH'
-alias rp_get='curl -sS'
+alias rp_post='curl -sS -H "Content-Type: application/json" -H "Cookie: rp_session=$RP_SID" -X POST'
+alias rp_patch='curl -sS -H "Content-Type: application/json" -H "Cookie: rp_session=$RP_SID" -X PATCH'
+alias rp_get='curl -sS -H "Cookie: rp_session=$RP_SID"'
+alias rp_del='curl -sS -H "Cookie: rp_session=$RP_SID" -X DELETE'
 ```
 
-The rest of this doc uses full curl invocations so the examples
-copy-paste cleanly without depending on the aliases.
+The rest of this doc uses full curl invocations (with the cookie
+header) so the examples copy-paste cleanly without depending on the
+aliases.
 
 ---
 
@@ -73,6 +100,7 @@ The full route table lives in [routes/cases.rs](../../../backend/crates/api/src/
 ```bash
 curl -sS -X POST $RP_API/cases \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{
     "title":       "Workspace slow when filtering 100k rows",
     "description": "User report — autocomplete dropdown lags ~2s.",
@@ -115,13 +143,13 @@ Stash the `redpash_id` for follow-up calls.
 
 ```bash
 # Every case (kanban-board read)
-curl -sS "$RP_API/cases?size=100"
+curl -sS -H "Cookie: rp_session=$RP_SID" "$RP_API/cases?size=100"
 
 # Filter: my open work
-curl -sS "$RP_API/cases?assignee=USR_gus…&status=in_progress"
+curl -sS -H "Cookie: rp_session=$RP_SID" "$RP_API/cases?assignee=USR_gus…&status=in_progress"
 
 # Search by title/description
-curl -sS "$RP_API/cases?q=autocomplete"
+curl -sS -H "Cookie: rp_session=$RP_SID" "$RP_API/cases?q=autocomplete"
 ```
 
 Query params (all optional):
@@ -151,7 +179,7 @@ surface first.
 ### 3. Get a case (full detail)
 
 ```bash
-curl -sS "$RP_API/cases/CAS_a1b2c3…"
+curl -sS -H "Cookie: rp_session=$RP_SID" "$RP_API/cases/CAS_a1b2c3…"
 ```
 
 **Response (200, `CaseDetail`):**
@@ -196,6 +224,7 @@ when "Gus says step 3 is done" → flip the case from `in_progress` to
 ```bash
 curl -sS -X PATCH "$RP_API/cases/CAS_a1b2c3…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "status": "in_progress" }'
 ```
 
@@ -217,21 +246,25 @@ fields you include get updated.
 # Reassign
 curl -sS -X PATCH "$RP_API/cases/CAS_…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "assignee_id": "USR_woz…" }'
 
 # Bump priority
 curl -sS -X PATCH "$RP_API/cases/CAS_…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "priority": "critical" }'
 
 # Refile as a bug instead of a task
 curl -sS -X PATCH "$RP_API/cases/CAS_…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "type": "bug" }'
 
 # Multi-field (each becomes a discrete activity-feed entry)
 curl -sS -X PATCH "$RP_API/cases/CAS_…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "status": "in_review", "assignee_id": "USR_em…" }'
 ```
 
@@ -256,6 +289,7 @@ notes.
 ```bash
 curl -sS -X POST "$RP_API/cases/CAS_a1b2c3…/comments" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "body": "Looked at the picker debounce — 200ms is fine, the slowness is in the predicate render." }'
 ```
 
@@ -280,9 +314,11 @@ Edit + delete:
 ```bash
 curl -sS -X PATCH "$RP_API/cases/CAS_…/comments/CMT_…" \
   -H 'Content-Type: application/json' \
+  -H "Cookie: rp_session=$RP_SID" \
   -d '{ "body": "Updated body" }'
 
-curl -sS -X DELETE "$RP_API/cases/CAS_…/comments/CMT_…"
+curl -sS -X DELETE "$RP_API/cases/CAS_…/comments/CMT_…" \
+  -H "Cookie: rp_session=$RP_SID"
 ```
 
 Edits set `is_edited = true` (UI shows an "(edited)" indicator).
@@ -292,7 +328,8 @@ Edits set `is_edited = true` (UI shows an "(edited)" indicator).
 ### 7. Delete a case
 
 ```bash
-curl -sS -X DELETE "$RP_API/cases/CAS_…"
+curl -sS -X DELETE "$RP_API/cases/CAS_…" \
+  -H "Cookie: rp_session=$RP_SID"
 ```
 
 204 on success. Comments cascade-delete (per the FK shape in
@@ -338,6 +375,7 @@ retires slack for task tracking entirely.
   ```bash
   RID=$(curl -sS -X POST $RP_API/cases \
     -H 'Content-Type: application/json' \
+    -H "Cookie: rp_session=$RP_SID" \
     -d '{ "title": "fix the thing" }' | jq -r '.redpash_id')
   echo "Created $RID"
   ```
