@@ -260,17 +260,30 @@ export function mountReport(panelBody, ctx) {
 
   // ── spec build + apply ────────────────────────────────────────────
   function buildSpec() {
+    // Aggregations: drop empty alias keys so the backend infers a
+    // default. Map shape matches shared::report::Aggregation:
+    // { col, fn, alias? }. fn comes through as the snake_case enum.
+    const aggs = aggregations.map((a) => {
+      const out = { col: a.col, fn: a.fn };
+      if (a.alias) out.alias = a.alias;
+      return out;
+    });
+    // Engine auto-add workaround. When group_by is non-empty and the
+    // user gave no aggregations, the engine auto-pushes
+    // `{col:"*", fn:count}` (group_by.rs:44) which compiles to
+    // `lit(1i64).count()` — Polars rejects literal aggregations with
+    // "cannot aggregate a literal". Sending an explicit count over a
+    // real column dodges the auto-add. Pinged Gus to fix in the
+    // engine (the shortcut should use `len()` or a column reference,
+    // not a literal); this workaround can be dropped once the engine
+    // change lands.
+    if (groupBy.length && !aggs.length) {
+      aggs.push({ col: groupBy[0], fn: "count", alias: "count" });
+    }
     return {
       group_by:       [...groupBy],
       group_by_cols:  [],
-      // Aggregations: drop empty alias keys so the backend infers a
-      // default. Map shape matches shared::report::Aggregation:
-      // { col, fn, alias? }. fn comes through as the snake_case enum.
-      aggregations:   aggregations.map((a) => {
-        const out = { col: a.col, fn: a.fn };
-        if (a.alias) out.alias = a.alias;
-        return out;
-      }),
+      aggregations:   aggs,
       filter:         null,
       show_details:   false,
       show_subtotals: true,
