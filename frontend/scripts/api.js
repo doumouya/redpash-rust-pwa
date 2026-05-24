@@ -4,13 +4,19 @@
 //   • Prefix every path with /api so callers write api.get("/projects").
 //   • Send + receive JSON (Content-Type, Accept) and parse errors into
 //     real Error objects with `status` and `body` attached.
+//   • Capture `x-request-id` from every response so frontend events
+//     (errors, lifecycle reports via /scripts/events.js) can correlate
+//     to the originating backend request — operators pivot from an FE
+//     error in the events table to its backend log line via the shared
+//     id. The header is set by `request_id_mw` server-side; we mirror
+//     it here as the "last seen" correlation handle (per-window, mutable).
 //   • Single place to add auth headers later (cookie now, Bearer for
 //     Google OAuth in Phase 4).
 //
 // Anything that needs the raw Response (file downloads, streaming
 // exports) bypasses this and calls fetch directly.
 
-import { reportEvent } from "/scripts/events.js";
+import { reportEvent, _setLastRequestId } from "/scripts/events.js";
 
 const BASE = "/api";
 
@@ -51,6 +57,16 @@ async function request(method, path, body, opts = {}) {
     }
     throw err;
   }
+
+  // Push the request correlation id into events.js's module state
+  // BEFORE any early-return branch (204 / 401) so the most recent
+  // request_id is always captured regardless of status. Fetch is
+  // case-insensitive on header names per the spec but lowercase is
+  // the canonical Axum emit shape. State lives in events.js (not
+  // here) to keep the events.js "never import api.js" rule intact —
+  // we push, it owns; no circular import.
+  const ridHeader = res.headers.get("x-request-id");
+  if (ridHeader) _setLastRequestId(ridHeader);
 
   if (res.status === 204) return null;
   // Session expired (or never existed). Redirect to the login page

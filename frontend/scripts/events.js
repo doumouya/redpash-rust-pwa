@@ -34,6 +34,20 @@ const _lastSent = new Map(); // "kind|message" → epoch ms
 const SESSION_CAP = 100;
 let _sentCount = 0;
 
+// Last `x-request-id` we saw from a /api response. Updated by
+// `_setLastRequestId` — api.js calls it on every response. Defaults
+// reportEvent's `request_id` arg so FE events (uncaught errors,
+// unhandled rejections, network failures, lifecycle reports) carry
+// the originating backend request's id without every call site
+// having to thread it manually. Operators pivot from an FE event
+// row to its backend log line via this shared id.
+//
+// The state lives HERE (not in api.js) to keep the strict "never
+// import api.js" rule on this module intact — api.js pushes via the
+// setter, this module owns the value. No circular import.
+let _lastRequestId = null;
+export function _setLastRequestId(id) { _lastRequestId = id || null; }
+
 function _truncate(value, max) {
   const s = String(value ?? "");
   return s.length > max ? s.slice(0, max) + "…" : s;
@@ -59,7 +73,11 @@ export function reportEvent({ level = "error", kind, message, source, context, r
     kind,
     message: _truncate(message, 1000),
     source:  source ? _truncate(source, 200) : undefined,
-    request_id: request_id || undefined,
+    // Explicit `request_id` arg wins; otherwise default to the most
+    // recent x-request-id we saw on any /api response. Either way the
+    // FE event row in the events table carries the same id the
+    // backend log line carries — operators jq one + SQL the other.
+    request_id: request_id || _lastRequestId || undefined,
     context: {
       url:   location.href,
       route: location.hash || "(none)",
