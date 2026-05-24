@@ -50,6 +50,15 @@ var GOD_LOC = 800;
      live      — observability for already-extracted helpers (count = healthy
                  reuse, not antipattern). `skip` is a regex that excludes the
                  helper's own file so we only count callers, not the def.
+
+   Optional `ackComment` (regex) — when set, a match preceded on the line
+   above by a comment matching that regex is excluded from the hit count.
+   Same forcing function as auth-audit's `// AUTH-AUDIT-ACK:` — new call
+   sites either carry an explicit caller-side intent comment or fail the
+   audit. The convention pairs with runbook 0006's "audit pattern
+   lifecycle": ship unACK'd, verify the audit flags the expected sites,
+   then add ACKs in the same commit so the audit goes green and the
+   regression net stays mechanical.
    ────────────────────────────────────────────────────────────────────────── */
 var PATTERNS = [
   /* ── extracted: count should stay at 0 ─────────────────────────────────── */
@@ -71,6 +80,30 @@ var PATTERNS = [
     rx: /\$\$\(\s*['"]\[data-dd\]/g,
     helper: 'bindDropdown() — one delegated handler at boot',
     saving: 2, notes: 'T3 retired per-page sweeps in workspace.js + report.js' },
+  /* runbook 0006 — chart/dashboard rids hitting data endpoints. The 10
+     CSV-only endpoints below ALL route through `hydrate()` server-side
+     (Gus's guard at backend/crates/api/src/routes/files.rs returns 400
+     `not_a_data_file` on empty storage_path). Frontend callers must
+     read `summary.file_type` first OR declare caller-side intent via
+     a `// DATA-ENDPOINT-ACK: caller-checks-file_type` comment on the
+     line above. Matches both single-literal URLs ("/files/RID/page")
+     and string-concat ("/files/" + rid + "/page"); misses dynamic-
+     suffix URLs ("/" + action — undo/redo) which need explicit ACKs.
+     `scripts/api.js` is excluded — it's the HTTP wrapper layer with
+     no caller context (same pattern as auth-audit excluding its own
+     source set + the routes/mod.rs helper layer). */
+  { name: 'data-only endpoint without file_type gate', status: 'extracted',
+    /* [\s\S]{0,200}? — non-greedy any-char (including newlines) up to
+       200 chars. Tighter `[^)]` would terminate at the first `)`
+       inside `encodeURIComponent(rid)` etc., so the endpoint literal
+       further out never gets matched. 200 chars covers multi-line
+       calls + concat expressions without overrunning into the next
+       statement. */
+    rx: /api\.(?:get|post|put|delete)\([\s\S]{0,200}?['"]\/?(?:page|uniques|joins|export|cleanness|sentinels|dedup|cast-preview|steps|snapshot)\b/g,
+    skip: /(^|\/)scripts\/api\.js$/,
+    ackComment: /\/\/\s*DATA-ENDPOINT-ACK\b/,
+    helper: 'add `// DATA-ENDPOINT-ACK: caller-checks-file_type` above the call, or route through column-index / joins / etc.',
+    saving: 1, notes: 'runbook 0006 — CSV-only endpoints; chart/dashboard rids 400 at the hydrate guard. ACK declares the caller checks file_type upstream.' },
 
   /* ── live: helper usage — counts here are healthy reuse, not antipattern ─ */
   { name: 'chartTheme() usage', status: 'live',
@@ -213,15 +246,32 @@ files.forEach(function (f) {
   f.importSpecs = specs;
 
   /* pattern scan — skip the audit tool itself + per-pattern skip rx so
-     the helper's own file doesn't count as usage of itself. */
+     the helper's own file doesn't count as usage of itself. Optional
+     `ackComment` regex suppresses matches whose line is preceded by an
+     acknowledgement comment (same shape as auth-audit's AUTH-AUDIT-ACK). */
   if (/(^|\/)tools\/js-audit\//.test(f.rel)) return;
   PATTERNS.forEach(function (p, i) {
     if (p.skip && p.skip.test(f.rel)) return;
     p.rx.lastIndex = 0;
     var pm, n = 0;
     while ((pm = p.rx.exec(text)) !== null) {
-      n++;
       if (pm.index === p.rx.lastIndex) p.rx.lastIndex++;     // zero-width guard
+      // ACK-aware: skip if the comment block immediately above the
+      // match carries the pattern's `ackComment`. We look at the 6
+      // lines preceding the match-start so a multi-line comment
+      // block (the convention is a 1-4 line `// DATA-ENDPOINT-ACK:`
+      // explanation) is captured — same scoping idea as auth-audit's
+      // body-wide scan, just bounded for files.rs-style long bodies.
+      if (p.ackComment) {
+        var lineStart = text.lastIndexOf('\n', pm.index - 1) + 1;
+        var windowStart = lineStart;
+        for (var w = 0; w < 6 && windowStart > 0; w++) {
+          windowStart = text.lastIndexOf('\n', windowStart - 2) + 1;
+        }
+        var window = text.slice(windowStart, lineStart);
+        if (p.ackComment.test(window)) continue;
+      }
+      n++;
     }
     if (n > 0) {
       patternHits[i].total += n;

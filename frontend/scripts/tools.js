@@ -896,6 +896,10 @@ export function mountTools(panelBody, ctx) {
     if (!rid) return;
     let resp;
     try {
+      // DATA-ENDPOINT-ACK: caller-checks-file_type — tools.js mounts
+      // inside the Workspace's Tools panel, which is CSV-gated by
+      // loadFile's CSV branch (see 6f1b70c). ctx.fileRid() returns
+      // the active CSV here.
       resp = await api.post("/files/" + encodeURIComponent(rid) + "/cast-preview",
                             { column, dtype });
     } catch (err) {
@@ -982,6 +986,9 @@ export function mountTools(panelBody, ctx) {
     const busyBtn = opts.busyBtn;
     if (busyBtn) { busyBtn.disabled = true; busyBtn.classList.add("is-busy"); }
     try {
+      // DATA-ENDPOINT-ACK: caller-checks-file_type — same CSV-gating
+      // path as cast-preview above; tools.js renders only inside the
+      // Workspace Tools panel's CSV branch.
       const res = await api.post("/files/" + encodeURIComponent(rid) + "/steps",
                                  { kind, params });
       setStatus("Applied: " + label, "ok");

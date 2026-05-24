@@ -183,6 +183,38 @@ Concrete rules:
 | **Frontend code firing data-only endpoints** | `/page`, `/uniques`, `/joins`, `/export`, `/steps` — never fire these without first knowing the rid points at a CSV. Read `summary.file_type` from `/files/:rid` and dispatch; or wire the file_type into the originating UI (rail tab `data-file-type`, future). |
 | **New file types** | When a new spec-only `file_type` lands (notebook / saved query / …), the positive-form queries + hydrate guard cover it automatically. The negative-form queries are the trap. Audit on add. |
 
+### Audit-pattern lifecycle (TDD-style validation)
+
+A convention crystallized while landing this runbook's first
+audit pattern (the js-audit `data-only endpoint without
+file_type gate` PATTERNS entry, commit pending at write time):
+
+1. **Ship the pattern unACK'd.** Add it to the catalog with no
+   acknowledgements at the call sites yet.
+2. **Run the audit, verify it flags the expected sites.** The hit
+   count and file breakdown should match what a manual grep would
+   produce. If it doesn't (false positives, false negatives,
+   missed brittle regex shapes), iterate on the pattern *before*
+   landing any acknowledgements — the unACK'd state is the
+   testbed.
+3. **Land the ACK comments in the same commit.** Each call site
+   gains its `// <PATTERN>-ACK:` annotation with the caller-side
+   intent in plain English. The annotation IS the contract — if
+   the contract becomes false later (e.g. a future refactor
+   makes the gating site dispatch to a non-CSV rid), the comment
+   is the wrong artifact and the audit catches the slip the
+   moment a contributor adds a new call site without an ACK.
+4. **Re-run, confirm green.** Zero hits on the extracted
+   pattern = the new regression net is live + the existing call
+   sites are documented.
+
+Same shape as the auth-audit pass that added `// AUTH-AUDIT-ACK:`
+to the 6 dev-permissive admin handlers — ship the scanner,
+verify it flags, ACK the intentional surfaces, ship the union
+as one commit. Mirrors the discipline rule of [[build-tools-
+proactively]] applied at audit-pattern granularity: encode the
+lesson + verify the encoding, in one beat.
+
 ### Audit-tool additions this runbook earns
 
 The right time to mechanize is when a class of bugs has hit
@@ -192,28 +224,38 @@ threshold. Three patterns worth queuing on the next audit-tool
 pass:
 
 1. **rs-audit pattern: `SELECT … FROM project_files`** queries
-   without a `WHERE … file_type …` clause. Status: `declined`
-   (track growth) — some queries legitimately need all rows
-   (rail list, cascade-delete targets). The catalog should
-   tolerate ACK comments like `// AUTH-AUDIT-ACK: …` does for
-   ownership.
+   without a `WHERE … file_type …` clause. Status: `declined` →
+   `extracted` with ACK convention (Gus's reframe — match on the
+   ACK comment, not the SQL shape; same forcing function as
+   cat-1's `// AUTH-AUDIT-ACK:`). Every query site declares its
+   intent via `// PROJECT-FILES-ACK: type=<any|csv|<concrete>>`
+   or fails the audit. **Pending** — queued in Gus's lane.
 
 2. **rs-audit pattern: `hydrate(state, &rid).await?`** call sites
    in handlers where the caller's `Path(rid)` could be any
    file_type (no preceding `find_file` + `file_type` check, no
    404-on-non-csv guard). Status: `live` — hydrate's own guard
    makes these correct-by-fallback, but tracking the count
-   surfaces preventive opportunities.
+   surfaces preventive opportunities; cross-module callers
+   (outside `routes::files`) get a separate counter so layer
+   violations stand out. **Pending** — queued in Gus's lane.
 
-3. **js-audit pattern: `api.get("/files/…/page" | "/uniques" |
-   "/joins" | "/export")`** without a preceding `file_type`
-   gate. Status: `extracted` — these endpoints are CSV-only;
-   any FE call site that hits them without first reading
-   file_type is a regression candidate.
+3. **js-audit pattern: `api.(get|post|put|delete)("/files/…/<csv-only-endpoint>")`**
+   without a preceding `// DATA-ENDPOINT-ACK: caller-checks-file_type`
+   annotation. Status: `extracted`, **shipped**. The endpoint
+   set is a single constant in the audit (`page | uniques |
+   joins | export | cleanness | sentinels | dedup | cast-preview
+   | steps | snapshot`); adding a new data-only endpoint
+   server-side now requires adding it to the constant or the
+   audit underdetects. `scripts/api.js` is excluded (HTTP
+   wrapper layer with no caller context — same exclusion shape
+   as auth-audit's own source-set exemption). The 5 initial
+   call sites carry their ACKs in the same commit per the
+   lifecycle convention above.
 
-Each pattern earns its keep at the next leak of the class. Adding
-them now is preventive; adding them after the third occurrence is
-remedial. We're at occurrence one — queue when there's bandwidth.
+Patterns 1 and 2 land at the next bandwidth gap in Gus's lane.
+The discipline they enforce is identical to Pattern 3's, just on
+the SQL and Rust call-site axes.
 
 ## Linked
 

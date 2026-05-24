@@ -289,6 +289,10 @@ export function mountJoins(panelBody, ctx) {
     applying = rid;
     render();
     try {
+      // DATA-ENDPOINT-ACK: caller-checks-file_type — joins.js mounts
+      // inside the Tools panel's Joins tab and refresh()'s call sites
+      // are CSV-gated by loadFile's CSV branch (see 6f1b70c). baseRid
+      // points at the active CSV.
       const envelope = await api.post("/files/" + encodeURIComponent(baseRid) + "/joins", body);
       // Reset card state — the new file is now in the project, the user
       // will see it in the rail; cards re-fetch to pick up any new

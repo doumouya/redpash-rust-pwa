@@ -585,6 +585,9 @@ export default function workspace(app, { session }) {
     const sorts = buildSortsParam();
     if (sorts && sorts.length) params.set("sorts", JSON.stringify(sorts));
     if (activeFilter) params.set("filters", JSON.stringify(activeFilter));
+    // DATA-ENDPOINT-ACK: caller-checks-file_type — refetchPage is only
+    // called from the CSV branch of loadFile (and from sites it gates
+    // like applyStep). activeFileRid points at a CSV here.
     const pageData = await api.get(
       "/files/" + encodeURIComponent(activeFileRid) + "/page?" + params.toString());
     // Server clamps page; trust its echo so the pager reflects reality.
@@ -1184,6 +1187,10 @@ export default function workspace(app, { session }) {
     stepInFlight = true;
     rowsInfo.textContent = "Saving…";
     try {
+      // DATA-ENDPOINT-ACK: caller-checks-file_type — applyStep is only
+      // reachable from the cleaning toolbar, which is rendered in the
+      // CSV branch of loadFile (see 6f1b70c). activeFileRid points at
+      // a CSV by the time we get here.
       const res = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
       if (res?.columns) activeColumns = res.columns;
       if (res?.steps)   activeSteps   = res.steps;
