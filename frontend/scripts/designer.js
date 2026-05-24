@@ -42,18 +42,20 @@ const THEMES = {
   mocha:       { name: "Mocha",
     series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af"],
     text: "#cdd6f4", axis: "#6c7086", split: "rgba(255,255,255,.08)", bg: "transparent" },
-  macarons:    { name: "Macarons",
-    series: ["#2ec7c9","#b6a2de","#5ab1ef","#ffb980","#d87a80","#8d98b3","#e5cf0d","#97b552"],
-    text: "#333333", axis: "#008acd", split: "#eeeeee", bg: "transparent" },
-  roma:        { name: "Roma",
-    series: ["#E01F54","#001852","#f5e8c8","#b8d2c7","#c6b38e","#a4d8c2","#f3d999","#d3758f"],
-    text: "#333333", axis: "#999999", split: "rgba(0,0,0,0.06)", bg: "transparent" },
-  shine:       { name: "Shine",
-    series: ["#c12e34","#e6b600","#0098d9","#2b821d","#005eaa","#339ca8","#cda819","#32a487"],
-    text: "#333333", axis: "#666666", split: "rgba(0,0,0,0.08)", bg: "transparent" },
-  infographic: { name: "Infographic",
-    series: ["#C1232B","#27727B","#FCCE10","#E87C25","#B5C334","#FE8463","#9BCA63","#FAD860"],
-    text: "#27727B", axis: "#27727B", split: "rgba(0,0,0,0.08)", bg: "transparent" },
+  // These four were inline palettes; the full Apache-ECharts themes
+  // self-register via /echarts-themes/builtin/{name}.js loaded in
+  // index.html. Marking them registered: true flips buildOption into
+  // pass-through so the registered theme drives axis/tooltip/gauge
+  // bands/candlestick — not just the palette. `series` stays only
+  // for the swatch preview in the Style picker.
+  macarons:    { name: "Macarons", registered: true,
+    series: ["#2ec7c9","#b6a2de","#5ab1ef","#ffb980","#d87a80","#8d98b3","#e5cf0d","#97b552"] },
+  roma:        { name: "Roma", registered: true,
+    series: ["#E01F54","#001852","#f5e8c8","#b8d2c7","#c6b38e","#a4d8c2","#f3d999","#d3758f"] },
+  shine:       { name: "Shine", registered: true,
+    series: ["#c12e34","#e6b600","#0098d9","#2b821d","#005eaa","#339ca8","#cda819","#32a487"] },
+  infographic: { name: "Infographic", registered: true,
+    series: ["#C1232B","#27727B","#FCCE10","#E87C25","#B5C334","#FE8463","#9BCA63","#FAD860"] },
   // Gus's full ECharts themes — palette + axis + tooltip + gauge
   // bands + candlestick + boxplot defaults baked into the JSON.
   // `registered: true` flips buildOption into pass-through mode

@@ -48,6 +48,15 @@
        files through this. Loaded globally because chart files can
        appear behind any rail click. -->
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <!-- Prebuilt ECharts themes (Apache 2.0, from apache/echarts).
+       Each script self-registers via echarts.registerTheme so the
+       Designer's Style picker can pass the name straight to
+       echarts.init. The redpash-mocha + redpash-latte themes load
+       dynamically from /echarts-themes/ via designer.js. -->
+  <script src="/echarts-themes/builtin/macarons.js"></script>
+  <script src="/echarts-themes/builtin/roma.js"></script>
+  <script src="/echarts-themes/builtin/shine.js"></script>
+  <script src="/echarts-themes/builtin/infographic.js"></script>
 
   <link rel="stylesheet" href="/styles/main.css" />
 </head>
