@@ -123,7 +123,10 @@ export default function cases(app, { session }) {
       params.set("size", "200");                     // pull a large window; v2 paginates per column
       if (searchQ) params.set("q", searchQ);
       const data = await api.get("/cases?" + params.toString());
-      const rows = data?.rows || [];
+      // Backend returns { items, total, page, size } per the cookbook
+      // contract. The original v1 shell read `.rows` (wrong) and
+      // rendered an empty board even when cases existed.
+      const rows = data?.items || [];
       paintBoard(rows);
     } catch (err) {
       if (err?.status === 404) {
