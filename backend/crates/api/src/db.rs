@@ -15,6 +15,22 @@ use shared::step::ProjectStep;
 use shared::user::{UserMembership, UserProfile};
 use sqlx::{FromRow, PgPool, Row};
 
+/// `SELECT COUNT(*)::BIGINT FROM <table>` — bare-table row count.
+///
+/// **`table` must be a string literal or an internally-controlled
+/// constant — never user input.** sqlx can't bind identifiers, so
+/// the table name is interpolated via `format!`. Every caller in
+/// this crate passes a static `&str`; do not break that invariant.
+///
+/// 14 hand-rolled inline `sqlx::query_scalar("SELECT COUNT(*)::BIGINT
+/// FROM …")` chains collapsed into this helper per the
+/// rust-dedup-audit-2026-05-24 item B.
+pub async fn count_total(pool: &PgPool, table: &str) -> sqlx::Result<i64> {
+    sqlx::query_scalar(&format!("SELECT COUNT(*)::BIGINT FROM {}", table))
+        .fetch_one(pool)
+        .await
+}
+
 // ─── users ──────────────────────────────────────────────────────
 
 #[derive(FromRow)]

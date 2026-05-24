@@ -40,7 +40,7 @@ use shared::{
 use std::collections::HashMap;
 use sqlx::Row;
 
-use crate::{error::AppError, state::AppState};
+use crate::{db, error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -131,9 +131,7 @@ async fn list_events(
 
     // Pre-filter total ("all rows ever") — useful to show "showing X of N
     // events ever logged" alongside the windowed/filtered total.
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "events").await?;
 
     // Post-filter total + the page rows. Three optional filters
     // (window, level, kind) folded into a single SQL via the
@@ -201,9 +199,7 @@ async fn list_audit_runs(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.run")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "audit.run").await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.run
@@ -356,9 +352,7 @@ async fn list_requests(
     let cutoff = window_cutoff(q.window.as_deref())?;
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM request_log")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "request_log").await?;
 
     // /api/monitoring/* itself is filtered out so the operator's act
     // of viewing the dashboard doesn't pollute its own table —
@@ -574,11 +568,10 @@ async fn stats_events(
     let total: i64 = if let Some(c) = cutoff {
         sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events WHERE occurred_at >= $1")
             .bind(c)
-            .fetch_one(&state.db).await
+            .fetch_one(&state.db).await?
     } else {
-        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM events")
-            .fetch_one(&state.db).await
-    }?;
+        db::count_total(&state.db, "events").await?
+    };
 
     let by_level_query = if cutoff.is_some() {
         "SELECT level, COUNT(*)::BIGINT FROM events WHERE occurred_at >= $1 GROUP BY level"
@@ -620,8 +613,7 @@ async fn stats_events(
 async fn stats_audit_runs(
     State(state): State<AppState>,
 ) -> Result<Json<AuditRunsStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.run")
-        .fetch_one(&state.db).await?;
+    let total: i64 = db::count_total(&state.db, "audit.run").await?;
 
     let by_tool = crate::routes::admin::group_count(
         &state.db,
@@ -649,8 +641,7 @@ async fn stats_audit_runs(
 async fn stats_audit_findings(
     State(state): State<AppState>,
 ) -> Result<Json<AuditFindingsStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM audit.finding")
-        .fetch_one(&state.db).await?;
+    let total: i64 = db::count_total(&state.db, "audit.finding").await?;
 
     // Bucket boundaries: low ≤ 5, med 6-15, high > 15. NULL severity
     // folds into "low" since "no severity flagged" is the gentlest

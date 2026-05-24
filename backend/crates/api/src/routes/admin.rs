@@ -38,7 +38,7 @@ use shared::{
 use std::collections::HashMap;
 use sqlx::Row;
 
-use crate::{error::AppError, state::AppState};
+use crate::{db, error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -105,9 +105,7 @@ async fn list_users(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM users")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "users").await?;
 
     // ILIKE-search over username + display_name + email + organisation
     // when ?q= is set. Single $1 used four times — Postgres caches the
@@ -193,9 +191,7 @@ async fn list_companies(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM companies")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "companies").await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM companies
@@ -349,9 +345,7 @@ async fn list_files(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_files")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "project_files").await?;
 
     // `status` was dropped in the object-model hard-refresh; `file_stages.stage`
     // is the computed replacement (import | clean | report | publish). LEFT JOIN
@@ -494,9 +488,7 @@ async fn list_steps(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
-    let all_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_steps")
-        .fetch_one(&state.db)
-        .await?;
+    let all_count: i64 = db::count_total(&state.db, "project_steps").await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM project_steps
@@ -574,9 +566,7 @@ pub(super) async fn group_count(
 // ── /api/admin/users/stats ──────────────────────────────────────────────
 
 async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM users")
-        .fetch_one(&state.db)
-        .await?;
+    let total: i64 = db::count_total(&state.db, "users").await?;
 
     // Active proxy: any event captured against the user in the last 7d.
     // SET NULL on events.user_redpash_id (per the migration) means events
@@ -605,9 +595,7 @@ async fn stats_users(State(state): State<AppState>) -> Result<Json<UserStats>, A
 // ── /api/admin/companies/stats ──────────────────────────────────────────
 
 async fn stats_companies(State(state): State<AppState>) -> Result<Json<CompanyStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM companies")
-        .fetch_one(&state.db)
-        .await?;
+    let total: i64 = db::count_total(&state.db, "companies").await?;
 
     // Activity proxy: any file in any of the company's projects has
     // updated_at in the last 30d. EXISTS rather than DISTINCT-join so
@@ -685,9 +673,7 @@ async fn stats_memberships(
 // ── /api/admin/files/stats ──────────────────────────────────────────────
 
 async fn stats_files(State(state): State<AppState>) -> Result<Json<FileStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_files")
-        .fetch_one(&state.db)
-        .await?;
+    let total: i64 = db::count_total(&state.db, "project_files").await?;
 
     let by_stage = group_count(
         &state.db,
@@ -758,9 +744,7 @@ async fn stats_charts(State(state): State<AppState>) -> Result<Json<ChartStats>,
 // ── /api/admin/steps/stats ──────────────────────────────────────────────
 
 async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, AppError> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM project_steps")
-        .fetch_one(&state.db)
-        .await?;
+    let total: i64 = db::count_total(&state.db, "project_steps").await?;
 
     let by_kind = group_count(
         &state.db,
