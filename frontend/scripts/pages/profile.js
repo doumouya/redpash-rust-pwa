@@ -9,7 +9,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
-import { chartTheme } from "/scripts/echarts-theme.js";
+import { kpiBarH } from "/scripts/echarts-kpi.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
 
@@ -193,49 +193,29 @@ async function loadUsage(app) {
   ]);
 }
 
-// Horizontal bar chart via ECharts (loaded globally in index.html).
-// Theme = redpash-mocha/latte (registered in echarts-theme.js): the
-// palette + axis chrome + tooltip colours all come from the theme,
-// so this builder only declares the option shape — no hardcoded
-// hexes. Items are bottom-to-top in the order passed: the category
-// axis paints upward, so we hand it Projects last to put it on top.
-// Bars are clickable — each item carries `hash`, dispatched on click.
+// Horizontal bar via the shared kpiBarH helper — same renderer as
+// the Home + Monitoring chart strips, so Profile inherits theme
+// changes + future bar improvements without a separate code path.
+// Items carry { name, value, hash }; kpiBarH preserves the hash on
+// the series data, the click handler reads params.data.hash for the
+// navigation. opts:
+//   colorByData     — one palette colour per bar (per-data, not
+//                     per-series) so Dashboards / Charts / Files /
+//                     Projects each get a distinct hue.
+//   showValueLabels — count next to each bar (the headline number).
+//   cursor          — pointer; we wire .on("click") below for nav.
 function paintUsageChart(el, items) {
-  if (!window.echarts) {
-    el.textContent = "Chart unavailable.";
-    return;
-  }
-  const chart = window.echarts.init(el, chartTheme());
-  chart.setOption({
-    animationDuration: 700,
-    grid: { left: 90, right: 32, top: 8, bottom: 8, containLabel: false },
-    tooltip: {
-      trigger: "axis",
-      formatter: (params) => {
-        const p = params[0];
-        return `<b>${p.name}</b> · ${p.value}`;
-      },
-    },
-    xAxis: { type: "value", min: 0 },
-    yAxis: { type: "category", data: items.map((i) => i.name) },
-    series: [{
-      type: "bar",
-      // Cycle the theme palette per data point (not per series) so each
-      // bar gets its own colour — without this, ECharts hands the
-      // whole series palette[0] and every bar paints the same blue.
-      colorBy: "data",
-      barWidth: "60%",
-      data: items.map((i) => ({ value: i.value, hash: i.hash })),
-      label: { show: true, position: "right", formatter: "{c}", fontWeight: 600 },
-      cursor: "pointer",
-      emphasis: { itemStyle: { opacity: 0.85 } },
-    }],
+  const inst = kpiBarH(el, items, {
+    colorByData:     true,
+    showValueLabels: true,
+    cursor:          "pointer",
+    sort:            "label",   // keep the caller-passed order (bottom→top)
   });
-  chart.on("click", (params) => {
+  if (!inst) { el.textContent = "Chart unavailable."; return; }
+  inst.on("click", (params) => {
     const h = params.data?.hash;
     if (h) location.hash = h;
   });
-  chart.resize();
 }
 
 // Lock/unlock the personal-info card.

@@ -1,143 +1,59 @@
-// ECharts global themes — RedPash Mocha + Latte.
+// ECharts theme registration + resolver — shared across designer.js,
+// echarts-kpi.js, and any page that paints a chart.
 //
-// Palette mirrors designer.js:31-41 (Torv's hand-rolled chart themes);
-// chrome colours come from frontend/styles/tokens.css. Theme is the
-// runtime ECharts option shape (not the builder's editor schema), so
-// it plugs straight into echarts.registerTheme().
+// One source of truth for our two RedPash themes (Mocha + Latte):
+// the JSON files in /echarts-themes/redpash-{mocha,latte}.json.
+// ensureRegisteredThemes() fetches both once per page-load and calls
+// echarts.registerTheme. Returns a memoized promise; safe to await
+// from every chart-init path without duplicating fetches.
 //
-// Lazy: themes register on first call to chartTheme(); zero work when
-// the page never paints a chart.
+// chartTheme() resolves the right theme NAME for the current chrome
+// theme — Mocha when the page is dark, Latte when light. Pages that
+// want a different theme pass the name to echarts.init directly;
+// most consumers (Home / Monitoring / Profile) just use this default.
+//
+// The hand-rolled REDPASH_MOCHA / REDPASH_LATTE constants that used
+// to live here were retired when the JSON files landed — keeping two
+// copies of the same theme is the survival risk Em flagged when he
+// asked for the refactor. JSON files are the canonical source; this
+// module is the runtime wiring.
 
-const REGISTERED = { mocha: false, latte: false };
+const THEME_NAMES = ["redpash-mocha", "redpash-latte"];
+let registerP = null;
 
-// ── Mocha (dark) — palette: Torv's THEMES.mocha.series verbatim,
-//    padded to 8 with --rp-ok + a cool blue. Chrome from
-//    tokens.css [data-theme=dark].
-const REDPASH_MOCHA = {
-  color: [
-    "#89b4fa", "#cba6f7", "#94e2d5", "#fab387",
-    "#f38ba8", "#f9e2af", "#a6e3a1", "#74c7ec",
-  ],
-  backgroundColor: "transparent",
-  textStyle: {
-    color: "#cdd6f4",
-    fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  },
-  title:  { textStyle: { color: "#cdd6f4", fontWeight: 600 }, subtextStyle: { color: "#a6adc8" } },
-  legend: { textStyle: { color: "#a6adc8" }, icon: "roundRect", itemWidth: 14, itemHeight: 9 },
-  tooltip: {
-    backgroundColor: "#1e1e2e",
-    borderColor:     "#313244",
-    borderWidth:     1,
-    textStyle:       { color: "#cdd6f4" },
-    axisPointer: {
-      type: "shadow",
-      lineStyle:   { color: "#6c7086", width: 1 },
-      shadowStyle: { color: "rgba(137, 180, 250, 0.10)" },
-    },
-  },
-  categoryAxis: {
-    axisLine:  { show: false, lineStyle: { color: "#313244" } },
-    axisTick:  { show: false, lineStyle: { color: "#313244" } },
-    axisLabel: { color: "#cdd6f4", fontSize: 12 },
-    splitLine: { show: false, lineStyle: { color: ["#313244"] } },
-  },
-  valueAxis: {
-    axisLine:  { show: false, lineStyle: { color: "#313244" } },
-    axisTick:  { show: false, lineStyle: { color: "#313244" } },
-    axisLabel: { color: "#6c7086", fontSize: 10 },
-    splitLine: { show: true,  lineStyle: { color: ["#313244"], type: "dashed", opacity: 0.45 } },
-  },
-  logAxis:  { axisLine: { show: false, lineStyle: { color: "#313244" } }, axisTick: { show: false }, axisLabel: { color: "#6c7086", fontSize: 10 }, splitLine: { show: true, lineStyle: { color: ["#313244"], type: "dashed", opacity: 0.45 } } },
-  timeAxis: { axisLine: { show: false, lineStyle: { color: "#313244" } }, axisTick: { show: false }, axisLabel: { color: "#6c7086", fontSize: 10 }, splitLine: { show: true, lineStyle: { color: ["#313244"], type: "dashed", opacity: 0.45 } } },
-  line:    { lineStyle: { width: 2 }, symbolSize: 6, symbol: "circle", smooth: false },
-  bar:     { itemStyle: { borderRadius: [0, 4, 4, 0] } },
-  pie:     { itemStyle: { borderColor: "#181825", borderWidth: 1 } },
-  scatter: { itemStyle: { borderWidth: 0 } },
-  visualMap: { color: ["#f38ba8", "#fab387", "#f9e2af", "#a6e3a1", "#89b4fa"], textStyle: { color: "#a6adc8" } },
-  dataZoom: {
-    backgroundColor:     "rgba(0,0,0,0)",
-    dataBackgroundColor: "rgba(255,255,255,0.10)",
-    fillerColor:         "rgba(137, 180, 250, 0.18)",
-    handleColor:         "#89b4fa",
-    textStyle:           { color: "#6c7086" },
-  },
-};
+// Fetch + register both RedPash themes. Memoized — subsequent calls
+// return the in-flight or resolved promise without re-fetching. Fire-
+// and-forget from chart-init paths; the first chart on a cold load
+// may paint with ECharts' default theme for the few ms before the
+// JSON resolves (acceptable degradation; the SW caches the files
+// after the first visit so subsequent loads are instant).
+export function ensureRegisteredThemes() {
+  if (registerP) return registerP;
+  if (!window.echarts) return Promise.resolve();
+  registerP = Promise.all(THEME_NAMES.map(async (name) => {
+    try {
+      const r = await fetch("/echarts-themes/" + name + ".json");
+      if (!r.ok) return;
+      const json = await r.json();
+      window.echarts.registerTheme(name, json);
+    } catch {
+      /* silent — caller falls back to ECharts default theme */
+    }
+  }));
+  return registerP;
+}
 
-// ── Latte (light) — Torv's THEMES.latte.series + tokens.css
-//    [data-theme=light].
-const REDPASH_LATTE = {
-  color: [
-    "#1e66f5", "#8839ef", "#179299", "#fe640b",
-    "#d20f39", "#df8e1d", "#40a02b", "#04a5e5",
-  ],
-  backgroundColor: "transparent",
-  textStyle: {
-    color: "#4c4f69",
-    fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  },
-  title:  { textStyle: { color: "#4c4f69", fontWeight: 600 }, subtextStyle: { color: "#5c5f77" } },
-  legend: { textStyle: { color: "#5c5f77" }, icon: "roundRect", itemWidth: 14, itemHeight: 9 },
-  tooltip: {
-    backgroundColor: "#e6e9ef",
-    borderColor:     "#ccd0da",
-    borderWidth:     1,
-    textStyle:       { color: "#4c4f69" },
-    axisPointer: {
-      type: "shadow",
-      lineStyle:   { color: "#8c8fa1", width: 1 },
-      shadowStyle: { color: "rgba(30, 102, 245, 0.10)" },
-    },
-  },
-  categoryAxis: {
-    axisLine:  { show: false, lineStyle: { color: "#ccd0da" } },
-    axisTick:  { show: false, lineStyle: { color: "#ccd0da" } },
-    axisLabel: { color: "#4c4f69", fontSize: 12 },
-    splitLine: { show: false, lineStyle: { color: ["#ccd0da"] } },
-  },
-  valueAxis: {
-    axisLine:  { show: false, lineStyle: { color: "#ccd0da" } },
-    axisTick:  { show: false, lineStyle: { color: "#ccd0da" } },
-    axisLabel: { color: "#8c8fa1", fontSize: 10 },
-    splitLine: { show: true,  lineStyle: { color: ["#ccd0da"], type: "dashed", opacity: 0.55 } },
-  },
-  logAxis:  { axisLine: { show: false, lineStyle: { color: "#ccd0da" } }, axisTick: { show: false }, axisLabel: { color: "#8c8fa1", fontSize: 10 }, splitLine: { show: true, lineStyle: { color: ["#ccd0da"], type: "dashed", opacity: 0.55 } } },
-  timeAxis: { axisLine: { show: false, lineStyle: { color: "#ccd0da" } }, axisTick: { show: false }, axisLabel: { color: "#8c8fa1", fontSize: 10 }, splitLine: { show: true, lineStyle: { color: ["#ccd0da"], type: "dashed", opacity: 0.55 } } },
-  line:    { lineStyle: { width: 2 }, symbolSize: 6, symbol: "circle", smooth: false },
-  bar:     { itemStyle: { borderRadius: [0, 4, 4, 0] } },
-  pie:     { itemStyle: { borderColor: "#ffffff", borderWidth: 1 } },
-  scatter: { itemStyle: { borderWidth: 0 } },
-  visualMap: { color: ["#d20f39", "#fe640b", "#df8e1d", "#40a02b", "#1e66f5"], textStyle: { color: "#5c5f77" } },
-  dataZoom: {
-    backgroundColor:     "rgba(0,0,0,0)",
-    dataBackgroundColor: "rgba(0,0,0,0.10)",
-    fillerColor:         "rgba(30, 102, 245, 0.18)",
-    handleColor:         "#1e66f5",
-    textStyle:           { color: "#8c8fa1" },
-  },
-};
+// Returns "redpash-mocha" when the page chrome is dark (default),
+// "redpash-latte" when light. Reads html[data-theme] first
+// (set by tokens.css + the boot script in index.html), then falls
+// back to the OS-level prefers-color-scheme.
+export function chartTheme() {
+  return resolveDark() ? "redpash-mocha" : "redpash-latte";
+}
 
-// Reads <html data-theme>. Mirrors theme.js's currentTheme() return
-// shape (light/dark/system → resolved). "system" + light OS → latte;
-// any other path → mocha.
 function resolveDark() {
-  const t = document.documentElement.dataset.theme;
+  const t = document.documentElement?.dataset?.theme;
   if (t === "light") return false;
   if (t === "dark")  return true;
   return !window.matchMedia?.("(prefers-color-scheme: light)").matches;
-}
-
-/** Returns the registered theme name for the current page theme.
- *  Registers themes on first call so unused themes never pay. Pass
- *  the return value to echarts.init(el, name). */
-export function chartTheme() {
-  if (!window.echarts) return null;
-  const dark = resolveDark();
-  const key  = dark ? "redpash-mocha" : "redpash-latte";
-  const slot = dark ? "mocha" : "latte";
-  if (!REGISTERED[slot]) {
-    window.echarts.registerTheme(key, dark ? REDPASH_MOCHA : REDPASH_LATTE);
-    REGISTERED[slot] = true;
-  }
-  return key;
 }

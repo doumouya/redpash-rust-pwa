@@ -23,6 +23,7 @@
 //   - onSaved:    callback after a successful PUT /charts/:rid
 
 import { api } from "/scripts/api.js";
+import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 
 // ── chart themes (separate from chrome theme) ────────────────────────
 // Vintage is the ECharts builtin (warm/muted); Latte + Mocha mirror
@@ -79,28 +80,10 @@ const THEMES = {
     series: ["#757575","#c7c7c7","#dadada","#8b8b8b","#b5b5b5","#e9e9e9"] },
 };
 
-// One-time registration of Gus's themes. Loads the JSON files
-// from /echarts-themes/ and calls echarts.registerTheme — must run
-// before any chart that uses one is initialised. The promise is
-// awaited by mountDesigner so the first paint already has the theme
-// in place; subsequent mounts skip the fetch via the cache.
-let themesReadyP = null;
-function ensureRegisteredThemes() {
-  if (themesReadyP) return themesReadyP;
-  if (!window.echarts) return Promise.resolve();
-  const wanted = ["redpash-mocha", "redpash-latte"];
-  themesReadyP = Promise.all(wanted.map(async (name) => {
-    try {
-      const r = await fetch("/echarts-themes/" + name + ".json");
-      if (!r.ok) return;
-      const json = await r.json();
-      window.echarts.registerTheme(name, json);
-    } catch {
-      /* silent — theme falls through to vintage in buildOption */
-    }
-  }));
-  return themesReadyP;
-}
+// Theme registration moved to /scripts/echarts-theme.js so designer,
+// echarts-kpi, and any page that paints a chart share one path.
+// mountDesigner fires it once on first mount; the module memoizes
+// so subsequent calls don't re-fetch.
 
 // Chart kinds — grouped by family. Picking a type sets both the
 // type AND the kind it belongs to (cartesian/pie/barh/etc. each

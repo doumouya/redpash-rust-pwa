@@ -1,32 +1,36 @@
 // echarts-kpi.js — small chart wrappers for KPI cards across Home,
 // Monitoring, Profile. Each function takes a DOM element + the data
-// shape that surface naturally has + an opts bag, inits ECharts with
-// the requested theme (default: redpash-mocha — registered globally
-// from /echarts-themes/builtin/), and returns the instance so the
-// caller can dispose / resize later.
+// shape that surface naturally has + an opts bag, inits ECharts
+// against the chrome-matching RedPash theme (or whatever theme the
+// caller picks), and returns the instance so the caller can dispose
+// / resize / wire .on("click") later.
 //
 // Why a separate module: the Designer's buildOption() is rich and
 // chart-spec-bound. KPI cards want a thinner contract — pass in
 // {label: count} or [{ts, value}], get a chart back. This module is
-// that contract. Designer charts and KPI cards still share the
-// underlying ECharts instance + registered themes, just the option-
+// that contract. Designer charts and KPI cards share the same
+// registered themes via /scripts/echarts-theme.js, just the option-
 // building shortcut differs.
 //
-// Themes: default to "redpash-mocha" so cards inherit the brand
-// palette. Anyone wanting a different look passes `{ theme: "v5" }`
-// or similar. Theme names match the keys in designer.js THEMES
-// (vintage / latte / mocha / macarons / roma / shine / infographic /
-// dark / tech-blue / v5 / gray / redpash-mocha / redpash-latte).
+// Theme defaults to the chrome-matching RedPash theme (mocha when
+// the page is dark, latte when light) via chartTheme(). Override
+// per-chart by passing `{ theme: "v5" }` etc. — any name registered
+// in the global ECharts theme registry works.
 
-const DEFAULT_THEME = "redpash-mocha";
+import { ensureRegisteredThemes, chartTheme } from "/scripts/echarts-theme.js";
 
 // Initialize an ECharts instance against the requested theme. The
 // theme name is passed straight to echarts.init — registered themes
 // drive their own palette + axis treatment. Caller is responsible
 // for dispose() on teardown.
+//
+// Side effect: kicks off the one-time RedPash theme registration so
+// every chart in the app shares the same loader. Memoized — calling
+// from N initChart sites still only fetches the JSON files once.
 function initChart(el, theme) {
   if (!el || !window.echarts) return null;
-  return window.echarts.init(el, theme || DEFAULT_THEME);
+  ensureRegisteredThemes();
+  return window.echarts.init(el, theme || chartTheme());
 }
 
 // kpiDonut — categorical breakdown (e.g. by_plan, by_stage, by_role).
@@ -123,23 +127,50 @@ export function kpiBar(el, data, opts = {}) {
 
 // kpiBarH — horizontal bar; same data shape as kpiBar. Better when
 // labels are long (e.g. step kinds) or there are 6+ categories.
+// opts:
+//   theme, title, sort, top    — same as kpiBar.
+//   colorByData                — true: each bar gets a different
+//                                palette colour (ECharts colorBy:
+//                                "data"). Default: one colour for
+//                                the whole series.
+//   showValueLabels            — true: emit "{c}" next to each bar.
+//   cursor                     — e.g. "pointer" when the caller
+//                                wires .on("click", …) for nav.
+// Items can carry arbitrary extra fields (e.g. profile's `hash` for
+// click-to-navigate); kpiBarH preserves them in the series data so
+// the click handler can read params.data.hash.
 export function kpiBarH(el, data, opts = {}) {
   const inst = initChart(el, opts.theme);
   if (!inst) return null;
   let items = normalizeKV(data);
-  if (opts.sort !== "label") items.sort((a, b) => b.value - a.value);
+  // sort: "label" means "preserve caller's order, already arranged
+  // bottom-to-top for the display I want" (Profile passes Projects
+  // last because it wants Projects on top). Default behaviour:
+  // sort DESC by value + reverse so the largest paints at the top
+  // of the canvas (ECharts category axis paints bottom-up — the
+  // last element of yAxis.data is the topmost bar).
+  const presort = opts.sort === "label";
+  if (!presort) items.sort((a, b) => b.value - a.value);
   if (opts.top) items = items.slice(0, opts.top);
-  // Horizontal bars read top-to-bottom; reverse so the largest is
-  // at the top of the canvas (ECharts draws yAxis bottom-up).
-  items.reverse();
+  if (!presort) items.reverse();
   inst.setOption({
     title: opts.title ? { text: opts.title, left: "center", top: 6, textStyle: { fontSize: 12.5, fontWeight: 600 } } : undefined,
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid:   { left: 8, right: 24, top: opts.title ? 38 : 14, bottom: 18, containLabel: true },
-    xAxis:  { type: "value" },
+    xAxis:  { type: "value", min: 0 },
     yAxis:  { type: "category", data: items.map((i) => i.name) },
-    series: [{ type: "bar", data: items.map((i) => i.value), barWidth: "60%",
-               itemStyle: { borderRadius: [0, 4, 4, 0] } }],
+    series: [{
+      type: "bar",
+      // Pass full item objects (not just numbers) so extra fields
+      // like `hash` survive into the click event's params.data.
+      data: items.map((i) => ({ ...i })),
+      barWidth: "60%",
+      itemStyle: { borderRadius: [0, 4, 4, 0] },
+      ...(opts.colorByData      ? { colorBy: "data" } : {}),
+      ...(opts.showValueLabels  ? { label: { show: true, position: "right", formatter: "{c}", fontWeight: 600 } } : {}),
+      ...(opts.cursor           ? { cursor: opts.cursor } : {}),
+      emphasis: { itemStyle: { opacity: 0.85 } },
+    }],
   });
   return inst;
 }
