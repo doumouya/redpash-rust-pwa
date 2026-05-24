@@ -47,14 +47,18 @@ var OUT = path.join(__dirname, 'report.html');
 
 /* ── handler discovery + body extraction ─────────────────────────────────── */
 
-/* Strip comments + string literals so they don't false-match regex below.
-   Same shape as rs-audit's strip(). */
+/* Strip comments + string literals so they don't false-match regex
+   below. **Position-preserving** — replaces removed content with
+   spaces (preserving newlines) so byte offsets in stripped text
+   align 1:1 with the raw input. The annotation detector
+   (`hasAuthAck`) re-reads from raw using the offsets findHandlers
+   computed against stripped, so the two MUST stay in sync. */
 function strip(text) {
   return text
-    .replace(/\/\/[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/"(?:\\.|[^"\\])*"/g, '""')
-    .replace(/'(?:\\.|[^'\\])*'/g, "''");
+    .replace(/\/\/[^\n]*/g,         function (m) { return ' '.repeat(m.length); })
+    .replace(/\/\*[\s\S]*?\*\//g,   function (m) { return m.replace(/[^\n]/g, ' '); })
+    .replace(/"(?:\\.|[^"\\])*"/g,  function (m) { return '"' + ' '.repeat(m.length - 2) + '"'; })
+    .replace(/'(?:\\.|[^'\\])*'/g,  function (m) { return "'" + ' '.repeat(m.length - 2) + "'"; });
 }
 
 /* Find every `pub async fn <name>(<params>) -> <ret> { <body> }` and

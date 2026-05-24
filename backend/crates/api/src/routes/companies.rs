@@ -161,6 +161,8 @@ async fn patch(
     Path(rid):    Path<String>,
     Json(body):   Json<PatchCompanyBody>,
 ) -> Result<Json<Company>, AppError> {
+    // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
+    // (siblings delete_one + patch share the dev-stage policy)
     let _user = super::resolve_user_rid(&state, &headers).await?;
     let res = db::update_company(
         &state.db, &rid,
@@ -187,6 +189,7 @@ async fn delete_one(
     // Tighten back to owner-only (require_member + role check) before
     // multi-tenant prod — left open while the app is in active dev so
     // the Objects-page Companies tab can freely manipulate seed data.
+    // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
     let _user = super::resolve_user_rid(&state, &headers).await?;
     if !db::delete_company(&state.db, &rid).await.map_err(db_err)? {
         return Err(AppError::not_found("not_found", format!("company {rid}")));

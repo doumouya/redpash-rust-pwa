@@ -899,6 +899,8 @@ async fn patch_optimization_point(
     Path(rid):    Path<String>,
     Json(body):   Json<PatchOptPointBody>,
 ) -> Result<Json<OptimizationPoint>, AppError> {
+    // AUTH-AUDIT-ACK: optimization_points is global admin state per
+    // optimization-map.md §7; gate behind company-admin role at RBAC.
     let new_status = body.status.trim();
     if !OPT_STATUSES.contains(&new_status) {
         return Err(AppError::bad_request("invalid",
