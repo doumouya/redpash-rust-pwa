@@ -2027,49 +2027,69 @@ pub async fn list_events_for_user(
 
 #[derive(FromRow)]
 struct CaseRow {
-    redpash_id:  String,
-    r#type:      String,
-    title:       String,
-    description: Option<String>,
-    status:      String,
-    priority:    String,
-    reporter_id: Option<String>,
-    assignee_id: Option<String>,
-    project_id:  Option<String>,
-    company_id:  Option<String>,
-    created_at:  DateTime<Utc>,
-    updated_at:  DateTime<Utc>,
+    redpash_id:             String,
+    r#type:                 String,
+    title:                  String,
+    description:            Option<String>,
+    status:                 String,
+    priority:               String,
+    reporter_id:            Option<String>,
+    assignee_id:            Option<String>,
+    project_id:             Option<String>,
+    company_id:             Option<String>,
+    reporter_display_name:  Option<String>,
+    assignee_display_name:  Option<String>,
+    created_at:             DateTime<Utc>,
+    updated_at:             DateTime<Utc>,
 }
 impl From<CaseRow> for Case {
     fn from(r: CaseRow) -> Self {
         Self {
-            redpash_id:  r.redpash_id,
-            r#type:      r.r#type,
-            title:       r.title,
-            description: r.description,
-            status:      r.status,
-            priority:    r.priority,
-            reporter_id: r.reporter_id,
-            assignee_id: r.assignee_id,
-            project_id:  r.project_id,
-            company_id:  r.company_id,
-            created_at:  r.created_at,
-            updated_at:  r.updated_at,
+            redpash_id:             r.redpash_id,
+            r#type:                 r.r#type,
+            title:                  r.title,
+            description:            r.description,
+            status:                 r.status,
+            priority:               r.priority,
+            reporter_id:            r.reporter_id,
+            assignee_id:            r.assignee_id,
+            project_id:             r.project_id,
+            company_id:             r.company_id,
+            reporter_display_name:  r.reporter_display_name,
+            assignee_display_name:  r.assignee_display_name,
+            created_at:             r.created_at,
+            updated_at:             r.updated_at,
         }
     }
 }
 
-const CASE_COLS: &str =
-    "redpash_id, type, title, description, status, priority,
-     reporter_id, assignee_id, project_id, company_id,
-     created_at, updated_at";
+/// SELECT list for queries that hydrate user display names via LEFT
+/// JOIN. Aliased prefix `c` for the cases row + `r`/`a` for reporter
+/// and assignee user joins. Display names are nullable — null when
+/// the user no longer exists (FK ON DELETE SET NULL on reporter_id /
+/// assignee_id; the case outlives the deletion + the join becomes
+/// NULL).
+const CASE_SELECT: &str =
+    "c.redpash_id, c.type, c.title, c.description, c.status, c.priority,
+     c.reporter_id, c.assignee_id, c.project_id, c.company_id,
+     r.display_name AS reporter_display_name,
+     a.display_name AS assignee_display_name,
+     c.created_at, c.updated_at";
+
+/// LEFT JOINs for reporter + assignee user lookups. Append after a
+/// `FROM cases c` clause; partners with CASE_SELECT.
+const CASE_USER_JOINS: &str =
+    "LEFT JOIN users r ON r.redpash_id = c.reporter_id
+     LEFT JOIN users a ON a.redpash_id = c.assignee_id";
 
 // PROJECT-FILES-ACK: type=any — cases doesn't touch project_files.
 // (The ack rule is for project_files queries; included here as a
 // signal to future contributors that this scan is intentional.)
 
 /// List cases with optional filters. Each `Option` bind skips its
-/// filter when None (the `$n::text IS NULL OR …` idiom).
+/// filter when None (the `$n::text IS NULL OR …` idiom). LEFT JOINs
+/// users so reporter_display_name + assignee_display_name come back
+/// hydrated — saves the FE a per-row N+1 user-lookup.
 pub async fn list_cases(
     pool:        &PgPool,
     status:      Option<&str>,
@@ -2080,13 +2100,13 @@ pub async fn list_cases(
     offset:      i64,
 ) -> sqlx::Result<Vec<Case>> {
     let rows: Vec<CaseRow> = sqlx::query_as(&format!(
-        "SELECT {CASE_COLS} FROM cases
-         WHERE ($1::text IS NULL OR status      = $1)
-           AND ($2::text IS NULL OR assignee_id = $2)
-           AND ($3::text IS NULL OR project_id  = $3)
-           AND ($4::text IS NULL OR title ILIKE '%' || $4 || '%'
-                                OR  COALESCE(description, '') ILIKE '%' || $4 || '%')
-         ORDER BY updated_at DESC
+        "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
+         WHERE ($1::text IS NULL OR c.status      = $1)
+           AND ($2::text IS NULL OR c.assignee_id = $2)
+           AND ($3::text IS NULL OR c.project_id  = $3)
+           AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
+                                OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
+         ORDER BY c.updated_at DESC
          LIMIT $5 OFFSET $6"
     ))
     .bind(status)
@@ -2108,12 +2128,12 @@ pub async fn count_cases(
     q:           Option<&str>,
 ) -> sqlx::Result<i64> {
     let (n,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::BIGINT FROM cases
-         WHERE ($1::text IS NULL OR status      = $1)
-           AND ($2::text IS NULL OR assignee_id = $2)
-           AND ($3::text IS NULL OR project_id  = $3)
-           AND ($4::text IS NULL OR title ILIKE '%' || $4 || '%'
-                                OR  COALESCE(description, '') ILIKE '%' || $4 || '%')",
+        "SELECT COUNT(*)::BIGINT FROM cases c
+         WHERE ($1::text IS NULL OR c.status      = $1)
+           AND ($2::text IS NULL OR c.assignee_id = $2)
+           AND ($3::text IS NULL OR c.project_id  = $3)
+           AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
+                                OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')",
     )
     .bind(status)
     .bind(assignee_id)
@@ -2126,7 +2146,8 @@ pub async fn count_cases(
 
 pub async fn find_case(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Case>> {
     let row: Option<CaseRow> = sqlx::query_as(&format!(
-        "SELECT {CASE_COLS} FROM cases WHERE redpash_id = $1"
+        "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
+         WHERE c.redpash_id = $1"
     ))
     .bind(rid)
     .fetch_optional(pool)
@@ -2134,6 +2155,9 @@ pub async fn find_case(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Case>> {
     Ok(row.map(Into::into))
 }
 
+/// INSERT … RETURNING via a CTE so we can chain a LEFT JOIN against
+/// `users` and produce the hydrated Case shape in one round-trip.
+/// Same pattern as update_case below.
 pub async fn insert_case(
     pool:        &PgPool,
     rid:         &str,
@@ -2148,11 +2172,14 @@ pub async fn insert_case(
     company_id:  Option<&str>,
 ) -> sqlx::Result<Case> {
     let row: CaseRow = sqlx::query_as(&format!(
-        "INSERT INTO cases
-            (redpash_id, type, title, description, status, priority,
-             reporter_id, assignee_id, project_id, company_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING {CASE_COLS}"
+        "WITH c AS (
+             INSERT INTO cases
+                 (redpash_id, type, title, description, status, priority,
+                  reporter_id, assignee_id, project_id, company_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             RETURNING *
+         )
+         SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
     ))
     .bind(rid)
     .bind(type_)
@@ -2189,18 +2216,21 @@ pub async fn update_case(
     // Option<&str> with None=skip / Some(value)=set; clearing isn't
     // wired in v1 (defer until the UI needs an unassign button).
     let row: Option<CaseRow> = sqlx::query_as(&format!(
-        "UPDATE cases SET
-             title       = COALESCE($2,  title),
-             description = COALESCE($3,  description),
-             type        = COALESCE($4,  type),
-             status      = COALESCE($5,  status),
-             priority    = COALESCE($6,  priority),
-             assignee_id = COALESCE($7,  assignee_id),
-             project_id  = COALESCE($8,  project_id),
-             company_id  = COALESCE($9,  company_id),
-             updated_at  = now()
-         WHERE redpash_id = $1
-         RETURNING {CASE_COLS}"
+        "WITH c AS (
+             UPDATE cases SET
+                 title       = COALESCE($2,  title),
+                 description = COALESCE($3,  description),
+                 type        = COALESCE($4,  type),
+                 status      = COALESCE($5,  status),
+                 priority    = COALESCE($6,  priority),
+                 assignee_id = COALESCE($7,  assignee_id),
+                 project_id  = COALESCE($8,  project_id),
+                 company_id  = COALESCE($9,  company_id),
+                 updated_at  = now()
+             WHERE redpash_id = $1
+             RETURNING *
+         )
+         SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
     ))
     .bind(rid)
     .bind(title)

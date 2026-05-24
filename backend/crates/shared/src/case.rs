@@ -31,6 +31,13 @@ pub struct Case {
     #[serde(default)] pub assignee_id: Option<String>,
     #[serde(default)] pub project_id:  Option<String>,
     #[serde(default)] pub company_id:  Option<String>,
+    /// Hydrated server-side via LEFT JOIN users. The FE card +
+    /// detail page render `display_name || rid || "—"` so the user
+    /// sees a readable name instead of `USR_abc123…`. Null when the
+    /// user no longer exists (FK is ON DELETE SET NULL — the case
+    /// outlives the deletion).
+    #[serde(default)] pub reporter_display_name: Option<String>,
+    #[serde(default)] pub assignee_display_name: Option<String>,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }
