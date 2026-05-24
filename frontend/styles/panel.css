@@ -840,10 +840,136 @@
 }
 .rt-report-agg select:focus,
 .rt-report-agg input:focus { border-color: var(--rp-accent-2); }
-.rt-report-add-agg {
+.rt-report-add-agg,
+.rt-report-add-window {
   width: 100%;
   justify-content: center;
 }
+
+/* Windows (C2) — derived columns on the subtotals frame. Each row
+   has alias / fn / col / [%] / delete on the first line; value-fn
+   kinds get a second line with order_by + offset; the third line
+   carries the partition-by chip toggles. */
+.rt-report-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+.rt-report-window {
+  padding: 8px;
+  border: 1px solid var(--rp-border);
+  border-radius: 8px;
+  background: var(--rp-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rt-report-window-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto auto;
+  gap: 5px;
+  align-items: center;
+}
+.rt-report-window-row input[type="text"],
+.rt-report-window-row select {
+  height: 28px;
+  padding: 0 7px;
+  min-width: 0;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+.rt-report-window-row input:focus,
+.rt-report-window-row select:focus { border-color: var(--rp-accent-2); }
+.rt-report-window-pct {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+}
+.rt-report-window-pct input { margin: 0; }
+.rt-report-window-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.rt-report-window-value select {
+  flex: 1;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+}
+.rt-report-window-value input[type="number"] {
+  width: 56px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+}
+.rt-report-window-parts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.rt-report-part-chip {
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--rp-border);
+  border-radius: 99px;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rt-report-part-chip:hover { border-color: var(--rp-accent-2); color: var(--rp-text); }
+.rt-report-part-chip.is-on {
+  background: var(--rp-accent-soft);
+  border-color: var(--rp-accent-2);
+  color: var(--rp-accent-2);
+  font-weight: 600;
+}
+.rt-report-muted {
+  color: var(--rp-text-mute);
+  font-size: 11px;
+}
+
+/* Show toggles (C2) — show_details / show_subtotals / show_total. */
+.rt-report-show-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 4px;
+}
+.rt-report-show-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--rp-text);
+  cursor: pointer;
+}
+.rt-report-show-toggle input { margin: 0; }
 
 /* sample preview table — capped rows + grand-total row */
 .rt-report-preview {

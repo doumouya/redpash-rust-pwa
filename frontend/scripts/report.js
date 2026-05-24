@@ -37,14 +37,45 @@ const AGG_FNS = [
   ["q3",             "Q3 (75%)"],
 ];
 
+// Window functions — split into aggregate kinds (operate on a column
+// within a partition; can express "% of partition" via as_percent) and
+// value kinds (positional: lag/lead/first/last; need order_by). Both
+// shapes come from shared::report::WindowSpec.
+const WINDOW_FN_GROUPS = [
+  ["Aggregate", [["sum","Sum"], ["mean","Mean"], ["count","Count"],
+                 ["min","Min"], ["max","Max"]]],
+  ["Value",     [["lag","Lag"], ["lead","Lead"],
+                 ["first_value","First value"], ["last_value","Last value"]]],
+];
+const WINDOW_VALUE_FNS = new Set(["lag","lead","first_value","last_value"]);
+const WINDOW_OFFSET_FNS = new Set(["lag","lead"]);
+
+// Live preview debounce — every spec mutation calls previewSoon(),
+// which collapses bursts into one /group/preview round-trip. 300ms is
+// the historic Phase-3 default; fast enough to feel live, slow enough
+// that typing an alias doesn't fire per-keystroke.
+const PREVIEW_DEBOUNCE_MS = 300;
+
 export function mountReport(panelBody, ctx) {
   // ── spec state ────────────────────────────────────────────────────
-  // groupBy: ordered list of column names — the leftmost columns of
-  // the subtotals table.
-  // aggregations: ordered list of { col, fn, alias }. col is "" for
-  // count(*); fn is one of AGG_FNS; alias is optional display label.
+  // groupBy:      ordered group-by column names (subtotals rows).
+  // aggregations: [{col, fn, alias}] — col is "*" for count(*).
+  // windows:      [{alias, fn, col, partition_by[], as_percent,
+  //                 order_by, offset}] — derived cols on subtotals.
+  // show*:        which sections the engine should materialise.
   let groupBy      = [];
   let aggregations = [];
+  let windows      = [];
+  let showDetails   = false;
+  let showSubtotals = true;
+  let showTotal     = true;
+
+  // ── live preview ──────────────────────────────────────────────────
+  // previewSoon() debounces; runPreview() POSTs and updates the
+  // inline sample table. Both used by every spec-mutating action so
+  // the UX feels live without an explicit Apply.
+  let previewTimer = null;
+  let lastPage     = null;     // last successful GroupPage, for refresh-without-refetch
 
   // ── containers ────────────────────────────────────────────────────
   const statusEl = document.createElement("div");
@@ -68,7 +99,23 @@ export function mountReport(panelBody, ctx) {
     }
     builderEl.innerHTML =
         renderGroupBySection(cols)
-      + renderAggregationsSection(cols);
+      + renderAggregationsSection(cols)
+      + renderWindowsSection()
+      + renderShowSection();
+  }
+
+  // Subtotals columns = group_by + agg aliases. Computed client-side
+  // (same alias rule as the backend's default_alias) so the window
+  // col / order_by pickers stay in sync without an extra round-trip.
+  function subtotalsColumnNames() {
+    const out = [...groupBy];
+    aggregations.forEach((a) => out.push(aggAlias(a)));
+    return out;
+  }
+  function aggAlias(a) {
+    if (a.alias && a.alias.trim()) return a.alias.trim();
+    const fn = a.fn || "count";
+    return a.col === "*" ? fn : (a.col + "_" + fn);
   }
 
   // Group-by — the row-grouping columns. Each group becomes one row in
@@ -139,6 +186,104 @@ export function mountReport(panelBody, ctx) {
       +    '</section>';
   }
 
+  // Windows — derived columns added to the subtotals frame. Each
+  // window compiles to a Polars `over()` expression. UI shape mirrors
+  // shared::report::WindowSpec; conditional fields render only for
+  // their fn family (as_percent on aggregate; order_by/offset on
+  // value). Partition-by chips toggle from the group_by set.
+  function renderWindowsSection() {
+    const subCols = subtotalsColumnNames();
+    const fnOpts = (sel) => WINDOW_FN_GROUPS.map(([label, fns]) =>
+      '<optgroup label="' + esc(label) + '">'
+      + fns.map(([v, l]) =>
+          '<option value="' + esc(v) + '"'
+          + (v === sel ? ' selected' : '') + '>' + esc(l) + '</option>').join('')
+      + '</optgroup>').join('');
+    const colOpts = (sel) => subCols.length
+      ? subCols.map((c) =>
+          '<option value="' + esc(c) + '"'
+          + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
+      : '<option value="">(no columns yet — pick a group-by or agg)</option>';
+    const rows = windows.map((w, i) => {
+      const fn      = w.fn || "sum";
+      const isVal   = WINDOW_VALUE_FNS.has(fn);
+      const needOff = WINDOW_OFFSET_FNS.has(fn);
+      const partSet = new Set(w.partition_by || []);
+      const partChips = groupBy.length
+        ? groupBy.map((g) =>
+            '<button type="button" class="rt-report-part-chip'
+            + (partSet.has(g) ? ' is-on' : '')
+            + '" data-window-part="' + esc(g) + '" data-i="' + i + '">'
+            + esc(g) + '</button>').join('')
+        : '<span class="rt-report-muted">(none — global window)</span>';
+      return '<div class="rt-report-window" data-i="' + i + '">'
+        + '<div class="rt-report-window-row">'
+        +   '<input class="rt-pred-val" data-wkey="alias" type="text"'
+        +     ' placeholder="alias" value="' + esc(w.alias || "") + '" />'
+        +   '<select class="rt-pred-op" data-wkey="fn">' + fnOpts(fn) + '</select>'
+        +   '<select class="rt-pred-col" data-wkey="col">' + colOpts(w.col || "") + '</select>'
+        +   (isVal
+              ? ''
+              : '<label class="rt-report-window-pct" title="Divide by partition total ×100">'
+                + '<input type="checkbox" data-wkey="as_percent"'
+                + (w.as_percent ? ' checked' : '') + ' /> %</label>')
+        +   '<button class="rt-pred-del" type="button" data-window-del="' + i + '"'
+        +     ' title="Remove window"><i class="bi bi-x-lg"></i></button>'
+        + '</div>'
+        + (isVal
+            ? '<div class="rt-report-window-value">'
+              + '<span class="rt-report-muted">order by</span>'
+              + '<select class="rt-pred-col" data-wkey="order_by">'
+              +   '<option value="">— pick —</option>'
+              +   subCols.map((c) =>
+                    '<option value="' + esc(c) + '"'
+                    + (c === w.order_by ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
+              + '</select>'
+              + (needOff
+                  ? '<span class="rt-report-muted">offset</span>'
+                    + '<input type="number" min="1" step="1" data-wkey="offset"'
+                    + ' value="' + Number(w.offset || 1) + '" />'
+                  : '')
+              + '</div>'
+            : '')
+        + '<div class="rt-report-window-parts">'
+        +   '<span class="rt-report-muted">partition by:</span> ' + partChips
+        + '</div>'
+        + '</div>';
+    }).join('');
+    return '<section class="rt-report-sect">'
+      +    '<span class="rt-field-lbl">Windows</span>'
+      +    (windows.length
+            ? '<div class="rt-report-windows">' + rows + '</div>'
+            : '<p class="rt-report-empty">No windows — useful for "% of partition" or running totals.</p>')
+      +    '<button class="rt-btn rt-btn--glass rt-report-add-window" type="button">'
+      +      '<i class="bi bi-plus-lg"></i> Add window'
+      +    '</button>'
+      +    '</section>';
+  }
+
+  // Show toggles — which sections the engine materialises. Hidden
+  // sections still compute on the backend (always-materialise rule
+  // for dashboards), but the preview omits them.
+  function renderShowSection() {
+    const toggle = (key, on, label, title) =>
+      '<label class="rt-report-show-toggle" title="' + esc(title) + '">'
+      + '<input type="checkbox" data-show-key="' + key + '"'
+      + (on ? ' checked' : '') + ' /> ' + esc(label)
+      + '</label>';
+    return '<section class="rt-report-sect rt-report-show">'
+      +    '<span class="rt-field-lbl">Show</span>'
+      +    '<div class="rt-report-show-row">'
+      +      toggle("show_subtotals", showSubtotals, "Subtotals",
+                    "One row per group with the aggregations")
+      +      toggle("show_total",     showTotal,     "Grand total",
+                    "Single row aggregating all groups")
+      +      toggle("show_details",   showDetails,   "Details",
+                    "Source rows (capped at 1000 server-side)")
+      +    '</div>'
+      +    '</section>';
+  }
+
   // Sample preview — render the subtotals + grand total inline. Cap
   // rows so a many-group preview doesn't dominate the panel; the user
   // gets a "showing N of M" footer when truncated. Details + matrix
@@ -193,6 +338,8 @@ export function mountReport(panelBody, ctx) {
   }
 
   // ── click delegation ──────────────────────────────────────────────
+  // Every spec-mutating handler calls previewSoon() at the end so
+  // the inline sample table re-renders without an explicit Apply.
   builderEl.addEventListener("click", (e) => {
     // "Add column" dropdown toggle. The builder is rendered after the
     // mount-time $$("[data-dd]") sweep in workspace.js, so we handle
@@ -216,6 +363,7 @@ export function mountReport(panelBody, ctx) {
       if (name && !groupBy.includes(name)) {
         groupBy.push(name);
         renderBuilder();
+        previewSoon();
       }
       addBtn.closest(".rt-dd")?.classList.remove("open");
       return;
@@ -223,39 +371,115 @@ export function mountReport(panelBody, ctx) {
     const delBtn = e.target.closest("[data-group-del]");
     if (delBtn) {
       groupBy = groupBy.filter((n) => n !== delBtn.dataset.groupDel);
-      renderBuilder();
+      renderBuilder(); previewSoon();
       return;
     }
     const aggDelBtn = e.target.closest("[data-agg-del]");
     if (aggDelBtn) {
-      const i = +aggDelBtn.dataset.aggDel;
-      aggregations.splice(i, 1);
-      renderBuilder();
+      aggregations.splice(+aggDelBtn.dataset.aggDel, 1);
+      renderBuilder(); previewSoon();
       return;
     }
     if (e.target.closest(".rt-report-add-agg")) {
-      // New rows default to count(*) — the safe shortcut that works
-      // without picking a column. Engine treats col === "*" as a
-      // count-of-rows literal (group_by.rs:218).
       aggregations.push({ col: "*", fn: "count", alias: "" });
-      renderBuilder();
+      renderBuilder(); previewSoon();
+      return;
+    }
+    // ── windows ────────────────────────────────────────────────────
+    if (e.target.closest(".rt-report-add-window")) {
+      windows.push({
+        alias:        "win" + (windows.length + 1),
+        fn:           "sum",
+        col:          subtotalsColumnNames()[0] || "",
+        partition_by: [],
+        as_percent:   false,
+        order_by:     null,
+        offset:       1,
+      });
+      renderBuilder(); previewSoon();
+      return;
+    }
+    const winDelBtn = e.target.closest("[data-window-del]");
+    if (winDelBtn) {
+      windows.splice(+winDelBtn.dataset.windowDel, 1);
+      renderBuilder(); previewSoon();
+      return;
+    }
+    const partBtn = e.target.closest("[data-window-part]");
+    if (partBtn) {
+      const i = +partBtn.dataset.i;
+      const name = partBtn.dataset.windowPart;
+      const w = windows[i];
+      if (!w) return;
+      const set = new Set(w.partition_by || []);
+      if (set.has(name)) set.delete(name); else set.add(name);
+      // Preserve group_by order so the param is deterministic.
+      w.partition_by = groupBy.filter((g) => set.has(g));
+      renderBuilder(); previewSoon();
+      return;
     }
   });
 
-  // Field changes propagate to the spec live so the user doesn't have
-  // to remember to commit before Apply.
+  // Field changes propagate to the spec live; the live-preview fires
+  // on every commit (change events; input events for free-text only).
   builderEl.addEventListener("change", (e) => {
-    const row = e.target.closest(".rt-report-agg");
-    if (!row) return;
-    const i = +row.dataset.i;
-    if (!aggregations[i]) return;
-    const key = e.target.dataset.key;
-    if (key === "col" || key === "fn") aggregations[i][key] = e.target.value;
+    const aggRow = e.target.closest(".rt-report-agg");
+    if (aggRow) {
+      const i = +aggRow.dataset.i;
+      if (!aggregations[i]) return;
+      const key = e.target.dataset.key;
+      if (key === "col" || key === "fn") {
+        aggregations[i][key] = e.target.value;
+        // fn change can move the col vs col change is harmless — both
+        // trigger a re-render so subtotal-cols / window-cols pickers
+        // pick up the new alias options.
+        renderBuilder();
+        previewSoon();
+      }
+      return;
+    }
+    const winRow = e.target.closest(".rt-report-window");
+    if (winRow) {
+      const i = +winRow.dataset.i;
+      const w = windows[i];
+      if (!w) return;
+      const key = e.target.dataset.wkey;
+      if (!key) return;
+      if (key === "as_percent") w.as_percent = e.target.checked;
+      else if (key === "offset") w.offset = Math.max(1, Number(e.target.value) || 1);
+      else if (key === "fn") {
+        w.fn = e.target.value;
+        // Value fns require order_by; aggregate fns own as_percent.
+        // Reset the now-irrelevant slot so the spec stays clean.
+        if (WINDOW_VALUE_FNS.has(w.fn)) w.as_percent = false;
+        else                            w.order_by   = null;
+        renderBuilder();
+      }
+      else if (key === "col" || key === "order_by") w[key] = e.target.value;
+      previewSoon();
+      return;
+    }
+    // Show toggles — show_details / show_subtotals / show_total.
+    const showCb = e.target.closest("[data-show-key]");
+    if (showCb) {
+      if (showCb.dataset.showKey === "show_details")   showDetails   = showCb.checked;
+      if (showCb.dataset.showKey === "show_subtotals") showSubtotals = showCb.checked;
+      if (showCb.dataset.showKey === "show_total")     showTotal     = showCb.checked;
+      previewSoon();
+    }
   });
   builderEl.addEventListener("input", (e) => {
-    const row = e.target.closest(".rt-report-agg");
-    if (!row || e.target.dataset.key !== "alias") return;
-    aggregations[+row.dataset.i].alias = e.target.value;
+    const aggRow = e.target.closest(".rt-report-agg");
+    if (aggRow && e.target.dataset.key === "alias") {
+      aggregations[+aggRow.dataset.i].alias = e.target.value;
+      previewSoon();
+      return;
+    }
+    const winRow = e.target.closest(".rt-report-window");
+    if (winRow && e.target.dataset.wkey === "alias") {
+      windows[+winRow.dataset.i].alias = e.target.value;
+      previewSoon();
+    }
   });
 
   // ── spec build + apply ────────────────────────────────────────────
@@ -280,28 +504,55 @@ export function mountReport(panelBody, ctx) {
     if (groupBy.length && !aggs.length) {
       aggs.push({ col: groupBy[0], fn: "count", alias: "count" });
     }
+    // Windows: drop empty-alias slots and the irrelevant slot for
+    // each fn family so the backend sees a clean shape.
+    const wins = windows.map((w) => {
+      const isVal = WINDOW_VALUE_FNS.has(w.fn);
+      const out = {
+        alias:        w.alias || ("win" + Math.random().toString(36).slice(2, 6)),
+        fn:           w.fn,
+        col:          w.col,
+        partition_by: w.partition_by || [],
+      };
+      if (isVal) {
+        out.order_by = w.order_by || null;
+        if (WINDOW_OFFSET_FNS.has(w.fn)) out.offset = Math.max(1, Number(w.offset) || 1);
+      } else {
+        out.as_percent = !!w.as_percent;
+      }
+      return out;
+    });
     return {
       group_by:       [...groupBy],
       group_by_cols:  [],
       aggregations:   aggs,
       filter:         null,
-      show_details:   false,
-      show_subtotals: true,
-      show_total:     true,
+      show_details:   showDetails,
+      show_subtotals: showSubtotals,
+      show_total:     showTotal,
       sort:           [],
       charts:         [],
       top_n:          null,
-      windows:        [],
+      windows:        wins,
     };
   }
 
-  async function apply(busyBtn) {
+  // Debounced preview — collapses bursts of spec edits into one
+  // /group/preview round-trip. Skipped when there's no file open
+  // (no surface to preview against).
+  function previewSoon() {
+    if (!ctx.fileRid()) return;
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS);
+  }
+  async function runPreview(busyBtn) {
     const rid = ctx.fileRid();
     if (!rid) { ctx.setStatus?.("Open a file before running a report.", "warn"); return; }
     if (busyBtn) { busyBtn.disabled = true; busyBtn.classList.add("is-busy"); }
     try {
       const page = await api.post("/group/preview",
                                   { source_file_id: rid, spec: buildSpec() });
+      lastPage = page;
       renderPreview(page);
       ctx.onPreview?.(page);
     } catch (err) {
@@ -311,17 +562,33 @@ export function mountReport(panelBody, ctx) {
       if (busyBtn) { busyBtn.disabled = false; busyBtn.classList.remove("is-busy"); }
     }
   }
+  // Apply button preserved as a "refresh now" affordance — bypasses
+  // the debounce so the user can force a re-run after fixing an
+  // error or when they want to commit a half-typed alias.
+  const apply = runPreview;
 
   function clear() {
     groupBy = [];
     aggregations = [];
+    windows = [];
+    showDetails = false;
+    showSubtotals = true;
+    showTotal = true;
+    lastPage = null;
+    if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
     renderBuilder();
     renderPreview(null);
   }
 
   renderBuilder();
   return {
-    refresh()  { renderBuilder(); },
+    refresh()  {
+      renderBuilder();
+      // Auto-preview on file switch / tab open so the inline sample
+      // table reflects the current spec against the (possibly new)
+      // file's data without an explicit Apply.
+      previewSoon();
+    },
     apply,
     clear,
     getSpec()  { return buildSpec(); },
