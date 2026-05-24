@@ -387,14 +387,14 @@ export function mountTools(panelBody, ctx) {
   panelBody.append(statusEl, colsEl);
 
   // ── list view ──────────────────────────────────────────────────────
+  // Picker rows show name + icon only — the per-tool blurb lives on the
+  // form (rt-tool-form-blurb), no need to repeat it here. Keeps the
+  // 15-tool catalog scrollable in a single screen.
   function renderList() {
     listEl.innerHTML = TOOLS.map((t, i) =>
-      '<button class="rt-tool-item" type="button" data-i="' + i + '">'
+      '<button class="rt-tool-item" type="button" data-i="' + i + '" title="' + esc(t.blurb || t.label) + '">'
       +   '<i class="bi ' + esc(t.icon) + '"></i>'
-      +   '<span class="rt-tool-item-body">'
-      +     '<span class="rt-tool-item-name">' + esc(t.label) + '</span>'
-      +     '<span class="rt-tool-item-blurb">' + esc(t.blurb) + '</span>'
-      +   '</span>'
+      +   '<span class="rt-tool-item-name">' + esc(t.label) + '</span>'
       + '</button>').join("");
   }
   listEl.addEventListener("click", (e) => {

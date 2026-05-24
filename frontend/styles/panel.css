@@ -315,15 +315,17 @@
   overflow-y: auto;
 }
 
-/* the picker — vertical list of tool cards */
-.rt-tool-list { display: flex; flex-direction: column; gap: 5px; }
+/* the picker — vertical list of tool cards. Single-line rows since
+   the per-tool blurb moved to the form (rt-tool-form-blurb); keeps
+   all 15 tools visible without scrolling on a typical viewport. */
+.rt-tool-list { display: flex; flex-direction: column; gap: 4px; }
 .rt-tool-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 9px;
-  padding: 9px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--rp-border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--rp-surface);
   color: var(--rp-text);
   text-align: left;
@@ -395,18 +397,16 @@
   text-align: center;
 }
 
-.rt-tool-item > i { font-size: 16px; color: var(--rp-accent-2); padding-top: 1px; }
-.rt-tool-item-body { display: flex; flex-direction: column; min-width: 0; }
+.rt-tool-item > i { font-size: 15px; color: var(--rp-accent-2); flex-shrink: 0; }
 .rt-tool-item-name {
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--rp-text);
-}
-.rt-tool-item-blurb {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--rp-text-mute);
-  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* the per-tool form */
