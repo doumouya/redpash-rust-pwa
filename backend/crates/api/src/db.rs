@@ -846,8 +846,16 @@ pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec
     Ok(rows.into_iter().map(|r| FileFull::from(r).summary).collect())
 }
 
-/// (rid, display_name or filename) for every file in `project_rid`
-/// except `exclude_rid`. Powers the joins detector.
+/// (rid, display_name or filename) for every **CSV** file in
+/// `project_rid` except `exclude_rid`. Powers the joins detector.
+///
+/// CSV-only by design — chart / dashboard / future spec-only file
+/// types (notebook, saved query) share `project_files` but carry
+/// `storage_path = ''` and live in the `spec` JSON column. Hydrating
+/// any of them would 400 with `not_a_data_file` (Gus's guard at
+/// hydrate, commit 220296a). The positive form `= 'csv'` is
+/// future-proof — new spec-only types inherit the exclusion without
+/// needing to update this query.
 pub async fn list_files_in_project_except(
     pool:         &PgPool,
     project_rid:  &str,
@@ -857,7 +865,7 @@ pub async fn list_files_in_project_except(
         "SELECT redpash_id, COALESCE(display_name, filename) AS title
          FROM project_files
          WHERE project_redpash_id = $1 AND redpash_id <> $2
-           AND file_type <> 'chart'
+           AND file_type = 'csv'
          ORDER BY created_at ASC",
     )
     .bind(project_rid)
