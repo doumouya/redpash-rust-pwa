@@ -33,6 +33,7 @@ use tracing::Instrument;
 use crate::state::AppState;
 
 mod auth;
+mod cases;
 mod charts;
 mod companies;
 mod dashboards;
@@ -196,6 +197,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/companies",  companies::routes())
         .nest("/files",      files::routes())
         .nest("/group",      group::routes())
+        .nest("/cases",      cases::routes())
         .nest("/charts",     charts::routes())
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())

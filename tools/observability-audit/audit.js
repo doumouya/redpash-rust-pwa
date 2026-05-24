@@ -205,6 +205,17 @@ var SURFACES = [
     rx: /\bperformance\.(mark|measure|now)\s*\(/g,
     notes: 'client-side timing capture — feeds the fetch-elapsed KPIs today' },
 
+  /* ─── BACKEND: cases workstream (Jira-flow v1) ──────────────────────── */
+  { id: 'B-CASES.route', cat: 'B-CASES', kind: 'check', label: '/api/cases router nested',
+    roots: ['backend/crates/api/src/routes'],
+    expectFile: 'mod.rs',
+    rx: /\.nest\(\s*"\/cases"\s*,\s*cases::routes\(\)\s*\)/,
+    notes: 'cases CRUD + comments sub-router live; activity feed reads through events.context->>case (no parallel history table)' },
+  { id: 'B-CASES.event-kinds', cat: 'B-CASES', kind: 'count', label: 'case_* event::record kinds in use',
+    roots: ['backend/crates/api/src/routes'],
+    rx: /\bkind:\s*"case_[a-z_]+"\.into\(\)/g,
+    notes: 'live counter — every case mutation handler emits a case_* kind; cat-3 catches handlers that skip it' },
+
   /* ─── BACKEND: monitoring page endpoints (slice E investigation console) ── */
   { id: 'B-MON.request-detail', cat: 'B-MON', kind: 'check', label: 'GET /monitoring/request/:request_id route registered',
     roots: ['backend/crates/api/src/routes'],

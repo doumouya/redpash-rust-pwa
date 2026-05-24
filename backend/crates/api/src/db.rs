@@ -5,6 +5,7 @@
 //! takes a `&PgPool` and returns a domain DTO from `shared::*`.
 
 use chrono::{DateTime, Utc};
+use shared::case::{Case, Comment};
 use shared::chart::Chart;
 use shared::company::{Company, CompanyMember, CompanySummary};
 use shared::dashboard::{Dashboard, DashboardSpec};
@@ -2014,6 +2015,322 @@ pub async fn list_events_for_user(
     .bind(from)
     .bind(to)
     .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+// ─── cases + comments ──────────────────────────────────────────────
+// Jira-flow workstream v1. Case lifecycle changes are NOT persisted
+// here — they emit `events.kind = 'case_*'` rows via the existing
+// `event::record` path. The activity feed query joins through there.
+
+#[derive(FromRow)]
+struct CaseRow {
+    redpash_id:  String,
+    r#type:      String,
+    title:       String,
+    description: Option<String>,
+    status:      String,
+    priority:    String,
+    reporter_id: Option<String>,
+    assignee_id: Option<String>,
+    project_id:  Option<String>,
+    company_id:  Option<String>,
+    created_at:  DateTime<Utc>,
+    updated_at:  DateTime<Utc>,
+}
+impl From<CaseRow> for Case {
+    fn from(r: CaseRow) -> Self {
+        Self {
+            redpash_id:  r.redpash_id,
+            r#type:      r.r#type,
+            title:       r.title,
+            description: r.description,
+            status:      r.status,
+            priority:    r.priority,
+            reporter_id: r.reporter_id,
+            assignee_id: r.assignee_id,
+            project_id:  r.project_id,
+            company_id:  r.company_id,
+            created_at:  r.created_at,
+            updated_at:  r.updated_at,
+        }
+    }
+}
+
+const CASE_COLS: &str =
+    "redpash_id, type, title, description, status, priority,
+     reporter_id, assignee_id, project_id, company_id,
+     created_at, updated_at";
+
+// PROJECT-FILES-ACK: type=any — cases doesn't touch project_files.
+// (The ack rule is for project_files queries; included here as a
+// signal to future contributors that this scan is intentional.)
+
+/// List cases with optional filters. Each `Option` bind skips its
+/// filter when None (the `$n::text IS NULL OR …` idiom).
+pub async fn list_cases(
+    pool:        &PgPool,
+    status:      Option<&str>,
+    assignee_id: Option<&str>,
+    project_id:  Option<&str>,
+    q:           Option<&str>,
+    limit:       i64,
+    offset:      i64,
+) -> sqlx::Result<Vec<Case>> {
+    let rows: Vec<CaseRow> = sqlx::query_as(&format!(
+        "SELECT {CASE_COLS} FROM cases
+         WHERE ($1::text IS NULL OR status      = $1)
+           AND ($2::text IS NULL OR assignee_id = $2)
+           AND ($3::text IS NULL OR project_id  = $3)
+           AND ($4::text IS NULL OR title ILIKE '%' || $4 || '%'
+                                OR  COALESCE(description, '') ILIKE '%' || $4 || '%')
+         ORDER BY updated_at DESC
+         LIMIT $5 OFFSET $6"
+    ))
+    .bind(status)
+    .bind(assignee_id)
+    .bind(project_id)
+    .bind(q)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn count_cases(
+    pool:        &PgPool,
+    status:      Option<&str>,
+    assignee_id: Option<&str>,
+    project_id:  Option<&str>,
+    q:           Option<&str>,
+) -> sqlx::Result<i64> {
+    let (n,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT FROM cases
+         WHERE ($1::text IS NULL OR status      = $1)
+           AND ($2::text IS NULL OR assignee_id = $2)
+           AND ($3::text IS NULL OR project_id  = $3)
+           AND ($4::text IS NULL OR title ILIKE '%' || $4 || '%'
+                                OR  COALESCE(description, '') ILIKE '%' || $4 || '%')",
+    )
+    .bind(status)
+    .bind(assignee_id)
+    .bind(project_id)
+    .bind(q)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+pub async fn find_case(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Case>> {
+    let row: Option<CaseRow> = sqlx::query_as(&format!(
+        "SELECT {CASE_COLS} FROM cases WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_case(
+    pool:        &PgPool,
+    rid:         &str,
+    title:       &str,
+    description: Option<&str>,
+    type_:       &str,
+    status:      &str,
+    priority:    &str,
+    reporter_id: Option<&str>,
+    assignee_id: Option<&str>,
+    project_id:  Option<&str>,
+    company_id:  Option<&str>,
+) -> sqlx::Result<Case> {
+    let row: CaseRow = sqlx::query_as(&format!(
+        "INSERT INTO cases
+            (redpash_id, type, title, description, status, priority,
+             reporter_id, assignee_id, project_id, company_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING {CASE_COLS}"
+    ))
+    .bind(rid)
+    .bind(type_)
+    .bind(title)
+    .bind(description)
+    .bind(status)
+    .bind(priority)
+    .bind(reporter_id)
+    .bind(assignee_id)
+    .bind(project_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+/// Sparse update — `None` leaves the column untouched via COALESCE.
+/// The handler emits one `case_<field>_change` event per changed
+/// field so the activity feed renders each change as a discrete row.
+pub async fn update_case(
+    pool:        &PgPool,
+    rid:         &str,
+    title:       Option<&str>,
+    description: Option<&str>,
+    type_:       Option<&str>,
+    status:      Option<&str>,
+    priority:    Option<&str>,
+    assignee_id: Option<&str>,
+    project_id:  Option<&str>,
+    company_id:  Option<&str>,
+) -> sqlx::Result<Option<Case>> {
+    // For nullable FKs we use the sentinel pattern: pass `Some("")`
+    // to set NULL, omit to skip. Today the handler always passes
+    // Option<&str> with None=skip / Some(value)=set; clearing isn't
+    // wired in v1 (defer until the UI needs an unassign button).
+    let row: Option<CaseRow> = sqlx::query_as(&format!(
+        "UPDATE cases SET
+             title       = COALESCE($2,  title),
+             description = COALESCE($3,  description),
+             type        = COALESCE($4,  type),
+             status      = COALESCE($5,  status),
+             priority    = COALESCE($6,  priority),
+             assignee_id = COALESCE($7,  assignee_id),
+             project_id  = COALESCE($8,  project_id),
+             company_id  = COALESCE($9,  company_id),
+             updated_at  = now()
+         WHERE redpash_id = $1
+         RETURNING {CASE_COLS}"
+    ))
+    .bind(rid)
+    .bind(title)
+    .bind(description)
+    .bind(type_)
+    .bind(status)
+    .bind(priority)
+    .bind(assignee_id)
+    .bind(project_id)
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn delete_case(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM cases WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+#[derive(FromRow)]
+struct CommentRow {
+    redpash_id: String,
+    case_id:    String,
+    author_id:  Option<String>,
+    body:       String,
+    is_edited:  bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+impl From<CommentRow> for Comment {
+    fn from(r: CommentRow) -> Self {
+        Self {
+            redpash_id: r.redpash_id,
+            case_id:    r.case_id,
+            author_id:  r.author_id,
+            body:       r.body,
+            is_edited:  r.is_edited,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+const COMMENT_COLS: &str =
+    "redpash_id, case_id, author_id, body, is_edited, created_at, updated_at";
+
+pub async fn list_comments_for_case(pool: &PgPool, case_id: &str) -> sqlx::Result<Vec<Comment>> {
+    let rows: Vec<CommentRow> = sqlx::query_as(&format!(
+        "SELECT {COMMENT_COLS} FROM comments
+         WHERE case_id = $1
+         ORDER BY created_at ASC"
+    ))
+    .bind(case_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+pub async fn find_comment(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Comment>> {
+    let row: Option<CommentRow> = sqlx::query_as(&format!(
+        "SELECT {COMMENT_COLS} FROM comments WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn insert_comment(
+    pool:      &PgPool,
+    rid:       &str,
+    case_id:   &str,
+    author_id: Option<&str>,
+    body:      &str,
+) -> sqlx::Result<Comment> {
+    let row: CommentRow = sqlx::query_as(&format!(
+        "INSERT INTO comments (redpash_id, case_id, author_id, body)
+         VALUES ($1, $2, $3, $4)
+         RETURNING {COMMENT_COLS}"
+    ))
+    .bind(rid)
+    .bind(case_id)
+    .bind(author_id)
+    .bind(body)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.into())
+}
+
+pub async fn update_comment(pool: &PgPool, rid: &str, body: &str) -> sqlx::Result<Option<Comment>> {
+    let row: Option<CommentRow> = sqlx::query_as(&format!(
+        "UPDATE comments
+         SET body = $2, is_edited = true, updated_at = now()
+         WHERE redpash_id = $1
+         RETURNING {COMMENT_COLS}"
+    ))
+    .bind(rid)
+    .bind(body)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+pub async fn delete_comment(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM comments WHERE redpash_id = $1")
+        .bind(rid)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Activity feed for a case — every `events` row tagged with the
+/// case's rid via `context->>'case' = $1`. ASC so the operator reads
+/// the timeline top-to-bottom (oldest first), matching the comment
+/// thread + the slack/github convention.
+///
+/// No GIN index on events.context today — small table, full scan
+/// acceptable. Add `CREATE INDEX … USING gin (context jsonb_path_ops)`
+/// when the events table crosses ~100k rows.
+pub async fn list_activity_for_case(pool: &PgPool, case_id: &str) -> sqlx::Result<Vec<Event>> {
+    let rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "SELECT {EVENT_COLS} FROM events
+         WHERE context->>'case' = $1
+         ORDER BY occurred_at ASC"
+    ))
+    .bind(case_id)
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(Into::into).collect())
