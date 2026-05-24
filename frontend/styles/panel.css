@@ -954,6 +954,42 @@
   font-size: 11px;
 }
 
+/* Top-N (C3) — keep top/bottom N rows per partition. */
+.rt-report-topn { margin-top: 8px; }
+.rt-report-topn-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+}
+.rt-report-topn-row input[type="number"] {
+  width: 56px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+.rt-report-topn-row select {
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--rp-border);
+  border-radius: 6px;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+.rt-report-topn-row select[data-topn-key="order_by"] { flex: 1; }
+.rt-report-topn-row input:focus,
+.rt-report-topn-row select:focus { border-color: var(--rp-accent-2); }
+
 /* Show toggles (C2) — show_details / show_subtotals / show_total. */
 .rt-report-show-row {
   display: flex;
@@ -1018,6 +1054,30 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   z-index: 1;
+}
+.rt-report-preview-table thead th[data-sort] { cursor: pointer; user-select: none; }
+.rt-report-preview-table thead th[data-sort]:hover {
+  color: var(--rp-text);
+  background: var(--rp-hover);
+}
+.rt-report-sort-arrow {
+  color: var(--rp-accent-2);
+  font-size: 9px;
+  margin-left: 2px;
+}
+.rt-report-sort-chain {
+  display: inline-block;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  margin-left: 3px;
+  border-radius: 99px;
+  background: var(--rp-accent-2);
+  color: var(--rp-surface);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 14px;
 }
 .rt-report-preview-table td.is-num { text-align: right; }
 .rt-report-preview-table tr.is-total td {

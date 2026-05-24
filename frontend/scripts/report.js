@@ -69,6 +69,13 @@ export function mountReport(panelBody, ctx) {
   let showDetails   = false;
   let showSubtotals = true;
   let showTotal     = true;
+  // topN: null | { n, order_by, direction, partition_by }. Compiles
+  // to a ranking window on the subtotals frame (shared::report::TopNFilter).
+  let topN         = null;
+  // sortList: [{col, dir}] — multi-key sort over the subtotals frame.
+  // Built by clicking preview headers (click cycles asc→desc→off,
+  // shift-click appends to the chain).
+  let sortList     = [];
 
   // ── live preview ──────────────────────────────────────────────────
   // previewSoon() debounces; runPreview() POSTs and updates the
@@ -101,6 +108,7 @@ export function mountReport(panelBody, ctx) {
         renderGroupBySection(cols)
       + renderAggregationsSection(cols)
       + renderWindowsSection()
+      + renderTopNSection()
       + renderShowSection();
   }
 
@@ -262,6 +270,57 @@ export function mountReport(panelBody, ctx) {
       +    '</section>';
   }
 
+  // Top-N filter — keeps the top/bottom N rows per partition on the
+  // subtotals frame. Compiles to a ranking window on order_by then a
+  // filter to rank ≤ n (engine: shared::report::TopNFilter).
+  function renderTopNSection() {
+    const subCols = subtotalsColumnNames();
+    const partSet = new Set(topN?.partition_by || []);
+    const partChips = groupBy.length
+      ? groupBy.map((g) =>
+          '<button type="button" class="rt-report-part-chip'
+          + (partSet.has(g) ? ' is-on' : '')
+          + '" data-topn-part="' + esc(g) + '">'
+          + esc(g) + '</button>').join('')
+      : '<span class="rt-report-muted">(none — global top N)</span>';
+    const enableRow =
+      '<label class="rt-report-show-toggle">'
+      + '<input type="checkbox" data-topn-enable'
+      + (topN ? ' checked' : '') + ' /> Enable</label>';
+    if (!topN) {
+      return '<section class="rt-report-sect">'
+        + '<span class="rt-field-lbl">Top N</span>'
+        + '<div class="rt-report-show-row">' + enableRow + '</div>'
+        + '<p class="rt-report-empty">Keep the top (or bottom) N rows per partition — useful for "top 5 per group" reports.</p>'
+        + '</section>';
+    }
+    const colOpts = subCols.length
+      ? subCols.map((c) =>
+          '<option value="' + esc(c) + '"'
+          + (c === topN.order_by ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
+      : '<option value="">(define a group-by or aggregation first)</option>';
+    return '<section class="rt-report-sect">'
+      + '<span class="rt-field-lbl">Top N</span>'
+      + '<div class="rt-report-show-row">' + enableRow + '</div>'
+      + '<div class="rt-report-topn">'
+      +   '<div class="rt-report-topn-row">'
+      +     '<span class="rt-report-muted">keep</span>'
+      +     '<input type="number" min="1" step="1" data-topn-key="n"'
+      +       ' value="' + Number(topN.n || 5) + '" />'
+      +     '<select data-topn-key="direction">'
+      +       '<option value="desc"' + (topN.direction === "desc" ? ' selected' : '') + '>top</option>'
+      +       '<option value="asc"'  + (topN.direction === "asc"  ? ' selected' : '') + '>bottom</option>'
+      +     '</select>'
+      +     '<span class="rt-report-muted">by</span>'
+      +     '<select data-topn-key="order_by">' + colOpts + '</select>'
+      +   '</div>'
+      +   '<div class="rt-report-window-parts">'
+      +     '<span class="rt-report-muted">partition by:</span> ' + partChips
+      +   '</div>'
+      + '</div>'
+      + '</section>';
+  }
+
   // Show toggles — which sections the engine materialises. Hidden
   // sections still compute on the backend (always-materialise rule
   // for dashboards), but the preview omits them.
@@ -299,8 +358,21 @@ export function mountReport(panelBody, ctx) {
     const MAX = 50;
     const shown = sub.rows.slice(0, MAX);
     const more  = Math.max(0, sub.rows.length - MAX);
+    // Header cells carry data-sort + an active-state arrow so the
+    // user sees which keys drive the current order. Click cycles
+    // asc → desc → off; shift-click appends to the chain.
+    const sortIdx = (col) => sortList.findIndex((s) => s.col === col);
     const head  = '<thead><tr>'
-      + sub.columns.map((c) => '<th>' + esc(c) + '</th>').join('')
+      + sub.columns.map((c) => {
+          const i = sortIdx(c);
+          const arrow = i === -1 ? ''
+            : sortList[i].dir === "desc" ? ' <span class="rt-report-sort-arrow">▼</span>'
+            : ' <span class="rt-report-sort-arrow">▲</span>';
+          const chip = sortList.length > 1 && i >= 0
+            ? ' <span class="rt-report-sort-chain">' + (i + 1) + '</span>' : '';
+          return '<th data-sort="' + esc(c) + '" title="Click to sort; shift-click to chain">'
+            + esc(c) + arrow + chip + '</th>';
+        }).join('')
       + '</tr></thead>';
     const body  = '<tbody>'
       + shown.map((r) => '<tr>'
@@ -335,6 +407,34 @@ export function mountReport(panelBody, ctx) {
           ? '<p class="rt-report-empty">' + more + ' more group'
             + (more === 1 ? '' : 's') + ' not shown.</p>'
           : '');
+    // Click-to-sort on preview headers — bound once per render since
+    // the innerHTML wipes the previous listener. Cycle rules mirror
+    // the historic Phase-3 behaviour:
+    //   click       → replace chain with [{col, asc}], cycle asc→desc→off
+    //   shift-click → append/cycle in chain
+    const thead = previewEl.querySelector("thead");
+    thead?.addEventListener("click", (e) => {
+      const th = e.target.closest("[data-sort]");
+      if (!th) return;
+      const col = th.dataset.sort;
+      const list = sortList.slice();
+      const idx  = list.findIndex((s) => s.col === col);
+      if (e.shiftKey) {
+        if (idx === -1)                  list.push({ col, dir: "asc" });
+        else if (list[idx].dir === "asc") list[idx] = { col, dir: "desc" };
+        else                              list.splice(idx, 1);
+      } else if (idx === -1 || list.length > 1) {
+        sortList = [{ col, dir: "asc" }];
+        previewSoon();
+        return;
+      } else if (list[idx].dir === "asc") {
+        list[idx] = { col, dir: "desc" };
+      } else {
+        list.splice(idx, 1);
+      }
+      sortList = list;
+      previewSoon();
+    });
   }
 
   // ── click delegation ──────────────────────────────────────────────
@@ -418,6 +518,16 @@ export function mountReport(panelBody, ctx) {
       renderBuilder(); previewSoon();
       return;
     }
+    // ── top-N ────────────────────────────────────────────────────
+    const topnPart = e.target.closest("[data-topn-part]");
+    if (topnPart && topN) {
+      const name = topnPart.dataset.topnPart;
+      const set = new Set(topN.partition_by || []);
+      if (set.has(name)) set.delete(name); else set.add(name);
+      topN.partition_by = groupBy.filter((g) => set.has(g));
+      renderBuilder(); previewSoon();
+      return;
+    }
   });
 
   // Field changes propagate to the spec live; the live-preview fires
@@ -465,6 +575,31 @@ export function mountReport(panelBody, ctx) {
       if (showCb.dataset.showKey === "show_details")   showDetails   = showCb.checked;
       if (showCb.dataset.showKey === "show_subtotals") showSubtotals = showCb.checked;
       if (showCb.dataset.showKey === "show_total")     showTotal     = showCb.checked;
+      previewSoon();
+      return;
+    }
+    // Top-N enable / fields.
+    if (e.target.matches("[data-topn-enable]")) {
+      if (e.target.checked) {
+        const subCols = subtotalsColumnNames();
+        topN = {
+          n:            5,
+          order_by:     subCols[subCols.length - 1] || "",
+          direction:    "desc",
+          partition_by: [],
+        };
+      } else {
+        topN = null;
+      }
+      renderBuilder(); previewSoon();
+      return;
+    }
+    const topnField = e.target.closest("[data-topn-key]");
+    if (topnField && topN) {
+      const key = topnField.dataset.topnKey;
+      if (key === "n")        topN.n        = Math.max(1, Number(topnField.value) || 1);
+      if (key === "order_by") topN.order_by = topnField.value;
+      if (key === "direction")topN.direction = topnField.value;
       previewSoon();
     }
   });
@@ -530,9 +665,16 @@ export function mountReport(panelBody, ctx) {
       show_details:   showDetails,
       show_subtotals: showSubtotals,
       show_total:     showTotal,
-      sort:           [],
+      // sort: drop empty cols so a stale entry from a renamed alias
+      // doesn't 400 the request.
+      sort:           sortList.filter((s) => s && s.col).map((s) => ({ col: s.col, dir: s.dir })),
       charts:         [],
-      top_n:          null,
+      top_n:          topN ? {
+        n:            Math.max(1, Number(topN.n) || 1),
+        order_by:     topN.order_by || "",
+        direction:    topN.direction || "desc",
+        partition_by: topN.partition_by || [],
+      } : null,
       windows:        wins,
     };
   }
@@ -574,6 +716,8 @@ export function mountReport(panelBody, ctx) {
     showDetails = false;
     showSubtotals = true;
     showTotal = true;
+    topN = null;
+    sortList = [];
     lastPage = null;
     if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
     renderBuilder();
