@@ -10,6 +10,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
+import { getPref } from "/scripts/prefs.js";
 import {
   headHTML, kpiStripHTML, chartsStripHTML,
   windowChipsHTML as _windowChipsHTML,
@@ -145,8 +146,18 @@ export default function monitoring(app, { session }) {
   // touches it on the first mount.
   let rawPage = 1;
   let rawTotalPages = 1;
-  const RAW_PAGE_SIZE = 50;
   let donutChart = null;  // ECharts instance — disposed on body rebuild
+
+  // Honors the user's `rowsPerPage` pref (set on /settings). "all" maps
+  // to a large one-shot page so the same paginated path stays in
+  // service. Read on each fetch so a mid-session pref change picks up
+  // on the next navigation. Matches workspace.js + home.js.
+  function pageSizeFromPref() {
+    const raw = getPref("rowsPerPage");
+    if (raw === "all") return 500; // backend MAX_PAGE_SIZE
+    const n = parseInt(raw || "", 10);
+    return Number.isFinite(n) && n > 0 ? n : 25;
+  }
 
   // List-page bindings — partial-apply view + ID prefixes once so
   // call sites keep their original short-arg signatures. Charts
@@ -351,7 +362,7 @@ export default function monitoring(app, { session }) {
     if (tbody) tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
     try {
       const data = await api.get("/monitoring/requests?window=" + encodeURIComponent(window)
-        + "&page=" + rawPage + "&size=" + RAW_PAGE_SIZE);
+        + "&page=" + rawPage + "&size=" + pageSizeFromPref());
       const rows = data?.rows || [];
       rawTotalPages = data?.pages || 1;
       rawPage       = data?.page  || rawPage;
@@ -419,7 +430,6 @@ export default function monitoring(app, { session }) {
   // shape. Window chips apply only to Events (the others have no
   // time-window filter at the wire layer).
   let listPage   = 1;
-  const LIST_PAGE_SIZE = 50;
   let listTotalPages = 1;
   let listWindow = DEFAULT_WINDOW;
 
@@ -478,7 +488,7 @@ export default function monitoring(app, { session }) {
     const colCount = viewSpec.columns.length;
     if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Loading…</td></tr>';
 
-    const qs = "?page=" + listPage + "&size=" + LIST_PAGE_SIZE
+    const qs = "?page=" + listPage + "&size=" + pageSizeFromPref()
              + (viewSpec.useWindow ? "&window=" + encodeURIComponent(listWindow) : "");
     const t0 = performance.now();
     try {

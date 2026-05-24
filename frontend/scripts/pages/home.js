@@ -14,6 +14,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
+import { getPref } from "/scripts/prefs.js";
 import {
   headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML,
   listPanel as _listPanel,
@@ -332,8 +333,17 @@ export default function home(app, { session }) {
   // ─── list-view tabs (Users / Companies / Memberships / Files /
   //     Charts / Steps) — one renderer driven by a LIST_VIEWS spec.
   let listPage = 1;
-  const LIST_PAGE_SIZE = 50;
   let listTotalPages = 1;
+  // Honors the user's `rowsPerPage` pref (set on /settings). "all" maps
+  // to a large one-shot page so the same paginated path stays in
+  // service. Read on each fetch so a mid-session pref change picks up
+  // on the next navigation. Matches workspace.js's pageSizeFromPref.
+  function listPageSize() {
+    const raw = getPref("rowsPerPage");
+    if (raw === "all") return 500; // backend MAX_PAGE_SIZE
+    const n = parseInt(raw || "", 10);
+    return Number.isFinite(n) && n > 0 ? n : 25;
+  }
 
   function renderListBody(tab, spec) {
     listPage = 1;
@@ -423,7 +433,7 @@ export default function home(app, { session }) {
 
     const params = new URLSearchParams();
     params.set("page", String(listPage));
-    params.set("size", String(LIST_PAGE_SIZE));
+    params.set("size", String(listPageSize()));
     for (const [name, value] of Object.entries(chipState || {})) {
       if (value != null && value !== "") params.set(name, value);
     }
