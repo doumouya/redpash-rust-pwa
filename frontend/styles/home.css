@@ -136,3 +136,9 @@
 }
 .rp-home-org__icon { font-size: 10px; opacity: 0.85; }
 
+/* Home reclaims the .rp-shell-main padding — KPI strip + charts +
+   toolbar + table want the full body width. The shared shell rule in
+   shell.css adds var(--rp-sp-6); ID-scoped override here so Monitoring
+   and Docs (same atom) keep their padding. */
+#rpHomeMain { padding: 0; }
+
