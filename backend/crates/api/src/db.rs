@@ -778,7 +778,10 @@ pub async fn list_files_in_project(pool: &PgPool, project_rid: &str) -> sqlx::Re
 }
 
 /// Every file owned by `owner_rid` (FK chain via project_files →
-/// projects → owner_id). Powers the home page's "My Files" step.
+/// projects → owner_id). Powers `GET /api/files`. Returns every
+/// file_type including chart — same reasoning as
+/// list_files_in_project above: charts are first-class files since
+/// the Designer landed inline in the Workspace.
 pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec<FileSummary>> {
     let rows: Vec<FileRow> = sqlx::query_as(
         "SELECT f.redpash_id, f.project_redpash_id, f.filename, f.display_name,
@@ -788,7 +791,7 @@ pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec
          FROM project_files f
          JOIN projects p ON p.redpash_id = f.project_redpash_id
          JOIN file_stages fs ON fs.file_redpash_id = f.redpash_id
-         WHERE p.owner_id = $1 AND f.file_type <> 'chart'
+         WHERE p.owner_id = $1
          ORDER BY f.updated_at DESC",
     )
     .bind(owner_rid)
