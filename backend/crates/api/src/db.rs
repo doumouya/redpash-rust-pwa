@@ -665,6 +665,48 @@ pub async fn delete_project(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     Ok(res.rows_affected() > 0)
 }
 
+/// Create a project with full metadata. Wraps insert in a tx alongside
+/// the default-flip so the `projects_owner_default_idx` partial unique
+/// index never sees two defaults at once. Returns the freshly-selected
+/// ProjectSummary (joined through `users` for the owner display fields).
+#[allow(clippy::too_many_arguments)]
+pub async fn create_project(
+    pool:        &PgPool,
+    rid:         &str,
+    owner:       &str,
+    name:        &str,
+    description: Option<&str>,
+    company_id:  Option<&str>,
+    is_default:  bool,
+) -> sqlx::Result<ProjectSummary> {
+    let mut tx = pool.begin().await?;
+    if is_default {
+        sqlx::query(
+            "UPDATE projects SET is_default = false, updated_at = now()
+             WHERE owner_id = $1 AND is_default",
+        )
+        .bind(owner)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query(
+        "INSERT INTO projects (redpash_id, owner_id, name, description, company_id, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(rid)
+    .bind(owner)
+    .bind(name)
+    .bind(description)
+    .bind(company_id)
+    .bind(is_default)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    // get_project re-selects through PROJECT_SELECT so the returned row
+    // carries the joined owner_display_name / stage / file_count.
+    get_project(pool, rid).await.map(|opt| opt.expect("just inserted"))
+}
+
 // ─── project_files ──────────────────────────────────────────────
 
 #[derive(FromRow)]

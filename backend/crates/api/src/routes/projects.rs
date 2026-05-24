@@ -1,16 +1,18 @@
-//! `/api/projects` — list the current user's projects + their files.
+//! `/api/projects` — full CRUD on the user's projects + their files.
 //!
-//! POST + detail land alongside the multi-project UI (Phase 2c). For
-//! now Home just lists; uploads always go into the user's default
-//! project. `GET /:rid/files` powers the project landing list in the
-//! cleaner when navigated from Home.
+//!   GET    /                 list the caller's projects
+//!   POST   /                 create a new project
+//!   GET    /:rid             fetch one project summary
+//!   PATCH  /:rid             sparse metadata update (inline edits)
+//!   DELETE /:rid             delete (cascades to files / steps / dashboards)
+//!   GET    /:rid/files       list files in a project (cleaner landing)
 
-use axum::{extract::{Path, State}, http::{HeaderMap, StatusCode}, routing::{get, patch}, Json, Router};
+use axum::{extract::{Path, State}, http::{HeaderMap, StatusCode}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use shared::file::FileSummary;
 use shared::project::ProjectSummary;
 
-use crate::{db, error::AppError, state::AppState};
+use crate::{db, error::AppError, id, state::AppState};
 
 #[derive(Serialize)]
 struct ProjectList { items: Vec<ProjectSummary> }
@@ -20,8 +22,8 @@ struct ProjectFiles { items: Vec<FileSummary> }
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/",             get(list))
-        .route("/:rid",         patch(patch_project).delete(delete_project))
+        .route("/",             get(list).post(create_project))
+        .route("/:rid",         get(get_one).patch(patch_project).delete(delete_project))
         .route("/:rid/files",   get(list_files))
 }
 
@@ -47,6 +49,88 @@ async fn list_files(
         .await
         .map_err(|e| AppError::internal("db", e.to_string()))?;
     Ok(Json(ProjectFiles { items }))
+}
+
+/// `GET /api/projects/:rid` — fetch one project summary. Ownership-
+/// gated; same row shape as `list`'s items, so the frontend can use
+/// it as a fresh-after-edit refetch.
+async fn get_one(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<Json<ProjectSummary>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
+    db::get_project(&state.db, &rid)
+        .await
+        .map_err(|e| AppError::internal("db", e.to_string()))?
+        .map(Json)
+        .ok_or_else(|| AppError::not_found("not_found", format!("project {rid}")))
+}
+
+#[derive(Deserialize)]
+struct CreateProjectBody {
+    name:                          String,
+    #[serde(default)] description: Option<String>,
+    #[serde(default)] company_id:  Option<String>,
+    #[serde(default)] is_default:  Option<bool>,
+}
+
+/// `POST /api/projects` — create a project owned by the caller.
+///
+/// Validates:
+/// - `name` required, non-empty after trim.
+/// - `company_id` (when set) must reference a company the caller belongs
+///   to — same gate as PATCH's company reassign, so a stranger can't
+///   pin a project to a company they don't share.
+/// - `is_default` defaults to `false`. When `true`, the create runs in
+///   a transaction that demotes the caller's existing default in the
+///   same tx — the `projects_owner_default_idx` partial unique index
+///   never sees two defaults at once.
+async fn create_project(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Json(body):   Json<CreateProjectBody>,
+) -> Result<(StatusCode, Json<ProjectSummary>), AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(AppError::bad_request("invalid", "name is required"));
+    }
+
+    let description = body.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let company_id  = body.company_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+
+    if let Some(cid) = company_id {
+        if db::company_role(&state.db, cid, &user)
+            .await
+            .map_err(|e| AppError::internal("db", e.to_string()))?
+            .is_none()
+        {
+            return Err(AppError::not_found("not_found", "company not found"));
+        }
+    }
+
+    let rid = id::new("PRJ");
+    let project = db::create_project(
+        &state.db, &rid, &user, name, description, company_id,
+        body.is_default.unwrap_or(false),
+    )
+    .await
+    .map_err(|e| AppError::internal("db", e.to_string()))?;
+
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "info",
+        kind:    "project_create".into(),
+        message: format!("created project {name}"),
+        user:    Some(user.clone()),
+        context: serde_json::json!({ "project": rid }),
+        ..Default::default()
+    });
+
+    Ok((StatusCode::CREATED, Json(project)))
 }
 
 #[derive(Deserialize)]
