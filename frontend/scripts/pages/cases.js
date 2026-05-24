@@ -99,20 +99,18 @@ export default function cases(app, { session }) {
 
   newCaseBtn?.addEventListener("click", () => openCreateModal());
 
-  // Click delegate on the cols host — handles both card-click
-  // (→ detail) and click-cycle-status (the per-spec v1 affordance).
+  // Cards are <a href="#/cases?id=…"> anchors — browser handles
+  // the navigation for ordinary clicks (and middle-click → new tab,
+  // and keyboard activation). The delegate only intercepts the
+  // cycle-status chevron: preventDefault stops the nav, then we
+  // PATCH the next status.
   colsHost?.addEventListener("click", (e) => {
     const cycleBtn = e.target.closest(".rp-cases-card-cycle");
-    if (cycleBtn) {
-      e.stopPropagation();
-      const card = cycleBtn.closest(".rp-cases-card");
-      if (card) cycleStatus(card.dataset.rid, card.dataset.status);
-      return;
-    }
-    const card = e.target.closest(".rp-cases-card");
-    if (card) {
-      location.hash = "#/cases?id=" + encodeURIComponent(card.dataset.rid);
-    }
+    if (!cycleBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const card = cycleBtn.closest(".rp-cases-card");
+    if (card) cycleStatus(card.dataset.rid, card.dataset.status);
   });
 
   async function loadCaseBoard() {
@@ -184,22 +182,24 @@ export default function cases(app, { session }) {
     const rid = c.redpash_id || c.rid || "";
     const assignee = c.assignee_display_name || c.assignee_id || "—";
     const age = c.updated_at ? fmtAge(c.updated_at) : "";
+    const href = "#/cases?id=" + encodeURIComponent(rid);
     return ''
-      + '<article class="rp-cases-card" data-rid="' + esc(rid) + '" '
-      +          'data-status="' + esc(c.status || "backlog") + '">'
-      +   '<header class="rp-cases-card-head">'
+      + '<a class="rp-cases-card" href="' + esc(href) + '" '
+      +    'data-rid="' + esc(rid) + '" '
+      +    'data-status="' + esc(c.status || "backlog") + '">'
+      +   '<div class="rp-cases-card-head">'
       +     '<span class="rp-cases-card-rid">' + esc(rid.slice(0, 8)) + '</span>'
       +     priorityDotHTML(c.priority)
-      +   '</header>'
-      +   '<h4 class="rp-cases-card-title">' + esc(c.title || "(untitled)") + '</h4>'
-      +   '<footer class="rp-cases-card-foot">'
+      +   '</div>'
+      +   '<div class="rp-cases-card-title">' + esc(c.title || "(untitled)") + '</div>'
+      +   '<div class="rp-cases-card-foot">'
       +     '<span class="rp-cases-card-assignee">' + esc(assignee) + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'
       +     '<button class="rp-cases-card-cycle" type="button" title="Advance status">'
       +       '<i class="bi bi-chevron-right"></i>'
       +     '</button>'
-      +   '</footer>'
-      + '</article>';
+      +   '</div>'
+      + '</a>';
   }
 
   function priorityDotHTML(p) {

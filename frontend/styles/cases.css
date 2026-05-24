@@ -64,6 +64,7 @@
   overflow: hidden;
 }
 .rp-cases-col {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -72,6 +73,22 @@
   border-radius: 10px;
   overflow: hidden;
 }
+/* Per-status accent stripe across the top edge of each column —
+   orients the eye when scanning the board, without color-coding the
+   whole panel (would muddy the cards). Tokens cover the 5 statuses;
+   no new palette additions. */
+.rp-cases-col::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--rp-text-mute);
+}
+.rp-cases-col[data-status="backlog"]::before     { background: var(--rp-text-mute); }
+.rp-cases-col[data-status="todo"]::before        { background: var(--rp-accent-2); }
+.rp-cases-col[data-status="in_progress"]::before { background: var(--rp-mauve); }
+.rp-cases-col[data-status="in_review"]::before   { background: var(--rp-warn); }
+.rp-cases-col[data-status="done"]::before        { background: var(--rp-ok); }
 .rp-cases-col-head {
   display: flex;
   align-items: center;
@@ -109,17 +126,28 @@
 }
 
 /* ── card ─────────────────────────────────────────────────────── */
+/* Anchor element — middle-click opens in a new tab, keyboard nav
+   for free, semantically correct (the card IS a link to the detail
+   route). The status-cycle button inside calls e.preventDefault()
+   so chevron-clicks don't navigate. */
 .rp-cases-card {
+  display: block;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
   border-radius: 8px;
   padding: 9px 10px;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 0.12s var(--rp-ease), box-shadow 0.12s var(--rp-ease);
 }
 .rp-cases-card:hover {
   border-color: var(--rp-accent-2);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.rp-cases-card:focus-visible {
+  outline: 2px solid var(--rp-accent-2);
+  outline-offset: 1px;
 }
 .rp-cases-card-head {
   display: flex;
@@ -132,6 +160,10 @@
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 10px;
   color: var(--rp-text-mute);
+  background: var(--rp-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
 }
 .rp-cases-priority-dot {
   width: 9px;
@@ -637,6 +669,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid transparent;
+  padding: 12px 16px;
+  border-top: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
 }

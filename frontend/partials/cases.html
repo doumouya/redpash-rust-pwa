@@ -158,27 +158,29 @@
           <i class="bi bi-x-lg"></i>
         </button>
       </header>
-      <form class="rp-cases-modal-content" id="rp-cases-create-form">
-        <div class="rp-cases-modal-field">
-          <label class="rp-cases-modal-label" for="rp-cases-create-title-input">Title</label>
-          <input class="rp-cases-modal-input" id="rp-cases-create-title-input"
-                 type="text" required autocomplete="off"
-                 placeholder="What's the case about?" />
-        </div>
-        <div class="rp-cases-modal-field">
-          <label class="rp-cases-modal-label" for="rp-cases-create-desc-input">Description</label>
-          <textarea class="rp-cases-modal-textarea" id="rp-cases-create-desc-input"
-                    rows="6" autocomplete="off"
-                    placeholder="Steps to reproduce, context, expected behavior… (optional)"></textarea>
-          <p class="rp-cases-modal-hint">Plain text for v1. Markdown render comes with v2 polish.</p>
-        </div>
-        <div class="rp-cases-modal-field rp-cases-modal-field--attachments">
-          <label class="rp-cases-modal-label">Attachments</label>
-          <div class="rp-cases-modal-attachments-pending">
-            <i class="bi bi-paperclip"></i>
-            <span>Screenshots + log files — backend pending (queued for Gus).
-                  The upload affordance lights up here once <code>POST
-                  /api/cases/:rid/attachments</code> ships.</span>
+      <form id="rp-cases-create-form">
+        <div class="rp-cases-modal-content">
+          <div class="rp-cases-modal-field">
+            <label class="rp-cases-modal-label" for="rp-cases-create-title-input">Title</label>
+            <input class="rp-cases-modal-input" id="rp-cases-create-title-input"
+                   type="text" required autocomplete="off"
+                   placeholder="What's the case about?" />
+          </div>
+          <div class="rp-cases-modal-field">
+            <label class="rp-cases-modal-label" for="rp-cases-create-desc-input">Description</label>
+            <textarea class="rp-cases-modal-textarea" id="rp-cases-create-desc-input"
+                      rows="6" autocomplete="off"
+                      placeholder="Steps to reproduce, context, expected behavior… (optional)"></textarea>
+            <p class="rp-cases-modal-hint">Plain text for v1. Markdown render comes with v2 polish.</p>
+          </div>
+          <div class="rp-cases-modal-field rp-cases-modal-field--attachments">
+            <label class="rp-cases-modal-label">Attachments</label>
+            <div class="rp-cases-modal-attachments-pending">
+              <i class="bi bi-paperclip"></i>
+              <span>Screenshots + log files — backend pending (queued for Gus).
+                    The upload affordance lights up here once <code>POST
+                    /api/cases/:rid/attachments</code> ships.</span>
+            </div>
           </div>
         </div>
         <footer class="rp-cases-modal-foot">
