@@ -399,8 +399,40 @@
 .rp-cases-detail-tabs-content {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;          /* each tab manages its own scroll inside */
+  display: flex;
+  flex-direction: column;
+}
+.rp-cases-detail-tab.is-active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   padding-top: 0.75rem;
+}
+/* Comments tab — list scrolls, compose pinned at the bottom of
+   the tab. User can always reply without hunting; the thread
+   scrolls above. */
+#rp-cases-comments.is-active .rp-cases-comments-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+#rp-cases-comments.is-active .rp-cases-comment-form {
+  flex-shrink: 0;
+}
+/* Activity tab — filter pills pinned at top, list scrolls. */
+#rp-cases-activity.is-active .rp-cases-activity-filter {
+  flex-shrink: 0;
+}
+#rp-cases-activity.is-active .rp-cases-activity-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Case details tab — one scroll context for the whole block. */
+#rp-cases-details-tab.is-active {
+  overflow-y: auto;
 }
 .rp-cases-detail-title {
   margin: 0;
@@ -599,7 +631,8 @@
   border-bottom-color: var(--rp-accent-2);
 }
 .rp-cases-detail-tab { display: none; }
-.rp-cases-detail-tab.is-active { display: block; }
+/* Active variant rule lives above next to the tabs-content +
+   per-tab scroll/pin rules (single source of truth). */
 .rp-cases-detail-tab[hidden]   { display: none !important; }
 
 /* Case details tab — definition-list reference card. Two-column
@@ -772,14 +805,19 @@
   padding: 0.75rem 3.25rem 0.75rem 0.875rem;          /* right pad clears the send button */
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 0.5rem;                    /* squared off — reads as a body composer, not a chat reply */
+  border-radius: 0.5rem;
   color: var(--rp-text);
   font: inherit;
   font-size: 0.8125rem;
   line-height: 1.5;
-  resize: none;                          /* no drag handle — height is fixed at min-height */
+  resize: none;
   outline: 0;
-  min-height: 16.25rem;                     /* ~12 lines — angry customers need room to vent without scrolling */
+  /* Compact at rest (~3 lines) so the thread above gets the bulk
+     of the panel. Autosize JS grows the height up to max-height
+     as the user types — Slack / Discord pattern. */
+  min-height: 4.5rem;
+  max-height: 18rem;
+  overflow-y: auto;
 }
 .rp-cases-comment-input:focus { border-color: var(--rp-accent-2); }
 .rp-cases-comment-form-send {
@@ -797,10 +835,30 @@
   align-items: center;
   justify-content: center;
 }
-.rp-cases-comment-form-send:hover {
+.rp-cases-comment-form-send:hover:not([disabled]) {
   background: color-mix(in srgb, var(--rp-accent-2) 88%, white);
 }
+.rp-cases-comment-form-send[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .rp-cases-comment-form-send i { font-size: 0.875rem; }
+
+/* Inline error slot — surfaces a POST /comments failure visibly
+   instead of swallowing it in console.warn. Cleared on next
+   submit attempt. Reuses the accent (red/pink) color so the
+   alert tone reads immediately. */
+.rp-cases-comment-form-error {
+  margin: 0.25rem 0 0;
+  padding: 0.375rem 0.625rem;
+  background: color-mix(in srgb, var(--rp-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rp-accent) 35%, transparent);
+  border-radius: 0.375rem;
+  color: var(--rp-accent);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.rp-cases-comment-form-error[hidden] { display: none; }
 
 /* Small avatar variant — used inside comment bubbles. The default
    1.5rem is for the side-panel reporter/assignee badge. */

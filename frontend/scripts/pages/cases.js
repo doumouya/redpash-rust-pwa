@@ -524,6 +524,8 @@ export default function cases(app, { session }) {
   const commentsList    = app.querySelector("#rp-cases-comments-list");
   const commentForm     = app.querySelector("#rp-cases-comment-form");
   const commentInput    = app.querySelector("#rp-cases-comment-input");
+  const commentSend     = app.querySelector("#rp-cases-comment-form-send");
+  const commentError    = app.querySelector("#rp-cases-comment-form-error");
   const activityList    = app.querySelector("#rp-cases-activity-list");
   const detailsDl       = app.querySelector("#rp-cases-details-dl");
   const sideStatus   = app.querySelector("#rp-cases-side-status");
@@ -586,6 +588,31 @@ export default function cases(app, { session }) {
       commentForm?.requestSubmit();
     }
   });
+
+  // Compose ergonomics — autosize textarea, enable/disable send
+  // based on whether there's a non-blank message, hide stale
+  // error on next keystroke.
+  function syncComposeState() {
+    if (!commentInput) return;
+    // Autosize: reset height to read scrollHeight accurately,
+    // then set to the natural content height (CSS max-height
+    // caps the growth so the textarea can't eat the panel).
+    commentInput.style.height = "auto";
+    commentInput.style.height = commentInput.scrollHeight + "px";
+    const hasBody = commentInput.value.trim().length > 0;
+    if (commentSend) commentSend.disabled = !hasBody;
+    if (commentError && !commentError.hidden) {
+      commentError.hidden = true;
+      commentError.textContent = "";
+    }
+  }
+  commentInput?.addEventListener("input", syncComposeState);
+
+  function showComposeError(msg) {
+    if (!commentError) return;
+    commentError.textContent = msg;
+    commentError.hidden = false;
+  }
 
   // Primary advance button — advances current status to the next
   // in the lifecycle. Uses cycleStatus under the hood (same wrap-to-
@@ -772,6 +799,9 @@ export default function cases(app, { session }) {
     }
     renderActivityList(activity);
     renderDetailsDl(c);
+    // Pin to latest comment after the paint settles. requestAnimationFrame
+    // so the new comment nodes are laid out before we read scrollHeight.
+    requestAnimationFrame(scrollCommentsToLatest);
   }
 
   // Case details tab — full reference card. Renders every hydrated
@@ -975,13 +1005,36 @@ export default function cases(app, { session }) {
 
   async function postComment(body) {
     if (!currentDetailRid) return;
+    if (commentSend)  commentSend.disabled = true;
+    if (commentInput) commentInput.disabled = true;
+    if (commentError) { commentError.hidden = true; commentError.textContent = ""; }
     try {
       await api.post("/cases/" + encodeURIComponent(currentDetailRid) + "/comments", { body });
-      if (commentInput) commentInput.value = "";
-      loadCaseDetail(currentDetailRid);
+      if (commentInput) {
+        commentInput.value = "";
+        commentInput.style.height = "auto";    // reset autosize after clear
+      }
+      await loadCaseDetail(currentDetailRid);   // pulls the new comment + repaints
+      scrollCommentsToLatest();                 // auto-scroll so user sees their own message
     } catch (err) {
-      console.warn("[cases] comment post failed:", err);
+      const msg = err?.body?.message || err?.body?.error || err?.message || "Couldn't post comment";
+      showComposeError(msg + (err?.status ? " (" + err.status + ")" : ""));
+    } finally {
+      if (commentInput) commentInput.disabled = false;
+      // Re-evaluate send state from current input contents (form
+      // was cleared on success → disabled; failed → still has body
+      // → enabled so user can retry).
+      syncComposeState();
+      commentInput?.focus();
     }
+  }
+
+  // Pin comments to the latest message — called after open and
+  // after a successful post. Uses scrollTop on the list element,
+  // which is the bounded scroll container for the comments tab.
+  function scrollCommentsToLatest() {
+    if (!commentsList) return;
+    commentsList.scrollTop = commentsList.scrollHeight;
   }
 
   // ── chip + format helpers ──────────────────────────────────

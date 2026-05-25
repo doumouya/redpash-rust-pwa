@@ -158,12 +158,14 @@
               </div>
               <div class="rp-cases-comment-form-row">
                 <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
-                          placeholder="Type a comment…" rows="12"></textarea>
+                          placeholder="Reply to this case… (Ctrl+Enter to send)"
+                          rows="3"></textarea>
                 <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
-                        type="submit" title="Send (Ctrl+Enter)">
+                        type="submit" title="Send (Ctrl+Enter)" disabled>
                   <i class="bi bi-send-fill"></i>
                 </button>
               </div>
+              <p class="rp-cases-comment-form-error" id="rp-cases-comment-form-error" hidden></p>
             </form>
           </section>
 
