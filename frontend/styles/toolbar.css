@@ -131,3 +131,7 @@
 
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 .rt-spinning { animation: rt-spin 0.6s var(--rp-ease); }
+/* Loop variant — for buttons that should spin while an async op is
+   in-flight (e.g. Home list refresh). Caller adds the class before
+   the await, removes it in the finally branch. */
+.rt-spinning-loop { animation: rt-spin 0.8s linear infinite; }

@@ -265,7 +265,12 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search title, description…",
-        modes: true, refresh: true, columns: true, export: true,
+        // Object form (vs `modes: true` everywhere else) so listToolbarHTML
+        // drops `disabled` on the named modes. Mirrors spec.modes above —
+        // the spec-level flag drives row decoration (selectMode column),
+        // the toolbar-level flag drives the button states.
+        modes: { select: true, delete: true },
+        refresh: true, columns: true, export: true,
       },
       columns: ["Title", "Type", "Status", "Priority", "Assignee", "Updated"],
       // Row click → /cases?id=… so the Cases detail page opens for
@@ -791,8 +796,14 @@ export default function home(app, { session: _session }) {
       }
 
       // Refresh — re-runs the fetch with the current page/sort/search.
-      view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", () => {
-        fetchList(spec, chipState);
+      // The icon spins (loop variant) for the duration of the fetch so the
+      // operator gets accurate in-flight feedback; the `finally` clears the
+      // class even if fetchList throws.
+      view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", async (e) => {
+        const icon = e.currentTarget.querySelector("i");
+        icon?.classList.add("rt-spinning-loop");
+        try { await fetchList(spec, chipState); }
+        finally { icon?.classList.remove("rt-spinning-loop"); }
       });
 
       // Click-to-sort — header delegation. Three-state per column:
