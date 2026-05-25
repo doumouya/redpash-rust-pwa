@@ -18,9 +18,14 @@
       <div class="rt-nav-body" id="rpHomeNavBody"></div>
     </aside>
 
-    <!-- ════ main — body view, content depends on the active tab ════ -->
-    <main class="rp-shell-main" id="rpHomeMain">
-      <div class="rp-shell-view" id="rpHomeView">
+    <!-- ════ main — body view, content depends on the active tab ════
+         Mirrors Workspace's `<main class="rt-main"><div class="rt-surface">`
+         shell (workspace.html:42-43, workspace.css:.rt-surface) so the
+         table surface lives inside the same canonical card chrome.
+         #rpHomeView IS the rt-surface — home.js targets `#rpHomeView`
+         and the flex/overflow/chrome all come from .rt-surface. -->
+    <main class="rt-main">
+      <div class="rt-surface" id="rpHomeView">
         <p class="rp-shell-state">Loading…</p>
       </div>
     </main>

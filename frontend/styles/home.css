@@ -1,47 +1,19 @@
 /* ── home ───────────────────────────────────────────────────────
    Page-specific styles for /home only. The rail-page shell (outer
    layout, rail+body split, per-tab head, KPI strip) lives in
-   shell.css and is shared with /monitoring. This file owns the
-   page-level shell tweaks for #rpHomeMain + per-tab row polish. */
+   shell.css and is shared with /monitoring. The body card surface
+   now uses .rt-surface directly (workspace.css), so this file owns
+   only per-tab row polish + the toolbar 80% separator override.
 
-/* rpHomeMain: round only the inner top-left corner (where the
-   rail meets the main body) so the body surface looks tucked
-   under the rail instead of squared off against it. The radius
-   needs a surface color underneath it to be visible — the parent
-   .rp-shell-body is transparent over the page bg, so without a
-   distinct fill the rounded corner clips nothing perceivable.
-   Surface-1 sits one tone above the page bg + matches the
-   "lighter card on darker page" pattern shown in the reference
-   (Apache ECharts theme-builder, 2026-05-25 sketch).
-
-   `overflow: hidden` (overrides .rp-shell-main's auto-scroll for
-   this page) so the table-wrap handles its own overflow + the
-   chip-row / composite-strip / toolbar / pager stay anchored in
-   place. The .rt-table-wrap base (table.css) already does flex: 1
-   + min-{width,height}: 0 + overflow: auto, so the panel grows to
-   fill remaining height regardless of row count — no Home-specific
-   override needed after the 2026-05-25 wrap rename. */
-#rpHomeMain {
-  background: var(--rp-surface);
-  border-top-left-radius: 0.875rem;
-  overflow: hidden;
-}
-
-/* Relay the flex column from #rpHomeMain down through the
-   .rp-shell-view wrapper. Without this, the wrapper is a normal
-   block element + the .rt-table-wrap below can't flex: 1 against
-   it. The chain becomes:
-     #rpHomeMain (flex col, h = viewport - topbar)
-       → #rpHomeView (flex col, flex: 1)
-         → chip-row / composite-strip / toolbar (fixed-height)
-         → .rt-table-wrap (flex: 1) — fills the rest
-         → .rt-pager (fixed-height) */
-#rpHomeView {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
+   Shell chain on Home (2026-05-25, mirrors Workspace):
+     .rp-shell-body                (flex row)
+       → main.rt-main              (padding 0.875rem, flex column)
+         → .rt-surface#rpHomeView  (the chrome'd card + flex col)
+           → chip-row              (fixed-height)
+           → composite-strip       (fixed-height)
+           → .rt-toolbar           (fixed-height)
+           → .rt-table-wrap        (flex: 1 — fills the rest)
+           → .rt-pager             (fixed-height) */
 
 /* The shared .rt-toolbar (toolbar.css:5) carries a full-width
    `border-bottom` to separate it from the table below. On Home
