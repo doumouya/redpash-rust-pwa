@@ -387,6 +387,16 @@ export default function home(app, { session }) {
   // there's no scroll cost.
   navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
 
+  // List-tab paging + filter state. Declared BEFORE the activate()
+  // call below — Projects is the default tab and now goes through
+  // renderListBody (since it joined LIST_VIEWS in `0434935`), which
+  // touches these on its first paint. Leaving the `let`s further
+  // down hit a TDZ on default-tab activation.
+  let listPage = 1;
+  let listTotalPages = 1;
+  let listSearch = "";
+  let listSort   = null;  // { col, dir } | null
+
   // Active tab — from hash (?tab=<key>) or default.
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const wantTab = params.get("tab") || HOME_DEFAULT_TAB;
@@ -465,9 +475,11 @@ export default function home(app, { session }) {
   }
 
   // ─── list-view tabs (Users / Companies / Memberships / Files /
-  //     Charts / Steps) — one renderer driven by a LIST_VIEWS spec.
-  let listPage = 1;
-  let listTotalPages = 1;
+  //     Charts / Projects) — one renderer driven by a LIST_VIEWS spec.
+  // The page-state `let`s (listPage / listTotalPages / listSearch /
+  // listSort) hoist to the top of this function above the activate()
+  // call — see the TDZ note there.
+  //
   // Honors the user's `rowsPerPageHome` pref (set on /settings). "all"
   // maps to a large one-shot page so the same paginated path stays in
   // service. Read on each fetch so a mid-session pref change picks up
@@ -479,12 +491,6 @@ export default function home(app, { session }) {
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
-
-  // Per-tab toolbar state — search query + active sort. Reset on each
-  // renderListBody so tab-switching doesn't carry one tab's filter
-  // into another.
-  let listSearch = "";
-  let listSort   = null;  // { col, dir } | null
 
   function renderListBody(tab, spec) {
     listPage   = 1;
