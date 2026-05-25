@@ -565,6 +565,11 @@
   padding: 0 5%;
   border-bottom: 1px solid var(--rp-border);
   background: var(--rp-bg);
+  /* Override .rt-panel-tabs base (panel.css:756) which sets
+     height: 100% — the cases nav must size to its content, not
+     fill the flex parent (was rendering ~528px tall otherwise). */
+  height: auto;
+  margin-right: 0;
 }
 .rp-cases-detail-tabs button {
   flex: 1;
@@ -578,6 +583,9 @@
   border-bottom: 0.125rem solid transparent;
   cursor: pointer;
   text-align: center;
+  /* Same override: .rt-panel-tabs button base sets height: 100%
+     which inflates the button to the nav's height. Force auto. */
+  height: auto;
 }
 .rp-cases-detail-tabs button:hover { color: var(--rp-text); }
 .rp-cases-detail-tabs button.is-active {
