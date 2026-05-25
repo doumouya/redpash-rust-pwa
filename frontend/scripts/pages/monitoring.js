@@ -103,8 +103,8 @@ export default function monitoring(app, { session }) {
         // absent — keeps non-error rows clean.
         const chain = e.context?.error_chain;
         const expandable = !!chain;
-        const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
-          + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+        const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
+          + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
             + fmtTime(e.occurred_at) + '</td>'
           + '<td>' + levelChip(e.level) + '</td>'
           + '<td>' + esc(e.origin) + '</td>'
@@ -113,11 +113,11 @@ export default function monitoring(app, { session }) {
           + '<td class="is-num">' + (e.http_status != null ? e.http_status : "—") + '</td>'
           + '</tr>';
         if (!expandable) return primary;
-        const errKind = e.context?.error_kind ? '<span class="rt-mon-chain-kind">' + esc(e.context.error_kind) + '</span>' : '';
+        const errKind = e.context?.error_kind ? '<span class="rp-mon-chain-kind">' + esc(e.context.error_kind) + '</span>' : '';
         return primary
-          + '<tr class="rt-mon-row-expansion" hidden>'
+          + '<tr class="rp-mon-row-expansion" hidden>'
           +   '<td colspan="6">'
-          +     '<div class="rt-mon-chain">'
+          +     '<div class="rp-mon-chain">'
           +       errKind
           +       '<pre>' + esc(chain) + '</pre>'
           +     '</div>'
@@ -327,7 +327,7 @@ export default function monitoring(app, { session }) {
     // data-request-id gates which rows are clickable (legacy /
     // pre-correlation requests with NULL request_id stay
     // unclickable — there's nothing to drill into).
-    const clickable = r.request_id ? ' class="rt-mon-row-clickable" data-request-id="' + esc(r.request_id) + '"' : '';
+    const clickable = r.request_id ? ' class="rp-mon-row-clickable" data-request-id="' + esc(r.request_id) + '"' : '';
     return '<tr' + clickable + '>'
       + '<td>' + fmtTime(r.at) + '</td>'
       + '<td><span class="rp-mon-method">' + esc(r.method) + '</span></td>'
@@ -383,13 +383,13 @@ export default function monitoring(app, { session }) {
 
     // Event-row expander inside the modal — same pattern as M-3 + M-4.
     modal.querySelector(".rp-mon-modal-body").addEventListener("click", (e) => {
-      const row = e.target.closest("tr.rt-mon-row-expandable");
+      const row = e.target.closest("tr.rp-mon-row-expandable");
       if (!row) return;
       const expansion = row.nextElementSibling;
-      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+      if (!expansion || !expansion.classList.contains("rp-mon-row-expansion")) return;
       const opening = expansion.hidden;
       expansion.hidden = !opening;
-      const caret = row.querySelector(".rt-mon-row-caret");
+      const caret = row.querySelector(".rp-mon-row-caret");
       if (caret) {
         caret.classList.toggle("bi-chevron-down", opening);
         caret.classList.toggle("bi-chevron-right", !opening);
@@ -449,8 +449,8 @@ export default function monitoring(app, { session }) {
     const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
     const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
     const expandable = hasCtx;
-    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
-      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+    const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
+      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
         + fmtTime(e.occurred_at) + '</td>'
       + '<td>' + levelChip(e.level) + '</td>'
       + '<td>' + esc(e.kind) + '</td>'
@@ -458,10 +458,10 @@ export default function monitoring(app, { session }) {
       + '</tr>';
     if (!expandable) return primary;
     return primary
-      + '<tr class="rt-mon-row-expansion" hidden>'
+      + '<tr class="rp-mon-row-expansion" hidden>'
       +   '<td colspan="4">'
-      +     '<div class="rt-mon-chain">'
-      +       '<span class="rt-mon-chain-kind">context</span>'
+      +     '<div class="rp-mon-chain">'
+      +       '<span class="rp-mon-chain-kind">context</span>'
       +       '<pre>' + esc(ctxJson) + '</pre>'
       +     '</div>'
       +   '</td>'
@@ -631,25 +631,25 @@ export default function monitoring(app, { session }) {
     });
 
     // Tbody click delegate — two row patterns, both opt-in by class:
-    //   • M-1 .rt-mon-row-clickable[data-request-id] → request-replay modal
+    //   • M-1 .rp-mon-row-clickable[data-request-id] → request-replay modal
     //     (Requests tab — recent-requests rows drill into the per-request
     //     event timeline).
-    //   • M-4 .rt-mon-row-expandable → toggle the sibling .rt-mon-row-
+    //   • M-4 .rp-mon-row-expandable → toggle the sibling .rp-mon-row-
     //     expansion (Events tab's error_chain pane). Caret class flips
     //     for visual feedback.
     // Scoped to tbody so it doesn't fight the pager handler above.
     const tbodyEl = view.querySelector("#rp-mon-list-tbody");
     if (tbodyEl) {
       tbodyEl.addEventListener("click", (e) => {
-        const clickable = e.target.closest("tr.rt-mon-row-clickable[data-request-id]");
+        const clickable = e.target.closest("tr.rp-mon-row-clickable[data-request-id]");
         if (clickable) { openRequestReplay(clickable.dataset.requestId); return; }
-        const row = e.target.closest("tr.rt-mon-row-expandable");
+        const row = e.target.closest("tr.rp-mon-row-expandable");
         if (!row) return;
         const expansion = row.nextElementSibling;
-        if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+        if (!expansion || !expansion.classList.contains("rp-mon-row-expansion")) return;
         const opening = expansion.hidden;
         expansion.hidden = !opening;
-        const caret = row.querySelector(".rt-mon-row-caret");
+        const caret = row.querySelector(".rp-mon-row-caret");
         if (caret) {
           caret.classList.toggle("bi-chevron-down", opening);
           caret.classList.toggle("bi-chevron-right", !opening);
@@ -778,20 +778,20 @@ export default function monitoring(app, { session }) {
     });
 
     // Tbody click delegate — same dual-pattern as renderListBody's:
-    //   • rt-mon-row-clickable[data-request-id] → request-replay modal
+    //   • rp-mon-row-clickable[data-request-id] → request-replay modal
     //     (request-source rows drill into the per-request timeline)
-    //   • rt-mon-row-expandable → toggle the context-jsonb pane
+    //   • rp-mon-row-expandable → toggle the context-jsonb pane
     //     (event-source rows with non-empty context)
     view.querySelector("#rp-mon-user-activity-tbody")?.addEventListener("click", (e) => {
-      const clickable = e.target.closest("tr.rt-mon-row-clickable[data-request-id]");
+      const clickable = e.target.closest("tr.rp-mon-row-clickable[data-request-id]");
       if (clickable) { openRequestReplay(clickable.dataset.requestId); return; }
-      const row = e.target.closest("tr.rt-mon-row-expandable");
+      const row = e.target.closest("tr.rp-mon-row-expandable");
       if (!row) return;
       const expansion = row.nextElementSibling;
-      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
+      if (!expansion || !expansion.classList.contains("rp-mon-row-expansion")) return;
       const opening = expansion.hidden;
       expansion.hidden = !opening;
-      const caret = row.querySelector(".rt-mon-row-caret");
+      const caret = row.querySelector(".rp-mon-row-caret");
       if (caret) {
         caret.classList.toggle("bi-chevron-down", opening);
         caret.classList.toggle("bi-chevron-right", !opening);
@@ -877,7 +877,7 @@ export default function monitoring(app, { session }) {
       const status = parseInt(item.summary, 10);
       const reqId = item.ref_id;
       const clickable = reqId
-        ? ' class="rt-mon-row-clickable" data-request-id="' + esc(reqId) + '"'
+        ? ' class="rp-mon-row-clickable" data-request-id="' + esc(reqId) + '"'
         : '';
       return '<tr' + clickable + '>'
         + '<td>' + fmtTime(item.at) + '</td>'
@@ -894,8 +894,8 @@ export default function monitoring(app, { session }) {
     const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
     const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
     const expandable = hasCtx;
-    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
-      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
+    const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
+      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
         + fmtTime(item.at) + '</td>'
       + '<td><span class="rp-mon-method">EVT</span></td>'
       + '<td>'
@@ -906,10 +906,10 @@ export default function monitoring(app, { session }) {
       + '</tr>';
     if (!expandable) return primary;
     return primary
-      + '<tr class="rt-mon-row-expansion" hidden>'
+      + '<tr class="rp-mon-row-expansion" hidden>'
       +   '<td colspan="4">'
-      +     '<div class="rt-mon-chain">'
-      +       '<span class="rt-mon-chain-kind">context</span>'
+      +     '<div class="rp-mon-chain">'
+      +       '<span class="rp-mon-chain-kind">context</span>'
       +       '<pre>' + esc(ctxJson) + '</pre>'
       +     '</div>'
       +   '</td>'

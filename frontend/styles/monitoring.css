@@ -130,29 +130,29 @@
    render an expandable sibling row containing the chain in a
    <pre>. Click the primary row → toggles the expansion's hidden
    attribute. Same atom shape as any redtable inline expander. */
-.rt-mon-row-expandable {
+.rp-mon-row-expandable {
   cursor: pointer;
 }
-.rt-mon-row-expandable:hover {
+.rp-mon-row-expandable:hover {
   background: var(--rp-hover);
 }
-.rt-mon-row-caret {
+.rp-mon-row-caret {
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
   margin-right: 0.25rem;
   transition: transform 0.12s var(--rp-ease);
 }
-.rt-mon-row-expansion td {
+.rp-mon-row-expansion td {
   background: var(--rp-surface-2);
   padding: 0.625rem 0.875rem 0.875rem;
   border-top: 0;
 }
-.rt-mon-chain {
+.rp-mon-chain {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
 }
-.rt-mon-chain-kind {
+.rp-mon-chain-kind {
   display: inline-block;
   align-self: flex-start;
   padding: 1px 0.5rem;
@@ -164,7 +164,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.rt-mon-chain pre {
+.rp-mon-chain pre {
   margin: 0;
   padding: 0.625rem 0.75rem;
   border-radius: 0.375rem;
@@ -183,13 +183,13 @@
 /* ── M-1: request-replay modal ──────────────────────────────────
    Fixed-position centered modal over the Monitoring page. Body
    sits above a translucent backdrop; backdrop click + ESC + the
-   header × button all dismiss. The modal reuses .rt-mon-row-*
+   header × button all dismiss. The modal reuses .rp-mon-row-*
    atoms inside for the event timeline so the expand UX matches
    M-3 / M-4. */
-.rt-mon-row-clickable {
+.rp-mon-row-clickable {
   cursor: pointer;
 }
-.rt-mon-row-clickable:hover {
+.rp-mon-row-clickable:hover {
   background: var(--rp-hover);
 }
 .rp-mon-modal {

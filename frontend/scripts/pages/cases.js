@@ -4,7 +4,7 @@
 // v1 scope: cases + comments tables, kanban (5 columns), detail page,
 // agent migration from /Internal-Slack/. The detail page's activity
 // feed is a direct port of Monitoring's M-2 UserActivity render shape
-// — same `events` table, same `.rt-mon-row-expandable` atom for the
+// — same `events` table, same `.rp-mon-row-expandable` atom for the
 // per-event context expander, same `redact_chain` already applied at
 // the airlock.
 //
