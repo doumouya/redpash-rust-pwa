@@ -121,7 +121,7 @@ export default function home(app, { session: _session }) {
       // toolbar's first-slice convention.
       toolbar: {
         searchPlaceholder: "Search name, handle, org…",
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
       row: (u) =>
@@ -163,7 +163,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search name, slug…",
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Name", "Members", "My role", "Created"],
       row: (c) =>
@@ -202,13 +202,12 @@ export default function home(app, { session: _session }) {
           data: (s) => s.by_role },
       ],
       // /admin/memberships doesn't take ?q= today — the chipRow above
-      // is the scope filter. Suppress the search box (`searchPlaceholder:
-      // false`) so the toolbar doesn't promise a non-functional input;
-      // refresh + the disabled mode/columns/export buttons keep visual
-      // parity with the other tabs.
+      // is the scope filter. Suppress the search box so the toolbar
+      // doesn't promise a non-functional input. Only refresh is wired
+      // — matches every other tab now per [[unify-behavior-not-names]].
       toolbar: {
         searchPlaceholder: false,
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Member", "Role", "Scope", "Joined"],
       row: (m) =>
@@ -265,12 +264,13 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search title, description…",
-        // Object form (vs `modes: true` everywhere else) so listToolbarHTML
-        // drops `disabled` on the named modes. Mirrors spec.modes above —
-        // the spec-level flag drives row decoration (selectMode column),
-        // the toolbar-level flag drives the button states.
+        // Cases is the one Home tab with wired select + delete modes
+        // (bulk-delete via DELETE /api/cases/:rid). Other tabs don't
+        // expose modes today — they'll join when their delete endpoints
+        // land. Per [[unify-behavior-not-names]]: visible options only
+        // when functional.
         modes: { select: true, delete: true },
-        refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Title", "Type", "Status", "Priority", "Assignee", "Updated"],
       // Row click → /cases?id=… so the Cases detail page opens for
@@ -318,13 +318,14 @@ export default function home(app, { session: _session }) {
         { id: "rp-home-files-clean", title: "Cleanness", kind: "gauge",
           data: (s) => s.avg_cleanness ?? 0, opts: { max: 100, unit: "%" } },
       ],
-      // Toolbar — first validation slice (Em's 2026-05-24 ask). Search
-      // + sort + refresh are wired; modes/columns/export buttons
-      // render disabled until the next slice. undoRedo + history
-      // intentionally omitted (no list-level history to model).
+      // Toolbar — search + sort + refresh are wired. Modes/columns/
+      // export stripped 2026-05-25 per [[unify-behavior-not-names]]
+      // (no disabled-stub buttons; they'll return when their handlers
+      // land). undoRedo + history intentionally omitted (no list-level
+      // history to model).
       toolbar: {
         searchPlaceholder: "Search filename, project…",
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       // Sortable columns map to /admin/files's SORTABLE_FILES allowlist
       // (filename / file_type / stage / row_count / updated_at). Project
@@ -374,7 +375,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search chart name…",
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Name", "Project", "Stage", "Updated"],
       // Rows are clickable — navigate to the Workspace with the
@@ -442,7 +443,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search project name…",
-        modes: true, refresh: true, columns: true, export: true,
+        refresh: true,
       },
       columns: ["Name", "Files", "Stage", "Status", "Updated"],
       // Click-through to the Workspace with the project rid pinned —
