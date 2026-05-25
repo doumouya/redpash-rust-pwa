@@ -30,6 +30,17 @@
    fixing rt-pager at the bottom". */
 #rpMonView > .rt-pager { margin-top: auto; }
 
+/* Monitoring is read-only — hide undo/redo + history (they're for
+   Home's editable tabs). Em 2026-05-25: "just do a display:none bro".
+   Cleaner than threading a spec flag through listToolbarHTML for the
+   one case that opts out. */
+#rpMonView #rp-list-toolbar-undo,
+#rpMonView #rp-list-toolbar-redo,
+#rpMonView [data-dd="rp-list-toolbar-history-dd"],
+#rpMonView #rp-list-toolbar-history-dd {
+  display: none;
+}
+
 /* Monitoring tables use the canonical `.rt-table` (table.css). The
    mono method pill is page-content (HTTP method label in cells),
    not table chrome, so it stays here. */
