@@ -141,13 +141,21 @@ export function listToolbarHTML(spec) {
   }
 
   if (s.modes) {
+    // `modes` accepts two shapes:
+    //   - truthy boolean  → all three render disabled (visual-parity stub)
+    //   - object          → { edit, select, delete } per-mode enable; named
+    //                       modes drop `disabled`, the rest stay greyed.
+    // Lets per-tab specs opt individual modes in without flipping the others.
+    const m = (typeof s.modes === "object") ? s.modes : {};
+    const enable = (key) => (typeof s.modes === "object" ? !!m[key] : false);
+    const dis = (key) => enable(key) ? "" : " disabled";
     parts.push(
       '<button class="rt-btn rt-mode" data-mode="edit"   type="button" '
-      +   'title="Edit mode" disabled><i class="bi bi-pencil"></i></button>',
+      +   'title="Edit mode"' + dis("edit") + '><i class="bi bi-pencil"></i></button>',
       '<button class="rt-btn rt-mode" data-mode="select" type="button" '
-      +   'title="Select mode" disabled><i class="bi bi-check2-square"></i></button>',
+      +   'title="Select mode"' + dis("select") + '><i class="bi bi-check2-square"></i></button>',
       '<button class="rt-btn rt-mode" data-mode="delete" type="button" '
-      +   'title="Delete mode" disabled><i class="bi bi-trash3"></i></button>',
+      +   'title="Delete mode"' + dis("delete") + '><i class="bi bi-trash3"></i></button>',
       '<span class="rt-toolbar-sep"></span>',
     );
   }
