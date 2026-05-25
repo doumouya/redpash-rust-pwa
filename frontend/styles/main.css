@@ -6,30 +6,53 @@
    no @import anywhere else — a sheet not named here is not in the
    app. That keeps the CSS layer fully traceable (css-audit enforces
    it: no orphan sheet, no surprise import).
+
+   Order matters. Later @imports override earlier ones at equal
+   specificity. The three layers below sort that out:
+
+     1. Foundation — tokens / prefs / base. Loaded first so every
+        rule downstream sees the resolved CSS variables.
+     2. Shared atoms — .rt-* primitives used by every page (button,
+        toolbar, table, pager, card, topbar, rail, …). Loaded
+        BEFORE page-specific files so a `home.css` rule like
+        `#rpHomeView .rt-toolbar { … }` can override the atom's
+        base; if the atom loaded after, a page rule lacking #id
+        scope would be silently overridden by the atom default.
+        2026-05-25 reorg — these were previously grouped under a
+        "Workspace" section header, which hid the shared status
+        of toolbar/table/pager post-naming-consistency alignment.
+     3. Page-specific sheets — login, home, monitoring, cases,
+        workspace, etc. These ride on top of the atoms with #id-
+        scoped overrides per [[unify-behavior-not-names]] +
+        [[no-mystery-css]].
    ───────────────────────────────────────────────────────────────── */
+
+/* ── 1. foundation ─────────────────────────────────────────────── */
 @import "tokens.css";    /* design tokens — every value */
 @import "prefs.css";     /* pref-driven token overrides — density, font size */
 @import "base.css";      /* reset + document defaults + brand text */
+
+/* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
 @import "button.css";    /* .rp-btn + .rt-btn families */
 @import "user-picker.css"; /* shared user-picker atom — search input + dropdown */
+@import "topbar.css";    /* brand · omnibox · actions */
+@import "rail.css";      /* the rail nav (home + monitoring + workspace) */
+@import "toolbar.css";   /* .rt-toolbar + .rt-btn states + .rt-mode + .rt-search + .rt-dd-* + .rt-pill + .rt-sel-chip */
+@import "table.css";     /* .rt-table-wrap + .rt-table + .rt-table-state + .rt-status */
+@import "pager.css";     /* .rt-pager + .rt-rows-info + .rt-pages + .rt-pg */
+@import "card.css";      /* .rt-card — generic glass card primitive (sibling of .rt-panel) */
+@import "panel.css";     /* .rt-panel — workspace slide-out side panels */
+@import "sw-update.css"; /* service-worker update banner */
+
+/* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
+@import "shell.css";     /* rail-page shell — home, monitoring */
 @import "login.css";     /* the sign-in page */
 @import "home.css";      /* the home launchpad */
 @import "page.css";      /* generic page shell — profile, settings, docs */
 @import "profile.css";   /* /profile only — identity card, usage strip, plan */
 @import "settings.css";  /* /settings only — sentinel chips, About brand row */
-@import "shell.css";     /* rail-page shell — home, monitoring */
-@import "card.css";      /* .rt-card — generic glass card primitive (sibling of .rt-panel) */
-@import "sw-update.css"; /* service-worker update banner */
 @import "monitoring.css"; /* /monitoring — window chips, top-routes table, modal */
 @import "cases.css";      /* /cases — kanban board + case detail page */
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
-
-/* the Workspace — the redtable-as-a-browser, one file per component */
-@import "workspace.css"; /* shell layout */
-@import "topbar.css";    /* brand · omnibox · actions */
-@import "rail.css";      /* the project / file nav rail */
-@import "toolbar.css";   /* the redtable toolbar */
-@import "table.css";     /* the data table */
-@import "panel.css";     /* the filter + tools side panels */
-@import "pager.css";     /* the redtable pager */
+@import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
 @import "chart.css";     /* the redtable body when a chart file is open */
