@@ -2,7 +2,7 @@
 title: Database schema
 section: DB
 order: 0
-last modified date: 2026-05-21
+last modified date: 2026-05-25
 ---
 
 # Database schema
@@ -57,10 +57,24 @@ never addressed in a URL.
 | `20260523000001_computed_stages.sql`       | Drops `projects.stage` + `project_files.status`; adds the `file_stages` view (stage is computed, not stored) |
 | `20260524000001_sentinel_submissions.sql`  | `sentinel_submissions` shared-vocab promotion table + `global_sentinels` view |
 | `20260525000001_filename_stem.sql`         | Strips the upload extension off `project_files.filename` / `display_name`; the column now stores the stem and `file_type` owns the extension half (see "filename + file_type contract" below) |
-| `20260526000001_mtime_cascade.sql`         | Trigger chain — a child INSERT/UPDATE/DELETE bumps the parent's `updated_at` (`project_steps`→`project_files`→`projects`; `reports`/`dashboards`→`projects`). Project-as-folder mtime semantics. |
-| `20260527000001_dependency_mtime_cascade.sql` | Companion triggers — a `project_files` UPDATE bumps reports that source it; a `reports` UPDATE bumps dashboards whose widget spec references it. |
+| `20260526000001_mtime_cascade.sql`         | Trigger chain — a child INSERT/UPDATE/DELETE bumps the parent's `updated_at` (`project_steps`→`project_files`→`projects`; `reports`/`dashboards`→`projects`). Project-as-folder mtime semantics. *(The `reports`/`dashboards`→`projects` branches were retired alongside the table drops in `drop_reports` + `fold_dashboards`; dashboard-typed `project_files` rows now flow through the parent-side `project_files`→`projects` trigger like every other File.)* |
+| `20260527000001_dependency_mtime_cascade.sql` | Companion triggers — a `project_files` UPDATE bumps reports that source it; a `reports` UPDATE bumps dashboards whose widget spec references it. *(Both branches retired with `drop_reports` + `fold_dashboards`; the source-bump path is now an FK cascade on `project_files.source_file_id` per `chart_files` mig — chart-typed rows cascade-delete when their source CSV does.)* |
 | `20260528000001_audit_storage.sql`         | `audit.run` + `audit.finding` in a separate `audit` schema — **dev-meta**, persists CSS/HTML audit-tool output for trend tracking (see `tools/audit-storage-brainstorming.md`). Not read by the app request path. |
 | `20260529000001_events.sql`                | `events` table — the runtime observability log (see below). |
+| `20260530000001_chart_files.sql`           | `project_files.spec` (JSONB) + `project_files.source_file_id` (self-FK, `ON DELETE CASCADE`); rewires the `file_stages` view onto chart-typed `project_files` rows. |
+| `20260531000001_user_names.sql`            | `users.first_name` + `users.last_name` — backfilled by splitting `display_name` on its first space. |
+| `20260601000001_drop_reports.sql`          | **Drops the `reports` table.** Object-model hard-refresh Phase 1 — reports become derived views over a csv-typed File; addressable handle becomes the source `FIL_…`. Locked 2-entity model per [`internal/architecture/object-model.md`](../internal/architecture/object-model.md). |
+| `20260602000001_fold_dashboards.sql`       | **Drops the `dashboards` table.** Phase 2 — dashboards fold into `project_files` as rows with `file_type='dashboard'`. DSH_ rids preserved through migration. |
+| `20260603000001_request_log.sql`           | `request_log` table — append-only per-HTTP-request capture (route, status, latency). Powers `/api/metrics` + the Monitoring Requests tab. Indexes on `at DESC` + `(route, at DESC)`. |
+| `20260604000001_audit_run_diff.sql`        | `audit.run_diff` parameterized projection over `audit.finding` — classifies findings as new / closed / unchanged across two runs. Powers trend reports without a separate write path. |
+| `20260605000001_stage_rename.sql`          | Stage label rename: `import → new`, `report → design`. Matches the locked stage vocabulary; old labels migrated in-place. |
+| `20260606000001_user_preferences.sql`      | `user_preferences` table — promotes prefs from a JSONB column to a first-class object. `(user_redpash_id, key)` composite PK, JSONB value. Phase 1 of the user-prefs migration (spec: [`internal/specs/user-preferences.md`](../internal/specs/user-preferences.md)). |
+| `20260607000001_drop_users_prefs.sql`      | Drops the now-dead `users.prefs` JSONB column. Phase 2 of the user-prefs migration — completes the cut-over after `user_preferences` carries every read + write. |
+| `20260608000001_optimization_points.sql`   | `optimization_points` table — the doc-side "optimization map" becomes a queryable surface that powers the Monitoring page's Optimization tab. Live measurements off the `ROW_COUNT_TABLES` whitelist in `routes/monitoring.rs`. |
+| `20260609000001_request_log_user_session.sql` | `request_log.user_redpash_id` + `session_id` columns + `(user_redpash_id, at DESC)` partial index + `(session_id, at DESC)` partial index. Slice B of the audit-everything workstream — powers per-user investigation queries (I-1 / I-7) without joining through `sessions`. |
+| `20260610000001_cases.sql`                 | `cases` + `comments` tables — Jira-flow workstream v1. CAS_ + CMT_ rids. Status flow (`backlog`/`todo`/`in_progress`/`in_review`/`done`); type / priority / assignee / reporter / project / company FKs. Lifecycle changes mirror into `events` (`case_*` kinds via `event::info`). |
+| `20260611000001_cases_error_message.sql`   | `cases.error_message` — raw error payload field for cases auto-triaged from FE crash / panic events. Free-text TEXT column; populated by the auto-triage path, not the user composer. |
+| `20260612000001_case_categories.sql`       | `case_categories` table + `cases.category_id` FK. Two-level taxonomy via self-FK on `parent_id` (NULL = root / parent; non-NULL = child). `company_id NULL` = global category; per-company custom categories land later via the same column. |
 
 ---
 
@@ -80,7 +94,9 @@ Identity anchor. Two creation paths:
 | `redpash_id`   | `TEXT` PK     | NO       | —            | `USR_…` |
 | `username`     | `TEXT`        | NO       | —            | `UNIQUE`. Bootstrap = `"dev"`; OAuth = `{email-local}.{rid-suffix}`. |
 | `email`        | `TEXT`        | YES      | —            | From Google's `email` claim. |
-| `display_name` | `TEXT`        | NO       | —            | Bootstrap = `"Dev user"`; OAuth = Google `name` claim or email local part. |
+| `display_name` | `TEXT`        | NO       | —            | Bootstrap = `"Dev user"`; OAuth = Google `name` claim or email local part. Stays the friendly label (avatar initials, UI). |
+| `first_name`   | `TEXT`        | YES      | —            | Mig 017. Structured given name; backfilled from `display_name` (first token). |
+| `last_name`    | `TEXT`        | YES      | —            | Mig 017. Structured family name; backfilled from `display_name` (remainder after the first space). |
 | `avatar_url`   | `TEXT`        | YES      | —            | Google `picture` claim (full URL). |
 | `job_title`    | `TEXT`        | YES      | —            | Onboarding. Edited via the Profile page (`PATCH /api/me`). |
 | `organisation` | `TEXT`        | YES      | —            | Onboarding. |
@@ -246,63 +262,42 @@ INSERT clears the redo stack via
 | `project_steps_pkey`        | `redpash_id`                       | PK |
 | `project_steps_file_idx`    | `(file_redpash_id, ordinal)`       | List query (`ORDER BY ordinal ASC`) |
 
-### `reports`
+### `reports` — **RETIRED** (dropped in `drop_reports`, 2026-06-01)
 
-Saved group-by + agg + filter + sort + chart spec over a project file.
+The `reports` table was dropped in the object-model hard-refresh Phase 1
+([`drop_reports.sql`](../../backend/migrations/20260601000001_drop_reports.sql);
+see [`internal/architecture/object-model.md`](../internal/architecture/object-model.md)
+for the verdict). A Report is no longer a stored entity — it's a
+derived view over a csv-typed File. The old `reports.spec` field lives
+on chart-typed `project_files.spec` instead; folder / favorite / public
+metadata now lives on the source File's matching columns. RID prefix
+`RPT_…` retired; addressable handle is the source `FIL_…`.
 
-| Column               | Type          | Nullable | Default       | Notes |
-|----------------------|---------------|----------|---------------|-------|
-| `redpash_id`         | `TEXT` PK     | NO       | —             | `RPT_…` |
-| `project_redpash_id` | `TEXT` FK     | NO       | —             | `ON DELETE CASCADE` → projects |
-| `source_file_id`     | `TEXT` FK     | NO       | —             | `ON DELETE CASCADE` → project_files |
-| `title`              | `TEXT`        | NO       | —             | |
-| `spec`               | `JSONB`       | NO       | `'{}'::jsonb` | `ReportSpec` — group-by / agg / filter / sort / windows / top-N / charts. |
-| `is_favorite`        | `BOOLEAN`     | NO       | `FALSE`       | Mig 003. |
-| `folder`             | `TEXT`        | YES      | —             | Mig 004. Free-form label. |
-| `description`        | `TEXT`        | YES      | —             | Mig 005. |
-| `is_public`          | `BOOLEAN`     | NO       | `FALSE`       | Mig 005. Column exists; share-link UI still pending. |
-| `created_at`         | `TIMESTAMPTZ` | NO       | `now()`       | |
-| `updated_at`         | `TIMESTAMPTZ` | NO       | `now()`       | |
+Pre-retirement shape (kept for historical reference, no live impact):
+columns `(redpash_id PK, project_redpash_id FK, source_file_id FK,
+title, spec JSONB, is_favorite, folder, description, is_public,
+created_at, updated_at)`; indexes `reports_pkey`, `reports_project_idx`,
+`reports_source_idx`, `reports_favorite_idx (WHERE is_favorite)`,
+`reports_folder_idx (project_redpash_id, folder)`.
 
-**Indexes:**
+### `dashboards` — **RETIRED** (dropped in `fold_dashboards`, 2026-06-02)
 
-| Index                      | Columns                              | Notes |
-|----------------------------|--------------------------------------|-------|
-| `reports_pkey`             | `redpash_id`                         | PK |
-| `reports_project_idx`      | `project_redpash_id`                 | |
-| `reports_source_idx`       | `source_file_id`                     | |
-| `reports_favorite_idx`     | `is_favorite` `WHERE is_favorite`    | Partial — home-page favourites |
-| `reports_folder_idx`       | `(project_redpash_id, folder)`       | |
+The `dashboards` table was dropped in the object-model hard-refresh
+Phase 2 ([`fold_dashboards.sql`](../../backend/migrations/20260602000001_fold_dashboards.sql)).
+Dashboards fold into `project_files` as rows with `file_type='dashboard'`;
+the `DSH_…` RID prefix is preserved (rows kept their original ids
+through the migration). `spec` is now `project_files.spec` (same JSONB
+shape); folder / favorite / public flags live on `project_files`'s
+matching columns. Widgets that previously referenced
+`(report_id, chart_index)` pairs now reference `chart_id` (CHT_)
+directly — reports aren't entities so the pairing concept is gone.
 
-List query sorts `folder ASC NULLS LAST, is_favorite DESC,
-updated_at DESC`.
-
-### `dashboards`
-
-Saved layout of widgets (template + slot map). Widgets reference
-reports by RID + chart index — see [objects/dashboard.md](../objects/dashboard.md).
-
-| Column               | Type          | Nullable | Default       | Notes |
-|----------------------|---------------|----------|---------------|-------|
-| `redpash_id`         | `TEXT` PK     | NO       | —             | `DSH_…` |
-| `project_redpash_id` | `TEXT` FK     | NO       | —             | `ON DELETE CASCADE` → projects |
-| `title`              | `TEXT`        | NO       | —             | |
-| `description`        | `TEXT`        | YES      | —             | |
-| `spec`               | `JSONB`       | NO       | `'{}'::jsonb` | `DashboardSpec` — template + widgets. |
-| `folder`             | `TEXT`        | YES      | —             | |
-| `is_favorite`        | `BOOLEAN`     | NO       | `FALSE`       | |
-| `is_public`          | `BOOLEAN`     | NO       | `FALSE`       | Column exists; share-link UI still pending. |
-| `created_at`         | `TIMESTAMPTZ` | NO       | `now()`       | |
-| `updated_at`         | `TIMESTAMPTZ` | NO       | `now()`       | |
-
-**Indexes:**
-
-| Index                       | Columns                              | Notes |
-|-----------------------------|--------------------------------------|-------|
-| `dashboards_pkey`           | `redpash_id`                         | PK |
-| `dashboards_project_idx`    | `project_redpash_id`                 | |
-| `dashboards_folder_idx`     | `(project_redpash_id, folder)`       | |
-| `dashboards_favorite_idx`   | `is_favorite` `WHERE is_favorite`    | Partial |
+Pre-retirement shape (kept for historical reference, no live impact):
+columns `(redpash_id PK, project_redpash_id FK, title, description,
+spec JSONB, folder, is_favorite, is_public, created_at, updated_at)`;
+indexes `dashboards_pkey`, `dashboards_project_idx`,
+`dashboards_folder_idx (project_redpash_id, folder)`,
+`dashboards_favorite_idx (WHERE is_favorite)`.
 
 ### `sessions`
 
