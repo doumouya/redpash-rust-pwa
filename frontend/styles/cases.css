@@ -365,35 +365,42 @@
   background: var(--rp-hover);
   color: var(--rp-text);
 }
-/* Body splits into two regions:
-   • TOP — title / controls / info / advance / description: each
-     child is flex-shrink:0 (always shows in full), no scroll.
-   • BOTTOM — tab nav (also flex-shrink:0) + .rp-cases-detail-tabs-content
-     (flex:1 + overflow-y:auto, scrolls inside).
-   This way switching tabs only reflows inside the tabs-content
-   wrapper; the nav stays put + the top region doesn't shift,
-   regardless of whether the description is expanded or retracted. */
+/* Body splits into exactly two regions, each its own <section>:
+   • .rp-cases-detail-overview — title / badges / info / advance /
+     description. flex-shrink:0 (always shows in full). Internal
+     children flow naturally.
+   • .rp-cases-detail-thread — tab nav + tabs-content. flex:1, so
+     it claims the remaining body height. Inside it: nav is
+     flex-shrink:0, tabs-content flex:1 + scrolls.
+   Switching tabs only reflows inside .rp-cases-detail-tabs-content;
+   overview + nav are anchored by the parent flex layout regardless
+   of whether the description is open or retracted. */
 .rp-cases-detail-body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
   min-height: 0;
   overflow: hidden;
   padding: 0.875rem 1.125rem 1rem;
 }
-.rp-cases-detail-body > h1,
-.rp-cases-detail-body > .rp-cases-detail-controls,
-.rp-cases-detail-body > .rp-cases-detail-info,
-.rp-cases-detail-body > .rp-cases-detail-action,
-.rp-cases-detail-body > .rp-cases-detail-description,
-.rp-cases-detail-body > .rp-cases-detail-tabs {
+.rp-cases-detail-overview {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+.rp-cases-detail-thread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .rp-cases-detail-tabs-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-top: 0.75rem;
 }
 .rp-cases-detail-title {
   margin: 0;

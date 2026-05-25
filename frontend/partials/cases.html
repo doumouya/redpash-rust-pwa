@@ -69,6 +69,11 @@
         </header>
 
         <div class="rp-cases-detail-body">
+
+          <!-- ════ overview region — always visible, never scrolls
+               at this level. Wraps the identity surface of the case:
+               title, badges, info, advance, description. ════ -->
+          <section class="rp-cases-detail-overview">
           <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
 
           <!-- At-a-glance badges — centered chip row of status /
@@ -119,7 +124,13 @@
               <!-- JS renders <pre> for now; markdown render is a v2 polish -->
             </div>
           </details>
+          </section>
 
+          <!-- ════ thread region — flexes to fill the remaining body
+               height. Wraps the tab nav (fixed at the top of this
+               region) + the scrolling tab content (each pane scrolls
+               inside its own bounds). ════ -->
+          <section class="rp-cases-detail-thread">
           <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
             <button class="is-active" type="button" data-tab="comments" title="Comments thread">
               <i class="bi bi-chat-left-text"></i> Comments
@@ -233,6 +244,7 @@
             </dl>
           </section>
           </div>
+          </section>
         </div>
       </aside>
 
