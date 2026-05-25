@@ -955,6 +955,11 @@
   color: var(--rp-text-mute);
   font-size: 0.75rem;
 }
+.rp-cases-empty--inline {
+  padding: 0.25rem 0;
+  text-align: left;
+}
+
 /* ── primary advance button ─────────────────────────────────
    The detail page's main action — advances the case to the
    next stage (or "Reopen" when Done). Same PATCH as the

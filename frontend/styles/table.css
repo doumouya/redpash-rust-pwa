@@ -56,7 +56,13 @@
 .rt-table tbody tr:hover { background: var(--rp-hover); }
 .rt-table tbody tr.is-selected { background: var(--rp-accent-soft); }
 .rt-table .col-n { color: var(--rp-text-mute); }
+.rt-table .cell-name { font-weight: 550; }
 .rt-table .cell-muted { color: var(--rp-text-dim); }
+.rt-table .cell-warn {
+  color: var(--rp-warn);
+  background: rgba(249, 226, 175, 0.1);
+  border-radius: 0.3125rem;
+}
 
 .rt-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-accent-2); cursor: pointer; }
 

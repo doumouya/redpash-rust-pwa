@@ -28,3 +28,5 @@ a { color: var(--rp-accent-2); }
   color: var(--rp-text);
 }
 .rp-wordmark b { color: var(--rp-accent); font-weight: 900; }
+
+.rp-muted { margin: 0; color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
