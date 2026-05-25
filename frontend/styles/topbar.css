@@ -35,9 +35,11 @@
 .rp-brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--rp-accent), var(--rp-mauve));
-  box-shadow: 0 2px 8px rgba(243, 139, 168, 0.28);
+  /* The brand SVG carries its own circle + gradient + R glyph
+     (see frontend/icons/logo.svg) — CSS owns size + positioning
+     only. Same asset as the PWA install icon so the topbar mark
+     matches what the user sees on their launcher. */
+  background: url(/icons/logo.svg) center / contain no-repeat;
 }
 .rp-brand-name {
   font-family: var(--rp-font-brand);
