@@ -27,7 +27,7 @@
   padding: var(--rp-sp-6);
 }
 
-.rp-shell-view { width: 100%; max-width: 1100px; margin: 0 auto; }
+.rp-shell-view { width: 100%; max-width: 68.75rem; margin: 0 auto; }
 
 /* ── chip row — a horizontal pill-selector ──────────────────────
    Shared atom: window chips on /monitoring (1h/24h/7d/30d), scope
@@ -39,26 +39,26 @@
 .rp-chip-row {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0.125rem;
   margin-bottom: var(--rp-sp-4);
-  padding: 3px;
+  padding: 0.1875rem;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 99px;
+  border-radius: 6.1875rem;
 }
 .rp-chip-row-label {
   font-size: var(--rp-text-sm);
   color: var(--rp-text-mute);
-  padding: 0 8px 0 12px;
+  padding: 0 0.5rem 0 0.75rem;
 }
 .rp-chip {
-  padding: 4px 14px;
+  padding: 0.25rem 0.875rem;
   font: inherit;
   font-size: var(--rp-text-sm);
   color: var(--rp-text-dim);
   background: transparent;
   border: 0;
-  border-radius: 99px;
+  border-radius: 6.1875rem;
   cursor: pointer;
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
@@ -91,8 +91,8 @@
 }
 .rp-list-sortable:hover { color: var(--rp-text); }
 .rp-list-sort-icon {
-  margin-left: 4px;
-  font-size: 10px;
+  margin-left: 0.25rem;
+  font-size: 0.625rem;
   opacity: 0.45;
   transition: opacity 0.12s var(--rp-ease);
 }
@@ -111,11 +111,11 @@
 /* ── --wide modifier ────────────────────────────────────────────
    Opt-in: page wants the body to span the full available width
    beside the rail (like the Workspace's redtable). Drops the main
-   padding to a tight 14px (matches workspace.css's .rt-main) and
-   releases the inner view from its 1100px cap. Used on /monitoring
+   padding to a tight 0.875rem (matches workspace.css's .rt-main) and
+   releases the inner view from its 68.75rem cap. Used on /monitoring
    where tables benefit from horizontal real estate; not on /home
    where the card grid genuinely benefits from a centred cap. */
-.rp-shell--wide .rp-shell-main { padding: 14px; }
+.rp-shell--wide .rp-shell-main { padding: 0.875rem; }
 .rp-shell--wide .rp-shell-view { max-width: none; }
 
 .rp-shell-state {
@@ -145,8 +145,8 @@
 .rp-shell-head-count {
   font-size: var(--rp-text-sm);
   color: var(--rp-text-mute);
-  padding: 2px 10px;
-  border-radius: 99px;
+  padding: 0.125rem 0.625rem;
+  border-radius: 6.1875rem;
   background: var(--rp-hover);
 }
 
@@ -155,7 +155,7 @@
    the chart-primitives roadmap. */
 .rp-kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-6);
 }
@@ -171,7 +171,7 @@
   border-radius: var(--rp-radius);
 }
 .rp-kpi-label {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -181,18 +181,18 @@
      Savate displays well on the home greeting but reads poorly at
      small numeric sizes, especially on the Monitoring KPI row. One
      family across both pages — not worth maintaining two versions. */
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 700;
   color: var(--rp-text);
 }
 
 /* Chart strip — 1-N viz cards above the list. Sibling of .rp-kpi-
    strip, same auto-fit grid breakpoints. Each card carries a small
-   title + a 180px-tall ECharts canvas; echarts-kpi.js inits the
+   title + a 11.25rem-tall ECharts canvas; echarts-kpi.js inits the
    instance against the canvas. */
 .rp-home-charts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-6);
 }
@@ -207,7 +207,7 @@
   border-radius: var(--rp-radius);
 }
 .rp-home-chart-title {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -217,6 +217,6 @@
 .rp-home-chart-canvas {
   flex: 1;
   width: 100%;
-  height: 180px;
-  min-height: 180px;
+  height: 11.25rem;
+  min-height: 11.25rem;
 }

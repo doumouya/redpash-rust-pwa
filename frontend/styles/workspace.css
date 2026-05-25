@@ -19,7 +19,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 0.875rem;
 }
 .rt-surface {
   flex: 1;
@@ -28,7 +28,7 @@
   flex-direction: column;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 14px;
+  border-radius: 0.875rem;
   box-shadow: var(--rp-shadow);
   overflow: hidden;
 }

@@ -7,10 +7,10 @@
    Ported from main's Step-1 Profile (commit f690550-era), trimmed
    to features backed by existing endpoints. */
 
-.rp-profile { max-width: 1080px; }
+.rp-profile { max-width: 67.5rem; }
 
 /* 2-col layout: form on the left, stacked side-panels on the right.
-   Collapses to one column under 880px so phones get a vertical read. */
+   Collapses to one column under 55rem so phones get a vertical read. */
 .rp-profile__grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
@@ -22,7 +22,7 @@
   flex-direction: column;
   gap: var(--rp-sp-5);
 }
-@media (max-width: 880px) {
+@media (max-width: 55rem) {
   .rp-profile__grid { grid-template-columns: 1fr; }
 }
 
@@ -45,15 +45,15 @@
   white-space: nowrap;
 }
 .rp-profile__id-email {
-  margin: 2px 0 6px;
+  margin: 0.125rem 0 0.375rem;
   color: var(--rp-text-mute);
   font-size: var(--rp-text-sm);
 }
 .rp-profile__plan-pill {
   display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem;
   color: var(--rp-ok);
   background: color-mix(in srgb, var(--rp-ok) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--rp-ok) 35%, transparent);
@@ -71,17 +71,17 @@
 /* ─── Hint text under row labels ─────────────────────────────── */
 .rp-profile__hint {
   display: block;
-  margin-top: 2px;
+  margin-top: 0.125rem;
   color: var(--rp-text-mute);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 400;
 }
 
 /* ─── Inputs — readonly looks flat, editable gets a border ───── */
 .rp-input {
-  width: 280px;
+  width: 17.5rem;
   max-width: 100%;
-  padding: 6px 10px;
+  padding: 0.375rem 0.625rem;
   font: inherit;
   font-size: var(--rp-text-sm);
   color: var(--rp-text);
@@ -99,7 +99,7 @@
   border-color: var(--rp-border);
   background: var(--rp-surface);
 }
-.rp-input:focus { outline: 2px solid var(--rp-accent-2); outline-offset: 1px; }
+.rp-input:focus { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 1px; }
 
 /* Row variant: label on top, control beneath (for the use-case grid) */
 .rp-page__row--col { flex-direction: column; align-items: stretch; gap: var(--rp-sp-3); }
@@ -110,7 +110,7 @@
   gap: var(--rp-sp-2);
   align-items: center;
 }
-.rp-profile__rid { width: 320px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 11px; }
+.rp-profile__rid { width: 20rem; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 0.6875rem; }
 
 /* ─── Memberships (real company affiliations from /me) ──────── */
 .rp-profile__memberships {
@@ -126,23 +126,23 @@
 .rp-profile__membership {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 8px;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem 0.25rem 0.5rem;
   font-size: var(--rp-text-sm);
   color: var(--rp-accent-2);
   text-decoration: none;
   background: color-mix(in srgb, var(--rp-accent-2) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--rp-accent-2) 32%, transparent);
-  border-radius: 999px;
+  border-radius: 62.4375rem;
   transition: background 0.15s var(--rp-ease);
 }
 .rp-profile__membership:hover { background: color-mix(in srgb, var(--rp-accent-2) 18%, transparent); }
-.rp-profile__membership-icon { font-size: 11px; opacity: 0.85; }
+.rp-profile__membership-icon { font-size: 0.6875rem; opacity: 0.85; }
 .rp-profile__membership-name { font-weight: 550; }
 .rp-profile__membership-role {
-  font-size: 10px;
-  padding: 1px 7px;
-  border-radius: 999px;
+  font-size: 0.625rem;
+  padding: 1px 0.4375rem;
+  border-radius: 62.4375rem;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
   color: var(--rp-text-dim);
@@ -155,11 +155,11 @@
 /* ─── Use-case option pills ──────────────────────────────────── */
 .rp-profile__opts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--rp-sp-2);
 }
 .rp-profile__opt {
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   font: inherit;
   font-size: var(--rp-text-sm);
   color: var(--rp-text-dim);
@@ -182,7 +182,7 @@
    Fixed height so the section doesn't reflow when counts arrive. */
 .rp-profile__usage-chart {
   width: 100%;
-  height: 180px;
+  height: 11.25rem;
 }
 
 /* ─── Plan card ──────────────────────────────────────────────── */
@@ -198,7 +198,7 @@
   color: var(--rp-text);
 }
 .rp-profile__plan-sub {
-  margin-top: 2px;
+  margin-top: 0.125rem;
   color: var(--rp-text-mute);
   font-size: var(--rp-text-sm);
 }
@@ -211,11 +211,11 @@
   display: flex;
   align-items: center;
   gap: var(--rp-sp-2);
-  padding: 4px 0;
+  padding: 0.25rem 0;
   font-size: var(--rp-text-sm);
   color: var(--rp-text-dim);
 }
-.rp-profile__plan-features i { color: var(--rp-ok); font-size: 13px; }
+.rp-profile__plan-features i { color: var(--rp-ok); font-size: 0.8125rem; }
 
 /* ─── Connected accounts ─────────────────────────────────────── */
 .rp-profile__conn {
@@ -227,25 +227,25 @@
 }
 .rp-profile__conn:first-of-type { border-top: 0; }
 .rp-profile__conn-icon {
-  width: 24px;
+  width: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 .rp-profile__conn-info { flex: 1; min-width: 0; }
 .rp-profile__conn-name { font-size: var(--rp-text-sm); color: var(--rp-text); }
 .rp-profile__conn-detail {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rp-profile__conn-state {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem;
   color: var(--rp-text-mute);
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
@@ -258,9 +258,9 @@
 
 /* Generic "Soon" badge — reused on plan + connections rows */
 .rp-profile__soon {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem;
   color: var(--rp-text-mute);
   background: var(--rp-surface-2);
   border: 1px dashed var(--rp-border);
