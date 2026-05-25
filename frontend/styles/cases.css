@@ -538,14 +538,22 @@
 }
 
 /* tabs — three equal tabs (Comments / Activity / Case details).
-   Nav strip is 90% of the panel area, centered; each button is
-   1/3 of the strip → 30% of the area, matching Em's spec. */
+   Strip spans the panel full width so the sticky background
+   covers edge-to-edge; the inner 5% horizontal padding leaves
+   the button row at 90% of the area; each button is 1/3 of
+   that strip → 30% of the area, matching Em's spec.
+   Sticky to the top of the scrolling body so switching tabs
+   doesn't make the strip move around with the varying content
+   heights of each pane (Em's bug report). */
 .rp-cases-detail-tabs {
   display: flex;
   gap: 0.125rem;
-  width: 90%;
-  margin: 0 auto;
+  padding: 0 5%;
   border-bottom: 1px solid var(--rp-border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--rp-bg);                /* opaque so scrolled content doesn't show through */
 }
 .rp-cases-detail-tabs button {
   flex: 1;
