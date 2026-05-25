@@ -61,7 +61,7 @@ YAML frontmatter above).
 - [CSS units](frontend/css-units.md) — relative-by-default rule: prefer rem / em / % over px; px only for hairlines + hardware-pixel snap.
 - [Unified surface](frontend/unified-surface.md) — future milestone: RedPash as one Excel-like window; parent-tab isolation, child-tab shared data.
 - [Landing page](frontend/redpash-components-pages/landing-page/index.md) — first surface composing `redpash-components`. Hero / float bars / modals / i18n / theme toggle / PWA install / typewriter / shimmer.
-- [Home page](frontend/redpash-components-pages/home-page/index.md) — authenticated landing: a single dashboard card (upload zone, minitables, stat strip) linking into /objects.
+- [Home page](frontend/redpash-components-pages/home-page/index.md) — authenticated landing: the org command center; rail-page shell, per-tab LIST_VIEWS (Users / Companies / Memberships / Cases / Projects / Files / Charts), sortable & reorderable columns.
 - [Objects page](frontend/redpash-components-pages/objects-page/index.md) — the browse surface: one redtable, customizable tabs (projects / files / reports / dashboards), edit/select/delete modes.
 - [Profile + Settings page](frontend/redpash-components-pages/profile-page/index.md) — full-bleed 2-step scroll-snap consolidating identity + preferences.
 
