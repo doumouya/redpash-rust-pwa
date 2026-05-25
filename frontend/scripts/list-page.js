@@ -114,32 +114,30 @@ export function listPanel(columns, tbodyId) {
     + '</section>';
 }
 
-// Toolbar shell — full Workspace-parity shape. Every list view gets the
-// same boring toolbar with the same button order; controls disable in
-// their natural state where the feature isn't wired yet (undo/redo with
-// no history, columns picker without prefs UI, export without exporter,
-// history without a history panel). Em 2026-05-25: "same boring tab
-// everywhere as long as all the options are there" — toolbar parity
-// trumps per-tab opt-in. Spec carries only:
+// Toolbar shell — emits only buttons that have working handlers. The
+// "show every Workspace button" parity experiment (a429d1c) was reverted
+// 2026-05-25 — Em: "the options are still not working". Per
+// [[unify-behavior-not-names]]: every visible control must be functional;
+// disabled stubs that look clickable are an anti-pattern, no matter how
+// well they match Workspace's shape.
 //
+// Wired today: search, modes (select + delete on tabs that declare
+// them), refresh, rows-per-page dropdown, selection chip.
+// Disabled until their handlers land: edit mode (per-cell editing),
+// row-numbers toggle (no rownum column yet), columns picker, undo/redo
+// (no list-step history), export menu, history toggle.
+//
+// Spec carries:
 //   { searchPlaceholder?: string|false, modes?: bool|{edit, select, delete} }
 //
-// `searchPlaceholder: false` suppresses the search box (memberships does
-// this — /admin/memberships takes no ?q=). `modes` defaults to true (all
-// three rt-mode buttons render disabled); object form enables the named
-// modes; explicit false hides the whole mode group (rare).
-//
-// Order mirrors workspace.html line 47-102 — same indices, same separators:
-//   search | edit select delete | undo redo refresh rownum | rowsDd colsDd
-//   selChip | export history
-//
-// Button IDs are namespaced (#rp-list-toolbar-*) so home + monitoring
-// renderers wire them via querySelector without colliding with #ws*.
+// `searchPlaceholder: false` suppresses the search box. `modes` accepts
+// either a boolean (all three render disabled) or an object form
+// (named modes enabled, others greyed).
 export function listToolbarHTML(spec) {
   const s = spec || {};
   const parts = ['<div class="rt-toolbar rt-toolbar--data rp-list-toolbar">'];
 
-  // search
+  // search — wired by renderListBody to ?q= when the endpoint supports it.
   if (s.searchPlaceholder !== false) {
     parts.push(
       '<div class="rt-search">'
@@ -151,11 +149,9 @@ export function listToolbarHTML(spec) {
     );
   }
 
-  // modes — edit / select / delete. Default: all three disabled (visual-
-  // parity stub matching Workspace's no-file state). Object form enables
-  // named modes; explicit false hides the group (memberships, etc. that
-  // don't model row actions).
-  if (s.modes !== false) {
+  // modes — edit / select / delete. Object form enables named modes
+  // (handler in renderListBody); boolean keeps all three disabled.
+  if (s.modes) {
     const m = (typeof s.modes === "object") ? s.modes : {};
     const enable = (key) => (typeof s.modes === "object" ? !!m[key] : false);
     const dis = (key) => enable(key) ? "" : " disabled";
@@ -170,36 +166,14 @@ export function listToolbarHTML(spec) {
     );
   }
 
-  // undo / redo — list views don't model step history, so both render
-  // disabled (matches workspace.html's no-file natural state).
-  parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
-    '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
-  );
-
-  // refresh — always wired (handler in renderListBody re-runs fetchList).
+  // refresh — wired (handler in renderListBody re-runs fetchList).
   parts.push(
     '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
     +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
   );
 
-  // row-numbers toggle — Home tables don't currently emit a row-number
-  // column, so the toggle is a parity stub matching workspace's
-  // #wsRownum. When a future slice adds .col-rownum cells, flip this
-  // to enabled + wire `is-active`/`.no-rownum` toggling on .rt-table.
-  parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-rownum" type="button" disabled '
-    +   'title="Row numbers (no rownum column on list views)">'
-    +   '<i class="bi bi-list-ol"></i></button>',
-    '<span class="rt-toolbar-sep"></span>',
-  );
-
-  // rows-per-page pill — matches workspace's #wsRowsDd. Functional today:
-  // home + monitoring read listPageSize() from prefs, and renderListBody
-  // wires the dropdown items to setPref("list.rows-per-page", N). Initial
-  // label is "{N} rows"; renderListBody updates it on mount.
+  // rows-per-page pill — wired to the rowsPerPageHome pref. setPref
+  // writes through + renderListBody re-fetches with the new size.
   parts.push(
     '<div class="rt-dd-wrap">'
     + '<button class="rt-pill" data-dd="rp-list-toolbar-rows-dd" type="button" '
@@ -217,49 +191,17 @@ export function listToolbarHTML(spec) {
     + '</div>',
   );
 
-  // columns dropdown — disabled stub matching workspace's #wsColsDd in
-  // its no-file state. Enable when the columns-prefs slice lands.
-  parts.push(
-    '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-cols-dd" type="button" '
-    +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- columns picker — next slice --></div>'
-    + '</div>',
-  );
-
-  // selection chip — shown only when the active tab's modes include
-  // select. Hidden by default; renderListBody flips `hidden` off on
-  // toggleSelectMode and updates the count.
-  parts.push(
-    '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
-    + '<i class="bi bi-check2-square"></i>'
-    + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
-    + '</span>',
-    '<span class="rt-toolbar-sep"></span>',
-  );
-
-  // export dropdown — disabled stub. Enable when the per-tab exporter
-  // lands (CSV first, XLSX/JSON next). The menu items already declare
-  // their data-fmt so the wire-up only needs the click handler.
-  parts.push(
-    '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-export-dd" type="button" '
-    +   'title="Export" disabled><i class="bi bi-download"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
-    +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
-    +   '<div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>'
-    +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
-    + '</div>'
-    + '</div>',
-  );
-
-  // history toggle — disabled stub matching workspace's #wsHistoryToggle.
-  // List views don't model an undoable history, so this stays disabled
-  // (unlike rowsDd, there's no natural list-view analogue).
-  parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-history" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-clock-history"></i></button>',
-  );
+  // selection chip — shown only when a tab's modes include select.
+  // Hidden by default; renderListBody flips `hidden` off + updates the
+  // count as rows are checked.
+  if (s.modes) {
+    parts.push(
+      '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
+      + '<i class="bi bi-check2-square"></i>'
+      + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
+      + '</span>',
+    );
+  }
 
   parts.push('</div>');
   return parts.join("");

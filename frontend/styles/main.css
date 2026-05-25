@@ -33,11 +33,11 @@
 @import "base.css";      /* reset + document defaults + brand text */
 
 /* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
-@import "button.css";    /* .rp-btn — the chunky call-to-action */
+@import "button.css";    /* .rp-btn + .rt-btn families */
 @import "user-picker.css"; /* shared user-picker atom — search input + dropdown */
 @import "topbar.css";    /* brand · omnibox · actions */
 @import "rail.css";      /* the rail nav (home + monitoring + workspace) */
-@import "toolbar.css";   /* .rt-btn + .rt-toolbar + .rt-mode + .rt-search + .rt-dd-* + .rt-pill + .rt-sel-chip — the redtable toolbar family */
+@import "toolbar.css";   /* .rt-toolbar + .rt-mode + .rt-search + .rt-pill + .rt-dd-* + .rt-sel-chip (the .rt-btn base lives in button.css) */
 @import "table.css";     /* .rt-table-wrap + .rt-table + .rt-table-state + .rt-status */
 @import "pager.css";     /* .rt-pager + .rt-rows-info + .rt-pages + .rt-pg */
 @import "card.css";      /* .rt-card — generic glass card primitive (sibling of .rt-panel) */
