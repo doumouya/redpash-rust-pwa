@@ -9,13 +9,17 @@
    Monitoring-specific atoms: window chip, the side-by-side charts
    row, modal chrome, page-content pills inside tables. */
 
-/* #rpMonView IS the rt-main now (2026-05-25 restructure — head /
-   chips / composite-strip sit OUTSIDE the .rt-surface, with the
-   surface wrapping only the redtable trio: toolbar + body + pager).
-   workspace.css's `.rt-main` provides padding + flex column; the
-   `.rt-surface` inside flex-fills via its base rule. No #id-scoped
-   overrides needed — the chain works via the canonical Workspace
-   structure. */
+/* #rpMonView IS the rt-surface, mirroring Home's #rpHomeView.
+   Padding matches Home so the chip-row / composite / toolbar /
+   table / pager sit with a symmetric inner gap in the card.
+   The rt-surface-body wrapper around the filter panel + table-wrap
+   is the one extra layer Monitoring has vs Home; the #id-scoped
+   rules below ensure that extra layer flex-fills cleanly so the
+   table claims the remaining height — same target as Home's chain,
+   one nest deeper. Em 2026-05-25: "check how we did on Home page". */
+#rpMonView { padding: 0.875rem; }
+#rpMonView .rt-surface-body { flex: 1; min-height: 0; display: flex; }
+#rpMonView .rt-table-wrap   { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
 
 /* Monitoring tables use the canonical `.rt-table` (table.css). The
    mono method pill is page-content (HTTP method label in cells),

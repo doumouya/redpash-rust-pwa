@@ -22,15 +22,17 @@
     </aside>
 
     <!-- ════ main — body view per active tab ════
-         rt-main is the padded page column; renderListBody mounts the
-         head / chip-row / composite-strip OUTSIDE the rt-surface and
-         the rt-surface wraps ONLY the redtable trio (toolbar + body +
-         pager) — mirroring Workspace's structure where the surface
-         card scopes the working table, not the page-level decoration.
-         #rpMonView is the plain mount point; renderListBody emits the
-         rt-surface inside it. -->
-    <main class="rt-main" id="rpMonView">
-      <p class="rp-shell-state">Loading…</p>
+         Same `<main class="rt-main"><div class="rt-surface">` shell
+         as Home — #rpMonView IS the rt-surface so the entire body
+         (head / chips / composite / toolbar / body / pager) lives
+         inside one chrome'd card. The rt-surface-body wrapper around
+         the filter panel + table-wrap is the only structural
+         difference from Home, present only because Monitoring has the
+         slide-out filter panel that Home doesn't. -->
+    <main class="rt-main">
+      <div class="rt-surface" id="rpMonView">
+        <p class="rp-shell-state">Loading…</p>
+      </div>
     </main>
 
   </div>

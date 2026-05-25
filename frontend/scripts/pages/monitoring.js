@@ -758,29 +758,22 @@ export default function monitoring(app, { session }) {
       + '</div>'
       + '</aside>';
 
-    // Structure mirrors Workspace's redtable shell:
-    //   rt-main (#rpMonView)
-    //     ├── head / chips / composite-strip   (page decoration)
-    //     └── .rt-surface                       (the redtable group)
-    //          ├── toolbar
-    //          ├── rt-surface-body (filter panel + rt-table-wrap)
-    //          └── rt-pager
-    // The .rt-surface contains ONLY the redtable trio so a single
-    // rule on it controls the group's flex behavior. Em 2026-05-25:
-    // "you can't apply the rule to the group of components by
-    // controlling their container".
+    // Structure mirrors Home's #rpHomeView — the rt-surface IS the
+    // view element, everything inside it as a flex column. The
+    // rt-surface-body wrapper around the filter panel + table-wrap
+    // is the one structural difference vs Home, present so the
+    // filter slide-out has a row-flex container to share with the
+    // table-wrap. Em 2026-05-25: "check how we did on Home page".
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
       + monCompositeStripHTML(kpiTiles, viewSpec.charts || [])
-      + '<div class="rt-surface">'
-      +   listToolbarHTML(toolbarSpec)
-      +   '<div class="rt-surface-body">'
-      +     filterPanelHTML
-      +     listPanel(viewSpec.columns)
-      +   '</div>'
-      +   '<div class="rt-pager" id="rp-mon-list-pager"></div>'
-      + '</div>';
+      + listToolbarHTML(toolbarSpec)
+      + '<div class="rt-surface-body">'
+      +   filterPanelHTML
+      +   listPanel(viewSpec.columns)
+      + '</div>'
+      + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
       charts.mount(viewSpec).catch((err) =>
