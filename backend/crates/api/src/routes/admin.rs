@@ -20,7 +20,8 @@
 use std::time::Instant;
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
     routing::get,
     Json, Router,
 };
@@ -44,10 +45,17 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/users",             get(list_users))
         .route("/users/stats",       get(stats_users))
+        .route("/users/:rid",        axum::routing::delete(delete_user))
         .route("/companies",         get(list_companies))
         .route("/companies/stats",   get(stats_companies))
+        .route("/companies/:rid",    axum::routing::delete(delete_company))
         .route("/memberships",       get(list_memberships))
         .route("/memberships/stats", get(stats_memberships))
+        // Memberships use a synthetic compound rid in the path —
+        // `{scope}:{scope_redpash_id}:{user_redpash_id}` — since the
+        // table's primary key is composite. delete_membership parses
+        // and dispatches to the right table.
+        .route("/memberships/:rid",  axum::routing::delete(delete_membership))
         .route("/files",             get(list_files))
         .route("/files/stats",       get(stats_files))
         .route("/charts",            get(list_charts))
@@ -954,4 +962,108 @@ async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, A
         by_kind,
         last_24h: last_24h as u64,
     }))
+}
+
+// ── delete endpoints — wired against the Home tabs' bulk-select ────────
+//
+// All three are dev-permissive ([[redpash-stage]] — solo-dev / pre-prod;
+// production RBAC + soft-delete + audit-gates land in the per-tab admin
+// console). FK cascades do the heavy lifting:
+//
+//   users          → projects (CASCADE), memberships (CASCADE), sessions (CASCADE)
+//   companies      → company_memberships (CASCADE), projects.company_id (SET NULL)
+//   memberships    → no cascade; the row itself is the unit of access
+//
+// 404 if the row is missing; otherwise 204 No Content. Every delete
+// emits a `*_delete` event for the audit-trail.
+
+async fn delete_user(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<StatusCode, AppError> {
+    // AUTH-AUDIT-ACK: admin endpoints are dev-permissive in v1; RBAC
+    // gate (admin-only + can't-delete-self) lands with the RBAC slice.
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let removed = db::delete_user(&state.db, &rid).await?;
+    if !removed {
+        return Err(AppError::not_found("not_found", format!("user {rid}")));
+    }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "warn",
+        kind:    "user_delete".into(),
+        message: format!("deleted user {rid}"),
+        user:    Some(caller),
+        context: serde_json::json!({ "target_user": rid }),
+        ..Default::default()
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_company(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<StatusCode, AppError> {
+    // AUTH-AUDIT-ACK: same dev-permissive stance as delete_user.
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let removed = db::delete_company(&state.db, &rid).await?;
+    if !removed {
+        return Err(AppError::not_found("not_found", format!("company {rid}")));
+    }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "warn",
+        kind:    "company_delete".into(),
+        message: format!("deleted company {rid}"),
+        user:    Some(caller),
+        context: serde_json::json!({ "company": rid }),
+        ..Default::default()
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Memberships have a composite primary key (scope_id + user_id), so
+/// the path-rid is a synthetic triple: `{scope}:{scope_id}:{user_id}`.
+/// Frontend constructs it from the MembershipSummary row; the handler
+/// parses + dispatches to the right table.
+async fn delete_membership(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<StatusCode, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let parts: Vec<&str> = rid.split(':').collect();
+    if parts.len() != 3 {
+        return Err(AppError::bad_request(
+            "invalid",
+            "memberships rid must be {scope}:{scope_id}:{user_id}",
+        ));
+    }
+    let (scope, scope_id, user_id) = (parts[0], parts[1], parts[2]);
+    if scope != "project" && scope != "company" {
+        return Err(AppError::bad_request(
+            "invalid",
+            "scope must be one of: project, company",
+        ));
+    }
+    let removed = db::delete_membership(&state.db, scope, scope_id, user_id).await?;
+    if !removed {
+        return Err(AppError::not_found("not_found", format!("membership {rid}")));
+    }
+    crate::event::record(&state.db, crate::event::EventDraft {
+        origin:  "backend",
+        level:   "warn",
+        kind:    "membership_delete".into(),
+        message: format!("removed {scope} membership {user_id} from {scope_id}"),
+        user:    Some(caller),
+        context: serde_json::json!({
+            "scope":    scope,
+            "scope_id": scope_id,
+            "user_id":  user_id,
+        }),
+        ..Default::default()
+    });
+    Ok(StatusCode::NO_CONTENT)
 }

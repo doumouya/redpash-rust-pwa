@@ -91,6 +91,11 @@ export default function home(app, { session: _session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      // DELETE /api/admin/users/:rid — added 2026-05-25. Cascades to
+      // projects (owner_id), memberships (CASCADE), sessions (CASCADE).
+      itemNoun: "user",
+      itemNounPlural: "users",
+      modes: { select: true, delete: true },
       // Composite layout for this tab — KPI tiles flanked by the two
       // charts in a single row. Per Em's 2026-05-25 spec (Users tab
       // only): [chart1 20%] [stats 2×2, 15% each] [chart2 20%].
@@ -124,6 +129,7 @@ export default function home(app, { session: _session }) {
       // toolbar's first-slice convention.
       toolbar: {
         searchPlaceholder: "Search name, handle, org…",
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // Sortable wire-keys must match the SORTABLE_USERS allowlist in
@@ -138,7 +144,7 @@ export default function home(app, { session: _session }) {
         { label: "Joined", key: "created_at",   sortable: true  },
       ],
       row: (u) =>
-        '<tr>'
+        '<tr data-rid="' + esc(u.redpash_id || "") + '">'
         + '<td class="rp-home-user-name">'
         +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
         +   ' <span class="rp-home-handle">@' + esc(u.username) + '</span>'
@@ -153,6 +159,12 @@ export default function home(app, { session: _session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      // DELETE /api/admin/companies/:rid — added 2026-05-25. Cascades
+      // to company_memberships; projects.company_id is SET NULL so
+      // company-scoped projects survive as personal.
+      itemNoun: "company",
+      itemNounPlural: "companies",
+      modes: { select: true, delete: true },
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // Visual placeholder — `?view=` isn't wired on /admin/companies
       // yet (backend TODO). Same shape as the users tab's window chip.
@@ -176,6 +188,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search name, slug…",
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // Sortable wire-keys → SORTABLE_COMPANIES allowlist (admin.rs).
@@ -188,7 +201,7 @@ export default function home(app, { session: _session }) {
         { label: "Created", key: "created_at",   sortable: true  },
       ],
       row: (c) =>
-        '<tr>'
+        '<tr data-rid="' + esc(c.redpash_id || "") + '">'
         + '<td>' + esc(c.name) + ' <span class="rp-mon-method">' + esc(c.slug) + '</span></td>'
         + '<td class="is-num">' + (c.member_count || 0) + '</td>'
         + '<td>' + (c.my_role ? roleChip(c.my_role) : "—") + '</td>'
@@ -198,6 +211,14 @@ export default function home(app, { session: _session }) {
     memberships: {
       title: "Memberships",
       endpoint: "/admin/memberships",
+      // DELETE /api/admin/memberships/:rid — added 2026-05-25. The rid
+      // is a synthetic compound: `{scope}:{scope_id}:{user_id}` since
+      // membership rows have a composite PK. row() below constructs
+      // this rid from the response; backend parses + dispatches to the
+      // right table (project_memberships vs company_memberships).
+      itemNoun: "membership",
+      itemNounPlural: "memberships",
+      modes: { select: true, delete: true },
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // The endpoint takes ?scope=project|company; flip via the chip row.
       chipRows: [{
@@ -228,6 +249,7 @@ export default function home(app, { session: _session }) {
       // — matches every other tab now per [[unify-behavior-not-names]].
       toolbar: {
         searchPlaceholder: false,
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // Sortable wire-keys → SORTABLE_MEMBERSHIPS allowlist (admin.rs).
@@ -238,8 +260,12 @@ export default function home(app, { session: _session }) {
         { label: "Scope",  key: "scope_name",        sortable: true },
         { label: "Joined", key: "joined_at",         sortable: true },
       ],
+      // Synthetic compound rid for DELETE: `{scope}:{scope_id}:{user_id}`.
+      // The backend admin.rs delete_membership handler parses this triple.
       row: (m) =>
-        '<tr>'
+        '<tr data-rid="'
+        + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""))
+        + '">'
         + '<td>' + esc(m.user_display_name) + ' <span class="rp-mon-method">@' + esc(m.user_username) + '</span></td>'
         + '<td>' + roleChip(m.role) + '</td>'
         + '<td>' + esc(m.scope_name) + '</td>'

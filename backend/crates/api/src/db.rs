@@ -1800,6 +1800,31 @@ pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     Ok(n.rows_affected() > 0)
 }
 
+/// Delete a membership row (project or company scope). Composite PK is
+/// (scope_id, user_id) so both must match. Caller is responsible for
+/// validating `scope` ∈ {"project", "company"} — admin.rs does that
+/// gate before reaching here.
+pub async fn delete_membership(
+    pool:     &PgPool,
+    scope:    &str,
+    scope_id: &str,
+    user_id:  &str,
+) -> sqlx::Result<bool> {
+    let sql = match scope {
+        "project" => "DELETE FROM project_memberships
+                       WHERE project_redpash_id = $1 AND user_redpash_id = $2",
+        // scope == "company"
+        _         => "DELETE FROM company_memberships
+                       WHERE company_id = $1 AND user_redpash_id = $2",
+    };
+    let n = sqlx::query(sql)
+        .bind(scope_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(n.rows_affected() > 0)
+}
+
 pub async fn list_company_members(
     pool:        &PgPool,
     company_rid: &str,
