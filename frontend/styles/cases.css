@@ -491,13 +491,43 @@
   color: var(--rp-text);
 }
 
+/* Retractable description — native <details> element with a
+   custom summary chrome. Caret rotates 90° when [open]. */
 .rp-cases-detail-description {
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
   border-radius: 0.5rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0;                             /* summary + body own their own padding */
 }
-.rp-cases-detail-description pre {
+.rp-cases-detail-desc-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  list-style: none;                       /* drop the default disclosure marker */
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  user-select: none;
+}
+.rp-cases-detail-desc-summary::-webkit-details-marker { display: none; }
+.rp-cases-detail-desc-summary:hover { color: var(--rp-text); }
+.rp-cases-detail-desc-caret {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  transition: transform 0.15s var(--rp-ease);
+  transform: rotate(-90deg);              /* closed = collapsed-right */
+}
+.rp-cases-detail-description[open] .rp-cases-detail-desc-caret {
+  transform: rotate(0deg);                /* open = pointing down */
+}
+.rp-cases-detail-desc-body {
+  padding: 0 0.75rem 0.625rem;
+}
+.rp-cases-detail-desc-body pre {
   margin: 0;
   font-family: inherit;
   font-size: 0.7812rem;

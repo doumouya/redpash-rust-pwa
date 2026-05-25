@@ -106,9 +106,19 @@
             </button>
           </div>
 
-          <section class="rp-cases-detail-description" id="rp-cases-detail-description">
-            <!-- JS renders <pre> for now; markdown render is a v2 polish -->
-          </section>
+          <!-- Retractable description — <details> is native, no JS
+               needed for the toggle. Defaults open so the context
+               shows on case-open; user collapses to reclaim space
+               for comments / activity. -->
+          <details class="rp-cases-detail-description" id="rp-cases-detail-description" open>
+            <summary class="rp-cases-detail-desc-summary">
+              <i class="bi bi-chevron-down rp-cases-detail-desc-caret"></i>
+              <span>Description</span>
+            </summary>
+            <div class="rp-cases-detail-desc-body" id="rp-cases-detail-desc-body">
+              <!-- JS renders <pre> for now; markdown render is a v2 polish -->
+            </div>
+          </details>
 
           <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
             <button class="is-active" type="button" data-tab="comments" title="Comments thread">

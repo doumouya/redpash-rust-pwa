@@ -519,7 +519,7 @@ export default function cases(app, { session }) {
   const ridEl      = app.querySelector("#rp-cases-detail-rid");
   const titleEl    = app.querySelector("#rp-cases-detail-title");
   const controlsRow = app.querySelector("#rp-cases-detail-controls");
-  const descEl     = app.querySelector("#rp-cases-detail-description");
+  const descBody   = app.querySelector("#rp-cases-detail-desc-body");
   const tabsEl     = app.querySelector("#rp-cases-detail-tabs");
   const commentsList    = app.querySelector("#rp-cases-comments-list");
   const commentForm     = app.querySelector("#rp-cases-comment-form");
@@ -690,7 +690,7 @@ export default function cases(app, { session }) {
     if (ridEl) ridEl.textContent = rid;
     if (titleEl) titleEl.textContent = "Loading…";
     if (controlsRow) controlsRow.innerHTML = "";
-    if (descEl) descEl.innerHTML = "";
+    if (descBody) descBody.innerHTML = "";
     if (commentsList) commentsList.innerHTML = '<p class="rp-cases-empty">Loading comments…</p>';
     if (activityList) activityList.innerHTML = '<p class="rp-cases-empty">Loading activity…</p>';
     try {
@@ -699,7 +699,7 @@ export default function cases(app, { session }) {
     } catch (err) {
       if (err?.status === 404) {
         if (titleEl) titleEl.textContent = "Case not found";
-        if (descEl) descEl.innerHTML = '<p class="rp-cases-empty">'
+        if (descBody) descBody.innerHTML = '<p class="rp-cases-empty">'
           + 'Cases endpoint not live yet (backend pending) or no case with this RID.</p>';
         if (commentsList) commentsList.innerHTML = "";
         if (activityList) activityList.innerHTML = "";
@@ -733,8 +733,8 @@ export default function cases(app, { session }) {
         + typeChip(c.type)
         + assigneeChip;
     }
-    if (descEl) {
-      descEl.innerHTML = c.description
+    if (descBody) {
+      descBody.innerHTML = c.description
         ? '<pre>' + esc(c.description) + '</pre>'
         : '<p class="rp-cases-empty rp-cases-empty--inline">No description.</p>';
     }
