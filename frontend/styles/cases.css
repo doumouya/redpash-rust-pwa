@@ -23,13 +23,22 @@
    body, groups, tabs. These rules add the cases-specific filter
    strip (search input below the head) and tune the .rt-tab
    variant used for individual case rows. */
-.rp-cases-rail-new {
+.rp-cases-rail-new,
+.rp-cases-rail-collapse {
   width: 28px;
   height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.rp-cases-rail-collapse {
+  background: transparent;
+  color: var(--rp-text-mute);
+}
+.rp-cases-rail-collapse:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
 }
 .rp-cases-rail-filter {
   flex-shrink: 0;
@@ -72,6 +81,46 @@
   padding: 6px 8px 8px 32px;
   font-size: 11px;
   color: var(--rp-text-mute);
+}
+
+/* ── done-window chip-row ─────────────────────────────────────
+   Lives at the top of the Done body in both surfaces (rail group
+   + kanban column). Caps the productivity view to today / week /
+   month / all (productivity-tracking window per [[project_cases_workstream]]).
+   Persists via the `casesDoneWindow` pref (prefs.js) so the choice
+   survives reload and syncs per-user. */
+.rp-cases-done-window {
+  margin: 4px 0 8px;
+  padding: 4px 4px 6px;
+  border-bottom: 1px dashed var(--rp-border);
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rp-cases-done-window .rp-chip-row-label {
+  font-size: 9.5px;
+  margin-right: 2px;
+}
+.rp-cases-done-chip {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+/* Rail-context chip-row sits inside .rt-group-body, which has a
+   tighter inset than the kanban column body — pull padding in so
+   the chips read as part of the rail's column rhythm. */
+.rt-group-body > .rp-cases-done-window {
+  padding-left: 28px;       /* aligns with .rt-tab's text inset */
+  padding-right: 8px;
+}
+
+/* compact rail — hide the search + collapse the head's gap.
+   The rail itself collapses to 60px via .rt-nav.compact (rail.css);
+   these page-specific overrides keep the cases extras hidden so
+   the icon-only view stays clean. */
+.rt-nav.compact .rp-cases-rail-filter,
+.rt-nav.compact .rp-cases-rail-new,
+.rt-nav.compact .rp-cases-done-window {
+  display: none;
 }
 
 /* ── board ────────────────────────────────────────────────────── */

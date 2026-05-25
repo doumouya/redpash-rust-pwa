@@ -46,6 +46,11 @@ export const PREFS = {
                              "windows-1252", "iso-8859-1", "iso-8859-15",
                              "windows-1250", "macintosh"],      default: "auto", attr: null           },
   exportFormat:   { values: ["csv", "xlsx", "json"],            default: "csv",  attr: null           },
+  // Cases page — how far back to show the "Done" column / rail group
+  // (productivity-tracking window). Default "day" caps to today's
+  // closed cases; "all" disables the filter. Live-toggleable from the
+  // chip-row at the top of the Done column.
+  casesDoneWindow: { values: ["day", "week", "month", "all"],   default: "day",  attr: null },
 };
 
 const KEY_PREFIX = "rp-pref-";

@@ -33,6 +33,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc } from "/scripts/dom.js";
+import { getPref, setPref } from "/scripts/prefs.js";
 
 const STATUS_ORDER = ["backlog", "todo", "in_progress", "in_review", "done"];
 const STATUS_LABEL = {
@@ -60,6 +61,29 @@ const RAIL_MARK_COLOR = {
   done:        "green",
 };
 
+// Done-window filter — caps the Done column / rail group to
+// recently-closed cases so the productivity view stays focused.
+// Default "day" (today's closed). Persisted via the `casesDoneWindow`
+// registered pref (prefs.js) so it survives reloads + syncs per-user.
+// Edge: we use updated_at as the proxy for "closed at" — accurate
+// for the common case (Done cases rarely get edits), wrong if a Done
+// case gets its description edited months after closing. The honest
+// fix is a closed_at column on cases or a derived value from the
+// events table; queued for Gus's lane.
+const DONE_WINDOW_MS = {
+  day:   86_400_000,         // 24h
+  week:  604_800_000,        // 7d
+  month: 2_592_000_000,      // 30d
+  all:   Infinity,
+};
+const DONE_WINDOW_LABEL = {
+  day:   "Today",
+  week:  "Week",
+  month: "Month",
+  all:   "All",
+};
+const DONE_WINDOW_ORDER = ["day", "week", "month", "all"];
+
 export default function cases(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "cases", session });
 
@@ -78,6 +102,42 @@ export default function cases(app, { session }) {
     in_review:   true,
     done:        false,                        // done is collapsed by default — usually noisy
   };
+
+  // ── done-window filter — drop Done cases older than the window ───
+  // Lives outside paint functions so cycleStatus + the chip-row both
+  // see the same source of truth (the pref). Anything not-Done
+  // passes through; Done items keep only if their updated_at is
+  // within the window cap.
+  function applyDoneWindow(rows) {
+    const window = getPref("casesDoneWindow");
+    const capMs = DONE_WINDOW_MS[window];
+    if (!Number.isFinite(capMs)) return rows;
+    const cutoff = Date.now() - capMs;
+    return rows.filter((c) => {
+      if (c.status !== "done") return true;
+      const ts = c.updated_at ? Date.parse(c.updated_at) : NaN;
+      return Number.isFinite(ts) && ts >= cutoff;
+    });
+  }
+
+  function doneWindowChipsHTML(host) {
+    // host: "kanban" | "rail" — kept distinct so the click delegate
+    // knows where the chip lives (purely informational; both update
+    // the same pref).
+    const active = getPref("casesDoneWindow");
+    const chips = DONE_WINDOW_ORDER.map((w) =>
+      '<button type="button" class="rp-chip rp-cases-done-chip'
+        + (w === active ? ' is-active' : '') + '" '
+        + 'data-done-window="' + w + '" data-host="' + host + '">'
+        + esc(DONE_WINDOW_LABEL[w])
+        + '</button>'
+    ).join("");
+    return ''
+      + '<div class="rp-chip-row rp-cases-done-window">'
+      +   '<span class="rp-chip-row-label">Closed</span>'
+      +   chips
+      + '</div>';
+  }
 
   // ── route — board vs detail by ?id=… in the hash ────────────
   function activeCaseRid() {
@@ -146,9 +206,21 @@ export default function cases(app, { session }) {
     if (card) cycleStatus(card.dataset.rid, card.dataset.status);
   });
 
-  // Rail click delegate — group-head toggles expansion; tab clicks
-  // are anchors so the browser handles nav.
+  // Rail click delegate — handles group-head expand/collapse and the
+  // Done-window chip-row. Case tabs are <a> anchors so the browser
+  // handles those clicks for free.
   railBody?.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-done-window]");
+    if (chip) {
+      e.preventDefault();
+      const w = chip.dataset.doneWindow;
+      if (w && w !== getPref("casesDoneWindow")) {
+        setPref("casesDoneWindow", w);
+        paintRail(cachedCases, activeCaseRid());
+        if (!boardEl.hidden) paintBoard(cachedCases);
+      }
+      return;
+    }
     const groupHead = e.target.closest(".rt-group-head");
     if (!groupHead) return;
     const group = groupHead.closest(".rt-group");
@@ -158,6 +230,39 @@ export default function cases(app, { session }) {
       railGroupExpanded[status] = !group.classList.contains("expanded");
       group.classList.toggle("expanded", railGroupExpanded[status]);
     }
+  });
+
+  // Same Done-window chip-row sits in the kanban Done column; one
+  // shared handler so toggling from either surface updates both.
+  colsHost?.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-done-window]");
+    if (!chip) return;
+    e.preventDefault();
+    const w = chip.dataset.doneWindow;
+    if (w && w !== getPref("casesDoneWindow")) {
+      setPref("casesDoneWindow", w);
+      paintBoard(cachedCases);
+      paintRail(cachedCases, activeCaseRid());
+    }
+  });
+
+  // ── rail collapse toggle ─────────────────────────────────────
+  // Same compact-mode affordance as the Workspace / Docs / Monitoring
+  // rails — the chevron-double-left button on the head flips the
+  // .rt-nav.compact modifier; rail.css collapses everything to the
+  // 60px icon-only width.
+  const railEl       = app.querySelector("#rp-cases-rail");
+  const railCollapse = app.querySelector("#rp-cases-rail-collapse");
+  railCollapse?.addEventListener("click", () => {
+    if (!railEl) return;
+    railEl.classList.toggle("compact");
+    const compact = railEl.classList.contains("compact");
+    const icon = railCollapse.querySelector("i");
+    if (icon) {
+      icon.classList.toggle("bi-chevron-double-left", !compact);
+      icon.classList.toggle("bi-chevron-double-right", compact);
+    }
+    railCollapse.title = compact ? "Expand" : "Collapse";
   });
 
   async function refreshCases() {
@@ -193,8 +298,9 @@ export default function cases(app, { session }) {
   }
 
   function paintBoard(rows) {
+    const filtered = applyDoneWindow(rows);
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
-    rows.forEach((c) => {
+    filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
       byStatus[s].push(c);
     });
@@ -218,13 +324,16 @@ export default function cases(app, { session }) {
     const body = cards.length
       ? cards.map(cardHTML).join("")
       : '<p class="rp-cases-col-empty">No cases.</p>';
+    // Done column gets the window chip-row above the cards so the
+    // user can switch the cap without leaving the board.
+    const head = status === "done" ? doneWindowChipsHTML("kanban") : "";
     return ''
       + '<section class="rp-cases-col" data-status="' + status + '">'
       +   '<header class="rp-cases-col-head">'
       +     '<span class="rp-cases-col-name">' + esc(STATUS_LABEL[status]) + '</span>'
       +     '<span class="rp-cases-col-count">' + cards.length + '</span>'
       +   '</header>'
-      +   '<div class="rp-cases-col-body">' + body + '</div>'
+      +   '<div class="rp-cases-col-body">' + head + body + '</div>'
       + '</section>';
   }
 
@@ -264,6 +373,7 @@ export default function cases(app, { session }) {
 
   function paintRail(rows, activeRid) {
     if (!railBody) return;
+    const filtered = applyDoneWindow(rows);
     const boardActive = !activeRid;
     const boardItem = ''
       + '<a class="rt-tab rp-cases-rail-board' + (boardActive ? ' active' : '') + '" '
@@ -273,7 +383,7 @@ export default function cases(app, { session }) {
       + '</a>';
 
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
-    rows.forEach((c) => {
+    filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
       byStatus[s].push(c);
     });
@@ -281,6 +391,10 @@ export default function cases(app, { session }) {
     const groupsHTML = STATUS_ORDER.map((status) => {
       const cases = byStatus[status];
       const expanded = railGroupExpanded[status];
+      // Done group gets the window chip-row at the top of its body
+      // so the user can change the cap from the rail without
+      // jumping to the board.
+      const chipRow = status === "done" ? doneWindowChipsHTML("rail") : "";
       const itemsHTML = cases.length
         ? cases.map((c) => railItemHTML(c, activeRid)).join("")
         : '<p class="rp-cases-rail-empty">No cases.</p>';
@@ -292,7 +406,7 @@ export default function cases(app, { session }) {
         +     '<span class="rt-group-name">' + esc(STATUS_LABEL[status]) + '</span>'
         +     '<span class="rt-group-count">' + cases.length + '</span>'
         +   '</button>'
-        +   '<div class="rt-group-body">' + itemsHTML + '</div>'
+        +   '<div class="rt-group-body">' + chipRow + itemsHTML + '</div>'
         + '</div>';
     }).join("");
 
