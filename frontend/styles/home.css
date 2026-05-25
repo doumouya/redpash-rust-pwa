@@ -6,8 +6,15 @@
 
 /* rpHomeMain: round only the inner top-left corner (where the
    rail meets the main body) so the body surface looks tucked
-   under the rail instead of squared off against it. */
+   under the rail instead of squared off against it. The radius
+   needs a surface color underneath it to be visible — the parent
+   .rp-shell-body is transparent over the page bg, so without a
+   distinct fill the rounded corner clips nothing perceivable.
+   Surface-1 sits one tone above the page bg + matches the
+   "lighter card on darker page" pattern shown in the reference
+   (Apache ECharts theme-builder, 2026-05-25 sketch). */
 #rpHomeMain {
+  background: var(--rp-surface);
   border-top-left-radius: 0.875rem;
 }
 
