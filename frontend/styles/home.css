@@ -26,6 +26,22 @@
   overflow: hidden;
 }
 
+/* Relay the flex column from #rpHomeMain down through the
+   .rp-shell-view wrapper. Without this, the wrapper is a normal
+   block element + the .rp-mon-panel below can't flex: 1 against
+   it. The chain becomes:
+     #rpHomeMain (flex col, h = viewport - topbar)
+       → #rpHomeView (flex col, flex: 1)
+         → chip-row / composite-strip / toolbar (fixed-height)
+         → .rp-mon-panel (flex: 1) — fills the rest
+         → .rp-list-pager (fixed-height) */
+#rpHomeView {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* Panel fills remaining height of the column so a 5-row table
    doesn't render as a short box with empty whitespace below —
    the surface stretches to the bottom of the viewport (Em
@@ -35,7 +51,7 @@
    size when needed; `overflow-y: auto` scrolls internally if
    rows exceed the allocated space, keeping the chip-row +
    composite-strip + toolbar + pager fixed in their positions. */
-#rpHomeMain .rp-mon-panel {
+#rpHomeView .rp-mon-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
