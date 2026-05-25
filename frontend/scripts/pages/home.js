@@ -34,6 +34,10 @@ const HOME_TABS = [
   { group: "ORG",    key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true  },
   { group: "ORG",    key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true  },
   { group: "ORG",    key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true  },
+  // Cases — flat-table read of /api/cases for the rail. The /cases
+  // page renders the kanban + detail; this Home tab gives the
+  // sortable inventory view alongside Users / Companies / Memberships.
+  { group: "ORG",    key: "cases",       label: "Cases",       icon: "bi-card-list",    perm: "user",  endpoint: "/cases",             wired: true  },
   // ── DATA ───────────────────────────────────────────────────
   { group: "DATA",   key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true  },
   { group: "DATA",   key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true  },
@@ -213,6 +217,63 @@ export default function home(app, { session: _session }) {
         + '<td>' + roleChip(m.role) + '</td>'
         + '<td>' + esc(m.scope_name) + '</td>'
         + '<td>' + fmtTime(m.joined_at) + '</td>'
+        + '</tr>',
+    },
+    cases: {
+      title: "Cases",
+      // /api/cases returns { items, total, page, size } (paginated
+      // — see routes/cases.rs:list). fetchList's items-fallback
+      // handles the shape; pagination + ?q= / ?status= / ?assignee=
+      // are real on this endpoint, unlike the projects + admin
+      // placeholders elsewhere in this file.
+      endpoint: "/cases",
+      // No dedicated /cases/stats — charts derive from the list
+      // payload, same pattern as the Projects tab.
+      statsEndpoint: "/cases",
+      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
+      // Status filter is FUNCTIONAL — backend supports ?status= on
+      // the list endpoint. Empty value (default "All") sends no
+      // status param.
+      chipRows: [{
+        name: "status",
+        label: "Status",
+        options: [
+          { label: "All",         value: ""            },
+          { label: "Backlog",     value: "backlog"     },
+          { label: "Todo",        value: "todo"        },
+          { label: "In progress", value: "in_progress" },
+          { label: "In review",   value: "in_review"   },
+          { label: "Done",        value: "done"        },
+        ],
+        default: "",
+      }],
+      charts: [
+        { id: "rp-home-cases-status", title: "By status", kind: "donut",
+          data: (stats) => (stats?.items || []).reduce((acc, r) => {
+            const k = r.status || "backlog"; acc[k] = (acc[k] || 0) + 1; return acc;
+          }, {}) },
+        { id: "rp-home-cases-priority", title: "By priority", kind: "donut",
+          data: (stats) => (stats?.items || []).reduce((acc, r) => {
+            const k = r.priority || "medium"; acc[k] = (acc[k] || 0) + 1; return acc;
+          }, {}) },
+      ],
+      toolbar: {
+        searchPlaceholder: "Search title, description…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
+      columns: ["Title", "Type", "Status", "Priority", "Assignee", "Updated"],
+      // Row click → /cases?id=… so the Cases detail page opens for
+      // the picked case (same pattern as Charts/Projects rows
+      // routing into Workspace).
+      row: (c) =>
+        '<tr class="rp-home-row--clickable"'
+        + ' data-href="#/cases?id=' + encodeURIComponent(c.redpash_id) + '">'
+        + '<td>' + esc(c.title || "(untitled)") + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(c.type || "task") + '</span></td>'
+        + '<td>' + caseStatusChip(c.status) + '</td>'
+        + '<td>' + priorityChip(c.priority) + '</td>'
+        + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
+        + '<td>' + fmtTime(c.updated_at) + '</td>'
         + '</tr>',
     },
     files: {
@@ -780,6 +841,26 @@ export default function home(app, { session: _session }) {
     const v = String(plan || "").toLowerCase();
     const tone = v === "free" ? "" : "rp-mon-err-low";
     return '<span class="rp-mon-method ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+  // Cases status — flow: backlog → todo → in_progress → in_review → done.
+  // Mid-flow states (in_progress / in_review) get the warmer tone; the
+  // terminal `done` gets low (cool/green-ish vibe via the chip token).
+  function caseStatusChip(status) {
+    const v = String(status || "").toLowerCase();
+    const tone = v === "in_progress" || v === "in_review" ? "rp-mon-err-mid"
+              : v === "todo"        ? "rp-mon-err-low"
+              : "";
+    return '<span class="rp-mon-method ' + tone + '">' + esc(status || "—") + '</span>';
+  }
+  // Cases priority — low / medium / high / critical. Tone scales with
+  // urgency; medium gets no tone (it's the default + most rows).
+  function priorityChip(priority) {
+    const v = String(priority || "").toLowerCase();
+    const tone = v === "critical" ? "rp-mon-err-high"
+              : v === "high"     ? "rp-mon-err-mid"
+              : v === "low"      ? "rp-mon-err-low"
+              : "";
+    return '<span class="rp-mon-method ' + tone + '">' + esc(priority || "—") + '</span>';
   }
   // Org affiliation — softer than role/plan (which carry signal). The
   // dot prefix makes the cell read "this user belongs to: X" without
