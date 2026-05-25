@@ -139,15 +139,22 @@ export default function home(app, { session: _session }) {
       // Sortable wire-keys must match the SORTABLE_USERS allowlist in
       // backend/crates/api/src/routes/admin.rs. The header chevron only
       // renders for columns flagged sortable: true.
+      // Every field on UserSummary gets a column — picker (toggle via
+      // toolbar columns icon) controls visibility. Less-useful fields
+      // are flagged `defaultHidden: true` so the initial render stays
+      // identical to before; the data is reachable via the picker.
       columns: [
-        { label: "Name",   key: "display_name", sortable: true  },
-        { label: "Plan",   key: "plan",         sortable: true  },
-        // Job is the editable column on Users — clean text only, so
-        // contenteditable doesn't fight nested chip markup.
-        { label: "Job",    key: "job_title",    sortable: true,  editable: true, editKey: "job_title" },
-        { label: "Org",    key: "org_name",     sortable: true  },
-        { label: "Role",   key: "org_role",     sortable: true  },
-        { label: "Joined", key: "created_at",   sortable: true  },
+        { label: "Name",        key: "display_name", sortable: true  },
+        { label: "Handle",      key: "username",     sortable: false, defaultHidden: true },
+        { label: "Email",       key: "email",        sortable: false, defaultHidden: true },
+        { label: "Plan",        key: "plan",         sortable: true  },
+        { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
+        { label: "Profile org", key: "organisation", sortable: false, defaultHidden: true },
+        { label: "Org",         key: "org_name",     sortable: true  },
+        { label: "Role",        key: "org_role",     sortable: true  },
+        { label: "Avatar",      key: "avatar_url",   sortable: false, defaultHidden: true },
+        { label: "Joined",      key: "created_at",   sortable: true  },
+        { label: "ID",          key: "redpash_id",   sortable: false, defaultHidden: true },
       ],
       // Only clean-text cells (no nested chip / icon markup) are flagged
       // editable. Cells that wrap display_name in <span> chips with
@@ -160,11 +167,16 @@ export default function home(app, { session: _session }) {
         +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
         +   ' <span class="rp-home-handle">@' + esc(u.username) + '</span>'
         + '</td>'
+        + '<td class="rp-home-meta">@' + esc(u.username || "") + '</td>'
+        + '<td class="rp-home-meta">' + esc(u.email || "—") + '</td>'
         + '<td>' + planChip(u.plan) + '</td>'
         + '<td class="rp-home-meta">' + esc(u.job_title || "—") + '</td>'
+        + '<td class="rp-home-meta">' + esc(u.organisation || "—") + '</td>'
         + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-home-meta">—</span>') + '</td>'
         + '<td>' + (u.org_role ? roleChip(u.org_role) : '<span class="rp-home-meta">—</span>') + '</td>'
+        + '<td class="rp-home-meta">' + esc(u.avatar_url || "—") + '</td>'
         + '<td class="rp-home-meta">' + fmtTime(u.created_at) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(u.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     companies: {
@@ -204,19 +216,28 @@ export default function home(app, { session: _session }) {
       },
       // Sortable wire-keys → SORTABLE_COMPANIES allowlist (admin.rs).
       // "My role" stays unsortable — it's a per-caller computed value
-      // (RBAC pending), not a column the DB can sort by.
+      // (RBAC pending), not a column the DB can sort by. Slug / avatar /
+      // updated / ID are defaultHidden — opt-in via the picker.
       columns: [
         { label: "Name",    key: "name",         sortable: true  },
+        { label: "Slug",    key: "slug",         sortable: true,  defaultHidden: true },
         { label: "Members", key: "member_count", sortable: true  },
         { label: "My role", key: "my_role",      sortable: false },
+        { label: "Avatar",  key: "avatar_url",   sortable: false, defaultHidden: true },
         { label: "Created", key: "created_at",   sortable: true  },
+        { label: "Updated", key: "updated_at",   sortable: true,  defaultHidden: true },
+        { label: "ID",      key: "redpash_id",   sortable: false, defaultHidden: true },
       ],
       row: (c) =>
         '<tr data-rid="' + esc(c.redpash_id || "") + '">'
         + '<td>' + esc(c.name) + ' <span class="rp-mon-method">' + esc(c.slug) + '</span></td>'
+        + '<td><span class="rp-mon-method">' + esc(c.slug || "—") + '</span></td>'
         + '<td class="is-num">' + (c.member_count || 0) + '</td>'
         + '<td>' + (c.my_role ? roleChip(c.my_role) : "—") + '</td>'
+        + '<td class="rp-home-meta">' + esc(c.avatar_url || "—") + '</td>'
         + '<td>' + fmtTime(c.created_at) + '</td>'
+        + '<td>' + fmtTime(c.updated_at) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(c.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     memberships: {
@@ -265,11 +286,16 @@ export default function home(app, { session: _session }) {
       },
       // Sortable wire-keys → SORTABLE_MEMBERSHIPS allowlist (admin.rs).
       // Scope_name resolves to p.name / c.name in the backend per-branch.
+      // User/scope IDs are defaultHidden — opt-in for debugging.
       columns: [
-        { label: "Member", key: "user_display_name", sortable: true },
-        { label: "Role",   key: "role",              sortable: true },
-        { label: "Scope",  key: "scope_name",        sortable: true },
-        { label: "Joined", key: "joined_at",         sortable: true },
+        { label: "Member",     key: "user_display_name", sortable: true  },
+        { label: "Handle",     key: "user_username",     sortable: false, defaultHidden: true },
+        { label: "Role",       key: "role",              sortable: true  },
+        { label: "Scope type", key: "scope",             sortable: false, defaultHidden: true },
+        { label: "Scope",      key: "scope_name",        sortable: true  },
+        { label: "Scope ID",   key: "scope_redpash_id",  sortable: false, defaultHidden: true },
+        { label: "User ID",    key: "user_redpash_id",   sortable: false, defaultHidden: true },
+        { label: "Joined",     key: "joined_at",         sortable: true  },
       ],
       // Synthetic compound rid for DELETE: `{scope}:{scope_id}:{user_id}`.
       // The backend admin.rs delete_membership handler parses this triple.
@@ -278,8 +304,12 @@ export default function home(app, { session: _session }) {
         + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""))
         + '">'
         + '<td>' + esc(m.user_display_name) + ' <span class="rp-mon-method">@' + esc(m.user_username) + '</span></td>'
+        + '<td class="rp-home-meta">@' + esc(m.user_username || "") + '</td>'
         + '<td>' + roleChip(m.role) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(m.scope || "—") + '</span></td>'
         + '<td>' + esc(m.scope_name) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(m.scope_redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mon-method">' + esc(m.user_redpash_id || "—") + '</span></td>'
         + '<td>' + fmtTime(m.joined_at) + '</td>'
         + '</tr>',
     },
@@ -343,32 +373,53 @@ export default function home(app, { session: _session }) {
       },
       // Sortable wire-keys → SORTABLE_CASES allowlist (cases.rs).
       // Assignee sorts on the hydrated display_name (NULLS LAST for
-      // unassigned). Updated_at is the default.
+      // unassigned). Updated_at is the default. The picker exposes
+      // every Case field; defaults match the prior curated set.
       columns: [
         // Title is the editable cell — clean text in the row render.
         // Type / Status / Priority / Assignee need pickers (chip ↔
         // dropdown), not contenteditable; deferred.
-        { label: "Title",    key: "title",                 sortable: true, editable: true, editKey: "title" },
-        { label: "Type",     key: "type",                  sortable: true },
-        { label: "Status",   key: "status",                sortable: true },
-        { label: "Priority", key: "priority",              sortable: true },
-        { label: "Assignee", key: "assignee_display_name", sortable: true },
-        { label: "Updated",  key: "updated_at",            sortable: true },
+        { label: "Title",       key: "title",                 sortable: true, editable: true, editKey: "title" },
+        { label: "Type",        key: "type",                  sortable: true  },
+        { label: "Status",      key: "status",                sortable: true  },
+        { label: "Priority",    key: "priority",              sortable: true  },
+        { label: "Assignee",    key: "assignee_display_name", sortable: true  },
+        { label: "Reporter",    key: "reporter_display_name", sortable: false, defaultHidden: true },
+        { label: "Project",     key: "project_id",            sortable: false, defaultHidden: true },
+        { label: "Company",     key: "company_id",            sortable: false, defaultHidden: true },
+        { label: "Category",    key: "category_name",         sortable: false, defaultHidden: true },
+        { label: "Description", key: "description",           sortable: false, defaultHidden: true },
+        { label: "Error",       key: "error_message",         sortable: false, defaultHidden: true },
+        { label: "Created",     key: "created_at",            sortable: false, defaultHidden: true },
+        { label: "Updated",     key: "updated_at",            sortable: true  },
+        { label: "ID",          key: "redpash_id",            sortable: false, defaultHidden: true },
       ],
       // Row click → /cases?id=… so the Cases detail page opens for
       // the picked case (same pattern as Charts/Projects rows
       // routing into Workspace).
-      row: (c) =>
-        '<tr class="rp-home-row--clickable"'
-        + ' data-rid="' + esc(c.redpash_id || "") + '"'
-        + ' data-href="#/cases?id=' + encodeURIComponent(c.redpash_id) + '">'
-        + '<td>' + esc(c.title || "(untitled)") + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(c.type || "task") + '</span></td>'
-        + '<td>' + caseStatusChip(c.status) + '</td>'
-        + '<td>' + priorityChip(c.priority) + '</td>'
-        + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
-        + '<td>' + fmtTime(c.updated_at) + '</td>'
-        + '</tr>',
+      row: (c) => {
+        const categoryLabel = c.category_parent_name
+          ? esc(c.category_parent_name) + " &rsaquo; " + esc(c.category_name || "")
+          : esc(c.category_name || "—");
+        return '<tr class="rp-home-row--clickable"'
+          + ' data-rid="' + esc(c.redpash_id || "") + '"'
+          + ' data-href="#/cases?id=' + encodeURIComponent(c.redpash_id) + '">'
+          + '<td>' + esc(c.title || "(untitled)") + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(c.type || "task") + '</span></td>'
+          + '<td>' + caseStatusChip(c.status) + '</td>'
+          + '<td>' + priorityChip(c.priority) + '</td>'
+          + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
+          + '<td>' + esc(c.reporter_display_name || c.reporter_id || "—") + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(c.project_id || "—") + '</span></td>'
+          + '<td><span class="rp-mon-method">' + esc(c.company_id || "—") + '</span></td>'
+          + '<td>' + categoryLabel + '</td>'
+          + '<td class="rp-home-meta">' + esc((c.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td class="rp-home-meta">' + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
+          + '<td>' + fmtTime(c.created_at) + '</td>'
+          + '<td>' + fmtTime(c.updated_at) + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(c.redpash_id || "—") + '</span></td>'
+          + '</tr>';
+      },
     },
     files: {
       title: "Files",
@@ -425,23 +476,39 @@ export default function home(app, { session: _session }) {
       // (filename / file_type / stage / row_count / updated_at). Project
       // intentionally not sortable — name lives on a JOIN and isn't in
       // the allowlist yet. Filename is editable (clean-text render).
+      // Cols / size / cleanness / created / ID are defaultHidden.
       columns: [
-        { label: "Filename", key: "filename",   sortable: true,  editable: true, editKey: "display_name" },
-        { label: "Project",  key: "project",    sortable: false },
-        { label: "Type",     key: "file_type",  sortable: true  },
-        { label: "Stage",    key: "stage",      sortable: true  },
-        { label: "Rows",     key: "row_count",  sortable: true  },
-        { label: "Updated",  key: "updated_at", sortable: true  },
+        { label: "Filename",  key: "filename",       sortable: true,  editable: true, editKey: "display_name" },
+        { label: "Project",   key: "project",        sortable: false },
+        { label: "Type",      key: "file_type",      sortable: true  },
+        { label: "Stage",     key: "stage",          sortable: true  },
+        { label: "Rows",      key: "row_count",      sortable: true  },
+        { label: "Cols",      key: "col_count",      sortable: false, defaultHidden: true },
+        { label: "Size",      key: "file_size_bytes",sortable: false, defaultHidden: true },
+        { label: "Cleanness", key: "cleanness_pct",  sortable: false, defaultHidden: true },
+        { label: "Created",   key: "created_at",     sortable: false, defaultHidden: true },
+        { label: "Updated",   key: "updated_at",     sortable: true  },
+        { label: "ID",        key: "redpash_id",     sortable: false, defaultHidden: true },
       ],
-      row: (f) =>
-        '<tr data-rid="' + esc(f.redpash_id || "") + '">'
-        + '<td>' + esc(f.display_name || f.filename) + '</td>'
-        + '<td>' + esc(f.project_name) + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(f.file_type) + '</span></td>'
-        + '<td>' + stageChip(f.stage) + '</td>'
-        + '<td class="is-num">' + (f.row_count != null ? f.row_count : "—") + '</td>'
-        + '<td>' + fmtTime(f.updated_at) + '</td>'
-        + '</tr>',
+      row: (f) => {
+        const sizeKb = f.file_size_bytes != null
+          ? Math.round(f.file_size_bytes / 1024) + " KB"
+          : "—";
+        const clean = f.cleanness_pct != null ? Math.round(f.cleanness_pct) + "%" : "—";
+        return '<tr data-rid="' + esc(f.redpash_id || "") + '">'
+          + '<td>' + esc(f.display_name || f.filename) + '</td>'
+          + '<td>' + esc(f.project_name) + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(f.file_type) + '</span></td>'
+          + '<td>' + stageChip(f.stage) + '</td>'
+          + '<td class="is-num">' + (f.row_count != null ? f.row_count : "—") + '</td>'
+          + '<td class="is-num">' + (f.col_count != null ? f.col_count : "—") + '</td>'
+          + '<td class="is-num rp-home-meta">' + sizeKb + '</td>'
+          + '<td class="is-num">' + clean + '</td>'
+          + '<td>' + fmtTime(f.created_at) + '</td>'
+          + '<td>' + fmtTime(f.updated_at) + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(f.redpash_id || "—") + '</span></td>'
+          + '</tr>';
+      },
     },
     charts: {
       title: "Charts",
@@ -483,12 +550,17 @@ export default function home(app, { session: _session }) {
       },
       // Sortable wire-keys → SORTABLE_CHARTS allowlist (admin.rs).
       // "Name" sorts on COALESCE(display_name, filename) so the visible
-      // label drives the order even when display_name is unset.
+      // label drives the order even when display_name is unset. Raw
+      // filename / created / IDs are defaultHidden.
       columns: [
-        { label: "Name",    key: "display_name", sortable: true, editable: true, editKey: "display_name" },
-        { label: "Project", key: "project_name", sortable: true },
-        { label: "Stage",   key: "stage",        sortable: true },
-        { label: "Updated", key: "updated_at",   sortable: true },
+        { label: "Name",       key: "display_name",        sortable: true, editable: true, editKey: "display_name" },
+        { label: "Filename",   key: "filename",            sortable: false, defaultHidden: true },
+        { label: "Project",    key: "project_name",        sortable: true  },
+        { label: "Project ID", key: "project_redpash_id",  sortable: false, defaultHidden: true },
+        { label: "Stage",      key: "stage",               sortable: true  },
+        { label: "Created",    key: "created_at",          sortable: false, defaultHidden: true },
+        { label: "Updated",    key: "updated_at",          sortable: true  },
+        { label: "ID",         key: "redpash_id",          sortable: false, defaultHidden: true },
       ],
       // Rows are clickable — navigate to the Workspace with the
       // chart's source project + chart rid as deep-link params so
@@ -499,9 +571,13 @@ export default function home(app, { session: _session }) {
         + ' data-href="#/workspace?project=' + encodeURIComponent(c.project_redpash_id)
         + '&file=' + encodeURIComponent(c.redpash_id) + '">'
         + '<td>' + esc(c.display_name || c.filename) + '</td>'
+        + '<td>' + esc(c.filename || "—") + '</td>'
         + '<td>' + esc(c.project_name) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(c.project_redpash_id || "—") + '</span></td>'
         + '<td>' + stageChip(c.stage) + '</td>'
+        + '<td>' + fmtTime(c.created_at) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
+        + '<td><span class="rp-mon-method">' + esc(c.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     projects: {
@@ -574,26 +650,44 @@ export default function home(app, { session: _session }) {
       // queued as a separate slice; until then all columns render
       // non-sortable so the chevron stays hidden (no false affordance).
       // Name is the editable cell — clean text render, PATCH /projects/:rid.
+      // Description / owner / company / default / cleanness / created /
+      // ID are defaultHidden — opt-in via the picker.
       columns: [
-        { label: "Name",    key: "name",       sortable: false, editable: true, editKey: "name" },
-        { label: "Files",   key: "file_count", sortable: false },
-        { label: "Stage",   key: "stage",      sortable: false },
-        { label: "Status",  key: "status",     sortable: false },
-        { label: "Updated", key: "updated_at", sortable: false },
+        { label: "Name",        key: "name",               sortable: false, editable: true, editKey: "name" },
+        { label: "Files",       key: "file_count",         sortable: false },
+        { label: "Stage",       key: "stage",              sortable: false },
+        { label: "Status",      key: "status",             sortable: false },
+        { label: "Default",     key: "is_default",         sortable: false, defaultHidden: true },
+        { label: "Owner",       key: "owner_display_name", sortable: false, defaultHidden: true },
+        { label: "Company",     key: "company_id",         sortable: false, defaultHidden: true },
+        { label: "Cleanness",   key: "cleanness_pct",      sortable: false, defaultHidden: true },
+        { label: "Description", key: "description",        sortable: false, defaultHidden: true },
+        { label: "Created",     key: "created_at",         sortable: false, defaultHidden: true },
+        { label: "Updated",     key: "updated_at",         sortable: false },
+        { label: "ID",          key: "redpash_id",         sortable: false, defaultHidden: true },
       ],
       // Click-through to the Workspace with the project rid pinned —
       // same pattern as charts above so the rail tab acts as a
       // launchpad into the working surface.
-      row: (p) =>
-        '<tr class="rp-home-row--clickable"'
-        + ' data-rid="' + esc(p.redpash_id || "") + '"'
-        + ' data-href="#/workspace?project=' + encodeURIComponent(p.redpash_id) + '">'
-        + '<td>' + esc(p.name || "(untitled)") + '</td>'
-        + '<td class="is-num">' + (p.file_count != null ? p.file_count : "—") + '</td>'
-        + '<td>' + stageChip(p.stage) + '</td>'
-        + '<td>' + esc(p.status || "—") + '</td>'
-        + '<td>' + fmtTime(p.updated_at) + '</td>'
-        + '</tr>',
+      row: (p) => {
+        const clean = p.cleanness_pct != null ? Math.round(p.cleanness_pct) + "%" : "—";
+        return '<tr class="rp-home-row--clickable"'
+          + ' data-rid="' + esc(p.redpash_id || "") + '"'
+          + ' data-href="#/workspace?project=' + encodeURIComponent(p.redpash_id) + '">'
+          + '<td>' + esc(p.name || "(untitled)") + '</td>'
+          + '<td class="is-num">' + (p.file_count != null ? p.file_count : "—") + '</td>'
+          + '<td>' + stageChip(p.stage) + '</td>'
+          + '<td>' + esc(p.status || "—") + '</td>'
+          + '<td>' + (p.is_default ? '<i class="bi bi-check2"></i>' : '<span class="rp-home-meta">—</span>') + '</td>'
+          + '<td>' + esc(p.owner_display_name || p.owner_id || "—") + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(p.company_id || "—") + '</span></td>'
+          + '<td class="is-num">' + clean + '</td>'
+          + '<td class="rp-home-meta">' + esc((p.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td>' + fmtTime(p.created_at) + '</td>'
+          + '<td>' + fmtTime(p.updated_at) + '</td>'
+          + '<td><span class="rp-mon-method">' + esc(p.redpash_id || "—") + '</span></td>'
+          + '</tr>';
+      },
     },
   };
 
@@ -1192,10 +1286,18 @@ export default function home(app, { session: _session }) {
       // every body row's TD at the same column index. decorate runs
       // after every fetchList paint via the view._applyHiddenColumns
       // hook so freshly-rendered rows pick up the hide state.
+      // Columns picker — seed with spec defaults when storage is
+      // untouched. `defaultHidden: true` on a column hides it on a
+      // user's first visit; their picker clicks override + persist.
       const colsStorageKey = "rp-cols-hidden-" + tab.key;
-      const hiddenCols = new Set(
-        JSON.parse(localStorage.getItem(colsStorageKey) || "[]")
-      );
+      const colsStorageRaw = localStorage.getItem(colsStorageKey);
+      const hiddenCols = colsStorageRaw === null
+        ? new Set(
+            (spec.columns || [])
+              .filter((c) => typeof c === "object" && c.defaultHidden)
+              .map((c) => c.key || c.label)
+          )
+        : new Set(JSON.parse(colsStorageRaw));
 
       function applyHiddenColumns() {
         const table = view.querySelector(".rt-table");
