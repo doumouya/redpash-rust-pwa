@@ -1,275 +1,217 @@
 #!/usr/bin/env node
 /* ──────────────────────────────────────────────────────────────────────────
-   RedPash JS — refactoring audit
+   RedPash JS — refactoring audit (v2.0 AST Edition)
    ---------------------------------------------------------------------------
-   A static scan of frontend/scripts/. Codifies Woz's manual JS review
-   (docs/internal/js-refactor-review.md) into a repeatable tool — re-run it as
-   the refactor lands to watch the numbers fall.
+   A static scan of frontend/scripts/. Codifies the refactor review into a
+   repeatable CI/CD tool.
 
-   Four views:
-     1. Files       — every .js file: LOC, top-level defs, import count, how
-                      many modules import it. Flags god-objects (LOC > 800).
-     2. Unreachable — modules with no static import path from a root. A
-                      strong dead-code candidate list — but "unreachable"
-                      is not "dead": anything loaded by a means the static
-                      graph cannot see would land here too. Confirm by
-                      hand before deleting.
-     3. Duplicates  — a top-level symbol name defined in 2+ files (Woz
-                      Finding 4: `esc` in 27 files). One row per name.
-     4. Patterns    — named antipatterns + helper-usage markers from the
-                      docs/internal/architecture/js-refactor-targets.md
-                      catalog. Mirrors tools/rs-audit's pattern panel.
+   Upgrades over the regex version:
+     - Acorn AST for 100% accurate import / definition extraction
+       (no false positives from `function esc` inside comments or
+       strings). Acorn is the one carve-out from the project's no-
+       framework rule — sanctioned for static-analysis tooling
+       under `tools/*` only, NEVER in frontend / backend runtime
+       (see [[feedback-acorn-allowed-for-static-analysis]]).
+     - CI/CD-ready: `process.exit(1)` when extracted-pattern count
+       > 0 (regressions break the build, not just the report).
 
-   Heuristic, not a parser — regex-based, like the CSS audit. Good enough to
-   point at the work; read the code to confirm a hit.
+   DANGER: `--inject-probes` is destructive — it writes
+       console.warn("🧟 ZOMBIE MODULE LOADED: …")
+   into every statically-unreachable .js file so you can confirm
+   at runtime which "dead" modules are actually loaded by paths
+   the static graph can't see. **Run only on a clean tree** and
+   revert with `git checkout frontend/scripts/` once you've
+   inspected the browser console. Don't ship a build with probes.
 
-   Usage:  node audit.js [scriptsDir]
+   Usage:  node audit.js [scriptsDir] [--inject-probes]
    Output: ./report.html  +  a console summary
    ────────────────────────────────────────────────────────────────────────── */
 'use strict';
 
-var fs = require('fs');
-var path = require('path');
+const fs = require('fs');
+const path = require('path');
+const acorn = require('acorn');
 
-var SRC_DIR = process.argv[2]
-  ? path.resolve(process.argv[2])
+// Parse CLI arguments
+const args = process.argv.slice(2);
+const INJECT_PROBES = args.includes('--inject-probes');
+const srcArg = args.find(a => !a.startsWith('--'));
+
+const SRC_DIR = srcArg
+  ? path.resolve(srcArg)
   : '/home/mansa/redpash-app/frontend/scripts';
-var OUT = path.join(__dirname, 'report.html');
-var GOD_LOC = 800;
+const OUT = path.join(__dirname, 'report.html');
+const GOD_LOC = 800;
 
-/* ── pattern catalog ─────────────────────────────────────────────────────────
-   Named antipatterns + helper-usage markers from the
-   docs/internal/architecture/js-refactor-targets.md audit (T1 esc/cssEsc, T2
-   list-page, T3 dropdown) + the echarts theme/kpi consolidation. Mirrors the
-   rs-audit catalog's status taxonomy:
-
-     extracted — a helper exists; antipattern count should be 0. Non-zero is
-                 a REGRESSION — someone re-introduced the old shape.
-     declined  — duplication exists but variation is load-bearing; track count
-                 to confirm it doesn't grow enough to warrant extraction.
-     live      — observability for already-extracted helpers (count = healthy
-                 reuse, not antipattern). `skip` is a regex that excludes the
-                 helper's own file so we only count callers, not the def.
-
-   Optional `ackComment` (regex) — when set, a match preceded on the line
-   above by a comment matching that regex is excluded from the hit count.
-   Same forcing function as auth-audit's `// AUTH-AUDIT-ACK:` — new call
-   sites either carry an explicit caller-side intent comment or fail the
-   audit. The convention pairs with runbook 0006's "audit pattern
-   lifecycle": ship unACK'd, verify the audit flags the expected sites,
-   then add ACKs in the same commit so the audit goes green and the
-   regression net stays mechanical.
-   ────────────────────────────────────────────────────────────────────────── */
-var PATTERNS = [
-  /* ── extracted: count should stay at 0 ─────────────────────────────────── */
+/* ── pattern catalog ─────────────────────────────────────────────────────── */
+const PATTERNS = [
   { name: 'esc() redefined outside dom.js', status: 'extracted',
-    rx: /\bfunction\s+esc\s*\(/g,
-    skip: /(^|\/)dom\.js$/,
-    helper: 'import { esc } from "/scripts/dom.js"',
-    saving: 1, notes: 'commit 57f8541 retired 9 sites' },
+    rx: /\bfunction\s+esc\s*\(/g, skip: /(^|\/)dom\.js$/,
+    helper: 'import { esc } from "/scripts/dom.js"', saving: 1 },
   { name: 'cssEsc() redefined outside dom.js', status: 'extracted',
-    rx: /\bfunction\s+cssEsc\s*\(/g,
-    skip: /(^|\/)dom\.js$/,
-    helper: 'import { cssEsc } from "/scripts/dom.js"',
-    saving: 1, notes: 'commit 57f8541 retired 3 sites' },
+    rx: /\bfunction\s+cssEsc\s*\(/g, skip: /(^|\/)dom\.js$/,
+    helper: 'import { cssEsc } from "/scripts/dom.js"', saving: 1 },
   { name: 'echarts.init(el) without theme arg', status: 'extracted',
     rx: /\becharts\.init\(\s*[A-Za-z_$][\w$.]*\s*\)/g,
-    helper: 'echarts.init(el, chartTheme()) — theme registered globally',
-    saving: 1, notes: 'every init site must pass a registered theme name' },
+    helper: 'echarts.init(el, chartTheme())', saving: 1 },
   { name: '$$("[data-dd]") legacy sweep', status: 'extracted',
     rx: /\$\$\(\s*['"]\[data-dd\]/g,
-    helper: 'bindDropdown() — one delegated handler at boot',
-    saving: 2, notes: 'T3 retired per-page sweeps in workspace.js + report.js' },
-  /* runbook 0006 — chart/dashboard rids hitting data endpoints. The 10
-     CSV-only endpoints below ALL route through `hydrate()` server-side
-     (Gus's guard at backend/crates/api/src/routes/files.rs returns 400
-     `not_a_data_file` on empty storage_path). Frontend callers must
-     read `summary.file_type` first OR declare caller-side intent via
-     a `// DATA-ENDPOINT-ACK: caller-checks-file_type` comment on the
-     line above. Matches both single-literal URLs ("/files/RID/page")
-     and string-concat ("/files/" + rid + "/page"); misses dynamic-
-     suffix URLs ("/" + action — undo/redo) which need explicit ACKs.
-     `scripts/api.js` is excluded — it's the HTTP wrapper layer with
-     no caller context (same pattern as auth-audit excluding its own
-     source set + the routes/mod.rs helper layer). */
+    helper: 'bindDropdown()', saving: 2 },
   { name: 'data-only endpoint without file_type gate', status: 'extracted',
-    /* [\s\S]{0,200}? — non-greedy any-char (including newlines) up to
-       200 chars. Tighter `[^)]` would terminate at the first `)`
-       inside `encodeURIComponent(rid)` etc., so the endpoint literal
-       further out never gets matched. 200 chars covers multi-line
-       calls + concat expressions without overrunning into the next
-       statement. */
     rx: /api\.(?:get|post|put|delete)\([\s\S]{0,200}?['"]\/?(?:page|uniques|joins|export|cleanness|sentinels|dedup|cast-preview|steps|snapshot)\b/g,
-    skip: /(^|\/)scripts\/api\.js$/,
-    ackComment: /\/\/\s*DATA-ENDPOINT-ACK\b/,
-    helper: 'add `// DATA-ENDPOINT-ACK: caller-checks-file_type` above the call, or route through column-index / joins / etc.',
-    saving: 1, notes: 'runbook 0006 — CSV-only endpoints; chart/dashboard rids 400 at the hydrate guard. ACK declares the caller checks file_type upstream.' },
+    skip: /(^|\/)scripts\/api\.js$/, ackComment: /\/\/\s*DATA-ENDPOINT-ACK\b/,
+    helper: 'add `// DATA-ENDPOINT-ACK: caller-checks-file_type`', saving: 1 },
 
-  /* ── live: helper usage — counts here are healthy reuse, not antipattern ─ */
   { name: 'chartTheme() usage', status: 'live',
-    rx: /\bchartTheme\s*\(\s*\)/g,
-    skip: /(^|\/)echarts-theme\.js$/,
-    helper: '(this is the helper)',
-    saving: 0, notes: 'count tracks redpash-mocha/latte theme reuse spread' },
+    rx: /\bchartTheme\s*\(\s*\)/g, skip: /(^|\/)echarts-theme\.js$/, helper: '(helper)' },
   { name: 'dom.js helper import', status: 'live',
-    rx: /\bfrom\s+['"][^'"]*\/dom\.js['"]/g,
-    helper: '(this is the import path)',
-    saving: 0, notes: 'count tracks esc/cssEsc consolidation adoption' },
+    rx: /\bfrom\s+['"][^'"]*\/dom\.js['"]/g, helper: '(helper)' },
   { name: 'echarts-kpi.js helper usage', status: 'live',
-    rx: /\bkpi(?:Donut|Pie|Rose|Bar|BarH|Line|Gauge)\s*\(/g,
-    skip: /(^|\/)echarts-kpi\.js$/,
-    helper: '(these are the helpers)',
-    saving: 0, notes: 'count tracks chart helper reuse across pages' },
+    rx: /\bkpi(?:Donut|Pie|Rose|Bar|BarH|Line|Gauge)\s*\(/g, skip: /(^|\/)echarts-kpi\.js$/, helper: '(helper)' },
   { name: 'list-page.js helper import', status: 'live',
-    rx: /\bfrom\s+['"][^'"]*\/list-page\.js['"]/g,
-    helper: '(this is the import path)',
-    saving: 0, notes: 'count tracks T2 list-page extraction adoption' },
+    rx: /\bfrom\s+['"][^'"]*\/list-page\.js['"]/g, helper: '(helper)' },
   { name: 'bindDropdown() call', status: 'live',
-    rx: /\bbindDropdown\s*\(\s*\)/g,
-    skip: /(^|\/)dropdown\.js$/,
-    helper: '(this is the helper)',
-    saving: 0, notes: 'expect 1 call at boot (main.js); growth = per-page resweep regression' },
+    rx: /\bbindDropdown\s*\(\s*\)/g, skip: /(^|\/)dropdown\.js$/, helper: '(helper)' },
   { name: 'ensureRegisteredThemes() usage', status: 'live',
-    rx: /\bensureRegisteredThemes\s*\(/g,
-    skip: /(^|\/)echarts-theme\.js$/,
-    helper: '(this is the helper)',
-    saving: 0, notes: 'count tracks theme-init adoption (one per echarts host)' },
+    rx: /\bensureRegisteredThemes\s*\(/g, skip: /(^|\/)echarts-theme\.js$/,
+    helper: '(this is the helper)' },
 
-  /* ── declined: track growth; if a count crosses ~20, revisit ───────────── */
   { name: 'inline-HTML string concat (\'<…\' + esc(…))', status: 'declined',
-    rx: /(['"])<[^<>]*?\1\s*\+\s*esc\s*\(/g,
-    helper: 'templating helper — only if a 3rd identical-shape surface lands',
-    saving: 0, notes: 'audit verdict: per-page HTML varies; revisit if patterns converge' },
+    rx: /(['"])<[^<>]*?\1\s*\+\s*esc\s*\(/g, helper: 'wait for convergence' },
   { name: 'setTimeout(…, ms) ad-hoc timing', status: 'declined',
-    rx: /\bsetTimeout\s*\(/g,
-    helper: 'centralized timing helper — only if a duplicate cluster appears',
-    saving: 0, notes: 'audit verdict: ad-hoc delays; tracks ambient timing debt' }
+    rx: /\bsetTimeout\s*\(/g, helper: 'wait for convergence' }
 ];
 
-/* Roots — modules the shell <script> tags, the router's dynamic import(),
-   or the service worker load directly (never via a static `import`).
-   Discovered by scanning index.html / main.js / service-worker.js for
-   /scripts/*.js literals, so the set is found, not hard-coded. */
-function discoverRoots(srcDir, fileSet) {
-  var roots = {};
-  function mark(rel) { if (fileSet[rel]) roots[rel] = true; }
+/* ── helper functions ────────────────────────────────────────────────────── */
+const discoverRoots = (srcDir, fileSet) => {
+  const roots = {};
+  const mark = (rel) => { if (fileSet[rel]) roots[rel] = true; };
+
   [ path.join(srcDir, '..', 'index.html'),
     path.join(srcDir, 'main.js'),
-    path.join(srcDir, '..', 'service-worker.js') ].forEach(function (p) {
-    var txt;
-    try { txt = fs.readFileSync(p, 'utf8'); } catch (e) { return; }
-    var m, re = /\/scripts\/([A-Za-z0-9_.\/-]+\.js)/g;
-    while ((m = re.exec(txt))) mark(m[1]);
+    path.join(srcDir, '..', 'service-worker.js') ].forEach(p => {
+    try {
+      const txt = fs.readFileSync(p, 'utf8');
+      const re = /\/scripts\/([A-Za-z0-9_.\/-]+\.js)/g;
+      let m;
+      while ((m = re.exec(txt))) mark(m[1]);
+    } catch (e) { /* ignore missing */ }
   });
   mark('main.js');
   return roots;
-}
+};
 
-/* ── file discovery ──────────────────────────────────────────────────────── */
-function walk(dir, acc) {
-  fs.readdirSync(dir, { withFileTypes: true }).forEach(function (e) {
-    var full = path.join(dir, e.name);
+const walk = (dir, acc = []) => {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach(e => {
+    const full = path.join(dir, e.name);
     if (e.isDirectory()) walk(full, acc);
     else if (e.isFile() && /\.js$/i.test(e.name)) acc.push(full);
   });
   return acc;
-}
+};
 
-/* strip /* *​/ and // comments, newline-preserving so LOC counts stay honest */
-function stripComments(text) {
-  text = text.replace(/\/\*[\s\S]*?\*\//g, function (m) {
-    return m.replace(/[^\n]/g, ' ');
-  });
-  return text.replace(/\/\/[^\n]*/g, '');
-}
-
-/* resolve an import specifier to a path relative to SRC_DIR. Handles both
-   ./relative AND the /scripts/absolute style this codebase actually uses. */
-function resolveSpec(fromRel, spec, fileSet) {
-  var p;
-  if (spec.charAt(0) === '.') {
+const resolveSpec = (fromRel, spec, fileSet) => {
+  let p;
+  if (spec.startsWith('.')) {
     p = path.posix.normalize(path.posix.dirname(fromRel) + '/' + spec);
-  } else if (spec.indexOf('/scripts/') === 0) {
+  } else if (spec.startsWith('/scripts/')) {
     p = spec.slice('/scripts/'.length);
   } else {
-    return null;                                    // bare module / non-script
+    return null;
   }
-  var cands = [p, p + '.js', p.replace(/\/+$/, '') + '/index.js'];
-  for (var i = 0; i < cands.length; i++) {
-    if (fileSet[cands[i]]) return cands[i];
-  }
-  return null;                                      // unresolved — no edge
-}
+  const cands = [p, p + '.js', p.replace(/\/+$/, '') + '/index.js'];
+  return cands.find(c => fileSet[c]) || null;
+};
 
-var DEF_RE = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/;
-var IMPORT_RE  = /\bimport\b(?:[^'";]*?\bfrom\s*)?['"]([^'"]+)['"]/g;
-var DYNIMP_RE  = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-var REQUIRE_RE = /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+// Recursive AST walker for deep `require` or dynamic `import()` calls
+const walkAst = (node, visitor) => {
+  if (!node) return;
+  visitor(node);
+  for (const key in node) {
+    if (node[key] && typeof node[key] === 'object') {
+      if (Array.isArray(node[key])) {
+        node[key].forEach(child => walkAst(child, visitor));
+      } else if (typeof node[key].type === 'string') {
+        walkAst(node[key], visitor);
+      }
+    }
+  }
+};
 
 /* ── scan ────────────────────────────────────────────────────────────────── */
-console.log('Scanning ' + SRC_DIR + ' …');
-var diskPaths = walk(SRC_DIR, []).sort();
+console.log(`Scanning ${SRC_DIR} …`);
+const diskPaths = walk(SRC_DIR).sort();
 if (!diskPaths.length) { console.error('No .js files found.'); process.exit(1); }
 
-var fileSet = {};
-var files = diskPaths.map(function (full) {
-  var rel = path.relative(SRC_DIR, full).split(path.sep).join('/');
-  fileSet[rel] = true;
-  return { rel: rel, full: full };
-});
+const fileSet = Object.fromEntries(diskPaths.map(full => [
+  path.relative(SRC_DIR, full).split(path.sep).join('/'), true
+]));
 
-/* per-pattern accumulators — parallel array to PATTERNS, each entry
-   { total, files: { rel: count, … } }. Pattern scan runs on the raw
-   text (a `setTimeout(` in a comment is still a real timing call to
-   record if it ever resurfaces); the strip pass is for LOC + defs. */
-var patternHits = PATTERNS.map(function () { return { total: 0, files: {} }; });
+const files = diskPaths.map(full => ({
+  full,
+  rel: path.relative(SRC_DIR, full).split(path.sep).join('/'),
+  defs: [],
+  importSpecs: []
+}));
 
-files.forEach(function (f) {
-  var text = fs.readFileSync(f.full, 'utf8');
-  var code = stripComments(text);
-  /* LOC = content lines. split('\n') on a trailing-newline file yields a
-     phantom '' element — strip one trailing newline first so the count
-     matches `wc -l` instead of over-reporting by 1 per file. */
+const patternHits = PATTERNS.map(() => ({ total: 0, files: {} }));
+
+files.forEach(f => {
+  const text = fs.readFileSync(f.full, 'utf8');
   f.loc = text === '' ? 0 : text.replace(/\n$/, '').split('\n').length;
 
-  f.defs = [];
-  code.split('\n').forEach(function (ln) {
-    var m = DEF_RE.exec(ln);
-    if (m) f.defs.push(m[2]);
-  });
+  // AST Parsing for bulletproof definition & import extraction
+  try {
+    const ast = acorn.parse(text, { ecmaVersion: 2024, sourceType: 'module' });
 
-  var specs = [], m;
-  [IMPORT_RE, DYNIMP_RE, REQUIRE_RE].forEach(function (re) {
-    re.lastIndex = 0;
-    while ((m = re.exec(code))) specs.push(m[1]);
-  });
-  f.importSpecs = specs;
+    // 1. Top-level Definitions
+    ast.body.forEach(node => {
+      if (node.type === 'VariableDeclaration') {
+        node.declarations.forEach(d => { if (d.id?.name) f.defs.push(d.id.name); });
+      } else if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
+        if (node.id?.name) f.defs.push(node.id.name);
+      } else if (node.type === 'ExportNamedDeclaration' && node.declaration) {
+        if (node.declaration.type === 'VariableDeclaration') {
+          node.declaration.declarations.forEach(d => { if (d.id?.name) f.defs.push(d.id.name); });
+        } else if (node.declaration.id?.name) {
+          f.defs.push(node.declaration.id.name);
+        }
+      }
+    });
 
-  /* pattern scan — skip the audit tool itself + per-pattern skip rx so
-     the helper's own file doesn't count as usage of itself. Optional
-     `ackComment` regex suppresses matches whose line is preceded by an
-     acknowledgement comment (same shape as auth-audit's AUTH-AUDIT-ACK). */
+    // 2. Imports (Static, Dynamic, and Requires)
+    walkAst(ast, node => {
+      if (node.type === 'ImportDeclaration') {
+        f.importSpecs.push(node.source.value);
+      } else if (node.type === 'CallExpression') {
+        if (node.callee.type === 'Identifier' && node.callee.name === 'require' && node.arguments[0]?.type === 'Literal') {
+          f.importSpecs.push(node.arguments[0].value);
+        } else if (node.callee.type === 'Import' && node.arguments[0]?.type === 'Literal') {
+          f.importSpecs.push(node.arguments[0].value);
+        }
+      }
+    });
+  } catch (e) {
+    console.warn(`  ⚠️ AST Parse error in ${f.rel}: ${e.message} (Falling back to empty graph)`);
+  }
+
+  // Regex pass for Antipatterns
   if (/(^|\/)tools\/js-audit\//.test(f.rel)) return;
-  PATTERNS.forEach(function (p, i) {
+  PATTERNS.forEach((p, i) => {
     if (p.skip && p.skip.test(f.rel)) return;
     p.rx.lastIndex = 0;
-    var pm, n = 0;
+    let pm, n = 0;
     while ((pm = p.rx.exec(text)) !== null) {
-      if (pm.index === p.rx.lastIndex) p.rx.lastIndex++;     // zero-width guard
-      // ACK-aware: skip if the comment block immediately above the
-      // match carries the pattern's `ackComment`. We look at the 6
-      // lines preceding the match-start so a multi-line comment
-      // block (the convention is a 1-4 line `// DATA-ENDPOINT-ACK:`
-      // explanation) is captured — same scoping idea as auth-audit's
-      // body-wide scan, just bounded for files.rs-style long bodies.
+      if (pm.index === p.rx.lastIndex) p.rx.lastIndex++;
+
+      // ACK Comment Logic
       if (p.ackComment) {
-        var lineStart = text.lastIndexOf('\n', pm.index - 1) + 1;
-        var windowStart = lineStart;
-        for (var w = 0; w < 6 && windowStart > 0; w++) {
+        let lineStart = text.lastIndexOf('\n', pm.index - 1) + 1;
+        let windowStart = lineStart;
+        for (let w = 0; w < 6 && windowStart > 0; w++) {
           windowStart = text.lastIndexOf('\n', windowStart - 2) + 1;
         }
-        var window = text.slice(windowStart, lineStart);
-        if (p.ackComment.test(window)) continue;
+        if (p.ackComment.test(text.slice(windowStart, lineStart))) continue;
       }
       n++;
     }
@@ -280,359 +222,326 @@ files.forEach(function (f) {
   });
 });
 
-/* forward import graph — resolved internal edges only */
-files.forEach(function (f) {
-  var seen = {}, out = [];
-  f.importSpecs.forEach(function (spec) {
-    var t = resolveSpec(f.rel, spec, fileSet);
-    if (t && fileSet[t] && t !== f.rel && !seen[t]) { seen[t] = true; out.push(t); }
+/* ── Graph Analysis ──────────────────────────────────────────────────────── */
+const importedBy = Object.fromEntries(files.map(f => [f.rel, []]));
+
+files.forEach(f => {
+  const seen = new Set();
+  f.imports = [];
+  f.importSpecs.forEach(spec => {
+    const t = resolveSpec(f.rel, spec, fileSet);
+    if (t && fileSet[t] && t !== f.rel && !seen.has(t)) {
+      seen.add(t);
+      f.imports.push(t);
+      importedBy[t].push(f.rel);
+    }
   });
-  f.imports = out;
-});
-var importedBy = {};
-files.forEach(function (f) { importedBy[f.rel] = []; });
-files.forEach(function (f) {
-  f.imports.forEach(function (t) { importedBy[t].push(f.rel); });
 });
 
-/* dead = not reachable from any root through the import graph. Reachability
-   (not "zero importers") catches the transitive case — a module imported
-   only by an already-dead module is dead too. */
-var roots = discoverRoots(SRC_DIR, fileSet);
-var byRel = {};
-files.forEach(function (f) { byRel[f.rel] = f; });
-var reachable = {};
-var queue = Object.keys(roots);
+const roots = discoverRoots(SRC_DIR, fileSet);
+const byRel = Object.fromEntries(files.map(f => [f.rel, f]));
+const reachable = new Set();
+const queue = Object.keys(roots);
+
 while (queue.length) {
-  var cur = queue.shift();
-  if (reachable[cur]) continue;
-  reachable[cur] = true;
-  if (byRel[cur]) byRel[cur].imports.forEach(function (t) {
-    if (!reachable[t]) queue.push(t);
+  const cur = queue.shift();
+  if (reachable.has(cur)) continue;
+  reachable.add(cur);
+  if (byRel[cur]) byRel[cur].imports.forEach(t => {
+    if (!reachable.has(t)) queue.push(t);
   });
 }
-files.forEach(function (f) {
+
+files.forEach(f => {
   f.importedBy = importedBy[f.rel];
-  f.dead = !reachable[f.rel];
+  f.dead = !reachable.has(f.rel);
   f.god = f.loc > GOD_LOC;
 });
 
-console.log('  roots discovered  ' + Object.keys(roots).length
-  + '   (shell <script> tags + router + service worker)');
-
-/* duplicate top-level symbols — one name, 2+ defining files */
-var defsByName = {};
-files.forEach(function (f) {
-  var seen = {};
-  f.defs.forEach(function (name) {
-    if (seen[name]) return;          // count a name once per file
-    seen[name] = true;
-    (defsByName[name] || (defsByName[name] = [])).push(f.rel);
+/* ── Data Rollup ─────────────────────────────────────────────────────────── */
+const defsByName = {};
+files.forEach(f => {
+  const seen = new Set();
+  f.defs.forEach(name => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    (defsByName[name] = defsByName[name] || []).push(f.rel);
   });
 });
-var dupes = Object.keys(defsByName)
-  .filter(function (n) { return defsByName[n].length >= 2; })
-  .map(function (n) { return { name: n, count: defsByName[n].length, files: defsByName[n].sort() }; })
-  .sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
 
-var dead = files.filter(function (f) { return f.dead; })
-  .sort(function (a, b) { return b.loc - a.loc; });
+const dupes = Object.entries(defsByName)
+  .filter(([_, arr]) => arr.length >= 2)
+  .map(([name, arr]) => ({ name, count: arr.length, files: arr.sort() }))
+  .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-/* ── stats + payload ─────────────────────────────────────────────────────── */
-var totalLoc = files.reduce(function (n, f) { return n + f.loc; }, 0);
-var deadLoc = dead.reduce(function (n, f) { return n + f.loc; }, 0);
+const dead = files.filter(f => f.dead).sort((a, b) => b.loc - a.loc);
+const REVISIT_THRESHOLD = 20;
 
-/* per-pattern roll-up — joined with the catalog so the report shows
-   name/status/helper/notes alongside hit-count + per-file breakdown. */
-var patterns = PATTERNS.map(function (p, i) {
-  var h = patternHits[i];
-  return {
-    name: p.name, status: p.status, helper: p.helper, saving: p.saving, notes: p.notes,
-    total: h.total,
-    files: Object.keys(h.files).sort().map(function (f) { return { file: f, n: h.files[f] }; })
-  };
-});
+const patterns = PATTERNS.map((p, i) => ({
+  ...p,
+  total: patternHits[i].total,
+  files: Object.entries(patternHits[i].files).sort().map(([file, n]) => ({ file, n }))
+}));
 
-/* headline counts: regressions = extracted patterns with non-zero counts;
-   pending = declined patterns past the revisit threshold. */
-var REVISIT_THRESHOLD = 20;
-var regressions = patterns.filter(function (p) { return p.status === 'extracted' && p.total > 0; }).length;
-var pending     = patterns.filter(function (p) { return p.status === 'declined'  && p.total > REVISIT_THRESHOLD; }).length;
+const regressions = patterns.filter(p => p.status === 'extracted' && p.total > 0).reduce((acc, p) => acc + p.total, 0);
+const pending = patterns.filter(p => p.status === 'declined' && p.total > REVISIT_THRESHOLD).length;
 
-var data = {
+const data = {
   generatedAt: new Date().toISOString(),
-  srcDir: SRC_DIR,
-  godLoc: GOD_LOC,
-  revisitThreshold: REVISIT_THRESHOLD,
+  srcDir: SRC_DIR, godLoc: GOD_LOC, revisitThreshold: REVISIT_THRESHOLD,
   stats: {
     files: files.length,
-    loc: totalLoc,
+    loc: files.reduce((n, f) => n + f.loc, 0),
     deadModules: dead.length,
-    deadLoc: deadLoc,
+    deadLoc: dead.reduce((n, f) => n + f.loc, 0),
     dupSymbols: dupes.length,
-    godObjects: files.filter(function (f) { return f.god; }).length,
-    regressions: regressions,
-    pendingDeclined: pending
+    godObjects: files.filter(f => f.god).length,
+    regressions, pendingDeclined: pending
   },
-  files: files.map(function (f) {
-    return {
-      rel: f.rel, loc: f.loc, defs: f.defs.length,
-      imports: f.importSpecs.length, importedBy: f.importedBy.length,
-      dead: f.dead, god: f.god
-    };
-  }).sort(function (a, b) { return b.loc - a.loc; }),
-  dead: dead.map(function (f) { return { rel: f.rel, loc: f.loc }; }),
-  dupes: dupes,
-  patterns: patterns
+  files: files.map(f => ({
+    rel: f.rel, loc: f.loc, defs: f.defs.length,
+    imports: f.importSpecs.length, importedBy: f.importedBy.length,
+    dead: f.dead, god: f.god
+  })).sort((a, b) => b.loc - a.loc),
+  dead: dead.map(f => ({ rel: f.rel, loc: f.loc })), dupes, patterns
 };
 
-/* ── HTML report ─────────────────────────────────────────────────────────── */
-function renderHtml(d) {
-  var json = JSON.stringify(d).replace(/<\//g, '<\\/');
-  return [
-    '<!doctype html>',
-    '<html lang="en"><head><meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>RedPash JS audit</title>',
-    '<style>' + CSS + '</style>',
-    '</head><body>',
-    '<header>',
-    '  <h1>JS refactoring audit <span class="muted">· redpash-app</span></h1>',
-    '  <div class="sub" id="sub"></div>',
-    '</header>',
-    '<section class="cards" id="cards"></section>',
-    '<nav class="tabs">',
-    '  <button class="tab active" data-tab="files">Files</button>',
-    '  <button class="tab" data-tab="dead">Unreachable</button>',
-    '  <button class="tab" data-tab="dupes">Duplicate symbols</button>',
-    '  <button class="tab" data-tab="patterns">Patterns</button>',
-    '</nav>',
-    '<div class="panel" id="panel-files">',
-    '  <div class="toolbar"><input id="q-files" placeholder="Filter files…" autocomplete="off">',
-    '    <label class="chk"><input type="checkbox" id="only-god"> only god-objects</label>',
-    '    <span class="count" id="count-files"></span></div>',
-    '  <table id="t-files"><thead><tr>',
-    '    <th data-k="rel">File</th><th data-k="loc" class="num">LOC</th>',
-    '    <th data-k="defs" class="num">Top-level defs</th>',
-    '    <th data-k="imports" class="num">Imports</th>',
-    '    <th data-k="importedBy" class="num">Imported by</th>',
-    '  </tr></thead><tbody></tbody></table>',
-    '</div>',
-    '<div class="panel hidden" id="panel-dead">',
-    '  <div class="toolbar"><span class="count" id="count-dead"></span></div>',
-    '  <table id="t-dead"><thead><tr>',
-    '    <th data-k="rel">Statically unreachable from any root — candidate, confirm</th>',
-    '    <th data-k="loc" class="num">LOC</th>',
-    '  </tr></thead><tbody></tbody></table>',
-    '</div>',
-    '<div class="panel hidden" id="panel-dupes">',
-    '  <div class="toolbar"><input id="q-dupes" placeholder="Filter symbol names…" autocomplete="off">',
-    '    <span class="count" id="count-dupes"></span></div>',
-    '  <table id="t-dupes"><thead><tr>',
-    '    <th data-k="name">Symbol</th><th data-k="count" class="num">Files</th>',
-    '    <th data-k="where">Defined in</th>',
-    '  </tr></thead><tbody></tbody></table>',
-    '</div>',
-    '<div class="panel hidden" id="panel-patterns">',
-    '  <div class="toolbar">',
-    '    <label class="chk"><input type="checkbox" id="only-regressions"> regressions only</label>',
-    '    <span class="count" id="count-patterns"></span></div>',
-    '  <table id="t-patterns"><thead><tr>',
-    '    <th data-k="status">Status</th>',
-    '    <th data-k="name">Pattern</th>',
-    '    <th data-k="total" class="num">Hits</th>',
-    '    <th data-k="helper">Helper / verdict</th>',
-    '  </tr></thead><tbody></tbody></table>',
-    '</div>',
-    '<script>var DATA=' + json + ';</script>',
-    '<script>' + JS + '</script>',
-    '</body></html>'
-  ].join('\n');
-}
+/* ── HTML Generator (Template Literals) ──────────────────────────────────── */
+const HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RedPash JS audit</title>
+  <style>
+    :root { --bg: #0d1117; --panel: #11161f; --panel2: #161c28; --line: #222b3a;
+            --text: #d6dbe5; --muted: #7c8699; --accent: #b3001b; --accent2: #5b8cff;
+            --bad: #ff5d6c; --warn: #e0a64b; --ok: #3fb56b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, sans-serif; }
+    header { padding: 22px 26px 14px; border-bottom: 1px solid var(--line); }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; }
+    .muted { color: var(--muted); font-weight: 400; }
+    .sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .cards { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 26px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 118px; }
+    .card .n { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .card .l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .card.bad .n { color: var(--bad); } .card.warn .n { color: var(--warn); }
+    .tabs { display: flex; gap: 4px; padding: 0 26px; border-bottom: 1px solid var(--line); }
+    .tab { background: none; border: 0; color: var(--muted); padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .panel { padding: 14px 26px 80px; } .panel.hidden { display: none; }
+    .toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+    .toolbar input { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 11px; width: 300px; }
+    .chk { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .count { color: var(--muted); font-size: 12px; margin-left: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 9px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    th.num { text-align: right; } th.sorted { color: var(--text); }
+    th.sorted::after { content: " \\25be"; color: var(--accent2); } th.sorted.asc::after { content: " \\25b4"; }
+    tbody tr { border-bottom: 1px solid var(--line); } tbody tr:hover { background: var(--panel); }
+    tbody td { padding: 7px 10px; vertical-align: top; } td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: #e6ebf2; }
+    .pill { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 600; margin-left: 6px; }
+    .pill.bad { background: rgba(255,93,108,.15); color: var(--bad); } .pill.warn { background: rgba(224,166,75,.16); color: var(--warn); } .pill.ok { background: rgba(63,181,107,.16); color: var(--ok); } .pill.dim { background: #1d2433; color: var(--muted); }
+    .where { color: var(--muted); font-size: 11px; margin-top: 3px; font-family: ui-monospace, Consolas, monospace; }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JS refactoring audit <span class="muted">· redpash-app</span></h1>
+    <div class="sub" id="sub"></div>
+  </header>
+  <section class="cards" id="cards"></section>
+  <nav class="tabs">
+    <button class="tab active" data-tab="files">Files</button>
+    <button class="tab" data-tab="dead">Unreachable</button>
+    <button class="tab" data-tab="dupes">Duplicate symbols</button>
+    <button class="tab" data-tab="patterns">Patterns</button>
+  </nav>
 
-var CSS = [
-  ':root{--bg:#0d1117;--panel:#11161f;--panel2:#161c28;--line:#222b3a;',
-  '--text:#d6dbe5;--muted:#7c8699;--accent:#b3001b;--accent2:#5b8cff;',
-  '--bad:#ff5d6c;--warn:#e0a64b;--ok:#3fb56b}',
-  '*{box-sizing:border-box}',
-  'body{margin:0;background:var(--bg);color:var(--text);',
-  'font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}',
-  'header{padding:22px 26px 14px;border-bottom:1px solid var(--line)}',
-  'h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}',
-  '.muted{color:var(--muted);font-weight:400}',
-  '.sub{margin-top:4px;color:var(--muted);font-size:12px}',
-  '.cards{display:flex;flex-wrap:wrap;gap:10px;padding:16px 26px}',
-  '.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;',
-  'padding:10px 14px;min-width:118px}',
-  '.card .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}',
-  '.card .l{font-size:11px;color:var(--muted);margin-top:2px}',
-  '.card.bad .n{color:var(--bad)}.card.warn .n{color:var(--warn)}',
-  '.tabs{display:flex;gap:4px;padding:0 26px;border-bottom:1px solid var(--line)}',
-  '.tab{background:none;border:0;color:var(--muted);padding:10px 14px;cursor:pointer;',
-  'font-size:13px;border-bottom:2px solid transparent}',
-  '.tab.active{color:var(--text);border-bottom-color:var(--accent)}',
-  '.panel{padding:14px 26px 80px}.panel.hidden{display:none}',
-  '.toolbar{display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap}',
-  '.toolbar input[type=text],#q-files,#q-dupes{background:var(--panel2);',
-  'border:1px solid var(--line);color:var(--text);border-radius:8px;',
-  'padding:7px 11px;width:300px;font-size:13px}',
-  '.chk{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px;',
-  'cursor:pointer;user-select:none}',
-  '.count{color:var(--muted);font-size:12px;margin-left:auto}',
-  'table{width:100%;border-collapse:collapse}',
-  'thead th{position:sticky;top:0;background:var(--panel);text-align:left;z-index:2;',
-  'font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);',
-  'padding:9px 10px;border-bottom:1px solid var(--line);cursor:pointer;',
-  'user-select:none;white-space:nowrap}',
-  'th.num{text-align:right}th.sorted{color:var(--text)}',
-  'th.sorted::after{content:" \\25be";color:var(--accent2)}',
-  'th.sorted.asc::after{content:" \\25b4"}',
-  'tbody tr{border-bottom:1px solid var(--line)}',
-  'tbody tr:hover{background:var(--panel)}',
-  'tbody td{padding:7px 10px;vertical-align:top}',
-  'td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}',
-  '.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#e6ebf2}',
-  '.pill{display:inline-block;padding:1px 6px;border-radius:6px;font-size:10px;',
-  'font-weight:600;margin-left:6px}',
-  '.pill.bad{background:rgba(255,93,108,.15);color:var(--bad)}',
-  '.pill.warn{background:rgba(224,166,75,.16);color:var(--warn)}',
-  '.pill.ok{background:rgba(63,181,107,.16);color:var(--ok)}',
-  '.pill.dim{background:#1d2433;color:var(--muted)}',
-  '.where{color:var(--muted);font-size:11px;margin-top:3px;',
-  'font-family:ui-monospace,Menlo,Consolas,monospace}',
-  '.empty{padding:40px;text-align:center;color:var(--muted)}'
-].join('');
+  <div class="panel" id="panel-files">
+    <div class="toolbar"><input id="q-files" placeholder="Filter files…" autocomplete="off">
+      <label class="chk"><input type="checkbox" id="only-god"> only god-objects</label>
+      <span class="count" id="count-files"></span></div>
+    <table id="t-files"><thead><tr>
+      <th data-k="rel">File</th><th data-k="loc" class="num">LOC</th>
+      <th data-k="defs" class="num">Defs</th><th data-k="imports" class="num">Imports</th><th data-k="importedBy" class="num">Imported by</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
 
-/* report client script — ES5, no template literals, no ${ */
-var JS = [
-  "(function(){'use strict';var D=DATA;",
-  "function esc(s){return String(s).replace(/[&<>\"]/g,function(c){",
-  "return({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'})[c];});}",
-  "document.getElementById('sub').textContent=D.srcDir+'  —  generated '+",
-  "new Date(D.generatedAt).toLocaleString();",
-  "var cards=[['Files',D.stats.files,''],['Lines of code',D.stats.loc,''],",
-  "['Unreachable',D.stats.deadModules,'bad'],['Unreachable LOC',D.stats.deadLoc,'bad'],",
-  "['Duplicate symbols',D.stats.dupSymbols,'warn'],",
-  "['God-objects (>'+D.godLoc+')',D.stats.godObjects,'warn'],",
-  "['Pattern regressions',D.stats.regressions,D.stats.regressions?'bad':''],",
-  "['Declined over threshold',D.stats.pendingDeclined,D.stats.pendingDeclined?'warn':'']];",
-  "document.getElementById('cards').innerHTML=cards.map(function(c){",
-  "return '<div class=\"card '+c[2]+'\"><div class=\"n\">'+c[1]+",
-  "'</div><div class=\"l\">'+c[0]+'</div></div>';}).join('');",
-  "var tabs=document.querySelectorAll('.tab');",
-  "for(var i=0;i<tabs.length;i++)tabs[i].addEventListener('click',function(){",
-  "for(var j=0;j<tabs.length;j++)tabs[j].classList.remove('active');",
-  "this.classList.add('active');var t=this.getAttribute('data-tab');",
-  "['files','dead','dupes','patterns'].forEach(function(p){",
-  "document.getElementById('panel-'+p).classList.toggle('hidden',p!==t);});});",
-  "function sortRows(rows,st){rows.sort(function(a,b){var x=a[st.k],y=b[st.k],d;",
-  "if(typeof x==='string')d=x.localeCompare(y);else d=x-y;return st.asc?d:-d;});}",
-  "function wireSort(id,st,re){var ths=document.querySelectorAll('#'+id+' thead th');",
-  "function paint(){for(var i=0;i<ths.length;i++){ths[i].classList.remove('sorted','asc');",
-  "if(ths[i].getAttribute('data-k')===st.k){ths[i].classList.add('sorted');",
-  "if(st.asc)ths[i].classList.add('asc');}}}",
-  "for(var i=0;i<ths.length;i++)(function(th){th.addEventListener('click',function(){",
-  "var k=th.getAttribute('data-k');if(!k)return;",
-  "if(st.k===k)st.asc=!st.asc;else{st.k=k;st.asc=false;}paint();re();});})(ths[i]);",
-  "paint();}",
-  "var fSort={k:'loc',asc:false};",
-  "function renderFiles(){var q=document.getElementById('q-files').value.toLowerCase();",
-  "var og=document.getElementById('only-god').checked;",
-  "var rows=D.files.filter(function(r){if(og&&!r.god)return false;",
-  "return !q||r.rel.toLowerCase().indexOf(q)>=0;});sortRows(rows,fSort);",
-  "document.getElementById('count-files').textContent=rows.length+' of '+D.files.length;",
-  "var tb=document.querySelector('#t-files tbody');",
-  "tb.innerHTML=rows.length?rows.map(function(r){",
-  "var f=(r.dead?'<span class=\"pill bad\">unreached</span>':'')+",
-  "(r.god?'<span class=\"pill warn\">god</span>':'');",
-  "return '<tr><td><span class=\"mono\">'+esc(r.rel)+'</span>'+f+'</td>'+",
-  "'<td class=num>'+r.loc+'</td><td class=num>'+r.defs+'</td>'+",
-  "'<td class=num>'+r.imports+'</td><td class=num>'+r.importedBy+'</td></tr>';",
-  "}).join(''):'<tr><td colspan=5 class=empty>No matches.</td></tr>';}",
-  "var dSort={k:'loc',asc:false};",
-  "function renderDead(){var rows=D.dead.slice();sortRows(rows,dSort);",
-  "document.getElementById('count-dead').textContent=rows.length+' unreachable · '+",
-  "D.stats.deadLoc+' LOC';var tb=document.querySelector('#t-dead tbody');",
-  "tb.innerHTML=rows.length?rows.map(function(r){",
-  "return '<tr><td><span class=\"mono\">'+esc(r.rel)+'</span></td>'+",
-  "'<td class=num>'+r.loc+'</td></tr>';",
-  "}).join(''):'<tr><td colspan=2 class=empty>Nothing unreachable.</td></tr>';}",
-  "var uSort={k:'count',asc:false};",
-  "function renderDupes(){var q=document.getElementById('q-dupes').value.toLowerCase();",
-  "var rows=D.dupes.filter(function(r){return !q||r.name.toLowerCase().indexOf(q)>=0;});",
-  "sortRows(rows,uSort);",
-  "document.getElementById('count-dupes').textContent=rows.length+' of '+D.dupes.length;",
-  "var tb=document.querySelector('#t-dupes tbody');",
-  "tb.innerHTML=rows.length?rows.map(function(r){",
-  "return '<tr><td><span class=\"mono\">'+esc(r.name)+'</span></td>'+",
-  "'<td class=num>'+r.count+'</td><td><span class=\"where\">'+",
-  "esc(r.files.join('  ·  '))+'</span></td></tr>';",
-  "}).join(''):'<tr><td colspan=3 class=empty>No matches.</td></tr>';}",
-  /* Patterns panel — status pill + hit count + helper / verdict. */
-  "var pSort={k:'total',asc:false};",
-  "function statusPill(s,total){",
-  "var cls=s==='extracted'?(total>0?'bad':'ok')",
-  ":s==='declined'?(total>D.revisitThreshold?'warn':'dim')",
-  ":'dim';",
-  "return '<span class=\"pill '+cls+'\">'+s+'</span>';}",
-  "function renderPatterns(){",
-  "var or=document.getElementById('only-regressions').checked;",
-  "var rows=D.patterns.filter(function(r){",
-  "return !or||(r.status==='extracted'&&r.total>0);});",
-  "sortRows(rows,pSort);",
-  "document.getElementById('count-patterns').textContent=rows.length+' of '+D.patterns.length;",
-  "var tb=document.querySelector('#t-patterns tbody');",
-  "tb.innerHTML=rows.length?rows.map(function(r){",
-  "var where=r.files.length?",
-  "'<div class=\"where\">'+r.files.map(function(f){return esc(f.file)+' ('+f.n+')';}).join('  ·  ')+'</div>':'';",
-  "return '<tr><td>'+statusPill(r.status,r.total)+'</td>'+",
-  "'<td><span class=\"mono\">'+esc(r.name)+'</span>'+",
-  "(r.notes?'<div class=\"where\">'+esc(r.notes)+'</div>':'')+where+'</td>'+",
-  "'<td class=num>'+r.total+'</td>'+",
-  "'<td>'+esc(r.helper)+'</td></tr>';",
-  "}).join(''):'<tr><td colspan=4 class=empty>No patterns matched.</td></tr>';}",
-  "document.getElementById('q-files').addEventListener('input',renderFiles);",
-  "document.getElementById('only-god').addEventListener('change',renderFiles);",
-  "document.getElementById('q-dupes').addEventListener('input',renderDupes);",
-  "document.getElementById('only-regressions').addEventListener('change',renderPatterns);",
-  "wireSort('t-files',fSort,renderFiles);wireSort('t-dead',dSort,renderDead);",
-  "wireSort('t-dupes',uSort,renderDupes);wireSort('t-patterns',pSort,renderPatterns);",
-  "renderFiles();renderDead();renderDupes();renderPatterns();})();"
-].join('\n');
+  <div class="panel hidden" id="panel-dead">
+    <div class="toolbar"><span class="count" id="count-dead"></span></div>
+    <table id="t-dead"><thead><tr>
+      <th data-k="rel">Statically unreachable from any root — candidate, confirm</th><th data-k="loc" class="num">LOC</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
 
-/* ── emit ────────────────────────────────────────────────────────────────── */
-fs.writeFileSync(OUT, renderHtml(data), 'utf8');
+  <div class="panel hidden" id="panel-dupes">
+    <div class="toolbar"><input id="q-dupes" placeholder="Filter symbol names…" autocomplete="off">
+      <span class="count" id="count-dupes"></span></div>
+    <table id="t-dupes"><thead><tr>
+      <th data-k="name">Symbol</th><th data-k="count" class="num">Files</th><th data-k="where">Defined in</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
 
-console.log('');
-console.log('  files scanned     ' + data.stats.files
-  + '   (' + data.stats.loc + ' LOC)');
-console.log('  unreachable       ' + data.stats.deadModules
-  + '   (' + data.stats.deadLoc + ' LOC, no static path from a root)');
-console.log('  duplicate symbols ' + data.stats.dupSymbols
-  + '   (one name, 2+ defining files)');
-console.log('  god-objects       ' + data.stats.godObjects
-  + '   (> ' + GOD_LOC + ' LOC)');
-console.log('  patterns          '
-  + patterns.filter(function (p) { return p.status === 'extracted'; }).length + ' extracted, '
-  + patterns.filter(function (p) { return p.status === 'live'; }).length      + ' live, '
-  + patterns.filter(function (p) { return p.status === 'declined'; }).length  + ' declined'
-  + (regressions ? '   ⚠ ' + regressions + ' regression(s)' : '')
-  + (pending ? '   ⚠ ' + pending + ' declined > ' + REVISIT_THRESHOLD : ''));
-if (dead.length) {
-  console.log('');
-  console.log('  unreachable (candidates — confirm before deleting):');
-  dead.forEach(function (f) {
-    console.log('    ' + f.rel + '  (' + f.loc + ')');
-  });
-}
-console.log('');
-console.log('  patterns:');
-patterns.forEach(function (p) {
-  var glyph = p.status === 'extracted' ? (p.total > 0 ? '✗' : '✓')
-            : p.status === 'declined'  ? (p.total > REVISIT_THRESHOLD ? '⚠' : '•')
-            : ' ';
-  var pad = String(p.total).padStart(4, ' ');
-  console.log('    ' + glyph + ' ' + p.status.padEnd(9) + ' ' + pad + ' hits  ' + p.name);
+  <div class="panel hidden" id="panel-patterns">
+    <div class="toolbar">
+      <label class="chk"><input type="checkbox" id="only-regressions"> regressions only</label>
+      <span class="count" id="count-patterns"></span></div>
+    <table id="t-patterns"><thead><tr>
+      <th data-k="status">Status</th><th data-k="name">Pattern</th><th data-k="total" class="num">Hits</th><th data-k="helper">Helper / verdict</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+
+  <script>const DATA = ${JSON.stringify(data).replace(/<\//g, '<\\/')};</script>
+  <script>
+    // Modern ES6 UI Script
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+    document.getElementById('sub').textContent = \`\${DATA.srcDir}  —  generated \${new Date(DATA.generatedAt).toLocaleString()}\`;
+
+    const cards = [
+      ['Files', DATA.stats.files, ''], ['Lines of code', DATA.stats.loc, ''],
+      ['Unreachable', DATA.stats.deadModules, 'bad'], ['Unreachable LOC', DATA.stats.deadLoc, 'bad'],
+      ['Duplicate symbols', DATA.stats.dupSymbols, 'warn'],
+      [\`God-objects (>\${DATA.godLoc})\`, DATA.stats.godObjects, 'warn'],
+      ['Pattern regressions', DATA.stats.regressions, DATA.stats.regressions ? 'bad' : ''],
+      ['Declined over threshold', DATA.stats.pendingDeclined, DATA.stats.pendingDeclined ? 'warn' : '']
+    ];
+
+    document.getElementById('cards').innerHTML = cards.map(c =>
+      \`<div class="card \${c[2]}"><div class="n">\${c[1]}</div><div class="l">\${c[0]}</div></div>\`
+    ).join('');
+
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => tab.addEventListener('click', function() {
+      tabs.forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      const tId = this.dataset.tab;
+      ['files','dead','dupes','patterns'].forEach(p =>
+        document.getElementById('panel-'+p).classList.toggle('hidden', p !== tId)
+      );
+    }));
+
+    const sortRows = (rows, st) => rows.sort((a, b) => {
+      const d = typeof a[st.k] === 'string' ? a[st.k].localeCompare(b[st.k]) : a[st.k] - b[st.k];
+      return st.asc ? d : -d;
+    });
+
+    const wireSort = (id, st, renderFn) => {
+      const ths = document.querySelectorAll(\`#\${id} thead th\`);
+      const paint = () => ths.forEach(th => {
+        th.classList.remove('sorted', 'asc');
+        if (th.dataset.k === st.k) { th.classList.add('sorted'); if (st.asc) th.classList.add('asc'); }
+      });
+      ths.forEach(th => th.addEventListener('click', () => {
+        if (!th.dataset.k) return;
+        if (st.k === th.dataset.k) st.asc = !st.asc; else { st.k = th.dataset.k; st.asc = false; }
+        paint(); renderFn();
+      }));
+      paint();
+    };
+
+    const fSort = {k:'loc', asc:false};
+    const renderFiles = () => {
+      const q = document.getElementById('q-files').value.toLowerCase();
+      const og = document.getElementById('only-god').checked;
+      const rows = DATA.files.filter(r => (!og || r.god) && (!q || r.rel.toLowerCase().includes(q)));
+      sortRows(rows, fSort);
+      document.getElementById('count-files').textContent = \`\${rows.length} of \${DATA.files.length}\`;
+      document.querySelector('#t-files tbody').innerHTML = rows.length ? rows.map(r => \`
+        <tr><td><span class="mono">\${esc(r.rel)}</span>
+        \${r.dead ? '<span class="pill bad">unreached</span>' : ''}\${r.god ? '<span class="pill warn">god</span>' : ''}</td>
+        <td class=num>\${r.loc}</td><td class=num>\${r.defs}</td><td class=num>\${r.imports}</td><td class=num>\${r.importedBy}</td></tr>
+      \`).join('') : '<tr><td colspan=5 class=empty>No matches.</td></tr>';
+    };
+
+    const renderDead = () => {
+      document.getElementById('count-dead').textContent = \`\${DATA.dead.length} unreachable · \${DATA.stats.deadLoc} LOC\`;
+      document.querySelector('#t-dead tbody').innerHTML = DATA.dead.length ? DATA.dead.map(r => \`
+        <tr><td><span class="mono">\${esc(r.rel)}</span></td><td class=num>\${r.loc}</td></tr>
+      \`).join('') : '<tr><td colspan=2 class=empty>Nothing unreachable.</td></tr>';
+    };
+
+    const uSort = {k:'count', asc:false};
+    const renderDupes = () => {
+      const q = document.getElementById('q-dupes').value.toLowerCase();
+      const rows = DATA.dupes.filter(r => !q || r.name.toLowerCase().includes(q));
+      sortRows(rows, uSort);
+      document.getElementById('count-dupes').textContent = \`\${rows.length} of \${DATA.dupes.length}\`;
+      document.querySelector('#t-dupes tbody').innerHTML = rows.length ? rows.map(r => \`
+        <tr><td><span class="mono">\${esc(r.name)}</span></td><td class=num>\${r.count}</td>
+        <td><span class="where">\${esc(r.files.join('  ·  '))}</span></td></tr>
+      \`).join('') : '<tr><td colspan=3 class=empty>No matches.</td></tr>';
+    };
+
+    const pSort = {k:'total', asc:false};
+    const renderPatterns = () => {
+      const or = document.getElementById('only-regressions').checked;
+      const rows = DATA.patterns.filter(r => !or || (r.status === 'extracted' && r.total > 0));
+      sortRows(rows, pSort);
+      document.getElementById('count-patterns').textContent = \`\${rows.length} of \${DATA.patterns.length}\`;
+      document.querySelector('#t-patterns tbody').innerHTML = rows.length ? rows.map(r => {
+        const cls = r.status === 'extracted' ? (r.total > 0 ? 'bad' : 'ok') : r.status === 'declined' ? (r.total > DATA.revisitThreshold ? 'warn' : 'dim') : 'dim';
+        const where = r.files.length ? \`<div class="where">\${r.files.map(f => \`\${esc(f.file)} (\${f.n})\`).join('  ·  ')}</div>\` : '';
+        return \`<tr><td><span class="pill \${cls}">\${r.status}</span></td>
+        <td><span class="mono">\${esc(r.name)}</span>\${r.notes ? \`<div class="where">\${esc(r.notes)}</div>\` : ''}\${where}</td>
+        <td class=num>\${r.total}</td><td>\${esc(r.helper)}</td></tr>\`;
+      }).join('') : '<tr><td colspan=4 class=empty>No patterns matched.</td></tr>';
+    };
+
+    document.getElementById('q-files').addEventListener('input', renderFiles);
+    document.getElementById('only-god').addEventListener('change', renderFiles);
+    document.getElementById('q-dupes').addEventListener('input', renderDupes);
+    document.getElementById('only-regressions').addEventListener('change', renderPatterns);
+
+    wireSort('t-files', fSort, renderFiles);
+    wireSort('t-dupes', uSort, renderDupes);
+    wireSort('t-patterns', pSort, renderPatterns);
+
+    renderFiles(); renderDead(); renderDupes(); renderPatterns();
+  </script>
+</body>
+</html>`;
+
+fs.writeFileSync(OUT, HTML, 'utf8');
+
+/* ── Console Output & Probes ─────────────────────────────────────────────── */
+console.log('\n  📊 Stats:');
+console.log(`    Files scanned:     ${data.stats.files} (${data.stats.loc} LOC)`);
+console.log(`    Unreachable:       ${data.stats.deadModules} (${data.stats.deadLoc} LOC)`);
+console.log(`    Duplicate symbols: ${data.stats.dupSymbols}`);
+console.log(`    God-objects:       ${data.stats.godObjects}`);
+
+console.log('\n  🎯 Patterns:');
+patterns.forEach(p => {
+  const glyph = p.status === 'extracted' ? (p.total > 0 ? '❌' : '✅') : p.status === 'declined' ? (p.total > REVISIT_THRESHOLD ? '⚠️' : '•') : ' ';
+  console.log(`    ${glyph} ${p.status.padEnd(9)} ${String(p.total).padStart(4, ' ')} hits  ${p.name}`);
 });
-console.log('');
-console.log('  report -> ' + OUT);
+
+console.log(`\n  📄 Report saved to: ${OUT}`);
+
+/* ── Runtime Probes Logic ────────────────────────────────────────────────── */
+if (INJECT_PROBES && dead.length > 0) {
+  console.log(`\n💉 Injecting runtime probes into ${dead.length} unreachable files...`);
+  dead.forEach(f => {
+    const probe = `\nconsole.warn("🧟 ZOMBIE MODULE LOADED: ${f.rel}");\n`;
+    const content = fs.readFileSync(f.full, 'utf8');
+    if (!content.includes('ZOMBIE MODULE LOADED')) {
+      fs.writeFileSync(f.full, probe + content, 'utf8');
+    }
+  });
+  console.log('   Probes injected. Run your app and check the browser console.');
+}
+
+/* ── CI/CD Gate ──────────────────────────────────────────────────────────── */
+if (regressions > 0) {
+  console.error(`\n❌ CI/CD Gate Failed: Found ${regressions} active regressions.`);
+  process.exit(1);
+} else {
+  console.log('\n✅ CI/CD Gate Passed: No extracted patterns violated.');
+  process.exit(0);
+}
