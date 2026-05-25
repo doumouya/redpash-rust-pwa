@@ -931,10 +931,90 @@ export default function home(app, { session: _session }) {
         // Successful — leave the new value in place. Refetch is optional;
         // skipping it preserves the user's edit-mode position + cursor.
         td.dataset.editOriginal = value;
+        // Record for undo. Any new edit invalidates the redo stack —
+        // standard linear-history behavior.
+        editHistory.push({ rid, key, oldValue: original, newValue: value });
+        editFuture.length = 0;
+        updateUndoRedoButtons();
       } catch (err) {
         console.warn("[home] cell-edit failed:", err);
         alert("Edit failed — reverting.");
         td.textContent = original;
+      }
+    }
+
+    // ── undo / redo ──────────────────────────────────────────────
+    // Stacks of edit deltas; each entry is { rid, key, oldValue,
+    // newValue }. Undo PATCHes oldValue, redo PATCHes newValue.
+    // Per-renderListBody scope — switching tabs resets the history
+    // (undo across tabs would be confusing). Delete-undo would need
+    // backend soft-delete; deferred until that exists.
+    const editHistory = [];
+    const editFuture  = [];
+
+    function updateUndoRedoButtons() {
+      const undoBtn = view.querySelector("#rp-list-toolbar-undo");
+      const redoBtn = view.querySelector("#rp-list-toolbar-redo");
+      if (undoBtn) {
+        if (editHistory.length) {
+          undoBtn.removeAttribute("disabled");
+          undoBtn.title = "Undo last edit";
+        } else {
+          undoBtn.setAttribute("disabled", "");
+          undoBtn.title = "Nothing to undo";
+        }
+      }
+      if (redoBtn) {
+        if (editFuture.length) {
+          redoBtn.removeAttribute("disabled");
+          redoBtn.title = "Redo";
+        } else {
+          redoBtn.setAttribute("disabled", "");
+          redoBtn.title = "Nothing to redo";
+        }
+      }
+    }
+
+    async function undoLastEdit() {
+      if (!editHistory.length) return;
+      const entry = editHistory.pop();
+      const patchBase = spec.patchEndpoint || spec.endpoint;
+      try {
+        await api.patch(
+          patchBase + "/" + encodeURIComponent(entry.rid),
+          { [entry.key]: entry.oldValue }
+        );
+        editFuture.push(entry);
+        updateUndoRedoButtons();
+        fetchList(spec, chipState);
+      } catch (err) {
+        console.warn("[home] undo failed:", err);
+        // Restore the entry so the user can try again (e.g. the row
+        // might have been deleted from another tab — fetchList will
+        // surface that on the next refetch).
+        editHistory.push(entry);
+        updateUndoRedoButtons();
+        alert("Undo failed.");
+      }
+    }
+
+    async function redoLastEdit() {
+      if (!editFuture.length) return;
+      const entry = editFuture.pop();
+      const patchBase = spec.patchEndpoint || spec.endpoint;
+      try {
+        await api.patch(
+          patchBase + "/" + encodeURIComponent(entry.rid),
+          { [entry.key]: entry.newValue }
+        );
+        editHistory.push(entry);
+        updateUndoRedoButtons();
+        fetchList(spec, chipState);
+      } catch (err) {
+        console.warn("[home] redo failed:", err);
+        editFuture.push(entry);
+        updateUndoRedoButtons();
+        alert("Redo failed.");
       }
     }
 
@@ -1192,6 +1272,13 @@ export default function home(app, { session: _session }) {
         btn.title = "Edit mode (toggle)";
         btn.addEventListener("click", () => toggleEditMode());
       }
+      // Undo / redo are scoped to edit history (PATCH old/new values).
+      // Buttons stay disabled until the first edit lands; click handlers
+      // are always bound. updateUndoRedoButtons enables them when their
+      // respective stack is non-empty.
+      view.querySelector("#rp-list-toolbar-undo")?.addEventListener("click", undoLastEdit);
+      view.querySelector("#rp-list-toolbar-redo")?.addEventListener("click", redoLastEdit);
+      updateUndoRedoButtons();
     }
 
     // Row click — four branches:
