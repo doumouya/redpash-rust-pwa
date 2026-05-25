@@ -57,6 +57,28 @@
   overflow-y: auto;
 }
 
+/* The shared .rt-toolbar (toolbar.css:5) carries a full-width
+   `border-bottom` to separate it from the table below. On Home
+   Em wants that separator narrowed to 80% + centered — softer
+   visual hand-off into the panel, in line with the "lifted
+   content surface" direction in [[chrome-visual-direction]].
+   Border can't be partial-width, so we drop it on the Home
+   scope + draw a centered ::after instead. Other consumers of
+   .rt-toolbar (Workspace, Cases) keep the full-width border. */
+#rpHomeView .rt-toolbar {
+  position: relative;
+  border-bottom: 0;
+}
+#rpHomeView .rt-toolbar::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--rp-border);
+}
+
 /* ── Users tab row polish ───────────────────────────────────────
    The Users row had three different concepts wearing the same
    monospace-pill (.rp-mon-method): the @handle, the Plan, the
