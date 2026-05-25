@@ -98,10 +98,17 @@ export function windowChipsHTML(windows, active) {
 // existing caller passes a string array and renders identically.
 export function listPanel(columns, tbodyId) {
   const th = columns.map((c) => {
-    if (typeof c === "string") return '<th>' + esc(c) + '</th>';
+    // `data-col-key` carries the column's logical identifier so the
+    // columns-picker dropdown (decorateColsPicker in home.js) can hide
+    // matching TH + nth-child TDs by id rather than by index. String-
+    // column callers (no key set) fall back to the label as the key.
+    if (typeof c === "string") {
+      return '<th data-col-key="' + esc(c) + '">' + esc(c) + '</th>';
+    }
     const { label, key, sortable } = c;
-    if (!sortable) return '<th>' + esc(label) + '</th>';
-    return '<th class="rp-list-sortable" data-sort="' + esc(key || label) + '">'
+    const ck = esc(key || label);
+    if (!sortable) return '<th data-col-key="' + ck + '">' + esc(label) + '</th>';
+    return '<th class="rp-list-sortable" data-col-key="' + ck + '" data-sort="' + ck + '">'
       + esc(label)
       + '<i class="bi bi-chevron-expand rp-list-sort-icon"></i>'
       + '</th>';

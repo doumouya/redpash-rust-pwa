@@ -1185,6 +1185,72 @@ export default function home(app, { session: _session }) {
         fetchList(spec, chipState);
       });
 
+      // ── columns picker ─────────────────────────────────────────
+      // Per-tab persisted set of hidden column keys. Stored under
+      // localStorage `rp-cols-hidden-${tab.key}` as a JSON array.
+      // applyHiddenColumns hides matching TH (by data-col-key) +
+      // every body row's TD at the same column index. decorate runs
+      // after every fetchList paint via the view._applyHiddenColumns
+      // hook so freshly-rendered rows pick up the hide state.
+      const colsStorageKey = "rp-cols-hidden-" + tab.key;
+      const hiddenCols = new Set(
+        JSON.parse(localStorage.getItem(colsStorageKey) || "[]")
+      );
+
+      function applyHiddenColumns() {
+        const table = view.querySelector(".rt-table");
+        if (!table) return;
+        const ths = [...table.querySelectorAll("thead th[data-col-key]")];
+        ths.forEach((th, idx) => {
+          const key = th.dataset.colKey;
+          const hide = hiddenCols.has(key);
+          th.style.display = hide ? "none" : "";
+          // nth-child is 1-indexed. The select-mode checkbox column
+          // (.rp-list-sel-th) sits BEFORE these data-col-key THs when
+          // present, so we compute the absolute index from the th's
+          // own position in the row instead of trusting `idx`.
+          const absIdx = [...th.parentNode.children].indexOf(th) + 1;
+          table.querySelectorAll(
+            `tbody tr > *:nth-child(${absIdx})`
+          ).forEach((td) => {
+            td.style.display = hide ? "none" : "";
+          });
+        });
+      }
+      view._applyHiddenColumns = applyHiddenColumns;
+
+      function decorateColsPicker() {
+        const dd  = view.querySelector("#rp-list-toolbar-cols-dd");
+        const btn = view.querySelector('[data-dd="rp-list-toolbar-cols-dd"]');
+        if (!dd || !btn) return;
+        const cols = spec.columns || [];
+        if (!cols.length) { btn.setAttribute("disabled", ""); return; }
+        btn.removeAttribute("disabled");
+        btn.title = "Show / hide columns";
+        dd.innerHTML = cols.map((c) => {
+          const label = typeof c === "string" ? c : c.label;
+          const key   = typeof c === "string" ? c : (c.key || c.label);
+          const visible = !hiddenCols.has(key);
+          const selCls  = visible ? " selected" : "";
+          const tick    = visible ? '<i class="bi bi-check2 tick"></i>' : "";
+          return '<div class="rt-dd-item' + selCls + '" data-col-key="'
+            + esc(key) + '">' + esc(label) + tick + '</div>';
+        }).join("");
+      }
+      decorateColsPicker();
+      applyHiddenColumns(); // hide THs immediately; fetchList re-applies for new TDs
+
+      view.querySelector("#rp-list-toolbar-cols-dd")?.addEventListener("click", (e) => {
+        const item = e.target.closest(".rt-dd-item[data-col-key]");
+        if (!item) return;
+        const key = item.dataset.colKey;
+        if (hiddenCols.has(key)) hiddenCols.delete(key);
+        else                      hiddenCols.add(key);
+        localStorage.setItem(colsStorageKey, JSON.stringify([...hiddenCols]));
+        decorateColsPicker();
+        applyHiddenColumns();
+      });
+
       // Click-to-sort — header delegation. Three-state per column:
       // first click sets desc, second flips to asc, third clears.
       // After clearing, the backend falls back to its default sort.
@@ -1407,6 +1473,10 @@ export default function home(app, { session: _session }) {
       }
       if (typeof view._decorateEditMode === "function") {
         view._decorateEditMode();
+      }
+      // Re-apply the hidden-columns set so new rows pick up the hide.
+      if (typeof view._applyHiddenColumns === "function") {
+        view._applyHiddenColumns();
       }
       renderListPager();
     } catch (err) {
