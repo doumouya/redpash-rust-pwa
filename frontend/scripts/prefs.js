@@ -51,6 +51,12 @@ export const PREFS = {
   // closed cases; "all" disables the filter. Live-toggleable from the
   // chip-row at the top of the Done column.
   casesDoneWindow: { values: ["day", "week", "month", "all"],   default: "day",  attr: null },
+  // Cases page — which axis the left rail groups by. "status" is the
+  // default kanban-mirrored grouping; "assignee" surfaces the "what
+  // is each agent / user working on" view named in
+  // `docs/internal/jira-flow-proposition/proposition.md` as a phase
+  // 2-3 migration requirement. Live-toggleable from the rail head.
+  casesRailGroupBy: { values: ["status", "assignee"],           default: "status", attr: null },
 };
 
 const KEY_PREFIX = "rp-pref-";

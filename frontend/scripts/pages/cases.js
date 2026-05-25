@@ -104,6 +104,7 @@ export default function cases(app, { session }) {
     in_review:   true,
     done:        false,                        // done is collapsed by default — usually noisy
   };
+  let railAssigneeExpanded = new Map();        // per-mount, keyed by assignee_id (or "__unassigned__")
   let activityFilter = "all";                  // sticky per-mount; per-case mem only
   let lastDetailActivity = [];                 // memoized for filter pill re-render
   let currentDetailCase = null;                // for the primary advance button
@@ -207,6 +208,22 @@ export default function cases(app, { session }) {
 
   newCaseBtn?.addEventListener("click", () => openCreateModal());
 
+  // ── rail group-by toggle (Status / Assignee) ───────────────────
+  // Delegated handler on the rt-seg container — flips the
+  // `casesRailGroupBy` pref + repaints. The painter's syncGroupByToggle
+  // call updates the is-active visual on every paint so refreshCases
+  // keeps the toggle in sync with the pref.
+  const groupByToggle = app.querySelector("#rp-cases-rail-groupby");
+  groupByToggle?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-rail-group-by]");
+    if (!btn) return;
+    const mode = btn.dataset.railGroupBy;
+    if (mode && mode !== getPref("casesRailGroupBy")) {
+      setPref("casesRailGroupBy", mode);
+      paintRail(cachedCases, activeCaseRid());
+    }
+  });
+
   // Cards are <a href="#/cases?id=…"> anchors — browser handles
   // the navigation for ordinary clicks (and middle-click → new tab,
   // and keyboard activation). The delegate only intercepts the
@@ -241,9 +258,17 @@ export default function cases(app, { session }) {
     const group = groupHead.closest(".rt-group");
     if (!group) return;
     const status = group.dataset.status;
+    const assignee = group.dataset.assignee;
     if (status) {
+      // Status mode — toggle persists across paints in railGroupExpanded.
       railGroupExpanded[status] = !group.classList.contains("expanded");
       group.classList.toggle("expanded", railGroupExpanded[status]);
+    } else if (assignee) {
+      // Assignee mode — toggle persists across paints in
+      // railAssigneeExpanded (Map keyed by assignee_id / "__unassigned__").
+      const next = !group.classList.contains("expanded");
+      railAssigneeExpanded.set(assignee, next);
+      group.classList.toggle("expanded", next);
     }
   });
 
@@ -399,17 +424,39 @@ export default function cases(app, { session }) {
     if (railBody) railBody.innerHTML = '<p class="rt-nav-state">' + esc(msg) + '</p>';
   }
 
+  // Dispatcher — reads the `casesRailGroupBy` pref and picks the
+  // right painter. Sync's the toggle's is-active class with the pref
+  // so a pref change from elsewhere (seedPrefs on boot) still reflects
+  // visually without a manual click. Per the proposition.md phase 2-3
+  // requirement: each agent gets a queryable "what's on my plate"
+  // view; the assignee grouping is that view.
   function paintRail(rows, activeRid) {
     if (!railBody) return;
-    const filtered = applyDoneWindow(rows);
+    const mode = getPref("casesRailGroupBy");
+    syncGroupByToggle(mode);
+    if (mode === "assignee") paintRailByAssignee(rows, activeRid);
+    else                     paintRailByStatus(rows, activeRid);
+  }
+
+  function syncGroupByToggle(mode) {
+    const toggle = app.querySelector("#rp-cases-rail-groupby");
+    if (!toggle) return;
+    toggle.querySelectorAll("[data-rail-group-by]").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.railGroupBy === mode));
+  }
+
+  function railBoardItemHTML(activeRid) {
     const boardActive = !activeRid;
-    const boardItem = ''
+    return ''
       + '<a class="rt-tab rp-cases-rail-board' + (boardActive ? ' active' : '') + '" '
       +    'href="#/cases" data-tab="board">'
       +   '<i class="rt-tab-icon bi bi-kanban"></i>'
       +   '<span class="rt-tab-name">Board</span>'
       + '</a>';
+  }
 
+  function paintRailByStatus(rows, activeRid) {
+    const filtered = applyDoneWindow(rows);
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
     filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
@@ -424,7 +471,7 @@ export default function cases(app, { session }) {
       // jumping to the board.
       const chipRow = status === "done" ? doneWindowChipsHTML("rail") : "";
       const itemsHTML = cases.length
-        ? cases.map((c) => railItemHTML(c, activeRid)).join("")
+        ? cases.map((c) => railItemHTML(c, activeRid, "status")).join("")
         : '<p class="rp-cases-rail-empty">No cases.</p>';
       return ''
         + '<div class="rt-group' + (expanded ? ' expanded' : '') + '" data-status="' + status + '">'
@@ -438,18 +485,81 @@ export default function cases(app, { session }) {
         + '</div>';
     }).join("");
 
-    railBody.innerHTML = boardItem + groupsHTML;
+    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML;
   }
 
-  function railItemHTML(c, activeRid) {
+  // Assignee grouping — one group per `assignee_id` plus a single
+  // "Unassigned" pseudo-group at the bottom for nulls. Sorted
+  // alphabetically by display name (Unassigned always last). Each
+  // item shows its status as a small colored dot at the right of the
+  // row so the user still sees where the case sits without the
+  // status-grouped header context.
+  function paintRailByAssignee(rows, activeRid) {
+    const filtered = applyDoneWindow(rows);
+    const byAssignee = new Map();
+    filtered.forEach((c) => {
+      const key = c.assignee_id || "__unassigned__";
+      if (!byAssignee.has(key)) {
+        byAssignee.set(key, {
+          id:    c.assignee_id || null,
+          name:  c.assignee_display_name || (c.assignee_id || "Unassigned"),
+          cases: [],
+        });
+      }
+      byAssignee.get(key).cases.push(c);
+    });
+
+    const groups = Array.from(byAssignee.values()).sort((a, b) => {
+      if (a.id === null && b.id !== null) return 1;          // Unassigned last
+      if (b.id === null && a.id !== null) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const groupsHTML = groups.map((g) => {
+      const key = g.id || "__unassigned__";
+      const expanded = railAssigneeExpanded.has(key)
+        ? railAssigneeExpanded.get(key)
+        : true;                                              // default expanded in assignee mode
+      const itemsHTML = g.cases.length
+        ? g.cases.map((c) => railItemHTML(c, activeRid, "assignee")).join("")
+        : '<p class="rp-cases-rail-empty">No cases.</p>';
+      // All assignee groups get a muted mark for v1 (no per-assignee
+      // color hash yet — the avatar atom in cases.js carries that
+      // logic, will reuse it here once A2 lands as a shared atom).
+      return ''
+        + '<div class="rt-group' + (expanded ? ' expanded' : '') + '" data-assignee="' + esc(key) + '">'
+        +   '<button class="rt-group-head" type="button">'
+        +     '<i class="rt-group-caret bi bi-chevron-down"></i>'
+        +     '<span class="rt-group-mark" data-c="mute"></span>'
+        +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
+        +     '<span class="rt-group-count">' + g.cases.length + '</span>'
+        +   '</button>'
+        +   '<div class="rt-group-body">' + itemsHTML + '</div>'
+        + '</div>';
+    }).join("");
+
+    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML;
+  }
+
+  function railItemHTML(c, activeRid, mode) {
     const rid = c.redpash_id || c.rid || "";
     const isActive = rid === activeRid;
     const href = "#/cases?id=" + encodeURIComponent(rid);
+    // In assignee mode, append a small colored status dot so the user
+    // still sees where the case sits in the workflow without the
+    // status-grouped header overhead. Rounded-square shape (vs the
+    // priority dot's filled circle) so the two readouts don't get
+    // confused at a glance.
+    const statusDot = mode === "assignee"
+      ? '<span class="rp-cases-rail-status-dot is-' + esc(c.status || "backlog")
+          + '" title="Status: ' + esc(STATUS_LABEL[c.status] || "—") + '"></span>'
+      : '';
     return ''
       + '<a class="rt-tab rp-cases-rail-item' + (isActive ? ' active' : '') + '" '
       +    'href="' + esc(href) + '" title="' + esc(c.title || rid) + '">'
       +   priorityDotHTML(c.priority)
       +   '<span class="rt-tab-name">' + esc(c.title || "(untitled)") + '</span>'
+      +   statusDot
       + '</a>';
   }
 

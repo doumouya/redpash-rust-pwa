@@ -34,6 +34,20 @@
       <div class="rp-cases-rail-filter">
         <input type="search" id="rp-cases-search" class="rp-cases-rail-search"
                placeholder="Search cases…" autocomplete="off" />
+        <!-- Group-by toggle — flips the rail between status (kanban-
+             mirrored, default) and assignee ("what is each user working
+             on", per proposition.md's phase 2-3 migration requirement).
+             Persisted via the `casesRailGroupBy` registered pref. -->
+        <div class="rt-seg rp-cases-rail-groupby" id="rp-cases-rail-groupby">
+          <button type="button" class="is-active" data-rail-group-by="status"
+                  title="Group by status (default — kanban-mirrored)">
+            <i class="bi bi-kanban"></i> Status
+          </button>
+          <button type="button" data-rail-group-by="assignee"
+                  title="Group by assignee — what each user is working on">
+            <i class="bi bi-person"></i> Assignee
+          </button>
+        </div>
       </div>
       <div class="rt-nav-body" id="rp-cases-rail-body">
         <p class="rt-nav-state">Loading cases…</p>

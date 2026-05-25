@@ -45,6 +45,26 @@
 }
 .rp-cases-rail-search:focus { border-color: var(--rp-accent-2); }
 
+/* Group-by toggle — sits below the search input in the rail filter
+   strip. Uses .rt-seg (panel.css) for the segmented-control shape;
+   the two buttons share the row 50/50 via flex:1. The 0.4375rem
+   margin-top breathes between the search input and the toggle. */
+.rp-cases-rail-groupby {
+  margin-top: 0.4375rem;
+  display: flex;
+  width: 100%;
+}
+.rp-cases-rail-groupby button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem;
+  font-size: 0.6875rem;
+}
+.rp-cases-rail-groupby button i { font-size: 0.75rem; }
+
 /* "Board" pseudo-tab — sits above the status groups, no group
    indent. Uses the .rt-tab atom but reset the left-padding that
    the workspace's nested-under-group items use. */
@@ -244,6 +264,27 @@
 .rp-cases-priority-dot.is-medium   { background: var(--rp-accent-2); }
 .rp-cases-priority-dot.is-high     { background: var(--rp-warn); }
 .rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
+
+/* Rail status dot — shown only in assignee-grouped mode (the group
+   header doesn't carry the status signal there). Rounded-square
+   shape (rather than the priority dot's filled circle) distinguishes
+   the two readouts at a glance. Pushed to the row's right edge with
+   margin-left: auto so the title takes the available space between.
+   Same color tokens as the kanban column accents + the rail group
+   marks (status-grouped mode) — one palette across the page. */
+.rp-cases-rail-status-dot {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 0.125rem;
+  background: var(--rp-text-mute);
+}
+.rp-cases-rail-status-dot.is-backlog     { background: var(--rp-text-mute); }
+.rp-cases-rail-status-dot.is-todo        { background: var(--rp-accent-2); }
+.rp-cases-rail-status-dot.is-in_progress { background: var(--rp-warn); }
+.rp-cases-rail-status-dot.is-in_review   { background: var(--rp-accent); }
+.rp-cases-rail-status-dot.is-done        { background: var(--rp-ok); }
 .rp-cases-card-title {
   margin: 0 0 0.375rem;
   font-size: 0.7812rem;
