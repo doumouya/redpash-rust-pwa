@@ -112,13 +112,24 @@ redpash-app/
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::user::UserProfile` |
-| **Table** | `users` (migration 001) — `google_sub` (006), `first_name` / `last_name` (017) |
+| **Table** | `users` (migration 001) — `google_sub` (006), `first_name` / `last_name` (017). `users.prefs` JSONB column dropped in mig 024 — prefs now live in their own table (see User Preferences below). |
 | **RID prefix** | `USR` |
-| **DB helpers** | `db::find_user_by_id`, `find_user_by_username`, `find_user_by_google_sub`, `insert_user`, `upsert_google_user`, `update_user` (sparse merge + jsonb-merge for `prefs`), `ensure_default_project` |
-| **API** | `GET /api/me`, `PATCH /api/me` (sparse update of profile fields + shallow merge of `prefs`) |
+| **DB helpers** | `db::find_user_by_id`, `find_user_by_username`, `find_user_by_google_sub`, `insert_user`, `upsert_google_user`, `update_user` (sparse merge over the profile fields), `ensure_default_project` |
+| **API** | `GET /api/me` (returns profile + prefs merged), `PATCH /api/me` (sparse update of profile fields; prefs go via `/api/me/prefs`) |
 | **Resolver** | `routes::me::resolve_user_rid(state, headers)` — single source of truth, re-exported from `routes::mod` |
 | **Ownership helper** | `routes::ensure_owner(lookup, expected_user, label, rid)` — re-exported from `routes::mod`, called by every detail handler |
 | **Docs** | [`auth/google.md`](auth/google.md), [`api/me.md`](api/me.md) |
+
+### User Preferences (`UserPreferences`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::user::UserPreferences` |
+| **Table** | `user_preferences` (migration 023) — promoted from the `users.prefs` JSONB column to a first-class table. JSONB column dropped in mig 024. |
+| **Schema** | `(user_redpash_id, key)` composite PK; one row per `(user, pref-key)` pair. Value is JSONB so client-side type-shape decisions don't leak into the schema. |
+| **DB helpers** | `db::get_user_preferences(user)`, `set_user_preference(user, key, value)`, `delete_user_preference(user, key)` |
+| **API** | `GET /api/me/prefs`, `PATCH /api/me/prefs` (sparse update — `{key: value, …}`; setting `value: null` deletes the row) |
+| **Why standalone** | Per-key writes don't race; SWR-friendly on the client; one pref's bug can't corrupt the rest of the JSONB blob. See [`docs/internal/specs/user-preferences.md`](internal/specs/user-preferences.md). |
+| **Migration** | mig 023 (table + endpoint, dual-write window) → mig 024 (drop `users.prefs`). Both already shipped. |
 
 ### Session
 | Layer | Location |
@@ -144,14 +155,16 @@ redpash-app/
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::file::FileSummary`, `ColumnMeta`, `PageQuery` |
-| **Table** | `project_files` (migration 001) |
-| **RID prefix** | `FIL` |
-| **Storage** | `<REDPASH_DATA_DIR>/files/<rid>.bin` (raw bytes) |
-| **In-memory** | `AppState.files: DashMap<rid, FileEntry { summary, columns, frame: Arc<DataFrame> }>` |
-| **DB helpers** | `db::insert_file`, `find_file`, `list_files_in_project`, `file_owner` (ownership gate) |
-| **API** | `POST /api/files/upload`, `GET /:rid`, `GET /:rid/page`, `POST /:rid/{steps,undo,redo,encoding,snapshot,joins}`, `GET /:rid/{dedup,joins,uniques}` |
-| **Hydrate** | `routes::files::hydrate(state, rid)` — used by reports too |
-| **Frontend** | `scripts/cleaner/index.js` controller; `partials/cleaner.html` |
+| **Table** | `project_files` (migration 001). Sole entity table since the object-model hard-refresh (mig 018 `drop_reports` + mig 019 `fold_dashboards`); previously-separate Report and Dashboard rows now live here as `file_type='dashboard'` rows (a Report is a derived view of a CSV-typed File, not its own table). |
+| **`file_type`** | `csv` (uploaded data), `chart` (saved chart spec — mig 016 added `spec` JSONB + `source_file_id` self-FK; CHT_ rid), `dashboard` (saved dashboard spec — mig 019; DSH_ rid). File-typed rows go through the same ownership + CRUD + cascade machinery. |
+| **RID prefix** | `FIL` (csv), `CHT` (chart), `DSH` (dashboard) — all rows in `project_files`. |
+| **Storage** | `<REDPASH_DATA_DIR>/files/<rid>.bin` (raw bytes for csv-typed only; chart + dashboard specs live in `project_files.spec` JSONB). |
+| **In-memory** | `AppState.files: DashMap<rid, FileEntry { summary, columns, frame: Arc<DataFrame> }>` (csv-typed only — chart/dashboard rows skip the in-memory frame cache). |
+| **DB helpers** | `db::insert_file`, `find_file`, `list_files_in_project`, `file_owner` (ownership gate). Chart-specific helpers live in `db::charts::*`; dashboard PATCH lives in `routes::dashboards::patch_dashboard`. |
+| **API** | `POST /api/files/upload`, `GET /:rid`, `GET /:rid/page`, `POST /:rid/{steps,undo,redo,encoding,snapshot,joins}`, `GET /:rid/{dedup,joins,uniques}`. Chart CRUD: `/api/charts/*`. Dashboard PATCH: `PATCH /api/dashboards/:rid`. |
+| **Hydrate** | `routes::files::hydrate(state, rid)` — csv-typed only. Chart + dashboard rows return their spec directly. |
+| **Frontend** | Workspace page (`scripts/pages/workspace.js`, `partials/workspace.html`) — the unified surface that replaced the per-type Cleaner/Reports/Dashboards pages. |
+| **Stage** | Computed from row state + `file_stages` view (mig 014 + mig 022 rename + mig 026 cascade triggers) — `new` / `clean` / `design` / `published`. Never stored; stage is derived. |
 
 ### Step (`ProjectStep`)
 | Layer | Location |
@@ -164,28 +177,32 @@ redpash-app/
 | **Supported `kind`s** | **Column shape:** `drop_columns`, `filter_columns` (keep listed), `rename_column`, `snake_case_columns`, `replace_in_names`, `join_columns`, `split_column`. **Row shape:** `drop_rows` (by index), `drop_nulls`, `filter_rows` (predicate-tree). **Cell value:** `set_cell`, `fill_nulls`, `cast` (with `/cast-preview` dry-run), `change_case`, `replace_text`, `fix_invalid` (sentinel replace), `format_dates`. **Rescue:** `unwrap_csv` (re-parse a fully-wrapped CSV). See [api/files.md](api/files.md#post-apifilesridsteps--apply-a-cleaning-step) for the per-kind param shapes. |
 | **Docs** | [`features/cleaner.md`](features/cleaner.md) · [`objects/step.md`](objects/step.md) |
 
-### Report (`Report`, `ReportSpec`)
+### Report (derived view — not an entity)
 | Layer | Location |
 |---|---|
-| **DTO** | `shared::report::Report`, `ReportSpec`, `Aggregation`, `AggFn`, `SortSpec`, `TopNFilter`, `WindowSpec`, `ChartSpec` |
-| **Table** | `reports` (migration 002 + 003 favorite + 004 folder + 005 description/is_public) |
-| **RID prefix** | `RPT` |
-| **DB helpers** | `db::list_reports(owner)`, `find_report`, `insert_report`, `update_report`, `delete_report`, `set_report_favorite`, `report_owner` (ownership gate) |
-| **Engine** | `data::group_by::execute(df, spec)` — filter → group → sort → windows → top_n |
-| **API** | `GET/POST /api/reports`, `POST /api/reports/preview` (polymorphic source), `GET/PUT/DELETE /:rid`, `POST /:rid/run`, `POST /:rid/favorite` |
-| **Frontend** | `scripts/pages/reports.js` — sandbox-ported page (2-page scroll-snap deck: Data + Charts); `partials/reports/*.html`. Legacy `scripts/reports/index.js` kept on disk, no longer invoked. |
-| **Docs** | [`features/reports.md`](features/reports.md) · [`objects/report.md`](objects/report.md) |
+| **Status** | Object-model hard-refresh (mig 018, 2026-06-01): `reports` table dropped. **Report is no longer a stored entity** — it's a derived view over a csv-typed File + its attached charts. The old `reports.spec` field is now `project_files.spec` on chart-typed rows (mig 016). Anywhere the URL used to need an `RPT_…` id, the source File id (`FIL_…`) is the addressable handle. |
+| **DTO** | `shared::report::ReportSpec` + descendants (`Aggregation`, `AggFn`, `SortSpec`, `TopNFilter`, `WindowSpec`) retained — they're the group-by spec shape consumed by the engine, not a stored object. |
+| **RID prefix** | `RPT` retired. Reports are addressed via their source `FIL_…`. |
+| **Engine** | `data::group_by::execute(df, spec)` — filter → group → sort → windows → top_n. Unchanged; spec source moved from a `reports` row to the chart-typed File's `spec`. |
+| **API** | `/api/reports` retired in mig 018; runtime grouped queries hit `/api/charts/:rid` (saved charts) or compose the spec inline against `/api/files/:rid/page` (ad-hoc). |
+| **Frontend** | Workspace page (`scripts/pages/workspace.js`) — the report-builder UI is now a mode on the unified Workspace surface, not a separate `/reports` page. |
+| **Docs** | [`docs/internal/architecture/object-model.md`](internal/architecture/object-model.md) — locked 2026-05-22 — explains the 2-entity rewrite. |
 
-### Chart (`ChartSpec`)
+### Chart (`ChartSpec`, chart-as-File)
 | Layer | Location |
 |---|---|
-| **DTO** | `shared::report::ChartSpec` (lives inside `ReportSpec.charts`) |
+| **DTO** | `shared::report::ChartSpec` (spec shape) + `shared::file::FileSummary` (the storage envelope) — a chart is a `project_files` row with `file_type='chart'`. |
+| **Table** | `project_files` (mig 016 added `spec` JSONB + `source_file_id` self-FK). No separate `charts` table. |
+| **RID prefix** | `CHT` |
+| **Storage** | `project_files.spec` JSONB carries the `ChartSpec`; `source_file_id` self-FK (`ON DELETE CASCADE`) points at the csv-typed File the chart renders against. Deleting the source CSV cascades the chart. |
+| **DB helpers** | `db::charts::list_charts(owner)`, `find_chart`, `insert_chart`, `update_chart`, `delete_chart`, `chart_owner` (ownership gate). |
+| **API** | `GET /api/charts` (list), `POST /api/charts` (create), `GET·PUT·DELETE /api/charts/:rid` (RUD). |
 | **Kinds** | `bar`, `bar_horizontal`, `line`, `area`, `pie`, `funnel`, `gauge`, `pictorial_bar`, `scatter`, `heatmap`, `radar`, `boxplot`, `calendar`, `matrix` |
 | **Modifiers** | `smooth` (line/area), `donut`/`half`/`rose` (pie), `regression` (scatter), `symbol`/`symbol_repeat` (pictorial_bar), `y_group_by` (heatmap/radar/matrix), `rich_labels` (pie/bar) |
 | **Preview body** | `chart-render.js::chartPreviewBody` dispatches 4 shapes (subtotals / heatmap-radar-matrix / scatter-details / gauge-scalar / boxplot-5-aggs) |
 | **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `subtotalsToMatrix`, `detailsToScatterSeries` |
 | **Option builders** | `chartOption(cfg, labels, values)` for category kinds; `chartOptionHeatmap`, `chartOptionRadar`, `chartOptionBoxplot`, `chartOptionCalendar`, `chartOptionMatrix` for the rest |
-| **Builder** | family `<select>` + inline-SVG variant tiles; registry `_CHART_FAMILIES` in `scripts/pages/reports.js` |
+| **Builder** | Workspace page's chart-builder mode — family `<select>` + inline-SVG variant tiles. |
 | **Library** | ECharts 6 (CDN, lazy-loaded via `echarts.js::loadECharts`); ecStat lazy-loaded via `loadECStat` for regression fits |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
 
@@ -201,18 +218,58 @@ redpash-app/
 | **Dev relaxation** | `PATCH` + `DELETE` membership/role gates currently OFF — any signed-in user can edit/delete any company from the Objects-page Companies tab. Target gates documented in [api/companies.md](api/companies.md). |
 | **Docs** | [`api/companies.md`](api/companies.md) |
 
-### Dashboard (`Dashboard`, `DashboardSpec`, `Widget`)
+### Dashboard (`DashboardSpec`, dashboard-as-File)
 | Layer | Location |
 |---|---|
-| **DTO** | `shared::dashboard::Dashboard`, `DashboardSpec`, `Widget` |
-| **Table** | `dashboards` (migration 005) |
+| **Status** | Object-model hard-refresh (mig 019, 2026-06-02): `dashboards` table dropped, rows folded into `project_files` as `file_type='dashboard'`. The DSH_ rid is preserved (dashboard-typed rows kept their original RIDs through the migration). |
+| **DTO** | `shared::dashboard::DashboardSpec`, `Widget` (spec shape) + `shared::file::FileSummary` (storage envelope). |
+| **Table** | `project_files` with `file_type='dashboard'`; spec lives in `project_files.spec` JSONB. |
 | **RID prefix** | `DSH` |
-| **Templates** | `frontend/scripts/dashboards/templates.js` — `1x1`, `2x2`, `kpi-row-2x1`, `chart-side-table`, `header-3x2` |
-| **Widgets** | `chart` (`{report_id, chart_index, title_override?}`) · `text` (`{markdown}`) |
-| **DB helpers** | `db::list_dashboards(owner)`, `find_dashboard`, `insert_dashboard`, `update_dashboard`, `delete_dashboard`, `set_dashboard_favorite`, `dashboard_owner` (ownership gate) |
-| **API** | `GET/POST /api/dashboards`, `GET/PUT/DELETE /:rid`, `POST /:rid/favorite` |
-| **Frontend** | `scripts/dashboards/index.js` builder + `widgets.js` renderers; `partials/dashboards.html` |
-| **Docs** | [`features/dashboards.md`](features/dashboards.md) · [`objects/dashboard.md`](objects/dashboard.md) |
+| **Templates** | `frontend/scripts/pages/workspace.js` carries the template registry (`1x1`, `2x2`, `kpi-row-2x1`, `chart-side-table`, `header-3x2`) — moved from the retired `scripts/dashboards/templates.js`. |
+| **Widgets** | `chart` (`{chart_id, title_override?}` — `chart_id` is now a `CHT_…`, no more `report_id+chart_index` pairing since reports aren't entities) · `text` (`{markdown}`). |
+| **DB helpers** | Generic file machinery: `db::insert_file`, `find_file`, `list_files_in_project`, `file_owner`. Dashboard-specific PATCH endpoint at `routes::dashboards::patch_dashboard` handles sparse spec merges. |
+| **API** | `GET·POST /api/dashboards`, `GET·PUT·PATCH·DELETE /api/dashboards/:rid`, `POST /:rid/favorite` (sparse meta PATCH covers title/description/folder/is_favorite/is_public). |
+| **Frontend** | Workspace page (`scripts/pages/workspace.js`, `partials/workspace.html`) — dashboard builder is a mode on the unified surface, not a separate `/dashboards` page. |
+| **Docs** | [`features/dashboards.md`](features/dashboards.md) · [`objects/dashboard.md`](objects/dashboard.md) — both due for a refresh. |
+
+### Case (`Case`, `Comment`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::case::Case`, `Comment`, `CaseCategory` |
+| **Table** | `cases` + `comments` (migration 028) — Jira-flow workstream v1; the team-coordination + customer-ticket layer on top of the audit-everything spine. Extended by `cases.error_message` (mig 029, raw error payload for auto-triaged FE crash cases) and `case_categories` + `cases.category_id` (mig 030, two-level taxonomy via self-FK on `parent_id`). |
+| **RID prefix** | `CAS` (cases), `CMT` (comments), `CAT` (categories). |
+| **Status flow** | `backlog` → `todo` → `in_progress` → `in_review` → `done`. Click-cycle on the kanban advances; reopens (done → todo) allowed. Status mutations emit `events.kind='case_status_change'` (queued — backend emit pending). |
+| **Type / priority** | `type ∈ {bug, feature, task, epic}` · `priority ∈ {low, medium, high, critical}`. |
+| **DB helpers** | `db::list_cases`, `find_case`, `insert_case`, `update_case`, `delete_case`, `list_comments_for_case`, `insert_comment`, `update_comment`, `delete_comment`, `list_case_categories`. |
+| **API** | `GET·POST /api/cases`, `GET·PATCH·DELETE /api/cases/:rid`, `GET·POST /api/cases/:rid/comments`, `PATCH·DELETE /api/cases/:rid/comments/:cmt_rid`, `GET /api/cases/categories`. |
+| **Lifecycle events** | `case_create`, `case_delete`, `case_comment_post`, `case_comment_edit`, `case_comment_delete` already emit via `event::record`. `case_status_change` queued. |
+| **Frontend** | `partials/cases.html`, `scripts/pages/cases.js` — kanban board + two-column detail panel (head bar + main column + 14rem sidebar, narrow-viewport falls back to single-column at 40rem). |
+| **Coordination role** | Per `docs/internal/jira-flow-proposition/proposition.md`, cases are the planned successor to the `Internal-Slack/*.md` channel system once the activity feed lands. |
+| **Docs** | [`docs/internal/subsystems/cases.md`](internal/subsystems/cases.md) · [`docs/internal/cases/agent-cookbook.md`](internal/cases/agent-cookbook.md) |
+
+### Optimization Point (`OptimizationPoint`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::optimization::OptimizationPoint` |
+| **Table** | `optimization_points` (migration 025) — the doc-side "Optimization map" tables in each subsystem doc become a first-class queryable surface that powers the Monitoring page's Optimization tab. |
+| **RID prefix** | `OPT` |
+| **Fields** | `subsystem` · `axis` (Storage / Compute / Memory / Latency / etc.) · `name` · `description` · `current_value` (computed live) · `tipped` (threshold-crossed flag) · `status` ∈ `{open, planned, done, wontfix}` · `notes`. |
+| **DB helpers** | `db::list_optimization_points`, `update_optimization_point_status`. |
+| **API** | `GET /api/monitoring/optimization-points`, `PATCH /api/monitoring/optimization-points/:rid` (status flip from the FE pill). |
+| **Live measurements** | `ROW_COUNT_TABLES` whitelist in `routes/monitoring.rs` drives the `current_value` for table-row-count-typed points; other axes hardcode their measurement source. |
+| **Docs** | [`docs/internal/specs/optimization-map.md`](internal/specs/optimization-map.md) |
+
+### Request Log (`RequestSummary`, `RequestDetail`)
+| Layer | Location |
+|---|---|
+| **DTO** | `shared::monitoring::RequestSummary`, `RequestDetail` |
+| **Table** | `request_log` (migration 020) — append-only per-HTTP-request capture. Extended in mig 027 (`user_redpash_id` + `session_id` columns + `(user_redpash_id, at DESC)` index — slice B of audit-everything). |
+| **RID prefix** | None (auto-increment `id`). The correlatable id is `request_id` (`req_<uuid>`), echoed via `X-Request-Id`. |
+| **Writer** | `capture_mw` middleware (`routes::mod`) — per-request fire-and-forget INSERT post-response, populated with user via the same `find_session_user` lookup as the 4xx/5xx event path. |
+| **DB helpers** | Direct sqlx in `routes::monitoring` — no `db::` wrapper since the writer is the middleware. |
+| **API** | `GET /api/monitoring/requests` (paginated list with `?window`/`?route`/`?status`/`?method`/`?q` filters), `GET /api/monitoring/requests/stats` (status-mix donut + latency histogram), `GET /api/monitoring/request/:request_id` (single-request drill-down with associated events). |
+| **Frontend** | Monitoring page's Requests tab — paginated redtable, status-mix donut, click-to-replay modal. Per-user activity feed (`GET /api/monitoring/users/:rid/activity`) UNIONs `request_log` + `events` on the server side into one `Page<ActivityRow>` stream. |
+| **Docs** | [`docs/internal/specs/admin-monitoring-surfaces.md`](internal/specs/admin-monitoring-surfaces.md) — slice E (M-1 / M-2 / M-4) covers the per-request drill-down + per-user feed + error-chain expander. |
 
 ### Event (`Event`)
 | Layer | Location |
@@ -220,9 +277,10 @@ redpash-app/
 | **DTO** | `shared::event::Event`, `EventReport` |
 | **Table** | `events` (migration 013 — `20260529000001_events.sql`) |
 | **RID prefix** | `EVT` |
-| **Capture** | *auto* — `routes::mod::capture_mw` logs every 4xx/5xx; *explicit* — `event::record(&db, EventDraft)` at lifecycle sites (`auth_login`, `auth_logout`, `file_upload`, `file_delete`, `step_apply`); *frontend* — `scripts/events.js` (uncaught JS errors, promise rejections, transport failures, page load/mount failures) → `POST /api/events` |
+| **Capture** | *auto* — `routes::mod::capture_mw` logs every 4xx/5xx; *explicit* — `event::record(&db, EventDraft)` at lifecycle sites — or the ergonomic builders `event::info / warn / error(pool, kind, msg).user(u).context(c).send()` (`780b3c9`); *frontend* — `scripts/events.js` (uncaught JS errors, promise rejections, transport failures, page load/mount failures) → `POST /api/events` |
+| **Kinds emitted today** | **Auth:** `auth_login`, `auth_logout`, `unauthenticated`, `forbidden`, `oauth_disabled`, `dev_login_disabled`. **Files:** `file_upload`, `file_delete`, `file_patch`, `file_re_encode`, `file_snapshot`. **Steps:** `step_apply`. **Projects:** `project_create`, `project_patch`. **Charts:** `chart_create`, `chart_update`, `chart_delete`. **Dashboards:** `dashboard_update`, `dashboard_patch`, `dashboard_delete`. **Companies:** `company_create`, `company_update`, `company_delete`, `company_member_leave`. **Users:** `user_create`. **Cases:** `case_create`, `case_delete`, `case_comment_post`, `case_comment_edit`, `case_comment_delete`. **System:** `http_error`, `panic`, `avatar_fetch_failed`, `db`, `io`, `internal`. **Audit findings (FE side):** `selector_conflict`, `class_divergence`, `component_candidate`. |
 | **Write** | `event::record` — fire-and-forget (spawns the INSERT on a detached task; a logging failure never blocks or fails the request) |
-| **DB helpers** | `db::list_events(level, kind, limit)`, `db::find_event` |
+| **DB helpers** | `db::list_events(level, kind, limit)`, `db::find_event`, `db::list_events_for_request`. |
 | **API** | `GET /api/events` (filter `level`/`kind`/`limit`), `GET /api/events/:rid`, `POST /api/events` (frontend report) |
 | **Correlation** | `request_id` (per request, echoed as `X-Request-Id`) + `session_id` (`rp_session` RID) |
 | **Docs** | [`api/events.md`](api/events.md) |
@@ -498,6 +556,46 @@ docs: sync REDMAP for the Events system
 - 4c — Per-resource ownership + Profile/Settings + logout button ✅. Share-link UI for `is_public` toggles still pending.
 - 4d — Multi-tenancy data model ✅ — companies + memberships (`owner` > `admin` > `member`), `projects.company_id` (set/re-scope; clear-to-personal pending), dev-permissive `/api/users` + `/api/companies` CRUD, `REDPASH_DEV_LOGIN` "log in as user" switch, shared-sentinel learning loop (`prefs.learned_sentinels` + `prefs.share_sentinels` consent gate + `global_sentinels` view). **Pending:** company-scoped resource visibility — every owner-scoped endpoint still gates on `projects.owner_id` alone; `project_memberships` exists in schema but isn't read.
 - 5 — Bake frontend into binary, brotli, systemd ⬜
+
+---
+
+## Migrations
+
+Source-of-truth ordering at `backend/migrations/<YYYYMMDDNNNNNN>_<slug>.sql`. The `api` crate runs `sqlx::migrate!` at boot. Per-table schema breakdown lives in [`db/schema.md`](db/schema.md#migrations); this table is the one-line navigation cheatsheet.
+
+Files are listed in chronological (boot-replay) order. The **Ord** column tracks the in-file `── NNN ──` header ordinal where one exists; that convention started mid-stream at `chart_files` (Ord 016) and isn't applied consistently to every later file (`audit_run_diff` has no ordinal; the stream jumps 025 → 027 — there is no 026). When referring to a migration in commit messages or threads, prefer the **file name** — it's unambiguous.
+
+| Ord | File | Adds |
+|-----|------|------|
+| —   | `20260512000001_init.sql`                  | `users`, `projects`, `project_files`, `project_steps` |
+| —   | `20260513000001_reports.sql`               | `reports` table (dropped in `drop_reports`) |
+| —   | `20260514000001_report_favorite.sql`       | `reports.is_favorite` + partial index (gone with `drop_reports`) |
+| —   | `20260515000001_report_folder.sql`         | `reports.folder` + index (gone with `drop_reports`) |
+| —   | `20260516000001_dashboards.sql`            | `dashboards` table + `reports.description` + both `is_public` (table gone in `fold_dashboards`; flags absorbed by `project_files`) |
+| —   | `20260520000001_auth.sql`                  | `users.google_sub` + partial unique index + `sessions` table |
+| —   | `20260521000001_companies.sql`             | `companies`, `company_memberships`, `project_memberships` + `projects.company_id` |
+| —   | `20260522000001_project_stage_status.sql`  | `projects.stage` + `projects.status` (CHECK-constrained) + indexes |
+| —   | `20260523000001_computed_stages.sql`       | Drops `projects.stage` + `project_files.status`; adds `file_stages` view (stage is computed) |
+| —   | `20260524000001_sentinel_submissions.sql`  | `sentinel_submissions` shared-vocab table + `global_sentinels` view |
+| —   | `20260525000001_filename_stem.sql`         | Strips upload extension off `project_files.filename` / `display_name`; `file_type` owns the extension half |
+| —   | `20260526000001_mtime_cascade.sql`         | Trigger chain — child INSERT/UPDATE/DELETE bumps parent's `updated_at` (steps → files → projects; reports/dashboards → projects) |
+| —   | `20260527000001_dependency_mtime_cascade.sql` | Companion triggers — `project_files` UPDATE bumps reports that source it; `reports` UPDATE bumps dashboards referencing it |
+| —   | `20260528000001_audit_storage.sql`         | `audit.run` + `audit.finding` in separate `audit` schema — dev-meta, persists audit-tool output for trend tracking |
+| —   | `20260529000001_events.sql`                | `events` table — runtime observability log |
+| 016 | `20260530000001_chart_files.sql`           | `project_files.spec` (JSONB) + `project_files.source_file_id` self-FK — saved charts become first-class `project_files` rows with `file_type='chart'` |
+| 017 | `20260531000001_user_names.sql`            | `users.first_name` + `users.last_name` (backfilled from `display_name`) |
+| 018 | `20260601000001_drop_reports.sql`          | **Drops the `reports` table.** Object-model hard-refresh Phase 1 — reports become derived views over a csv-typed File. Locked 2-entity model. |
+| 019 | `20260602000001_fold_dashboards.sql`       | **Drops the `dashboards` table.** Phase 2 — dashboards become `project_files` rows with `file_type='dashboard'`. DSH_ rids preserved through migration. |
+| 020 | `20260603000001_request_log.sql`           | `request_log` table — append-only per-HTTP-request capture (route, status, latency). Powers `/api/metrics` + the Monitoring Requests tab |
+| —   | `20260604000001_audit_run_diff.sql`        | `audit.run_diff` parameterized projection — classifies findings new/closed/unchanged across two runs |
+| 022 | `20260605000001_stage_rename.sql`          | Stage label rename: `import → new`, `report → design`. Matches the locked stage vocabulary |
+| 023 | `20260606000001_user_preferences.sql`      | `user_preferences` table — promotes prefs from a JSONB column to a first-class object (Phase 1 of user-prefs migration) |
+| 024 | `20260607000001_drop_users_prefs.sql`      | Drops the now-dead `users.prefs` JSONB column (Phase 2 of user-prefs migration — completes the cut-over) |
+| 025 | `20260608000001_optimization_points.sql`   | `optimization_points` table — the doc-side "optimization map" becomes a queryable surface that powers the Monitoring Optimization tab |
+| 027 | `20260609000001_request_log_user_session.sql` | `request_log.user_redpash_id` + `session_id` + `(user_redpash_id, at DESC)` partial index. Powers per-user investigation queries (audit-everything slice B) |
+| 028 | `20260610000001_cases.sql`                 | `cases` + `comments` tables — Jira-flow workstream v1. CAS_ + CMT_ rids. Lifecycle changes mirror into `events` (`case_*` kinds) |
+| 029 | `20260611000001_cases_error_message.sql`   | `cases.error_message` — raw error payload field for cases auto-triaged from FE crash / panic events |
+| 030 | `20260612000001_case_categories.sql`       | `case_categories` table + `cases.category_id` FK. Two-level taxonomy via self-FK on `parent_id` |
 
 ---
 
