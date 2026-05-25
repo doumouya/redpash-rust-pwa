@@ -93,6 +93,10 @@ export default function home(app, { session: _session }) {
       endpoint: "/admin/users",
       // DELETE /api/admin/users/:rid — added 2026-05-25. Cascades to
       // projects (owner_id), memberships (CASCADE), sessions (CASCADE).
+      // PATCH /api/users/:rid — sparse update; display_name is the
+      // editable column today (job_title / org_name need their own
+      // editors later — chip-style for org_role, picker for org).
+      patchEndpoint: "/users",
       itemNoun: "user",
       itemNounPlural: "users",
       modes: { select: true, delete: true },
@@ -138,11 +142,18 @@ export default function home(app, { session: _session }) {
       columns: [
         { label: "Name",   key: "display_name", sortable: true  },
         { label: "Plan",   key: "plan",         sortable: true  },
-        { label: "Job",    key: "job_title",    sortable: true  },
+        // Job is the editable column on Users — clean text only, so
+        // contenteditable doesn't fight nested chip markup.
+        { label: "Job",    key: "job_title",    sortable: true,  editable: true, editKey: "job_title" },
         { label: "Org",    key: "org_name",     sortable: true  },
         { label: "Role",   key: "org_role",     sortable: true  },
         { label: "Joined", key: "created_at",   sortable: true  },
       ],
+      // Only clean-text cells (no nested chip / icon markup) are flagged
+      // editable. Cells that wrap display_name in <span> chips with
+      // @handle suffixes etc. can't be edited via contenteditable
+      // without dropping the formatting — those need a dedicated
+      // cell-editor render path which is its own slice.
       row: (u) =>
         '<tr data-rid="' + esc(u.redpash_id || "") + '">'
         + '<td class="rp-home-user-name">'
@@ -280,6 +291,8 @@ export default function home(app, { session: _session }) {
       // are real on this endpoint, unlike the projects + admin
       // placeholders elsewhere in this file.
       endpoint: "/cases",
+      // PATCH /api/cases/:rid — same path as DELETE; defaults via
+      // spec.endpoint, no override needed. Title is the editable cell.
       itemNoun: "case",
       itemNounPlural: "cases",
       // No dedicated /cases/stats — charts derive from the list
@@ -332,7 +345,10 @@ export default function home(app, { session: _session }) {
       // Assignee sorts on the hydrated display_name (NULLS LAST for
       // unassigned). Updated_at is the default.
       columns: [
-        { label: "Title",    key: "title",                 sortable: true },
+        // Title is the editable cell — clean text in the row render.
+        // Type / Status / Priority / Assignee need pickers (chip ↔
+        // dropdown), not contenteditable; deferred.
+        { label: "Title",    key: "title",                 sortable: true, editable: true, editKey: "title" },
         { label: "Type",     key: "type",                  sortable: true },
         { label: "Status",   key: "status",                sortable: true },
         { label: "Priority", key: "priority",              sortable: true },
@@ -359,8 +375,10 @@ export default function home(app, { session: _session }) {
       endpoint: "/admin/files",
       // DELETE goes to /api/files/:rid (the file ownership endpoint),
       // not /admin/files. Decoupled so the bulk-delete handler in
-      // renderListBody can hit the right route.
+      // renderListBody can hit the right route. PATCH is the same
+      // path — display_name is the editable cell.
       deleteEndpoint: "/files",
+      patchEndpoint:  "/files",
       itemNoun: "file",
       itemNounPlural: "files",
       // Wired modes: select toggles the checkbox column, delete fires
@@ -406,9 +424,9 @@ export default function home(app, { session: _session }) {
       // Sortable columns map to /admin/files's SORTABLE_FILES allowlist
       // (filename / file_type / stage / row_count / updated_at). Project
       // intentionally not sortable — name lives on a JOIN and isn't in
-      // the allowlist yet.
+      // the allowlist yet. Filename is editable (clean-text render).
       columns: [
-        { label: "Filename", key: "filename",   sortable: true  },
+        { label: "Filename", key: "filename",   sortable: true,  editable: true, editKey: "display_name" },
         { label: "Project",  key: "project",    sortable: false },
         { label: "Type",     key: "file_type",  sortable: true  },
         { label: "Stage",    key: "stage",      sortable: true  },
@@ -429,7 +447,11 @@ export default function home(app, { session: _session }) {
       title: "Charts",
       endpoint: "/admin/charts",
       // DELETE goes to /api/charts/:rid (the chart-specific endpoint).
+      // Charts are project_files under the hood; the canonical PATCH
+      // for display_name is /api/files/:rid (the file ownership path),
+      // not /api/charts/:rid (which only takes the chart spec payload).
       deleteEndpoint: "/charts",
+      patchEndpoint:  "/files",
       itemNoun: "chart",
       itemNounPlural: "charts",
       modes: { select: true, delete: true },
@@ -463,7 +485,7 @@ export default function home(app, { session: _session }) {
       // "Name" sorts on COALESCE(display_name, filename) so the visible
       // label drives the order even when display_name is unset.
       columns: [
-        { label: "Name",    key: "display_name", sortable: true },
+        { label: "Name",    key: "display_name", sortable: true, editable: true, editKey: "display_name" },
         { label: "Project", key: "project_name", sortable: true },
         { label: "Stage",   key: "stage",        sortable: true },
         { label: "Updated", key: "updated_at",   sortable: true },
@@ -484,8 +506,9 @@ export default function home(app, { session: _session }) {
     },
     projects: {
       title: "Projects",
-      // DELETE goes to /api/projects/:rid — same path as the list
-      // endpoint so deleteEndpoint defaults via spec.endpoint.
+      // DELETE + PATCH both go to /api/projects/:rid — same path as
+      // the list endpoint so deleteEndpoint / patchEndpoint default
+      // via spec.endpoint, no override needed. Name is editable.
       itemNoun: "project",
       itemNounPlural: "projects",
       // Note: the owner's DEFAULT project can't be deleted (backend
@@ -550,8 +573,9 @@ export default function home(app, { session: _session }) {
       // { items: [] } shape today. Backend Page<T> conversion + ?sort=
       // queued as a separate slice; until then all columns render
       // non-sortable so the chevron stays hidden (no false affordance).
+      // Name is the editable cell — clean text render, PATCH /projects/:rid.
       columns: [
-        { label: "Name",    key: "name",       sortable: false },
+        { label: "Name",    key: "name",       sortable: false, editable: true, editKey: "name" },
         { label: "Files",   key: "file_count", sortable: false },
         { label: "Stage",   key: "stage",      sortable: false },
         { label: "Status",  key: "status",     sortable: false },
@@ -741,11 +765,15 @@ export default function home(app, { session: _session }) {
     // visibility; `selected` is the live set of picked rids.
     // `deleteMode` is the single-row-click-to-delete pattern (matches
     // Workspace's `.rt-table.mode-delete` — Em 2026-05-25: "delete
-    // alone is not working because rows are clickable here"). The two
-    // modes are mutually exclusive — entering one exits the other.
-    // Edit-mode deferred — per-cell editor lands as a separate slice.
+    // alone is not working because rows are clickable here").
+    // `editMode` makes cells flagged `editable: true` in spec.columns
+    // contenteditable; blur or Enter fires a sparse PATCH against
+    // spec.patchEndpoint with { [editKey]: value }. All three modes
+    // are mutually exclusive — entering one exits the others so the
+    // row-click delegate has unambiguous intent.
     let selectMode = false;
     let deleteMode = false;
+    let editMode   = false;
     const selected = new Set();
 
     // Decorate the tbody with a leading checkbox column when select
@@ -833,6 +861,80 @@ export default function home(app, { session: _session }) {
       } catch (err) {
         console.warn("[home] single-delete failed:", err);
         alert("Delete failed.");
+      }
+    }
+
+    // ── edit mode ─────────────────────────────────────────────────
+    // Cells flagged in spec.columns with `editable: true` + `editKey`
+    // become contenteditable while editMode is on. Blur or Enter
+    // commits a sparse PATCH against spec.patchEndpoint (defaults to
+    // spec.endpoint, same fallback rule as deleteEndpoint).
+    function toggleEditMode(force) {
+      editMode = force !== undefined ? !!force : !editMode;
+      // Mutually exclusive with the other modes.
+      if (editMode) {
+        if (selectMode) {
+          selectMode = false;
+          selected.clear();
+          view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+          decorateSelectMode();
+        }
+        if (deleteMode) toggleDeleteMode(false);
+      }
+      view.querySelector(".rt-table")?.classList.toggle("mode-edit", editMode);
+      view.querySelector('.rt-mode[data-mode="edit"]')?.classList.toggle("is-active", editMode);
+      decorateEditMode();
+      updateSelChip();
+    }
+
+    // Apply contenteditable + .editable to the right TDs based on
+    // spec.columns. Stripped + re-applied on every fetchList rewrite
+    // since tbody.innerHTML rewrites wholesale. Idempotent.
+    function decorateEditMode() {
+      const tbody = view.querySelector("#rp-home-list-tbody");
+      if (!tbody) return;
+      // Strip first — clean slate.
+      tbody.querySelectorAll("td.editable").forEach((td) => {
+        td.classList.remove("editable");
+        td.removeAttribute("contenteditable");
+        td.removeAttribute("data-edit-key");
+      });
+      if (!editMode) return;
+      // Map column index → editKey (only for columns with editable: true).
+      const cols = spec.columns || [];
+      // selectMode adds a leading .rp-list-sel column; offset accordingly.
+      const offset = selectMode ? 1 : 0;
+      tbody.querySelectorAll("tr[data-rid]").forEach((tr) => {
+        const tds = tr.querySelectorAll("td");
+        cols.forEach((col, i) => {
+          if (typeof col !== "object" || !col.editable || !col.editKey) return;
+          const td = tds[i + offset];
+          if (!td) return;
+          td.classList.add("editable");
+          td.setAttribute("contenteditable", "plaintext-only");
+          td.setAttribute("data-edit-key", col.editKey);
+        });
+      });
+    }
+
+    async function saveCellEdit(td, rid) {
+      const key = td.dataset.editKey;
+      if (!key) return;
+      const value = td.textContent.trim();
+      // Capture original for revert-on-fail; stored on the cell when it
+      // gains focus so we don't need a separate map.
+      const original = td.dataset.editOriginal ?? "";
+      if (value === original) return; // no-op
+      const patchBase = spec.patchEndpoint || spec.endpoint;
+      try {
+        await api.patch(patchBase + "/" + encodeURIComponent(rid), { [key]: value });
+        // Successful — leave the new value in place. Refetch is optional;
+        // skipping it preserves the user's edit-mode position + cursor.
+        td.dataset.editOriginal = value;
+      } catch (err) {
+        console.warn("[home] cell-edit failed:", err);
+        alert("Edit failed — reverting.");
+        td.textContent = original;
       }
     }
 
@@ -1077,14 +1179,34 @@ export default function home(app, { session: _session }) {
         });
       }
     }
+    // Edit mode — wired when any column in spec.columns is flagged
+    // editable: true. The button enables; click toggles edit-mode +
+    // adds contenteditable to the flagged cells via decorateEditMode.
+    const hasEditable = (spec.columns || []).some(
+      (c) => typeof c === "object" && c.editable
+    );
+    if (hasEditable) {
+      const btn = view.querySelector('.rt-mode[data-mode="edit"]');
+      if (btn) {
+        btn.removeAttribute("disabled");
+        btn.title = "Edit mode (toggle)";
+        btn.addEventListener("click", () => toggleEditMode());
+      }
+    }
 
-    // Row click — three branches:
+    // Row click — four branches:
+    //   editMode   → let the contenteditable cell take focus naturally
+    //                (don't navigate or toggle anything)
     //   selectMode → toggle the row's checkbox
     //   deleteMode → confirm + DELETE this single row
     //   otherwise  → navigate via data-href
     // Delegated on the tbody so the binding survives every fetchList
     // re-render (tbody.innerHTML is rewritten wholesale on each fetch).
     view.querySelector("#rp-home-list-tbody")?.addEventListener("click", (e) => {
+      if (editMode) {
+        // Suppress navigation; let the browser focus the contenteditable.
+        return;
+      }
       if (selectMode) {
         const tr = e.target.closest("tr[data-rid]");
         if (!tr) return;
@@ -1108,11 +1230,40 @@ export default function home(app, { session: _session }) {
       location.hash = tr.dataset.href.replace(/^#/, "");
     });
 
-    // Expose the decorate hook to fetchList so it re-paints checkboxes
-    // after each refetch. Stashed on the view element so fetchList can
-    // call it without a closure capture (it's defined module-scope
-    // outside the renderListBody closure).
+    // Cell-edit handlers — delegated on the tbody so they survive the
+    // refetch tbody.innerHTML rewrite. focusin snapshots the original
+    // value; keydown traps Enter (commit) + Esc (revert); blur commits.
+    const tbodyForEdit = view.querySelector("#rp-home-list-tbody");
+    tbodyForEdit?.addEventListener("focusin", (e) => {
+      const td = e.target.closest("td.editable[data-edit-key]");
+      if (!td) return;
+      td.dataset.editOriginal = td.textContent.trim();
+    });
+    tbodyForEdit?.addEventListener("keydown", (e) => {
+      const td = e.target.closest("td.editable[data-edit-key]");
+      if (!td) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        td.blur();   // triggers focusout → blur → saveCellEdit
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        td.textContent = td.dataset.editOriginal ?? "";
+        td.blur();
+      }
+    });
+    tbodyForEdit?.addEventListener("focusout", (e) => {
+      const td = e.target.closest("td.editable[data-edit-key]");
+      if (!td) return;
+      const tr = td.closest("tr[data-rid]");
+      if (!tr) return;
+      saveCellEdit(td, tr.dataset.rid);
+    });
+
+    // Expose the decorate hooks to fetchList so it re-paints select
+    // checkboxes + edit cells after each refetch. Stashed on the view
+    // element so fetchList can call them without a closure capture.
     view._decorateSelectMode = decorateSelectMode;
+    view._decorateEditMode   = decorateEditMode;
 
     fetchList(spec, chipState);
   }
@@ -1160,11 +1311,15 @@ export default function home(app, { session: _session }) {
           ? rows.map(spec.row).join("")
           : '<tr><td colspan="' + colCount + '">No rows.</td></tr>';
       }
-      // Re-paint select-mode checkboxes if the active tab has them
-      // enabled. The hook is set up in renderListBody for specs that
-      // declare `spec.modes.select`; absent on other tabs (no-op).
+      // Re-paint mode-dependent cell decorations after the tbody
+      // rewrite. The hooks are set up in renderListBody when the
+      // active tab's spec declares the relevant modes; absent on
+      // other tabs (no-op).
       if (typeof view._decorateSelectMode === "function") {
         view._decorateSelectMode();
+      }
+      if (typeof view._decorateEditMode === "function") {
+        view._decorateEditMode();
       }
       renderListPager();
     } catch (err) {
