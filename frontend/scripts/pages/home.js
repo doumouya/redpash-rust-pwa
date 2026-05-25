@@ -1483,21 +1483,27 @@ export default function home(app, { session: _session }) {
         e.dataTransfer.effectAllowed = "move";
         th.classList.add("is-dragging");
       });
+      function clearDropIndicators() {
+        headEl?.querySelectorAll("th.is-drop-before, th.is-drop-after")
+          .forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
+      }
       headEl?.addEventListener("dragend", (e) => {
         const th = e.target.closest("th[data-col-key]");
         if (th) th.classList.remove("is-dragging");
-        // Strip any drop-indicator state.
-        headEl?.querySelectorAll("th.is-drop-target")
-          .forEach((el) => el.classList.remove("is-drop-target"));
+        clearDropIndicators();
       });
       headEl?.addEventListener("dragover", (e) => {
         const th = e.target.closest("th[data-col-key]");
         if (!th) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        headEl.querySelectorAll("th.is-drop-target")
-          .forEach((el) => { if (el !== th) el.classList.remove("is-drop-target"); });
-        th.classList.add("is-drop-target");
+        // Cursor in the left half of the TH → drop BEFORE; right half
+        // → drop AFTER. Translates the box-shadow indicator to the
+        // edge where the dragged column will actually land.
+        const rect = th.getBoundingClientRect();
+        const before = e.clientX < rect.left + rect.width / 2;
+        clearDropIndicators();
+        th.classList.add(before ? "is-drop-before" : "is-drop-after");
       });
       headEl?.addEventListener("drop", (e) => {
         const tgt = e.target.closest("th[data-col-key]");
@@ -1505,19 +1511,23 @@ export default function home(app, { session: _session }) {
         e.preventDefault();
         const srcKey = e.dataTransfer.getData("text/col-key");
         const tgtKey = tgt.dataset.colKey;
+        clearDropIndicators();
         if (!srcKey || srcKey === tgtKey) return;
+        const rect = tgt.getBoundingClientRect();
+        const before = e.clientX < rect.left + rect.width / 2;
         const ths = [...headEl.querySelectorAll("th[data-col-key]")];
         const currentOrder = ths.map((th) => th.dataset.colKey);
         const srcIdx = currentOrder.indexOf(srcKey);
         const tgtIdx = currentOrder.indexOf(tgtKey);
         if (srcIdx === -1 || tgtIdx === -1) return;
+        // Splice out the source first; the target's effective index
+        // shifts back by 1 if it was to the right of the source.
         currentOrder.splice(srcIdx, 1);
-        currentOrder.splice(tgtIdx, 0, srcKey);
+        const adjTgt = tgtIdx > srcIdx ? tgtIdx - 1 : tgtIdx;
+        const insertAt = before ? adjTgt : adjTgt + 1;
+        currentOrder.splice(insertAt, 0, srcKey);
         localStorage.setItem(colsOrderKey, JSON.stringify(currentOrder));
         applyColumnOrder();
-        // Clear drop indicators
-        headEl.querySelectorAll("th.is-drop-target")
-          .forEach((el) => el.classList.remove("is-drop-target"));
       });
 
       // Initial apply — restore any saved order from a prior session.
