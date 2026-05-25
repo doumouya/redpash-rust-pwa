@@ -106,10 +106,11 @@ var SURFACES = [
     notes: 'level decision lives with the error, not the middleware — robust to status-class changes' },
 
   /* ─── BACKEND: events ──────────────────────────────────────────────── */
-  { id: 'B-EVT.record-sites', cat: 'B-EVT', kind: 'count', label: 'event::record call sites (lifecycle events)',
+  { id: 'B-EVT.record-sites', cat: 'B-EVT', kind: 'count',
+    label: 'event::{record,info,warn,error} call sites (lifecycle events)',
     roots: ['backend/crates/api/src'],
-    rx: /\b(?:crate::)?event::record\s*\(/g,
-    notes: 'cat-3 audit-trail backfill landed 2026-05-24 — these are the persistent observability hooks' },
+    rx: /\b(?:crate::)?event::(?:record|info|warn|error)\s*\(/g,
+    notes: 'cat-3 audit-trail backfill landed 2026-05-24; the ergonomic builders (event::info/warn/error) replaced raw EventDraft in 780b3c9 — both shapes count toward the same audit-trail signal' },
   { id: 'B-EVT.draft-fields', cat: 'B-EVT', kind: 'check', label: 'EventDraft carries http + correlation fields',
     roots: ['backend/crates/api/src'],
     expectFile: 'event.rs',
@@ -211,10 +212,16 @@ var SURFACES = [
     expectFile: 'mod.rs',
     rx: /\.nest\(\s*"\/cases"\s*,\s*cases::routes\(\)\s*\)/,
     notes: 'cases CRUD + comments sub-router live; activity feed reads through events.context->>case (no parallel history table)' },
-  { id: 'B-CASES.event-kinds', cat: 'B-CASES', kind: 'count', label: 'case_* event::record kinds in use',
+  { id: 'B-CASES.event-kinds', cat: 'B-CASES', kind: 'count',
+    label: 'case_* event kinds in use (literal + format!() placeholder)',
     roots: ['backend/crates/api/src/routes'],
-    rx: /\bkind:\s*"case_[a-z_]+"\.into\(\)/g,
-    notes: 'live counter — every case mutation handler emits a case_* kind; cat-3 catches handlers that skip it' },
+    // Two emit shapes today: literal `event::info(db, "case_create", …)`
+    // matches the `"case_xxx"` form; the field-loop in routes::cases::patch
+    // emits via `format!("case_{field}_change")` for status / priority /
+    // type / assignee / category — that's the `"case_{…}_change"` form.
+    // Either counts as a `case_*` audit-trail emit.
+    rx: /"case_[a-z_]+"|"case_\{[a-z_]+\}_change"/g,
+    notes: 'live counter — every case mutation emits a case_* kind via event::{info,warn,error,record}; cat-3 catches handlers that skip it. Format!() placeholder counts as one source pattern that emits N kinds at runtime (status/priority/type/assignee/category).' },
 
   /* ─── BACKEND: monitoring page endpoints (slice E investigation console) ── */
   { id: 'B-MON.request-detail', cat: 'B-MON', kind: 'check', label: 'GET /monitoring/request/:request_id route registered',

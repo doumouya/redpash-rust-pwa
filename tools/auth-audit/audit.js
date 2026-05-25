@@ -176,9 +176,14 @@ function isMutation(body) {
   return false;
 }
 
-/* Has an event::record call (the audit-trail emit). */
+/* Has an event-emit call (the audit-trail emit). Recognizes both
+   the raw `event::record(EventDraft {...})` shape (4 kept sites:
+   capture_mw, frontend ingest, etc.) and the ergonomic builder
+   shape introduced in 780b3c9: `event::info|warn|error(db, kind,
+   msg).user(u).context(c).send()`. Per-handler check — either
+   form satisfies the audit-trail requirement. */
 function callsEventRecord(body) {
-  return /\bevent::record\s*\(/.test(body) || /\bcrate::event::record\s*\(/.test(body);
+  return /\b(?:crate::)?event::(?:record|info|warn|error)\s*\(/.test(body);
 }
 
 /* Routes whose handlers don't carry per-user ownership by design.
@@ -247,7 +252,10 @@ paths.forEach(function (full) {
   // canonical gates — same set callsOwnershipGate() recognises.
   var eoMatches = stripped.match(/\b(?:super::)?ensure_(?:\w+_)?owner\s*\(|\b(?:super::)?require_member\s*\(/g);
   if (eoMatches) ensureOwnerCalls += eoMatches.length;
-  var erMatches = stripped.match(/\bevent::record\s*\(/g) || stripped.match(/\bcrate::event::record\s*\(/g);
+  // Counts both the raw event::record sites and the post-780b3c9
+  // event::info / warn / error builder sites — same audit-trail
+  // signal. See callsEventRecord() above for the per-handler check.
+  var erMatches = stripped.match(/\b(?:crate::)?event::(?:record|info|warn|error)\s*\(/g);
   if (erMatches) eventRecordCalls += erMatches.length;
 
   findHandlers(text, stripped).forEach(function (h) {
