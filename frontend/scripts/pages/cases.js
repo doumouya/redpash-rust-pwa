@@ -689,7 +689,7 @@ export default function cases(app, { session }) {
     currentDetailRid = rid;
     if (ridEl) ridEl.textContent = rid;
     if (titleEl) titleEl.textContent = "Loading…";
-    if (metaStrip) metaStrip.innerHTML = "";
+    if (controlsRow) controlsRow.innerHTML = "";
     if (descEl) descEl.innerHTML = "";
     if (commentsList) commentsList.innerHTML = '<p class="rp-cases-empty">Loading comments…</p>';
     if (activityList) activityList.innerHTML = '<p class="rp-cases-empty">Loading activity…</p>';
