@@ -88,6 +88,7 @@ aliases.
 | Post a comment | `POST $RP_API/cases/:rid/comments` | discussion + status updates |
 | Edit a comment | `PATCH $RP_API/cases/:rid/comments/:cmt_rid` | typo fix; sets is_edited=true |
 | Delete a comment | `DELETE $RP_API/cases/:rid/comments/:cmt_rid` | rare; cleanup only |
+| List categories | `GET $RP_API/cases/categories` | pick a `CAT_…` for the `category_id` field |
 
 The full route table lives in [routes/cases.rs](../../../backend/crates/api/src/routes/cases.rs).
 
@@ -121,6 +122,11 @@ Required: `title`. Everything else defaults server-side:
   manual creates can leave it absent. Distinct from `description`
   (markdown prose) so the FE can render it monospace + so the
   dedup hash computes over a stable shape.
+- `category_id` → null. Pick a `CAT_…` rid from `GET /cases/categories`
+  to tag the case under (sub)category. Schema allows tagging at the
+  root level ("Backend" with no subcategory) or at a leaf
+  ("Backend > API"); the FE picker encourages leaves but the
+  backend doesn't enforce it.
 
 **Response (201 Created):**
 

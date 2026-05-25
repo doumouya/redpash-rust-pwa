@@ -11,6 +11,21 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
+/// One row in `GET /api/cases/categories`. Flat shape — the FE
+/// groups by `parent_id` to build the hierarchical picker. Roots
+/// have `parent_id = None`; subcategories have it set. `company_id`
+/// is null for global / built-in categories (the v1 seeded taxonomy);
+/// non-null entries are per-company customisations that v3 will
+/// gate by RBAC visibility.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Category {
+    pub redpash_id: String,
+    pub name:       String,
+    #[serde(default)] pub parent_id:  Option<String>,
+    #[serde(default)] pub company_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 /// One row in `GET /api/cases` + the body of `GET /api/cases/:rid`
 /// (sans the comments + activity feed — those live on `CaseDetail`
 /// below). Mirrors the cases table verbatim.
@@ -44,6 +59,14 @@ pub struct Case {
     /// monospace `<pre>` and the auto-triage dedup hash can compute
     /// over a stable shape. Null for manually-filed cases.
     #[serde(default)] pub error_message: Option<String>,
+    /// Taxonomy slot. Single FK — a case has at most one
+    /// (sub)category. Hydrated `*_name` fields below let the FE
+    /// render "Backend > API" without a separate categories fetch
+    /// per case. All three are null when the case is uncategorised.
+    #[serde(default)] pub category_id:          Option<String>,
+    #[serde(default)] pub category_name:        Option<String>,
+    #[serde(default)] pub category_parent_id:   Option<String>,
+    #[serde(default)] pub category_parent_name: Option<String>,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }
@@ -95,6 +118,10 @@ pub struct CaseCreateRequest {
     /// Auto-triage path populates this with the raw error string;
     /// manual creates leave it null.
     #[serde(default)] pub error_message: Option<String>,
+    /// Pick a leaf (subcategory) when one fits; pick a parent rid
+    /// directly when the case is broadly "Backend" with no fitting
+    /// sub. Null = uncategorised.
+    #[serde(default)] pub category_id:   Option<String>,
 }
 
 /// Body of `PATCH /api/cases/:rid`. Sparse — every field optional.
@@ -113,6 +140,7 @@ pub struct CasePatchRequest {
     #[serde(default)] pub project_id:    Option<String>,
     #[serde(default)] pub company_id:    Option<String>,
     #[serde(default)] pub error_message: Option<String>,
+    #[serde(default)] pub category_id:   Option<String>,
 }
 
 /// Body of `POST /api/cases/:rid/comments` (create) and

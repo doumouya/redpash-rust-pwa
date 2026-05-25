@@ -30,7 +30,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use shared::case::{
-    Case, CaseCreateRequest, CaseDetail, CasePatchRequest, Comment, CommentRequest,
+    Case, CaseCreateRequest, CaseDetail, CasePatchRequest, Category, Comment, CommentRequest,
 };
 
 use crate::{db, error::AppError, id, state::AppState};
@@ -38,6 +38,9 @@ use crate::{db, error::AppError, id, state::AppState};
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/",                          get(list).post(create))
+        // Categories list — sits before `/:rid` so the literal
+        // `categories` path doesn't get swallowed by the rid matcher.
+        .route("/categories",                get(list_categories))
         .route("/:rid",                      get(get_one).patch(patch).delete(delete_one))
         .route("/:rid/comments",             get(list_comments).post(post_comment))
         .route("/:rid/comments/:cmt_rid",    axum::routing::patch(patch_comment).delete(delete_comment))
@@ -61,6 +64,24 @@ struct CaseList {
     total: u64,
     page:  u32,
     size:  u32,
+}
+
+// ── categories ─────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CategoryList { items: Vec<Category> }
+
+/// Flat list of categories the caller can pick from. v1 returns the
+/// global / built-in seed taxonomy; v3 will union per-company entries
+/// once RBAC overlays per-user visibility. FE groups by `parent_id`
+/// to build the picker tree.
+async fn list_categories(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+) -> Result<Json<CategoryList>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let items = db::list_categories(&state.db, Some(&user)).await?;
+    Ok(Json(CategoryList { items }))
 }
 
 async fn list(
@@ -111,6 +132,7 @@ async fn create(
     // significant by line); only outer trim to drop leading/trailing
     // newlines from copy-paste. Empty string still maps to None.
     let error_message = req.error_message.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let category_id   = req.category_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let type_         = req.r#type.as_deref().unwrap_or("task");
     let priority      = req.priority.as_deref().unwrap_or("medium");
     let rid           = id::new("CAS");
@@ -127,6 +149,7 @@ async fn create(
         req.project_id.as_deref(),
         req.company_id.as_deref(),
         error_message,
+        category_id,
     ).await?;
 
     crate::event::record(&state.db, crate::event::EventDraft {
@@ -188,6 +211,7 @@ async fn patch(
     let project_id    = trim(body.project_id);
     let company_id    = trim(body.company_id);
     let error_message = trim(body.error_message);
+    let category_id   = trim(body.category_id);
 
     // Validate enum values before the DB write so we return a clean
     // 400 instead of letting Postgres CHECK constraint surface as 500.
@@ -218,6 +242,7 @@ async fn patch(
         project_id.as_deref(),
         company_id.as_deref(),
         error_message.as_deref(),
+        category_id.as_deref(),
     ).await?
     .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
 
@@ -249,6 +274,9 @@ async fn patch(
     if let Some(ref t) = type_    { emit_change("type",     &existing.r#type,   t); }
     if let Some(ref a) = assignee_id {
         emit_change("assignee", existing.assignee_id.as_deref().unwrap_or(""), a);
+    }
+    if let Some(ref c) = category_id {
+        emit_change("category", existing.category_id.as_deref().unwrap_or(""), c);
     }
     // title / description / project / company changes are quieter
     // edits — emit a single `case_metadata_change` summarising which

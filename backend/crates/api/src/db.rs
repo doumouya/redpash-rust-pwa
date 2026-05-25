@@ -5,7 +5,7 @@
 //! takes a `&PgPool` and returns a domain DTO from `shared::*`.
 
 use chrono::{DateTime, Utc};
-use shared::case::{Case, Comment};
+use shared::case::{Case, Category, Comment};
 use shared::chart::Chart;
 use shared::company::{Company, CompanyMember, CompanySummary};
 use shared::dashboard::{Dashboard, DashboardSpec};
@@ -2040,6 +2040,10 @@ struct CaseRow {
     reporter_display_name:  Option<String>,
     assignee_display_name:  Option<String>,
     error_message:          Option<String>,
+    category_id:            Option<String>,
+    category_name:          Option<String>,
+    category_parent_id:     Option<String>,
+    category_parent_name:   Option<String>,
     created_at:             DateTime<Utc>,
     updated_at:             DateTime<Utc>,
 }
@@ -2059,6 +2063,10 @@ impl From<CaseRow> for Case {
             reporter_display_name:  r.reporter_display_name,
             assignee_display_name:  r.assignee_display_name,
             error_message:          r.error_message,
+            category_id:            r.category_id,
+            category_name:          r.category_name,
+            category_parent_id:     r.category_parent_id,
+            category_parent_name:   r.category_parent_name,
             created_at:             r.created_at,
             updated_at:             r.updated_at,
         }
@@ -2077,13 +2085,22 @@ const CASE_SELECT: &str =
      r.display_name AS reporter_display_name,
      a.display_name AS assignee_display_name,
      c.error_message,
+     c.category_id,
+     cat.name           AS category_name,
+     cat.parent_id      AS category_parent_id,
+     catp.name          AS category_parent_name,
      c.created_at, c.updated_at";
 
-/// LEFT JOINs for reporter + assignee user lookups. Append after a
-/// `FROM cases c` clause; partners with CASE_SELECT.
+/// LEFT JOINs for reporter + assignee user lookups + the two-level
+/// category hydration (`cat` is the case's tagged category; `catp`
+/// is the parent of that category, NULL when the case is tagged at
+/// the root). Append after a `FROM cases c` clause; partners with
+/// CASE_SELECT.
 const CASE_USER_JOINS: &str =
-    "LEFT JOIN users r ON r.redpash_id = c.reporter_id
-     LEFT JOIN users a ON a.redpash_id = c.assignee_id";
+    "LEFT JOIN users r            ON r.redpash_id    = c.reporter_id
+     LEFT JOIN users a            ON a.redpash_id    = c.assignee_id
+     LEFT JOIN case_categories cat ON cat.redpash_id = c.category_id
+     LEFT JOIN case_categories catp ON catp.redpash_id = cat.parent_id";
 
 // PROJECT-FILES-ACK: type=any — cases doesn't touch project_files.
 // (The ack rule is for project_files queries; included here as a
@@ -2174,14 +2191,15 @@ pub async fn insert_case(
     project_id:    Option<&str>,
     company_id:    Option<&str>,
     error_message: Option<&str>,
+    category_id:   Option<&str>,
 ) -> sqlx::Result<Case> {
     let row: CaseRow = sqlx::query_as(&format!(
         "WITH c AS (
              INSERT INTO cases
                  (redpash_id, type, title, description, status, priority,
                   reporter_id, assignee_id, project_id, company_id,
-                  error_message)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  error_message, category_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *
          )
          SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
@@ -2197,6 +2215,7 @@ pub async fn insert_case(
     .bind(project_id)
     .bind(company_id)
     .bind(error_message)
+    .bind(category_id)
     .fetch_one(pool)
     .await?;
     Ok(row.into())
@@ -2217,6 +2236,7 @@ pub async fn update_case(
     project_id:    Option<&str>,
     company_id:    Option<&str>,
     error_message: Option<&str>,
+    category_id:   Option<&str>,
 ) -> sqlx::Result<Option<Case>> {
     // For nullable FKs we use the sentinel pattern: pass `Some("")`
     // to set NULL, omit to skip. Today the handler always passes
@@ -2234,6 +2254,7 @@ pub async fn update_case(
                  project_id    = COALESCE($8,  project_id),
                  company_id    = COALESCE($9,  company_id),
                  error_message = COALESCE($10, error_message),
+                 category_id   = COALESCE($11, category_id),
                  updated_at    = now()
              WHERE redpash_id = $1
              RETURNING *
@@ -2250,6 +2271,7 @@ pub async fn update_case(
     .bind(project_id)
     .bind(company_id)
     .bind(error_message)
+    .bind(category_id)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(Into::into))
@@ -2393,4 +2415,35 @@ pub async fn list_activity_for_case(pool: &PgPool, case_id: &str) -> sqlx::Resul
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// All categories visible to the caller. Today: every global
+/// category (company_id IS NULL) — the v1 seeded taxonomy. v3 unions
+/// in per-company categories once RBAC overlays per-user visibility;
+/// the `for_user_rid` arg is reserved for that signature change but
+/// ignored today (filters resolve to the same global set regardless).
+///
+/// Returned as a flat list ordered by (parent_id NULLS FIRST, name)
+/// so roots surface first + children sort alphabetically within
+/// their parent. The FE groups by parent_id to build the picker
+/// tree; doing it server-side adds infra without saving FE work.
+pub async fn list_categories(
+    pool:          &PgPool,
+    _for_user_rid: Option<&str>,
+) -> sqlx::Result<Vec<Category>> {
+    let rows = sqlx::query(
+        "SELECT redpash_id, name, parent_id, company_id, created_at
+           FROM case_categories
+          WHERE company_id IS NULL
+          ORDER BY parent_id NULLS FIRST, name ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| Category {
+        redpash_id: r.get("redpash_id"),
+        name:       r.get("name"),
+        parent_id:  r.try_get("parent_id").ok(),
+        company_id: r.try_get("company_id").ok(),
+        created_at: r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
+    }).collect())
 }
