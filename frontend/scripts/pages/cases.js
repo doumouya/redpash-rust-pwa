@@ -828,9 +828,12 @@ export default function cases(app, { session }) {
     if (c.company_id)  add("Company",  '<code>' + esc(c.company_id) + '</code>');
     add("Created",     esc(c.created_at || "—"));
     add("Updated",     esc(c.updated_at || "—"));
-    if (c.description) {
-      add("Description", '<pre class="rp-cases-details-pre">' + esc(c.description) + '</pre>');
-    }
+    // Description always renders — the slot needs to be visible even
+    // when empty so the user knows the field exists (and where to
+    // edit when inline-edit ships).
+    add("Description", c.description
+      ? '<pre class="rp-cases-details-pre">' + esc(c.description) + '</pre>'
+      : '<span class="rp-cases-side-unassigned">— no description —</span>');
     if (c.error_message) {
       add("Error",     '<pre class="rp-cases-details-pre rp-cases-details-error">' + esc(c.error_message) + '</pre>');
     }
