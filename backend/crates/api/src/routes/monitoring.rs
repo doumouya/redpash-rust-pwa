@@ -73,6 +73,8 @@ struct EventsQuery {
     #[serde(default)] window: Option<String>,
     #[serde(default)] level:  Option<String>,
     #[serde(default)] kind:   Option<String>,
+    /// Free-text search across kind + message. ILIKE substring match.
+    #[serde(default)] q:      Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -80,6 +82,9 @@ struct AuditRunsQuery {
     #[serde(default)] page: Option<u32>,
     #[serde(default)] size: Option<u32>,
     #[serde(default)] tool: Option<String>,
+    /// Free-text search across tool + git_branch + git_sha. ILIKE
+    /// substring; sha can be partial (e.g. "abc12" matches).
+    #[serde(default)] q:    Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +94,8 @@ struct AuditFindingsQuery {
     #[serde(default)] run:  Option<i64>,
     #[serde(default)] tool: Option<String>,
     #[serde(default)] kind: Option<String>,
+    /// Free-text search across tool + kind + finding_key. ILIKE substring.
+    #[serde(default)] q:    Option<String>,
 }
 
 /// Resolve `?window=` to a UTC cutoff. `None` means "no window filter".
@@ -146,11 +153,15 @@ async fn list_events(
         "SELECT COUNT(*)::BIGINT FROM events
          WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
            AND ($2::text IS NULL OR level = $2)
-           AND ($3::text IS NULL OR kind  = $3)",
+           AND ($3::text IS NULL OR kind  = $3)
+           AND ($4::text IS NULL OR
+                kind    ILIKE '%' || $4 || '%' OR
+                message ILIKE '%' || $4 || '%')",
     )
     .bind(cutoff)
     .bind(q.level.as_deref())
     .bind(q.kind.as_deref())
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -161,12 +172,16 @@ async fn list_events(
           WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
             AND ($2::text IS NULL OR level = $2)
             AND ($3::text IS NULL OR kind  = $3)
+            AND ($4::text IS NULL OR
+                 kind    ILIKE '%' || $4 || '%' OR
+                 message ILIKE '%' || $4 || '%')
           ORDER BY occurred_at DESC
-          LIMIT $4 OFFSET $5",
+          LIMIT $5 OFFSET $6",
     )
     .bind(cutoff)
     .bind(q.level.as_deref())
     .bind(q.kind.as_deref())
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
@@ -209,9 +224,14 @@ async fn list_audit_runs(
 
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::BIGINT FROM audit.run
-         WHERE ($1::text IS NULL OR tool = $1)",
+         WHERE ($1::text IS NULL OR tool = $1)
+           AND ($2::text IS NULL OR
+                tool                  ILIKE '%' || $2 || '%' OR
+                COALESCE(git_branch, '') ILIKE '%' || $2 || '%' OR
+                COALESCE(git_sha,    '') ILIKE '%' || $2 || '%')",
     )
     .bind(q.tool.as_deref())
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -219,10 +239,15 @@ async fn list_audit_runs(
         "SELECT id, tool, ran_at, git_sha, git_branch, stats
            FROM audit.run
           WHERE ($1::text IS NULL OR tool = $1)
+            AND ($2::text IS NULL OR
+                 tool                  ILIKE '%' || $2 || '%' OR
+                 COALESCE(git_branch, '') ILIKE '%' || $2 || '%' OR
+                 COALESCE(git_sha,    '') ILIKE '%' || $2 || '%')
           ORDER BY ran_at DESC
-          LIMIT $2 OFFSET $3",
+          LIMIT $3 OFFSET $4",
     )
     .bind(q.tool.as_deref())
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
@@ -287,11 +312,16 @@ async fn list_audit_findings(
         "SELECT COUNT(*)::BIGINT FROM audit.finding
          WHERE ($1::bigint IS NULL OR run_id = $1)
            AND ($2::text IS NULL OR tool = $2)
-           AND ($3::text IS NULL OR kind = $3)",
+           AND ($3::text IS NULL OR kind = $3)
+           AND ($4::text IS NULL OR
+                tool        ILIKE '%' || $4 || '%' OR
+                kind        ILIKE '%' || $4 || '%' OR
+                finding_key ILIKE '%' || $4 || '%')",
     )
     .bind(run_filter)
     .bind(q.tool.as_deref())
     .bind(q.kind.as_deref())
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -301,12 +331,17 @@ async fn list_audit_findings(
           WHERE ($1::bigint IS NULL OR run_id = $1)
             AND ($2::text IS NULL OR tool = $2)
             AND ($3::text IS NULL OR kind = $3)
+            AND ($4::text IS NULL OR
+                 tool        ILIKE '%' || $4 || '%' OR
+                 kind        ILIKE '%' || $4 || '%' OR
+                 finding_key ILIKE '%' || $4 || '%')
           ORDER BY run_id DESC, severity DESC NULLS LAST, finding_key
-          LIMIT $4 OFFSET $5",
+          LIMIT $5 OFFSET $6",
     )
     .bind(run_filter)
     .bind(q.tool.as_deref())
     .bind(q.kind.as_deref())
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)

@@ -122,6 +122,9 @@ struct StepsQuery {
     #[serde(default)] file:    Option<String>, // file_redpash_id
     #[serde(default)] kind:    Option<String>,
     #[serde(default)] applied: Option<bool>,
+    /// Free-text search across kind + filename (the joined file's
+    /// name). ILIKE substring.
+    #[serde(default)] q:       Option<String>,
 }
 
 /// Resolve a (sort, dir) query pair against a per-endpoint allowlist
@@ -705,14 +708,20 @@ async fn list_steps(
     let all_count: i64 = db::count_total(&state.db, "project_steps").await?;
 
     let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM project_steps
-         WHERE ($1::text IS NULL OR file_redpash_id = $1)
-           AND ($2::text IS NULL OR kind            = $2)
-           AND ($3::bool IS NULL OR applied         = $3)",
+        "SELECT COUNT(*)::BIGINT
+           FROM project_steps s
+           JOIN project_files f ON f.redpash_id = s.file_redpash_id
+          WHERE ($1::text IS NULL OR s.file_redpash_id = $1)
+            AND ($2::text IS NULL OR s.kind            = $2)
+            AND ($3::bool IS NULL OR s.applied         = $3)
+            AND ($4::text IS NULL OR
+                 s.kind     ILIKE '%' || $4 || '%' OR
+                 f.filename ILIKE '%' || $4 || '%')",
     )
     .bind(q.file.as_deref())
     .bind(q.kind.as_deref())
     .bind(q.applied)
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -724,12 +733,16 @@ async fn list_steps(
           WHERE ($1::text IS NULL OR s.file_redpash_id = $1)
             AND ($2::text IS NULL OR s.kind            = $2)
             AND ($3::bool IS NULL OR s.applied         = $3)
+            AND ($4::text IS NULL OR
+                 s.kind     ILIKE '%' || $4 || '%' OR
+                 f.filename ILIKE '%' || $4 || '%')
           ORDER BY s.created_at DESC
-          LIMIT $4 OFFSET $5",
+          LIMIT $5 OFFSET $6",
     )
     .bind(q.file.as_deref())
     .bind(q.kind.as_deref())
     .bind(q.applied)
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)

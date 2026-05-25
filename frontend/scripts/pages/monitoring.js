@@ -680,6 +680,7 @@ export default function monitoring(app, { session }) {
   let listTotal  = 0;     // total row count for the pager rows-info readout
   let listShown  = 0;     // rows actually on the current page
   let listWindow = DEFAULT_WINDOW;
+  let listSearch = "";    // ?q= text from the toolbar search input
 
   // 5-cell composite strip — Monitoring's variant of Home's
   // composite (Em 2026-05-25). Layout:
@@ -713,6 +714,7 @@ export default function monitoring(app, { session }) {
     charts.dispose();      // user switching between list tabs
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
+    listSearch = "";
     const kpiTiles = [
       { label: "Total",      id: "rp-mon-list-total"  },
       { label: "On page",    id: "rp-mon-list-shown"  },
@@ -724,8 +726,16 @@ export default function monitoring(app, { session }) {
     // suppresses the mode-button group entirely. `filter: true` adds
     // the workspace-style funnel toggle at the start of the toolbar,
     // wired below to slide the .rt-panel--filter.
+    // `?q=` wired on all four monitoring endpoints 2026-05-25 — the
+    // per-tab placeholder hints what fields each search covers.
+    const placeholders = {
+      events:   "Search kind, message…",
+      runs:     "Search tool, branch, sha…",
+      findings: "Search tool, kind, finding…",
+      steps:    "Search step kind, filename…",
+    };
     const toolbarSpec = {
-      searchPlaceholder: false,   // ?q= isn't wired on monitoring endpoints
+      searchPlaceholder: placeholders[tab.key] || "Search…",
       modes: false,
       filter: true,
     };
@@ -815,6 +825,24 @@ export default function monitoring(app, { session }) {
       fetchList(viewSpec);
     });
 
+    // Search — debounced 200ms so we don't fire on every keystroke.
+    // Resets to page 1 on every change so the new result set always
+    // starts at the top.
+    const searchEl = view.querySelector("#rp-list-toolbar-search");
+    if (searchEl) {
+      let timer = null;
+      searchEl.addEventListener("input", () => {
+        const q = searchEl.value.trim();
+        if (q === listSearch) return;
+        listSearch = q;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          listPage = 1;
+          fetchList(viewSpec);
+        }, 200);
+      });
+    }
+
     // Filter-panel toggle — same .open class as workspace's filter panel
     // (panel.css handles the slide animation). The close button inside
     // the panel head also toggles the class.
@@ -869,7 +897,8 @@ export default function monitoring(app, { session }) {
     if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Loading…</td></tr>';
 
     const qs = "?page=" + listPage + "&size=" + pageSizeFromPref()
-             + (viewSpec.useWindow ? "&window=" + encodeURIComponent(listWindow) : "");
+             + (viewSpec.useWindow ? "&window=" + encodeURIComponent(listWindow) : "")
+             + (listSearch ? "&q=" + encodeURIComponent(listSearch) : "");
     const t0 = performance.now();
     try {
       const data = await api.get(viewSpec.endpoint + qs);
