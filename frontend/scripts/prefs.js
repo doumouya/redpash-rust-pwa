@@ -25,6 +25,7 @@
 import { api } from "/scripts/api.js";
 
 export const PREFS = {
+  theme:          { values: ["light", "dark"],                  default: "dark", attr: "theme"        },
   density:        { values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density"      },
   fontSize:       { values: ["sm", "md", "lg"],                 default: "md",   attr: "fontSize"     },
   // Per-page rows-per-page — each table surface gets its own pref so
@@ -57,6 +58,7 @@ const storageKey = (name) => KEY_PREFIX + name;
 // so the new namespace is type-safe. Old keys are removed once moved
 // so a re-import doesn't pay the migration cost.
 const LEGACY_KEYS = {
+  theme:          "rp-theme",
   density:        "rp-density",
   fontSize:       "rp-font-size",
   rowsPerPage:    "rp-rows-per-page",
