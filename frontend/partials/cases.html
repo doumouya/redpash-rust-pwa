@@ -69,104 +69,43 @@
         </header>
 
         <div class="rp-cases-detail-body">
-          <div class="rp-cases-detail-main">
-            <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
-            <div class="rp-cases-detail-meta-strip" id="rp-cases-detail-meta-strip">
-              <!-- status chip + priority chip + type chip — JS renders -->
-            </div>
+          <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
 
-            <!-- Primary action — verb-based advance to the next status.
-                 Label updates with the current status; same PATCH as the
-                 side-panel select but discoverable. -->
-            <div class="rp-cases-detail-action">
-              <button class="rt-btn rt-btn--accent rp-cases-advance-btn"
-                      id="rp-cases-advance-btn" type="button"
-                      title="Advance to the next status">
-                <span id="rp-cases-advance-label">Advance status</span>
-                <i class="bi bi-arrow-right"></i>
-              </button>
-            </div>
-
-            <section class="rp-cases-detail-description" id="rp-cases-detail-description">
-              <!-- JS renders <pre> for now; markdown render is a v2 polish -->
-            </section>
-
-            <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
-              <button class="is-active" type="button" data-tab="comments" title="Comments thread">
-                <i class="bi bi-chat-left-text"></i> Comments
-              </button>
-              <button type="button" data-tab="activity" title="Activity feed (events)">
-                <i class="bi bi-clock-history"></i> Activity
-              </button>
-            </nav>
-
-            <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
-              <div class="rp-cases-comments-list" id="rp-cases-comments-list">
-                <!-- JS renders comments here -->
-              </div>
-              <form class="rp-cases-comment-form" id="rp-cases-comment-form">
-                <div class="rp-cases-comment-form-meta" id="rp-cases-comment-form-meta">
-                  Sending as <span id="rp-cases-comment-form-as">you</span>
-                </div>
-                <div class="rp-cases-comment-form-row">
-                  <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
-                            placeholder="Type a comment…" rows="6"></textarea>
-                  <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
-                          type="submit" title="Send (Ctrl+Enter)">
-                    <i class="bi bi-send-fill"></i>
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
-              <!-- Filter pills cap the firehose: All / Comments /
-                   Status / Assignment / Edits — picks a case_* kind
-                   group and re-renders the list. -->
-              <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter">
-                <button type="button" class="rp-chip is-active" data-activity-filter="all">All</button>
-                <button type="button" class="rp-chip" data-activity-filter="comments">Comments</button>
-                <button type="button" class="rp-chip" data-activity-filter="status">Status</button>
-                <button type="button" class="rp-chip" data-activity-filter="assignment">Assignment</button>
-                <button type="button" class="rp-chip" data-activity-filter="edits">Edits</button>
-              </div>
-              <div class="rp-cases-activity-list" id="rp-cases-activity-list">
-                <!-- JS renders activity-feed events (case_* kinds) -->
-              </div>
-            </section>
-          </div>
-
-          <aside class="rp-cases-detail-side">
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Status</label>
-              <select class="rp-cases-side-select" id="rp-cases-side-status">
+          <!-- Meta controls — replaces the side panel. Chip-styled
+               selects for status / priority / type sit inline with
+               the assignee picker; a thin info row below carries
+               the read-only metadata (reporter + timestamps). -->
+          <div class="rp-cases-detail-controls">
+            <label class="rp-cases-control">
+              <span class="rp-cases-control-lbl">Status</span>
+              <select class="rp-cases-control-select" id="rp-cases-side-status">
                 <option value="backlog">Backlog</option>
                 <option value="todo">Todo</option>
                 <option value="in_progress">In progress</option>
                 <option value="in_review">In review</option>
                 <option value="done">Done</option>
               </select>
-            </div>
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Priority</label>
-              <select class="rp-cases-side-select" id="rp-cases-side-priority">
+            </label>
+            <label class="rp-cases-control">
+              <span class="rp-cases-control-lbl">Priority</span>
+              <select class="rp-cases-control-select" id="rp-cases-side-priority">
                 <option value="low">Low</option>
                 <option value="medium" selected>Medium</option>
                 <option value="high">High</option>
                 <option value="critical">Critical</option>
               </select>
-            </div>
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Type</label>
-              <select class="rp-cases-side-select" id="rp-cases-side-type">
+            </label>
+            <label class="rp-cases-control">
+              <span class="rp-cases-control-lbl">Type</span>
+              <select class="rp-cases-control-select" id="rp-cases-side-type">
                 <option value="task" selected>Task</option>
                 <option value="bug">Bug</option>
                 <option value="feature">Feature</option>
                 <option value="epic">Epic</option>
               </select>
-            </div>
-            <div class="rp-cases-side-section rp-cases-side-section--picker">
-              <label class="rp-cases-side-label">Assignee</label>
+            </label>
+            <div class="rp-cases-control rp-cases-control--assignee">
+              <span class="rp-cases-control-lbl">Assignee</span>
               <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
                       type="button" title="Change assignee">
                 <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
@@ -181,21 +120,86 @@
                 </div>
               </div>
             </div>
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Reporter</label>
-              <div class="rp-cases-side-value" id="rp-cases-side-reporter">—</div>
+          </div>
+
+          <!-- Read-only metadata: reporter + create/update timestamps.
+               Thin info line — informational, not actionable. -->
+          <div class="rp-cases-detail-info">
+            <span class="rp-cases-detail-info-item">
+              <span class="rp-cases-detail-info-lbl">Reporter</span>
+              <span id="rp-cases-side-reporter">—</span>
+            </span>
+            <span class="rp-cases-detail-info-sep">·</span>
+            <span class="rp-cases-detail-info-item">
+              Created <span id="rp-cases-side-created">—</span>
+            </span>
+            <span class="rp-cases-detail-info-sep">·</span>
+            <span class="rp-cases-detail-info-item">
+              Updated <span id="rp-cases-side-updated">—</span>
+            </span>
+          </div>
+
+          <!-- Primary action — verb-based advance to the next status.
+               Label updates with the current status; same PATCH as
+               the status select but discoverable. -->
+          <div class="rp-cases-detail-action">
+            <button class="rt-btn rt-btn--accent rp-cases-advance-btn"
+                    id="rp-cases-advance-btn" type="button"
+                    title="Advance to the next status">
+              <span id="rp-cases-advance-label">Advance status</span>
+              <i class="bi bi-arrow-right"></i>
+            </button>
+          </div>
+
+          <section class="rp-cases-detail-description" id="rp-cases-detail-description">
+            <!-- JS renders <pre> for now; markdown render is a v2 polish -->
+          </section>
+
+          <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
+            <button class="is-active" type="button" data-tab="comments" title="Comments thread">
+              <i class="bi bi-chat-left-text"></i> Comments
+            </button>
+            <button type="button" data-tab="activity" title="Activity feed (events)">
+              <i class="bi bi-clock-history"></i> Activity
+            </button>
+          </nav>
+
+          <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
+            <div class="rp-cases-comments-list" id="rp-cases-comments-list">
+              <!-- JS renders comments here -->
             </div>
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Created</label>
-              <div class="rp-cases-side-value" id="rp-cases-side-created">—</div>
+            <form class="rp-cases-comment-form" id="rp-cases-comment-form">
+              <div class="rp-cases-comment-form-meta" id="rp-cases-comment-form-meta">
+                Sending as <span id="rp-cases-comment-form-as">you</span>
+              </div>
+              <div class="rp-cases-comment-form-row">
+                <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
+                          placeholder="Type a comment…" rows="6"></textarea>
+                <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
+                        type="submit" title="Send (Ctrl+Enter)">
+                  <i class="bi bi-send-fill"></i>
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
+            <!-- Filter pills cap the firehose: All / Comments /
+                 Status / Assignment / Edits — picks a case_* kind
+                 group and re-renders the list. -->
+            <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter">
+              <button type="button" class="rp-chip is-active" data-activity-filter="all">All</button>
+              <button type="button" class="rp-chip" data-activity-filter="comments">Comments</button>
+              <button type="button" class="rp-chip" data-activity-filter="status">Status</button>
+              <button type="button" class="rp-chip" data-activity-filter="assignment">Assignment</button>
+              <button type="button" class="rp-chip" data-activity-filter="edits">Edits</button>
             </div>
-            <div class="rp-cases-side-section">
-              <label class="rp-cases-side-label">Updated</label>
-              <div class="rp-cases-side-value" id="rp-cases-side-updated">—</div>
+            <div class="rp-cases-activity-list" id="rp-cases-activity-list">
+              <!-- JS renders activity-feed events (case_* kinds) -->
             </div>
-          </aside>
+          </section>
         </div>
-      </div>
+      </aside>
 
     </main>
   </div>
