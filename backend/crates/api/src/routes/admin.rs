@@ -65,6 +65,11 @@ struct AdminQuery {
     #[serde(default)] page: Option<u32>,
     #[serde(default)] size: Option<u32>,
     #[serde(default)] q:    Option<String>, // free-text search where applicable
+    /// Click-to-sort header support. Validated against the per-endpoint
+    /// SORTABLE_* allowlist; bad / missing values fall back to each
+    /// handler's default column. `dir` → "asc"|"desc" (default "desc").
+    #[serde(default)] sort: Option<String>,
+    #[serde(default)] dir:  Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -75,6 +80,10 @@ struct MembershipsQuery {
     /// the endpoint usable without a query string.
     #[serde(default)] scope: Option<String>,
     #[serde(default)] role:  Option<String>,
+    /// Same click-to-sort shape as AdminQuery. Validated against
+    /// SORTABLE_MEMBERSHIPS at the handler boundary.
+    #[serde(default)] sort:  Option<String>,
+    #[serde(default)] dir:   Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -130,12 +139,34 @@ pub(super) fn sort_clause(
 
 // ── /api/admin/users ────────────────────────────────────────────────────
 
+/// Sortable columns for /api/admin/users — wire-keys the Home Users tab
+/// can pass via ?sort=. Mirror's the LIST_VIEWS column spec on the frontend.
+const SORTABLE_USERS: &[&str] = &[
+    "display_name", "plan", "job_title", "org_name", "org_role", "created_at",
+];
+
 async fn list_users(
     State(state): State<AppState>,
     Query(q):     Query<AdminQuery>,
 ) -> Result<Json<Page<UserSummary>>, AppError> {
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
+
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_USERS, "created_at",
+    );
+    // Wire-key → SQL ref. Aliases like `org_name` resolve to the LEFT
+    // JOIN LATERAL column; `org_role` likewise. NULLS LAST is appended
+    // by the ORDER BY format! below so users without a company affiliation
+    // sort to the tail regardless of dir.
+    let sort_col = match sort_key.as_str() {
+        "display_name" => "u.display_name",
+        "plan"         => "u.plan",
+        "job_title"    => "u.job_title",
+        "org_name"     => "m.company_name",
+        "org_role"     => "m.role",
+        _              => "u.created_at",
+    };
 
     let all_count: i64 = db::count_total(&state.db, "users").await?;
 
@@ -159,7 +190,11 @@ async fn list_users(
     // joined_at. One company per user — the Home Users tab shows the
     // primary org affiliation, multi-org users can drill into
     // /admin/memberships for the full list.
-    let rows = sqlx::query(
+    // ORDER BY built via format! — sort_col comes from the SORTABLE_USERS
+    // allowlist (never user input directly). SQL injection closed at the
+    // sort_clause boundary. NULLS LAST keeps users without an org_name /
+    // job_title at the tail regardless of dir.
+    let sql = format!(
         "SELECT u.redpash_id, u.username, u.email, u.display_name, u.avatar_url,
                 u.job_title, u.organisation, u.plan, u.created_at,
                 m.company_id   AS org_id,
@@ -184,9 +219,10 @@ async fn list_users(
                  u.display_name ILIKE '%' || $1 || '%' OR
                  COALESCE(u.email,        '') ILIKE '%' || $1 || '%' OR
                  COALESCE(u.organisation, '') ILIKE '%' || $1 || '%')
-          ORDER BY u.created_at DESC
-          LIMIT $2 OFFSET $3",
-    )
+          ORDER BY {sort_col} {sort_dir} NULLS LAST
+          LIMIT $2 OFFSET $3"
+    );
+    let rows = sqlx::query(&sql)
     .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
@@ -216,12 +252,29 @@ async fn list_users(
 
 // ── /api/admin/companies ────────────────────────────────────────────────
 
+const SORTABLE_COMPANIES: &[&str] = &[
+    "name", "slug", "member_count", "created_at", "updated_at",
+];
+
 async fn list_companies(
     State(state): State<AppState>,
     Query(q):     Query<AdminQuery>,
 ) -> Result<Json<Page<CompanySummary>>, AppError> {
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
+
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_COMPANIES, "created_at",
+    );
+    let sort_col = match sort_key.as_str() {
+        "name"         => "c.name",
+        "slug"         => "c.slug",
+        // member_count is a subquery alias — Postgres allows referring to
+        // SELECT aliases in ORDER BY, so this resolves cleanly.
+        "member_count" => "member_count",
+        "updated_at"   => "c.updated_at",
+        _              => "c.created_at",
+    };
 
     let all_count: i64 = db::count_total(&state.db, "companies").await?;
 
@@ -233,15 +286,16 @@ async fn list_companies(
     .fetch_one(&state.db)
     .await?;
 
-    let rows = sqlx::query(
+    let sql = format!(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url,
                 c.created_at, c.updated_at,
                 (SELECT COUNT(*)::INT FROM company_memberships m WHERE m.company_id = c.redpash_id) AS member_count
            FROM companies c
           WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
-          ORDER BY c.created_at DESC
-          LIMIT $2 OFFSET $3",
-    )
+          ORDER BY {sort_col} {sort_dir} NULLS LAST
+          LIMIT $2 OFFSET $3"
+    );
+    let rows = sqlx::query(&sql)
     .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
@@ -271,6 +325,10 @@ async fn list_companies(
 
 // ── /api/admin/memberships ──────────────────────────────────────────────
 
+const SORTABLE_MEMBERSHIPS: &[&str] = &[
+    "user_display_name", "scope_name", "role", "joined_at",
+];
+
 async fn list_memberships(
     State(state): State<AppState>,
     Query(q):     Query<MembershipsQuery>,
@@ -285,6 +343,19 @@ async fn list_memberships(
         ));
     }
 
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_MEMBERSHIPS, "joined_at",
+    );
+    // The two scope-specific queries share aliases (user_display_name,
+    // scope_name, role, joined_at) so the same sort_col resolves against
+    // either branch.
+    let sort_col = match sort_key.as_str() {
+        "user_display_name" => "u.display_name",
+        "scope_name"        => match scope { "project" => "p.name", _ => "c.name" },
+        "role"              => "m.role",
+        _                   => "m.joined_at",
+    };
+
     // all_count = total across BOTH scopes (the rail tab's "everything"
     // count). total = scope+role-filtered count.
     let all_count: i64 = sqlx::query_scalar(
@@ -298,11 +369,17 @@ async fn list_memberships(
     // Scope-specific query — two different tables with parallel schemas.
     // Joined to users (display_name + username) and the scope parent
     // (project name or company name) so the row renders without a
-    // second lookup.
-    let (count_sql, rows_sql) = if scope == "project" {
-        (
-            "SELECT COUNT(*)::BIGINT FROM project_memberships m
-             WHERE ($1::text IS NULL OR m.role = $1)",
+    // second lookup. ORDER BY built via format! with sort_col sourced
+    // from SORTABLE_MEMBERSHIPS allowlist.
+    let count_sql = if scope == "project" {
+        "SELECT COUNT(*)::BIGINT FROM project_memberships m
+         WHERE ($1::text IS NULL OR m.role = $1)"
+    } else {
+        "SELECT COUNT(*)::BIGINT FROM company_memberships m
+         WHERE ($1::text IS NULL OR m.role = $1)"
+    };
+    let rows_sql = if scope == "project" {
+        format!(
             "SELECT 'project' AS scope,
                     m.project_redpash_id     AS scope_redpash_id,
                     p.name                   AS scope_name,
@@ -315,13 +392,11 @@ async fn list_memberships(
                JOIN projects p ON p.redpash_id = m.project_redpash_id
                JOIN users    u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
-              ORDER BY m.joined_at DESC
-              LIMIT $2 OFFSET $3",
+              ORDER BY {sort_col} {sort_dir} NULLS LAST
+              LIMIT $2 OFFSET $3"
         )
     } else {
-        (
-            "SELECT COUNT(*)::BIGINT FROM company_memberships m
-             WHERE ($1::text IS NULL OR m.role = $1)",
+        format!(
             "SELECT 'company' AS scope,
                     m.company_id     AS scope_redpash_id,
                     c.name           AS scope_name,
@@ -334,8 +409,8 @@ async fn list_memberships(
                JOIN companies c ON c.redpash_id = m.company_id
                JOIN users     u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
-              ORDER BY m.joined_at DESC
-              LIMIT $2 OFFSET $3",
+              ORDER BY {sort_col} {sort_dir} NULLS LAST
+              LIMIT $2 OFFSET $3"
         )
     };
 
@@ -344,7 +419,7 @@ async fn list_memberships(
         .fetch_one(&state.db)
         .await?;
 
-    let rows = sqlx::query(rows_sql)
+    let rows = sqlx::query(&rows_sql)
         .bind(q.role.as_deref())
         .bind(size as i64)
         .bind(offset)
@@ -492,12 +567,29 @@ async fn list_files(
 
 // ── /api/admin/charts ───────────────────────────────────────────────────
 
+const SORTABLE_CHARTS: &[&str] = &[
+    "display_name", "project_name", "stage", "created_at", "updated_at",
+];
+
 async fn list_charts(
     State(state): State<AppState>,
     Query(q):     Query<AdminQuery>,
 ) -> Result<Json<Page<ChartSummary>>, AppError> {
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
+
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_CHARTS, "created_at",
+    );
+    let sort_col = match sort_key.as_str() {
+        // display_name is nullable — COALESCE to filename so the sort is
+        // deterministic even when display_name is missing.
+        "display_name" => "COALESCE(f.display_name, f.filename)",
+        "project_name" => "p.name",
+        "stage"        => "COALESCE(s.stage, 'new')",
+        "updated_at"   => "f.updated_at",
+        _              => "f.created_at",
+    };
 
     // Charts live in project_files with file_type='chart'. Two counts:
     //   all_count — every chart row ever (the Charts tab's true total).
@@ -524,7 +616,9 @@ async fn list_charts(
     .await?;
 
     // PROJECT-FILES-ACK: type=chart — row data for the Charts tab.
-    let rows = sqlx::query(
+    // ORDER BY built via format! with sort_col from the SORTABLE_CHARTS
+    // allowlist (never user input directly).
+    let sql = format!(
         "SELECT f.redpash_id, f.project_redpash_id, p.name AS project_name,
                 f.filename, f.display_name,
                 COALESCE(s.stage, 'new') AS stage,
@@ -536,9 +630,10 @@ async fn list_charts(
             AND ($1::text IS NULL OR
                  f.filename                 ILIKE '%' || $1 || '%' OR
                  COALESCE(f.display_name, '') ILIKE '%' || $1 || '%')
-          ORDER BY f.created_at DESC
-          LIMIT $2 OFFSET $3",
-    )
+          ORDER BY {sort_col} {sort_dir} NULLS LAST
+          LIMIT $2 OFFSET $3"
+    );
+    let rows = sqlx::query(&sql)
     .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)

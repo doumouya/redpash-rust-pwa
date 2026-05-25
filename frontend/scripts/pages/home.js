@@ -126,7 +126,17 @@ export default function home(app, { session: _session }) {
         searchPlaceholder: "Search name, handle, org…",
         refresh: true,
       },
-      columns: ["Name", "Plan", "Job", "Org", "Role", "Joined"],
+      // Sortable wire-keys must match the SORTABLE_USERS allowlist in
+      // backend/crates/api/src/routes/admin.rs. The header chevron only
+      // renders for columns flagged sortable: true.
+      columns: [
+        { label: "Name",   key: "display_name", sortable: true  },
+        { label: "Plan",   key: "plan",         sortable: true  },
+        { label: "Job",    key: "job_title",    sortable: true  },
+        { label: "Org",    key: "org_name",     sortable: true  },
+        { label: "Role",   key: "org_role",     sortable: true  },
+        { label: "Joined", key: "created_at",   sortable: true  },
+      ],
       row: (u) =>
         '<tr>'
         + '<td class="rp-home-user-name">'
@@ -168,7 +178,15 @@ export default function home(app, { session: _session }) {
         searchPlaceholder: "Search name, slug…",
         refresh: true,
       },
-      columns: ["Name", "Members", "My role", "Created"],
+      // Sortable wire-keys → SORTABLE_COMPANIES allowlist (admin.rs).
+      // "My role" stays unsortable — it's a per-caller computed value
+      // (RBAC pending), not a column the DB can sort by.
+      columns: [
+        { label: "Name",    key: "name",         sortable: true  },
+        { label: "Members", key: "member_count", sortable: true  },
+        { label: "My role", key: "my_role",      sortable: false },
+        { label: "Created", key: "created_at",   sortable: true  },
+      ],
       row: (c) =>
         '<tr>'
         + '<td>' + esc(c.name) + ' <span class="rp-mon-method">' + esc(c.slug) + '</span></td>'
@@ -212,7 +230,14 @@ export default function home(app, { session: _session }) {
         searchPlaceholder: false,
         refresh: true,
       },
-      columns: ["Member", "Role", "Scope", "Joined"],
+      // Sortable wire-keys → SORTABLE_MEMBERSHIPS allowlist (admin.rs).
+      // Scope_name resolves to p.name / c.name in the backend per-branch.
+      columns: [
+        { label: "Member", key: "user_display_name", sortable: true },
+        { label: "Role",   key: "role",              sortable: true },
+        { label: "Scope",  key: "scope_name",        sortable: true },
+        { label: "Joined", key: "joined_at",         sortable: true },
+      ],
       row: (m) =>
         '<tr>'
         + '<td>' + esc(m.user_display_name) + ' <span class="rp-mon-method">@' + esc(m.user_username) + '</span></td>'
@@ -275,7 +300,17 @@ export default function home(app, { session: _session }) {
         modes: { select: true, delete: true },
         refresh: true,
       },
-      columns: ["Title", "Type", "Status", "Priority", "Assignee", "Updated"],
+      // Sortable wire-keys → SORTABLE_CASES allowlist (cases.rs).
+      // Assignee sorts on the hydrated display_name (NULLS LAST for
+      // unassigned). Updated_at is the default.
+      columns: [
+        { label: "Title",    key: "title",                 sortable: true },
+        { label: "Type",     key: "type",                  sortable: true },
+        { label: "Status",   key: "status",                sortable: true },
+        { label: "Priority", key: "priority",              sortable: true },
+        { label: "Assignee", key: "assignee_display_name", sortable: true },
+        { label: "Updated",  key: "updated_at",            sortable: true },
+      ],
       // Row click → /cases?id=… so the Cases detail page opens for
       // the picked case (same pattern as Charts/Projects rows
       // routing into Workspace).
@@ -380,7 +415,15 @@ export default function home(app, { session: _session }) {
         searchPlaceholder: "Search chart name…",
         refresh: true,
       },
-      columns: ["Name", "Project", "Stage", "Updated"],
+      // Sortable wire-keys → SORTABLE_CHARTS allowlist (admin.rs).
+      // "Name" sorts on COALESCE(display_name, filename) so the visible
+      // label drives the order even when display_name is unset.
+      columns: [
+        { label: "Name",    key: "display_name", sortable: true },
+        { label: "Project", key: "project_name", sortable: true },
+        { label: "Stage",   key: "stage",        sortable: true },
+        { label: "Updated", key: "updated_at",   sortable: true },
+      ],
       // Rows are clickable — navigate to the Workspace with the
       // chart's source project + chart rid as deep-link params so
       // the Designer opens directly on this chart.
@@ -448,7 +491,17 @@ export default function home(app, { session: _session }) {
         searchPlaceholder: "Search project name…",
         refresh: true,
       },
-      columns: ["Name", "Files", "Stage", "Status", "Updated"],
+      // No sortable wire-keys yet — /api/projects returns a bare
+      // { items: [] } shape today. Backend Page<T> conversion + ?sort=
+      // queued as a separate slice; until then all columns render
+      // non-sortable so the chevron stays hidden (no false affordance).
+      columns: [
+        { label: "Name",    key: "name",       sortable: false },
+        { label: "Files",   key: "file_count", sortable: false },
+        { label: "Stage",   key: "stage",      sortable: false },
+        { label: "Status",  key: "status",     sortable: false },
+        { label: "Updated", key: "updated_at", sortable: false },
+      ],
       // Click-through to the Workspace with the project rid pinned —
       // same pattern as charts above so the rail tab acts as a
       // launchpad into the working surface.

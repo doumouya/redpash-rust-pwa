@@ -56,7 +56,18 @@ struct ListQuery {
     #[serde(default)] q:        Option<String>,
     #[serde(default)] page:     Option<u32>,
     #[serde(default)] size:     Option<u32>,
+    /// Click-to-sort header support. Validated against SORTABLE_CASES;
+    /// bad values fall back to `updated_at`. dir → "asc"|"desc" (default
+    /// "desc"). Same shape as AdminQuery.
+    #[serde(default)] sort:     Option<String>,
+    #[serde(default)] dir:      Option<String>,
 }
+
+/// Wire-keys the Home Cases tab can pass via ?sort=. Mirrors the
+/// LIST_VIEWS.cases column spec on the frontend.
+const SORTABLE_CASES: &[&str] = &[
+    "title", "type", "status", "priority", "assignee_display_name", "updated_at",
+];
 
 #[derive(Serialize)]
 struct CaseList {
@@ -100,12 +111,27 @@ async fn list(
     let project  = trim(q.project);
     let qtext    = trim(q.q);
 
+    let (sort_key, sort_dir) = super::admin::sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_CASES, "updated_at",
+    );
+    let sort_col = match sort_key.as_str() {
+        "title"                 => "c.title",
+        "type"                  => "c.type",
+        "status"                => "c.status",
+        "priority"              => "c.priority",
+        // Assignee sorts by hydrated display_name (NULL when unassigned;
+        // NULLS LAST in the SQL keeps unassigned cases at the tail).
+        "assignee_display_name" => "a.display_name",
+        _                       => "c.updated_at",
+    };
+
     let items = db::list_cases(
         &state.db,
         status.as_deref(),
         assignee.as_deref(),
         project.as_deref(),
         qtext.as_deref(),
+        sort_col, sort_dir,
         size as i64, offset,
     ).await?;
 

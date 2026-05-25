@@ -2110,12 +2110,15 @@ const CASE_USER_JOINS: &str =
 /// filter when None (the `$n::text IS NULL OR …` idiom). LEFT JOINs
 /// users so reporter_display_name + assignee_display_name come back
 /// hydrated — saves the FE a per-row N+1 user-lookup.
+#[allow(clippy::too_many_arguments)]
 pub async fn list_cases(
     pool:        &PgPool,
     status:      Option<&str>,
     assignee_id: Option<&str>,
     project_id:  Option<&str>,
     q:           Option<&str>,
+    sort_col:    &str,   // sourced from SORTABLE_CASES allowlist — safe to splice
+    sort_dir:    &str,   // "ASC" | "DESC" — sourced from sort_clause
     limit:       i64,
     offset:      i64,
 ) -> sqlx::Result<Vec<Case>> {
@@ -2126,7 +2129,7 @@ pub async fn list_cases(
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
-         ORDER BY c.updated_at DESC
+         ORDER BY {sort_col} {sort_dir} NULLS LAST
          LIMIT $5 OFFSET $6"
     ))
     .bind(status)
