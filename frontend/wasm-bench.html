@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WASM Phase C bench harness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Phase C bench page. Standalone — does NOT go through the SPA router.
+  Lives outside `partials/` because the router-loaded shell isn't what
+  we want here; we want raw access to the wasm engine + the demo
+  endpoint with no auth, topbar, or theme machinery.
+
+  Run:
+    1. cargo run -p api          (serves /api/demo/parse + /wasm/*)
+    2. python3 tools/wasm-bench/generate.py  (one-shot corpus)
+    3. open http://localhost:8080/wasm-bench.html
+
+  Source of truth for the deliverable: docs/internal/architecture/
+  roadmap-webassembly.md §5 Phase C (the perf measurement).
+-->
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 920px;
+         margin: 24px auto; padding: 0 16px; color: #1a1a1a; }
+  h1   { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #666; margin-bottom: 24px; }
+  .drop { border: 2px dashed #bbb; border-radius: 8px; padding: 32px;
+          text-align: center; background: #f8f8f8; cursor: pointer;
+          margin-bottom: 16px; }
+  .drop.over { border-color: #4a8; background: #f0fbf6; }
+  .ctl  { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .ctl label { color: #444; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+  th, td { border-bottom: 1px solid #eee; padding: 8px 12px;
+           text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { background: #fafafa; font-weight: 600; }
+  .num  { font-variant-numeric: tabular-nums; }
+  .ok   { color: #270; }
+  .err  { color: #a33; }
+  pre   { background: #fafafa; padding: 12px; border-radius: 6px;
+          font-size: 12px; max-height: 320px; overflow: auto; }
+  button { font: inherit; padding: 6px 14px; border-radius: 6px;
+           border: 1px solid #bbb; background: #fff; cursor: pointer; }
+  button:hover { background: #f4f4f4; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  input[type=number] { width: 4em; padding: 4px; }
+</style>
+</head>
+<body>
+
+<h1>WASM Phase C bench harness</h1>
+<p class="sub">
+  Measures parse-on-wasm vs server round-trip on a CSV.
+  See <code>docs/internal/architecture/roadmap-webassembly.md §5 Phase C</code>
+  for the deliverable contract.
+</p>
+
+<div id="drop" class="drop">
+  <strong>Drop a CSV here</strong> or
+  <button id="picker-btn">choose a file</button><br>
+  <small>Generate the corpus with <code>python3 tools/wasm-bench/generate.py</code>
+         — files land in <code>tools/wasm-bench/corpus/</code></small>
+  <input id="picker" type="file" accept=".csv,text/csv" hidden>
+</div>
+
+<div class="ctl">
+  <label>Iterations <input id="iters" type="number" min="1" max="20" value="3"></label>
+  <span id="status"></span>
+</div>
+
+<table id="results" hidden>
+  <thead>
+    <tr>
+      <th>Lane</th>
+      <th>Iter</th>
+      <th>Parse (ms)</th>
+      <th>Rows</th>
+      <th>Cols</th>
+      <th>Score</th>
+      <th>Empty %</th>
+    </tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<details id="payload-wrap" hidden>
+  <summary>Raw wasm response (last iter)</summary>
+  <pre id="payload"></pre>
+</details>
+
+<script type="module">
+import { getEngine } from "/scripts/wasm-engine.js";
+
+const drop   = document.getElementById("drop");
+const picker = document.getElementById("picker");
+const status = document.getElementById("status");
+const table  = document.getElementById("results");
+const rowsEl = document.getElementById("rows");
+const itersEl = document.getElementById("iters");
+const payload = document.getElementById("payload");
+const payloadWrap = document.getElementById("payload-wrap");
+
+document.getElementById("picker-btn")
+        .addEventListener("click", () => picker.click());
+picker.addEventListener("change", e => run(e.target.files[0]));
+
+// Drag-drop wiring.
+["dragenter", "dragover"].forEach(evt =>
+  drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(evt =>
+  drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => {
+  const f = e.dataTransfer?.files?.[0];
+  if (f) run(f);
+});
+
+async function run(file) {
+  if (!file) return;
+  rowsEl.innerHTML = "";
+  table.hidden = true;
+  payloadWrap.hidden = true;
+
+  const n = Math.max(1, Math.min(20, parseInt(itersEl.value, 10) || 3));
+  const sizeMb = (file.size / 1024 / 1024).toFixed(2);
+  status.textContent = `${file.name} · ${sizeMb} MB · ${n} iters per lane…`;
+
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+
+  // WASM lane — cold load on first iter, warm after.
+  status.textContent += " · loading wasm…";
+  const engine = await getEngine();
+  status.textContent = status.textContent.replace(" · loading wasm…", "");
+
+  table.hidden = false;
+  let lastWasmJson = null;
+
+  for (let i = 1; i <= n; i++) {
+    const t0 = performance.now();
+    let res, ok = true, errMsg = "";
+    try {
+      res = engine.parse_csv(bytes);
+      lastWasmJson = res;
+    } catch (err) {
+      ok = false;
+      errMsg = err?.toString() || "unknown";
+    }
+    const ms = performance.now() - t0;
+    appendRow("wasm", i, ms, ok ? JSON.parse(res) : null, errMsg);
+  }
+
+  // Server lane — POST raw bytes to /api/demo/parse. Demo endpoint
+  // currently caps at 4 MiB; larger files will 413 — that's a real
+  // datapoint, not a bug.
+  for (let i = 1; i <= n; i++) {
+    const t0 = performance.now();
+    let payload = null, ok = true, errMsg = "";
+    try {
+      const r = await fetch("/api/demo/parse", {
+        method: "POST",
+        headers: { "content-type": "text/csv" },
+        body: bytes,
+      });
+      if (!r.ok) {
+        ok = false;
+        errMsg = `HTTP ${r.status}`;
+      } else {
+        payload = await r.json();
+      }
+    } catch (err) {
+      ok = false;
+      errMsg = err?.toString() || "unknown";
+    }
+    const ms = performance.now() - t0;
+    appendRow("server", i, ms, payload, errMsg);
+  }
+
+  status.textContent = `${file.name} · ${sizeMb} MB · done.`;
+
+  if (lastWasmJson) {
+    payload.textContent = lastWasmJson;
+    payloadWrap.hidden = false;
+  }
+}
+
+function appendRow(lane, iter, ms, body, errMsg) {
+  const tr = document.createElement("tr");
+  const cells = [
+    lane,
+    String(iter),
+    ms.toFixed(1),
+    body?.rows ?? "—",
+    body?.columns ?? "—",
+    body?.score?.toFixed?.(1) ?? "—",
+    body?.empty_pct?.toFixed?.(1) ?? "—",
+  ];
+  cells.forEach((c, i) => {
+    const td = document.createElement("td");
+    if (i > 1) td.className = "num";
+    td.textContent = c;
+    tr.appendChild(td);
+  });
+  if (errMsg) {
+    const td = document.createElement("td");
+    td.colSpan = cells.length;
+    td.className = "err";
+    td.textContent = "  " + errMsg;
+    tr.appendChild(td);
+  }
+  rowsEl.appendChild(tr);
+}
+</script>
+</body>
+</html>

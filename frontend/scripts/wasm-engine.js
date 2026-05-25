@@ -1,14 +1,14 @@
 // Lazy loader for the `data` crate's wasm build.
 //
-// The wasm bundle (~3.3 MB gzipped over-the-wire) lazy-loads only when
-// `getEngine()` is first awaited — page-cold visitors pay 0 bytes. The
-// browser stream-compiles the .wasm, so engine ops become callable
-// before the download finishes.
+// The wasm bundle (~3.46 MB gzipped over-the-wire) lazy-loads only
+// when `getEngine()` is first awaited — page-cold visitors pay 0
+// bytes. The browser stream-compiles the .wasm, so engine ops become
+// callable before the download finishes.
 //
-// Source of truth: backend/crates/data/src/wasm.rs (the four wrappers
-// — apply_filter, apply_sort, auto_clean, step_preview).
+// Source of truth: backend/crates/data/src/wasm.rs (five wrappers
+// — apply_filter, apply_sort, auto_clean, step_preview, parse_csv).
 // Regenerate after a data-crate change: `sh tools/build-wasm.sh`.
-// Architecture: docs/internal/roadmap-webassembly.md §5 Phase B.
+// Architecture: docs/internal/roadmap-webassembly.md §5 Phase B + C.
 
 /** Demo upload cap. Files larger than this go through the sign-up CTA
  *  instead of loading the wasm engine. 5 MB — generous for "try it",
@@ -32,6 +32,7 @@ export async function getEngine() {
       apply_sort:    mod.apply_sort,
       auto_clean:    mod.auto_clean,
       step_preview:  mod.step_preview,
+      parse_csv:     mod.parse_csv,
     };
   })();
   return _enginePromise;
