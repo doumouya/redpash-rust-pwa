@@ -1258,7 +1258,9 @@ export default function home(app, { session: _session }) {
     // Toolbar handlers — only wired when spec.toolbar is declared.
     if (spec.toolbar) {
       // Search — debounced so we don't fire on every keystroke. 200ms
-      // matches the topbar omnisearch dropdown's debounce.
+      // matches the topbar omnisearch dropdown's debounce. Logged to
+      // the session action log so the history dropdown shows what the
+      // user searched for (Em 2026-05-25: "lol we forgot search").
       const searchEl = view.querySelector("#rp-list-toolbar-search");
       if (searchEl) {
         let timer = null;
@@ -1270,6 +1272,8 @@ export default function home(app, { session: _session }) {
           timer = setTimeout(() => {
             listPage = 1;
             fetchList(spec, chipState);
+            if (q) logAction('Searched "' + q + '"');
+            else    logAction("Cleared search");
           }, 200);
         });
       }
@@ -1500,6 +1504,9 @@ export default function home(app, { session: _session }) {
         paintSortHeaders();
         listPage = 1;
         fetchList(spec, chipState);
+        logAction(listSort
+          ? "Sorted by " + listSort.col + " " + listSort.dir
+          : "Cleared sort");
       });
 
       // Apply visual indicator to the active sort header. Idempotent —
