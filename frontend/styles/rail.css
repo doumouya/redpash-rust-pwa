@@ -7,12 +7,13 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--rp-glass);
-  -webkit-backdrop-filter: blur(0.625rem);
-  backdrop-filter: blur(0.625rem);
-  /* Rail + main body separate by the rpHomeMain surface
-     contrast + the rounded top-left corner — no hairline
-     needed at the rail's right edge (Em 2026-05-25). */
+  /* Solid page-bg fill (= --rp-bg → #eff1f5 light / #11111b dark).
+     Same pattern as the topbar: rail merges into the page bg, the
+     rpHomeMain surface card holds the visual weight. Glass +
+     backdrop-filter dropped (no-op over a fully opaque fill).
+     Rail + main separate by the surface contrast + the rounded
+     top-left corner (no hairline). */
+  background: var(--rp-bg);
   transition: width 0.18s var(--rp-ease);
 }
 .rt-nav.compact { width: 3.75rem; }

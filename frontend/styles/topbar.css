@@ -11,12 +11,13 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0 0.875rem;
-  background: var(--rp-glass);
-  -webkit-backdrop-filter: blur(1rem) saturate(1.5);
-  backdrop-filter: blur(1rem) saturate(1.5);
-  /* Topbar + body separate by the glass blur + the rpHomeMain
-     surface contrast underneath — no hairline needed under the
-     topbar's bottom edge (Em 2026-05-25). */
+  /* Solid page-bg fill (= --rp-bg → #eff1f5 light / #11111b dark).
+     Per Em's ECharts theme-builder reference: the topbar + rail
+     merge into the page background, leaving the rpHomeMain
+     surface card as the only standout. Glass + backdrop-filter
+     dropped — they did the previous "floating chrome" look but
+     are no-ops over a fully opaque fill, so removed for clarity. */
+  background: var(--rp-bg);
 }
 /* The topbar wraps a flyout dropdown (omnisearch). Without an
    explicit z-index, later-in-DOM siblings (rail / shell-body /
