@@ -595,10 +595,14 @@ export default function cases(app, { session }) {
   function syncComposeState() {
     if (!commentInput) return;
     // Autosize: reset height to read scrollHeight accurately,
-    // then set to the natural content height (CSS max-height
-    // caps the growth so the textarea can't eat the panel).
+    // then set to the natural content height. scrollHeight is
+    // a computed pixel value; convert to rem so the inline
+    // style honors the relative-units principle
+    // (docs/frontend/css-units.md) and scales with root font-size.
+    // CSS max-height: 18rem caps actual rendered growth.
     commentInput.style.height = "auto";
-    commentInput.style.height = commentInput.scrollHeight + "px";
+    const rootFs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    commentInput.style.height = (commentInput.scrollHeight / rootFs) + "rem";
     const hasBody = commentInput.value.trim().length > 0;
     if (commentSend) commentSend.disabled = !hasBody;
     if (commentError && !commentError.hidden) {
