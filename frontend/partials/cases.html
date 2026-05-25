@@ -162,6 +162,9 @@
             <button type="button" data-tab="activity" title="Activity feed (events)">
               <i class="bi bi-clock-history"></i> Activity
             </button>
+            <button type="button" data-tab="details" title="Case details — full reference card">
+              <i class="bi bi-info-circle"></i> Case details
+            </button>
           </nav>
 
           <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
@@ -197,6 +200,17 @@
             <div class="rp-cases-activity-list" id="rp-cases-activity-list">
               <!-- JS renders activity-feed events (case_* kinds) -->
             </div>
+          </section>
+
+          <section class="rp-cases-detail-tab" data-tab="details" id="rp-cases-details-tab" hidden>
+            <!-- Definition-list reference card — all hydrated Case
+                 fields in one read-only view. Mirrors the inline
+                 controls + info row above but expanded (full
+                 RIDs, full timestamps, error_message, category,
+                 etc.) for the "copy / print / audit" use case. -->
+            <dl class="rp-cases-details-dl" id="rp-cases-details-dl">
+              <!-- JS paint fills this. -->
+            </dl>
           </section>
         </div>
       </aside>

@@ -525,6 +525,7 @@ export default function cases(app, { session }) {
   const commentForm     = app.querySelector("#rp-cases-comment-form");
   const commentInput    = app.querySelector("#rp-cases-comment-input");
   const activityList    = app.querySelector("#rp-cases-activity-list");
+  const detailsDl       = app.querySelector("#rp-cases-details-dl");
   const sideStatus   = app.querySelector("#rp-cases-side-status");
   const sidePriority = app.querySelector("#rp-cases-side-priority");
   const sideType     = app.querySelector("#rp-cases-side-type");
@@ -761,6 +762,42 @@ export default function cases(app, { session }) {
         : '<p class="rp-cases-empty">No comments yet. Be the first.</p>';
     }
     renderActivityList(activity);
+    renderDetailsDl(c);
+  }
+
+  // Case details tab — full reference card. Renders every hydrated
+  // field as a definition-list row. Mirrors what the inline meta
+  // strip + info row carry, expanded (full RIDs, ISO timestamps,
+  // category, error_message) for the copy / print / audit case.
+  function renderDetailsDl(c) {
+    if (!detailsDl) return;
+    const rows = [];
+    const add = (label, value) => {
+      if (value === null || value === undefined || value === "") return;
+      rows.push(
+        '<dt>' + esc(label) + '</dt>'
+        + '<dd>' + value + '</dd>'              // value pre-escaped or HTML by caller
+      );
+    };
+    add("Case ID",     '<code>' + esc(c.redpash_id || "—") + '</code>');
+    add("Title",       esc(c.title || "(untitled)"));
+    add("Type",        esc(TYPE_LABEL[c.type] || c.type || "—"));
+    add("Status",      esc(STATUS_LABEL[c.status] || c.status || "—"));
+    add("Priority",    esc(PRIORITY_LABEL[c.priority] || c.priority || "—"));
+    if (c.category_id) add("Category", '<code>' + esc(c.category_id) + '</code>');
+    add("Reporter",    c.reporter_id ? userBadgeHTML(c.reporter_id, c.reporter_display_name) : "—");
+    add("Assignee",    c.assignee_id ? userBadgeHTML(c.assignee_id, c.assignee_display_name) : '<span class="rp-cases-side-unassigned">— unassigned —</span>');
+    if (c.project_id)  add("Project",  '<code>' + esc(c.project_id) + '</code>');
+    if (c.company_id)  add("Company",  '<code>' + esc(c.company_id) + '</code>');
+    add("Created",     esc(c.created_at || "—"));
+    add("Updated",     esc(c.updated_at || "—"));
+    if (c.description) {
+      add("Description", '<pre class="rp-cases-details-pre">' + esc(c.description) + '</pre>');
+    }
+    if (c.error_message) {
+      add("Error",     '<pre class="rp-cases-details-pre rp-cases-details-error">' + esc(c.error_message) + '</pre>');
+    }
+    detailsDl.innerHTML = rows.join("");
   }
 
   // Verb-based labels for the primary advance button. Reads as a
