@@ -159,14 +159,10 @@
           <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
             <!-- Filter pills cap the firehose: All / Comments /
                  Status / Assignment / Edits — picks a case_* kind
-                 group and re-renders the list. -->
-            <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter">
-              <button type="button" class="rp-chip is-active" data-activity-filter="all">All</button>
-              <button type="button" class="rp-chip" data-activity-filter="comments">Comments</button>
-              <button type="button" class="rp-chip" data-activity-filter="status">Status</button>
-              <button type="button" class="rp-chip" data-activity-filter="assignment">Assignment</button>
-              <button type="button" class="rp-chip" data-activity-filter="edits">Edits</button>
-            </div>
+                 group and re-renders the list. Rendered by JS from
+                 ACTIVITY_PILLS (cases.js) so the predicate map and
+                 the pills stay single-sourced. -->
+            <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter"></div>
             <div class="rp-cases-activity-list" id="rp-cases-activity-list">
               <!-- JS renders activity-feed events (case_* kinds) -->
             </div>

@@ -340,6 +340,11 @@ export default function cases(app, { session }) {
     const assignee = c.assignee_display_name || c.assignee_id || "—";
     const age = c.updated_at ? fmtAge(c.updated_at) : "";
     const href = "#/cases?id=" + encodeURIComponent(rid);
+    // Tooltip names the destination ("→ Send for review") instead of
+    // the generic "Advance status" — same verb-based labels the detail
+    // page's primary advance button uses, so the user sees where the
+    // click is taking them. Done cycles back to backlog → "Reopen".
+    const cycleLabel = ADVANCE_LABEL[c.status || "backlog"] || "Advance status";
     return ''
       + '<a class="rp-cases-card" href="' + esc(href) + '" '
       +    'data-rid="' + esc(rid) + '" '
@@ -352,7 +357,7 @@ export default function cases(app, { session }) {
       +   '<div class="rp-cases-card-foot">'
       +     '<span class="rp-cases-card-assignee">' + esc(assignee) + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'
-      +     '<button class="rt-icon-btn rt-icon-btn--sm rp-cases-card-cycle" type="button" title="Advance status">'
+      +     '<button class="rt-icon-btn rt-icon-btn--sm rp-cases-card-cycle" type="button" title="' + esc(cycleLabel) + '">'
       +       '<i class="bi bi-chevron-right"></i>'
       +     '</button>'
       +   '</div>'
@@ -793,7 +798,7 @@ export default function cases(app, { session }) {
     if (commentsList) {
       commentsList.innerHTML = comments.length
         ? commentsListHTML(comments)
-        : '<p class="rt-empty rp-cases-empty">No comments yet. Be the first.</p>';
+        : '<p class="rt-empty rp-cases-empty">No comments yet.</p>';
     }
     renderActivityList(activity);
     renderDetailsDl(c);
@@ -887,22 +892,33 @@ export default function cases(app, { session }) {
     return USER_BADGE_COLORS[Math.abs(h) % USER_BADGE_COLORS.length];
   }
 
-  // Activity feed filter — maps the pill choice to the case_* kinds
-  // that pass through. Re-renders from the memoized last payload so
-  // changing the filter doesn't re-fetch.
-  const ACTIVITY_FILTERS = {
-    all:        () => true,
-    comments:   (e) => e.kind === "case_comment_post",
-    status:     (e) => e.kind === "case_status_change",
-    assignment: (e) => e.kind === "case_assignee_change",
-    edits:      (e) => e.kind === "case_metadata_change"
-                    || e.kind === "case_priority_change"
-                    || e.kind === "case_type_change",
-  };
+  // Activity feed filter — pill metadata (label + kind predicate)
+  // single-sourced here. The partial's `#rp-cases-activity-filter` is
+  // an empty host; paintActivityFilter() renders the pills from this
+  // array so adding a category is a one-line edit instead of HTML+JS.
+  const ACTIVITY_PILLS = [
+    { key: "all",        label: "All",        pred: () => true },
+    { key: "comments",   label: "Comments",   pred: (e) => e.kind === "case_comment_post" },
+    { key: "status",     label: "Status",     pred: (e) => e.kind === "case_status_change" },
+    { key: "assignment", label: "Assignment", pred: (e) => e.kind === "case_assignee_change" },
+    { key: "edits",      label: "Edits",      pred: (e) => e.kind === "case_metadata_change"
+                                                        || e.kind === "case_priority_change"
+                                                        || e.kind === "case_type_change" },
+  ];
+  function paintActivityFilter() {
+    if (!activityFilterEl) return;
+    activityFilterEl.innerHTML = ACTIVITY_PILLS.map((p) =>
+      '<button type="button" class="rp-chip'
+      + (p.key === activityFilter ? ' is-active' : '')
+      + '" data-activity-filter="' + esc(p.key) + '">'
+      + esc(p.label)
+      + '</button>'
+    ).join("");
+  }
   function renderActivityList(activity) {
     if (!activityList) return;
-    const pred = ACTIVITY_FILTERS[activityFilter] || ACTIVITY_FILTERS.all;
-    const filtered = activity.filter(pred);
+    const pill = ACTIVITY_PILLS.find((p) => p.key === activityFilter) || ACTIVITY_PILLS[0];
+    const filtered = activity.filter(pill.pred);
     if (!filtered.length) {
       const msg = activityFilter === "all"
         ? "No activity yet."
@@ -1067,10 +1083,12 @@ export default function cases(app, { session }) {
   }
 
   // ── boot ─────────────────────────────────────────────────────
-  // First show the right surface (board vs detail), then fetch the
-  // case list — fetch populates the rail and re-paints the board
-  // once the response lands. Detail view fires its own /cases/:rid
-  // fetch independently of the list call.
+  // First show the right surface (board vs detail), render the
+  // static activity-filter pills, then fetch the case list — fetch
+  // populates the rail and re-paints the board once the response
+  // lands. Detail view fires its own /cases/:rid fetch independently
+  // of the list call.
   renderRoute();
+  paintActivityFilter();
   refreshCases();
 }
