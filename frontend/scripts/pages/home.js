@@ -738,10 +738,14 @@ export default function home(app, { session: _session }) {
     // ── select / delete mode state ───────────────────────────────
     // Reset on each renderListBody so tab switches don't carry it.
     // `selectMode` toggles the checkbox column + selection-chip
-    // visibility; `selected` is the live set of picked rids; the
-    // delete-mode toolbar button enables only when selected.size > 0.
+    // visibility; `selected` is the live set of picked rids.
+    // `deleteMode` is the single-row-click-to-delete pattern (matches
+    // Workspace's `.rt-table.mode-delete` — Em 2026-05-25: "delete
+    // alone is not working because rows are clickable here"). The two
+    // modes are mutually exclusive — entering one exits the other.
     // Edit-mode deferred — per-cell editor lands as a separate slice.
     let selectMode = false;
+    let deleteMode = false;
     const selected = new Set();
 
     // Decorate the tbody with a leading checkbox column when select
@@ -780,19 +784,56 @@ export default function home(app, { session: _session }) {
       const delBtn = view.querySelector('.rt-mode[data-mode="delete"]');
       if (chip)  chip.hidden = !selectMode;
       if (count) count.textContent = selected.size;
-      // Delete button enables only with a non-empty selection.
+      // Delete button stays clickable in both shapes: bulk-delete when
+      // selection is non-empty, otherwise toggles delete-mode (click-
+      // row-to-delete). Only disabled when selectMode is on AND nothing
+      // is selected — then the button has nothing to act on.
       if (delBtn) {
-        if (selectMode && selected.size > 0) delBtn.removeAttribute("disabled");
-        else                                 delBtn.setAttribute("disabled", "");
+        if (selectMode && selected.size === 0) delBtn.setAttribute("disabled", "");
+        else                                    delBtn.removeAttribute("disabled");
+        // Armed tint when the bulk-delete action is ready to fire.
+        delBtn.classList.toggle("armed", selectMode && selected.size > 0);
       }
     }
 
     function toggleSelectMode() {
       selectMode = !selectMode;
       selected.clear();
+      // Mutually exclusive with deleteMode — exit it if active.
+      if (selectMode && deleteMode) toggleDeleteMode(false);
       view.querySelector('.rt-mode[data-mode="select"]')?.classList.toggle("is-active", selectMode);
       decorateSelectMode();
       updateSelChip();
+    }
+
+    // Single-row click-to-delete mode. Adds .mode-delete on the table
+    // so the CSS hover (red tint via table.css) lights up; the row
+    // click delegate below short-circuits navigation when active.
+    function toggleDeleteMode(force) {
+      deleteMode = force !== undefined ? !!force : !deleteMode;
+      // Mutually exclusive with selectMode.
+      if (deleteMode && selectMode) {
+        selectMode = false;
+        selected.clear();
+        view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+        decorateSelectMode();
+      }
+      view.querySelector(".rt-table")?.classList.toggle("mode-delete", deleteMode);
+      view.querySelector('.rt-mode[data-mode="delete"]')?.classList.toggle("is-active", deleteMode);
+      updateSelChip();
+    }
+
+    async function deleteOne(rid) {
+      const noun = spec.itemNoun || "item";
+      if (!confirm(`Delete this ${noun}? This cannot be undone.`)) return;
+      const deleteBase = spec.deleteEndpoint || spec.endpoint;
+      try {
+        await api.delete(deleteBase + "/" + encodeURIComponent(rid));
+        fetchList(spec, chipState);
+      } catch (err) {
+        console.warn("[home] single-delete failed:", err);
+        alert("Delete failed.");
+      }
     }
 
     async function bulkDelete() {
@@ -1024,14 +1065,23 @@ export default function home(app, { session: _session }) {
     if (spec.modes?.delete) {
       const btn = view.querySelector('.rt-mode[data-mode="delete"]');
       if (btn) {
-        // Stays disabled until the selection is non-empty (updated
-        // by updateSelChip every time the set changes).
-        btn.title = "Delete selected";
-        btn.addEventListener("click", bulkDelete);
+        // Two shapes on click:
+        //   - select-mode + selection non-empty → bulkDelete the set
+        //   - otherwise                         → toggle deleteMode
+        //                                          (click rows one at
+        //                                           a time to delete)
+        btn.title = "Delete (selected) or click-row-to-delete";
+        btn.addEventListener("click", () => {
+          if (selectMode && selected.size > 0) bulkDelete();
+          else                                  toggleDeleteMode();
+        });
       }
     }
 
-    // Row click — in select mode toggles selection; otherwise navigates.
+    // Row click — three branches:
+    //   selectMode → toggle the row's checkbox
+    //   deleteMode → confirm + DELETE this single row
+    //   otherwise  → navigate via data-href
     // Delegated on the tbody so the binding survives every fetchList
     // re-render (tbody.innerHTML is rewritten wholesale on each fetch).
     view.querySelector("#rp-home-list-tbody")?.addEventListener("click", (e) => {
@@ -1045,6 +1095,12 @@ export default function home(app, { session: _session }) {
         const cb = tr.querySelector(".rp-list-sel input");
         if (cb) cb.checked = selected.has(rid);
         updateSelChip();
+        return;
+      }
+      if (deleteMode) {
+        const tr = e.target.closest("tr[data-rid]");
+        if (!tr) return;
+        deleteOne(tr.dataset.rid);
         return;
       }
       const tr = e.target.closest("tr[data-href]");
