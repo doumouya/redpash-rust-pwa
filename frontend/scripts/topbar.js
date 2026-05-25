@@ -31,13 +31,30 @@ const NAV = [
 // life, not once per topbar mount.
 let _ctrlKBound = false;
 
+// Time-of-day salutation + first_name (display_name fallback). Sits in
+// the brand-name slot of the topbar so every page carries a personal
+// "Good morning, …" instead of a static "RedPash" wordmark. Falls back
+// to "RedPash" when the session isn't resolved yet (boot path before
+// /api/me lands) so the brand mark never renders empty.
+function greetingFor(session) {
+  const name = (session?.first_name || session?.display_name || "").trim();
+  if (!name) return "RedPash";
+  const hour = new Date().getHours();
+  const tod  = hour < 5  ? "Good night"
+             : hour < 12 ? "Good morning"
+             : hour < 18 ? "Good afternoon"
+             : hour < 22 ? "Good evening"
+             :             "Good night";
+  return esc(tod + ", " + name + ".");
+}
+
 export function mountTopbar(host, { active = "", session = null } = {}) {
   if (!host) return;
   host.className = "rp-topbar";
   host.innerHTML =
       '<a class="rp-brand" href="#/home" title="Home">'
     +   '<span class="rp-brand-mark"></span>'
-    +   '<span class="rp-brand-name">RedPash</span>'
+    +   '<span class="rp-brand-name">' + greetingFor(session) + '</span>'
     + '</a>'
     + '<div class="rp-omni">'
     +   '<i class="bi bi-search"></i>'
