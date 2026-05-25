@@ -254,6 +254,8 @@ export default function home(app, { session: _session }) {
       // are real on this endpoint, unlike the projects + admin
       // placeholders elsewhere in this file.
       endpoint: "/cases",
+      itemNoun: "case",
+      itemNounPlural: "cases",
       // No dedicated /cases/stats — charts derive from the list
       // payload, same pattern as the Projects tab.
       statsEndpoint: "/cases",
@@ -329,6 +331,15 @@ export default function home(app, { session: _session }) {
     files: {
       title: "Files",
       endpoint: "/admin/files",
+      // DELETE goes to /api/files/:rid (the file ownership endpoint),
+      // not /admin/files. Decoupled so the bulk-delete handler in
+      // renderListBody can hit the right route.
+      deleteEndpoint: "/files",
+      itemNoun: "file",
+      itemNounPlural: "files",
+      // Wired modes: select toggles the checkbox column, delete fires
+      // bulk DELETE /files/:rid against the selection.
+      modes: { select: true, delete: true },
       statsEndpoint: "/admin/files/stats",
       compositeStrip: true,   // 3 charts → first 2 flank, 3rd renders below
       // Functional — /admin/files's FilesQuery already accepts ?stage=
@@ -363,6 +374,7 @@ export default function home(app, { session: _session }) {
       // history to model).
       toolbar: {
         searchPlaceholder: "Search filename, project…",
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // Sortable columns map to /admin/files's SORTABLE_FILES allowlist
@@ -378,7 +390,7 @@ export default function home(app, { session: _session }) {
         { label: "Updated",  key: "updated_at", sortable: true  },
       ],
       row: (f) =>
-        '<tr>'
+        '<tr data-rid="' + esc(f.redpash_id || "") + '">'
         + '<td>' + esc(f.display_name || f.filename) + '</td>'
         + '<td>' + esc(f.project_name) + '</td>'
         + '<td><span class="rp-mon-method">' + esc(f.file_type) + '</span></td>'
@@ -390,6 +402,11 @@ export default function home(app, { session: _session }) {
     charts: {
       title: "Charts",
       endpoint: "/admin/charts",
+      // DELETE goes to /api/charts/:rid (the chart-specific endpoint).
+      deleteEndpoint: "/charts",
+      itemNoun: "chart",
+      itemNounPlural: "charts",
+      modes: { select: true, delete: true },
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // Visual placeholder — /admin/charts doesn't accept ?window= yet
       // (backend TODO). Mirrors the users tab's activity-window shape.
@@ -413,6 +430,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search chart name…",
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // Sortable wire-keys → SORTABLE_CHARTS allowlist (admin.rs).
@@ -429,6 +447,7 @@ export default function home(app, { session: _session }) {
       // the Designer opens directly on this chart.
       row: (c) =>
         '<tr class="rp-home-row--clickable"'
+        + ' data-rid="' + esc(c.redpash_id || "") + '"'
         + ' data-href="#/workspace?project=' + encodeURIComponent(c.project_redpash_id)
         + '&file=' + encodeURIComponent(c.redpash_id) + '">'
         + '<td>' + esc(c.display_name || c.filename) + '</td>'
@@ -439,6 +458,15 @@ export default function home(app, { session: _session }) {
     },
     projects: {
       title: "Projects",
+      // DELETE goes to /api/projects/:rid — same path as the list
+      // endpoint so deleteEndpoint defaults via spec.endpoint.
+      itemNoun: "project",
+      itemNounPlural: "projects",
+      // Note: the owner's DEFAULT project can't be deleted (backend
+      // returns 400 is_default). Promise.allSettled in bulkDelete
+      // handles the partial failure cleanly — non-default ones still
+      // get deleted, the default stays + the refetch shows reality.
+      modes: { select: true, delete: true },
       compositeStrip: true,   // 3 charts → first 2 flank, 3rd renders below
       // /api/projects today returns { items: [...] } (no Page<T>
       // wrapper, no pagination). fetchList falls back to `items` when
@@ -489,6 +517,7 @@ export default function home(app, { session: _session }) {
       ],
       toolbar: {
         searchPlaceholder: "Search project name…",
+        modes: { select: true, delete: true },
         refresh: true,
       },
       // No sortable wire-keys yet — /api/projects returns a bare
@@ -507,6 +536,7 @@ export default function home(app, { session: _session }) {
       // launchpad into the working surface.
       row: (p) =>
         '<tr class="rp-home-row--clickable"'
+        + ' data-rid="' + esc(p.redpash_id || "") + '"'
         + ' data-href="#/workspace?project=' + encodeURIComponent(p.redpash_id) + '">'
         + '<td>' + esc(p.name || "(untitled)") + '</td>'
         + '<td class="is-num">' + (p.file_count != null ? p.file_count : "—") + '</td>'
@@ -742,13 +772,18 @@ export default function home(app, { session: _session }) {
     async function bulkDelete() {
       if (!selected.size) return;
       const n = selected.size;
-      if (!confirm(`Delete ${n} ${n === 1 ? "case" : "cases"}? This cannot be undone.`)) return;
+      const noun = spec.itemNoun || "item";
+      const plural = spec.itemNounPlural || (noun + "s");
+      if (!confirm(`Delete ${n} ${n === 1 ? noun : plural}? This cannot be undone.`)) return;
       const rids = [...selected];
       // Fire all DELETEs in parallel — small N (selection is bounded
       // by page size, default 25). allSettled so partial failures
-      // don't block the refetch.
+      // don't block the refetch. `spec.deleteEndpoint` decouples the
+      // DELETE path from the list endpoint — Files/Charts list from
+      // /admin/* but delete via /files/:rid + /charts/:rid.
+      const deleteBase = spec.deleteEndpoint || spec.endpoint;
       const results = await Promise.allSettled(
-        rids.map((rid) => api.delete(spec.endpoint + "/" + encodeURIComponent(rid)))
+        rids.map((rid) => api.delete(deleteBase + "/" + encodeURIComponent(rid)))
       );
       const failed = results.filter((r) => r.status === "rejected");
       if (failed.length) {
