@@ -231,6 +231,12 @@ export default function home(app, { session: _session }) {
       // payload, same pattern as the Projects tab.
       statsEndpoint: "/cases",
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
+      // Edit / Select / Delete modes — Cases is the first Home tab
+      // to wire the toolbar mode buttons. `select` toggles a
+      // checkbox column + selection chip; `delete` bulk-removes the
+      // selected cases via DELETE /api/cases/:rid. `edit` stays
+      // disabled until the per-cell editor lands (separate slice).
+      modes: { select: true, delete: true },
       // Status filter is FUNCTIONAL — backend supports ?status= on
       // the list endpoint. Empty value (default "All") sends no
       // status param.
@@ -267,6 +273,7 @@ export default function home(app, { session: _session }) {
       // routing into Workspace).
       row: (c) =>
         '<tr class="rp-home-row--clickable"'
+        + ' data-rid="' + esc(c.redpash_id || "") + '"'
         + ' data-href="#/cases?id=' + encodeURIComponent(c.redpash_id) + '">'
         + '<td>' + esc(c.title || "(untitled)") + '</td>'
         + '<td><span class="rp-mon-method">' + esc(c.type || "task") + '</span></td>'
@@ -608,6 +615,88 @@ export default function home(app, { session: _session }) {
     const chipState = {};
     (spec.chipRows || []).forEach((cr) => { chipState[cr.name] = cr.default; });
 
+    // ── select / delete mode state ───────────────────────────────
+    // Reset on each renderListBody so tab switches don't carry it.
+    // `selectMode` toggles the checkbox column + selection-chip
+    // visibility; `selected` is the live set of picked rids; the
+    // delete-mode toolbar button enables only when selected.size > 0.
+    // Edit-mode deferred — per-cell editor lands as a separate slice.
+    let selectMode = false;
+    const selected = new Set();
+
+    // Decorate the tbody with a leading checkbox column when select
+    // mode is on. Called after every fetchList paint (since fetchList
+    // rewrites tbody.innerHTML wholesale) + after every mode toggle.
+    // Idempotent: a row that already has the .rp-list-sel cell is
+    // skipped. Reads rid from data-rid on each <tr>.
+    function decorateSelectMode() {
+      const tbody = view.querySelector("#rp-home-list-tbody");
+      if (!tbody) return;
+      const thead = view.querySelector(".rp-mon-table thead tr");
+      // Header checkbox column — strip first, re-add if selectMode.
+      thead?.querySelector(".rp-list-sel-th")?.remove();
+      tbody.querySelectorAll("td.rp-list-sel").forEach((td) => td.remove());
+      if (!selectMode) return;
+      if (thead) {
+        const th = document.createElement("th");
+        th.className = "rp-list-sel-th";
+        th.innerHTML = '<input type="checkbox" data-sel-all>';
+        thead.insertBefore(th, thead.firstChild);
+      }
+      tbody.querySelectorAll("tr[data-rid]").forEach((tr) => {
+        const rid = tr.dataset.rid;
+        const checked = selected.has(rid);
+        if (checked) tr.classList.add("is-selected");
+        const td = document.createElement("td");
+        td.className = "rp-list-sel";
+        td.innerHTML = '<input type="checkbox"' + (checked ? " checked" : "") + '>';
+        tr.insertBefore(td, tr.firstChild);
+      });
+    }
+
+    function updateSelChip() {
+      const chip   = view.querySelector("#rp-list-toolbar-sel-chip");
+      const count  = view.querySelector("#rp-list-toolbar-sel-count");
+      const delBtn = view.querySelector('.rt-mode[data-mode="delete"]');
+      if (chip)  chip.hidden = !selectMode;
+      if (count) count.textContent = selected.size;
+      // Delete button enables only with a non-empty selection.
+      if (delBtn) {
+        if (selectMode && selected.size > 0) delBtn.removeAttribute("disabled");
+        else                                 delBtn.setAttribute("disabled", "");
+      }
+    }
+
+    function toggleSelectMode() {
+      selectMode = !selectMode;
+      selected.clear();
+      view.querySelector('.rt-mode[data-mode="select"]')?.classList.toggle("is-active", selectMode);
+      decorateSelectMode();
+      updateSelChip();
+    }
+
+    async function bulkDelete() {
+      if (!selected.size) return;
+      const n = selected.size;
+      if (!confirm(`Delete ${n} ${n === 1 ? "case" : "cases"}? This cannot be undone.`)) return;
+      const rids = [...selected];
+      // Fire all DELETEs in parallel — small N (selection is bounded
+      // by page size, default 25). allSettled so partial failures
+      // don't block the refetch.
+      const results = await Promise.allSettled(
+        rids.map((rid) => api.delete(spec.endpoint + "/" + encodeURIComponent(rid)))
+      );
+      const failed = results.filter((r) => r.status === "rejected");
+      if (failed.length) {
+        console.warn("[home] bulk-delete: " + failed.length + " failed");
+      }
+      selected.clear();
+      selectMode = false;
+      view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+      updateSelChip();
+      fetchList(spec, chipState);
+    }
+
     const kpiTiles = [
       { label: "Total",      id: "rp-home-list-total" },
       { label: "On page",    id: "rp-home-list-shown" },
@@ -739,13 +828,68 @@ export default function home(app, { session: _session }) {
       }
     }
 
-    // Row click → navigate. Delegated on the table so the binding
-    // survives re-renders (every fetchList rewrites tbody.innerHTML).
+    // ── mode buttons: enable + wire for specs that opted in ─────
+    if (spec.modes?.select) {
+      const btn = view.querySelector('.rt-mode[data-mode="select"]');
+      if (btn) {
+        btn.removeAttribute("disabled");
+        btn.title = "Select mode (toggle)";
+        btn.addEventListener("click", toggleSelectMode);
+      }
+      // Header select-all checkbox — delegated `change` listener on
+      // the thead so it survives re-renders (decorateSelectMode
+      // strips + re-adds the cell on every refetch + mode toggle).
+      view.querySelector(".rp-mon-table thead")?.addEventListener("change", (e) => {
+        const cb = e.target.closest("input[data-sel-all]");
+        if (!cb || !selectMode) return;
+        const tbody = view.querySelector("#rp-home-list-tbody");
+        tbody?.querySelectorAll("tr[data-rid]").forEach((tr) => {
+          const rid = tr.dataset.rid;
+          if (cb.checked) selected.add(rid);
+          else            selected.delete(rid);
+          tr.classList.toggle("is-selected", cb.checked);
+          const rowCb = tr.querySelector(".rp-list-sel input");
+          if (rowCb) rowCb.checked = cb.checked;
+        });
+        updateSelChip();
+      });
+    }
+    if (spec.modes?.delete) {
+      const btn = view.querySelector('.rt-mode[data-mode="delete"]');
+      if (btn) {
+        // Stays disabled until the selection is non-empty (updated
+        // by updateSelChip every time the set changes).
+        btn.title = "Delete selected";
+        btn.addEventListener("click", bulkDelete);
+      }
+    }
+
+    // Row click — in select mode toggles selection; otherwise navigates.
+    // Delegated on the tbody so the binding survives every fetchList
+    // re-render (tbody.innerHTML is rewritten wholesale on each fetch).
     view.querySelector("#rp-home-list-tbody")?.addEventListener("click", (e) => {
+      if (selectMode) {
+        const tr = e.target.closest("tr[data-rid]");
+        if (!tr) return;
+        const rid = tr.dataset.rid;
+        if (selected.has(rid)) selected.delete(rid);
+        else                    selected.add(rid);
+        tr.classList.toggle("is-selected", selected.has(rid));
+        const cb = tr.querySelector(".rp-list-sel input");
+        if (cb) cb.checked = selected.has(rid);
+        updateSelChip();
+        return;
+      }
       const tr = e.target.closest("tr[data-href]");
       if (!tr) return;
       location.hash = tr.dataset.href.replace(/^#/, "");
     });
+
+    // Expose the decorate hook to fetchList so it re-paints checkboxes
+    // after each refetch. Stashed on the view element so fetchList can
+    // call it without a closure capture (it's defined module-scope
+    // outside the renderListBody closure).
+    view._decorateSelectMode = decorateSelectMode;
 
     fetchList(spec, chipState);
   }
@@ -790,6 +934,12 @@ export default function home(app, { session: _session }) {
         tbody.innerHTML = rows.length
           ? rows.map(spec.row).join("")
           : '<tr><td colspan="' + colCount + '">No rows.</td></tr>';
+      }
+      // Re-paint select-mode checkboxes if the active tab has them
+      // enabled. The hook is set up in renderListBody for specs that
+      // declare `spec.modes.select`; absent on other tabs (no-op).
+      if (typeof view._decorateSelectMode === "function") {
+        view._decorateSelectMode();
       }
       renderListPager();
     } catch (err) {
