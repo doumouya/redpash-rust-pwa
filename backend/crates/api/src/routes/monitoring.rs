@@ -383,6 +383,10 @@ struct RequestsQuery {
     /// from the stats endpoint.
     #[serde(default)] status: Option<i16>,
     #[serde(default)] method: Option<String>,
+    /// Free-text search across route + method + status (as text). ILIKE
+    /// substring match — feeds the toolbar search box on /monitoring/requests
+    /// (same shape as events / runs / findings / steps' ?q=).
+    #[serde(default)] q:      Option<String>,
 }
 
 async fn list_requests(
@@ -405,12 +409,17 @@ async fn list_requests(
             AND route NOT LIKE '/monitoring%'
             AND ($2::text  IS NULL OR route  ILIKE '%' || $2 || '%')
             AND ($3::int2  IS NULL OR status = $3)
-            AND ($4::text  IS NULL OR method = $4)",
+            AND ($4::text  IS NULL OR method = $4)
+            AND ($5::text  IS NULL OR (
+                  route        ILIKE '%' || $5 || '%' OR
+                  method       ILIKE '%' || $5 || '%' OR
+                  status::text ILIKE '%' || $5 || '%'))",
     )
     .bind(cutoff)
     .bind(q.route.as_deref())
     .bind(q.status)
     .bind(q.method.as_deref())
+    .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
@@ -422,13 +431,18 @@ async fn list_requests(
             AND ($2::text  IS NULL OR route  ILIKE '%' || $2 || '%')
             AND ($3::int2  IS NULL OR status = $3)
             AND ($4::text  IS NULL OR method = $4)
+            AND ($5::text  IS NULL OR (
+                  route        ILIKE '%' || $5 || '%' OR
+                  method       ILIKE '%' || $5 || '%' OR
+                  status::text ILIKE '%' || $5 || '%'))
           ORDER BY at DESC
-          LIMIT $5 OFFSET $6",
+          LIMIT $6 OFFSET $7",
     )
     .bind(cutoff)
     .bind(q.route.as_deref())
     .bind(q.status)
     .bind(q.method.as_deref())
+    .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)

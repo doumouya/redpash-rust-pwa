@@ -2,12 +2,12 @@
    Page-specific styles for /monitoring only. The rail-page shell
    (outer flex column, greeting, rail+body split, per-tab head, KPI
    strip) is shared with /home and lives in shell.css. The card
-   surface that hosts every panel here lives in card.css (.rt-card,
-   .rt-card-head, .rt-card-title, .rt-card-hint, .rt-card-endpoint,
-   .rt-card--panic, .rt-card.is-pending) — renamed from .rp-mon-panel
-   2026-05-25 per [[naming-consistency]]. This file owns only the
-   Monitoring-specific atoms: window chip, the side-by-side charts
-   row, modal chrome, page-content pills inside tables. */
+   surface used by the Optimization map + per-user activity panes
+   lives in card.css (.rt-card, .rt-card-head, .rt-card-title,
+   .rt-card-hint) — renamed from .rp-mon-panel 2026-05-25 per
+   [[naming-consistency]]. This file owns only the Monitoring-
+   specific atoms: modal chrome, page-content pills inside tables,
+   error-chain row expander. */
 
 /* #rpMonView IS the rt-surface, mirroring Home's #rpHomeView.
    Padding matches Home so the chip-row / composite / toolbar /
@@ -53,28 +53,6 @@
 .rp-mon-err-low  { color: var(--rp-ok); }
 .rp-mon-err-mid  { color: var(--rp-warn); }
 .rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
-
-/* two-column row that houses chart-card + ranked-table side-by-side
-   on wide viewports; wraps on narrow. Used on the Requests tab to
-   pair the status-code donut with the top-routes table. */
-.rp-mon-charts-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--rp-sp-4);
-  margin-bottom: var(--rp-sp-4);
-}
-.rp-mon-charts-row > .rt-card {
-  flex: 1 1 20rem;
-  min-width: 0;
-  margin-bottom: 0;
-}
-
-/* fixed-height ECharts mount — the donut + future time-series sit
-   inside this. Width inherits from the surrounding panel. */
-.rp-mon-chart {
-  width: 100%;
-  height: 15rem;
-}
 
 /* ── Composite strip — Monitoring's 5-cell version ───────────────
    Em 2026-05-25: "2 charts 20% each, 2 rows of 2 r-stats 10% width
@@ -201,12 +179,6 @@
   max-height: 22.5rem;
   overflow-y: auto;
 }
-
-/* M-3 panic pane styling (border + tinted background + accent
-   title icon + mono cells for stack frames) now lives on the
-   `.rt-card--panic` modifier in card.css. The pane is just an
-   instance of the .rt-card primitive with the --panic modifier;
-   no Monitoring-specific rules needed. */
 
 /* ── M-1: request-replay modal ──────────────────────────────────
    Fixed-position centered modal over the Monitoring page. Body

@@ -9,10 +9,9 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
-import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
-  headHTML, kpiStripHTML, chartsStripHTML, compositeStripHTML, listToolbarHTML,
+  headHTML, kpiStripHTML, compositeStripHTML, listToolbarHTML,
   windowChipsHTML as _windowChipsHTML,
   listPanel as _listPanel,
   setKpi as _setKpi,
@@ -25,7 +24,7 @@ import {
 // string by itself so the crossing audit doesn't mistake it for a call.
 const MON_TABS = [
   // ── REQUESTS ───────────────────────────────────────────────
-  { group: "REQUESTS", key: "requests", label: "Requests", icon: "bi-globe2",         endpoint: "/metrics",                wired: true },
+  { group: "REQUESTS", key: "requests", label: "Requests", icon: "bi-globe2",         endpoint: "/monitoring/requests",    wired: true },
   { group: "REQUESTS", key: "events",   label: "Events",   icon: "bi-envelope",       endpoint: "/monitoring/events",      wired: true },
   // ── AUDITS ─────────────────────────────────────────────────
   { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",          endpoint: "/monitoring/audit-runs",     wired: true },
@@ -166,6 +165,29 @@ export default function monitoring(app, { session }) {
         + '<td class="is-num">' + (f.severity != null ? f.severity : "—") + '</td>'
         + '</tr>',
     },
+    requests: {
+      title: "Requests",
+      endpoint: "/monitoring/requests",
+      useWindow: true,
+      // status-mix donut populated from /monitoring/requests/stats?window=…
+      // The lambda closes over `listWindow` (renderListBody scope) so it
+      // stays in sync with the active chip without per-call wiring.
+      statsEndpoint: () => "/monitoring/requests/stats?window="
+        + encodeURIComponent(listWindow),
+      charts: [
+        { id: "rp-mon-req-status", title: "By status", kind: "donut",
+          data: (s) => s?.status_mix || {} },
+      ],
+      columns: [
+        { label: "Time",    key: "at",          sortable: true  },
+        { label: "Method",  key: "method",      sortable: true  },
+        { label: "Status",  key: "status",      sortable: true  },
+        { label: "Route",   key: "route",       sortable: true  },
+        { label: "Latency", key: "duration_ms", sortable: true  },
+        { label: "ID",      key: "request_id",  sortable: false },
+      ],
+      row: requestRowHTML,
+    },
     steps: {
       title: "Steps",
       endpoint: "/admin/steps",
@@ -196,15 +218,6 @@ export default function monitoring(app, { session }) {
     },
   };
 
-  // Per-Requests-tab state for the donut + Recent requests drill-down.
-  // Window state lives in the active chip (read on demand). Declared
-  // up here — before activate() runs below — so the const isn't in
-  // TDZ when renderTabBody → renderRequestsBody → disposeRequestsCharts
-  // touches it on the first mount.
-  let rawPage = 1;
-  let rawTotalPages = 1;
-  let donutChart = null;  // ECharts instance — disposed on body rebuild
-
   // Honors the user's `rowsPerPageMonitoring` pref (set on /settings).
   // "all" maps to a large one-shot page so the same paginated path
   // stays in service. Read on each fetch so a mid-session pref change
@@ -216,6 +229,18 @@ export default function monitoring(app, { session }) {
     const n = parseInt(raw || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
+
+  // List-tab state — hoisted above activate() so renderListBody (called
+  // synchronously on first mount via activate → renderTabBody) can read +
+  // mutate them without tripping TDZ. Previously safe because the default
+  // tab landed on a non-list renderer; now Requests routes through
+  // renderListBody too, so these need to be live before activate fires.
+  let listPage   = 1;
+  let listTotalPages = 1;
+  let listTotal  = 0;     // total row count for the pager rows-info readout
+  let listShown  = 0;     // rows actually on the current page
+  let listWindow = DEFAULT_WINDOW;
+  let listSearch = "";    // ?q= text from the toolbar search input
 
   // List-page bindings — partial-apply view + ID prefixes once so
   // call sites keep their original short-arg signatures. Charts
@@ -292,232 +317,10 @@ export default function monitoring(app, { session }) {
   }
 
   function renderTabBody(tab) {
-    if (tab.key === "requests")      return renderRequestsBody();
     if (tab.key === "optimization")  return renderOptimizationBody();
     if (tab.key === "user_activity") return renderUserActivityBody();
     const view = LIST_VIEWS[tab.key];
     if (view) return renderListBody(tab, view);
-  }
-
-  function disposeRequestsCharts() {
-    if (donutChart) { try { donutChart.dispose(); } catch { /* already gone */ } }
-    donutChart = null;
-  }
-
-  function renderRequestsBody() {
-    disposeRequestsCharts();
-    charts.dispose();
-    rawPage = 1;
-    view.innerHTML = ''
-      + headHTML("Requests", "")
-      + windowChipsHTML(DEFAULT_WINDOW)
-      + kpiStripHTML([
-          { label: "Requests",   id: "rp-kpi-req-count" },
-          { label: "Error rate", id: "rp-kpi-req-err"   },
-          { label: "p50",        id: "rp-kpi-req-p50"   },
-          { label: "p95",        id: "rp-kpi-req-p95"   },
-        ])
-      + panicPanel()                       // M-3 — slot above the charts row
-      + '<div class="rp-mon-charts-row">'
-      +   statusMixPanel()
-      +   topRoutesPanel()
-      + '</div>'
-      + pendingPanel("Latency over time", "Bucketed time-series",
-                     "/monitoring/requests?bucket=1m (or similar)")
-      + recentRequestsPanel();
-
-    // Window-chip click delegation — refetch all four sources.
-    view.querySelector(".rp-chip-row").addEventListener("click", (e) => {
-      const chip = e.target.closest(".rp-chip");
-      if (!chip) return;
-      view.querySelectorAll(".rp-chip.is-active").forEach((c) => c.classList.remove("is-active"));
-      chip.classList.add("is-active");
-      const w = chip.dataset.window;
-      rawPage = 1;
-      fetchMetrics(w);
-      fetchRequestsStats(w);
-      fetchRecentRequests(w);
-      fetchRecentPanics(w);
-    });
-
-    // M-3 — click-to-expand on a panic row toggles its backtrace_head pane.
-    view.querySelector("#rp-mon-panic-tbody")?.addEventListener("click", (e) => {
-      const row = e.target.closest("tr.rt-mon-row-expandable");
-      if (!row) return;
-      const expansion = row.nextElementSibling;
-      if (!expansion || !expansion.classList.contains("rt-mon-row-expansion")) return;
-      const opening = expansion.hidden;
-      expansion.hidden = !opening;
-      const caret = row.querySelector(".rt-mon-row-caret");
-      if (caret) {
-        caret.classList.toggle("bi-chevron-down", opening);
-        caret.classList.toggle("bi-chevron-right", !opening);
-      }
-    });
-
-    // Raw-table pager.
-    view.querySelector("#rp-mon-raw-pager").addEventListener("click", (e) => {
-      const btn = e.target.closest(".rt-pg[data-page]");
-      if (!btn) return;
-      const target = parseInt(btn.dataset.page, 10);
-      if (!Number.isFinite(target) || target < 1 || target > rawTotalPages || target === rawPage) return;
-      rawPage = target;
-      fetchRecentRequests(activeWindow());
-    });
-
-    // M-1 — click a Recent requests row → request-replay modal.
-    // Rows without a request_id (legacy / pre-correlation entries) are
-    // not clickable; data-request-id gates the openable rows.
-    view.querySelector("#rp-mon-raw-tbody")?.addEventListener("click", (e) => {
-      const row = e.target.closest("tr[data-request-id]");
-      if (!row) return;
-      openRequestReplay(row.dataset.requestId);
-    });
-
-    fetchMetrics(DEFAULT_WINDOW);
-    fetchRequestsStats(DEFAULT_WINDOW);
-    fetchRecentRequests(DEFAULT_WINDOW);
-    fetchRecentPanics(DEFAULT_WINDOW);
-  }
-
-  function activeWindow() {
-    const chip = view.querySelector(".rp-chip-row .rp-chip.is-active");
-    return chip?.dataset.window || DEFAULT_WINDOW;
-  }
-
-  // ─── M-3: recent panics pane on the Requests landing ─────────
-  // Fetches events?kind=panic for the active window, renders the
-  // last 5 with an inline expander showing context.backtrace_head.
-  // Empty state — the common case — hides the whole pane so the
-  // landing stays clean unless there's actually something to surface.
-  async function fetchRecentPanics(window) {
-    const wrap = view.querySelector("#rp-mon-panic-pane");
-    const tbody = view.querySelector("#rp-mon-panic-tbody");
-    const countEl = view.querySelector("#rp-mon-panic-count");
-    if (!wrap || !tbody) return;
-    try {
-      const data = await api.get(
-        "/monitoring/events?kind=panic&window=" + encodeURIComponent(window) + "&size=5"
-      );
-      const rows = data?.rows || [];
-      const total = data?.total || 0;
-      if (!rows.length) {
-        wrap.hidden = true;
-        return;
-      }
-      wrap.hidden = false;
-      if (countEl) countEl.textContent = total + (total === 1 ? " panic" : " panics") + " in " + window;
-      tbody.innerHTML = rows.map(panicRowHTML).join("");
-    } catch {
-      // Fire-and-forget surface — silent failure keeps the landing
-      // usable when the panic feed itself errors.
-      wrap.hidden = true;
-    }
-  }
-
-  function panicRowHTML(e) {
-    const head = e.context?.backtrace_head;
-    const loc  = e.context?.location;
-    const message = e.message || e.kind;
-    const expandable = !!head;
-    const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
-      + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
-        + fmtTime(e.occurred_at) + '</td>'
-      + '<td>' + esc(message) + '</td>'
-      + '<td class="is-mono">' + (loc ? esc(loc) : "—") + '</td>'
-      + '</tr>';
-    if (!expandable) return primary;
-    return primary
-      + '<tr class="rt-mon-row-expansion" hidden>'
-      +   '<td colspan="3">'
-      +     '<div class="rt-mon-chain">'
-      +       '<span class="rt-mon-chain-kind">backtrace</span>'
-      +       '<pre>' + esc(head) + '</pre>'
-      +     '</div>'
-      +   '</td>'
-      + '</tr>';
-  }
-
-  // ─── /api/monitoring/requests/stats → status-code donut ──────
-  async function fetchRequestsStats(window) {
-    try {
-      const data = await api.get("/monitoring/requests/stats?window=" + encodeURIComponent(window));
-      paintDonut(data?.status_mix || {});
-    } catch {
-      paintDonut({});  // empty donut on error; KPI strip carries the diagnostic
-    }
-  }
-
-  function paintDonut(statusMix) {
-    const el = view.querySelector("#rp-mon-donut");
-    if (!el || !window.echarts) return;
-    if (!donutChart) {
-      ensureRegisteredThemes();
-      donutChart = window.echarts.init(el, chartTheme());
-    }
-    // Map { "200": 457, "500": 48, ... } → ECharts pie data, coloured
-    // by status band (2xx green / 3xx blue / 4xx amber / 5xx red).
-    const entries = Object.entries(statusMix)
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1]);
-    const palette = {
-      "2": getCSSVar("--rp-ok"),
-      "3": getCSSVar("--rp-accent-2"),
-      "4": getCSSVar("--rp-warn"),
-      "5": getCSSVar("--rp-accent"),
-    };
-    const data = entries.map(([code, count]) => ({
-      name:  code,
-      value: count,
-      itemStyle: { color: palette[String(code)[0]] || getCSSVar("--rp-text-mute") },
-    }));
-    const total = entries.reduce((acc, [, v]) => acc + v, 0);
-    const textColor = getCSSVar("--rp-text-dim");
-    donutChart.setOption({
-      animation: false,
-      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
-      series: [{
-        type: "pie",
-        radius: ["55%", "78%"],
-        avoidLabelOverlap: false,
-        label: {
-          show: true,
-          position: "center",
-          formatter: total === 0
-            ? "no requests"
-            : "{total|" + fmtCount(total) + "}\n{label|requests}",
-          rich: {
-            total: { fontSize: 22, fontWeight: 700, color: getCSSVar("--rp-text") },
-            label: { fontSize: 11, color: textColor, padding: [4, 0, 0, 0] },
-          },
-        },
-        labelLine: { show: false },
-        data,
-      }],
-    }, true);
-    donutChart.resize();
-  }
-
-  // ─── /api/monitoring/requests → paginated drill-down redtable ─
-  async function fetchRecentRequests(window) {
-    const tbody = view.querySelector("#rp-mon-raw-tbody");
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
-    try {
-      const data = await api.get("/monitoring/requests?window=" + encodeURIComponent(window)
-        + "&page=" + rawPage + "&size=" + pageSizeFromPref());
-      const rows = data?.rows || [];
-      rawTotalPages = data?.pages || 1;
-      rawPage       = data?.page  || rawPage;
-      if (tbody) {
-        tbody.innerHTML = rows.length
-          ? rows.map(requestRowHTML).join("")
-          : '<tr><td colspan="6">No requests in this window.</td></tr>';
-      }
-      renderRawPager();
-    } catch (err) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="6">Couldn’t load'
-        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
-    }
   }
 
   function requestRowHTML(r) {
@@ -673,44 +476,13 @@ export default function monitoring(app, { session }) {
     return "rp-mon-err-low";
   }
 
-  function renderRawPager() {
-    const el = view.querySelector("#rp-mon-raw-pager");
-    if (!el || rawTotalPages < 1) { if (el) el.innerHTML = ""; return; }
-    const p = rawPage, last = rawTotalPages;
-    const out = [];
-    out.push(pagerBtnHTML("‹", p - 1, false, p === 1));
-    if (last <= 7) {
-      for (let i = 1; i <= last; i++) out.push(pagerBtnHTML(String(i), i, i === p, false));
-    } else {
-      const want = new Set([1, last, p, p - 1, p + 1]);
-      let prev = 0;
-      for (let i = 1; i <= last; i++) {
-        if (!want.has(i)) continue;
-        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
-        out.push(pagerBtnHTML(String(i), i, i === p, false));
-        prev = i;
-      }
-    }
-    out.push(pagerBtnHTML("›", p + 1, false, p === last));
-    el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
-  }
-  function pagerBtnHTML(label, page, active, disabled) {
-    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
-      + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
-  }
-
-  // ─── list-view tabs (Events / Runs / Findings) ───────────────
-  // The three monitoring list endpoints share the same Page<T> shape,
-  // so one renderer handles all three — only columns + row HTML
-  // differ. LIST_VIEWS at the bottom of the file declares each tab's
-  // shape. Window chips apply only to Events (the others have no
-  // time-window filter at the wire layer).
-  let listPage   = 1;
-  let listTotalPages = 1;
-  let listTotal  = 0;     // total row count for the pager rows-info readout
-  let listShown  = 0;     // rows actually on the current page
-  let listWindow = DEFAULT_WINDOW;
-  let listSearch = "";    // ?q= text from the toolbar search input
+  // ─── list-view tabs (Requests / Events / Runs / Findings / Steps) ─
+  // All five monitoring list endpoints share the same Page<T> shape,
+  // so one renderer handles them — only columns + row HTML differ.
+  // LIST_VIEWS at the top of the file declares each tab's shape. Window
+  // chips apply only to time-windowed tabs (`useWindow: true`). The
+  // list-tab state vars are hoisted further up so activate() can drive
+  // renderListBody synchronously without tripping TDZ.
 
   // Composite strip — `compositeStripHTML` is imported from
   // /scripts/list-page.js (the shared atom both Home + Monitoring
@@ -718,7 +490,6 @@ export default function monitoring(app, { session }) {
   // consolidated 2026-05-25 per [[feedback-compose-atoms-dont-parallel]].
 
   function renderListBody(tab, viewSpec) {
-    disposeRequestsCharts();  // user switching away from Requests
     charts.dispose();      // user switching between list tabs
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
@@ -732,9 +503,13 @@ export default function monitoring(app, { session }) {
     // Monitoring is read-only — no edit / select / delete on these
     // tabs (the entities are tracked, not mutated). `modes: false`
     // suppresses the mode-button group entirely.
-    // `?q=` wired on all four monitoring endpoints 2026-05-25 — the
-    // per-tab placeholder hints what fields each search covers.
+    // `?q=` wired on four monitoring endpoints 2026-05-25 (events / runs /
+    // findings / steps); /monitoring/requests will follow. Until then the
+    // Requests search input is structurally present but no-op against the
+    // backend — same pattern as the sort chevrons on Events (queued for
+    // Gus). The per-tab placeholder hints what fields each search covers.
     const placeholders = {
+      requests: "Search route, method, status…",
       events:   "Search kind, message…",
       runs:     "Search tool, branch, sha…",
       findings: "Search tool, kind, finding…",
@@ -779,6 +554,13 @@ export default function monitoring(app, { session }) {
         listWindow = chip.dataset.window;
         listPage = 1;
         fetchList(viewSpec);
+        // Window-sensitive charts (Requests' status-mix donut) re-derive
+        // from /stats?window=…; remount so they track the chip.
+        if (viewSpec.charts && viewSpec.charts.length) {
+          charts.dispose();
+          charts.mount(viewSpec).catch((err) =>
+            console.warn("[monitoring] charts remount on window change failed:", err));
+        }
       });
     }
 
@@ -848,13 +630,19 @@ export default function monitoring(app, { session }) {
       fetchList(viewSpec);
     });
 
-    // M-4: row-expander delegate — click an expandable primary row to
-    // toggle its sibling .rt-mon-row-expansion (the error_chain pane).
-    // Caret class flips for visual feedback. Idempotent + scoped to
-    // tbody so it doesn't fight the pager handler above.
+    // Tbody click delegate — two row patterns, both opt-in by class:
+    //   • M-1 .rt-mon-row-clickable[data-request-id] → request-replay modal
+    //     (Requests tab — recent-requests rows drill into the per-request
+    //     event timeline).
+    //   • M-4 .rt-mon-row-expandable → toggle the sibling .rt-mon-row-
+    //     expansion (Events tab's error_chain pane). Caret class flips
+    //     for visual feedback.
+    // Scoped to tbody so it doesn't fight the pager handler above.
     const tbodyEl = view.querySelector("#rp-mon-list-tbody");
     if (tbodyEl) {
       tbodyEl.addEventListener("click", (e) => {
+        const clickable = e.target.closest("tr.rt-mon-row-clickable[data-request-id]");
+        if (clickable) { openRequestReplay(clickable.dataset.requestId); return; }
         const row = e.target.closest("tr.rt-mon-row-expandable");
         if (!row) return;
         const expansion = row.nextElementSibling;
@@ -930,7 +718,6 @@ export default function monitoring(app, { session }) {
   let userActivityPickerTimer = null;   // debounce handle for the search input
 
   function renderUserActivityBody() {
-    disposeRequestsCharts();
     charts.dispose();
     userActivityPick = null;
     view.innerHTML = ''
@@ -1110,7 +897,7 @@ export default function monitoring(app, { session }) {
   let optStatus = "all";
 
   function renderOptimizationBody() {
-    disposeRequestsCharts();
+    charts.dispose();
     optStatus = "all";
     view.innerHTML = ''
       + headHTML("Optimization map", "")
@@ -1270,156 +1057,16 @@ export default function monitoring(app, { session }) {
       + '</select>';
   }
 
-  // ─── /api/metrics fetch + paint ──────────────────────────────
-  async function fetchMetrics(window) {
-    setKpi("rp-kpi-req-count", "…");
-    setKpi("rp-kpi-req-err",   "…");
-    setKpi("rp-kpi-req-p50",   "…");
-    setKpi("rp-kpi-req-p95",   "…");
-    const tbody = view.querySelector("#rp-mon-routes-tbody");
-    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="is-num">Loading…</td></tr>';
-    try {
-      const data = await api.get("/metrics?window=" + encodeURIComponent(window));
-      paintKpis(data?.overall);
-      paintTopRoutes(data?.by_route || []);
-      const head = view.querySelector(".rp-shell-head-count");
-      if (head) head.textContent = (data?.window?.label || window) + " window";
-    } catch (err) {
-      setKpi("rp-kpi-req-count", "—");
-      setKpi("rp-kpi-req-err",   "—");
-      setKpi("rp-kpi-req-p50",   "—");
-      setKpi("rp-kpi-req-p95",   "—");
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="is-num">Couldn’t load metrics'
-        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
-    }
-  }
-
-  function paintKpis(o) {
-    if (!o) return;
-    setKpi("rp-kpi-req-count", fmtCount(o.count));
-    setKpi("rp-kpi-req-err",   fmtPct(o.error_rate));
-    setKpi("rp-kpi-req-p50",   o.p50_ms + "ms");
-    setKpi("rp-kpi-req-p95",   o.p95_ms + "ms");
-  }
-
-  function paintTopRoutes(rows) {
-    const tbody = view.querySelector("#rp-mon-routes-tbody");
-    if (!tbody) return;
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="is-num">No requests in this window.</td></tr>';
-      return;
-    }
-    // Rank by p95 desc — slowest routes first, the operator's
-    // interesting tail. Ties broken by count desc.
-    const ranked = rows.slice().sort((a, b) => {
-      if (b.p95_ms !== a.p95_ms) return b.p95_ms - a.p95_ms;
-      return b.count - a.count;
-    }).slice(0, 10);
-    tbody.innerHTML = ranked.map((r) =>
-      '<tr>'
-      + '<td><span class="rp-mon-method">' + esc(r.method) + '</span> ' + esc(r.route) + '</td>'
-      + '<td class="is-num">' + fmtCount(r.count) + '</td>'
-      + '<td class="is-num ' + errBand(r.error_rate) + '">' + fmtPct(r.error_rate) + '</td>'
-      + '<td class="is-num">' + r.p50_ms + 'ms</td>'
-      + '<td class="is-num">' + r.p95_ms + 'ms</td>'
-      + '</tr>'
-    ).join("");
-  }
-
   // ─── render utilities ────────────────────────────────────────
   // windowChipsHTML in this page is partial-applied with the local
   // WINDOWS list — wraps the shared module helper.
   function windowChipsHTML(active) { return _windowChipsHTML(WINDOWS, active); }
 
-  function topRoutesPanel() {
-    return '<section class="rt-card">'
-      + '<div class="rt-card-head">'
-      +   '<h3 class="rt-card-title">Top routes</h3>'
-      +   '<span class="rt-card-hint">ranked by p95 latency</span>'
-      + '</div>'
-      + '<table class="rt-table">'
-      +   '<thead><tr>'
-      +     '<th>Route</th><th>Count</th><th>Error %</th><th>p50</th><th>p95</th>'
-      +   '</tr></thead>'
-      +   '<tbody id="rp-mon-routes-tbody"></tbody>'
-      + '</table>'
-      + '</section>';
-  }
-  function pendingPanel(title, hint, endpoint) {
-    return '<section class="rt-card is-pending">'
-      + '<div class="rt-card-head">'
-      +   '<h3 class="rt-card-title">' + esc(title) + '</h3>'
-      +   '<span class="rt-card-hint">' + esc(hint) + '</span>'
-      + '</div>'
-      + '<p>Coming when its backend endpoint lands.</p>'
-      + '<span class="rt-card-endpoint">' + esc(endpoint) + '</span>'
-      + '</section>';
-  }
-  function statusMixPanel() {
-    return '<section class="rt-card">'
-      + '<div class="rt-card-head">'
-      +   '<h3 class="rt-card-title">Status code mix</h3>'
-      +   '<span class="rt-card-hint">distribution by HTTP status</span>'
-      + '</div>'
-      + '<div class="rp-mon-chart" id="rp-mon-donut"></div>'
-      + '</section>';
-  }
-  function recentRequestsPanel() {
-    return '<section class="rt-card">'
-      + '<div class="rt-card-head">'
-      +   '<h3 class="rt-card-title">Recent requests</h3>'
-      +   '<span class="rt-card-hint">paginated, newest first</span>'
-      + '</div>'
-      + '<table class="rt-table">'
-      +   '<thead><tr>'
-      +     '<th>Time</th><th>Method</th><th>Status</th><th>Route</th><th>Duration</th><th>Request ID</th>'
-      +   '</tr></thead>'
-      +   '<tbody id="rp-mon-raw-tbody"></tbody>'
-      + '</table>'
-      + '<div class="rt-pager" id="rp-mon-raw-pager"></div>'
-      + '</section>';
-  }
-  // M-3 — panic pane on the Requests landing. The wrapper has hidden=true
-  // by default so the panel disappears entirely when the window has no
-  // panics. The fetchRecentPanics path flips hidden + populates the
-  // count + 5 most recent rows; clicking a row expands the backtrace_head
-  // via the same expander shape used by the events redtable (M-4).
-  function panicPanel() {
-    return '<section class="rt-card rt-card--panic" id="rp-mon-panic-pane" hidden>'
-      + '<div class="rt-card-head">'
-      +   '<h3 class="rt-card-title">'
-      +     '<i class="bi bi-exclamation-octagon"></i> Recent panics'
-      +   '</h3>'
-      +   '<span class="rt-card-hint" id="rp-mon-panic-count">—</span>'
-      + '</div>'
-      + '<table class="rt-table">'
-      +   '<thead><tr><th>Time</th><th>Message</th><th>Location</th></tr></thead>'
-      +   '<tbody id="rp-mon-panic-tbody"></tbody>'
-      + '</table>'
-      + '</section>';
-  }
-  // Read a CSS custom property (theme token) at runtime so ECharts
-  // colours track the active theme. Falls back to a sensible default
-  // if the var is missing or empty.
-  function getCSSVar(name) {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || "#6c7086";
-  }
-  function errBand(rate) {
-    if (rate == null) return "";
-    if (rate < 1)  return "rp-mon-err-low";
-    if (rate < 5)  return "rp-mon-err-mid";
-    return "rp-mon-err-high";
-  }
   function fmtCount(n) {
     if (n == null) return "—";
     if (n < 1000)    return String(n);
     if (n < 1000000) return (n / 1000).toFixed(1) + "k";
     return (n / 1000000).toFixed(1) + "M";
-  }
-  function fmtPct(v) {
-    if (v == null) return "—";
-    return (Math.round(v * 100) / 100) + "%";
   }
   function fmtTime(iso) {
     const d = new Date(iso);
