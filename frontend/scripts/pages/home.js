@@ -136,6 +136,7 @@ export default function home(app, { session: _session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // Visual placeholder — `?view=` isn't wired on /admin/companies
       // yet (backend TODO). Same shape as the users tab's window chip.
       chipRows: [{
@@ -211,6 +212,7 @@ export default function home(app, { session: _session }) {
       title: "Files",
       endpoint: "/admin/files",
       statsEndpoint: "/admin/files/stats",
+      compositeStrip: true,   // 3 charts → first 2 flank, 3rd renders below
       // Functional — /admin/files's FilesQuery already accepts ?stage=
       // (see backend/crates/api/src/routes/admin.rs:86). Empty value
       // means "no filter".
@@ -267,6 +269,7 @@ export default function home(app, { session: _session }) {
     charts: {
       title: "Charts",
       endpoint: "/admin/charts",
+      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // Visual placeholder — /admin/charts doesn't accept ?window= yet
       // (backend TODO). Mirrors the users tab's activity-window shape.
       chipRows: [{
@@ -307,6 +310,7 @@ export default function home(app, { session: _session }) {
     },
     projects: {
       title: "Projects",
+      compositeStrip: true,   // 3 charts → first 2 flank, 3rd renders below
       // /api/projects today returns { items: [...] } (no Page<T>
       // wrapper, no pagination). fetchList falls back to `items` when
       // `rows` is absent; page size becomes a no-op for this endpoint.
@@ -546,12 +550,22 @@ export default function home(app, { session: _session }) {
       { label: "Last fetch", id: "rp-home-list-ms"   },
     ];
 
+    // Composite tabs: charts[0]+[1] flank the KPI 2×2; any extras
+    // (charts[2+]) render below as a standard chartsStrip so no
+    // chart gets dropped. Specs with 0-1 charts stay on the
+    // stacked default — the asymmetric "chart left, empty right"
+    // composite slot reads worse than the legacy stack.
+    const charts = spec.charts || [];
+    const useComposite = spec.compositeStrip && charts.length >= 2;
+    const compositeCharts = useComposite ? charts.slice(0, 2) : [];
+    const extraCharts     = useComposite ? charts.slice(2)    : charts;
+
     view.innerHTML = ''
       + headHTML(spec.title, "")
       + (spec.chipRows || []).map((cr) => chipRowHTML(cr, chipState[cr.name])).join("")
-      + (spec.compositeStrip
-          ? compositeStripHTML(kpiTiles, spec.charts || [])
-          : kpiStripHTML(kpiTiles) + chartsStripHTML(spec.charts || []))
+      + (useComposite
+          ? compositeStripHTML(kpiTiles, compositeCharts) + chartsStripHTML(extraCharts)
+          : kpiStripHTML(kpiTiles) + chartsStripHTML(extraCharts))
       + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
       + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
