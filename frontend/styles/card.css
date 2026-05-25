@@ -1,0 +1,84 @@
+/* ── card (rt-card) ─────────────────────────────────────────────
+   Generic page-card primitive — a glass-chrome section that holds a
+   table, chart, form, or state placeholder. Sibling of `.rt-panel`
+   (which owns the workspace's slide-out side-panels). Authored as a
+   shared file so Monitoring's chart cards, Home's future card-style
+   tabs, and any other page that wants a glass section all share the
+   same class.
+
+   Previously named `.rp-mon-panel` (monitoring.css) — page-prefixed
+   because Monitoring was the first consumer. Renamed 2026-05-25 per
+   [[naming-consistency]] + [[unify-behavior-not-names]]: one class
+   per UI concept, reusable across pages.
+
+   Variants:
+     .rt-card                      — base glass card
+     .rt-card.is-pending           — dashed border, dimmed; backend
+                                     endpoint hasn't landed yet
+     .rt-card--panic               — accent-tinted, raised state
+     .rt-card-head                 — head row (title left, hint right)
+     .rt-card-title                — head's title (h3 typically)
+     .rt-card-hint                 — head's right-side metadata
+     .rt-card-endpoint             — mono chip naming an endpoint
+                                     (paired with .is-pending) */
+
+.rt-card {
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border: 1px solid var(--rp-glass-border);
+  border-radius: var(--rp-radius-lg);
+  padding: var(--rp-sp-4) var(--rp-sp-5);
+  margin-bottom: var(--rp-sp-4);
+}
+
+.rt-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--rp-sp-3);
+}
+.rt-card-title {
+  margin: 0;
+  font-size: var(--rp-text-md);
+  font-weight: 650;
+}
+.rt-card-hint {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+}
+
+/* Pending — backend endpoint hasn't landed yet. Dashed border +
+   dimmed body so the user reads "structure, no data". Pairs with
+   .rt-card-endpoint (the mono chip naming the awaited route). */
+.rt-card.is-pending {
+  border-style: dashed;
+  color: var(--rp-text-dim);
+}
+.rt-card-endpoint {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: var(--rp-text-sm);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  color: var(--rp-accent-2);
+}
+
+/* Panic — accent-tinted card for exceptional content (currently the
+   Monitoring panic pane). Border + soft accent-tinted gradient
+   highlight the exception nature without screaming for attention. */
+.rt-card--panic {
+  border-color: var(--rp-accent);
+  background: linear-gradient(0deg,
+    color-mix(in srgb, var(--rp-accent) 3%, var(--rp-surface)),
+    var(--rp-surface));
+}
+.rt-card--panic .rt-card-title i {
+  color: var(--rp-accent);
+}
+.rt-card--panic td.is-mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.7188rem;
+  color: var(--rp-text-mute);
+}

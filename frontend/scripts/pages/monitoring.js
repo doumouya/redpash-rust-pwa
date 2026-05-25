@@ -599,7 +599,7 @@ export default function monitoring(app, { session }) {
     return reqLine
       + '<section class="rp-mon-modal-timeline">'
       +   '<h4 class="rp-mon-modal-section-title">'
-      +     'Timeline <span class="rp-mon-panel-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
+      +     'Timeline <span class="rt-card-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
       +   '</h4>'
       +   '<table class="rt-table">'
       +     '<thead><tr><th>Time</th><th>Level</th><th>Kind</th><th>Message</th></tr></thead>'
@@ -803,7 +803,7 @@ export default function monitoring(app, { session }) {
     userActivityPick = null;
     view.innerHTML = ''
       + headHTML("Per-user activity", "")
-      + '<section class="rp-mon-panel">'
+      + '<section class="rt-card">'
       +   '<div class="rp-mon-user-picker-shell">'
       +     '<label for="rp-mon-user-input" class="rt-field-lbl">User</label>'
       +     '<div class="rp-user-picker-wrap">'
@@ -816,10 +816,10 @@ export default function monitoring(app, { session }) {
       +     '</span>'
       +   '</div>'
       + '</section>'
-      + '<section class="rp-mon-panel" id="rp-mon-user-activity" hidden>'
-      +   '<div class="rp-mon-panel-head">'
-      +     '<h3 class="rp-mon-panel-title" id="rp-mon-user-activity-title">Activity</h3>'
-      +     '<span class="rp-mon-panel-hint" id="rp-mon-user-activity-count">—</span>'
+      + '<section class="rt-card" id="rp-mon-user-activity" hidden>'
+      +   '<div class="rt-card-head">'
+      +     '<h3 class="rt-card-title" id="rp-mon-user-activity-title">Activity</h3>'
+      +     '<span class="rt-card-hint" id="rp-mon-user-activity-count">—</span>'
       +   '</div>'
       +   '<table class="rt-table">'
       +     '<thead><tr><th>Time</th><th>Type</th><th>Detail</th><th class="is-num">Status / Level</th></tr></thead>'
@@ -1095,7 +1095,7 @@ export default function monitoring(app, { session }) {
   }
 
   function optTablePanel() {
-    return '<section class="rp-mon-panel">'
+    return '<section class="rt-card">'
       + '<table class="rt-table">'
       +   '<thead><tr>'
       +     '<th>Subsystem</th>'
@@ -1200,10 +1200,10 @@ export default function monitoring(app, { session }) {
   function windowChipsHTML(active) { return _windowChipsHTML(WINDOWS, active); }
 
   function topRoutesPanel() {
-    return '<section class="rp-mon-panel">'
-      + '<div class="rp-mon-panel-head">'
-      +   '<h3 class="rp-mon-panel-title">Top routes</h3>'
-      +   '<span class="rp-mon-panel-hint">ranked by p95 latency</span>'
+    return '<section class="rt-card">'
+      + '<div class="rt-card-head">'
+      +   '<h3 class="rt-card-title">Top routes</h3>'
+      +   '<span class="rt-card-hint">ranked by p95 latency</span>'
       + '</div>'
       + '<table class="rt-table">'
       +   '<thead><tr>'
@@ -1214,29 +1214,29 @@ export default function monitoring(app, { session }) {
       + '</section>';
   }
   function pendingPanel(title, hint, endpoint) {
-    return '<section class="rp-mon-panel is-pending">'
-      + '<div class="rp-mon-panel-head">'
-      +   '<h3 class="rp-mon-panel-title">' + esc(title) + '</h3>'
-      +   '<span class="rp-mon-panel-hint">' + esc(hint) + '</span>'
+    return '<section class="rt-card is-pending">'
+      + '<div class="rt-card-head">'
+      +   '<h3 class="rt-card-title">' + esc(title) + '</h3>'
+      +   '<span class="rt-card-hint">' + esc(hint) + '</span>'
       + '</div>'
       + '<p>Coming when its backend endpoint lands.</p>'
-      + '<span class="rp-mon-panel-endpoint">' + esc(endpoint) + '</span>'
+      + '<span class="rt-card-endpoint">' + esc(endpoint) + '</span>'
       + '</section>';
   }
   function statusMixPanel() {
-    return '<section class="rp-mon-panel">'
-      + '<div class="rp-mon-panel-head">'
-      +   '<h3 class="rp-mon-panel-title">Status code mix</h3>'
-      +   '<span class="rp-mon-panel-hint">distribution by HTTP status</span>'
+    return '<section class="rt-card">'
+      + '<div class="rt-card-head">'
+      +   '<h3 class="rt-card-title">Status code mix</h3>'
+      +   '<span class="rt-card-hint">distribution by HTTP status</span>'
       + '</div>'
       + '<div class="rp-mon-chart" id="rp-mon-donut"></div>'
       + '</section>';
   }
   function recentRequestsPanel() {
-    return '<section class="rp-mon-panel">'
-      + '<div class="rp-mon-panel-head">'
-      +   '<h3 class="rp-mon-panel-title">Recent requests</h3>'
-      +   '<span class="rp-mon-panel-hint">paginated, newest first</span>'
+    return '<section class="rt-card">'
+      + '<div class="rt-card-head">'
+      +   '<h3 class="rt-card-title">Recent requests</h3>'
+      +   '<span class="rt-card-hint">paginated, newest first</span>'
       + '</div>'
       + '<table class="rt-table">'
       +   '<thead><tr>'
@@ -1253,12 +1253,12 @@ export default function monitoring(app, { session }) {
   // count + 5 most recent rows; clicking a row expands the backtrace_head
   // via the same expander shape used by the events redtable (M-4).
   function panicPanel() {
-    return '<section class="rp-mon-panel rp-mon-panel--panic" id="rp-mon-panic-pane" hidden>'
-      + '<div class="rp-mon-panel-head">'
-      +   '<h3 class="rp-mon-panel-title">'
+    return '<section class="rt-card rt-card--panic" id="rp-mon-panic-pane" hidden>'
+      + '<div class="rt-card-head">'
+      +   '<h3 class="rt-card-title">'
       +     '<i class="bi bi-exclamation-octagon"></i> Recent panics'
       +   '</h3>'
-      +   '<span class="rp-mon-panel-hint" id="rp-mon-panic-count">—</span>'
+      +   '<span class="rt-card-hint" id="rp-mon-panic-count">—</span>'
       + '</div>'
       + '<table class="rt-table">'
       +   '<thead><tr><th>Time</th><th>Message</th><th>Location</th></tr></thead>'

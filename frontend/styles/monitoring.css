@@ -1,56 +1,17 @@
 /* ── monitoring ────────────────────────────────────────────────
    Page-specific styles for /monitoring only. The rail-page shell
    (outer flex column, greeting, rail+body split, per-tab head, KPI
-   strip) is shared with /home and lives in shell.css. This file
-   owns the window-chip control, the top-routes table, and the
-   pending-panel placeholder for charts whose endpoints don't exist
-   yet. */
+   strip) is shared with /home and lives in shell.css. The card
+   surface that hosts every panel here lives in card.css (.rt-card,
+   .rt-card-head, .rt-card-title, .rt-card-hint, .rt-card-endpoint,
+   .rt-card--panic, .rt-card.is-pending) — renamed from .rp-mon-panel
+   2026-05-25 per [[naming-consistency]]. This file owns only the
+   Monitoring-specific atoms: window chip, the side-by-side charts
+   row, modal chrome, page-content pills inside tables. */
 
-/* panel — a card section in the body (e.g. a chart or table block) */
-.rp-mon-panel {
-  background: var(--rp-glass);
-  -webkit-backdrop-filter: blur(var(--rp-blur));
-  backdrop-filter: blur(var(--rp-blur));
-  border: 1px solid var(--rp-glass-border);
-  border-radius: var(--rp-radius-lg);
-  padding: var(--rp-sp-4) var(--rp-sp-5);
-  margin-bottom: var(--rp-sp-4);
-}
-.rp-mon-panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: var(--rp-sp-3);
-}
-.rp-mon-panel-title {
-  margin: 0;
-  font-size: var(--rp-text-md);
-  font-weight: 650;
-}
-.rp-mon-panel-hint {
-  font-size: var(--rp-text-sm);
-  color: var(--rp-text-mute);
-}
-
-/* panel in pending state — empty inside; explains what blocks it */
-.rp-mon-panel.is-pending {
-  border-style: dashed;
-  color: var(--rp-text-dim);
-}
-.rp-mon-panel-endpoint {
-  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: var(--rp-text-sm);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  color: var(--rp-accent-2);
-}
-
-/* Monitoring tables now use the canonical `.rt-table` (table.css).
-   The previous `.rp-mon-table` rules collapsed into that base in
-   the 2026-05-25 alignment — see [[naming-consistency]]. The mono
-   method pill is page-content, not table chrome, so it stays here. */
+/* Monitoring tables use the canonical `.rt-table` (table.css). The
+   mono method pill is page-content (HTTP method label in cells),
+   not table chrome, so it stays here. */
 .rt-table td .rp-mon-method {
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 0.6875rem;
@@ -65,7 +26,7 @@
 .rp-mon-err-mid  { color: var(--rp-warn); }
 .rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
 
-/* two-column row that houses chart-panel + ranked-table side-by-side
+/* two-column row that houses chart-card + ranked-table side-by-side
    on wide viewports; wraps on narrow. Used on the Requests tab to
    pair the status-code donut with the top-routes table. */
 .rp-mon-charts-row {
@@ -74,7 +35,7 @@
   gap: var(--rp-sp-4);
   margin-bottom: var(--rp-sp-4);
 }
-.rp-mon-charts-row > .rp-mon-panel {
+.rp-mon-charts-row > .rt-card {
   flex: 1 1 20rem;
   min-width: 0;
   margin-bottom: 0;
@@ -202,25 +163,11 @@
   overflow-y: auto;
 }
 
-/* ── M-3: panic pane on the Requests landing ───────────────────
-   The wrapper sits hidden until fetchRecentPanics finds at least
-   one panic in the active window. Accent-tinted border highlights
-   the exception nature without screaming for attention; row shape
-   reuses the .rt-mon-row-expandable atom from M-4. */
-.rp-mon-panel--panic {
-  border-color: var(--rp-accent);
-  background: linear-gradient(0deg,
-    color-mix(in srgb, var(--rp-accent) 3%, var(--rp-surface)),
-    var(--rp-surface));
-}
-.rp-mon-panel--panic .rp-mon-panel-title i {
-  color: var(--rp-accent);
-}
-.rp-mon-panel--panic td.is-mono {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7188rem;
-  color: var(--rp-text-mute);
-}
+/* M-3 panic pane styling (border + tinted background + accent
+   title icon + mono cells for stack frames) now lives on the
+   `.rt-card--panic` modifier in card.css. The pane is just an
+   instance of the .rt-card primitive with the --panic modifier;
+   no Monitoring-specific rules needed. */
 
 /* ── M-1: request-replay modal ──────────────────────────────────
    Fixed-position centered modal over the Monitoring page. Body
@@ -358,7 +305,7 @@
   align-items: center;
   gap: 0.5rem;
 }
-.rp-mon-modal-section-title .rp-mon-panel-hint {
+.rp-mon-modal-section-title .rt-card-hint {
   font-size: 0.6562rem;
   font-weight: 500;
   text-transform: none;
