@@ -184,17 +184,14 @@ export function listToolbarHTML(spec) {
   );
 
   // refresh — wired (handler in renderListBody re-runs fetchList).
+  // The row-numbers toggle that lives in workspace's #wsRownum slot
+  // isn't shown here — Em 2026-05-25: "we can remove rows numbers
+  // here, I don't think it will be needed". List views inventory
+  // entities by name, not by sequential row index — a rownum column
+  // is page-noise for that frame.
   parts.push(
     '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
     +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
-  );
-
-  // row-numbers toggle — list-view tables don't currently emit a
-  // .col-rownum column. Disabled until that lands.
-  parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-rownum" type="button" disabled '
-    +   'title="Row numbers (no rownum column on list views)">'
-    +   '<i class="bi bi-list-ol"></i></button>',
     '<span class="rt-toolbar-sep"></span>',
   );
 
