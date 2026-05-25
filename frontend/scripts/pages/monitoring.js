@@ -82,7 +82,19 @@ export default function monitoring(app, { session }) {
       title: "Events",
       endpoint: "/monitoring/events",
       useWindow: true,
-      columns: ["Time", "Level", "Origin", "Kind", "Message", "Status"],
+      // Object-form column specs (Em 2026-05-25) so the rt-table headers
+      // render as sortable chevron-clicks like Home. `key` matches the
+      // backend field for ?sort=. Backend support for /monitoring/events
+      // ?sort= is queued for Gus — until it lands the chevron flips but
+      // the order doesn't change. Not broken, just a no-op.
+      columns: [
+        { label: "Time",    key: "occurred_at", sortable: true  },
+        { label: "Level",   key: "level",       sortable: true  },
+        { label: "Origin",  key: "origin",      sortable: true  },
+        { label: "Kind",    key: "kind",        sortable: true  },
+        { label: "Message", key: "message",     sortable: false },
+        { label: "Status",  key: "http_status", sortable: true  },
+      ],
       row: (e) => {
         // M-4: 5xx-from-AppError events carry `context.error_chain`
         // (populated by the airlock per c12b1fe — sanitized via
@@ -118,7 +130,13 @@ export default function monitoring(app, { session }) {
       title: "Audit runs",
       endpoint: "/monitoring/audit-runs",
       useWindow: false,
-      columns: ["Time", "Tool", "SHA", "Branch", "Headline"],
+      columns: [
+        { label: "Time",     key: "ran_at",      sortable: true  },
+        { label: "Tool",     key: "tool",        sortable: true  },
+        { label: "SHA",      key: "git_sha",     sortable: false },
+        { label: "Branch",   key: "git_branch",  sortable: true  },
+        { label: "Headline", key: "stats",       sortable: false },
+      ],
       row: (r) =>
         '<tr>'
         + '<td>' + fmtTime(r.ran_at) + '</td>'
@@ -132,7 +150,13 @@ export default function monitoring(app, { session }) {
       title: "Audit findings",
       endpoint: "/monitoring/audit-findings",
       useWindow: false,
-      columns: ["Run", "Tool", "Kind", "Finding", "Severity"],
+      columns: [
+        { label: "Run",      key: "run_id",      sortable: true  },
+        { label: "Tool",     key: "tool",        sortable: true  },
+        { label: "Kind",     key: "kind",        sortable: true  },
+        { label: "Finding",  key: "finding_key", sortable: true  },
+        { label: "Severity", key: "severity",    sortable: true  },
+      ],
       row: (f) =>
         '<tr>'
         + '<td class="is-num">#' + f.run_id + '</td>'
@@ -153,7 +177,13 @@ export default function monitoring(app, { session }) {
           data: (s) => s.total ? Math.round((s.last_24h / s.total) * 100) : 0,
           opts: { max: 100, unit: "%" } },
       ],
-      columns: ["File", "#", "Kind", "Applied", "When"],
+      columns: [
+        { label: "File",    key: "file_filename", sortable: true  },
+        { label: "#",       key: "ordinal",       sortable: true  },
+        { label: "Kind",    key: "kind",          sortable: true  },
+        { label: "Applied", key: "applied",       sortable: true  },
+        { label: "When",    key: "created_at",    sortable: true  },
+      ],
       row: (s) =>
         '<tr>'
         + '<td>' + esc(s.file_filename) + '</td>'
@@ -701,9 +731,7 @@ export default function monitoring(app, { session }) {
     ];
     // Monitoring is read-only — no edit / select / delete on these
     // tabs (the entities are tracked, not mutated). `modes: false`
-    // suppresses the mode-button group entirely. `filter: true` adds
-    // the workspace-style funnel toggle at the start of the toolbar,
-    // wired below to slide the .rt-panel--filter.
+    // suppresses the mode-button group entirely.
     // `?q=` wired on all four monitoring endpoints 2026-05-25 — the
     // per-tab placeholder hints what fields each search covers.
     const placeholders = {
@@ -715,42 +743,26 @@ export default function monitoring(app, { session }) {
     const toolbarSpec = {
       searchPlaceholder: placeholders[tab.key] || "Search…",
       modes: false,
-      filter: true,
     };
-    // Filter panel — slide-out matching Workspace's .rt-panel--filter
-    // chrome. Content is a placeholder for now; will populate when
-    // monitoring grows real per-tab filter UI beyond the window chip.
-    const filterPanelHTML =
-      '<aside class="rt-panel rt-panel--filter" id="rpMonFilterPanel">'
-      + '<div class="rt-panel-inner">'
-      +   '<div class="rt-panel-head">'
-      +     '<span class="rt-panel-title"><i class="bi bi-funnel"></i> Filter</span>'
-      +     '<button class="rt-btn rt-panel-close" type="button" title="Close panel">'
-      +       '<i class="bi bi-x-lg"></i></button>'
-      +   '</div>'
-      +   '<div class="rt-panel-body">'
-      +     '<p class="rt-step-state">'
-      +       'Per-tab filters land here — for now the window chip above the table is the primary filter.'
-      +     '</p>'
-      +   '</div>'
-      + '</div>'
-      + '</aside>';
 
-    // Structure mirrors Home's #rpHomeView — the rt-surface IS the
-    // view element, everything inside it as a flex column. The
-    // rt-surface-body wrapper around the filter panel + table-wrap
-    // is the one structural difference vs Home, present so the
-    // filter slide-out has a row-flex container to share with the
-    // table-wrap. Em 2026-05-25: "check how we did on Home page".
+    // Structure now matches Home exactly (Em 2026-05-25 ask: "for all
+    // non parallel candidates match this structure"):
+    //   header (rp-shell-head-title + rp-shell-head-count)
+    //   rp-chip-row (window chips for time-windowed tabs)
+    //   rp-list-composite (2 charts + 2×2 stats + 2 charts)
+    //   listToolbarHTML (search / refresh / rows / cols / export / history)
+    //   listPanel (the canonical rt-table with sortable headers)
+    //   rt-pager
+    // The previous filter panel + rt-surface-body wrapper are gone —
+    // Home doesn't have them, so neither does Monitoring. Future
+    // per-tab filters land via spec.chipRows (the same path Home
+    // already uses), not via a sliding panel.
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
       + compositeStripHTML(kpiTiles, viewSpec.charts || [])
       + listToolbarHTML(toolbarSpec)
-      + '<div class="rt-surface-body">'
-      +   filterPanelHTML
-      +   listPanel(viewSpec.columns)
-      + '</div>'
+      + listPanel(viewSpec.columns)
       + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
@@ -826,17 +838,6 @@ export default function monitoring(app, { session }) {
         }, 200);
       });
     }
-
-    // Filter-panel toggle — same .open class as workspace's filter panel
-    // (panel.css handles the slide animation). The close button inside
-    // the panel head also toggles the class.
-    const filterPanel = view.querySelector("#rpMonFilterPanel");
-    view.querySelector("#rp-list-toolbar-filter")?.addEventListener("click", () => {
-      filterPanel?.classList.toggle("open");
-    });
-    filterPanel?.querySelector(".rt-panel-close")?.addEventListener("click", () => {
-      filterPanel.classList.remove("open");
-    });
 
     view.querySelector("#rp-mon-list-pager").addEventListener("click", (e) => {
       const btn = e.target.closest(".rt-pg[data-page]");
