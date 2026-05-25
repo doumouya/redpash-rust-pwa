@@ -14,7 +14,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
-import { getPref } from "/scripts/prefs.js";
+import { getPref, setPref } from "/scripts/prefs.js";
 import {
   headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML, listToolbarHTML,
   listPanel as _listPanel,
@@ -76,7 +76,10 @@ export default function home(app, { session: _session }) {
   const charts          = createListCharts(view, { logPrefix: "home" });
   const setKpi          = (id, val) => _setKpi(view, id, val);
   const renderListPager = () =>
-    _renderListPager(view, "rp-home-list-pager", { page: listPage, totalPages: listTotalPages });
+    _renderListPager(view, "rp-home-list-pager", {
+      page: listPage, totalPages: listTotalPages,
+      total: listTotal, shown: listShown, pageSize: listPageSize(),
+    });
   const listPanel       = (columns) => _listPanel(columns, "rp-home-list-tbody");
 
   // List-view specs for the six non-Projects tabs. Same Page<T> shape
@@ -481,6 +484,8 @@ export default function home(app, { session: _session }) {
   // down hit a TDZ on default-tab activation.
   let listPage = 1;
   let listTotalPages = 1;
+  let listTotal = 0;     // total row count from the last fetch (for the pager rows-info readout)
+  let listShown = 0;     // rows actually returned on the current page
   let listSearch = "";
   let listSort   = null;  // { col, dir } | null
 
@@ -812,6 +817,37 @@ export default function home(app, { session: _session }) {
         fetchList(spec, chipState);
       });
 
+      // Rows-per-page dropdown — mirrors workspace's #wsRowsDd shape.
+      // Writes the rowsPerPageHome pref + resets to page 1 + refetches.
+      // The label/selection indicator are kept in sync via syncRowsLabel().
+      const rowsDd = view.querySelector("#rp-list-toolbar-rows-dd");
+      function syncRowsLabel() {
+        const raw = getPref("rowsPerPageHome") || "25";
+        const lbl = view.querySelector("#rp-list-toolbar-rows-label");
+        if (lbl) lbl.textContent = raw === "all" ? "All rows" : raw + " rows";
+        if (rowsDd) {
+          rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
+            i.classList.remove("selected");
+            const t = i.querySelector(".tick"); if (t) t.remove();
+          });
+          const sel = rowsDd.querySelector('.rt-dd-item[data-rows="' + raw + '"]')
+            || rowsDd.querySelector('.rt-dd-item[data-rows="25"]');
+          if (sel) {
+            sel.classList.add("selected");
+            sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
+          }
+        }
+      }
+      syncRowsLabel();
+      rowsDd?.addEventListener("click", (e) => {
+        const item = e.target.closest(".rt-dd-item");
+        if (!item) return;
+        setPref("rowsPerPageHome", item.dataset.rows);
+        listPage = 1;
+        syncRowsLabel();
+        fetchList(spec, chipState);
+      });
+
       // Click-to-sort — header delegation. Three-state per column:
       // first click sets desc, second flips to asc, third clears.
       // After clearing, the backend falls back to its default sort.
@@ -941,6 +977,8 @@ export default function home(app, { session: _session }) {
       const total = data?.total != null ? data.total : rows.length;
       listTotalPages = data?.pages || 1;
       listPage       = data?.page  || listPage;
+      listTotal      = total;
+      listShown      = rows.length;
       const elapsed = Math.round(performance.now() - t0);
       setKpi("rp-home-list-total", fmtCount(total));
       setKpi("rp-home-list-shown", String(rows.length));

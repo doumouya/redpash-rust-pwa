@@ -114,21 +114,32 @@ export function listPanel(columns, tbodyId) {
     + '</section>';
 }
 
-// Toolbar shell — mirrors the Workspace's `.rt-toolbar` shape using
-// the same atoms (.rt-btn, .rt-search, .rt-sel-chip, .rt-dd-wrap)
-// so styling carries over. Each section is opt-in via the spec so
-// per-page tabs decide which tools to expose:
+// Toolbar shell — full Workspace-parity shape. Every list view gets the
+// same boring toolbar with the same button order; controls disable in
+// their natural state where the feature isn't wired yet (undo/redo with
+// no history, columns picker without prefs UI, export without exporter,
+// history without a history panel). Em 2026-05-25: "same boring tab
+// everywhere as long as all the options are there" — toolbar parity
+// trumps per-tab opt-in. Spec carries only:
 //
-//   { searchPlaceholder, modes: bool, undoRedo: bool, refresh: bool,
-//     columns: bool, export: bool, history: bool }
+//   { searchPlaceholder?: string|false, modes?: bool|{edit, select, delete} }
 //
-// The button IDs are namespaced (#rp-list-toolbar-*) so the home/
-// monitoring renderers can wire them via querySelector without
-// colliding with workspace's #ws* ids.
+// `searchPlaceholder: false` suppresses the search box (memberships does
+// this — /admin/memberships takes no ?q=). `modes` defaults to true (all
+// three rt-mode buttons render disabled); object form enables the named
+// modes; explicit false hides the whole mode group (rare).
+//
+// Order mirrors workspace.html line 47-102 — same indices, same separators:
+//   search | edit select delete | undo redo refresh rownum | rowsDd colsDd
+//   selChip | export history
+//
+// Button IDs are namespaced (#rp-list-toolbar-*) so home + monitoring
+// renderers wire them via querySelector without colliding with #ws*.
 export function listToolbarHTML(spec) {
   const s = spec || {};
   const parts = ['<div class="rt-toolbar rt-toolbar--data rp-list-toolbar">'];
 
+  // search
   if (s.searchPlaceholder !== false) {
     parts.push(
       '<div class="rt-search">'
@@ -140,12 +151,11 @@ export function listToolbarHTML(spec) {
     );
   }
 
-  if (s.modes) {
-    // `modes` accepts two shapes:
-    //   - truthy boolean  → all three render disabled (visual-parity stub)
-    //   - object          → { edit, select, delete } per-mode enable; named
-    //                       modes drop `disabled`, the rest stay greyed.
-    // Lets per-tab specs opt individual modes in without flipping the others.
+  // modes — edit / select / delete. Default: all three disabled (visual-
+  // parity stub matching Workspace's no-file state). Object form enables
+  // named modes; explicit false hides the group (memberships, etc. that
+  // don't model row actions).
+  if (s.modes !== false) {
     const m = (typeof s.modes === "object") ? s.modes : {};
     const enable = (key) => (typeof s.modes === "object" ? !!m[key] : false);
     const dis = (key) => enable(key) ? "" : " disabled";
@@ -160,66 +170,96 @@ export function listToolbarHTML(spec) {
     );
   }
 
-  // undo/redo render disabled — Home lists don't model history; the
-  // buttons are here for visual parity with the Workspace toolbar.
-  if (s.undoRedo) {
-    parts.push(
-      '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
-      +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
-      '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
-      +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
-    );
-  }
+  // undo / redo — list views don't model step history, so both render
+  // disabled (matches workspace.html's no-file natural state).
+  parts.push(
+    '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
+    +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
+    '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
+    +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
+  );
 
-  if (s.refresh !== false) {
-    parts.push(
-      '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
-      +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
-      '<span class="rt-toolbar-sep"></span>',
-    );
-  }
+  // refresh — always wired (handler in renderListBody re-runs fetchList).
+  parts.push(
+    '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
+    +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
+  );
 
-  // Selection chip — shows in the toolbar but stays hidden until
-  // the select mode is wired (next slice). Reserves visual space.
-  if (s.modes) {
-    parts.push(
-      '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
-      + '<i class="bi bi-check2-square"></i>'
-      + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
-      + '</span>',
-    );
-  }
+  // row-numbers toggle — Home tables don't currently emit a row-number
+  // column, so the toggle is a parity stub matching workspace's
+  // #wsRownum. When a future slice adds .col-rownum cells, flip this
+  // to enabled + wire `is-active`/`.no-rownum` toggling on .rt-table.
+  parts.push(
+    '<button class="rt-btn" id="rp-list-toolbar-rownum" type="button" disabled '
+    +   'title="Row numbers (no rownum column on list views)">'
+    +   '<i class="bi bi-list-ol"></i></button>',
+    '<span class="rt-toolbar-sep"></span>',
+  );
 
-  if (s.columns) {
-    parts.push(
-      '<div class="rt-dd-wrap">'
-      + '<button class="rt-btn" data-dd="rp-list-toolbar-cols-dd" type="button" '
-      +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
-      + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- next slice --></div>'
-      + '</div>',
-    );
-  }
+  // rows-per-page pill — matches workspace's #wsRowsDd. Functional today:
+  // home + monitoring read listPageSize() from prefs, and renderListBody
+  // wires the dropdown items to setPref("list.rows-per-page", N). Initial
+  // label is "{N} rows"; renderListBody updates it on mount.
+  parts.push(
+    '<div class="rt-dd-wrap">'
+    + '<button class="rt-pill" data-dd="rp-list-toolbar-rows-dd" type="button" '
+    +   'title="Rows per page">'
+    +   '<span id="rp-list-toolbar-rows-label">25 rows</span>'
+    +   '<i class="bi bi-chevron-down chev"></i>'
+    + '</button>'
+    + '<div class="rt-dd" id="rp-list-toolbar-rows-dd">'
+    +   '<div class="rt-dd-item" data-rows="10">10 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="25">25 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="50">50 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="100">100 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="all">All rows</div>'
+    + '</div>'
+    + '</div>',
+  );
 
-  if (s.export) {
-    parts.push(
-      '<div class="rt-dd-wrap">'
-      + '<button class="rt-btn" data-dd="rp-list-toolbar-export-dd" type="button" '
-      +   'title="Export" disabled><i class="bi bi-download"></i></button>'
-      + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
-      +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
-      +   '<div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>'
-      +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
-      + '</div>'
-      + '</div>',
-    );
-  }
+  // columns dropdown — disabled stub matching workspace's #wsColsDd in
+  // its no-file state. Enable when the columns-prefs slice lands.
+  parts.push(
+    '<div class="rt-dd-wrap">'
+    + '<button class="rt-btn" data-dd="rp-list-toolbar-cols-dd" type="button" '
+    +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
+    + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- columns picker — next slice --></div>'
+    + '</div>',
+  );
 
-  if (s.history) {
-    parts.push(
-      '<button class="rt-btn" id="rp-list-toolbar-history" type="button" disabled '
-      +   'title="No history on list views"><i class="bi bi-clock-history"></i></button>',
-    );
-  }
+  // selection chip — shown only when the active tab's modes include
+  // select. Hidden by default; renderListBody flips `hidden` off on
+  // toggleSelectMode and updates the count.
+  parts.push(
+    '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
+    + '<i class="bi bi-check2-square"></i>'
+    + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
+    + '</span>',
+    '<span class="rt-toolbar-sep"></span>',
+  );
+
+  // export dropdown — disabled stub. Enable when the per-tab exporter
+  // lands (CSV first, XLSX/JSON next). The menu items already declare
+  // their data-fmt so the wire-up only needs the click handler.
+  parts.push(
+    '<div class="rt-dd-wrap">'
+    + '<button class="rt-btn" data-dd="rp-list-toolbar-export-dd" type="button" '
+    +   'title="Export" disabled><i class="bi bi-download"></i></button>'
+    + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
+    +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
+    +   '<div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>'
+    +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
+    + '</div>'
+    + '</div>',
+  );
+
+  // history toggle — disabled stub matching workspace's #wsHistoryToggle.
+  // List views don't model an undoable history, so this stays disabled
+  // (unlike rowsDd, there's no natural list-view analogue).
+  parts.push(
+    '<button class="rt-btn" id="rp-list-toolbar-history" type="button" disabled '
+    +   'title="No history on list views"><i class="bi bi-clock-history"></i></button>',
+  );
 
   parts.push('</div>');
   return parts.join("");
@@ -244,12 +284,34 @@ export function setKpi(view, id, val) {
 
 // ── pager ───────────────────────────────────────────────────────
 
-// Render the pager into <view #pagerId>. state = { page, totalPages }.
+// Render the pager into <view #pagerId>. state = {
+//   page, totalPages,
+//   total?: number,   // total row count (drives the rows-info readout)
+//   shown?: number,   // rows on the current page
+//   pageSize?: number // rows-per-page (so we can compute the X–Y range)
+// }
 // Elides middle pages when totalPages > 7 (1, …, neighbours, …, N).
+// Emits the Workspace-parity shape: .rt-rows-info on the left (uses
+// `margin-right: auto` in pager.css to push the pages right) + .rt-pages
+// on the right. When the optional fields are absent, the rows-info
+// renders empty so the pages still anchor right via flex-end.
 export function renderListPager(view, pagerId, state) {
   const el = view.querySelector("#" + pagerId);
   if (!el || state.totalPages < 1) { if (el) el.innerHTML = ""; return; }
   const p = state.page, last = state.totalPages;
+
+  // rows-info readout — "Rows {from}–{to} of {total}" when we have the
+  // counts; the empty span still reserves the flex slot so the layout
+  // stays consistent across tabs.
+  let info = "";
+  if (state.total != null && state.pageSize != null) {
+    const size = state.pageSize;
+    const from = (p - 1) * size + 1;
+    const to = state.shown != null ? Math.min((p - 1) * size + state.shown, state.total) : Math.min(p * size, state.total);
+    if (state.total === 0) info = "No rows";
+    else info = `Rows ${from.toLocaleString()}–${to.toLocaleString()} of ${state.total.toLocaleString()}`;
+  }
+
   const out = [];
   out.push(pagerBtn("‹", p - 1, false, p === 1));
   if (last <= 7) {
@@ -265,7 +327,8 @@ export function renderListPager(view, pagerId, state) {
     }
   }
   out.push(pagerBtn("›", p + 1, false, p === last));
-  el.innerHTML = '<div class="rt-pages">' + out.join("") + '</div>';
+  el.innerHTML = '<span class="rt-rows-info">' + esc(info) + '</span>'
+    + '<div class="rt-pages">' + out.join("") + '</div>';
 }
 
 // ── chart lifecycle ─────────────────────────────────────────────

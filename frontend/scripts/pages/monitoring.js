@@ -193,7 +193,10 @@ export default function monitoring(app, { session }) {
   const charts          = createListCharts(view, { logPrefix: "monitoring" });
   const setKpi          = (id, val) => _setKpi(view, id, val);
   const renderListPager = () =>
-    _renderListPager(view, "rp-mon-list-pager", { page: listPage, totalPages: listTotalPages });
+    _renderListPager(view, "rp-mon-list-pager", {
+      page: listPage, totalPages: listTotalPages,
+      total: listTotal, shown: listShown, pageSize: pageSizeFromPref(),
+    });
   const listPanel       = (columns) => _listPanel(columns, "rp-mon-list-tbody");
 
   // ─── rail collapse (same affordance as Workspace + Home) ────
@@ -674,6 +677,8 @@ export default function monitoring(app, { session }) {
   // time-window filter at the wire layer).
   let listPage   = 1;
   let listTotalPages = 1;
+  let listTotal  = 0;     // total row count for the pager rows-info readout
+  let listShown  = 0;     // rows actually on the current page
   let listWindow = DEFAULT_WINDOW;
 
   function renderListBody(tab, viewSpec) {
@@ -760,6 +765,8 @@ export default function monitoring(app, { session }) {
       const rows = data?.rows || [];
       listTotalPages = data?.pages || 1;
       listPage       = data?.page  || listPage;
+      listTotal      = data?.total || 0;
+      listShown      = rows.length;
       const elapsed = Math.round(performance.now() - t0);
       setKpi("rp-mon-list-total", fmtCount(data?.total || 0));
       setKpi("rp-mon-list-shown", String(rows.length));
