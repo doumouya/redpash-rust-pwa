@@ -12,10 +12,33 @@
    distinct fill the rounded corner clips nothing perceivable.
    Surface-1 sits one tone above the page bg + matches the
    "lighter card on darker page" pattern shown in the reference
-   (Apache ECharts theme-builder, 2026-05-25 sketch). */
+   (Apache ECharts theme-builder, 2026-05-25 sketch).
+
+   `overflow: hidden` (overrides .rp-shell-main's auto-scroll for
+   this page) so the panel below handles its own overflow + the
+   chip-row / composite-strip / toolbar / pager stay anchored in
+   place. Pairs with the .rp-mon-panel flex rule below — the
+   panel grows to fill remaining height regardless of row count,
+   so the table surface is visually constant. */
 #rpHomeMain {
   background: var(--rp-surface);
   border-top-left-radius: 0.875rem;
+  overflow: hidden;
+}
+
+/* Panel fills remaining height of the column so a 5-row table
+   doesn't render as a short box with empty whitespace below —
+   the surface stretches to the bottom of the viewport (Em
+   2026-05-25: "the table should take the full remaining height,
+   whatever the actual number of datarows available is").
+   `min-height: 0` lets the flex item shrink below its content
+   size when needed; `overflow-y: auto` scrolls internally if
+   rows exceed the allocated space, keeping the chip-row +
+   composite-strip + toolbar + pager fixed in their positions. */
+#rpHomeMain .rp-mon-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ── Users tab row polish ───────────────────────────────────────
