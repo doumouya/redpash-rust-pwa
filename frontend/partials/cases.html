@@ -132,6 +132,11 @@
             </button>
           </nav>
 
+          <!-- Tab content wrapper — takes the remaining body height
+               and scrolls inside. The nav above stays put; the
+               active pane scrolls within these bounds. Switching
+               tabs doesn't shift the top region or the nav. -->
+          <div class="rp-cases-detail-tabs-content" id="rp-cases-detail-tabs-content">
           <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
             <div class="rp-cases-comments-list" id="rp-cases-comments-list">
               <!-- JS renders comments here -->
@@ -227,6 +232,7 @@
               <!-- JS paint fills this. -->
             </dl>
           </section>
+          </div>
         </div>
       </aside>
 
