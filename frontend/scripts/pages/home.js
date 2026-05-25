@@ -796,14 +796,19 @@ export default function home(app, { session: _session }) {
       }
 
       // Refresh — re-runs the fetch with the current page/sort/search.
-      // The icon spins (loop variant) for the duration of the fetch so the
-      // operator gets accurate in-flight feedback; the `finally` clears the
-      // class even if fetchList throws.
-      view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", async (e) => {
+      // One-shot spin on click (0.6s ease, matches Workspace's #wsRefresh):
+      // remove → reflow → add retriggers the animation on every click,
+      // independent of how fast the fetch resolves. Fetch is fire-and-
+      // forget here; tying the spin to the await made it flicker on the
+      // sub-100ms responses that dominate Home list endpoints.
+      view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", (e) => {
         const icon = e.currentTarget.querySelector("i");
-        icon?.classList.add("rt-spinning-loop");
-        try { await fetchList(spec, chipState); }
-        finally { icon?.classList.remove("rt-spinning-loop"); }
+        if (icon) {
+          icon.classList.remove("rt-spinning");
+          void icon.offsetWidth;
+          icon.classList.add("rt-spinning");
+        }
+        fetchList(spec, chipState);
       });
 
       // Click-to-sort — header delegation. Three-state per column:
