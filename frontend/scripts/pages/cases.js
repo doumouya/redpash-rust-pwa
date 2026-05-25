@@ -34,6 +34,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
+import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
 
 const STATUS_ORDER = ["backlog", "todo", "in_progress", "in_review", "done"];
 const STATUS_LABEL = {
@@ -972,27 +973,8 @@ export default function cases(app, { session }) {
     return out;
   }
 
-  function dayKey(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
-  }
-  function dayLabel(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    const today = new Date();
-    const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-    const diffDays = Math.round((startOfDay(today) - startOfDay(d)) / 86_400_000);
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7)   return d.toLocaleDateString(undefined, { weekday: "long" });
-    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-  }
-  function fmtClock(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  }
+  // dayKey / dayLabel / fmtClock now imported from /scripts/format.js
+  // (extracted 2026-05-25 per cases-UI review).
 
   function activityRow(e) {
     // Mirrors Monitoring's M-2 userActivityRow shape — same atom,
@@ -1067,20 +1049,7 @@ export default function cases(app, { session }) {
     return '<span class="rp-cases-chip rp-cases-chip--priority is-' + esc(p || "medium") + '">'
       + esc(PRIORITY_LABEL[p] || p || "—") + '</span>';
   }
-  function fmtTime(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString();
-  }
-  function fmtAge(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    const diff = Math.max(0, Date.now() - d.getTime()) / 1000;
-    if (diff < 60) return Math.floor(diff) + "s";
-    if (diff < 3600) return Math.floor(diff / 60) + "m";
-    if (diff < 86400) return Math.floor(diff / 3600) + "h";
-    return Math.floor(diff / 86400) + "d";
-  }
+  // fmtTime / fmtAge now imported from /scripts/format.js.
 
   // ── boot ─────────────────────────────────────────────────────
   // First show the right surface (board vs detail), render the
