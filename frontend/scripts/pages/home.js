@@ -814,23 +814,25 @@ export default function home(app, { session: _session }) {
 
   // Composite KPI / charts row — replaces the default kpiStrip +
   // chartsStrip stack when `spec.compositeStrip === true`. Layout
-  // per Em's Users-tab spec (2026-05-25):
+  // matches Monitoring's .rp-mon-composite (Em 2026-05-25):
   //
-  //   [ chart1 20% ] [ 4 KPI tiles in 2×2, each 15% ] [ chart2 20% ]
+  //   [ chart 20% ][ chart 20% ][ 4 KPI tiles 2×2 = 20% ][ chart 20% ][ chart 20% ]
   //
-  // The middle column houses the 4 standard list KPIs (Total / On
-  // page / Page / Last fetch) in a 2-col × 2-row sub-grid. Falls
-  // back gracefully if the spec has fewer than 2 charts — the
-  // empty chart-card slot still reserves layout space so the row
-  // doesn't reflow. Class names sit in list-page.css's home block
-  // (see `.rp-home-composite*`).
+  // 5 equal cells. The middle cell houses the standard list KPIs
+  // (Total / On page / Page / Last fetch) in a 2×2 sub-grid (each
+  // tile ~10% of the row width). Empty chart slots render as the
+  // faded `.rp-home-chart-card--empty` placeholder so the pattern
+  // reads clearly even on tabs that haven't filled all 4 chart
+  // positions yet.
   function compositeStripHTML(tiles, charts) {
     const chartCard = (c) => c
       ? '<div class="rp-home-chart-card">'
       +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
       +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
       + '</div>'
-      : '<div class="rp-home-chart-card rp-home-chart-card--empty"></div>';
+      : '<div class="rp-home-chart-card rp-home-chart-card--empty">'
+      +   '<div class="rp-home-chart-canvas"></div>'
+      + '</div>';
     const statsCells = tiles.map((t) =>
       '<div class="rp-kpi">'
       + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
@@ -839,8 +841,10 @@ export default function home(app, { session: _session }) {
     ).join("");
     return '<div class="rp-home-composite">'
       +   chartCard(charts[0])
-      +   '<div class="rp-home-composite__stats">' + statsCells + '</div>'
       +   chartCard(charts[1])
+      +   '<div class="rp-home-composite__stats">' + statsCells + '</div>'
+      +   chartCard(charts[2])
+      +   chartCard(charts[3])
       + '</div>';
   }
 
@@ -1198,8 +1202,11 @@ export default function home(app, { session: _session }) {
     // module-scope `charts` controller from createListCharts().
     const specCharts      = spec.charts || [];
     const useComposite    = spec.compositeStrip && specCharts.length >= 2;
-    const compositeCharts = useComposite ? specCharts.slice(0, 2) : [];
-    const extraCharts     = useComposite ? specCharts.slice(2)    : specCharts;
+    // Composite has 4 chart slots flanking the KPI stats grid.
+    // First 4 specCharts go into the composite slots; anything
+    // beyond that drops into the standard chartsStrip below.
+    const compositeCharts = useComposite ? specCharts.slice(0, 4) : [];
+    const extraCharts     = useComposite ? specCharts.slice(4)    : specCharts;
 
     view.innerHTML = ''
       + headHTML(spec.title, "")

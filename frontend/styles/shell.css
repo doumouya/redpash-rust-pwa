@@ -217,18 +217,16 @@
 }
 
 /* Composite KPI / charts row — opt-in via `spec.compositeStrip` in
-   home.js. Layout:
-     [chart1 20%]  [4 KPI tiles, 2-col × 2-row]  [chart2 20%]
-   Tile width per Em's spec (2026-05-25 update): 10% of full row
-   each → the middle column is 20% wide (2 tiles per row × 10%).
-   20 + 20 + 20 = 60% declared; `justify-content: space-between`
-   distributes the remaining 40% as inter-column gaps so the row
-   feels balanced instead of left-clumped. */
+   home.js. 5-cell layout matching Monitoring's .rp-mon-composite
+   (2026-05-25): [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%]
+   [chart 20%]. Empty chart slots stay faded but visible so the
+   pattern reads clearly even on tabs that haven't filled all 4
+   chart positions. */
 .rp-home-composite {
   display: grid;
-  grid-template-columns: 20% 20% 20%;
-  justify-content: space-between;
-  margin-bottom: var(--rp-sp-6);
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-4);
 }
 .rp-home-composite__stats {
   display: grid;
@@ -236,12 +234,28 @@
   grid-template-rows: 1fr 1fr;
   gap: var(--rp-sp-2);
 }
-/* Empty chart slot (when the spec has <2 charts) — reserves
-   layout space so the grid doesn't reflow + the present chart
-   stays anchored at its 20% column. */
+/* Empty chart slot — placeholder for tabs that haven't filled all
+   4 chart positions yet. Faded so it reads as "this slot exists,
+   no chart here yet" rather than visually disappearing. The
+   composite-strip pattern stays clearly set regardless of how many
+   charts the active tab declares. Em 2026-05-25: "fill the empty
+   spaces with random charts, just to have the pattern clearly set". */
 .rp-home-chart-card--empty {
-  background: transparent;
-  border: 0;
+  background: var(--rp-glass);
+  border: 1px dashed var(--rp-glass-border);
+  opacity: 0.45;
+}
+.rp-home-chart-card--empty .rp-home-chart-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rp-home-chart-card--empty .rp-home-chart-canvas::after {
+  content: "—";
 }
 
 /* ── empty-state atom ──────────────────────────────────────────
