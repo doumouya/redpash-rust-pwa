@@ -150,14 +150,30 @@ export default function cases(app, { session }) {
     return params.get("id") || null;
   }
 
+  // Tracks whether we were last on detail-view so renderRoute only
+  // auto-folds the rail on actual board ↔ detail transitions, not
+  // on every case-to-case navigation. Initial value matches the
+  // mount-time route so the first renderRoute is also a "transition"
+  // (deep-link to /cases?id=… auto-folds; deep-link to /cases keeps
+  // the rail expanded).
+  let lastWasDetail = null;
+
   function renderRoute() {
     const rid = activeCaseRid();
+    const isDetail = !!rid;
     // Board is ALWAYS rendered now — the detail panel slides over
     // it as an overlay (Em's call vs the Salesforce full-page swap).
     detailEl.hidden = !rid;
     if (rid) loadCaseDetail(rid);
     if (cachedCases.length) paintBoard(cachedCases);
     paintRail(cachedCases, rid);
+    // Auto-fold the rail on board ↔ detail transitions only. Same-
+    // route navigation (case-to-case, board refresh) leaves the rail
+    // alone so the manual chevron survives until the next transition.
+    if (isDetail !== lastWasDetail) {
+      setRailCompact(isDetail);
+      lastWasDetail = isDetail;
+    }
   }
 
   // Listen for in-page hash changes (board ↔ detail) — main.js
@@ -250,18 +266,26 @@ export default function cases(app, { session }) {
   // rails — the chevron-double-left button on the head flips the
   // .rt-nav.compact modifier; rail.css collapses everything to the
   // 60px icon-only width.
+  //
+  // The rail also auto-folds when a case detail panel opens (board
+  // ↔ detail transition in `renderRoute`) — three columns (rail +
+  // detail-overlay + kanban-behind) competing for width feels
+  // crushed otherwise. `setRailCompact` is the shared mutator so
+  // the manual chevron + the auto-fold can't fight each other.
   const railEl       = app.querySelector("#rp-cases-rail");
   const railCollapse = app.querySelector("#rp-cases-rail-collapse");
-  railCollapse?.addEventListener("click", () => {
+  function setRailCompact(compact) {
     if (!railEl) return;
-    railEl.classList.toggle("compact");
-    const compact = railEl.classList.contains("compact");
-    const icon = railCollapse.querySelector("i");
+    railEl.classList.toggle("compact", compact);
+    const icon = railCollapse?.querySelector("i");
     if (icon) {
       icon.classList.toggle("bi-chevron-double-left", !compact);
       icon.classList.toggle("bi-chevron-double-right", compact);
     }
-    railCollapse.title = compact ? "Expand" : "Collapse";
+    if (railCollapse) railCollapse.title = compact ? "Expand" : "Collapse";
+  }
+  railCollapse?.addEventListener("click", () => {
+    setRailCompact(!railEl?.classList.contains("compact"));
   });
 
   async function refreshCases() {
