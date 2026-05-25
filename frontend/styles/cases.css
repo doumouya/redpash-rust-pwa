@@ -636,7 +636,7 @@
   line-height: 1.5;
   resize: none;                          /* no drag handle — height is fixed at min-height */
   outline: 0;
-  min-height: 140px;                     /* ~6 lines visible by default — room to write a paragraph */
+  min-height: 260px;                     /* ~12 lines — angry customers need room to vent without scrolling */
 }
 .rp-cases-comment-input:focus { border-color: var(--rp-accent-2); }
 .rp-cases-comment-form-send {
