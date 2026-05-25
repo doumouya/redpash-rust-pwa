@@ -104,17 +104,12 @@ async fn main() -> anyhow::Result<()> {
             // in Channel A's panic.backtrace field (deep-dive consumer).
             if tokio::runtime::Handle::try_current().is_ok() {
                 let bt_head = redact::backtrace_head(&backtrace.to_string(), 20);
-                event::record(&pool, event::EventDraft {
-                    origin:  "backend",
-                    level:   "error",
-                    kind:    "panic".into(),
-                    message: redact::redact_chain(&payload),
-                    context: serde_json::json!({
+                event::error(&pool, "panic", redact::redact_chain(&payload))
+                    .context(serde_json::json!({
                         "location":       location,
                         "backtrace_head": bt_head,
-                    }),
-                    ..Default::default()
-                });
+                    }))
+                    .send();
             }
         }));
     }

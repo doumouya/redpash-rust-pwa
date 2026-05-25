@@ -1048,15 +1048,10 @@ async fn delete_user(
     if !removed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "user_delete".into(),
-        message: format!("deleted user {rid}"),
-        user:    Some(caller),
-        context: serde_json::json!({ "target_user": rid }),
-        ..Default::default()
-    });
+    crate::event::warn(&state.db, "user_delete", format!("deleted user {rid}"))
+        .user(caller)
+        .context(serde_json::json!({ "target_user": rid }))
+        .send();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1071,15 +1066,10 @@ async fn delete_company(
     if !removed {
         return Err(AppError::not_found("not_found", format!("company {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "company_delete".into(),
-        message: format!("deleted company {rid}"),
-        user:    Some(caller),
-        context: serde_json::json!({ "company": rid }),
-        ..Default::default()
-    });
+    crate::event::warn(&state.db, "company_delete", format!("deleted company {rid}"))
+        .user(caller)
+        .context(serde_json::json!({ "company": rid }))
+        .send();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1111,18 +1101,17 @@ async fn delete_membership(
     if !removed {
         return Err(AppError::not_found("not_found", format!("membership {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "membership_delete".into(),
-        message: format!("removed {scope} membership {user_id} from {scope_id}"),
-        user:    Some(caller),
-        context: serde_json::json!({
-            "scope":    scope,
-            "scope_id": scope_id,
-            "user_id":  user_id,
-        }),
-        ..Default::default()
-    });
+    crate::event::warn(
+        &state.db,
+        "membership_delete",
+        format!("removed {scope} membership {user_id} from {scope_id}"),
+    )
+    .user(caller)
+    .context(serde_json::json!({
+        "scope":    scope,
+        "scope_id": scope_id,
+        "user_id":  user_id,
+    }))
+    .send();
     Ok(StatusCode::NO_CONTENT)
 }

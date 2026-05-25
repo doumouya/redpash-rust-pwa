@@ -124,15 +124,10 @@ async fn create(
     let company = db::create_company(&state.db, &rid, name, &slug, &user)
         .await
         .map_err(db_err)?;
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "company_create".into(),
-        message: format!("created company {name}"),
-        user:    Some(user.clone()),
-        context: serde_json::json!({ "company": rid, "slug": slug }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "company_create", format!("created company {name}"))
+        .user(user.clone())
+        .context(serde_json::json!({ "company": rid, "slug": slug }))
+        .send();
     Ok(Json(company))
 }
 
@@ -190,15 +185,10 @@ async fn patch(
         }
         Err(e) => return Err(AppError::internal("db", e.to_string())),
     };
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "company_update".into(),
-        message: format!("updated company {}", company.name),
-        user:    Some(user),
-        context: serde_json::json!({ "company": rid, "fields": fields }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "company_update", format!("updated company {}", company.name))
+        .user(user)
+        .context(serde_json::json!({ "company": rid, "fields": fields }))
+        .send();
     Ok(Json(company))
 }
 
@@ -216,15 +206,10 @@ async fn delete_one(
     if !db::delete_company(&state.db, &rid).await.map_err(db_err)? {
         return Err(AppError::not_found("not_found", format!("company {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "company_delete".into(),
-        message: format!("deleted company {rid}"),
-        user:    Some(user),
-        context: serde_json::json!({ "company": rid }),
-        ..Default::default()
-    });
+    crate::event::warn(&state.db, "company_delete", format!("deleted company {rid}"))
+        .user(user)
+        .context(serde_json::json!({ "company": rid }))
+        .send();
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -282,19 +267,18 @@ async fn add_member(
     db::add_company_member(&state.db, &rid, &body.user_id, &body.role)
         .await
         .map_err(db_err)?;
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "company_member_add".into(),
-        message: format!("added {} to company {rid} as {}", body.user_id, body.role),
-        user:    Some(user),
-        context: serde_json::json!({
-            "company": rid,
-            "member":  body.user_id,
-            "role":    body.role,
-        }),
-        ..Default::default()
-    });
+    crate::event::info(
+        &state.db,
+        "company_member_add",
+        format!("added {} to company {rid} as {}", body.user_id, body.role),
+    )
+    .user(user)
+    .context(serde_json::json!({
+        "company": rid,
+        "member":  body.user_id,
+        "role":    body.role,
+    }))
+    .send();
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }
@@ -331,21 +315,27 @@ async fn remove_member(
     db::remove_company_member(&state.db, &rid, &user_id)
         .await
         .map_err(db_err)?;
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   if is_self { "info" } else { "warn" },
-        kind:    if is_self { "company_member_leave".into() } else { "company_member_remove".into() },
-        message: if is_self { format!("left company {rid}") }
-                 else        { format!("removed {user_id} from company {rid}") },
-        user:    Some(user),
-        context: serde_json::json!({
-            "company":      rid,
-            "member":       user_id,
-            "was_self":     is_self,
-            "target_role":  target_role,
-        }),
-        ..Default::default()
+    let event_ctx = serde_json::json!({
+        "company":      rid,
+        "member":       user_id,
+        "was_self":     is_self,
+        "target_role":  target_role,
     });
+    if is_self {
+        crate::event::info(&state.db, "company_member_leave", format!("left company {rid}"))
+            .user(user)
+            .context(event_ctx)
+            .send();
+    } else {
+        crate::event::warn(
+            &state.db,
+            "company_member_remove",
+            format!("removed {user_id} from company {rid}"),
+        )
+        .user(user)
+        .context(event_ctx)
+        .send();
+    }
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }
@@ -395,20 +385,19 @@ async fn patch_member_role(
     db::update_company_member_role(&state.db, &rid, &user_id, new_role)
         .await
         .map_err(db_err)?;
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "company_member_role_change".into(),
-        message: format!("{user_id} role in {rid}: {current} -> {new_role}"),
-        user:    Some(user),
-        context: serde_json::json!({
-            "company":     rid,
-            "member":      user_id,
-            "prior_role":  current,
-            "new_role":    new_role,
-        }),
-        ..Default::default()
-    });
+    crate::event::info(
+        &state.db,
+        "company_member_role_change",
+        format!("{user_id} role in {rid}: {current} -> {new_role}"),
+    )
+    .user(user)
+    .context(serde_json::json!({
+        "company":     rid,
+        "member":      user_id,
+        "prior_role":  current,
+        "new_role":    new_role,
+    }))
+    .send();
     let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
     Ok(Json(MemberList { items }))
 }

@@ -188,21 +188,16 @@ async fn create(
         category_id,
     ).await?;
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "case_create".into(),
-        message: format!("created case {rid}: {title}"),
-        user:    Some(user),
-        context: serde_json::json!({
+    crate::event::info(&state.db, "case_create", format!("created case {rid}: {title}"))
+        .user(user)
+        .context(serde_json::json!({
             "case":     rid,
             "type":     type_,
             "priority": priority,
             "assignee": req.assignee_id,
             "project":  req.project_id,
-        }),
-        ..Default::default()
-    });
+        }))
+        .send();
 
     Ok((StatusCode::CREATED, Json(case)))
 }
@@ -289,20 +284,19 @@ async fn patch(
     // doesn't need to reconstruct from the case row alone.
     let emit_change = |field: &'static str, old: &str, new: &str| {
         if old == new { return; }
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:  "backend",
-            level:   "info",
-            kind:    format!("case_{field}_change"),
-            message: format!("case {rid}: {field} {old} -> {new}"),
-            user:    Some(user.clone()),
-            context: serde_json::json!({
-                "case":  rid,
-                "field": field,
-                "old":   old,
-                "new":   new,
-            }),
-            ..Default::default()
-        });
+        crate::event::info(
+            &state.db,
+            format!("case_{field}_change"),
+            format!("case {rid}: {field} {old} -> {new}"),
+        )
+        .user(user.clone())
+        .context(serde_json::json!({
+            "case":  rid,
+            "field": field,
+            "old":   old,
+            "new":   new,
+        }))
+        .send();
     };
 
     if let Some(ref s) = status   { emit_change("status",   &existing.status,   s); }
@@ -325,18 +319,17 @@ async fn patch(
     if company_id.is_some()    { metadata_fields.push("company");       }
     if error_message.is_some() { metadata_fields.push("error_message"); }
     if !metadata_fields.is_empty() {
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:  "backend",
-            level:   "info",
-            kind:    "case_metadata_change".into(),
-            message: format!("case {rid}: edited {} fields", metadata_fields.len()),
-            user:    Some(user.clone()),
-            context: serde_json::json!({
-                "case":   rid,
-                "fields": metadata_fields,
-            }),
-            ..Default::default()
-        });
+        crate::event::info(
+            &state.db,
+            "case_metadata_change",
+            format!("case {rid}: edited {} fields", metadata_fields.len()),
+        )
+        .user(user.clone())
+        .context(serde_json::json!({
+            "case":   rid,
+            "fields": metadata_fields,
+        }))
+        .send();
     }
 
     Ok(Json(updated))
@@ -354,15 +347,10 @@ async fn delete_one(
     if !removed {
         return Err(AppError::not_found("not_found", format!("case {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "case_delete".into(),
-        message: format!("deleted case {rid}"),
-        user:    Some(user),
-        context: serde_json::json!({ "case": rid }),
-        ..Default::default()
-    });
+    crate::event::warn(&state.db, "case_delete", format!("deleted case {rid}"))
+        .user(user)
+        .context(serde_json::json!({ "case": rid }))
+        .send();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -407,15 +395,10 @@ async fn post_comment(
     let cmt_rid = id::new("CMT");
     let comment = db::insert_comment(&state.db, &cmt_rid, &rid, Some(&user), body).await?;
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "case_comment_post".into(),
-        message: format!("case {rid}: new comment {cmt_rid}"),
-        user:    Some(user),
-        context: serde_json::json!({ "case": rid, "comment": cmt_rid }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "case_comment_post", format!("case {rid}: new comment {cmt_rid}"))
+        .user(user)
+        .context(serde_json::json!({ "case": rid, "comment": cmt_rid }))
+        .send();
 
     Ok((StatusCode::CREATED, Json(comment)))
 }
@@ -443,15 +426,10 @@ async fn patch_comment(
     let updated = db::update_comment(&state.db, &cmt_rid, body).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("comment {cmt_rid}")))?;
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "case_comment_edit".into(),
-        message: format!("case {rid}: edited comment {cmt_rid}"),
-        user:    Some(user),
-        context: serde_json::json!({ "case": rid, "comment": cmt_rid }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "case_comment_edit", format!("case {rid}: edited comment {cmt_rid}"))
+        .user(user)
+        .context(serde_json::json!({ "case": rid, "comment": cmt_rid }))
+        .send();
 
     Ok(Json(updated))
 }
@@ -473,14 +451,9 @@ async fn delete_comment(
     if !removed {
         return Err(AppError::not_found("not_found", format!("comment {cmt_rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "case_comment_delete".into(),
-        message: format!("case {rid}: deleted comment {cmt_rid}"),
-        user:    Some(user),
-        context: serde_json::json!({ "case": rid, "comment": cmt_rid }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "case_comment_delete", format!("case {rid}: deleted comment {cmt_rid}"))
+        .user(user)
+        .context(serde_json::json!({ "case": rid, "comment": cmt_rid }))
+        .send();
     Ok(StatusCode::NO_CONTENT)
 }

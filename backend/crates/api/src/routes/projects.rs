@@ -115,15 +115,10 @@ async fn create_project(
     )
     .await?;
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "project_create".into(),
-        message: format!("created project {name}"),
-        user:    Some(user.clone()),
-        context: serde_json::json!({ "project": rid }),
-        ..Default::default()
-    });
+    crate::event::info(&state.db, "project_create", format!("created project {name}"))
+        .user(user.clone())
+        .context(serde_json::json!({ "project": rid }))
+        .send();
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -217,13 +212,9 @@ async fn patch_project(
     // so a triage query can spot rename-only vs reassignment without
     // diffing the row.
     if any_field {
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:  "backend",
-            level:   "info",
-            kind:    "project_patch".into(),
-            message: format!("patched project {rid}"),
-            user:    Some(user.clone()),
-            context: serde_json::json!({
+        crate::event::info(&state.db, "project_patch", format!("patched project {rid}"))
+            .user(user.clone())
+            .context(serde_json::json!({
                 "project":     rid.clone(),
                 "renamed":     name_trim.is_some(),
                 "described":   desc_trim.is_some(),
@@ -231,9 +222,8 @@ async fn patch_project(
                 "reassigned":  new_owner.is_some(),
                 "scoped":      new_company.is_some(),
                 "status":      new_status.is_some(),
-            }),
-            ..Default::default()
-        });
+            }))
+            .send();
     }
     Ok(Json(updated))
 }
@@ -275,17 +265,16 @@ async fn delete_project(
         let _ = tokio::fs::remove_file(state.file_path(fid)).await;
     }
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "info",
-        kind:    "project_delete".into(),
-        message: format!("deleted project {rid} (cascade: {file_count} files)"),
-        user:    Some(user.clone()),
-        context: serde_json::json!({
-            "project":         rid.clone(),
-            "cascade_files":   file_count,
-        }),
-        ..Default::default()
-    });
+    crate::event::info(
+        &state.db,
+        "project_delete",
+        format!("deleted project {rid} (cascade: {file_count} files)"),
+    )
+    .user(user.clone())
+    .context(serde_json::json!({
+        "project":         rid.clone(),
+        "cascade_files":   file_count,
+    }))
+    .send();
     Ok(StatusCode::NO_CONTENT)
 }

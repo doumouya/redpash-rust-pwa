@@ -185,15 +185,14 @@ async fn callback(
     let sid = db::create_session(&state.db, &user.redpash_id, SESSION_TTL_DAYS)
         .await?;
 
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:     "backend",
-        level:      "info",
-        kind:       "auth_login".into(),
-        message:    format!("{} signed in (Google OAuth)", user.username),
-        user:       Some(user.redpash_id.clone()),
-        session_id: Some(sid.clone()),
-        ..Default::default()
-    });
+    crate::event::info(
+        &state.db,
+        "auth_login",
+        format!("{} signed in (Google OAuth)", user.username),
+    )
+    .user(user.redpash_id.clone())
+    .session(sid.clone())
+    .send();
 
     let mut out = HeaderMap::new();
     out.append(SET_COOKIE, HeaderValue::from_str(&clear_cookie(STATE_COOKIE)).unwrap());
@@ -209,15 +208,10 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Res
         // logout event can still be attributed.
         let user = db::find_session_user(&state.db, &sid).await.ok().flatten();
         let _ = db::delete_session(&state.db, &sid).await;
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:     "backend",
-            level:      "info",
-            kind:       "auth_logout".into(),
-            message:    "signed out".into(),
-            user,
-            session_id: Some(sid),
-            ..Default::default()
-        });
+        crate::event::info(&state.db, "auth_logout", "signed out")
+            .user_opt(user)
+            .session(sid)
+            .send();
     }
     let mut out = HeaderMap::new();
     out.insert(SET_COOKIE, HeaderValue::from_str(&clear_cookie(SESSION_COOKIE)).unwrap());

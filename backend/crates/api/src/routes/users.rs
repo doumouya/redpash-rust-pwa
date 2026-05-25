@@ -66,15 +66,10 @@ async fn create(
     let res   = db::insert_user(&state.db, &rid, username, display_name, email).await;
     match res {
         Ok(u) => {
-            crate::event::record(&state.db, crate::event::EventDraft {
-                origin:  "backend",
-                level:   "info",
-                kind:    "user_create".into(),
-                message: format!("created user {username}"),
-                user:    Some(caller),
-                context: serde_json::json!({ "user": rid, "username": username }),
-                ..Default::default()
-            });
+            crate::event::info(&state.db, "user_create", format!("created user {username}"))
+                .user(caller)
+                .context(serde_json::json!({ "user": rid, "username": username }))
+                .send();
             Ok(Json(u))
         }
         Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
@@ -163,15 +158,10 @@ async fn patch(
     match res {
         Ok(opt) => {
             let user = opt.ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?;
-            crate::event::record(&state.db, crate::event::EventDraft {
-                origin:  "backend",
-                level:   "info",
-                kind:    "user_update".into(),
-                message: format!("updated user {rid}"),
-                user:    Some(caller),
-                context: serde_json::json!({ "user": rid, "fields": fields }),
-                ..Default::default()
-            });
+            crate::event::info(&state.db, "user_update", format!("updated user {rid}"))
+                .user(caller)
+                .context(serde_json::json!({ "user": rid, "fields": fields }))
+                .send();
             Ok(Json(user))
         }
         Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
@@ -194,14 +184,9 @@ async fn delete_one(
     if !removed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
-    crate::event::record(&state.db, crate::event::EventDraft {
-        origin:  "backend",
-        level:   "warn",
-        kind:    "user_delete".into(),
-        message: format!("deleted user {rid}"),
-        user:    Some(caller),
-        context: serde_json::json!({ "user": rid }),
-        ..Default::default()
-    });
+    crate::event::warn(&state.db, "user_delete", format!("deleted user {rid}"))
+        .user(caller)
+        .context(serde_json::json!({ "user": rid }))
+        .send();
     Ok(Json(serde_json::json!({ "ok": true })))
 }

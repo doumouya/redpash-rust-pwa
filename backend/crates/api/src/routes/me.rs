@@ -129,15 +129,14 @@ async fn patch_me(
     .ok_or_else(|| AppError::not_found("not_found", "current user not found"))?;
 
     if !fields.is_empty() {
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:  "backend",
-            level:   "info",
-            kind:    "me_update".into(),
-            message: format!("updated own profile ({} fields)", fields.len()),
-            user:    Some(user_rid.clone()),
-            context: serde_json::json!({ "user": user_rid, "fields": fields }),
-            ..Default::default()
-        });
+        crate::event::info(
+            &state.db,
+            "me_update",
+            format!("updated own profile ({} fields)", fields.len()),
+        )
+        .user(user_rid.clone())
+        .context(serde_json::json!({ "user": user_rid, "fields": fields }))
+        .send();
     }
 
     Ok(Json(user))
@@ -165,18 +164,17 @@ async fn patch_me_prefs(
         .unwrap_or_default();
     apply_prefs_patch(&state, &user_rid, &body.prefs).await?;
     if !keys.is_empty() {
-        crate::event::record(&state.db, crate::event::EventDraft {
-            origin:  "backend",
-            level:   "info",
-            kind:    "me_prefs_update".into(),
-            message: format!("updated own preferences ({} keys)", keys.len()),
-            user:    Some(user_rid.clone()),
-            // Keys only — pref values may contain user-content like
-            // learned_sentinels that we don't want to mirror into the
-            // events stream.
-            context: serde_json::json!({ "user": user_rid, "keys": keys }),
-            ..Default::default()
-        });
+        // Keys only — pref values may contain user-content like
+        // learned_sentinels that we don't want to mirror into the
+        // events stream.
+        crate::event::info(
+            &state.db,
+            "me_prefs_update",
+            format!("updated own preferences ({} keys)", keys.len()),
+        )
+        .user(user_rid.clone())
+        .context(serde_json::json!({ "user": user_rid, "keys": keys }))
+        .send();
     }
     Ok(StatusCode::NO_CONTENT)
 }
