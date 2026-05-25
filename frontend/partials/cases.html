@@ -4,146 +4,158 @@
      v1 ships the board (5 columns) + the detail page; sprints + story
      points come in v2; customer-facing reporter path in v3.
 
-     Two surfaces hosted in one partial — JS toggles between them
-     based on `?id=CAS_…` in the URL hash:
-       • no `?id`         → kanban board (#rp-cases-board)
-       • `?id=CAS_xyz`    → case detail   (#rp-cases-detail)
+     Layout — same rail-page shell as /home + /monitoring:
+       • left rail (.rt-nav): case list grouped by status, with
+         "Board" pseudo-item at top + the New-case button in the head
+       • main: kanban board (when no ?id=) OR case detail (when
+         ?id=CAS_…). Both surfaces use the full main area; the rail
+         is the constant nav so you can jump between cases without
+         a round-trip through the board.
+
      Page-specific styles live in cases.css. -->
 <section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
 
-  <!-- ════ kanban board view (default) ════ -->
-  <div id="rp-cases-board" class="rp-cases-board">
-    <header class="rp-cases-board-head">
-      <div class="rp-cases-board-title">
-        <h1>Cases</h1>
-        <p class="rp-cases-board-sub">Workstreams, agent coordination, bug reports — one queue.</p>
-      </div>
-      <div class="rp-cases-board-actions">
-        <div class="rp-cases-filter">
-          <input type="search" id="rp-cases-search" class="rp-cases-search"
-                 placeholder="Search cases…" autocomplete="off" />
-        </div>
-        <button class="rt-btn rt-btn--accent" id="rp-cases-new" type="button">
-          <i class="bi bi-plus-lg"></i> New case
+  <div class="rp-shell-body">
+
+    <!-- ════ rail — case list, status-grouped ════ -->
+    <aside class="rt-nav" id="rp-cases-rail">
+      <div class="rt-nav-head">
+        <span class="rt-nav-title">Cases</span>
+        <button class="rt-btn rt-btn--accent rp-cases-rail-new" id="rp-cases-new"
+                type="button" title="New case">
+          <i class="bi bi-plus-lg"></i>
         </button>
       </div>
-    </header>
+      <div class="rp-cases-rail-filter">
+        <input type="search" id="rp-cases-search" class="rp-cases-rail-search"
+               placeholder="Search cases…" autocomplete="off" />
+      </div>
+      <div class="rt-nav-body" id="rp-cases-rail-body">
+        <p class="rt-nav-state">Loading cases…</p>
+      </div>
+    </aside>
 
-    <div class="rp-cases-cols" id="rp-cases-cols">
-      <!-- JS renders 5 .rp-cases-col elements here, one per status
-           (backlog / todo / in_progress / in_review / done). Cards
-           live inside; click-cycle forwards the status. -->
-    </div>
-  </div>
+    <!-- ════ main — board or detail, decided by ?id= ════ -->
+    <main class="rp-shell-main rp-cases-main">
 
-  <!-- ════ detail view (hidden until ?id=CAS_… deep-link) ════ -->
-  <div id="rp-cases-detail" class="rp-cases-detail" hidden>
-    <header class="rp-cases-detail-head">
-      <a href="#/cases" class="rt-btn rt-btn--glass rp-cases-back" title="Back to board">
-        <i class="bi bi-arrow-left"></i> Cases
-      </a>
-      <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
-    </header>
-
-    <div class="rp-cases-detail-body">
-      <main class="rp-cases-detail-main">
-        <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
-        <div class="rp-cases-detail-meta-strip" id="rp-cases-detail-meta-strip">
-          <!-- status chip + priority chip + type chip — JS renders -->
+      <!-- board view (default — no ?id=) -->
+      <div id="rp-cases-board" class="rp-cases-board">
+        <div class="rp-cases-cols" id="rp-cases-cols">
+          <!-- JS renders 5 .rp-cases-col elements here, one per status
+               (backlog / todo / in_progress / in_review / done). Cards
+               are anchors → /cases?id=…; the chevron button advances
+               status via PATCH. -->
         </div>
-        <section class="rp-cases-detail-description" id="rp-cases-detail-description">
-          <!-- JS renders <pre> for now; markdown render is a v2 polish -->
-        </section>
+      </div>
 
-        <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
-          <button class="is-active" type="button" data-tab="comments" title="Comments thread">
-            <i class="bi bi-chat-left-text"></i> Comments
-          </button>
-          <button type="button" data-tab="activity" title="Activity feed (events)">
-            <i class="bi bi-clock-history"></i> Activity
-          </button>
-        </nav>
+      <!-- detail view (hidden until ?id=CAS_… deep-link) -->
+      <div id="rp-cases-detail" class="rp-cases-detail" hidden>
+        <header class="rp-cases-detail-head">
+          <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
+        </header>
 
-        <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
-          <div class="rp-cases-comments-list" id="rp-cases-comments-list">
-            <!-- JS renders comments here -->
-          </div>
-          <form class="rp-cases-comment-form" id="rp-cases-comment-form">
-            <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
-                      placeholder="Write a comment…" rows="3"></textarea>
-            <button class="rt-btn rt-btn--accent" type="submit">
-              <i class="bi bi-send"></i> Post
-            </button>
-          </form>
-        </section>
-
-        <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
-          <div class="rp-cases-activity-list" id="rp-cases-activity-list">
-            <!-- JS renders activity-feed events (case_* kinds) -->
-          </div>
-        </section>
-      </main>
-
-      <aside class="rp-cases-detail-side">
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Status</label>
-          <select class="rp-cases-side-select" id="rp-cases-side-status">
-            <option value="backlog">Backlog</option>
-            <option value="todo">Todo</option>
-            <option value="in_progress">In progress</option>
-            <option value="in_review">In review</option>
-            <option value="done">Done</option>
-          </select>
-        </div>
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Priority</label>
-          <select class="rp-cases-side-select" id="rp-cases-side-priority">
-            <option value="low">Low</option>
-            <option value="medium" selected>Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
-          </select>
-        </div>
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Type</label>
-          <select class="rp-cases-side-select" id="rp-cases-side-type">
-            <option value="task" selected>Task</option>
-            <option value="bug">Bug</option>
-            <option value="feature">Feature</option>
-            <option value="epic">Epic</option>
-          </select>
-        </div>
-        <div class="rp-cases-side-section rp-cases-side-section--picker">
-          <label class="rp-cases-side-label">Assignee</label>
-          <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
-                  type="button" title="Change assignee">
-            <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
-            <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
-          </button>
-          <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
-            <div class="rp-user-picker-wrap">
-              <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
-                     placeholder="Search by name, username, email…" />
-              <div id="rp-cases-side-assignee-results"
-                   class="rp-user-picker-results" hidden></div>
+        <div class="rp-cases-detail-body">
+          <main class="rp-cases-detail-main">
+            <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
+            <div class="rp-cases-detail-meta-strip" id="rp-cases-detail-meta-strip">
+              <!-- status chip + priority chip + type chip — JS renders -->
             </div>
-          </div>
+            <section class="rp-cases-detail-description" id="rp-cases-detail-description">
+              <!-- JS renders <pre> for now; markdown render is a v2 polish -->
+            </section>
+
+            <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
+              <button class="is-active" type="button" data-tab="comments" title="Comments thread">
+                <i class="bi bi-chat-left-text"></i> Comments
+              </button>
+              <button type="button" data-tab="activity" title="Activity feed (events)">
+                <i class="bi bi-clock-history"></i> Activity
+              </button>
+            </nav>
+
+            <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
+              <div class="rp-cases-comments-list" id="rp-cases-comments-list">
+                <!-- JS renders comments here -->
+              </div>
+              <form class="rp-cases-comment-form" id="rp-cases-comment-form">
+                <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
+                          placeholder="Write a comment…" rows="3"></textarea>
+                <button class="rt-btn rt-btn--accent" type="submit">
+                  <i class="bi bi-send"></i> Post
+                </button>
+              </form>
+            </section>
+
+            <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
+              <div class="rp-cases-activity-list" id="rp-cases-activity-list">
+                <!-- JS renders activity-feed events (case_* kinds) -->
+              </div>
+            </section>
+          </main>
+
+          <aside class="rp-cases-detail-side">
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Status</label>
+              <select class="rp-cases-side-select" id="rp-cases-side-status">
+                <option value="backlog">Backlog</option>
+                <option value="todo">Todo</option>
+                <option value="in_progress">In progress</option>
+                <option value="in_review">In review</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Priority</label>
+              <select class="rp-cases-side-select" id="rp-cases-side-priority">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Type</label>
+              <select class="rp-cases-side-select" id="rp-cases-side-type">
+                <option value="task" selected>Task</option>
+                <option value="bug">Bug</option>
+                <option value="feature">Feature</option>
+                <option value="epic">Epic</option>
+              </select>
+            </div>
+            <div class="rp-cases-side-section rp-cases-side-section--picker">
+              <label class="rp-cases-side-label">Assignee</label>
+              <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
+                      type="button" title="Change assignee">
+                <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
+                <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
+              </button>
+              <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
+                <div class="rp-user-picker-wrap">
+                  <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
+                         placeholder="Search by name, username, email…" />
+                  <div id="rp-cases-side-assignee-results"
+                       class="rp-user-picker-results" hidden></div>
+                </div>
+              </div>
+            </div>
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Reporter</label>
+              <div class="rp-cases-side-value" id="rp-cases-side-reporter">—</div>
+            </div>
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Created</label>
+              <div class="rp-cases-side-value" id="rp-cases-side-created">—</div>
+            </div>
+            <div class="rp-cases-side-section">
+              <label class="rp-cases-side-label">Updated</label>
+              <div class="rp-cases-side-value" id="rp-cases-side-updated">—</div>
+            </div>
+          </aside>
         </div>
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Reporter</label>
-          <div class="rp-cases-side-value" id="rp-cases-side-reporter">—</div>
-        </div>
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Created</label>
-          <div class="rp-cases-side-value" id="rp-cases-side-created">—</div>
-        </div>
-        <div class="rp-cases-side-section">
-          <label class="rp-cases-side-label">Updated</label>
-          <div class="rp-cases-side-value" id="rp-cases-side-updated">—</div>
-        </div>
-      </aside>
-    </div>
+      </div>
+
+    </main>
   </div>
 
   <!-- ════ create-case modal (hidden until "New case" click) ════ -->

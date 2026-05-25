@@ -5,42 +5,39 @@
    comments/activity. Reuses tab atom from panel.css (.rt-panel-tabs)
    for the comments/activity switcher. */
 
-/* ── board ────────────────────────────────────────────────────── */
-.rp-cases-board {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 16px 22px 22px;
-  gap: 12px;
+/* ── main pane override ───────────────────────────────────────
+   The cases page hosts kanban (a fixed-height, internally-scrolling
+   grid) inside .rp-shell-main. Override the shell's default
+   `overflow-y: auto` + .rp-shell--wide's padding so the kanban
+   grid can use the full pane height + width without an outer
+   scroll. Selector specificity matches `.rp-shell--wide .rp-shell-main`
+   (0,0,2,0); source order wins since cases.css imports after
+   shell.css. */
+.rp-shell-main.rp-cases-main {
+  overflow: hidden;
+  padding: 0;
 }
-.rp-cases-board-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.rp-cases-board-title h1 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 650;
-  color: var(--rp-text);
-  letter-spacing: -0.01em;
-}
-.rp-cases-board-sub {
-  margin: 2px 0 0;
-  color: var(--rp-text-mute);
-  font-size: 12.5px;
-}
-.rp-cases-board-actions {
-  display: flex;
+
+/* ── rail filter + items ──────────────────────────────────────
+   The rail uses .rt-nav atoms (rail.css) for the chrome — head,
+   body, groups, tabs. These rules add the cases-specific filter
+   strip (search input below the head) and tune the .rt-tab
+   variant used for individual case rows. */
+.rp-cases-rail-new {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
 }
-.rp-cases-search {
-  height: 32px;
-  width: 240px;
+.rp-cases-rail-filter {
+  flex-shrink: 0;
+  padding: 4px 10px 8px;
+}
+.rp-cases-rail-search {
+  width: 100%;
+  height: 30px;
   padding: 0 10px;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
@@ -50,7 +47,41 @@
   font-size: 12.5px;
   outline: 0;
 }
-.rp-cases-search:focus { border-color: var(--rp-accent-2); }
+.rp-cases-rail-search:focus { border-color: var(--rp-accent-2); }
+
+/* "Board" pseudo-tab — sits above the status groups, no group
+   indent. Uses the .rt-tab atom but reset the left-padding that
+   the workspace's nested-under-group items use. */
+.rp-cases-rail-board {
+  padding: 0 8px;
+  margin: 4px 0 8px;
+}
+.rp-cases-rail-board .rt-tab-icon { font-size: 13px; }
+
+/* Case row in the rail — priority dot replaces the workspace's
+   per-file dirty/clean dot. Reset the left-padding so the dot
+   aligns with the group mark above. */
+.rp-cases-rail-item { padding: 0 8px; }
+.rp-cases-rail-item .rp-cases-priority-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+.rp-cases-rail-empty {
+  margin: 0;
+  padding: 6px 8px 8px 32px;
+  font-size: 11px;
+  color: var(--rp-text-mute);
+}
+
+/* ── board ────────────────────────────────────────────────────── */
+.rp-cases-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 16px;
+}
 
 /* 5 columns laid out as a horizontal grid; each column scrolls
    vertically inside its own track. The grid itself never scrolls

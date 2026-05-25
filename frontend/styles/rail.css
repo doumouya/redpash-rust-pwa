@@ -83,6 +83,7 @@
 .rt-group-mark[data-c="teal"]  { background: var(--rp-teal); }
 .rt-group-mark[data-c="peach"] { background: var(--rp-peach); }
 .rt-group-mark[data-c="green"] { background: var(--rp-ok); }
+.rt-group-mark[data-c="mute"]  { background: var(--rp-text-mute); }
 .rt-group-name {
   flex: 1;
   text-align: left;

@@ -1,4 +1,4 @@
-// Cases — kanban board + detail page.
+// Cases — rail + (kanban board | case detail) surface.
 //
 // Workstream spec: docs/internal/jira-flow-proposition/proposition.md.
 // v1 scope: cases + comments tables, kanban (5 columns), detail page,
@@ -8,7 +8,17 @@
 // per-event context expander, same `redact_chain` already applied at
 // the airlock.
 //
-// Two surfaces in one partial; the URL hash selects which renders:
+// Layout — same rail-page shell as /home + /monitoring:
+//   • left rail (.rt-nav): case list, status-grouped, with a "Board"
+//     pseudo-item at top + the New-case button in the head + the
+//     search input in a filter strip below the head
+//   • main: kanban board (default) OR case detail (when ?id=CAS_…)
+// One data fetch feeds both surfaces — `refreshCases()` pulls the
+// list, re-paints the rail, and re-paints the board if visible.
+// Mutations (status flip, create) re-trigger refreshCases so both
+// halves stay in sync.
+//
+// URL routing:
 //   #/cases               → kanban board (board view)
 //   #/cases?id=CAS_xyz    → case detail   (detail view)
 // The hashchange handler in main.js fires the router; this module
@@ -39,6 +49,17 @@ const TYPE_LABEL = {
   task: "Task", bug: "Bug", feature: "Feature", epic: "Epic",
 };
 
+// Status → color token name for the rail group's .rt-group-mark.
+// Same mapping the column accent stripe uses (cases.css) so the
+// rail mark + column stripe + status chip read as one palette.
+const RAIL_MARK_COLOR = {
+  backlog:     "mute",
+  todo:        "blue",
+  in_progress: "mauve",
+  in_review:   "peach",
+  done:        "green",
+};
+
 export default function cases(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "cases", session });
 
@@ -46,8 +67,17 @@ export default function cases(app, { session }) {
   // this function fresh on each route activation).
   const boardEl  = app.querySelector("#rp-cases-board");
   const detailEl = app.querySelector("#rp-cases-detail");
+  const railBody = app.querySelector("#rp-cases-rail-body");
   let searchQ = "";
   let searchDebounce = null;
+  let cachedCases = [];                        // last fetched roster — feeds rail + board
+  let railGroupExpanded = {                    // sticky per-mount; v2 could persist
+    backlog:     true,
+    todo:        true,
+    in_progress: true,
+    in_review:   true,
+    done:        false,                        // done is collapsed by default — usually noisy
+  };
 
   // ── route — board vs detail by ?id=… in the hash ────────────
   function activeCaseRid() {
@@ -64,8 +94,11 @@ export default function cases(app, { session }) {
     } else {
       detailEl.hidden = true;
       boardEl.hidden = false;
-      loadCaseBoard();
+      // Paint board from cache if we have it; otherwise the
+      // refreshCases() call below populates it on first mount.
+      if (cachedCases.length) paintBoard(cachedCases);
     }
+    paintRail(cachedCases, rid);               // rail always re-paints to update active highlight
   }
 
   // Listen for in-page hash changes (board ↔ detail) — main.js
@@ -84,7 +117,7 @@ export default function cases(app, { session }) {
   if (window._rpCasesHashHandler) window.removeEventListener("hashchange", window._rpCasesHashHandler);
   window._rpCasesHashHandler = onHashChange;
 
-  // ── board view ──────────────────────────────────────────────
+  // ── rail + board: one data fetch feeds both ─────────────────
   const searchInput = app.querySelector("#rp-cases-search");
   const newCaseBtn  = app.querySelector("#rp-cases-new");
   const colsHost    = app.querySelector("#rp-cases-cols");
@@ -93,7 +126,7 @@ export default function cases(app, { session }) {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
       searchQ = searchInput.value.trim();
-      loadCaseBoard();
+      refreshCases();
     }, 200);
   });
 
@@ -113,33 +146,50 @@ export default function cases(app, { session }) {
     if (card) cycleStatus(card.dataset.rid, card.dataset.status);
   });
 
-  async function loadCaseBoard() {
-    if (!colsHost) return;
-    colsHost.innerHTML = STATUS_ORDER.map((s) => columnShellHTML(s, "Loading…")).join("");
+  // Rail click delegate — group-head toggles expansion; tab clicks
+  // are anchors so the browser handles nav.
+  railBody?.addEventListener("click", (e) => {
+    const groupHead = e.target.closest(".rt-group-head");
+    if (!groupHead) return;
+    const group = groupHead.closest(".rt-group");
+    if (!group) return;
+    const status = group.dataset.status;
+    if (status) {
+      railGroupExpanded[status] = !group.classList.contains("expanded");
+      group.classList.toggle("expanded", railGroupExpanded[status]);
+    }
+  });
+
+  async function refreshCases() {
     try {
       const params = new URLSearchParams();
       params.set("size", "200");                     // pull a large window; v2 paginates per column
       if (searchQ) params.set("q", searchQ);
       const data = await api.get("/cases?" + params.toString());
       // Backend returns { items, total, page, size } per the cookbook
-      // contract. The original v1 shell read `.rows` (wrong) and
-      // rendered an empty board even when cases existed.
-      const rows = data?.items || [];
-      paintBoard(rows);
+      // contract — the original v1 shell read `.rows` (wrong).
+      cachedCases = data?.items || [];
+      paintRail(cachedCases, activeCaseRid());
+      if (!boardEl.hidden) paintBoard(cachedCases);
     } catch (err) {
-      if (err?.status === 404) {
-        // Backend not yet shipped — graceful empty state for the
-        // pre-handoff window. Re-renders cleanly once Gus's
-        // routes::cases lands.
-        colsHost.innerHTML = STATUS_ORDER.map((s) =>
-          columnShellHTML(s, s === "backlog" ? "Cases endpoint not live yet." : "—")
-        ).join("");
+      const status = err?.status;
+      if (status === 404) {
+        cachedCases = [];
+        paintRailState("Cases endpoint not live yet.");
+        if (!boardEl.hidden) paintBoardEmpty("Cases endpoint not live yet.");
         return;
       }
-      colsHost.innerHTML = STATUS_ORDER.map((s) =>
-        columnShellHTML(s, "Couldn't load cases" + (err?.status ? " (" + err.status + ")" : "") + ".")
-      ).join("");
+      const msg = "Couldn't load cases" + (status ? " (" + status + ")" : "") + ".";
+      paintRailState(msg);
+      if (!boardEl.hidden) paintBoardEmpty(msg);
     }
+  }
+
+  function paintBoardEmpty(msg) {
+    if (!colsHost) return;
+    colsHost.innerHTML = STATUS_ORDER.map((s) =>
+      columnShellHTML(s, s === "backlog" ? msg : "—")
+    ).join("");
   }
 
   function paintBoard(rows) {
@@ -202,6 +252,65 @@ export default function cases(app, { session }) {
       + '</a>';
   }
 
+  // ── rail render ─────────────────────────────────────────────
+  // Reuses the workspace's rail atoms — .rt-group + .rt-tab —
+  // so the visual rhythm matches the rest of the app. A
+  // "Board" pseudo-tab sits above the groups as the always-on
+  // way back to the kanban view. Each status group's mark uses
+  // the same color token as the column accent stripe.
+  function paintRailState(msg) {
+    if (railBody) railBody.innerHTML = '<p class="rt-nav-state">' + esc(msg) + '</p>';
+  }
+
+  function paintRail(rows, activeRid) {
+    if (!railBody) return;
+    const boardActive = !activeRid;
+    const boardItem = ''
+      + '<a class="rt-tab rp-cases-rail-board' + (boardActive ? ' active' : '') + '" '
+      +    'href="#/cases" data-tab="board">'
+      +   '<i class="rt-tab-icon bi bi-kanban"></i>'
+      +   '<span class="rt-tab-name">Board</span>'
+      + '</a>';
+
+    const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
+    rows.forEach((c) => {
+      const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
+      byStatus[s].push(c);
+    });
+
+    const groupsHTML = STATUS_ORDER.map((status) => {
+      const cases = byStatus[status];
+      const expanded = railGroupExpanded[status];
+      const itemsHTML = cases.length
+        ? cases.map((c) => railItemHTML(c, activeRid)).join("")
+        : '<p class="rp-cases-rail-empty">No cases.</p>';
+      return ''
+        + '<div class="rt-group' + (expanded ? ' expanded' : '') + '" data-status="' + status + '">'
+        +   '<button class="rt-group-head" type="button">'
+        +     '<i class="rt-group-caret bi bi-chevron-down"></i>'
+        +     '<span class="rt-group-mark" data-c="' + RAIL_MARK_COLOR[status] + '"></span>'
+        +     '<span class="rt-group-name">' + esc(STATUS_LABEL[status]) + '</span>'
+        +     '<span class="rt-group-count">' + cases.length + '</span>'
+        +   '</button>'
+        +   '<div class="rt-group-body">' + itemsHTML + '</div>'
+        + '</div>';
+    }).join("");
+
+    railBody.innerHTML = boardItem + groupsHTML;
+  }
+
+  function railItemHTML(c, activeRid) {
+    const rid = c.redpash_id || c.rid || "";
+    const isActive = rid === activeRid;
+    const href = "#/cases?id=" + encodeURIComponent(rid);
+    return ''
+      + '<a class="rt-tab rp-cases-rail-item' + (isActive ? ' active' : '') + '" '
+      +    'href="' + esc(href) + '" title="' + esc(c.title || rid) + '">'
+      +   priorityDotHTML(c.priority)
+      +   '<span class="rt-tab-name">' + esc(c.title || "(untitled)") + '</span>'
+      + '</a>';
+  }
+
   function priorityDotHTML(p) {
     const cls = p === "critical" ? "is-critical"
               : p === "high"     ? "is-high"
@@ -216,7 +325,7 @@ export default function cases(app, { session }) {
     const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
     try {
       await api.patch("/cases/" + encodeURIComponent(rid), { status: next });
-      loadCaseBoard();
+      refreshCases();
     } catch (err) {
       console.warn("[cases] cycle status failed:", err);
     }
@@ -275,8 +384,9 @@ export default function cases(app, { session }) {
       closeCreateModal();
       if (rid) {
         location.hash = "#/cases?id=" + encodeURIComponent(rid);
+        refreshCases();                          // pick up the new row in the rail
       } else {
-        loadCaseBoard();
+        refreshCases();
       }
     } catch (err) {
       const msg = err?.body?.message || err?.body?.error || err?.message || "Create failed";
@@ -509,6 +619,10 @@ export default function cases(app, { session }) {
     try {
       const updated = await api.patch("/cases/" + encodeURIComponent(currentDetailRid), patch);
       paintDetail(updated);
+      // Keep the rail in sync — status/priority/assignee changes
+      // from the side panel should reflect in the rail item without
+      // a manual refresh.
+      refreshCases();
     } catch (err) {
       console.warn("[cases] patch failed:", err);
     }
@@ -554,5 +668,10 @@ export default function cases(app, { session }) {
   }
 
   // ── boot ─────────────────────────────────────────────────────
+  // First show the right surface (board vs detail), then fetch the
+  // case list — fetch populates the rail and re-paints the board
+  // once the response lands. Detail view fires its own /cases/:rid
+  // fetch independently of the list call.
   renderRoute();
+  refreshCases();
 }
