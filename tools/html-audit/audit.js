@@ -41,7 +41,7 @@ var crypto = require('crypto');
 
 var PARTIALS_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
-  : '/home/mansa/redpash-app/frontend/partials';
+  : path.join(__dirname, '..', '..', 'frontend', 'partials');
 var OUT = path.join(__dirname, 'audit.html');
 
 /* tuning */
@@ -719,7 +719,7 @@ function renderHtml(d) {
 '<style>' + CSS + '</style>',
 '</head><body>',
 '<header>',
-'  <h1>HTML component audit <span class="muted">· redpash-app</span></h1>',
+'  <h1>HTML component audit <span class="muted">· RedPash</span></h1>',
 '  <div class="sub" id="sub"></div>',
 '</header>',
 '<section class="cards" id="cards"></section>',

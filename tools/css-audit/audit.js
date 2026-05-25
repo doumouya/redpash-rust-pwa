@@ -39,7 +39,7 @@ var path = require('path');
 
 var STYLES_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
-  : '/home/mansa/redpash-app/frontend/styles';
+  : path.join(__dirname, '..', '..', 'frontend', 'styles');
 var FRONTEND_DIR = path.dirname(STYLES_DIR);
 var OUT = path.join(__dirname, 'audit.html');
 
@@ -649,7 +649,7 @@ function renderHtml(d) {
 '<style>' + CSS + '</style>',
 '</head><body>',
 '<header>',
-'  <h1>CSS conflict audit <span class="muted">· redpash-app</span></h1>',
+'  <h1>CSS conflict audit <span class="muted">· RedPash</span></h1>',
 '  <div class="sub" id="sub"></div>',
 '</header>',
 '<section class="cards" id="cards"></section>',

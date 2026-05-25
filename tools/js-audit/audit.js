@@ -39,7 +39,7 @@ const srcArg = args.find(a => !a.startsWith('--'));
 
 const SRC_DIR = srcArg
   ? path.resolve(srcArg)
-  : '/home/mansa/redpash-app/frontend/scripts';
+  : path.join(__dirname, '..', '..', 'frontend', 'scripts');
 const OUT = path.join(__dirname, 'report.html');
 const GOD_LOC = 800;
 
@@ -351,7 +351,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
   <header>
-    <h1>JS refactoring audit <span class="muted">· redpash-app</span></h1>
+    <h1>JS refactoring audit <span class="muted">· RedPash</span></h1>
     <div class="sub" id="sub"></div>
   </header>
   <section class="cards" id="cards"></section>

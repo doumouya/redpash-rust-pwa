@@ -2,7 +2,7 @@
 # Install the team's post-commit hook into this clone's .git/hooks/.
 # Idempotent — runs safely from any branch, overwrites any existing hook.
 
-cd "$(dirname "$0")/../.." || exit 1     # → redpash-app/
+cd "$(dirname "$0")/../.." || exit 1     # → repo root
 HOOK_DIR=".git/hooks"
 SRC="tools/team/post-commit.sh"
 DEST="$HOOK_DIR/post-commit"

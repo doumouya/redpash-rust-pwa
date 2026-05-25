@@ -30,7 +30,7 @@
 var fs = require('fs');
 var path = require('path');
 
-var ROOT = process.argv[2] ? path.resolve(process.argv[2]) : '/home/mansa/redpash-app';
+var ROOT = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, '..', '..');
 var JS_DIR = path.join(ROOT, 'frontend', 'scripts');
 var ROUTES_DIR = path.join(ROOT, 'backend', 'crates', 'api', 'src', 'routes');
 var OUT = path.join(__dirname, 'report.html');

@@ -31,7 +31,7 @@ var path = require('path');
 
 var SRC_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
-  : '/home/mansa/redpash-app/backend';
+  : path.join(__dirname, '..', '..', 'backend');
 var OUT = path.join(__dirname, 'report.html');
 var BIG_LOC = 600;     // a file over this LOC is a hotspot
 var BIG_MATCH = 60;    // a `match` block over this many lines is flagged
@@ -383,7 +383,7 @@ function renderHtml(d) {
     '<style>' + CSS + '</style>',
     '</head><body>',
     '<header>',
-    '  <h1>Rust refactoring audit <span class="muted">· redpash-app</span></h1>',
+    '  <h1>Rust refactoring audit <span class="muted">· RedPash</span></h1>',
     '  <div class="sub" id="sub"></div>',
     '</header>',
     '<section class="cards" id="cards"></section>',

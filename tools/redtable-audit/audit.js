@@ -53,7 +53,7 @@ const path = require('path');
 
 const FRONTEND_DIR = process.argv[2]
   ? path.resolve(process.argv[2])
-  : '/home/mansa/redpash-app/frontend';
+  : path.join(__dirname, '..', '..', 'frontend');
 
 const STYLES_DIR  = path.join(FRONTEND_DIR, 'styles');
 const SCRIPTS_DIR = path.join(FRONTEND_DIR, 'scripts');
