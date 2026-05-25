@@ -951,6 +951,7 @@ export default function home(app, { session: _session }) {
       const deleteBase = spec.deleteEndpoint || spec.endpoint;
       try {
         await api.delete(deleteBase + "/" + encodeURIComponent(rid));
+        logAction("Deleted " + noun + " " + rid);
         fetchList(spec, chipState);
       } catch (err) {
         console.warn("[home] single-delete failed:", err);
@@ -1030,6 +1031,7 @@ export default function home(app, { session: _session }) {
         editHistory.push({ rid, key, oldValue: original, newValue: value });
         editFuture.length = 0;
         updateUndoRedoButtons();
+        logAction("Edited " + key + " of " + rid + " → \"" + value + "\"");
       } catch (err) {
         console.warn("[home] cell-edit failed:", err);
         alert("Edit failed — reverting.");
@@ -1045,6 +1047,39 @@ export default function home(app, { session: _session }) {
     // backend soft-delete; deferred until that exists.
     const editHistory = [];
     const editFuture  = [];
+
+    // Session action log — read-only display of every mutation the
+    // user has done on this tab. Distinct from editHistory (which is
+    // the undo/redo stack); the log also records deletes, undo / redo
+    // events, and bulk operations. Powers the history dropdown.
+    // Entries: { when: Date, label: string }.
+    const actionLog = [];
+    function logAction(label) {
+      actionLog.push({ when: new Date(), label });
+      renderHistoryDropdown();
+    }
+    function renderHistoryDropdown() {
+      const btn = view.querySelector('[data-dd="rp-list-toolbar-history-dd"]');
+      const dd  = view.querySelector("#rp-list-toolbar-history-dd");
+      if (!btn || !dd) return;
+      if (actionLog.length === 0) {
+        btn.setAttribute("disabled", "");
+        dd.innerHTML = '<div class="rt-dd-item rp-home-meta">No actions yet</div>';
+        return;
+      }
+      btn.removeAttribute("disabled");
+      btn.title = "Session history (" + actionLog.length + ")";
+      // Show newest first, cap at 50 entries (older entries can be
+      // recovered from /api/events queries via Monitoring if needed).
+      const recent = actionLog.slice(-50).reverse();
+      dd.innerHTML = recent.map((e) => {
+        const t = e.when.toLocaleTimeString();
+        return '<div class="rt-dd-item rp-home-meta">'
+          + '<span style="opacity:0.6;margin-right:0.5rem">' + esc(t) + '</span>'
+          + esc(e.label)
+          + '</div>';
+      }).join("");
+    }
 
     function updateUndoRedoButtons() {
       const undoBtn = view.querySelector("#rp-list-toolbar-undo");
@@ -1080,6 +1115,7 @@ export default function home(app, { session: _session }) {
         );
         editFuture.push(entry);
         updateUndoRedoButtons();
+        logAction("Undid edit of " + entry.key + " on " + entry.rid);
         fetchList(spec, chipState);
       } catch (err) {
         console.warn("[home] undo failed:", err);
@@ -1103,6 +1139,7 @@ export default function home(app, { session: _session }) {
         );
         editHistory.push(entry);
         updateUndoRedoButtons();
+        logAction("Redid edit of " + entry.key + " on " + entry.rid);
         fetchList(spec, chipState);
       } catch (err) {
         console.warn("[home] redo failed:", err);
@@ -1132,6 +1169,11 @@ export default function home(app, { session: _session }) {
       if (failed.length) {
         console.warn("[home] bulk-delete: " + failed.length + " failed");
       }
+      const ok = rids.length - failed.length;
+      logAction(
+        "Bulk-deleted " + ok + " " + (ok === 1 ? noun : plural)
+          + (failed.length ? " (" + failed.length + " failed)" : "")
+      );
       selected.clear();
       selectMode = false;
       view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");

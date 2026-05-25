@@ -255,11 +255,17 @@ export function listToolbarHTML(spec) {
     + '</div>',
   );
 
-  // history toggle — disabled stub matching #wsHistoryToggle. List
-  // views don't model an undoable history.
+  // history dropdown — read-only session log of edits + deletes the
+  // user has performed on the active tab. renderListBody populates
+  // the dd body + enables the button when actionLog is non-empty.
   parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-history" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-clock-history"></i></button>',
+    '<div class="rt-dd-wrap">'
+    + '<button class="rt-btn" data-dd="rp-list-toolbar-history-dd" type="button" '
+    +   'title="Session history" disabled><i class="bi bi-clock-history"></i></button>'
+    + '<div class="rt-dd" id="rp-list-toolbar-history-dd">'
+    +   '<div class="rt-dd-item rp-home-meta">No actions yet</div>'
+    + '</div>'
+    + '</div>',
   );
 
   parts.push('</div>');
