@@ -131,6 +131,12 @@
   min-height: 0;
   padding: 14px 16px;
 }
+/* Explicit [hidden] override — the `display: flex` above wins over
+   the UA stylesheet's `[hidden] { display: none }`, so without
+   this rule the kanban shell stays in the layout (as a big empty
+   block) even when JS toggles `hidden = true` to show the detail
+   view. Same gotcha applies to .rp-cases-detail below. */
+.rp-cases-board[hidden] { display: none; }
 
 /* 5 columns laid out as a horizontal grid; each column scrolls
    vertically inside its own track. The grid itself never scrolls
@@ -304,6 +310,7 @@
   min-height: 0;
   padding: 12px 22px 22px;
 }
+.rp-cases-detail[hidden] { display: none; }
 .rp-cases-detail-head {
   display: flex;
   align-items: center;
