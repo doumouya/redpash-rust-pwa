@@ -554,11 +554,13 @@ export default function home(app, { session: _session }) {
     // (charts[2+]) render below as a standard chartsStrip so no
     // chart gets dropped. Specs with 0-1 charts stay on the
     // stacked default — the asymmetric "chart left, empty right"
-    // composite slot reads worse than the legacy stack.
-    const charts = spec.charts || [];
-    const useComposite = spec.compositeStrip && charts.length >= 2;
-    const compositeCharts = useComposite ? charts.slice(0, 2) : [];
-    const extraCharts     = useComposite ? charts.slice(2)    : charts;
+    // composite slot reads worse than the legacy stack. Named
+    // `specCharts` (not `charts`) to avoid shadowing the
+    // module-scope `charts` controller from createListCharts().
+    const specCharts      = spec.charts || [];
+    const useComposite    = spec.compositeStrip && specCharts.length >= 2;
+    const compositeCharts = useComposite ? specCharts.slice(0, 2) : [];
+    const extraCharts     = useComposite ? specCharts.slice(2)    : specCharts;
 
     view.innerHTML = ''
       + headHTML(spec.title, "")
