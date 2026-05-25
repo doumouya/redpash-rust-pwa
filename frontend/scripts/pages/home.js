@@ -692,39 +692,44 @@ export default function home(app, { session: _session }) {
     },
   };
 
-  // ─── composite-strip placeholder padding ─────────────────────
+  // ─── composite-strip twin-chart padding ──────────────────────
   // The composite-strip has 4 chart slots flanking the 2×2 KPI
   // grid. Most tabs declare only 2 real charts today; we pad
-  // spec.charts to 4 with sample charts (constant fake data) so
-  // every composite reads as a full 5-cell row instead of two
-  // empty slots on the right. Em 2026-05-25: "just add 2 charts
-  // more, don't worry about accuracy just put anything for now".
-  // Real per-tab charts replace these as data lands.
-  const PLACEHOLDER_CHART_TEMPLATES = [
-    { kind: "bar",   title: "Sample bar",
-      data: () => ({ Alpha: 14, Bravo: 9, Charlie: 6, Delta: 3 }) },
-    { kind: "donut", title: "Sample share",
-      data: () => ({ Active: 62, Pending: 21, Idle: 12, Archived: 5 }) },
-    { kind: "gauge", title: "Sample coverage",
-      data: () => 73, opts: { max: 100, unit: "%" } },
-    { kind: "rose",  title: "Sample mix",
-      data: () => ({ One: 8, Two: 11, Three: 5, Four: 7, Five: 9 }) },
-  ];
-  function placeholderChart(tabKey, slot) {
-    const t = PLACEHOLDER_CHART_TEMPLATES[slot % PLACEHOLDER_CHART_TEMPLATES.length];
+  // spec.charts to 4 by REUSING each real chart's data callback
+  // with a different `kind` — so the right-side slots show the
+  // same distribution as a bar / donut / etc. instead of empty
+  // placeholders or fake constant data. Em 2026-05-25: "if there's
+  // a donut you use the same data to create a bar lol".
+  //
+  // Kind swap: donut ⇄ bar, rose → donut, barH → bar, gauge stays
+  // as gauge (single-number; no honest alternative). When a tab
+  // declares a 3rd / 4th real chart, the twins peel off naturally.
+  const TWIN_KIND_SWAP = {
+    donut: "bar",
+    bar:   "donut",
+    barH:  "bar",
+    rose:  "donut",
+    pie:   "bar",
+    line:  "bar",
+    gauge: "gauge",
+  };
+  function twinChart(tabKey, slot, source) {
     return {
-      id:   "rp-home-" + tabKey + "-ph-" + slot,
-      title: t.title,
-      kind:  t.kind,
-      data:  t.data,
-      ...(t.opts ? { opts: t.opts } : {}),
+      id:    "rp-home-" + tabKey + "-twin-" + slot,
+      title: source.title,
+      kind:  TWIN_KIND_SWAP[source.kind] || source.kind,
+      data:  source.data,
+      ...(source.opts ? { opts: source.opts } : {}),
     };
   }
   for (const [tabKey, viewSpec] of Object.entries(LIST_VIEWS)) {
     if (!viewSpec.compositeStrip) continue;
     viewSpec.charts = viewSpec.charts || [];
+    const real = viewSpec.charts.slice();
+    if (real.length === 0) continue;
     while (viewSpec.charts.length < 4) {
-      viewSpec.charts.push(placeholderChart(tabKey, viewSpec.charts.length));
+      const source = real[viewSpec.charts.length % real.length];
+      viewSpec.charts.push(twinChart(tabKey, viewSpec.charts.length, source));
     }
   }
 
