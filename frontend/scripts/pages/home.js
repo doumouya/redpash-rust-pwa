@@ -275,12 +275,13 @@ export default function home(app, { session: _session }) {
         { id: "rp-home-mem-role-bar", title: "Roles (bar)", kind: "bar",
           data: (s) => s.by_role },
       ],
-      // /admin/memberships doesn't take ?q= today — the chipRow above
-      // is the scope filter. Suppress the search box so the toolbar
-      // doesn't promise a non-functional input. Only refresh is wired
-      // — matches every other tab now per [[unify-behavior-not-names]].
+      // /admin/memberships now accepts ?q= (2026-05-25 backend addition) —
+      // ILIKE search across user_display_name + user_username + scope_name
+      // (project / company name). Search box re-enabled per
+      // [[unify-behavior-not-names]] — every tab shows the same controls
+      // now that the backend supports them.
       toolbar: {
-        searchPlaceholder: false,
+        searchPlaceholder: "Search member, scope…",
         modes: { select: true, delete: true },
         refresh: true,
       },

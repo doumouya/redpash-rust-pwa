@@ -88,6 +88,9 @@ struct MembershipsQuery {
     /// the endpoint usable without a query string.
     #[serde(default)] scope: Option<String>,
     #[serde(default)] role:  Option<String>,
+    /// Free-text search across user display_name + username + the
+    /// scope-parent name (project / company). ILIKE substring match.
+    #[serde(default)] q:     Option<String>,
     /// Same click-to-sort shape as AdminQuery. Validated against
     /// SORTABLE_MEMBERSHIPS at the handler boundary.
     #[serde(default)] sort:  Option<String>,
@@ -378,13 +381,28 @@ async fn list_memberships(
     // Joined to users (display_name + username) and the scope parent
     // (project name or company name) so the row renders without a
     // second lookup. ORDER BY built via format! with sort_col sourced
-    // from SORTABLE_MEMBERSHIPS allowlist.
+    // from SORTABLE_MEMBERSHIPS allowlist. ?q= searches user_display_name
+    // / user_username / scope_name (project or company name) via ILIKE.
     let count_sql = if scope == "project" {
-        "SELECT COUNT(*)::BIGINT FROM project_memberships m
-         WHERE ($1::text IS NULL OR m.role = $1)"
+        "SELECT COUNT(*)::BIGINT
+           FROM project_memberships m
+           JOIN projects p ON p.redpash_id = m.project_redpash_id
+           JOIN users    u ON u.redpash_id = m.user_redpash_id
+          WHERE ($1::text IS NULL OR m.role = $1)
+            AND ($2::text IS NULL OR
+                 u.display_name ILIKE '%' || $2 || '%' OR
+                 u.username     ILIKE '%' || $2 || '%' OR
+                 p.name         ILIKE '%' || $2 || '%')"
     } else {
-        "SELECT COUNT(*)::BIGINT FROM company_memberships m
-         WHERE ($1::text IS NULL OR m.role = $1)"
+        "SELECT COUNT(*)::BIGINT
+           FROM company_memberships m
+           JOIN companies c ON c.redpash_id = m.company_id
+           JOIN users     u ON u.redpash_id = m.user_redpash_id
+          WHERE ($1::text IS NULL OR m.role = $1)
+            AND ($2::text IS NULL OR
+                 u.display_name ILIKE '%' || $2 || '%' OR
+                 u.username     ILIKE '%' || $2 || '%' OR
+                 c.name         ILIKE '%' || $2 || '%')"
     };
     let rows_sql = if scope == "project" {
         format!(
@@ -400,8 +418,12 @@ async fn list_memberships(
                JOIN projects p ON p.redpash_id = m.project_redpash_id
                JOIN users    u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     p.name         ILIKE '%' || $2 || '%')
               ORDER BY {sort_col} {sort_dir} NULLS LAST
-              LIMIT $2 OFFSET $3"
+              LIMIT $3 OFFSET $4"
         )
     } else {
         format!(
@@ -417,18 +439,24 @@ async fn list_memberships(
                JOIN companies c ON c.redpash_id = m.company_id
                JOIN users     u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     c.name         ILIKE '%' || $2 || '%')
               ORDER BY {sort_col} {sort_dir} NULLS LAST
-              LIMIT $2 OFFSET $3"
+              LIMIT $3 OFFSET $4"
         )
     };
 
     let total: i64 = sqlx::query_scalar(count_sql)
         .bind(q.role.as_deref())
+        .bind(q.q.as_deref())
         .fetch_one(&state.db)
         .await?;
 
     let rows = sqlx::query(&rows_sql)
         .bind(q.role.as_deref())
+        .bind(q.q.as_deref())
         .bind(size as i64)
         .bind(offset)
         .fetch_all(&state.db)
