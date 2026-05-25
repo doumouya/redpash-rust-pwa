@@ -71,55 +71,10 @@
         <div class="rp-cases-detail-body">
           <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
 
-          <!-- Meta controls — replaces the side panel. Chip-styled
-               selects for status / priority / type sit inline with
-               the assignee picker; a thin info row below carries
-               the read-only metadata (reporter + timestamps). -->
-          <div class="rp-cases-detail-controls">
-            <label class="rp-cases-control">
-              <span class="rp-cases-control-lbl">Status</span>
-              <select class="rp-cases-control-select" id="rp-cases-side-status">
-                <option value="backlog">Backlog</option>
-                <option value="todo">Todo</option>
-                <option value="in_progress">In progress</option>
-                <option value="in_review">In review</option>
-                <option value="done">Done</option>
-              </select>
-            </label>
-            <label class="rp-cases-control">
-              <span class="rp-cases-control-lbl">Priority</span>
-              <select class="rp-cases-control-select" id="rp-cases-side-priority">
-                <option value="low">Low</option>
-                <option value="medium" selected>Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </label>
-            <label class="rp-cases-control">
-              <span class="rp-cases-control-lbl">Type</span>
-              <select class="rp-cases-control-select" id="rp-cases-side-type">
-                <option value="task" selected>Task</option>
-                <option value="bug">Bug</option>
-                <option value="feature">Feature</option>
-                <option value="epic">Epic</option>
-              </select>
-            </label>
-            <div class="rp-cases-control rp-cases-control--assignee">
-              <span class="rp-cases-control-lbl">Assignee</span>
-              <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
-                      type="button" title="Change assignee">
-                <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
-                <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
-              </button>
-              <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
-                <div class="rp-user-picker-wrap">
-                  <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
-                         placeholder="Search by name, username, email…" />
-                  <div id="rp-cases-side-assignee-results"
-                       class="rp-user-picker-results" hidden></div>
-                </div>
-              </div>
-            </div>
+          <!-- At-a-glance badges — centered chip row of status /
+               priority / type / assignee. Read-only; the editable
+               versions live in the Case details tab. JS fills. -->
+          <div class="rp-cases-detail-controls" id="rp-cases-detail-controls">
           </div>
 
           <!-- Read-only metadata: reporter + create/update timestamps.
@@ -203,11 +158,61 @@
           </section>
 
           <section class="rp-cases-detail-tab" data-tab="details" id="rp-cases-details-tab" hidden>
+            <!-- Editable controls — moved here from the top of the
+                 panel; the read-only badges above remain the at-a-
+                 glance view, this is where actual mutation happens. -->
+            <div class="rp-cases-detail-edit">
+              <label class="rp-cases-control">
+                <span class="rp-cases-control-lbl">Status</span>
+                <select class="rp-cases-control-select" id="rp-cases-side-status">
+                  <option value="backlog">Backlog</option>
+                  <option value="todo">Todo</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="in_review">In review</option>
+                  <option value="done">Done</option>
+                </select>
+              </label>
+              <label class="rp-cases-control">
+                <span class="rp-cases-control-lbl">Priority</span>
+                <select class="rp-cases-control-select" id="rp-cases-side-priority">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+              <label class="rp-cases-control">
+                <span class="rp-cases-control-lbl">Type</span>
+                <select class="rp-cases-control-select" id="rp-cases-side-type">
+                  <option value="task" selected>Task</option>
+                  <option value="bug">Bug</option>
+                  <option value="feature">Feature</option>
+                  <option value="epic">Epic</option>
+                </select>
+              </label>
+              <div class="rp-cases-control rp-cases-control--assignee">
+                <span class="rp-cases-control-lbl">Assignee</span>
+                <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
+                        type="button" title="Change assignee">
+                  <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
+                  <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
+                </button>
+                <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
+                  <div class="rp-user-picker-wrap">
+                    <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
+                           placeholder="Search by name, username, email…" />
+                    <div id="rp-cases-side-assignee-results"
+                         class="rp-user-picker-results" hidden></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Definition-list reference card — all hydrated Case
                  fields in one read-only view. Mirrors the inline
-                 controls + info row above but expanded (full
-                 RIDs, full timestamps, error_message, category,
-                 etc.) for the "copy / print / audit" use case. -->
+                 controls + info row above but expanded (full RIDs,
+                 full timestamps, error_message, category, etc.) for
+                 the copy / print / audit use case. -->
             <dl class="rp-cases-details-dl" id="rp-cases-details-dl">
               <!-- JS paint fills this. -->
             </dl>

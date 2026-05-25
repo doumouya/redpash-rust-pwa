@@ -518,7 +518,7 @@ export default function cases(app, { session }) {
   // ── detail view ─────────────────────────────────────────────
   const ridEl      = app.querySelector("#rp-cases-detail-rid");
   const titleEl    = app.querySelector("#rp-cases-detail-title");
-  const metaStrip  = app.querySelector("#rp-cases-detail-meta-strip");
+  const controlsRow = app.querySelector("#rp-cases-detail-controls");
   const descEl     = app.querySelector("#rp-cases-detail-description");
   const tabsEl     = app.querySelector("#rp-cases-detail-tabs");
   const commentsList    = app.querySelector("#rp-cases-comments-list");
@@ -718,11 +718,20 @@ export default function cases(app, { session }) {
     lastDetailActivity = activity;               // memoize for filter re-render
 
     if (titleEl) titleEl.textContent = c.title || "(untitled)";
-    if (metaStrip) {
-      metaStrip.innerHTML = ''
+    // Centered at-a-glance badge row — read-only. The matching
+    // editable selects + picker live in the Case details tab.
+    if (controlsRow) {
+      const assigneeChip = c.assignee_id
+        ? '<span class="rp-cases-chip rp-cases-chip--assignee">'
+            + userAvatarHTML(c.assignee_id, c.assignee_display_name, "xs")
+            + '<span>' + esc(c.assignee_display_name || c.assignee_id) + '</span>'
+          + '</span>'
+        : '<span class="rp-cases-chip rp-cases-chip--unassigned">— unassigned —</span>';
+      controlsRow.innerHTML = ''
         + statusChip(c.status)
+        + priorityChip(c.priority)
         + typeChip(c.type)
-        + priorityChip(c.priority);
+        + assigneeChip;
     }
     if (descEl) {
       descEl.innerHTML = c.description
