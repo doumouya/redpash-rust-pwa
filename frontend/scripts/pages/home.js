@@ -173,6 +173,7 @@ export default function home(app, { session: _session }) {
     memberships: {
       title: "Memberships",
       endpoint: "/admin/memberships",
+      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // The endpoint takes ?scope=project|company; flip via the chip row.
       chipRows: [{
         name: "scope",
@@ -187,7 +188,13 @@ export default function home(app, { session: _session }) {
       // chipState through via spec.chipRows when statsEndpoint is
       // unset (default behavior).
       charts: [
-        { id: "rp-home-mem-role", title: "By role", kind: "rose",
+        { id: "rp-home-mem-role",     title: "By role",     kind: "rose",
+          data: (s) => s.by_role },
+        // Second chart added 2026-05-25 so memberships joins the
+        // composite-strip layout (needs ≥2 charts). Same `by_role`
+        // data, different viz — Em "random for now, no worries"
+        // pending a real second metric on /admin/memberships/stats.
+        { id: "rp-home-mem-role-bar", title: "Roles (bar)", kind: "bar",
           data: (s) => s.by_role },
       ],
       // /admin/memberships doesn't take ?q= today — the chipRow above
@@ -228,11 +235,13 @@ export default function home(app, { session: _session }) {
         ],
         default: "",
       }],
+      // Trimmed from 3 to 2 charts (Em 2026-05-25 "random for now")
+      // to fit the composite-strip cleanly. Kept stage + cleanness
+      // (composition + quality); by-type bar dropped — its info
+      // overlaps with the type column already visible in the row.
       charts: [
         { id: "rp-home-files-stage", title: "By stage",  kind: "donut",
           data: (s) => s.by_stage },
-        { id: "rp-home-files-type",  title: "By type",   kind: "bar",
-          data: (s) => s.by_type },
         { id: "rp-home-files-clean", title: "Cleanness", kind: "gauge",
           data: (s) => s.avg_cleanness ?? 0, opts: { max: 100, unit: "%" } },
       ],
@@ -341,6 +350,11 @@ export default function home(app, { session: _session }) {
       // Each data callback reads `stats.items` (the list payload) and
       // aggregates client-side. The data shape (ProjectSummary[]) is
       // stable across the spec.
+      //
+      // Trimmed from 3 to 2 charts (Em 2026-05-25 "random for now")
+      // to fit the composite-strip cleanly. Kept stage + cleanness
+      // (composition + quality); files-per-project bar dropped —
+      // file_count is already in the row's Files column.
       charts: [
         { id: "rp-home-proj-stage", title: "By stage",   kind: "donut",
           data: (stats) => (stats?.items || []).reduce((acc, r) => {
@@ -352,16 +366,6 @@ export default function home(app, { session: _session }) {
             return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
           },
           opts: { max: 100, unit: "%" } },
-        { id: "rp-home-proj-files", title: "Files / project", kind: "bar",
-          data: (stats) => {
-            const buckets = { "0": 0, "1-4": 0, "5-9": 0, "10+": 0 };
-            for (const r of (stats?.items || [])) {
-              const n = r.file_count || 0;
-              const k = n === 0 ? "0" : n < 5 ? "1-4" : n < 10 ? "5-9" : "10+";
-              buckets[k]++;
-            }
-            return buckets;
-          } },
       ],
       toolbar: {
         searchPlaceholder: "Search project name…",
