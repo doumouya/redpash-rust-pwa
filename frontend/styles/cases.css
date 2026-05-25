@@ -447,25 +447,54 @@
 .rp-cases-detail-tab[hidden]   { display: none !important; }
 
 /* ── comments ─────────────────────────────────────────────────── */
+/* ── chat-bubble comments ────────────────────────────────────
+   Chat-style thread: own author right-aligned + accent-tinted
+   bubble; others left-aligned + surface bubble; avatar sits on
+   the outside. Day-divider rows separate the stream when the
+   calendar date changes. Aimed at the customer-ticket triage
+   model where the comment thread IS a conversation. */
 .rp-cases-comments-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 12px;
+  padding: 4px 2px;
 }
 .rp-cases-comment {
-  background: var(--rp-surface);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+.rp-cases-comment--own {
+  flex-direction: row-reverse;
+}
+.rp-cases-comment-bubble {
+  background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 8px;
-  padding: 9px 12px;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;        /* "tail" hint pointing at the avatar */
+  padding: 7px 11px;
+  max-width: 78%;
+  min-width: 0;
+}
+.rp-cases-comment--own .rp-cases-comment-bubble {
+  background: var(--rp-accent-soft);
+  border-color: color-mix(in srgb, var(--rp-accent-2) 28%, transparent);
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 4px;
 }
 .rp-cases-comment-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  margin-bottom: 4px;
-  font-size: 11px;
+  margin-bottom: 3px;
+  font-size: 10.5px;
   color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.rp-cases-comment--own .rp-cases-comment-head {
+  justify-content: flex-end;
 }
 .rp-cases-comment-author {
   color: var(--rp-text);
@@ -482,25 +511,99 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Day divider — centered "Today / Yesterday / Mon / Mar 4, 2026"
+   label on a thin hairline. Shown above the first comment of
+   each day. */
+.rp-cases-comment-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+  color: var(--rp-text-mute);
+  font-size: 10.5px;
+}
+.rp-cases-comment-day::before,
+.rp-cases-comment-day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rp-border);
+}
+.rp-cases-comment-day span {
+  padding: 0 4px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ── compose form ─────────────────────────────────────────────
+   "Sending as X" hint above + textarea with a send-icon button
+   floating on the right edge. Cleaner than the old labeled
+   button; reads as a chat composer. */
 .rp-cases-comment-form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+.rp-cases-comment-form-meta {
+  font-size: 10.5px;
+  color: var(--rp-text-mute);
+  padding-left: 2px;
+}
+.rp-cases-comment-form-meta span {
+  color: var(--rp-text);
+  font-weight: 600;
+}
+.rp-cases-comment-form-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
 }
 .rp-cases-comment-input {
+  flex: 1;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 44px 10px 12px;          /* right pad clears the send button */
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 7px;
+  border-radius: 18px;
   color: var(--rp-text);
   font: inherit;
   font-size: 12.5px;
+  line-height: 1.4;
   resize: vertical;
   outline: 0;
+  min-height: 38px;
 }
 .rp-cases-comment-input:focus { border-color: var(--rp-accent-2); }
+.rp-cases-comment-form-send {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-cases-comment-form-send:hover {
+  background: color-mix(in srgb, var(--rp-accent-2) 88%, white);
+}
+.rp-cases-comment-form-send i { font-size: 12px; }
+
+/* Small avatar variant — used inside comment bubbles. The default
+   24px is for the side-panel reporter/assignee badge. */
+.rp-cases-user-avatar--sm {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+  flex-shrink: 0;
+}
 
 /* ── activity ─────────────────────────────────────────────────── */
 .rp-cases-activity-list {

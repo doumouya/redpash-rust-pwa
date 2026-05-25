@@ -105,11 +105,17 @@
                 <!-- JS renders comments here -->
               </div>
               <form class="rp-cases-comment-form" id="rp-cases-comment-form">
-                <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
-                          placeholder="Write a comment…" rows="3"></textarea>
-                <button class="rt-btn rt-btn--accent" type="submit">
-                  <i class="bi bi-send"></i> Post
-                </button>
+                <div class="rp-cases-comment-form-meta" id="rp-cases-comment-form-meta">
+                  Sending as <span id="rp-cases-comment-form-as">you</span>
+                </div>
+                <div class="rp-cases-comment-form-row">
+                  <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
+                            placeholder="Type a comment…" rows="2"></textarea>
+                  <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
+                          type="submit" title="Send (Ctrl+Enter)">
+                    <i class="bi bi-send-fill"></i>
+                  </button>
+                </div>
               </form>
             </section>
 

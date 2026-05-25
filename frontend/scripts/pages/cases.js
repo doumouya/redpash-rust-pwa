@@ -89,6 +89,8 @@ export default function cases(app, { session }) {
 
   // Page state — module-scoped to the mount call (the router calls
   // this function fresh on each route activation).
+  const meRid  = session?.redpash_id || "";       // for own/other bubble alignment
+  const meName = session?.display_name || session?.username || "you";
   const detailEl = app.querySelector("#rp-cases-detail");
   const railBody = app.querySelector("#rp-cases-rail-body");
   let searchQ = "";
@@ -563,11 +565,25 @@ export default function cases(app, { session }) {
     el?.addEventListener("change", () => patchCase({ [field]: el.value }));
   });
 
+  // "Sending as X" hint — fills once at mount; the session is
+  // constant for the page lifetime.
+  const commentFormAs = app.querySelector("#rp-cases-comment-form-as");
+  if (commentFormAs) commentFormAs.textContent = meName;
+
   commentForm?.addEventListener("submit", (e) => {
     e.preventDefault();
     const body = (commentInput?.value || "").trim();
     if (!body || !currentDetailRid) return;
     postComment(body);
+  });
+
+  // Ctrl/Cmd + Enter sends from the textarea — keeps users in
+  // the keyboard flow when typing a long comment.
+  commentInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      commentForm?.requestSubmit();
+    }
   });
 
   // Primary advance button — advances current status to the next
@@ -741,7 +757,7 @@ export default function cases(app, { session }) {
 
     if (commentsList) {
       commentsList.innerHTML = comments.length
-        ? comments.map(commentHTML).join("")
+        ? commentsListHTML(comments)
         : '<p class="rp-cases-empty">No comments yet. Be the first.</p>';
     }
     renderActivityList(activity);
@@ -758,11 +774,13 @@ export default function cases(app, { session }) {
     done:        "Reopen",
   };
 
-  // Avatar-badge atom — initials in a colored circle + display_name.
-  // Falls back to the rid suffix when we don't have a display name
-  // (shouldn't happen post-Gus's b8f2da8 hydration, but defensive).
-  // No job_title yet — backend DTO doesn't carry it; queued for Gus.
-  function userBadgeHTML(userRid, displayName) {
+  // Avatar atom — initials in a deterministically-colored circle.
+  // Color hashes the user rid so the same user always reads the
+  // same color across the app. Returns the avatar element only;
+  // composes into userBadgeHTML (avatar + name) and into the
+  // comment bubble (avatar standalone, name lives in the bubble
+  // header).
+  function userAvatarHTML(userRid, displayName, size) {
     const name = displayName || userRid || "—";
     const initials = name
       .split(/\s+/)
@@ -770,14 +788,18 @@ export default function cases(app, { session }) {
       .slice(0, 2)
       .map((s) => s.charAt(0).toUpperCase())
       .join("") || "·";
-    // Deterministic accent color from the rid hash — same user
-    // always gets the same color across cases.
     const color = userBadgeColor(userRid || name);
+    const sizeCls = size ? ' rp-cases-user-avatar--' + size : '';
+    return '<span class="rp-cases-user-avatar' + sizeCls + '" '
+      + 'data-c="' + color + '" title="' + esc(name) + '">'
+      + esc(initials)
+      + '</span>';
+  }
+  function userBadgeHTML(userRid, displayName) {
+    const name = displayName || userRid || "—";
     return ''
       + '<div class="rp-cases-user-badge" title="' + esc(name) + '">'
-      +   '<span class="rp-cases-user-avatar" data-c="' + color + '">'
-      +     esc(initials)
-      +   '</span>'
+      +   userAvatarHTML(userRid, displayName)
       +   '<span class="rp-cases-user-name">' + esc(name) + '</span>'
       + '</div>';
   }
@@ -814,18 +836,69 @@ export default function cases(app, { session }) {
     activityList.innerHTML = filtered.map(activityRow).join("");
   }
 
+  // Chat-bubble layout — own author right-aligned + accent-soft tint,
+  // others left-aligned + surface. Avatar sits to the outside, the
+  // bubble carries author + timestamp header + body. The "you"
+  // bubble drops the author name in the header since it's redundant
+  // when avatar + alignment + color all signal self-authorship.
   function commentHTML(cm) {
     const author = cm.author_display_name || cm.author_id || "—";
-    const when = cm.created_at ? fmtTime(cm.created_at) : "";
+    const isOwn = cm.author_id && cm.author_id === meRid;
+    const when = cm.created_at ? fmtClock(cm.created_at) : "";
+    const headerParts = [];
+    if (!isOwn) headerParts.push('<span class="rp-cases-comment-author">' + esc(author) + '</span>');
+    if (when)   headerParts.push('<span class="rp-cases-comment-when">' + esc(when) + '</span>');
+    if (cm.is_edited) headerParts.push('<span class="rp-cases-comment-edited">edited</span>');
     return ''
-      + '<article class="rp-cases-comment">'
-      +   '<header class="rp-cases-comment-head">'
-      +     '<span class="rp-cases-comment-author">' + esc(author) + '</span>'
-      +     '<span class="rp-cases-comment-when">' + esc(when) + '</span>'
-      +     (cm.is_edited ? '<span class="rp-cases-comment-edited">(edited)</span>' : '')
-      +   '</header>'
-      +   '<div class="rp-cases-comment-body"><pre>' + esc(cm.body || "") + '</pre></div>'
-      + '</article>';
+      + '<div class="rp-cases-comment' + (isOwn ? ' rp-cases-comment--own' : '') + '">'
+      +   userAvatarHTML(cm.author_id, author, "sm")
+      +   '<div class="rp-cases-comment-bubble">'
+      +     (headerParts.length
+        ? '<header class="rp-cases-comment-head">' + headerParts.join("") + '</header>'
+        : '')
+      +     '<div class="rp-cases-comment-body"><pre>' + esc(cm.body || "") + '</pre></div>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  // Walk the comments in created_at order, inserting a centered
+  // day-divider whenever the calendar date changes. The first
+  // divider always shows the first comment's day. Empty list →
+  // no dividers (caller renders the empty-state instead).
+  function commentsListHTML(comments) {
+    let lastDay = null;
+    let out = "";
+    for (const cm of comments) {
+      const day = cm.created_at ? dayKey(cm.created_at) : "—";
+      if (day !== lastDay) {
+        out += '<div class="rp-cases-comment-day"><span>' + esc(dayLabel(cm.created_at)) + '</span></div>';
+        lastDay = day;
+      }
+      out += commentHTML(cm);
+    }
+    return out;
+  }
+
+  function dayKey(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+  }
+  function dayLabel(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const today = new Date();
+    const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diffDays = Math.round((startOfDay(today) - startOfDay(d)) / 86_400_000);
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7)   return d.toLocaleDateString(undefined, { weekday: "long" });
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
+  function fmtClock(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
   function activityRow(e) {
