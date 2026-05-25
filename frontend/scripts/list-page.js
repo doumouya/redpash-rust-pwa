@@ -153,6 +153,16 @@ export function listToolbarHTML(spec) {
   const s = spec || {};
   const parts = ['<div class="rt-toolbar rt-toolbar--data rp-list-toolbar">'];
 
+  // filter-panel toggle — workspace puts this first in the toolbar
+  // (workspace.html line 48). Opt-in via `filter: true` so Home tabs
+  // (no filter panel) don't render an orphan button.
+  if (s.filter) {
+    parts.push(
+      '<button class="rt-btn" id="rp-list-toolbar-filter" type="button" '
+      +   'title="Filter panel"><i class="bi bi-funnel"></i></button>',
+    );
+  }
+
   // search
   if (s.searchPlaceholder !== false) {
     parts.push(

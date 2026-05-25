@@ -9,6 +9,11 @@
    Monitoring-specific atoms: window chip, the side-by-side charts
    row, modal chrome, page-content pills inside tables. */
 
+/* Inner padding on the surface — mirrors Home's #rpHomeView so the
+   chip-row / composite-strip / toolbar / pager / table sit with a
+   symmetric gap inside the .rt-surface card. */
+#rpMonView { padding: 0.875rem; }
+
 /* Monitoring tables use the canonical `.rt-table` (table.css). The
    mono method pill is page-content (HTTP method label in cells),
    not table chrome, so it stays here. */

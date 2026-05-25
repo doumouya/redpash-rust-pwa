@@ -21,9 +21,14 @@
       <div class="rt-nav-body" id="rpMonNavBody"></div>
     </aside>
 
-    <!-- ════ main — body view per active tab ════ -->
-    <main class="rp-shell-main" id="rpMonMain">
-      <div class="rp-shell-view" id="rpMonView">
+    <!-- ════ main — body view per active tab ════
+         Same `<main class="rt-main"><div class="rt-surface">` shell
+         Home + Workspace use, so the table surface, toolbar, pager
+         and composite-strip all share one canonical card chrome.
+         renderListBody targets #rpMonView; the id rides on the
+         rt-surface element. -->
+    <main class="rt-main">
+      <div class="rt-surface" id="rpMonView">
         <p class="rp-shell-state">Loading…</p>
       </div>
     </main>

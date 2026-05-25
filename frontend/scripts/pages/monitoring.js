@@ -10,7 +10,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
-import { getPref } from "/scripts/prefs.js";
+import { getPref, setPref } from "/scripts/prefs.js";
 import {
   headHTML, kpiStripHTML, chartsStripHTML, listToolbarHTML,
   windowChipsHTML as _windowChipsHTML,
@@ -721,17 +721,42 @@ export default function monitoring(app, { session }) {
     ];
     // Monitoring is read-only — no edit / select / delete on these
     // tabs (the entities are tracked, not mutated). `modes: false`
-    // suppresses the mode-button group entirely.
+    // suppresses the mode-button group entirely. `filter: true` adds
+    // the workspace-style funnel toggle at the start of the toolbar,
+    // wired below to slide the .rt-panel--filter.
     const toolbarSpec = {
       searchPlaceholder: false,   // ?q= isn't wired on monitoring endpoints
       modes: false,
+      filter: true,
     };
+    // Filter panel — slide-out matching Workspace's .rt-panel--filter
+    // chrome. Content is a placeholder for now; will populate when
+    // monitoring grows real per-tab filter UI beyond the window chip.
+    const filterPanelHTML =
+      '<aside class="rt-panel rt-panel--filter" id="rpMonFilterPanel">'
+      + '<div class="rt-panel-inner">'
+      +   '<div class="rt-panel-head">'
+      +     '<span class="rt-panel-title"><i class="bi bi-funnel"></i> Filter</span>'
+      +     '<button class="rt-btn rt-panel-close" type="button" title="Close panel">'
+      +       '<i class="bi bi-x-lg"></i></button>'
+      +   '</div>'
+      +   '<div class="rt-panel-body">'
+      +     '<p class="rt-step-state">'
+      +       'Per-tab filters land here — for now the window chip above the table is the primary filter.'
+      +     '</p>'
+      +   '</div>'
+      + '</div>'
+      + '</aside>';
+
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
       + monCompositeStripHTML(kpiTiles, viewSpec.charts || [])
       + listToolbarHTML(toolbarSpec)
-      + listPanel(viewSpec.columns)
+      + '<div class="rt-surface-body">'
+      +   filterPanelHTML
+      +   listPanel(viewSpec.columns)
+      + '</div>'
       + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
@@ -784,12 +809,21 @@ export default function monitoring(app, { session }) {
     rowsDd?.addEventListener("click", (e) => {
       const item = e.target.closest(".rt-dd-item");
       if (!item) return;
-      // setPref isn't imported here — use localStorage directly,
-      // matching the prefs.js storageKey contract for rowsPerPageMonitoring.
-      localStorage.setItem("rp-rows-per-page-monitoring", item.dataset.rows);
+      setPref("rowsPerPageMonitoring", item.dataset.rows);
       listPage = 1;
       syncRowsLabel();
       fetchList(viewSpec);
+    });
+
+    // Filter-panel toggle — same .open class as workspace's filter panel
+    // (panel.css handles the slide animation). The close button inside
+    // the panel head also toggles the class.
+    const filterPanel = view.querySelector("#rpMonFilterPanel");
+    view.querySelector("#rp-list-toolbar-filter")?.addEventListener("click", () => {
+      filterPanel?.classList.toggle("open");
+    });
+    filterPanel?.querySelector(".rt-panel-close")?.addEventListener("click", () => {
+      filterPanel.classList.remove("open");
     });
 
     view.querySelector("#rp-mon-list-pager").addEventListener("click", (e) => {
