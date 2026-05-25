@@ -11,6 +11,7 @@ import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { kpiBarH } from "/scripts/echarts-kpi.js";
 import { esc } from "/scripts/dom.js";
+import { inputRow, mountRow } from "/scripts/page-row.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
 
@@ -20,8 +21,81 @@ const PLAN_LABELS = {
   trial: "30-day trial",
 };
 
+// Personal-info form rows. inputRow + mountRow cover the 5 standard
+// flavors; the Use case (custom button class) + Account ID (input +
+// copy button) rows are structurally unique — inlined as raw HTML
+// strings rather than over-parameterised into the shared helper.
+// `hintClass: "rp-profile__hint"` per call because Settings + Profile
+// carry separate hint-class tokens today.
+const PROFILE_FORM_ROWS = [
+  inputRow({
+    label: "Display name",
+    id: "rp-profile-display-name",
+    name: "display_name",
+    autocomplete: "name",
+  }),
+  inputRow({
+    label: "Username",
+    hint: "server-assigned, can't be edited",
+    hintClass: "rp-profile__hint",
+    id: "rp-profile-username",
+  }),
+  inputRow({
+    label: "Email",
+    hint: "from your Google account",
+    hintClass: "rp-profile__hint",
+    id: "rp-profile-email",
+    type: "email",
+  }),
+  inputRow({
+    label: "Job title",
+    id: "rp-profile-job-title",
+    name: "job_title",
+    placeholder: "e.g. Data Analyst",
+  }),
+  mountRow({
+    label: "Memberships",
+    hint: "your real company affiliations — manage from Home → Companies",
+    hintClass: "rp-profile__hint",
+    id: "rp-profile-memberships",
+    containerClass: "rp-profile__memberships",
+    emptyClass: "rp-profile__memberships-empty",
+  }),
+  // Use case — custom button class (rp-profile__opt, not rt-btn);
+  // group lacks data-pref (JS targets by id #rp-profile-use-case).
+  '<div class="rp-page__row rp-page__row--col">'
+    + '<span class="rp-page__row-label">Use case'
+      + ' <small class="rp-profile__hint">helps RedPash tailor suggestions to your context</small>'
+    + '</span>'
+    + '<div class="rp-profile__opts" id="rp-profile-use-case">'
+      + '<button type="button" class="rp-profile__opt" data-value="operational">Operational analysis</button>'
+      + '<button type="button" class="rp-profile__opt" data-value="research">Student / Research</button>'
+      + '<button type="button" class="rp-profile__opt" data-value="reporting">Business reporting</button>'
+      + '<button type="button" class="rp-profile__opt" data-value="other">Other</button>'
+    + '</div>'
+  + '</div>',
+  // Account ID — input + copy button, structurally unique.
+  '<div class="rp-page__row">'
+    + '<span class="rp-page__row-label">Account ID'
+      + ' <small class="rp-profile__hint">reference this when contacting support</small>'
+    + '</span>'
+    + '<span class="rp-page__row-control rp-profile__rid-wrap">'
+      + '<input id="rp-profile-rid" type="text" class="rp-input rp-profile__rid" readonly />'
+      + '<button type="button" class="rp-btn rp-btn--ghost rp-btn--sm" id="rp-profile-copy" title="Copy ID to clipboard">'
+        + '<i class="bi bi-clipboard"></i>'
+      + '</button>'
+    + '</span>'
+  + '</div>',
+];
+
+function renderForm(app) {
+  const mount = app.querySelector('[data-rp-rows="form"]');
+  if (mount) mount.innerHTML = PROFILE_FORM_ROWS.join("");
+}
+
 export default async function profile(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "profile", session });
+  renderForm(app);
 
   let me;
   try {

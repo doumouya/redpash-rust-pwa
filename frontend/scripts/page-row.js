@@ -91,6 +91,31 @@ export function actionsRow(spec) {
     + '</div>';
 }
 
+// Input-field row — label + a single `<input>` in the control cell.
+// Covers profile's display-name / username / email / job-title rows.
+// `readonly` defaults to true (Profile starts read-only; edit-mode
+// toggles `[name]` inputs writable via setEditMode).
+//
+//   { label, hint?, hintClass?, col?, id, type?, name?, autocomplete?, placeholder?, readonly? }
+export function inputRow(spec) {
+  const type = spec.type || "text";
+  const attrs = [
+    'id="' + esc(spec.id) + '"',
+    'class="rp-input"',
+    'type="' + esc(type) + '"',
+  ];
+  if (spec.name)         attrs.push('name="' + esc(spec.name) + '"');
+  if (spec.autocomplete) attrs.push('autocomplete="' + esc(spec.autocomplete) + '"');
+  if (spec.placeholder)  attrs.push('placeholder="' + esc(spec.placeholder) + '"');
+  if (spec.readonly !== false) attrs.push('readonly');
+  return rowOpen(spec)
+    + labelHTML(spec)
+    + '<span class="rp-page__row-control">'
+    + '<input ' + attrs.join(" ") + ' />'
+    + '</span>'
+    + '</div>';
+}
+
 // Mount-point row — col-stacked container the page fills async at
 // mount (sentinels, memberships). `containerClass` / `emptyClass`
 // carry the per-page modifier.
