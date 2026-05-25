@@ -89,7 +89,6 @@ export default function cases(app, { session }) {
 
   // Page state — module-scoped to the mount call (the router calls
   // this function fresh on each route activation).
-  const boardEl  = app.querySelector("#rp-cases-board");
   const detailEl = app.querySelector("#rp-cases-detail");
   const railBody = app.querySelector("#rp-cases-rail-body");
   let searchQ = "";
@@ -102,6 +101,9 @@ export default function cases(app, { session }) {
     in_review:   true,
     done:        false,                        // done is collapsed by default — usually noisy
   };
+  let activityFilter = "all";                  // sticky per-mount; per-case mem only
+  let lastDetailActivity = [];                 // memoized for filter pill re-render
+  let currentDetailCase = null;                // for the primary advance button
 
   // ── done-window filter — drop Done cases older than the window ───
   // Lives outside paint functions so cycleStatus + the chip-row both
@@ -147,18 +149,12 @@ export default function cases(app, { session }) {
 
   function renderRoute() {
     const rid = activeCaseRid();
-    if (rid) {
-      boardEl.hidden = true;
-      detailEl.hidden = false;
-      loadCaseDetail(rid);
-    } else {
-      detailEl.hidden = true;
-      boardEl.hidden = false;
-      // Paint board from cache if we have it; otherwise the
-      // refreshCases() call below populates it on first mount.
-      if (cachedCases.length) paintBoard(cachedCases);
-    }
-    paintRail(cachedCases, rid);               // rail always re-paints to update active highlight
+    // Board is ALWAYS rendered now — the detail panel slides over
+    // it as an overlay (Em's call vs the Salesforce full-page swap).
+    detailEl.hidden = !rid;
+    if (rid) loadCaseDetail(rid);
+    if (cachedCases.length) paintBoard(cachedCases);
+    paintRail(cachedCases, rid);
   }
 
   // Listen for in-page hash changes (board ↔ detail) — main.js
@@ -217,7 +213,7 @@ export default function cases(app, { session }) {
       if (w && w !== getPref("casesDoneWindow")) {
         setPref("casesDoneWindow", w);
         paintRail(cachedCases, activeCaseRid());
-        if (!boardEl.hidden) paintBoard(cachedCases);
+        paintBoard(cachedCases);
       }
       return;
     }
@@ -275,18 +271,18 @@ export default function cases(app, { session }) {
       // contract — the original v1 shell read `.rows` (wrong).
       cachedCases = data?.items || [];
       paintRail(cachedCases, activeCaseRid());
-      if (!boardEl.hidden) paintBoard(cachedCases);
+      paintBoard(cachedCases);
     } catch (err) {
       const status = err?.status;
       if (status === 404) {
         cachedCases = [];
         paintRailState("Cases endpoint not live yet.");
-        if (!boardEl.hidden) paintBoardEmpty("Cases endpoint not live yet.");
+        paintBoardEmpty("Cases endpoint not live yet.");
         return;
       }
       const msg = "Couldn't load cases" + (status ? " (" + status + ")" : "") + ".";
       paintRailState(msg);
-      if (!boardEl.hidden) paintBoardEmpty(msg);
+      paintBoardEmpty(msg);
     }
   }
 
@@ -479,8 +475,15 @@ export default function cases(app, { session }) {
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && createModal && !createModal.hidden) {
+    if (e.key !== "Escape") return;
+    if (createModal && !createModal.hidden) {
       closeCreateModal();
+      return;
+    }
+    // Detail panel close — navigate back to /cases (no ?id=), the
+    // router clears detailEl.hidden on the resulting renderRoute.
+    if (detailEl && !detailEl.hidden) {
+      location.hash = "#/cases";
     }
   });
 
@@ -531,6 +534,9 @@ export default function cases(app, { session }) {
   const sideReporter = app.querySelector("#rp-cases-side-reporter");
   const sideCreated  = app.querySelector("#rp-cases-side-created");
   const sideUpdated  = app.querySelector("#rp-cases-side-updated");
+  const advanceBtn   = app.querySelector("#rp-cases-advance-btn");
+  const advanceLabel = app.querySelector("#rp-cases-advance-label");
+  const activityFilterEl = app.querySelector("#rp-cases-activity-filter");
 
   let currentDetailRid = null;
   let assigneePickerTimer = null;
@@ -562,6 +568,28 @@ export default function cases(app, { session }) {
     const body = (commentInput?.value || "").trim();
     if (!body || !currentDetailRid) return;
     postComment(body);
+  });
+
+  // Primary advance button — advances current status to the next
+  // in the lifecycle. Uses cycleStatus under the hood (same wrap-to-
+  // backlog semantics for the Done case, which reads as "Reopen").
+  advanceBtn?.addEventListener("click", () => {
+    if (!currentDetailCase) return;
+    cycleStatus(currentDetailRid, currentDetailCase.status || "backlog");
+  });
+
+  // Activity feed filter pills — change the in-memory filter, re-
+  // render the list from the memoized last activity payload (no
+  // network round-trip per pill click).
+  activityFilterEl?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-activity-filter]");
+    if (!btn) return;
+    const f = btn.dataset.activityFilter;
+    if (!f || f === activityFilter) return;
+    activityFilter = f;
+    activityFilterEl.querySelectorAll("[data-activity-filter]").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.activityFilter === f));
+    renderActivityList(lastDetailActivity);
   });
 
   // ── assignee picker — shared atom from user-picker.css, hits the
@@ -669,6 +697,9 @@ export default function cases(app, { session }) {
     const comments = detail?.comments || [];
     const activity = detail?.activity || detail?.events || [];
 
+    currentDetailCase = c;                       // for the advance button
+    lastDetailActivity = activity;               // memoize for filter re-render
+
     if (titleEl) titleEl.textContent = c.title || "(untitled)";
     if (metaStrip) {
       metaStrip.innerHTML = ''
@@ -682,11 +713,29 @@ export default function cases(app, { session }) {
         : '<p class="rp-cases-empty rp-cases-empty--inline">No description.</p>';
     }
 
+    // Primary advance button label — verb-based, matched to the
+    // current status. cycleStatus wraps Done → Backlog so the Done
+    // label reads as "Reopen" (advances to backlog → user moves to
+    // todo if they want).
+    if (advanceBtn && advanceLabel) {
+      const next = ADVANCE_LABEL[c.status] || "Advance status";
+      advanceLabel.textContent = next;
+      advanceBtn.disabled = !c.status;
+    }
+
     if (sideStatus && c.status)     sideStatus.value = c.status;
     if (sidePriority && c.priority) sidePriority.value = c.priority;
     if (sideType && c.type)         sideType.value = c.type;
-    if (sideAssignee) sideAssignee.textContent = c.assignee_display_name || c.assignee_id || "— unassigned —";
-    if (sideReporter) sideReporter.textContent = c.reporter_display_name || c.reporter_id || "—";
+    if (sideAssignee) {
+      sideAssignee.innerHTML = c.assignee_id
+        ? userBadgeHTML(c.assignee_id, c.assignee_display_name)
+        : '<span class="rp-cases-side-unassigned">— unassigned —</span>';
+    }
+    if (sideReporter) {
+      sideReporter.innerHTML = c.reporter_id
+        ? userBadgeHTML(c.reporter_id, c.reporter_display_name)
+        : '—';
+    }
     if (sideCreated)  sideCreated.textContent = c.created_at ? fmtTime(c.created_at) : "—";
     if (sideUpdated)  sideUpdated.textContent = c.updated_at ? fmtTime(c.updated_at) : "—";
 
@@ -695,11 +744,74 @@ export default function cases(app, { session }) {
         ? comments.map(commentHTML).join("")
         : '<p class="rp-cases-empty">No comments yet. Be the first.</p>';
     }
-    if (activityList) {
-      activityList.innerHTML = activity.length
-        ? activity.map(activityRow).join("")
-        : '<p class="rp-cases-empty">No activity yet.</p>';
+    renderActivityList(activity);
+  }
+
+  // Verb-based labels for the primary advance button. Reads as a
+  // workflow command, not as a state-machine assertion. Done →
+  // "Reopen" since the click cycles back to backlog.
+  const ADVANCE_LABEL = {
+    backlog:     "Move to Todo",
+    todo:        "Start working",
+    in_progress: "Send for review",
+    in_review:   "Mark as Done",
+    done:        "Reopen",
+  };
+
+  // Avatar-badge atom — initials in a colored circle + display_name.
+  // Falls back to the rid suffix when we don't have a display name
+  // (shouldn't happen post-Gus's b8f2da8 hydration, but defensive).
+  // No job_title yet — backend DTO doesn't carry it; queued for Gus.
+  function userBadgeHTML(userRid, displayName) {
+    const name = displayName || userRid || "—";
+    const initials = name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s.charAt(0).toUpperCase())
+      .join("") || "·";
+    // Deterministic accent color from the rid hash — same user
+    // always gets the same color across cases.
+    const color = userBadgeColor(userRid || name);
+    return ''
+      + '<div class="rp-cases-user-badge" title="' + esc(name) + '">'
+      +   '<span class="rp-cases-user-avatar" data-c="' + color + '">'
+      +     esc(initials)
+      +   '</span>'
+      +   '<span class="rp-cases-user-name">' + esc(name) + '</span>'
+      + '</div>';
+  }
+  const USER_BADGE_COLORS = ["blue", "mauve", "peach", "green", "teal"];
+  function userBadgeColor(key) {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0;
+    return USER_BADGE_COLORS[Math.abs(h) % USER_BADGE_COLORS.length];
+  }
+
+  // Activity feed filter — maps the pill choice to the case_* kinds
+  // that pass through. Re-renders from the memoized last payload so
+  // changing the filter doesn't re-fetch.
+  const ACTIVITY_FILTERS = {
+    all:        () => true,
+    comments:   (e) => e.kind === "case_comment_post",
+    status:     (e) => e.kind === "case_status_change",
+    assignment: (e) => e.kind === "case_assignee_change",
+    edits:      (e) => e.kind === "case_metadata_change"
+                    || e.kind === "case_priority_change"
+                    || e.kind === "case_type_change",
+  };
+  function renderActivityList(activity) {
+    if (!activityList) return;
+    const pred = ACTIVITY_FILTERS[activityFilter] || ACTIVITY_FILTERS.all;
+    const filtered = activity.filter(pred);
+    if (!filtered.length) {
+      const msg = activityFilter === "all"
+        ? "No activity yet."
+        : "No activity in this filter.";
+      activityList.innerHTML = '<p class="rp-cases-empty">' + msg + '</p>';
+      return;
     }
+    activityList.innerHTML = filtered.map(activityRow).join("");
   }
 
   function commentHTML(cm) {

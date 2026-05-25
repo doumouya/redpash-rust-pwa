@@ -303,37 +303,76 @@
 }
 
 /* ── detail ───────────────────────────────────────────────────── */
+/* Detail panel — Linear-style overlay. Kanban stays visible
+   behind so the user can keep scanning while a case is open;
+   the rail handles cross-case nav. Close affordances: X button
+   in the head, Esc key, or clicking another rail/board card
+   (which swaps the loaded case in-place). Clicking the visible
+   kanban behind does NOT auto-close — that would fight rapid
+   case browsing.
+
+   Width is bounded so wide screens don't waste space on a
+   half-empty panel, and narrow screens get a near-full-screen
+   overlay. */
 .rp-cases-detail {
-  flex: 1;
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(720px, 70vw);
+  z-index: 20;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 12px 22px 22px;
+  padding: 0;
+  background: var(--rp-bg);
+  border-left: 1px solid var(--rp-border);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
 }
 .rp-cases-detail[hidden] { display: none; }
+
+/* Ensure .rp-cases-main is the positioning context for the
+   absolutely-positioned detail panel. */
+.rp-shell-main.rp-cases-main { position: relative; }
 .rp-cases-detail-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-}
-.rp-cases-back {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
 }
 .rp-cases-detail-rid {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 11px;
   color: var(--rp-text-mute);
 }
+/* Close X — anchors to /cases (no ?id=) so the router clears
+   the detail. Plain link, no rt-btn chrome — the head bar
+   already provides visual context. */
+.rp-cases-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--rp-text-mute);
+  text-decoration: none;
+}
+.rp-cases-detail-close:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
 .rp-cases-detail-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 260px;
-  gap: 18px;
+  grid-template-columns: 1fr 240px;
+  gap: 16px;
   min-height: 0;
   overflow: hidden;
+  padding: 14px 16px 16px;
 }
 .rp-cases-detail-main {
   min-width: 0;
@@ -615,6 +654,92 @@
 .rp-cases-empty--inline {
   padding: 4px 0;
   text-align: left;
+}
+
+/* ── primary advance button ─────────────────────────────────
+   The detail page's main action — advances the case to the
+   next stage (or "Reopen" when Done). Same PATCH as the
+   side-panel select but discoverable. Label updates with the
+   current status (see ADVANCE_LABEL in cases.js). */
+.rp-cases-detail-action {
+  display: flex;
+  justify-content: flex-end;
+}
+.rp-cases-advance-btn {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0 14px;
+  height: 32px;
+}
+.rp-cases-advance-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── user avatar badge ──────────────────────────────────────
+   Compact avatar+name row for the side-panel Reporter +
+   Assignee fields. Initials in a deterministically-colored
+   circle (color derived from the user rid hash so the same
+   user always reads the same color across the app). When
+   backend hydrates avatar_url + job_title, swap the initials
+   for an img and add a second line. */
+.rp-cases-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rp-cases-user-avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--rp-bg);
+  letter-spacing: 0.02em;
+}
+.rp-cases-user-avatar[data-c="blue"]  { background: var(--rp-accent-2); }
+.rp-cases-user-avatar[data-c="mauve"] { background: var(--rp-mauve); }
+.rp-cases-user-avatar[data-c="peach"] { background: var(--rp-peach); }
+.rp-cases-user-avatar[data-c="green"] { background: var(--rp-ok); }
+.rp-cases-user-avatar[data-c="teal"]  { background: var(--rp-teal); }
+.rp-cases-user-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--rp-text);
+}
+.rp-cases-side-unassigned {
+  font-size: 12px;
+  color: var(--rp-text-mute);
+  font-style: italic;
+}
+/* Side-edit (assignee) button hosts a user badge inline — drop
+   its inner-value padding rules so the badge controls layout. */
+.rp-cases-side-edit .rp-cases-user-badge {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── activity filter pill row ───────────────────────────────
+   Above the activity feed inside the Activity tab. Caps the
+   firehose by case_* kind group. Default "All". */
+.rp-cases-activity-filter {
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rp-cases-activity-filter .rp-chip {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11.5px;
 }
 
 /* ── create-case modal ───────────────────────────────────────────

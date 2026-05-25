@@ -40,10 +40,15 @@
       </div>
     </aside>
 
-    <!-- ════ main — board or detail, decided by ?id= ════ -->
+    <!-- ════ main — kanban always rendered; detail slides in on top ════
+         Em's call (vs the Salesforce screenshot): no full-page swap
+         when you open a case. The kanban stays visible behind the
+         detail panel so you can keep scanning the board, and the
+         rail still navigates between cases without losing the
+         board context. -->
     <main class="rp-shell-main rp-cases-main">
 
-      <!-- board view (default — no ?id=) -->
+      <!-- board view (always rendered now) -->
       <div id="rp-cases-board" class="rp-cases-board">
         <div class="rp-cases-cols" id="rp-cases-cols">
           <!-- JS renders 5 .rp-cases-col elements here, one per status
@@ -53,18 +58,35 @@
         </div>
       </div>
 
-      <!-- detail view (hidden until ?id=CAS_… deep-link) -->
-      <div id="rp-cases-detail" class="rp-cases-detail" hidden>
+      <!-- detail panel — slides over the kanban from the right when
+           ?id=CAS_… is present. -->
+      <aside id="rp-cases-detail" class="rp-cases-detail" hidden>
         <header class="rp-cases-detail-head">
           <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
+          <a class="rp-cases-detail-close" href="#/cases" title="Close (Esc)">
+            <i class="bi bi-x-lg"></i>
+          </a>
         </header>
 
         <div class="rp-cases-detail-body">
-          <main class="rp-cases-detail-main">
+          <div class="rp-cases-detail-main">
             <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
             <div class="rp-cases-detail-meta-strip" id="rp-cases-detail-meta-strip">
               <!-- status chip + priority chip + type chip — JS renders -->
             </div>
+
+            <!-- Primary action — verb-based advance to the next status.
+                 Label updates with the current status; same PATCH as the
+                 side-panel select but discoverable. -->
+            <div class="rp-cases-detail-action">
+              <button class="rt-btn rt-btn--accent rp-cases-advance-btn"
+                      id="rp-cases-advance-btn" type="button"
+                      title="Advance to the next status">
+                <span id="rp-cases-advance-label">Advance status</span>
+                <i class="bi bi-arrow-right"></i>
+              </button>
+            </div>
+
             <section class="rp-cases-detail-description" id="rp-cases-detail-description">
               <!-- JS renders <pre> for now; markdown render is a v2 polish -->
             </section>
@@ -92,11 +114,21 @@
             </section>
 
             <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
+              <!-- Filter pills cap the firehose: All / Comments /
+                   Status / Assignment / Edits — picks a case_* kind
+                   group and re-renders the list. -->
+              <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter">
+                <button type="button" class="rp-chip is-active" data-activity-filter="all">All</button>
+                <button type="button" class="rp-chip" data-activity-filter="comments">Comments</button>
+                <button type="button" class="rp-chip" data-activity-filter="status">Status</button>
+                <button type="button" class="rp-chip" data-activity-filter="assignment">Assignment</button>
+                <button type="button" class="rp-chip" data-activity-filter="edits">Edits</button>
+              </div>
               <div class="rp-cases-activity-list" id="rp-cases-activity-list">
                 <!-- JS renders activity-feed events (case_* kinds) -->
               </div>
             </section>
-          </main>
+          </div>
 
           <aside class="rp-cases-detail-side">
             <div class="rp-cases-side-section">
