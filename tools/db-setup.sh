@@ -9,15 +9,27 @@ if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # without configuring them) and `stack-version.sh` (which probes the
 # binary floor). This script picks up after the install step:
 #
-#   1. ensures the postgres service is running (WSL has no systemd by
+#   1. ensures psql is installed (apts it if missing)
+#   2. ensures the postgres service is running (WSL has no systemd by
 #      default — sudo service is the lever)
-#   2. creates the `mansa` role w/ login + superuser + password
-#   3. creates the `redpash_prerelease` database owned by that role
-#   4. flips localhost auth in pg_hba.conf from peer → md5 so the
-#      user:password URL is honored (Ubuntu default is peer for the
-#      local connections + scram/md5 for 127.0.0.1)
-#   5. probes the canonical DATABASE_URL with `SELECT 1`
-#   6. writes backend/.env if missing
+#  ★ 2.5 EARLY VERIFY — `psql DATABASE_URL → 1`. If the URL already
+#      connects, steps 3, 4, 5 are skipped entirely: role + database +
+#      auth are demonstrably already configured for the cluster that's
+#      actually answering. Avoids two classes of false negative:
+#        • sudo without a TTY (agent shell, CI) — sudo prompts then
+#          fails, so `sudo -u postgres psql` introspection returns
+#          empty even when the role exists;
+#        • multi-cluster hosts (WSL 26.04 with 22.04's PG14 also up
+#          on :5432) — `sudo -u postgres psql` reaches the LOCAL
+#          cluster, but `psql DATABASE_URL` reaches whichever cluster
+#          owns the port; the two queries see different state.
+#   3. creates the `mansa` role w/ login + superuser + password
+#   4. creates the `redpash_prerelease` database owned by that role
+#   5. flips localhost auth in pg_hba.conf from peer / ident → md5 so
+#      the user:password URL is honored. scram-sha-256 is left alone:
+#      PG15+ default, already works with user:pass URLs without churn.
+#   6. probes the canonical DATABASE_URL with `SELECT 1`
+#   7. writes backend/.env if missing
 #
 # The api crate's `sqlx::migrate!` auto-applies the 30+ migrations on
 # first boot — this script gets you to the point where the api can
@@ -65,6 +77,10 @@ fi
 TAG_OK="${C_OK}✓${C_RST}"
 TAG_WORK="${C_WARN}→${C_RST}"
 TAG_BAD="${C_BAD}✗${C_RST}"
+# Drive-by: TAG_WARN was referenced in step 7 but never defined — would
+# crash on `set -u` if the "DATABASE_URL differs" branch fired.
+TAG_WARN="${C_WARN}!${C_RST}"
+TAG_SKIP="${C_DIM}∘${C_RST}"
 
 run() {
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -99,6 +115,15 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/backend/.env"
 
 FAILED=0
+ALREADY_OK=0
+
+# verify_connection — same path the api crate's sqlx pool will use.
+# No sudo, no superuser; just the user/pass URL the .env will carry.
+verify_connection() {
+  PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" \
+    -d "$PG_DB" -tAc "SELECT 1;" 2>/dev/null | tr -d '[:space:]' \
+    | grep -q '^1$'
+}
 
 # ── header ──────────────────────────────────────────────────────────────────
 echo ""
@@ -132,74 +157,105 @@ else
   run_sudo service postgresql start || FAILED=$((FAILED + 1))
 fi
 
-# Detect the cluster's pg_hba.conf path now that the service is up.
-# Ubuntu lays it out as /etc/postgresql/<major>/main/pg_hba.conf.
-PG_HBA=""
-if [ "$DRY_RUN" -eq 0 ]; then
-  PG_HBA=$(sudo -n find /etc/postgresql -name pg_hba.conf -type f 2>/dev/null | head -1)
-  if [ -z "$PG_HBA" ]; then
-    # Fall back to a non-elevated probe via psql if sudo find fails.
-    PG_HBA=$(sudo -u postgres psql -tAc "SHOW hba_file;" 2>/dev/null | head -1)
-  fi
+# ── 2.5 early verify ────────────────────────────────────────────────────────
+# If the URL already connects, role + db + auth are already configured for
+# the cluster actually answering :5432 — skip every sudo-gated step below.
+echo ""
+echo "${C_BOLD}── 2.5. early verify (DATABASE_URL)${C_RST}"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "  ${C_DIM}[dry] psql $DB_URL -tAc 'SELECT 1'${C_RST}"
+elif verify_connection; then
+  echo "  $TAG_OK URL already connects — skipping role/db/hba steps"
+  ALREADY_OK=1
+else
+  echo "  $TAG_WARN URL does not connect yet — falling through to role/db/hba fix-up"
 fi
 
-# ── 3. role exists? ─────────────────────────────────────────────────────────
-echo ""
-echo "${C_BOLD}── 3. role '$PG_USER'${C_RST}"
-if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  ${C_DIM}[dry] CREATE ROLE $PG_USER WITH LOGIN SUPERUSER PASSWORD '<redacted>'${C_RST}"
-else
-  ROLE_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$PG_USER';" 2>/dev/null | tr -d '[:space:]')
-  if [ "$ROLE_EXISTS" = "1" ]; then
-    echo "  $TAG_OK role already exists — leaving as-is (use ALTER ROLE manually to change password)"
+# Detect the cluster's pg_hba.conf path. Only needed if we're going to
+# touch it (i.e. early-verify failed). Move the discovery inside the
+# fall-through block to avoid sudo prompts on the happy path.
+PG_HBA=""
+
+if [ "$ALREADY_OK" -eq 0 ]; then
+  if [ "$DRY_RUN" -eq 0 ]; then
+    PG_HBA=$(sudo -n find /etc/postgresql -name pg_hba.conf -type f 2>/dev/null | head -1)
+    if [ -z "$PG_HBA" ]; then
+      # Fall back to a SHOW from inside postgres if sudo find fails.
+      PG_HBA=$(sudo -u postgres psql -tAc "SHOW hba_file;" 2>/dev/null | head -1)
+    fi
+  fi
+
+  # ── 3. role exists? ───────────────────────────────────────────────────────
+  echo ""
+  echo "${C_BOLD}── 3. role '$PG_USER'${C_RST}"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  ${C_DIM}[dry] CREATE ROLE $PG_USER WITH LOGIN SUPERUSER PASSWORD '<redacted>'${C_RST}"
   else
-    echo "  $TAG_WORK creating role"
-    sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+    ROLE_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$PG_USER';" 2>/dev/null | tr -d '[:space:]')
+    if [ "$ROLE_EXISTS" = "1" ]; then
+      echo "  $TAG_OK role already exists — leaving as-is (use ALTER ROLE manually to change password)"
+    else
+      echo "  $TAG_WORK creating role"
+      sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='$PG_USER') THEN
     CREATE ROLE $PG_USER WITH LOGIN SUPERUSER PASSWORD '$PG_PASS';
   END IF;
 END \$\$;
 SQL
-    [ $? -eq 0 ] || FAILED=$((FAILED + 1))
+      [ $? -eq 0 ] || FAILED=$((FAILED + 1))
+    fi
   fi
-fi
 
-# ── 4. database exists? ─────────────────────────────────────────────────────
-echo ""
-echo "${C_BOLD}── 4. database '$PG_DB'${C_RST}"
-if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  ${C_DIM}[dry] CREATE DATABASE $PG_DB OWNER $PG_USER${C_RST}"
-else
-  DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$PG_DB';" 2>/dev/null | tr -d '[:space:]')
-  if [ "$DB_EXISTS" = "1" ]; then
-    echo "  $TAG_OK database already exists"
+  # ── 4. database exists? ───────────────────────────────────────────────────
+  echo ""
+  echo "${C_BOLD}── 4. database '$PG_DB'${C_RST}"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  ${C_DIM}[dry] CREATE DATABASE $PG_DB OWNER $PG_USER${C_RST}"
   else
-    echo "  $TAG_WORK creating database"
-    run_sudo -u postgres createdb -O "$PG_USER" "$PG_DB" || FAILED=$((FAILED + 1))
+    DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$PG_DB';" 2>/dev/null | tr -d '[:space:]')
+    if [ "$DB_EXISTS" = "1" ]; then
+      echo "  $TAG_OK database already exists"
+    else
+      echo "  $TAG_WORK creating database"
+      run_sudo -u postgres createdb -O "$PG_USER" "$PG_DB" || FAILED=$((FAILED + 1))
+    fi
   fi
-fi
 
-# ── 5. localhost auth = md5 ────────────────────────────────────────────────
-echo ""
-echo "${C_BOLD}── 5. localhost auth (pg_hba.conf)${C_RST}"
-if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  ${C_DIM}[dry] sed peer|scram-sha-256 → md5 on host all all 127.0.0.1/32${C_RST}"
-elif [ -z "$PG_HBA" ]; then
-  echo "  $TAG_BAD couldn't locate pg_hba.conf — skipping (DATABASE_URL probe may fail)"
-  FAILED=$((FAILED + 1))
-else
-  # Check current state.
-  CURRENT_AUTH=$(sudo grep -E '^host\s+all\s+all\s+127\.0\.0\.1/32\s+' "$PG_HBA" 2>/dev/null | awk '{print $5}' | head -1)
-  if [ "$CURRENT_AUTH" = "md5" ]; then
-    echo "  $TAG_OK localhost auth already md5 in $PG_HBA"
+  # ── 5. localhost auth = md5 ──────────────────────────────────────────────
+  echo ""
+  echo "${C_BOLD}── 5. localhost auth (pg_hba.conf)${C_RST}"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  ${C_DIM}[dry] sed peer|ident → md5 on host all all 127.0.0.1/32 + ::1/128${C_RST}"
+  elif [ -z "$PG_HBA" ]; then
+    echo "  $TAG_BAD couldn't locate pg_hba.conf — skipping (DATABASE_URL probe may fail)"
+    FAILED=$((FAILED + 1))
   else
-    echo "  $TAG_WORK flipping ${CURRENT_AUTH:-<none>} → md5 in $PG_HBA"
-    sudo cp "$PG_HBA" "$PG_HBA.bak.$(date +%s)"
-    sudo sed -i -E 's#^(host\s+all\s+all\s+127\.0\.0\.1/32\s+)(peer|scram-sha-256|ident)#\1md5#' "$PG_HBA"
-    sudo sed -i -E 's#^(host\s+all\s+all\s+::1/128\s+)(peer|scram-sha-256|ident)#\1md5#' "$PG_HBA"
-    echo "  ${C_DIM}\$ sudo service postgresql restart${C_RST}"
-    sudo service postgresql restart || FAILED=$((FAILED + 1))
+    # Only patch peer / ident — scram-sha-256 (PG15+ default) already
+    # works with user:pass URLs, no need to churn it.
+    CURRENT_AUTH=$(sudo grep -E '^host\s+all\s+all\s+127\.0\.0\.1/32\s+' "$PG_HBA" 2>/dev/null | awk '{print $5}' | head -1)
+    case "$CURRENT_AUTH" in
+      md5)
+        echo "  $TAG_OK localhost auth already md5 in $PG_HBA"
+        ;;
+      scram-sha-256)
+        echo "  $TAG_OK localhost auth is scram-sha-256 (PG15+ default) — works with user:pass URLs, no patch needed"
+        ;;
+      peer|ident)
+        echo "  $TAG_WORK flipping $CURRENT_AUTH → md5 in $PG_HBA"
+        sudo cp "$PG_HBA" "$PG_HBA.bak.$(date +%s)"
+        sudo sed -i -E 's#^(host\s+all\s+all\s+127\.0\.0\.1/32\s+)(peer|ident)#\1md5#' "$PG_HBA"
+        sudo sed -i -E 's#^(host\s+all\s+all\s+::1/128\s+)(peer|ident)#\1md5#' "$PG_HBA"
+        echo "  ${C_DIM}\$ sudo service postgresql restart${C_RST}"
+        sudo service postgresql restart || FAILED=$((FAILED + 1))
+        ;;
+      "")
+        echo "  $TAG_WARN no host all all 127.0.0.1/32 line in $PG_HBA — manual review needed"
+        ;;
+      *)
+        echo "  $TAG_WARN localhost auth = $CURRENT_AUTH (custom) — leaving alone"
+        ;;
+    esac
   fi
 fi
 
@@ -208,6 +264,8 @@ echo ""
 echo "${C_BOLD}── 6. probe DATABASE_URL${C_RST}"
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "  ${C_DIM}[dry] psql $DB_URL -tAc 'SELECT 1'${C_RST}"
+elif [ "$ALREADY_OK" -eq 1 ]; then
+  echo "  $TAG_SKIP early verify already proved SELECT 1 — skipping re-probe"
 else
   PROBE=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -tAc "SELECT 1;" 2>&1)
   if [ "$PROBE" = "1" ]; then
