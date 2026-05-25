@@ -513,8 +513,15 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.rp-cases-detail-info-sep {
+/* Wrap-aware separator — sits as a leading pseudo on every item
+   except the first, so when the row wraps, "· Updated Date Y" wraps
+   together to the new line instead of leaving a trailing "·"
+   orphaned on the previous line. Replaces the old `.rp-cases-detail-
+   info-sep` flex-child node. */
+.rp-cases-detail-info-item + .rp-cases-detail-info-item::before {
+  content: "·";
   color: var(--rp-border);
+  margin-right: 0.25rem;
 }
 .rp-cases-detail-info #rp-cases-side-reporter,
 .rp-cases-detail-info #rp-cases-side-created,

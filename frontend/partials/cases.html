@@ -83,17 +83,18 @@
           </div>
 
           <!-- Read-only metadata: reporter + create/update timestamps.
-               Thin info line — informational, not actionable. -->
+               Thin info line — informational, not actionable. The
+               between-items separator is a CSS pseudo-element on
+               each non-first item so wrap-to-new-line carries the
+               separator with the item (no orphan `·` at line ends). -->
           <div class="rp-cases-detail-info">
             <span class="rp-cases-detail-info-item">
               <span class="rp-cases-detail-info-lbl">Reporter</span>
               <span id="rp-cases-side-reporter">—</span>
             </span>
-            <span class="rp-cases-detail-info-sep">·</span>
             <span class="rp-cases-detail-info-item">
               Created <span id="rp-cases-side-created">—</span>
             </span>
-            <span class="rp-cases-detail-info-sep">·</span>
             <span class="rp-cases-detail-info-item">
               Updated <span id="rp-cases-side-updated">—</span>
             </span>
