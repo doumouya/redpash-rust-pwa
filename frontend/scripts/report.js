@@ -110,6 +110,12 @@ export function mountReport(panelBody, ctx) {
   panelBody.append(statusEl, builderEl, previewEl);
 
   // ── render ────────────────────────────────────────────────────────
+  // Layout reframed (Em 2026-05-25) for non-tech users:
+  //   • renderQuestionSection — "Show me X for each Y" sentence;
+  //     consolidates the old Group by + Aggregations forms
+  //   • renderAdvancedSection — pivot / windows / top-N / show
+  //     toggles, hidden behind a <details> so the 80% case stays
+  //     uncluttered (only ~20% of reports use these power features)
   function renderBuilder() {
     const cols = ctx.columns() || [];
     if (!cols.length) {
@@ -118,13 +124,108 @@ export function mountReport(panelBody, ctx) {
     }
     builderEl.innerHTML =
         renderUndoStrip()
-      + renderGroupBySection(cols)
-      + renderPivotSection(cols)
-      + renderAggregationsSection(cols)
-      + renderWindowsSection()
-      + renderTopNSection()
-      + renderShowSection();
+      + renderQuestionSection(cols)
+      + renderAdvancedSection(cols);
     renderUndoButtons();
+  }
+
+  // The "Show me X for each Y" question-builder. Measures + breakdowns
+  // share one mental model: the user is composing a sentence about
+  // what they want to see. Underneath, measures = aggregations,
+  // breakdowns = group_by — same state machine the old forms wrote.
+  function renderQuestionSection(cols) {
+    // ── measures (aggregations) ────────────────────────────────────
+    const measureRows = aggregations.map((a, i) => {
+      // Reorder: [fn ▾] of [col ▾] [alias?] [×] — reads as English
+      // "Sum of price" / "Mean of age" instead of "price sum".
+      const fnSelect = '<select class="rt-pred-op rt-report-fn" data-key="fn">'
+        + AGG_FNS.map(([v, l]) =>
+            '<option value="' + esc(v) + '"'
+            + (v === a.fn ? ' selected' : '') + '>' + esc(l) + '</option>').join('')
+        + '</select>';
+      const colSelect = '<select class="rt-pred-col rt-report-col" data-key="col">'
+        + cols.map((c) =>
+            '<option value="' + esc(c.name) + '"'
+            + (c.name === a.col ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('')
+        + '<option value="*"' + (a.col === "*" ? ' selected' : '') + '>rows</option>'
+        + '</select>';
+      // Keeping the `rt-report-agg` class alongside the new visual
+      // class so the existing change/input event handlers (which
+      // target `.rt-report-agg`) keep working without rewires.
+      return '<div class="rt-report-measure rt-report-agg" data-i="' + i + '">'
+        + fnSelect
+        + '<span class="rt-report-measure-of">of</span>'
+        + colSelect
+        + '<input class="rt-pred-val rt-report-alias" data-key="alias" type="text"'
+        + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
+        + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
+        + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
+        + '</div>';
+    }).join('');
+    const measuresEmpty = !aggregations.length
+      ? '<p class="rt-report-default-hint">By default, this counts rows in each group.</p>'
+      : '';
+
+    // ── breakdowns (group_by) ──────────────────────────────────────
+    const breakdownChips = groupBy.map((name) =>
+      '<span class="rt-report-chip">'
+      +   esc(name)
+      +   '<button class="rt-report-chip-del" type="button" data-group-del="'
+      +     esc(name) + '" title="Remove"><i class="bi bi-x"></i></button>'
+      + '</span>').join('');
+    const breakdownAvail = cols.filter((c) => !groupBy.includes(c.name));
+    const breakdownAdd = breakdownAvail.length
+      ? '<div class="rt-dd-wrap rt-report-add">'
+        + '<button class="rt-btn rt-btn--glass rt-btn--sm" type="button" data-dd="rtReportGroupDd">'
+        +   '<i class="bi bi-plus-lg"></i> breakdown'
+        + '</button>'
+        + '<div class="rt-dd" id="rtReportGroupDd">'
+        +   breakdownAvail.map((c) =>
+              '<div class="rt-dd-item" data-group-add="' + esc(c.name) + '">'
+              + esc(c.name) + '</div>').join('')
+        + '</div>'
+        + '</div>'
+      : '';
+
+    return '<section class="rt-report-question">'
+      +    '<div class="rt-report-q-line">'
+      +      '<span class="rt-report-q-label">Show me</span>'
+      +      '<div class="rt-report-q-measures">'
+      +        measureRows
+      +        '<button class="rt-btn rt-btn--glass rt-btn--sm rt-report-add-agg" type="button">'
+      +          '<i class="bi bi-plus-lg"></i> measure'
+      +        '</button>'
+      +      '</div>'
+      +    '</div>'
+      +    measuresEmpty
+      +    '<div class="rt-report-q-line">'
+      +      '<span class="rt-report-q-label">For each</span>'
+      +      '<div class="rt-report-q-breakdowns">'
+      +        (breakdownChips || '<span class="rt-report-q-hint">no breakdown — one grand row</span>')
+      +        breakdownAdd
+      +      '</div>'
+      +    '</div>'
+      +    '</section>';
+  }
+
+  // Power-user sections, collapsed by default. Pivot turns the
+  // report into a matrix; windows add derived columns; top-N caps
+  // the group count; Show toggles which result frames materialise.
+  // All four wired exactly as before — just folded behind disclosure.
+  function renderAdvancedSection(cols) {
+    return '<details class="rt-report-advanced">'
+      +    '<summary class="rt-report-advanced-summary">'
+      +      '<i class="bi bi-chevron-right rt-report-advanced-caret"></i>'
+      +      'Advanced'
+      +      '<span class="rt-report-advanced-hint">pivot · windows · top-N · show</span>'
+      +    '</summary>'
+      +    '<div class="rt-report-advanced-body">'
+      +      renderPivotSection(cols)
+      +      renderWindowsSection()
+      +      renderTopNSection()
+      +      renderShowSection()
+      +    '</div>'
+      +    '</details>';
   }
 
   // Compact undo/redo strip at the top of the builder. Keyboard
@@ -153,38 +254,6 @@ export function mountReport(panelBody, ctx) {
     if (a.alias && a.alias.trim()) return a.alias.trim();
     const fn = a.fn || "count";
     return a.col === "*" ? fn : (a.col + "_" + fn);
-  }
-
-  // Group-by — the row-grouping columns. Each group becomes one row in
-  // the subtotals table. Render as a chip-style picker: a list of
-  // selected chips on top, an "Add column ▾" dropdown to add more.
-  function renderGroupBySection(cols) {
-    const chips = groupBy.map((name) =>
-      '<span class="rt-report-chip">'
-      +   esc(name)
-      +   '<button class="rt-report-chip-del" type="button" data-group-del="'
-      +     esc(name) + '" title="Remove"><i class="bi bi-x"></i></button>'
-      + '</span>').join('');
-    const available = cols.filter((c) => !groupBy.includes(c.name));
-    const addDd = available.length
-      ? '<div class="rt-dd-wrap rt-report-add">'
-        + '<button class="rt-btn rt-btn--glass" type="button" data-dd="rtReportGroupDd">'
-        +   '<i class="bi bi-plus-lg"></i> Add column'
-        + '</button>'
-        + '<div class="rt-dd" id="rtReportGroupDd">'
-        +   available.map((c) =>
-              '<div class="rt-dd-item" data-group-add="' + esc(c.name) + '">'
-              + esc(c.name) + '</div>').join('')
-        + '</div>'
-        + '</div>'
-      : '<p class="rt-report-empty">Every column is already grouped.</p>';
-    return '<section class="rt-report-sect">'
-      +    '<span class="rt-field-lbl">Group by</span>'
-      +    (groupBy.length
-            ? '<div class="rt-report-chips">' + chips + '</div>'
-            : '<p class="rt-report-empty">No group columns — preview returns one grand row.</p>')
-      +    addDd
-      +    '</section>';
   }
 
   // Pivot columns — second-axis grouping (shared::report::group_by_cols).
@@ -218,42 +287,6 @@ export function mountReport(panelBody, ctx) {
             ? '<div class="rt-report-chips">' + chips + '</div>'
             : '<p class="rt-report-empty">No pivot — preview shows a flat subtotals table.</p>')
       +    addDd
-      +    '</section>';
-  }
-
-  // Aggregations — list of { col, fn, alias } rows. Each row has a
-  // column picker, an agg-fn picker, an optional alias input, and a
-  // delete button. The first row of count(*) is implicit when the
-  // list is empty (engine returns one count column per group).
-  function renderAggregationsSection(cols) {
-    const rows = aggregations.map((a, i) =>
-      '<div class="rt-report-agg" data-i="' + i + '">'
-      + '<select class="rt-pred-col" data-key="col">'
-      +   cols.map((c) =>
-            '<option value="' + esc(c.name) + '"'
-            + (c.name === a.col ? ' selected' : '') + '>'
-            + esc(c.name) + '</option>').join('')
-      +   '<option value="*"' + (a.col === "*" ? ' selected' : '') + '>(count *)</option>'
-      + '</select>'
-      + '<select class="rt-pred-op" data-key="fn">'
-      +   AGG_FNS.map(([v, l]) =>
-            '<option value="' + esc(v) + '"'
-            + (v === a.fn ? ' selected' : '') + '>'
-            + esc(l) + '</option>').join('')
-      + '</select>'
-      + '<input class="rt-pred-val" data-key="alias" type="text"'
-      +   ' placeholder="alias (optional)" value="' + esc(a.alias || "") + '" />'
-      + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
-      +   ' title="Remove aggregation"><i class="bi bi-x-lg"></i></button>'
-      + '</div>').join('');
-    return '<section class="rt-report-sect">'
-      +    '<span class="rt-field-lbl">Aggregations</span>'
-      +    (aggregations.length
-            ? '<div class="rt-report-aggs">' + rows + '</div>'
-            : '<p class="rt-report-empty">No aggregations — preview shows row count per group.</p>')
-      +    '<button class="rt-btn rt-btn--glass rt-report-add-agg" type="button">'
-      +      '<i class="bi bi-plus-lg"></i> Add aggregation'
-      +    '</button>'
       +    '</section>';
   }
 

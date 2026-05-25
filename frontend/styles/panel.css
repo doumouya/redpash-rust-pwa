@@ -860,6 +860,143 @@
   font-style: italic;
 }
 
+/* ── question-builder layout (Em 2026-05-25) ──────────────────
+   "Show me [measures] for each [breakdowns]" sentence framing
+   for the Report tab — reads as English, not SQL. Measures =
+   aggregations, breakdowns = group_by; same state shape under
+   the hood. Power features (pivot, windows, top-N, show
+   toggles) live behind <details class="rt-report-advanced">. */
+.rt-report-question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding-bottom: 0.875rem;
+  margin-bottom: 0.875rem;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rt-report-q-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.375rem 0.625rem;
+}
+.rt-report-q-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  padding-top: 0.4375rem;
+  min-width: 4.5rem;
+}
+.rt-report-q-measures,
+.rt-report-q-breakdowns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+}
+.rt-report-q-hint {
+  font-size: 0.7188rem;
+  color: var(--rp-text-mute);
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+.rt-report-default-hint {
+  margin: 0 0 0 4.875rem;       /* aligns with the measure row */
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  font-style: italic;
+}
+
+/* Single measure row — [fn ▾] of [col ▾] [rename] [×]. Reads
+   left-to-right as "Sum of price". */
+.rt-report-measure {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  padding: 0.1875rem 0.25rem 0.1875rem 0.375rem;
+}
+.rt-report-measure-of {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  padding: 0 0.125rem;
+}
+.rt-report-fn,
+.rt-report-col {
+  height: 1.625rem;
+  padding: 0 0.375rem;
+  border: 0;
+  background: transparent;
+  color: var(--rp-text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: 0;
+}
+.rt-report-fn:focus,
+.rt-report-col:focus { background: var(--rp-hover); border-radius: 0.25rem; }
+.rt-report-alias {
+  height: 1.625rem;
+  padding: 0 0.5rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.25rem;
+  color: var(--rp-text);
+  font-size: 0.6875rem;
+  width: 6rem;
+  outline: 0;
+}
+.rt-report-alias:focus { border-color: var(--rp-accent-2); }
+
+/* Advanced disclosure — native <details> wrapping pivot / windows /
+   top-N / show toggles. Custom summary chrome (caret + label +
+   muted hint listing what's inside). Caret rotates 90° on [open]. */
+.rt-report-advanced {
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  background: var(--rp-surface-2);
+  margin-top: 0.625rem;
+}
+.rt-report-advanced-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  user-select: none;
+}
+.rt-report-advanced-summary::-webkit-details-marker { display: none; }
+.rt-report-advanced-summary:hover { color: var(--rp-text); }
+.rt-report-advanced-caret {
+  font-size: 0.6875rem;
+  transition: transform 0.15s var(--rp-ease);
+}
+.rt-report-advanced[open] .rt-report-advanced-caret {
+  transform: rotate(90deg);
+}
+.rt-report-advanced-hint {
+  font-size: 0.625rem;
+  color: var(--rp-text-mute);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-left: auto;
+}
+.rt-report-advanced-body {
+  padding: 0.625rem 0.75rem 0.75rem;
+  border-top: 1px solid var(--rp-border);
+}
+
 .rt-report-chips {
   display: flex;
   flex-wrap: wrap;
