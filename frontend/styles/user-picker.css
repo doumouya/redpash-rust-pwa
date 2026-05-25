@@ -71,9 +71,6 @@
   color: var(--rp-text-mute);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.rp-user-picker-empty {
-  padding: 1rem;
-  text-align: center;
-  font-size: 0.7188rem;
-  color: var(--rp-text-mute);
-}
+/* Empty-state row composes `.rt-ac-empty` (panel.css). No
+   user-picker-specific class needed — the dropdown shape is
+   already inherited from .rt-ac per the doc-comment above. */

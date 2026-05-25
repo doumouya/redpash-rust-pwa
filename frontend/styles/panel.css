@@ -126,12 +126,11 @@
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
+/* Centered + muted from `.rt-empty` (shell.css); only the
+   step-history block-padding + slightly larger text stays. */
 .rt-step-state {
-  margin: 0;
   padding: 0.5rem 0.25rem;
-  color: var(--rp-text-mute);
   font-size: 0.7812rem;
-  text-align: center;
 }
 
 /* AND/OR segmented toggle */
@@ -536,14 +535,7 @@
   color: var(--rp-text);
 }
 .rt-tool-columns-sheet-title i { color: var(--rp-accent-2); }
-.rt-tool-columns-sheet-close {
-  width: 1.625rem;
-  height: 1.625rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
+/* Shape provided by `.rt-icon-btn` (button.css). */
 .rt-tool-columns-sheet-blurb {
   margin: 0 0 0.5rem;
   font-size: 0.7188rem;
@@ -595,18 +587,9 @@
 }
 .rt-tool-columns-selchip.is-active b,
 .rt-tool-columns-selchip.is-active i { color: var(--rp-accent-2); }
-.rt-tool-columns-selchip-clear {
-  width: 1.25rem;
-  height: 1.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 6.1875rem;
-  background: transparent;
-  color: var(--rp-text-mute);
-  cursor: pointer;
-}
+/* Shape from `.rt-icon-btn` + `--sm` (button.css). Hover tinted
+   red-soft + accent text since clearing IS the destructive action;
+   atom hover (mute → text) gets overridden here. */
 .rt-tool-columns-selchip-clear:hover {
   background: rgba(243, 139, 168, 0.18);
   color: var(--rp-accent);

@@ -48,20 +48,20 @@ export function mountJoins(panelBody, ctx) {
 
   function render() {
     if (loading) {
-      panelBody.innerHTML = '<p class="rt-step-state">Detecting joins…</p>';
+      panelBody.innerHTML = '<p class="rt-empty rt-step-state">Detecting joins…</p>';
       return;
     }
     if (errorText) {
-      panelBody.innerHTML = '<p class="rt-step-state">' + esc(errorText) + '</p>';
+      panelBody.innerHTML = '<p class="rt-empty rt-step-state">' + esc(errorText) + '</p>';
       return;
     }
     if (!candidates) {
-      panelBody.innerHTML = '<p class="rt-step-state">Open a file to detect joins with siblings in the project.</p>';
+      panelBody.innerHTML = '<p class="rt-empty rt-step-state">Open a file to detect joins with siblings in the project.</p>';
       return;
     }
     const files = candidates.files || [];
     if (!files.length) {
-      panelBody.innerHTML = '<p class="rt-step-state">No matching keys found in other files of this project.</p>';
+      panelBody.innerHTML = '<p class="rt-empty rt-step-state">No matching keys found in other files of this project.</p>';
       return;
     }
     panelBody.innerHTML =

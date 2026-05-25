@@ -12,7 +12,7 @@ import { esc, cssEsc } from "/scripts/dom.js";
 import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import { getPref } from "/scripts/prefs.js";
 import {
-  headHTML, kpiStripHTML, chartsStripHTML,
+  headHTML, kpiStripHTML, chartsStripHTML, listToolbarHTML,
   windowChipsHTML as _windowChipsHTML,
   listPanel as _listPanel,
   setKpi as _setKpi,
@@ -527,7 +527,7 @@ export default function monitoring(app, { session }) {
       + '<div class="rp-mon-modal-body" role="dialog" aria-modal="true" aria-labelledby="rp-mon-modal-title">'
       +   '<header class="rp-mon-modal-head">'
       +     '<h3 id="rp-mon-modal-title" class="rp-mon-modal-title">Request <code>' + esc(requestId) + '</code></h3>'
-      +     '<button type="button" class="rp-mon-modal-close" aria-label="Close">' +
+      +     '<button type="button" class="rt-icon-btn rp-mon-modal-close" aria-label="Close">' +
                 '<i class="bi bi-x-lg"></i></button>'
       +   '</header>'
       +   '<div class="rp-mon-modal-content" id="rp-mon-modal-content">'
@@ -681,21 +681,56 @@ export default function monitoring(app, { session }) {
   let listShown  = 0;     // rows actually on the current page
   let listWindow = DEFAULT_WINDOW;
 
+  // 5-cell composite strip — Monitoring's variant of Home's
+  // composite (Em 2026-05-25). Layout:
+  //   [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]
+  // 4 chart slots flank a 2×2 KPI sub-grid. Empty chart slots reserve
+  // layout space when a tab declares fewer than 4 charts.
+  function monCompositeStripHTML(tiles, charts) {
+    const chartCard = (c) => c
+      ? '<div class="rp-home-chart-card">'
+      +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
+      +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+      + '</div>'
+      : '<div class="rp-home-chart-card rp-home-chart-card--empty"></div>';
+    const statsCells = tiles.map((t) =>
+      '<div class="rp-kpi">'
+      + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
+      + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
+      + '</div>'
+    ).join("");
+    return '<div class="rp-mon-composite">'
+      +   chartCard(charts[0])
+      +   chartCard(charts[1])
+      +   '<div class="rp-mon-composite__stats">' + statsCells + '</div>'
+      +   chartCard(charts[2])
+      +   chartCard(charts[3])
+      + '</div>';
+  }
+
   function renderListBody(tab, viewSpec) {
     disposeRequestsCharts();  // user switching away from Requests
     charts.dispose();      // user switching between list tabs
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
+    const kpiTiles = [
+      { label: "Total",      id: "rp-mon-list-total"  },
+      { label: "On page",    id: "rp-mon-list-shown"  },
+      { label: "Page",       id: "rp-mon-list-page"   },
+      { label: "Last fetch", id: "rp-mon-list-ms"    },
+    ];
+    // Monitoring is read-only — no edit / select / delete on these
+    // tabs (the entities are tracked, not mutated). `modes: false`
+    // suppresses the mode-button group entirely.
+    const toolbarSpec = {
+      searchPlaceholder: false,   // ?q= isn't wired on monitoring endpoints
+      modes: false,
+    };
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
-      + kpiStripHTML([
-          { label: "Total",     id: "rp-mon-list-total"  },
-          { label: "On page",   id: "rp-mon-list-shown"  },
-          { label: "Page",      id: "rp-mon-list-page"   },
-          { label: "Last fetch", id: "rp-mon-list-ms"    },
-        ])
-      + chartsStripHTML(viewSpec.charts || [])
+      + monCompositeStripHTML(kpiTiles, viewSpec.charts || [])
+      + listToolbarHTML(toolbarSpec)
       + listPanel(viewSpec.columns)
       + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
@@ -715,6 +750,48 @@ export default function monitoring(app, { session }) {
         fetchList(viewSpec);
       });
     }
+
+    // Toolbar — refresh + rows-per-page picker. Same handlers as Home,
+    // adapted to monitoring's fetchList signature (no chipState arg).
+    view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", (e) => {
+      const icon = e.currentTarget.querySelector("i");
+      if (icon) {
+        icon.classList.remove("rt-spinning");
+        void icon.offsetWidth;
+        icon.classList.add("rt-spinning");
+      }
+      fetchList(viewSpec);
+    });
+    const rowsDd = view.querySelector("#rp-list-toolbar-rows-dd");
+    function syncRowsLabel() {
+      const raw = getPref("rowsPerPageMonitoring") || "25";
+      const lbl = view.querySelector("#rp-list-toolbar-rows-label");
+      if (lbl) lbl.textContent = raw === "all" ? "All rows" : raw + " rows";
+      if (rowsDd) {
+        rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
+          i.classList.remove("selected");
+          const t = i.querySelector(".tick"); if (t) t.remove();
+        });
+        const sel = rowsDd.querySelector('.rt-dd-item[data-rows="' + raw + '"]')
+          || rowsDd.querySelector('.rt-dd-item[data-rows="25"]');
+        if (sel) {
+          sel.classList.add("selected");
+          sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
+        }
+      }
+    }
+    syncRowsLabel();
+    rowsDd?.addEventListener("click", (e) => {
+      const item = e.target.closest(".rt-dd-item");
+      if (!item) return;
+      // setPref isn't imported here — use localStorage directly,
+      // matching the prefs.js storageKey contract for rowsPerPageMonitoring.
+      localStorage.setItem("rp-rows-per-page-monitoring", item.dataset.rows);
+      listPage = 1;
+      syncRowsLabel();
+      fetchList(viewSpec);
+    });
+
     view.querySelector("#rp-mon-list-pager").addEventListener("click", (e) => {
       const btn = e.target.closest(".rt-pg[data-page]");
       if (!btn) return;
@@ -888,7 +965,7 @@ export default function monitoring(app, { session }) {
       const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       if (!rows.length) {
-        results.innerHTML = '<div class="rp-user-picker-empty">No matches.</div>';
+        results.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
       } else {
         results.innerHTML = rows.map((u) => {
           const label = u.display_name || u.username || u.redpash_id;
@@ -903,7 +980,7 @@ export default function monitoring(app, { session }) {
       }
       results.hidden = false;
     } catch (err) {
-      results.innerHTML = '<div class="rp-user-picker-empty">Couldn’t search'
+      results.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       results.hidden = false;
     }

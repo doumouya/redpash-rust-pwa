@@ -243,3 +243,15 @@
   background: transparent;
   border: 0;
 }
+
+/* ── empty-state atom ──────────────────────────────────────────
+   Foundation atom for "(no rows) / no comments / no matches" text
+   shown in place of a list when it's empty. Centered, muted, small.
+   Compose by adding `rt-empty` to the placeholder element; page
+   rules layer their own padding / margin / max-width on top. */
+.rt-empty {
+  margin: 0;
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: 0.75rem;
+}

@@ -23,23 +23,10 @@
    body, groups, tabs. These rules add the cases-specific filter
    strip (search input below the head) and tune the .rt-tab
    variant used for individual case rows. */
-.rp-cases-rail-new,
-.rp-cases-rail-collapse {
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-cases-rail-collapse {
-  background: transparent;
-  color: var(--rp-text-mute);
-}
-.rp-cases-rail-collapse:hover {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
+/* Shape provided by `.rt-icon-btn` (button.css) — these rules only
+   carry page-specific tweaks. Today there's nothing left to override
+   so both rules collapse; keeping the comment as a breadcrumb in case
+   a future tweak needs a home. */
 .rp-cases-rail-filter {
   flex-shrink: 0;
   padding: 0.25rem 0.625rem 0.5rem;
@@ -203,13 +190,9 @@
   flex-direction: column;
   gap: 0.375rem;
 }
-.rp-cases-col-empty {
-  margin: 0;
-  padding: 1rem 0.5rem;
-  text-align: center;
-  color: var(--rp-text-mute);
-  font-size: 0.7188rem;
-}
+/* Centered + muted from `.rt-empty` (shell.css); only the
+   column-body inset stays. */
+.rp-cases-col-empty { padding: 1rem 0.5rem; }
 
 /* ── card ─────────────────────────────────────────────────────── */
 /* Anchor element — middle-click opens in a new tab, keyboard nav
@@ -285,22 +268,10 @@
 .rp-cases-card-age {
   font-variant-numeric: tabular-nums;
 }
-.rp-cases-card-cycle {
-  background: transparent;
-  border: 0;
-  color: var(--rp-text-mute);
-  width: 1.375rem;
-  height: 1.375rem;
-  border-radius: 0.3125rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-cases-card-cycle:hover {
-  background: var(--rp-hover);
-  color: var(--rp-accent-2);
-}
+/* Shape from `.rt-icon-btn` + `--sm` (button.css). Only the
+   accent-blue hover-color tweak stays — the chevron lifts to
+   accent-2 on hover (vs the atom's default text color). */
+.rp-cases-card-cycle:hover { color: var(--rp-accent-2); }
 
 /* ── detail ───────────────────────────────────────────────────── */
 /* Detail panel — Linear-style overlay. Kanban stays visible
@@ -947,14 +918,9 @@
 }
 .rp-cases-side-picker[hidden] { display: none; }
 
-/* ── shared empty states ──────────────────────────────────────── */
-.rp-cases-empty {
-  margin: 0;
-  padding: 1rem;
-  text-align: center;
-  color: var(--rp-text-mute);
-  font-size: 0.75rem;
-}
+/* Centered + muted from `.rt-empty` (shell.css); only the
+   detail-page block-padding stays. */
+.rp-cases-empty { padding: 1rem; }
 .rp-cases-empty--inline {
   padding: 0.25rem 0;
   text-align: left;
@@ -1094,22 +1060,9 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.rp-cases-modal-close {
-  background: transparent;
-  border: 0;
-  color: var(--rp-text-mute);
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-cases-modal-close:hover {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
+/* Shape + hover provided by `.rt-icon-btn` (button.css). No
+   page-specific overrides; rule kept empty as a hook for future
+   tweaks. */
 .rp-cases-modal-content {
   padding: 0.875rem 1rem 1.125rem;
   overflow-y: auto;

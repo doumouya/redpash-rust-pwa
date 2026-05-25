@@ -418,7 +418,7 @@ export function mountTools(panelBody, ctx) {
       editingName  = null;
       editingDtype = null;
       castConfirm  = null;
-      columnsEl.innerHTML = '<p class="rt-step-state">Open a file to see its columns.</p>';
+      columnsEl.innerHTML = '<p class="rt-empty rt-step-state">Open a file to see its columns.</p>';
       return;
     }
     // Drop stale edit targets if the column they point at no longer
@@ -585,7 +585,7 @@ export function mountTools(panelBody, ctx) {
       + (selCount ? ' title="Click to clear selection"' : '') + '>'
       +   '<i class="bi bi-check2-square"></i>'
       +   '<b>' + selCount + '</b> selected'
-      +   (selCount ? '<button class="rt-tool-columns-selchip-clear" type="button"'
+      +   (selCount ? '<button class="rt-icon-btn rt-icon-btn--sm rt-tool-columns-selchip-clear" type="button"'
                       + ' title="Clear selection"><i class="bi bi-x"></i></button>' : '')
       + '</span>';
     return '<div class="rt-tool-columns-toolbar">'
@@ -633,7 +633,7 @@ export function mountTools(panelBody, ctx) {
       +        '<i class="bi ' + esc(activeSheet.icon) + '"></i> '
       +        esc((isSelect && sheetCfg) ? sheetCfg.label : activeSheet.label)
       +      '</span>'
-      +      '<button class="rt-btn rt-btn--ghost rt-tool-columns-sheet-close" type="button"'
+      +      '<button class="rt-icon-btn rt-tool-columns-sheet-close" type="button"'
       +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
       +    '</div>'
       +    (activeSheet.blurb

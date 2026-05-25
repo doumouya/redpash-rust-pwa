@@ -313,7 +313,7 @@ export default function cases(app, { session }) {
       +     '<span class="rp-cases-col-count">0</span>'
       +   '</header>'
       +   '<div class="rp-cases-col-body">'
-      +     '<p class="rp-cases-col-empty">' + esc(emptyText) + '</p>'
+      +     '<p class="rt-empty rp-cases-col-empty">' + esc(emptyText) + '</p>'
       +   '</div>'
       + '</section>';
   }
@@ -321,7 +321,7 @@ export default function cases(app, { session }) {
   function columnHTML(status, cards) {
     const body = cards.length
       ? cards.map(cardHTML).join("")
-      : '<p class="rp-cases-col-empty">No cases.</p>';
+      : '<p class="rt-empty rp-cases-col-empty">No cases.</p>';
     // Done column gets the window chip-row above the cards so the
     // user can switch the cap without leaving the board.
     const head = status === "done" ? doneWindowChipsHTML("kanban") : "";
@@ -352,7 +352,7 @@ export default function cases(app, { session }) {
       +   '<div class="rp-cases-card-foot">'
       +     '<span class="rp-cases-card-assignee">' + esc(assignee) + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'
-      +     '<button class="rp-cases-card-cycle" type="button" title="Advance status">'
+      +     '<button class="rt-icon-btn rt-icon-btn--sm rp-cases-card-cycle" type="button" title="Advance status">'
       +       '<i class="bi bi-chevron-right"></i>'
       +     '</button>'
       +   '</div>'
@@ -687,7 +687,7 @@ export default function cases(app, { session }) {
       const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       if (!rows.length) {
-        sideAssigneeResults.innerHTML = '<div class="rp-user-picker-empty">No matches.</div>';
+        sideAssigneeResults.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
       } else {
         sideAssigneeResults.innerHTML = rows.map((u) => {
           const label = u.display_name || u.username || u.redpash_id;
@@ -701,7 +701,7 @@ export default function cases(app, { session }) {
       }
       sideAssigneeResults.hidden = false;
     } catch (err) {
-      sideAssigneeResults.innerHTML = '<div class="rp-user-picker-empty">Couldn’t search'
+      sideAssigneeResults.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       sideAssigneeResults.hidden = false;
     }
@@ -720,8 +720,8 @@ export default function cases(app, { session }) {
     if (ridEl) ridEl.textContent = rid;
     if (titleEl) titleEl.textContent = "Loading…";
     if (controlsRow) controlsRow.innerHTML = "";
-    if (commentsList) commentsList.innerHTML = '<p class="rp-cases-empty">Loading comments…</p>';
-    if (activityList) activityList.innerHTML = '<p class="rp-cases-empty">Loading activity…</p>';
+    if (commentsList) commentsList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading comments…</p>';
+    if (activityList) activityList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading activity…</p>';
     try {
       const detail = await api.get("/cases/" + encodeURIComponent(rid));
       paintDetail(detail);
@@ -793,7 +793,7 @@ export default function cases(app, { session }) {
     if (commentsList) {
       commentsList.innerHTML = comments.length
         ? commentsListHTML(comments)
-        : '<p class="rp-cases-empty">No comments yet. Be the first.</p>';
+        : '<p class="rt-empty rp-cases-empty">No comments yet. Be the first.</p>';
     }
     renderActivityList(activity);
     renderDetailsDl(c);
@@ -904,7 +904,7 @@ export default function cases(app, { session }) {
       const msg = activityFilter === "all"
         ? "No activity yet."
         : "No activity in this filter.";
-      activityList.innerHTML = '<p class="rp-cases-empty">' + msg + '</p>';
+      activityList.innerHTML = '<p class="rt-empty rp-cases-empty">' + msg + '</p>';
       return;
     }
     activityList.innerHTML = filtered.map(activityRow).join("");

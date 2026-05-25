@@ -48,6 +48,27 @@
   height: 15rem;
 }
 
+/* ── Composite strip — Monitoring's 5-cell version ───────────────
+   Em 2026-05-25: "2 charts 20% each, 2 rows of 2 r-stats 10% width
+   each, 2 charts 20% width each". Single row above the redtable:
+       [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]
+   5 equal cells; the middle cell hosts a 2×2 sub-grid of KPI tiles
+   so each tile reads as ~10% of the row width.
+   Empty chart slots reserve layout space so a tab with <4 charts
+   still anchors its present charts at their natural columns. */
+.rp-mon-composite {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-4);
+}
+.rp-mon-composite__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows:    1fr 1fr;
+  gap: var(--rp-sp-2);
+}
+
 /* the run-summary cell shows multiple stat chips inline (e.g. "files 14
    errors 0 reachable 18"); compact, monospace-numeric, neutral colour */
 .rp-mon-stat-chip {
@@ -231,22 +252,7 @@
   padding: 1px 0.375rem;
   border-radius: 0.25rem;
 }
-.rp-mon-modal-close {
-  background: transparent;
-  border: 0;
-  color: var(--rp-text-mute);
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-mon-modal-close:hover {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
+/* Shape + hover provided by `.rt-icon-btn` (button.css). */
 .rp-mon-modal-content {
   padding: 0.875rem 1rem 1.125rem;
   overflow-y: auto;

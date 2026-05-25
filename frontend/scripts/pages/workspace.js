@@ -1279,11 +1279,11 @@ export default function workspace(app, { session }) {
     const body = $("#wsHistoryBody");
     if (!body) return;
     if (!activeFileRid) {
-      body.innerHTML = '<p class="rt-step-state">Open a file to see its step history.</p>';
+      body.innerHTML = '<p class="rt-empty rt-step-state">Open a file to see its step history.</p>';
       return;
     }
     if (!activeSteps.length) {
-      body.innerHTML = '<p class="rt-step-state">No steps applied yet.</p>';
+      body.innerHTML = '<p class="rt-empty rt-step-state">No steps applied yet.</p>';
       return;
     }
     // Server returns steps in ordinal order; show newest first so the
