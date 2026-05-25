@@ -8,7 +8,7 @@
    rail meets the main body) so the body surface looks tucked
    under the rail instead of squared off against it. */
 #rpHomeMain {
-  border-top-left-radius: 14px;
+  border-top-left-radius: 0.875rem;
 }
 
 /* ── Users tab row polish ───────────────────────────────────────
@@ -17,11 +17,18 @@
    Role. Strip the handle out of pill styling (it's metadata, not
    a category), and give Org its own soft chip so it reads as the
    user's company affiliation rather than flat text fighting two
-   coloured chips beside it. */
+   coloured chips beside it.
+
+   Unit policy per [[relative-units]]: rem for everything that
+   isn't a hairline. 1px borders stay px (no perceptual rem
+   equivalent at typical zoom). 999px on a fully-rounded pill
+   stays px (the value just needs to exceed the box's half-height
+   — any large enough constant works, and 999 is the long-standing
+   "pill" idiom). */
 .rp-home-user-display { font-weight: 550; }
 .rp-home-handle {
-  margin-left: 4px;
-  font-size: 11px;
+  margin-left: 0.25rem;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
@@ -34,14 +41,14 @@
 .rp-home-org {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  padding: 2px 8px;
+  gap: 0.3125rem;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
   border-radius: 999px;
   background: rgba(137, 180, 250, 0.10);   /* accent-2 @ 10% */
   border: 1px solid rgba(137, 180, 250, 0.32);
   color: var(--rp-accent-2);
   white-space: nowrap;
 }
-.rp-home-org__icon { font-size: 10px; opacity: 0.85; }
+.rp-home-org__icon { font-size: 0.625rem; opacity: 0.85; }
 
