@@ -12,7 +12,7 @@ import { esc, cssEsc } from "/scripts/dom.js";
 import { chartTheme, ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
-  headHTML, kpiStripHTML, chartsStripHTML, listToolbarHTML,
+  headHTML, kpiStripHTML, chartsStripHTML, compositeStripHTML, listToolbarHTML,
   windowChipsHTML as _windowChipsHTML,
   listPanel as _listPanel,
   setKpi as _setKpi,
@@ -682,32 +682,10 @@ export default function monitoring(app, { session }) {
   let listWindow = DEFAULT_WINDOW;
   let listSearch = "";    // ?q= text from the toolbar search input
 
-  // 5-cell composite strip — Monitoring's variant of Home's
-  // composite (Em 2026-05-25). Layout:
-  //   [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]
-  // 4 chart slots flank a 2×2 KPI sub-grid. Empty chart slots reserve
-  // layout space when a tab declares fewer than 4 charts.
-  function monCompositeStripHTML(tiles, charts) {
-    const chartCard = (c) => c
-      ? '<div class="rp-home-chart-card">'
-      +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-      +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
-      + '</div>'
-      : '<div class="rp-home-chart-card rp-home-chart-card--empty"></div>';
-    const statsCells = tiles.map((t) =>
-      '<div class="rp-kpi">'
-      + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
-      + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
-      + '</div>'
-    ).join("");
-    return '<div class="rp-mon-composite">'
-      +   chartCard(charts[0])
-      +   chartCard(charts[1])
-      +   '<div class="rp-mon-composite__stats">' + statsCells + '</div>'
-      +   chartCard(charts[2])
-      +   chartCard(charts[3])
-      + '</div>';
-  }
+  // Composite strip — `compositeStripHTML` is imported from
+  // /scripts/list-page.js (the shared atom both Home + Monitoring
+  // use). The local `monCompositeStripHTML` that lived here was
+  // consolidated 2026-05-25 per [[feedback-compose-atoms-dont-parallel]].
 
   function renderListBody(tab, viewSpec) {
     disposeRequestsCharts();  // user switching away from Requests
@@ -767,7 +745,7 @@ export default function monitoring(app, { session }) {
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
-      + monCompositeStripHTML(kpiTiles, viewSpec.charts || [])
+      + compositeStripHTML(kpiTiles, viewSpec.charts || [])
       + listToolbarHTML(toolbarSpec)
       + '<div class="rt-surface-body">'
       +   filterPanelHTML

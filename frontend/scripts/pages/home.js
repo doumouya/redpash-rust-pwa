@@ -16,7 +16,8 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
-  headHTML, kpiStripHTML, chartsStripHTML, chipRowHTML, listToolbarHTML,
+  headHTML, kpiStripHTML, chartsStripHTML, compositeStripHTML,
+  chipRowHTML, listToolbarHTML,
   listPanel as _listPanel,
   setKpi as _setKpi,
   renderListPager as _renderListPager,
@@ -853,41 +854,10 @@ export default function home(app, { session: _session }) {
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
-  // Composite KPI / charts row — replaces the default kpiStrip +
-  // chartsStrip stack when `spec.compositeStrip === true`. Layout
-  // matches Monitoring's .rp-mon-composite (Em 2026-05-25):
-  //
-  //   [ chart 20% ][ chart 20% ][ 4 KPI tiles 2×2 = 20% ][ chart 20% ][ chart 20% ]
-  //
-  // 5 equal cells. The middle cell houses the standard list KPIs
-  // (Total / On page / Page / Last fetch) in a 2×2 sub-grid (each
-  // tile ~10% of the row width). Empty chart slots render as the
-  // faded `.rp-home-chart-card--empty` placeholder so the pattern
-  // reads clearly even on tabs that haven't filled all 4 chart
-  // positions yet.
-  function compositeStripHTML(tiles, charts) {
-    const chartCard = (c) => c
-      ? '<div class="rp-home-chart-card">'
-      +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-      +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
-      + '</div>'
-      : '<div class="rp-home-chart-card rp-home-chart-card--empty">'
-      +   '<div class="rp-home-chart-canvas"></div>'
-      + '</div>';
-    const statsCells = tiles.map((t) =>
-      '<div class="rp-kpi">'
-      + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
-      + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
-      + '</div>'
-    ).join("");
-    return '<div class="rp-home-composite">'
-      +   chartCard(charts[0])
-      +   chartCard(charts[1])
-      +   '<div class="rp-home-composite__stats">' + statsCells + '</div>'
-      +   chartCard(charts[2])
-      +   chartCard(charts[3])
-      + '</div>';
-  }
+  // Composite strip — `compositeStripHTML` is imported from
+  // /scripts/list-page.js (the shared atom both Home + Monitoring
+  // use). The local implementation that lived here was consolidated
+  // 2026-05-25 per [[feedback-compose-atoms-dont-parallel]].
 
   function renderListBody(tab, spec) {
     listPage   = 1;

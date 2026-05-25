@@ -51,6 +51,40 @@ export function kpiStripHTML(tiles) {
     + '</div>';
 }
 
+// 5-cell composite strip — the rich variant of (kpiStrip + chartsStrip).
+// Layout per Em's spec (2026-05-25):
+//   [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]
+// Two charts flank a 2×2 KPI sub-grid + two more charts on the right.
+// Empty chart slots reserve layout space so a tab with <4 charts still
+// anchors its present charts at their natural columns.
+//
+// Consolidates two parallel implementations (Em flagged 2026-05-25):
+// home.js's compositeStripHTML + monitoring.js's monCompositeStripHTML
+// were identical except for a wrapper class name. Both now call this.
+export function compositeStripHTML(tiles, charts) {
+  const chartCard = (c) => c
+    ? '<div class="rp-home-chart-card">'
+    +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
+    +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+    + '</div>'
+    : '<div class="rp-home-chart-card rp-home-chart-card--empty">'
+    +   '<div class="rp-home-chart-canvas"></div>'
+    + '</div>';
+  const statsCells = tiles.map((t) =>
+    '<div class="rp-kpi">'
+    + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
+    + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
+    + '</div>'
+  ).join("");
+  return '<div class="rp-list-composite">'
+    +   chartCard(charts[0])
+    +   chartCard(charts[1])
+    +   '<div class="rp-list-composite__stats">' + statsCells + '</div>'
+    +   chartCard(charts[2])
+    +   chartCard(charts[3])
+    + '</div>';
+}
+
 // One card per chart in the spec. Each card carries a small title +
 // a 180px-tall canvas; createListCharts().mount initialises ECharts
 // against the canvas after the /stats fetch resolves.

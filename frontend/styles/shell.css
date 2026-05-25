@@ -222,13 +222,18 @@
    [chart 20%]. Empty chart slots stay faded but visible so the
    pattern reads clearly even on tabs that haven't filled all 4
    chart positions. */
-.rp-home-composite {
+/* Renamed from `.rp-home-composite` 2026-05-25 — shared across Home
+   + Monitoring (and any future list-page consumer) per
+   [[feedback-compose-atoms-dont-parallel]]. `.rp-mon-composite` is
+   gone; both pages now emit `.rp-list-composite` via the shared
+   compositeStripHTML in list-page.js. */
+.rp-list-composite {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-4);
 }
-.rp-home-composite__stats {
+.rp-list-composite__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;

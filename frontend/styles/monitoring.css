@@ -88,18 +88,8 @@
    so each tile reads as ~10% of the row width.
    Empty chart slots reserve layout space so a tab with <4 charts
    still anchors its present charts at their natural columns. */
-.rp-mon-composite {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: var(--rp-sp-3);
-  margin-bottom: var(--rp-sp-4);
-}
-.rp-mon-composite__stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows:    1fr 1fr;
-  gap: var(--rp-sp-2);
-}
+/* Composite strip migrated to the shared `.rp-list-composite` atom
+   (shell.css) 2026-05-25 — same selector used by Home + Monitoring. */
 
 /* the run-summary cell shows multiple stat chips inline (e.g. "files 14
    errors 0 reachable 18"); compact, monospace-numeric, neutral colour */
