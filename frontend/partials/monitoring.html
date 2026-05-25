@@ -22,15 +22,15 @@
     </aside>
 
     <!-- ════ main — body view per active tab ════
-         Same `<main class="rt-main"><div class="rt-surface">` shell
-         Home + Workspace use, so the table surface, toolbar, pager
-         and composite-strip all share one canonical card chrome.
-         renderListBody targets #rpMonView; the id rides on the
-         rt-surface element. -->
-    <main class="rt-main">
-      <div class="rt-surface" id="rpMonView">
-        <p class="rp-shell-state">Loading…</p>
-      </div>
+         rt-main is the padded page column; renderListBody mounts the
+         head / chip-row / composite-strip OUTSIDE the rt-surface and
+         the rt-surface wraps ONLY the redtable trio (toolbar + body +
+         pager) — mirroring Workspace's structure where the surface
+         card scopes the working table, not the page-level decoration.
+         #rpMonView is the plain mount point; renderListBody emits the
+         rt-surface inside it. -->
+    <main class="rt-main" id="rpMonView">
+      <p class="rp-shell-state">Loading…</p>
     </main>
 
   </div>

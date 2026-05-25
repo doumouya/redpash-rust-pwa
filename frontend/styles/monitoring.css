@@ -9,22 +9,13 @@
    Monitoring-specific atoms: window chip, the side-by-side charts
    row, modal chrome, page-content pills inside tables. */
 
-/* Inner padding on the surface — mirrors Home's #rpHomeView so the
-   chip-row / composite-strip / toolbar / pager / table sit with a
-   symmetric gap inside the .rt-surface card. */
-#rpMonView { padding: 0.875rem; }
-
-/* Flex chain for the table to fill full height — mirrors Home, just
-   one layer deeper because Monitoring nests the table-wrap inside
-   .rt-surface-body (workspace's slide-out panels live as siblings).
-   workspace.css's `.rt-surface-body { flex:1; min-height:0; display:flex }`
-   provides this globally, but the explicit #id-scoped rule + the
-   rt-table-wrap restate sidesteps any cascade ambiguity from other
-   pages' overrides + makes the intent clear in the file that ships
-   the structure. Em 2026-05-25: "make the tables fill full height
-   like we did on Home page". */
-#rpMonView .rt-surface-body { flex: 1; min-height: 0; display: flex; }
-#rpMonView .rt-table-wrap   { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+/* #rpMonView IS the rt-main now (2026-05-25 restructure — head /
+   chips / composite-strip sit OUTSIDE the .rt-surface, with the
+   surface wrapping only the redtable trio: toolbar + body + pager).
+   workspace.css's `.rt-main` provides padding + flex column; the
+   `.rt-surface` inside flex-fills via its base rule. No #id-scoped
+   overrides needed — the chain works via the canonical Workspace
+   structure. */
 
 /* Monitoring tables use the canonical `.rt-table` (table.css). The
    mono method pill is page-content (HTTP method label in cells),

@@ -758,16 +758,29 @@ export default function monitoring(app, { session }) {
       + '</div>'
       + '</aside>';
 
+    // Structure mirrors Workspace's redtable shell:
+    //   rt-main (#rpMonView)
+    //     ├── head / chips / composite-strip   (page decoration)
+    //     └── .rt-surface                       (the redtable group)
+    //          ├── toolbar
+    //          ├── rt-surface-body (filter panel + rt-table-wrap)
+    //          └── rt-pager
+    // The .rt-surface contains ONLY the redtable trio so a single
+    // rule on it controls the group's flex behavior. Em 2026-05-25:
+    // "you can't apply the rule to the group of components by
+    // controlling their container".
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
       + monCompositeStripHTML(kpiTiles, viewSpec.charts || [])
-      + listToolbarHTML(toolbarSpec)
-      + '<div class="rt-surface-body">'
-      +   filterPanelHTML
-      +   listPanel(viewSpec.columns)
-      + '</div>'
-      + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
+      + '<div class="rt-surface">'
+      +   listToolbarHTML(toolbarSpec)
+      +   '<div class="rt-surface-body">'
+      +     filterPanelHTML
+      +     listPanel(viewSpec.columns)
+      +   '</div>'
+      +   '<div class="rt-pager" id="rp-mon-list-pager"></div>'
+      + '</div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
       charts.mount(viewSpec).catch((err) =>
