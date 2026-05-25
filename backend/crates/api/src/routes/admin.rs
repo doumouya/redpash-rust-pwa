@@ -156,7 +156,8 @@ pub(super) fn sort_clause(
 /// Sortable columns for /api/admin/users — wire-keys the Home Users tab
 /// can pass via ?sort=. Mirror's the LIST_VIEWS column spec on the frontend.
 const SORTABLE_USERS: &[&str] = &[
-    "display_name", "plan", "job_title", "org_name", "org_role", "created_at",
+    "display_name", "username", "email", "plan", "job_title",
+    "organisation", "org_name", "org_role", "created_at",
 ];
 
 async fn list_users(
@@ -175,8 +176,11 @@ async fn list_users(
     // sort to the tail regardless of dir.
     let sort_col = match sort_key.as_str() {
         "display_name" => "u.display_name",
+        "username"     => "u.username",
+        "email"        => "u.email",
         "plan"         => "u.plan",
         "job_title"    => "u.job_title",
+        "organisation" => "u.organisation",
         "org_name"     => "m.company_name",
         "org_role"     => "m.role",
         _              => "u.created_at",
@@ -340,7 +344,7 @@ async fn list_companies(
 // ── /api/admin/memberships ──────────────────────────────────────────────
 
 const SORTABLE_MEMBERSHIPS: &[&str] = &[
-    "user_display_name", "scope_name", "role", "joined_at",
+    "user_display_name", "user_username", "scope", "scope_name", "role", "joined_at",
 ];
 
 async fn list_memberships(
@@ -365,7 +369,14 @@ async fn list_memberships(
     // either branch.
     let sort_col = match sort_key.as_str() {
         "user_display_name" => "u.display_name",
+        "user_username"     => "u.username",
         "scope_name"        => match scope { "project" => "p.name", _ => "c.name" },
+        // "scope" is a literal column emitted by the SELECT — a
+        // single string per response since the WHERE filters by it.
+        // Sorting by it is a no-op within a single result set; keep
+        // it in the allowlist so the FE chevron still works but the
+        // ORDER BY targets the constant alias.
+        "scope"             => "scope",
         "role"              => "m.role",
         _                   => "m.joined_at",
     };
@@ -489,7 +500,9 @@ async fn list_memberships(
 /// spliced into ORDER BY. Keep small — every entry is a public-surface
 /// promise that the user can sort by it.
 const SORTABLE_FILES: &[&str] = &[
-    "filename", "file_type", "stage", "row_count", "updated_at", "created_at",
+    "filename", "display_name", "file_type", "stage",
+    "row_count", "col_count", "file_size_bytes", "cleanness_pct",
+    "updated_at", "created_at",
 ];
 
 async fn list_files(
@@ -505,12 +518,16 @@ async fn list_files(
         q.sort.as_deref(), q.dir.as_deref(), SORTABLE_FILES, "created_at",
     );
     let sort_col = match sort_key.as_str() {
-        "filename"   => "f.filename",
-        "file_type"  => "f.file_type",
-        "stage"      => "COALESCE(s.stage, 'new')",
-        "row_count"  => "f.row_count",
-        "updated_at" => "f.updated_at",
-        _            => "f.created_at",
+        "filename"        => "f.filename",
+        "display_name"    => "COALESCE(f.display_name, f.filename)",
+        "file_type"       => "f.file_type",
+        "stage"           => "COALESCE(s.stage, 'new')",
+        "row_count"       => "f.row_count",
+        "col_count"       => "f.col_count",
+        "file_size_bytes" => "f.file_size_bytes",
+        "cleanness_pct"   => "f.cleanness_pct",
+        "updated_at"      => "f.updated_at",
+        _                 => "f.created_at",
     };
 
     let all_count: i64 = db::count_total(&state.db, "project_files").await?;
@@ -607,7 +624,7 @@ async fn list_files(
 // ── /api/admin/charts ───────────────────────────────────────────────────
 
 const SORTABLE_CHARTS: &[&str] = &[
-    "display_name", "project_name", "stage", "created_at", "updated_at",
+    "display_name", "filename", "project_name", "stage", "created_at", "updated_at",
 ];
 
 async fn list_charts(
@@ -624,6 +641,7 @@ async fn list_charts(
         // display_name is nullable — COALESCE to filename so the sort is
         // deterministic even when display_name is missing.
         "display_name" => "COALESCE(f.display_name, f.filename)",
+        "filename"     => "f.filename",
         "project_name" => "p.name",
         "stage"        => "COALESCE(s.stage, 'new')",
         "updated_at"   => "f.updated_at",

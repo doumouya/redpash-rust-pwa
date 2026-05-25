@@ -66,7 +66,10 @@ struct ListQuery {
 /// Wire-keys the Home Cases tab can pass via ?sort=. Mirrors the
 /// LIST_VIEWS.cases column spec on the frontend.
 const SORTABLE_CASES: &[&str] = &[
-    "title", "type", "status", "priority", "assignee_display_name", "updated_at",
+    "title", "type", "status", "priority",
+    "assignee_display_name", "reporter_display_name",
+    "project_id", "company_id", "category_name",
+    "created_at", "updated_at",
 ];
 
 #[derive(Serialize)]
@@ -119,9 +122,16 @@ async fn list(
         "type"                  => "c.type",
         "status"                => "c.status",
         "priority"              => "c.priority",
-        // Assignee sorts by hydrated display_name (NULL when unassigned;
-        // NULLS LAST in the SQL keeps unassigned cases at the tail).
+        // Assignee / Reporter sort by hydrated display_name (NULL when
+        // unassigned; NULLS LAST in the SQL keeps them at the tail).
         "assignee_display_name" => "a.display_name",
+        "reporter_display_name" => "r.display_name",
+        "project_id"            => "c.project_id",
+        "company_id"            => "c.company_id",
+        // Category sorts on the hydrated leaf name (cat.name from
+        // CASE_USER_JOINS — see db.rs).
+        "category_name"         => "cat.name",
+        "created_at"            => "c.created_at",
         _                       => "c.updated_at",
     };
 
