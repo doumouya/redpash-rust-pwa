@@ -217,16 +217,16 @@
 }
 
 /* Composite KPI / charts row — opt-in via `spec.compositeStrip` in
-   home.js. Used on the Users tab today (Em 2026-05-25). Layout:
+   home.js. Layout:
      [chart1 20%]  [4 KPI tiles, 2-col × 2-row]  [chart2 20%]
-   Tile width per Em's spec: 15% of full row each → the middle
-   column is 30% wide (2 tiles per row × 15%). 20 + 30 + 20 = 70%
-   declared; `justify-content: space-between` distributes the
-   remaining 30% as inter-column gaps so the row feels balanced
-   instead of left-clumped. */
+   Tile width per Em's spec (2026-05-25 update): 10% of full row
+   each → the middle column is 20% wide (2 tiles per row × 10%).
+   20 + 20 + 20 = 60% declared; `justify-content: space-between`
+   distributes the remaining 40% as inter-column gaps so the row
+   feels balanced instead of left-clumped. */
 .rp-home-composite {
   display: grid;
-  grid-template-columns: 20% 30% 20%;
+  grid-template-columns: 20% 20% 20%;
   justify-content: space-between;
   margin-bottom: var(--rp-sp-6);
 }
