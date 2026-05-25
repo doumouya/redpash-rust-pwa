@@ -2017,33 +2017,11 @@ pub async fn list_events_for_request(pool: &PgPool, request_id: &str) -> sqlx::R
     Ok(rows.into_iter().map(Into::into).collect())
 }
 
-/// Every event for a user within a time window, newest first. Powers
-/// the M-2 per-user activity feed (investigations I-1 / I-7). The
-/// window bounds the result set; the caller decides them based on the
-/// operator's UI (default 1h on the Monitoring page).
-pub async fn list_events_for_user(
-    pool:    &PgPool,
-    user_rid:&str,
-    from:    chrono::DateTime<chrono::Utc>,
-    to:      chrono::DateTime<chrono::Utc>,
-    limit:   i64,
-) -> sqlx::Result<Vec<Event>> {
-    let rows: Vec<EventRow> = sqlx::query_as(&format!(
-        "SELECT {EVENT_COLS} FROM events
-         WHERE user_redpash_id = $1
-           AND occurred_at >= $2
-           AND occurred_at <  $3
-         ORDER BY occurred_at DESC
-         LIMIT $4"
-    ))
-    .bind(user_rid)
-    .bind(from)
-    .bind(to)
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows.into_iter().map(Into::into).collect())
-}
+// Per-user event slice helper retired 2026-05-25 — the M-2 activity
+// feed now runs a server-side UNION ALL over events + request_log in
+// `routes::monitoring::user_activity` so the merged stream paginates
+// faithfully. Splitting into two single-source helpers + merging in
+// the handler is the shape we just deleted.
 
 // ─── cases + comments ──────────────────────────────────────────────
 // Jira-flow workstream v1. Case lifecycle changes are NOT persisted

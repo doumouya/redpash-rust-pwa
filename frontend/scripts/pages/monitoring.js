@@ -731,7 +731,7 @@ export default function monitoring(app, { session }) {
       +       '<div id="rp-mon-user-results" class="rp-user-picker-results" hidden></div>'
       +     '</div>'
       +     '<span class="rp-mon-user-hint" id="rp-mon-user-hint">'
-      +       'Pick a user to see their request + event timeline (last 1h, newest first).'
+      +       'Pick a user to see their unified activity timeline — requests + events merged server-side, last 24h, newest first.'
       +     '</span>'
       +   '</div>'
       + '</section>'
@@ -777,8 +777,14 @@ export default function monitoring(app, { session }) {
       fetchUserActivity(rid, label);
     });
 
-    // Activity row expander (events with context) — same atom as M-1/M-3/M-4.
+    // Tbody click delegate — same dual-pattern as renderListBody's:
+    //   • rt-mon-row-clickable[data-request-id] → request-replay modal
+    //     (request-source rows drill into the per-request timeline)
+    //   • rt-mon-row-expandable → toggle the context-jsonb pane
+    //     (event-source rows with non-empty context)
     view.querySelector("#rp-mon-user-activity-tbody")?.addEventListener("click", (e) => {
+      const clickable = e.target.closest("tr.rt-mon-row-clickable[data-request-id]");
+      if (clickable) { openRequestReplay(clickable.dataset.requestId); return; }
       const row = e.target.closest("tr.rt-mon-row-expandable");
       if (!row) return;
       const expansion = row.nextElementSibling;
@@ -821,6 +827,12 @@ export default function monitoring(app, { session }) {
     }
   }
 
+  // Per-user activity feed. Backend returns Page<ActivityRow> from a
+  // server-side UNION ALL over events + request_log (true merged
+  // pagination — the prior dual-array shape silently dropped rows
+  // past either source's cap from the merged stream). Size 500 keeps
+  // the picker UX a single-page fetch; pager wiring follows the
+  // standard list-tab pattern when the volume justifies it.
   async function fetchUserActivity(rid, label) {
     const wrap   = view.querySelector("#rp-mon-user-activity");
     const tbody  = view.querySelector("#rp-mon-user-activity-tbody");
@@ -832,17 +844,21 @@ export default function monitoring(app, { session }) {
     if (count) count.textContent = "Loading…";
     tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
     try {
-      const data = await api.get("/monitoring/users/" + encodeURIComponent(rid) + "/activity");
-      const requests = (data?.requests || []).map((r) => ({ _kind: "request", ts: r.at, payload: r }));
-      const events   = (data?.events   || []).map((e) => ({ _kind: "event",   ts: e.occurred_at, payload: e }));
-      const merged = requests.concat(events).sort((a, b) => (a.ts < b.ts ? 1 : -1));
-      if (!merged.length) {
-        tbody.innerHTML = '<tr><td colspan="4">No activity in the last hour.</td></tr>';
+      const data = await api.get("/monitoring/users/" + encodeURIComponent(rid)
+        + "/activity?size=500&window=24h");
+      const rows = data?.rows || [];
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4">No activity in the last 24h.</td></tr>';
         if (count) count.textContent = "0";
         return;
       }
-      if (count) count.textContent = merged.length + " · " + requests.length + " req / " + events.length + " ev";
-      tbody.innerHTML = merged.map(userActivityRow).join("");
+      const reqCount = rows.filter((r) => r.source === "request").length;
+      const evtCount = rows.length - reqCount;
+      const total    = data?.total ?? rows.length;
+      const moreTag  = total > rows.length ? " of " + total : "";
+      if (count) count.textContent = rows.length + moreTag
+        + " · " + reqCount + " req / " + evtCount + " ev";
+      tbody.innerHTML = rows.map(userActivityRow).join("");
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="4">Couldn’t load activity'
         + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
@@ -850,35 +866,43 @@ export default function monitoring(app, { session }) {
     }
   }
 
+  // Render one ActivityRow. Source = 'event' carries level + a context
+  // jsonb worth expanding (matches the M-4 expander pattern). Source =
+  // 'request' carries status + duration_ms inside context; row is
+  // click-to-replay via the same M-1 modal Requests uses, when the
+  // ref_id (= request_id) is present.
   function userActivityRow(item) {
-    if (item._kind === "request") {
-      const r = item.payload;
-      return '<tr>'
-        + '<td>' + fmtTime(r.at) + '</td>'
+    if (item.source === "request") {
+      const ctx = item.context || {};
+      const status = parseInt(item.summary, 10);
+      const reqId = item.ref_id;
+      const clickable = reqId
+        ? ' class="rt-mon-row-clickable" data-request-id="' + esc(reqId) + '"'
+        : '';
+      return '<tr' + clickable + '>'
+        + '<td>' + fmtTime(item.at) + '</td>'
         + '<td><span class="rp-mon-method">REQ</span></td>'
         + '<td>'
-        +   '<span class="rp-mon-method">' + esc(r.method || "?") + '</span> '
-        +   '<span class="rp-mon-modal-route">' + esc(r.route || "—") + '</span>'
-        +   ' <span class="rp-mon-modal-meta">' + (r.duration_ms ?? "?") + 'ms</span>'
+        +   '<span class="rp-mon-method">' + esc(item.kind) + '</span>'
+        +   ' <span class="rp-mon-modal-meta">' + (ctx.duration_ms ?? "?") + 'ms</span>'
         + '</td>'
-        + '<td class="is-num ' + statusBand(r.status) + '">' + (r.status || "?") + '</td>'
+        + '<td class="is-num ' + statusBand(status) + '">' + (item.summary || "?") + '</td>'
         + '</tr>';
     }
-    // event
-    const e = item.payload;
-    const ctx = e.context;
+    // source === 'event'
+    const ctx = item.context;
     const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
     const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
     const expandable = hasCtx;
     const primary = '<tr' + (expandable ? ' class="rt-mon-row-expandable"' : '') + '>'
       + '<td>' + (expandable ? '<i class="bi bi-chevron-right rt-mon-row-caret"></i> ' : '')
-        + fmtTime(e.occurred_at) + '</td>'
+        + fmtTime(item.at) + '</td>'
       + '<td><span class="rp-mon-method">EVT</span></td>'
       + '<td>'
-      +   '<span class="rp-mon-method">' + esc(e.kind) + '</span> '
-      +   esc(e.message || "")
+      +   '<span class="rp-mon-method">' + esc(item.kind) + '</span> '
+      +   esc(item.summary || "")
       + '</td>'
-      + '<td class="is-num">' + levelChip(e.level) + '</td>'
+      + '<td class="is-num">' + levelChip(item.level) + '</td>'
       + '</tr>';
     if (!expandable) return primary;
     return primary

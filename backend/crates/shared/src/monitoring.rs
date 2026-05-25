@@ -180,17 +180,32 @@ pub struct RequestDetail {
     pub events:  Vec<crate::event::Event>,
 }
 
-/// Returned by `GET /api/monitoring/users/:rid/activity?from=&to=` —
-/// the per-user investigation feed. `requests` + `events` are
-/// independent slices (UNION'd on the frontend for a single
-/// time-ordered redtable), each filtered to `user_redpash_id = $rid`
-/// over the requested window.
+/// One row of the per-user activity feed. Unified projection over
+/// `events` + `request_log` (server-side `UNION ALL`) so a single
+/// `Page<ActivityRow>` paginates the merged chronological stream —
+/// independent slices would break pagination once either source
+/// exceeds the per-side cap.
+///
+/// `source` tags origin (`"event"` | `"request"`); `kind` is the
+/// per-source category (event.kind for events, `METHOD ROUTE` for
+/// requests); `summary` carries the human-readable line; `level`
+/// is event-only (NULL for requests); `ref_id` is the source row's
+/// addressable id (events.redpash_id or request_log.request_id) for
+/// drill-down; `context` is the source's jsonb payload (events.context
+/// directly, requests projected as `{ status, duration_ms }`).
 ///
 /// Powers investigations I-1 ("user X reports slow Workspace") and
-/// I-7 ("replay user's session") via the per-user index slice B
-/// added to `request_log` (migration 027).
+/// I-7 ("replay user's session"). Sources both indexed on
+/// `(user_redpash_id, at DESC)` — `events_user_idx` (mig 013) and
+/// `request_log_user_idx` (mig 027) — so the UNION ALL hits both
+/// fast paths and Postgres merges + LIMIT/OFFSETs the unified set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserActivity {
-    pub requests: Vec<RequestSummary>,
-    pub events:   Vec<crate::event::Event>,
+pub struct ActivityRow {
+    pub at:      chrono::DateTime<chrono::Utc>,
+    pub source:  String,
+    pub kind:    String,
+    pub summary: String,
+    pub level:   Option<String>,
+    pub ref_id:  Option<String>,
+    pub context: serde_json::Value,
 }
