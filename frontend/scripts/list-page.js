@@ -131,10 +131,10 @@ export function listPanel(columns, tbodyId) {
 // Wired today: search, modes (select + delete on tabs that declare
 // them), refresh, rows-per-page dropdown, selection chip, sort
 // chevrons in the table header.
-// Disabled until their handlers land: edit mode (per-cell editing),
-// row-numbers toggle (no rownum column yet on list views), columns
-// picker (no prefs UI), undo/redo (no list-step history), export
-// menu (no exporter), history toggle (no history panel).
+// Disabled until their handlers land: edit mode (per-cell editing —
+// wired today for Home tabs that flag editable columns), columns
+// picker (now wired with localStorage), export menu (CSV + JSON
+// wired; XLSX pending backend round-trip).
 //
 // Spec carries:
 //   { searchPlaceholder?: string|false, modes?: bool|{edit, select, delete} }
@@ -143,9 +143,10 @@ export function listPanel(columns, tbodyId) {
 // defaults to true (all three render disabled — visual parity); object
 // form enables the named modes; explicit false hides the whole group.
 //
-// Order mirrors workspace.html line 47-102:
-//   search | edit/select/delete | undo redo refresh rownum | rowsDd
-//   colsDd selChip | export history
+// Order on list views (2026-05-25, undo/redo + rownum + history
+// removed):
+//   filter? | search | edit/select/delete | refresh | rowsDd colsDd
+//   selChip | export
 //
 // Button IDs are namespaced (#rp-list-toolbar-*) so home + monitoring
 // renderers wire them via querySelector without colliding with #ws*.
@@ -191,14 +192,12 @@ export function listToolbarHTML(spec) {
     );
   }
 
-  // undo / redo — list views don't model step history; render disabled,
-  // matching workspace.html's no-file natural state.
-  parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
-    '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
-    +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
-  );
+  // Undo / redo + history removed 2026-05-25 — Em's session-close
+  // cleanup. The session action log added confusion for read-only
+  // browsing (search / sort showed up alongside mutations) and the
+  // undo/redo coupling against the edit history added more state than
+  // it earned. If a real activity log is needed later, the canonical
+  // source is /api/events via Monitoring, not a per-tab in-memory stack.
 
   // refresh — wired (handler in renderListBody re-runs fetchList).
   // The row-numbers toggle that lives in workspace's #wsRownum slot
@@ -265,18 +264,8 @@ export function listToolbarHTML(spec) {
     + '</div>',
   );
 
-  // history dropdown — read-only session log of edits + deletes the
-  // user has performed on the active tab. renderListBody populates
-  // the dd body + enables the button when actionLog is non-empty.
-  parts.push(
-    '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-history-dd" type="button" '
-    +   'title="Session history" disabled><i class="bi bi-clock-history"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-history-dd">'
-    +   '<div class="rt-dd-item rp-home-meta">No actions yet</div>'
-    + '</div>'
-    + '</div>',
-  );
+  // (history dropdown removed alongside undo / redo — see note at
+  // the top of the mode-button block above.)
 
   parts.push('</div>');
   return parts.join("");

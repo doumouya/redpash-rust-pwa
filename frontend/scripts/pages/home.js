@@ -952,7 +952,6 @@ export default function home(app, { session: _session }) {
       const deleteBase = spec.deleteEndpoint || spec.endpoint;
       try {
         await api.delete(deleteBase + "/" + encodeURIComponent(rid));
-        logAction("Deleted " + noun + " " + rid);
         fetchList(spec, chipState);
       } catch (err) {
         console.warn("[home] single-delete failed:", err);
@@ -1027,12 +1026,6 @@ export default function home(app, { session: _session }) {
         // Successful — leave the new value in place. Refetch is optional;
         // skipping it preserves the user's edit-mode position + cursor.
         td.dataset.editOriginal = value;
-        // Record for undo. Any new edit invalidates the redo stack —
-        // standard linear-history behavior.
-        editHistory.push({ rid, key, oldValue: original, newValue: value });
-        editFuture.length = 0;
-        updateUndoRedoButtons();
-        logAction("Edited " + key + " of " + rid + " → \"" + value + "\"");
       } catch (err) {
         console.warn("[home] cell-edit failed:", err);
         alert("Edit failed — reverting.");
@@ -1040,115 +1033,11 @@ export default function home(app, { session: _session }) {
       }
     }
 
-    // ── undo / redo ──────────────────────────────────────────────
-    // Stacks of edit deltas; each entry is { rid, key, oldValue,
-    // newValue }. Undo PATCHes oldValue, redo PATCHes newValue.
-    // Per-renderListBody scope — switching tabs resets the history
-    // (undo across tabs would be confusing). Delete-undo would need
-    // backend soft-delete; deferred until that exists.
-    const editHistory = [];
-    const editFuture  = [];
-
-    // Session action log — read-only display of every mutation the
-    // user has done on this tab. Distinct from editHistory (which is
-    // the undo/redo stack); the log also records deletes, undo / redo
-    // events, and bulk operations. Powers the history dropdown.
-    // Entries: { when: Date, label: string }.
-    const actionLog = [];
-    function logAction(label) {
-      actionLog.push({ when: new Date(), label });
-      renderHistoryDropdown();
-    }
-    function renderHistoryDropdown() {
-      const btn = view.querySelector('[data-dd="rp-list-toolbar-history-dd"]');
-      const dd  = view.querySelector("#rp-list-toolbar-history-dd");
-      if (!btn || !dd) return;
-      if (actionLog.length === 0) {
-        btn.setAttribute("disabled", "");
-        dd.innerHTML = '<div class="rt-dd-item rp-home-meta">No actions yet</div>';
-        return;
-      }
-      btn.removeAttribute("disabled");
-      btn.title = "Session history (" + actionLog.length + ")";
-      // Show newest first, cap at 50 entries (older entries can be
-      // recovered from /api/events queries via Monitoring if needed).
-      const recent = actionLog.slice(-50).reverse();
-      dd.innerHTML = recent.map((e) => {
-        const t = e.when.toLocaleTimeString();
-        return '<div class="rt-dd-item rp-home-meta">'
-          + '<span style="opacity:0.6;margin-right:0.5rem">' + esc(t) + '</span>'
-          + esc(e.label)
-          + '</div>';
-      }).join("");
-    }
-
-    function updateUndoRedoButtons() {
-      const undoBtn = view.querySelector("#rp-list-toolbar-undo");
-      const redoBtn = view.querySelector("#rp-list-toolbar-redo");
-      if (undoBtn) {
-        if (editHistory.length) {
-          undoBtn.removeAttribute("disabled");
-          undoBtn.title = "Undo last edit";
-        } else {
-          undoBtn.setAttribute("disabled", "");
-          undoBtn.title = "Nothing to undo";
-        }
-      }
-      if (redoBtn) {
-        if (editFuture.length) {
-          redoBtn.removeAttribute("disabled");
-          redoBtn.title = "Redo";
-        } else {
-          redoBtn.setAttribute("disabled", "");
-          redoBtn.title = "Nothing to redo";
-        }
-      }
-    }
-
-    async function undoLastEdit() {
-      if (!editHistory.length) return;
-      const entry = editHistory.pop();
-      const patchBase = spec.patchEndpoint || spec.endpoint;
-      try {
-        await api.patch(
-          patchBase + "/" + encodeURIComponent(entry.rid),
-          { [entry.key]: entry.oldValue }
-        );
-        editFuture.push(entry);
-        updateUndoRedoButtons();
-        logAction("Undid edit of " + entry.key + " on " + entry.rid);
-        fetchList(spec, chipState);
-      } catch (err) {
-        console.warn("[home] undo failed:", err);
-        // Restore the entry so the user can try again (e.g. the row
-        // might have been deleted from another tab — fetchList will
-        // surface that on the next refetch).
-        editHistory.push(entry);
-        updateUndoRedoButtons();
-        alert("Undo failed.");
-      }
-    }
-
-    async function redoLastEdit() {
-      if (!editFuture.length) return;
-      const entry = editFuture.pop();
-      const patchBase = spec.patchEndpoint || spec.endpoint;
-      try {
-        await api.patch(
-          patchBase + "/" + encodeURIComponent(entry.rid),
-          { [entry.key]: entry.newValue }
-        );
-        editHistory.push(entry);
-        updateUndoRedoButtons();
-        logAction("Redid edit of " + entry.key + " on " + entry.rid);
-        fetchList(spec, chipState);
-      } catch (err) {
-        console.warn("[home] redo failed:", err);
-        editFuture.push(entry);
-        updateUndoRedoButtons();
-        alert("Redo failed.");
-      }
-    }
+    // (undo / redo + session action log removed 2026-05-25 — the
+    // dropdown clutter wasn't worth the value. If a real activity
+    // log is needed later, /api/events via Monitoring is the
+    // canonical source — every CRUD action already records to
+    // events with full audit trail.)
 
     async function bulkDelete() {
       if (!selected.size) return;
@@ -1170,11 +1059,6 @@ export default function home(app, { session: _session }) {
       if (failed.length) {
         console.warn("[home] bulk-delete: " + failed.length + " failed");
       }
-      const ok = rids.length - failed.length;
-      logAction(
-        "Bulk-deleted " + ok + " " + (ok === 1 ? noun : plural)
-          + (failed.length ? " (" + failed.length + " failed)" : "")
-      );
       selected.clear();
       selectMode = false;
       view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
@@ -1273,8 +1157,6 @@ export default function home(app, { session: _session }) {
           timer = setTimeout(() => {
             listPage = 1;
             fetchList(spec, chipState);
-            if (q) logAction('Searched "' + q + '"');
-            else    logAction("Cleared search");
           }, 200);
         });
       }
@@ -1505,9 +1387,6 @@ export default function home(app, { session: _session }) {
         paintSortHeaders();
         listPage = 1;
         fetchList(spec, chipState);
-        logAction(listSort
-          ? "Sorted by " + listSort.col + " " + listSort.dir
-          : "Cleared sort");
       });
 
       // Apply visual indicator to the active sort header. Idempotent —
@@ -1577,13 +1456,6 @@ export default function home(app, { session: _session }) {
         btn.title = "Edit mode (toggle)";
         btn.addEventListener("click", () => toggleEditMode());
       }
-      // Undo / redo are scoped to edit history (PATCH old/new values).
-      // Buttons stay disabled until the first edit lands; click handlers
-      // are always bound. updateUndoRedoButtons enables them when their
-      // respective stack is non-empty.
-      view.querySelector("#rp-list-toolbar-undo")?.addEventListener("click", undoLastEdit);
-      view.querySelector("#rp-list-toolbar-redo")?.addEventListener("click", redoLastEdit);
-      updateUndoRedoButtons();
     }
 
     // Row click — four branches:
