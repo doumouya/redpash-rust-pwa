@@ -89,6 +89,7 @@ struct FilesList { items: Vec<FileSummary> }
 
 /// `GET /api/files` — every file the session user owns, across all
 /// their projects. Powers the home page's "My Files" step.
+#[tracing::instrument(skip_all)]
 async fn list_all(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -99,6 +100,7 @@ async fn list_all(
     Ok(Json(FilesList { items }))
 }
 
+#[tracing::instrument(skip_all)]
 async fn upload(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -246,6 +248,7 @@ async fn upload(
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn get_summary(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -297,6 +300,7 @@ struct PatchFileBody {
 /// error rather than a constraint violation. An `encoding` or project
 /// change makes the cached frame / summary stale, so the hot-frame
 /// cache entry is evicted (the next access re-hydrates from disk).
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn patch_file(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -373,6 +377,7 @@ async fn patch_file(
 /// can't re-hydrate a file mid-delete; the on-disk blob is removed
 /// best-effort afterwards (a leftover .bin is disk litter, not a
 /// correctness bug — the row it pointed at is already gone).
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn delete_file(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -393,6 +398,7 @@ async fn delete_file(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn get_page(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -418,6 +424,7 @@ async fn get_page(
     Ok(Json(Page { rows, total, all_count, page, size, pages, ms, row_indices }))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn add_step(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -500,6 +507,7 @@ struct CastPreviewResp {
 /// column with one `"2023"` cell — that cell can't be parsed as a
 /// full date and would be nulled). The frontend uses this to surface
 /// a confirm prompt before the destructive apply.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn cast_preview(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -563,6 +571,7 @@ async fn cast_preview(
     }))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn undo(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -583,6 +592,7 @@ async fn undo(
 /// renames, …) was unreachable. This flips `applied = false` for the
 /// matching rows; other steps stay applied. Returns the rebuilt
 /// envelope so the frontend can drop its page cache + repaint.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn clear_filters(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -596,6 +606,7 @@ async fn clear_filters(
     rebuild_envelope(&state, &rid).await
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn redo(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -617,6 +628,7 @@ struct DedupQuery {
     limit: Option<usize>,
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn dedup(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -661,6 +673,7 @@ struct UniquesResponse {
     truncated: bool,
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn uniques(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -709,6 +722,7 @@ struct SentinelsQuery {
     #[serde(default)] extra: Option<String>,
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn sentinels(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -757,6 +771,7 @@ struct JoinFile {
     candidates:  Vec<data::joins::JoinCandidate>,
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn joins(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -823,6 +838,7 @@ struct CreateJoinBody {
 }
 fn default_join_type() -> String { "inner".into() }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn create_join(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -973,6 +989,7 @@ struct SnapshotBody { name: Option<String> }
 /// file. The fresh file has no step history — it's a clean snapshot
 /// the user can hand to Reports / Dashboards without worrying about
 /// step changes invalidating downstream work.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn snapshot(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -1078,6 +1095,7 @@ struct ExportQuery {
 /// the 256 MiB upload cap that's a few hundred MiB worst case,
 /// acceptable for a single-shot download (we can switch to a
 /// streaming body if big-file exports become common).
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn export(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -1143,6 +1161,7 @@ async fn export(
 #[derive(serde::Deserialize)]
 struct EncodingBody { encoding: String }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn set_encoding(
     State(state):  State<AppState>,
     headers:       axum::http::HeaderMap,
@@ -1175,6 +1194,7 @@ async fn set_encoding(
 /// files" button refresh a stale number on demand. Evicting the cache
 /// first forces a fresh hydrate, which recomputes cleanness from the
 /// current step cursor and persists it via `update_file_columns`.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn compute_cleanness(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -1259,6 +1279,7 @@ async fn compute_cleanness(
 /// `DELETE /api/files/:rid/cleanness` — null-out the stored cleanness
 /// score (dev/test convenience). Evicts the hot-frame cache so the next
 /// hydrate doesn't re-stamp a value. Returns the updated FileSummary.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn clear_cleanness(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
@@ -1273,6 +1294,7 @@ async fn clear_cleanness(
     Ok(Json(meta.summary))
 }
 
+#[tracing::instrument(skip_all)]
 async fn rebuild_envelope(state: &AppState, rid: &str) -> Result<Json<FileEnvelope>, AppError> {
     let entry = hydrate(state, rid).await?;
     let steps = db::list_steps(&state.db, rid).await?;

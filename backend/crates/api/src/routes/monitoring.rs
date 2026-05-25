@@ -134,6 +134,7 @@ fn bucket_interval(label: &str) -> &'static str {
 
 // ── /api/monitoring/events ──────────────────────────────────────────────
 
+#[tracing::instrument(skip_all)]
 async fn list_events(
     State(state): State<AppState>,
     Query(q):     Query<EventsQuery>,
@@ -213,6 +214,7 @@ async fn list_events(
 
 // ── /api/monitoring/audit-runs ──────────────────────────────────────────
 
+#[tracing::instrument(skip_all)]
 async fn list_audit_runs(
     State(state): State<AppState>,
     Query(q):     Query<AuditRunsQuery>,
@@ -277,6 +279,7 @@ async fn list_audit_runs(
 
 // ── /api/monitoring/audit-findings ──────────────────────────────────────
 
+#[tracing::instrument(skip_all)]
 async fn list_audit_findings(
     State(state): State<AppState>,
     Query(q):     Query<AuditFindingsQuery>,
@@ -389,6 +392,7 @@ struct RequestsQuery {
     #[serde(default)] q:      Option<String>,
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_requests(
     State(state): State<AppState>,
     Query(q):     Query<RequestsQuery>,
@@ -478,6 +482,7 @@ struct RequestsStatsQuery {
     #[serde(default)] window: Option<String>,
 }
 
+#[tracing::instrument(skip_all)]
 async fn stats_requests(
     State(state): State<AppState>,
     Query(q):     Query<RequestsStatsQuery>,
@@ -614,6 +619,7 @@ struct EventsStatsQuery {
 /// for the Events tab KPI strip: total + level distribution + last-24h
 /// count. Window narrows total + by_level; last_24h is always fixed
 /// at 24h regardless. Shape parallels `/api/admin/*/stats`.
+#[tracing::instrument(skip_all)]
 async fn stats_events(
     State(state): State<AppState>,
     Query(q):     Query<EventsStatsQuery>,
@@ -665,6 +671,7 @@ async fn stats_events(
 /// tab: total + by-tool distribution + last-7d cadence. No window
 /// param: audit runs are infrequent (a handful per day at most), so
 /// total over all time is the right top-line.
+#[tracing::instrument(skip_all)]
 async fn stats_audit_runs(
     State(state): State<AppState>,
 ) -> Result<Json<AuditRunsStats>, AppError> {
@@ -693,6 +700,7 @@ async fn stats_audit_runs(
 /// Findings tab: total + severity bucket distribution + by-kind
 /// horizontal bar. Severity is bucketed low/med/high in SQL (raw
 /// column is integer 0-28+); the frontend wants three bands.
+#[tracing::instrument(skip_all)]
 async fn stats_audit_findings(
     State(state): State<AppState>,
 ) -> Result<Json<AuditFindingsStats>, AppError> {
@@ -734,6 +742,7 @@ async fn stats_audit_findings(
 /// top-to-bottom. 404 when neither the request row nor any event
 /// exists for the id — protects against a typo'd id returning an
 /// empty drill-down with no signal.
+#[tracing::instrument(skip_all, fields(request_id = %request_id))]
 async fn request_detail(
     State(state):       State<AppState>,
     Path(request_id):   Path<String>,
@@ -794,6 +803,7 @@ struct UserActivityQuery {
 /// carry `user_redpash_id` directly — their activity mirrors into
 /// `events` via `event::record(kind='step_apply'|'case_status_change'|…)`,
 /// so they're covered by the events branch without an extra JOIN.
+#[tracing::instrument(skip_all, fields(user_rid = %user_rid))]
 async fn user_activity(
     State(state):    State<AppState>,
     Path(user_rid):  Path<String>,
@@ -910,6 +920,7 @@ const ROW_COUNT_TABLES: &[&str] = &[
     "audit.run", "audit.finding",
 ];
 
+#[tracing::instrument(skip_all)]
 async fn list_optimization_points(
     State(state): State<AppState>,
     Query(q):     Query<OptPointsQuery>,
@@ -1006,6 +1017,7 @@ async fn list_optimization_points(
 /// Dispatch the live measurement per `kind`. Returns NULL on
 /// unknown kind, NULL key when one is required, or any DB error
 /// (the row still renders without a live value).
+#[tracing::instrument(skip_all)]
 async fn evaluate_measurement(
     state: &AppState,
     kind:  Option<&str>,
@@ -1114,6 +1126,7 @@ struct PatchOptPointBody {
 /// Open to any authed user today, matching the rest of the monitoring
 /// surface; RBAC-gate to company-admin when [[rbac-corporate-ready]]
 /// lands. Spec: docs/internal/specs/optimization-map.md §7.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn patch_optimization_point(
     State(state): State<AppState>,
     Path(rid):    Path<String>,

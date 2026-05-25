@@ -89,6 +89,7 @@ struct CategoryList { items: Vec<Category> }
 /// global / built-in seed taxonomy; v3 will union per-company entries
 /// once RBAC overlays per-user visibility. FE groups by `parent_id`
 /// to build the picker tree.
+#[tracing::instrument(skip_all)]
 async fn list_categories(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -98,6 +99,7 @@ async fn list_categories(
     Ok(Json(CategoryList { items }))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -153,6 +155,7 @@ async fn list(
     Ok(Json(CaseList { items, total, page, size }))
 }
 
+#[tracing::instrument(skip_all)]
 async fn create(
     State(state):  State<AppState>,
     headers:       HeaderMap,
@@ -202,6 +205,7 @@ async fn create(
     Ok((StatusCode::CREATED, Json(case)))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn get_one(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -217,6 +221,7 @@ async fn get_one(
     Ok(Json(CaseDetail { case, comments, activity }))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn patch(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -335,6 +340,7 @@ async fn patch(
     Ok(Json(updated))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn delete_one(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -359,6 +365,7 @@ async fn delete_one(
 #[derive(Serialize)]
 struct CommentList { items: Vec<Comment> }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn list_comments(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -376,6 +383,7 @@ async fn list_comments(
     Ok(Json(CommentList { items }))
 }
 
+#[tracing::instrument(skip_all, fields(rid = %rid))]
 async fn post_comment(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -403,6 +411,7 @@ async fn post_comment(
     Ok((StatusCode::CREATED, Json(comment)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn patch_comment(
     State(state):        State<AppState>,
     headers:             HeaderMap,
@@ -434,6 +443,7 @@ async fn patch_comment(
     Ok(Json(updated))
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_comment(
     State(state):         State<AppState>,
     headers:              HeaderMap,
