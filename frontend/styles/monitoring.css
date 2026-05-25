@@ -11,15 +11,24 @@
 
 /* #rpMonView IS the rt-surface, mirroring Home's #rpHomeView.
    Padding matches Home so the chip-row / composite / toolbar /
-   table / pager sit with a symmetric inner gap in the card.
-   The rt-surface-body wrapper around the filter panel + table-wrap
+   table / pager sit with a symmetric inner gap in the card. */
+#rpMonView { padding: 0.875rem; }
+
+/* The rt-surface-body wrapper around the filter panel + table-wrap
    is the one extra layer Monitoring has vs Home; the #id-scoped
    rules below ensure that extra layer flex-fills cleanly so the
    table claims the remaining height — same target as Home's chain,
    one nest deeper. Em 2026-05-25: "check how we did on Home page". */
-#rpMonView { padding: 0.875rem; }
 #rpMonView .rt-surface-body { flex: 1; min-height: 0; display: flex; }
 #rpMonView .rt-table-wrap   { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+
+/* Pin the pager to the bottom of the rt-surface regardless of the
+   table-wrap's height. `margin-top: auto` on a flex-column item
+   pushes it to the end of the main axis (bottom). If the wrap above
+   doesn't fully flex-fill the available height, the gap shows the
+   surface bg + the pager stays anchored — Em 2026-05-25: "try
+   fixing rt-pager at the bottom". */
+#rpMonView > .rt-pager { margin-top: auto; }
 
 /* Monitoring tables use the canonical `.rt-table` (table.css). The
    mono method pill is page-content (HTTP method label in cells),
