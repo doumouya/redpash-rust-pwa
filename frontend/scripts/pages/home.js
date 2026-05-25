@@ -692,6 +692,42 @@ export default function home(app, { session: _session }) {
     },
   };
 
+  // ─── composite-strip placeholder padding ─────────────────────
+  // The composite-strip has 4 chart slots flanking the 2×2 KPI
+  // grid. Most tabs declare only 2 real charts today; we pad
+  // spec.charts to 4 with sample charts (constant fake data) so
+  // every composite reads as a full 5-cell row instead of two
+  // empty slots on the right. Em 2026-05-25: "just add 2 charts
+  // more, don't worry about accuracy just put anything for now".
+  // Real per-tab charts replace these as data lands.
+  const PLACEHOLDER_CHART_TEMPLATES = [
+    { kind: "bar",   title: "Sample bar",
+      data: () => ({ Alpha: 14, Bravo: 9, Charlie: 6, Delta: 3 }) },
+    { kind: "donut", title: "Sample share",
+      data: () => ({ Active: 62, Pending: 21, Idle: 12, Archived: 5 }) },
+    { kind: "gauge", title: "Sample coverage",
+      data: () => 73, opts: { max: 100, unit: "%" } },
+    { kind: "rose",  title: "Sample mix",
+      data: () => ({ One: 8, Two: 11, Three: 5, Four: 7, Five: 9 }) },
+  ];
+  function placeholderChart(tabKey, slot) {
+    const t = PLACEHOLDER_CHART_TEMPLATES[slot % PLACEHOLDER_CHART_TEMPLATES.length];
+    return {
+      id:   "rp-home-" + tabKey + "-ph-" + slot,
+      title: t.title,
+      kind:  t.kind,
+      data:  t.data,
+      ...(t.opts ? { opts: t.opts } : {}),
+    };
+  }
+  for (const [tabKey, viewSpec] of Object.entries(LIST_VIEWS)) {
+    if (!viewSpec.compositeStrip) continue;
+    viewSpec.charts = viewSpec.charts || [];
+    while (viewSpec.charts.length < 4) {
+      viewSpec.charts.push(placeholderChart(tabKey, viewSpec.charts.length));
+    }
+  }
+
   // ─── rail collapse — same affordance as the Workspace rail ───
   app.querySelector("#rpHomeNavCollapse").addEventListener("click", (e) => {
     nav.classList.toggle("compact");
