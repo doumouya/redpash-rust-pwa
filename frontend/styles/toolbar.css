@@ -123,6 +123,17 @@
 }
 .rt-sel-chip.show { display: inline-flex; }
 
+/* Mode buttons (edit / select / delete) — give the enabled state a
+   brighter base color than the rest of .rt-btn so the disabled →
+   enabled gap is visible without hovering. Base .rt-btn sits at
+   text-mute + :disabled adds opacity: 0.4; that delta was too
+   small to read at a glance (Em 2026-05-25: "edit-delete-select
+   mode are still disabled"). Lifting non-disabled mode buttons to
+   text-dim keeps the toolbar quiet while making the available
+   actions clearly distinct from the still-disabled edit button. */
+.rt-mode:not(:disabled) { color: var(--rp-text-dim); }
+.rt-mode:not(:disabled):hover { color: var(--rp-text); }
+
 /* delete-mode button armed against the current selection */
 .rt-mode[data-mode="delete"].armed {
   color: var(--rp-accent);
