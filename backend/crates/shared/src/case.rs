@@ -38,6 +38,12 @@ pub struct Case {
     /// outlives the deletion).
     #[serde(default)] pub reporter_display_name: Option<String>,
     #[serde(default)] pub assignee_display_name: Option<String>,
+    /// Raw error payload for cases auto-triaged from error-class
+    /// events (FE crashes / panics / 5xx). Distinct from
+    /// `description` (markdown prose) so the FE can render it as a
+    /// monospace `<pre>` and the auto-triage dedup hash can compute
+    /// over a stable shape. Null for manually-filed cases.
+    #[serde(default)] pub error_message: Option<String>,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }
@@ -80,12 +86,15 @@ pub struct CaseDetail {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaseCreateRequest {
     pub title: String,
-    #[serde(default)] pub description: Option<String>,
-    #[serde(default)] pub r#type:      Option<String>,
-    #[serde(default)] pub priority:    Option<String>,
-    #[serde(default)] pub assignee_id: Option<String>,
-    #[serde(default)] pub project_id:  Option<String>,
-    #[serde(default)] pub company_id:  Option<String>,
+    #[serde(default)] pub description:   Option<String>,
+    #[serde(default)] pub r#type:        Option<String>,
+    #[serde(default)] pub priority:      Option<String>,
+    #[serde(default)] pub assignee_id:   Option<String>,
+    #[serde(default)] pub project_id:    Option<String>,
+    #[serde(default)] pub company_id:    Option<String>,
+    /// Auto-triage path populates this with the raw error string;
+    /// manual creates leave it null.
+    #[serde(default)] pub error_message: Option<String>,
 }
 
 /// Body of `PATCH /api/cases/:rid`. Sparse — every field optional.
@@ -95,14 +104,15 @@ pub struct CaseCreateRequest {
 /// a bundled multi-field diff).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CasePatchRequest {
-    #[serde(default)] pub title:       Option<String>,
-    #[serde(default)] pub description: Option<String>,
-    #[serde(default)] pub r#type:      Option<String>,
-    #[serde(default)] pub status:      Option<String>,
-    #[serde(default)] pub priority:    Option<String>,
-    #[serde(default)] pub assignee_id: Option<String>,
-    #[serde(default)] pub project_id:  Option<String>,
-    #[serde(default)] pub company_id:  Option<String>,
+    #[serde(default)] pub title:         Option<String>,
+    #[serde(default)] pub description:   Option<String>,
+    #[serde(default)] pub r#type:        Option<String>,
+    #[serde(default)] pub status:        Option<String>,
+    #[serde(default)] pub priority:      Option<String>,
+    #[serde(default)] pub assignee_id:   Option<String>,
+    #[serde(default)] pub project_id:    Option<String>,
+    #[serde(default)] pub company_id:    Option<String>,
+    #[serde(default)] pub error_message: Option<String>,
 }
 
 /// Body of `POST /api/cases/:rid/comments` (create) and

@@ -116,6 +116,11 @@ Required: `title`. Everything else defaults server-side:
 - `priority` → `medium` (also valid: `low`, `high`, `critical`)
 - `reporter_id` → the caller's user RID (resolved from session cookie)
 - `assignee_id` / `project_id` / `company_id` → null
+- `error_message` → null. Used by the auto-triage path (cases
+  spawned from error-class events) to carry the raw error string;
+  manual creates can leave it absent. Distinct from `description`
+  (markdown prose) so the FE can render it monospace + so the
+  dedup hash computes over a stable shape.
 
 **Response (201 Created):**
 

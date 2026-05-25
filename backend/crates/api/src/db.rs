@@ -2039,6 +2039,7 @@ struct CaseRow {
     company_id:             Option<String>,
     reporter_display_name:  Option<String>,
     assignee_display_name:  Option<String>,
+    error_message:          Option<String>,
     created_at:             DateTime<Utc>,
     updated_at:             DateTime<Utc>,
 }
@@ -2057,6 +2058,7 @@ impl From<CaseRow> for Case {
             company_id:             r.company_id,
             reporter_display_name:  r.reporter_display_name,
             assignee_display_name:  r.assignee_display_name,
+            error_message:          r.error_message,
             created_at:             r.created_at,
             updated_at:             r.updated_at,
         }
@@ -2074,6 +2076,7 @@ const CASE_SELECT: &str =
      c.reporter_id, c.assignee_id, c.project_id, c.company_id,
      r.display_name AS reporter_display_name,
      a.display_name AS assignee_display_name,
+     c.error_message,
      c.created_at, c.updated_at";
 
 /// LEFT JOINs for reporter + assignee user lookups. Append after a
@@ -2159,24 +2162,26 @@ pub async fn find_case(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Case>> {
 /// `users` and produce the hydrated Case shape in one round-trip.
 /// Same pattern as update_case below.
 pub async fn insert_case(
-    pool:        &PgPool,
-    rid:         &str,
-    title:       &str,
-    description: Option<&str>,
-    type_:       &str,
-    status:      &str,
-    priority:    &str,
-    reporter_id: Option<&str>,
-    assignee_id: Option<&str>,
-    project_id:  Option<&str>,
-    company_id:  Option<&str>,
+    pool:          &PgPool,
+    rid:           &str,
+    title:         &str,
+    description:   Option<&str>,
+    type_:         &str,
+    status:        &str,
+    priority:      &str,
+    reporter_id:   Option<&str>,
+    assignee_id:   Option<&str>,
+    project_id:    Option<&str>,
+    company_id:    Option<&str>,
+    error_message: Option<&str>,
 ) -> sqlx::Result<Case> {
     let row: CaseRow = sqlx::query_as(&format!(
         "WITH c AS (
              INSERT INTO cases
                  (redpash_id, type, title, description, status, priority,
-                  reporter_id, assignee_id, project_id, company_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                  reporter_id, assignee_id, project_id, company_id,
+                  error_message)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *
          )
          SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
@@ -2191,6 +2196,7 @@ pub async fn insert_case(
     .bind(assignee_id)
     .bind(project_id)
     .bind(company_id)
+    .bind(error_message)
     .fetch_one(pool)
     .await?;
     Ok(row.into())
@@ -2200,16 +2206,17 @@ pub async fn insert_case(
 /// The handler emits one `case_<field>_change` event per changed
 /// field so the activity feed renders each change as a discrete row.
 pub async fn update_case(
-    pool:        &PgPool,
-    rid:         &str,
-    title:       Option<&str>,
-    description: Option<&str>,
-    type_:       Option<&str>,
-    status:      Option<&str>,
-    priority:    Option<&str>,
-    assignee_id: Option<&str>,
-    project_id:  Option<&str>,
-    company_id:  Option<&str>,
+    pool:          &PgPool,
+    rid:           &str,
+    title:         Option<&str>,
+    description:   Option<&str>,
+    type_:         Option<&str>,
+    status:        Option<&str>,
+    priority:      Option<&str>,
+    assignee_id:   Option<&str>,
+    project_id:    Option<&str>,
+    company_id:    Option<&str>,
+    error_message: Option<&str>,
 ) -> sqlx::Result<Option<Case>> {
     // For nullable FKs we use the sentinel pattern: pass `Some("")`
     // to set NULL, omit to skip. Today the handler always passes
@@ -2218,15 +2225,16 @@ pub async fn update_case(
     let row: Option<CaseRow> = sqlx::query_as(&format!(
         "WITH c AS (
              UPDATE cases SET
-                 title       = COALESCE($2,  title),
-                 description = COALESCE($3,  description),
-                 type        = COALESCE($4,  type),
-                 status      = COALESCE($5,  status),
-                 priority    = COALESCE($6,  priority),
-                 assignee_id = COALESCE($7,  assignee_id),
-                 project_id  = COALESCE($8,  project_id),
-                 company_id  = COALESCE($9,  company_id),
-                 updated_at  = now()
+                 title         = COALESCE($2,  title),
+                 description   = COALESCE($3,  description),
+                 type          = COALESCE($4,  type),
+                 status        = COALESCE($5,  status),
+                 priority      = COALESCE($6,  priority),
+                 assignee_id   = COALESCE($7,  assignee_id),
+                 project_id    = COALESCE($8,  project_id),
+                 company_id    = COALESCE($9,  company_id),
+                 error_message = COALESCE($10, error_message),
+                 updated_at    = now()
              WHERE redpash_id = $1
              RETURNING *
          )
@@ -2241,6 +2249,7 @@ pub async fn update_case(
     .bind(assignee_id)
     .bind(project_id)
     .bind(company_id)
+    .bind(error_message)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(Into::into))

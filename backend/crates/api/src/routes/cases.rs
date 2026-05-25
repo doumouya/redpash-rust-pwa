@@ -106,10 +106,14 @@ async fn create(
     if title.is_empty() {
         return Err(AppError::bad_request("invalid", "title is required"));
     }
-    let description = req.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let type_       = req.r#type.as_deref().unwrap_or("task");
-    let priority    = req.priority.as_deref().unwrap_or("medium");
-    let rid         = id::new("CAS");
+    let description   = req.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    // error_message keeps internal whitespace (stack traces are
+    // significant by line); only outer trim to drop leading/trailing
+    // newlines from copy-paste. Empty string still maps to None.
+    let error_message = req.error_message.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let type_         = req.r#type.as_deref().unwrap_or("task");
+    let priority      = req.priority.as_deref().unwrap_or("medium");
+    let rid           = id::new("CAS");
 
     let case = db::insert_case(
         &state.db, &rid,
@@ -122,6 +126,7 @@ async fn create(
         req.assignee_id.as_deref(),
         req.project_id.as_deref(),
         req.company_id.as_deref(),
+        error_message,
     ).await?;
 
     crate::event::record(&state.db, crate::event::EventDraft {
@@ -174,14 +179,15 @@ async fn patch(
         .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
 
     let trim = |o: Option<String>| o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let title       = trim(body.title);
-    let description = trim(body.description);
-    let type_       = trim(body.r#type);
-    let status      = trim(body.status);
-    let priority    = trim(body.priority);
-    let assignee_id = trim(body.assignee_id);
-    let project_id  = trim(body.project_id);
-    let company_id  = trim(body.company_id);
+    let title         = trim(body.title);
+    let description   = trim(body.description);
+    let type_         = trim(body.r#type);
+    let status        = trim(body.status);
+    let priority      = trim(body.priority);
+    let assignee_id   = trim(body.assignee_id);
+    let project_id    = trim(body.project_id);
+    let company_id    = trim(body.company_id);
+    let error_message = trim(body.error_message);
 
     // Validate enum values before the DB write so we return a clean
     // 400 instead of letting Postgres CHECK constraint surface as 500.
@@ -211,6 +217,7 @@ async fn patch(
         assignee_id.as_deref(),
         project_id.as_deref(),
         company_id.as_deref(),
+        error_message.as_deref(),
     ).await?
     .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
 
@@ -248,10 +255,11 @@ async fn patch(
     // fields touched, not one event per field. Keeps the activity
     // feed signal-heavy.
     let mut metadata_fields: Vec<&str> = Vec::new();
-    if title.is_some()       { metadata_fields.push("title");       }
-    if description.is_some() { metadata_fields.push("description"); }
-    if project_id.is_some()  { metadata_fields.push("project");     }
-    if company_id.is_some()  { metadata_fields.push("company");     }
+    if title.is_some()         { metadata_fields.push("title");         }
+    if description.is_some()   { metadata_fields.push("description");   }
+    if project_id.is_some()    { metadata_fields.push("project");       }
+    if company_id.is_some()    { metadata_fields.push("company");       }
+    if error_message.is_some() { metadata_fields.push("error_message"); }
     if !metadata_fields.is_empty() {
         crate::event::record(&state.db, crate::event::EventDraft {
             origin:  "backend",
