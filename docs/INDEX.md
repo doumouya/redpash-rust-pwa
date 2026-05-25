@@ -58,6 +58,7 @@ YAML frontmatter above).
 
 ### Frontend
 - [Design tokens](frontend/design.md) — CSS variables, brand, dark mode, library integration + leak-class discipline.
+- [CSS units](frontend/css-units.md) — relative-by-default rule: prefer rem / em / % over px; px only for hairlines + hardware-pixel snap.
 - [Unified surface](frontend/unified-surface.md) — future milestone: RedPash as one Excel-like window; parent-tab isolation, child-tab shared data.
 - [Landing page](frontend/redpash-components-pages/landing-page/index.md) — first surface composing `redpash-components`. Hero / float bars / modals / i18n / theme toggle / PWA install / typewriter / shimmer.
 - [Home page](frontend/redpash-components-pages/home-page/index.md) — authenticated landing: a single dashboard card (upload zone, minitables, stat strip) linking into /objects.
