@@ -106,8 +106,8 @@ export function listPanel(columns, tbodyId) {
       + '<i class="bi bi-chevron-expand rp-list-sort-icon"></i>'
       + '</th>';
   }).join("");
-  return '<section class="rp-mon-panel">'
-    + '<table class="rp-mon-table">'
+  return '<section class="rt-table-wrap">'
+    + '<table class="rt-table">'
     +   '<thead><tr>' + th + '</tr></thead>'
     +   '<tbody id="' + esc(tbodyId) + '"></tbody>'
     + '</table>'

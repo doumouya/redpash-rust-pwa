@@ -1,8 +1,16 @@
-/* ── table (rp-table) ────────────────────────────────────────────
-   The RedPash table. App-wide rp- — the redtable is built on it and
-   minitables reuse it. */
+/* ── table (rt-table) ────────────────────────────────────────────
+   The canonical RedPash table — the redtable, the list views on
+   /home and /monitoring, the tools-panel column tables, the report
+   builder previews. Named `rt-table` (sibling of `.rt-table-wrap`)
+   so every consumer reads from the same class. Previously split as
+   `.rp-table` (workspace) + `.rp-mon-table` (home/monitoring); the
+   2026-05-25 consolidation merged them per [[naming-consistency]]. */
 
-.rt-table-wrap { flex: 1; min-width: 0; overflow: auto; position: relative; }
+/* min-height: 0 alongside min-width: 0 so the wrap can shrink in
+   either flex axis — workspace nests it under rail+content (row
+   flex), home nests it under #rpHomeView (column flex). One gate
+   per axis means the wrap obeys whichever parent is constraining. */
+.rt-table-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; }
 .rt-table-state {
   padding: var(--rp-sp-8);
   text-align: center;
@@ -10,13 +18,14 @@
   font-size: var(--rp-text-md);
 }
 
-.rp-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
-.rp-table .col-chk { width: 2.375rem; display: none; }
-.rp-table.mode-select .col-chk { display: table-cell; }
-.rp-table .col-rownum { width: 3.125rem; }
-.rp-table.no-rownum .col-rownum { display: none; }
+.rt-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.rt-table td.is-num { text-align: right; }
+.rt-table .col-chk { width: 2.375rem; display: none; }
+.rt-table.mode-select .col-chk { display: table-cell; }
+.rt-table .col-rownum { width: 3.125rem; }
+.rt-table.no-rownum .col-rownum { display: none; }
 
-.rp-table thead th {
+.rt-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -31,25 +40,25 @@
   border-bottom: 1px solid var(--rp-border);
   white-space: nowrap;
 }
-.rp-table th.sortable { cursor: pointer; user-select: none; }
-.rp-table th.sortable:hover { color: var(--rp-text-dim); }
-.rp-table th.sortable.sorted { color: var(--rp-accent-2); }
-.rp-table th .sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
-.rp-table th .sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-accent-2); }
+.rt-table th.sortable { cursor: pointer; user-select: none; }
+.rt-table th.sortable:hover { color: var(--rp-text-dim); }
+.rt-table th.sortable.sorted { color: var(--rp-accent-2); }
+.rt-table th .sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
+.rt-table th .sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-accent-2); }
 
-.rp-table tbody td {
+.rt-table tbody td {
   padding: 0.5625rem 0.75rem;
   border-bottom: 1px solid var(--rp-border);
   color: var(--rp-text);
   white-space: nowrap;
 }
-.rp-table tbody tr { transition: background 0.1s var(--rp-ease); }
-.rp-table tbody tr:hover { background: var(--rp-hover); }
-.rp-table tbody tr.is-selected { background: var(--rp-accent-soft); }
-.rp-table .col-n { color: var(--rp-text-mute); font-variant-numeric: tabular-nums; }
-.rp-table .cell-name { font-weight: 550; }
-.rp-table .cell-muted { color: var(--rp-text-dim); }
-.rp-table .cell-warn {
+.rt-table tbody tr { transition: background 0.1s var(--rp-ease); }
+.rt-table tbody tr:hover { background: var(--rp-hover); }
+.rt-table tbody tr.is-selected { background: var(--rp-accent-soft); }
+.rt-table .col-n { color: var(--rp-text-mute); }
+.rt-table .cell-name { font-weight: 550; }
+.rt-table .cell-muted { color: var(--rp-text-dim); }
+.rt-table .cell-warn {
   color: var(--rp-warn);
   background: rgba(249, 226, 175, 0.1);
   border-radius: 0.3125rem;
@@ -76,12 +85,12 @@
 .rt-status.is-lapsed::before { background: var(--rp-peach); }
 
 /* edit mode — cells become editable */
-.rp-table.mode-edit td.editable {
+.rt-table.mode-edit td.editable {
   cursor: text;
   box-shadow: inset 0 0 0 1px var(--rp-accent-soft);
 }
-.rp-table.mode-edit td.editable:hover { background: var(--rp-accent-soft); }
-.rp-table td.editable:focus {
+.rt-table.mode-edit td.editable:hover { background: var(--rp-accent-soft); }
+.rt-table td.editable:focus {
   outline: 0.125rem solid var(--rp-accent-2);
   outline-offset: -0.125rem;
   background: var(--rp-surface);
@@ -89,6 +98,6 @@
 }
 
 /* delete mode — click a row to remove it */
-.rp-table.mode-delete tbody tr { cursor: pointer; }
-.rp-table.mode-delete tbody tr:hover { background: rgba(243, 139, 168, 0.1); }
-.rp-table.mode-delete tbody tr:hover td { color: var(--rp-accent); }
+.rt-table.mode-delete tbody tr { cursor: pointer; }
+.rt-table.mode-delete tbody tr:hover { background: rgba(243, 139, 168, 0.1); }
+.rt-table.mode-delete tbody tr:hover td { color: var(--rp-accent); }

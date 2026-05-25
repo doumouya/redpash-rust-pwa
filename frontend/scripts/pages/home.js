@@ -637,7 +637,7 @@ export default function home(app, { session: _session }) {
     function decorateSelectMode() {
       const tbody = view.querySelector("#rp-home-list-tbody");
       if (!tbody) return;
-      const thead = view.querySelector(".rp-mon-table thead tr");
+      const thead = view.querySelector(".rt-table thead tr");
       // Header checkbox column — strip first, re-add if selectMode.
       thead?.querySelector(".rp-list-sel-th")?.remove();
       tbody.querySelectorAll("td.rp-list-sel").forEach((td) => td.remove());
@@ -814,7 +814,7 @@ export default function home(app, { session: _session }) {
       // Click-to-sort — header delegation. Three-state per column:
       // first click sets desc, second flips to asc, third clears.
       // After clearing, the backend falls back to its default sort.
-      view.querySelector(".rp-mon-table thead")?.addEventListener("click", (e) => {
+      view.querySelector(".rt-table thead")?.addEventListener("click", (e) => {
         const th = e.target.closest("th.rp-list-sortable");
         if (!th) return;
         const key = th.dataset.sort;
@@ -855,7 +855,7 @@ export default function home(app, { session: _session }) {
       // Header select-all checkbox — delegated `change` listener on
       // the thead so it survives re-renders (decorateSelectMode
       // strips + re-adds the cell on every refetch + mode toggle).
-      view.querySelector(".rp-mon-table thead")?.addEventListener("change", (e) => {
+      view.querySelector(".rt-table thead")?.addEventListener("change", (e) => {
         const cb = e.target.closest("input[data-sel-all]");
         if (!cb || !selectMode) return;
         const tbody = view.querySelector("#rp-home-list-tbody");

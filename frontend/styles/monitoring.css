@@ -47,27 +47,11 @@
   color: var(--rp-accent-2);
 }
 
-/* top-routes table — compact, readable, sortable visually */
-.rp-mon-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--rp-text-sm);
-  font-variant-numeric: tabular-nums;
-}
-.rp-mon-table th, .rp-mon-table td {
-  padding: 0.5rem 0.625rem;
-  text-align: left;
-  border-bottom: 1px solid var(--rp-border);
-}
-.rp-mon-table th {
-  color: var(--rp-text-dim);
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.6875rem;
-  letter-spacing: 0.05em;
-}
-.rp-mon-table td.is-num { text-align: right; }
-.rp-mon-table td .rp-mon-method {
+/* Monitoring tables now use the canonical `.rt-table` (table.css).
+   The previous `.rp-mon-table` rules collapsed into that base in
+   the 2026-05-25 alignment — see [[naming-consistency]]. The mono
+   method pill is page-content, not table chrome, so it stays here. */
+.rt-table td .rp-mon-method {
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 0.6875rem;
   padding: 1px 0.375rem;
@@ -75,7 +59,6 @@
   background: var(--rp-surface-2);
   color: var(--rp-text-dim);
 }
-.rp-mon-table tr:hover td { background: var(--rp-hover); }
 
 /* error-rate emphasis — colour by band, like cleanness on home */
 .rp-mon-err-low  { color: var(--rp-ok); }

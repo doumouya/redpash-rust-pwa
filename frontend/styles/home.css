@@ -15,11 +15,12 @@
    (Apache ECharts theme-builder, 2026-05-25 sketch).
 
    `overflow: hidden` (overrides .rp-shell-main's auto-scroll for
-   this page) so the panel below handles its own overflow + the
+   this page) so the table-wrap handles its own overflow + the
    chip-row / composite-strip / toolbar / pager stay anchored in
-   place. Pairs with the .rp-mon-panel flex rule below — the
-   panel grows to fill remaining height regardless of row count,
-   so the table surface is visually constant. */
+   place. The .rt-table-wrap base (table.css) already does flex: 1
+   + min-{width,height}: 0 + overflow: auto, so the panel grows to
+   fill remaining height regardless of row count — no Home-specific
+   override needed after the 2026-05-25 wrap rename. */
 #rpHomeMain {
   background: var(--rp-surface);
   border-top-left-radius: 0.875rem;
@@ -28,33 +29,18 @@
 
 /* Relay the flex column from #rpHomeMain down through the
    .rp-shell-view wrapper. Without this, the wrapper is a normal
-   block element + the .rp-mon-panel below can't flex: 1 against
+   block element + the .rt-table-wrap below can't flex: 1 against
    it. The chain becomes:
      #rpHomeMain (flex col, h = viewport - topbar)
        → #rpHomeView (flex col, flex: 1)
          → chip-row / composite-strip / toolbar (fixed-height)
-         → .rp-mon-panel (flex: 1) — fills the rest
+         → .rt-table-wrap (flex: 1) — fills the rest
          → .rp-list-pager (fixed-height) */
 #rpHomeView {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-}
-
-/* Panel fills remaining height of the column so a 5-row table
-   doesn't render as a short box with empty whitespace below —
-   the surface stretches to the bottom of the viewport (Em
-   2026-05-25: "the table should take the full remaining height,
-   whatever the actual number of datarows available is").
-   `min-height: 0` lets the flex item shrink below its content
-   size when needed; `overflow-y: auto` scrolls internally if
-   rows exceed the allocated space, keeping the chip-row +
-   composite-strip + toolbar + pager fixed in their positions. */
-#rpHomeView .rp-mon-panel {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 /* The shared .rt-toolbar (toolbar.css:5) carries a full-width
@@ -139,11 +125,10 @@
   height: 1rem;
   accent-color: var(--rp-accent-2);
 }
-/* Selected row tone — soft accent tint, no border so the list's
-   visual rhythm stays. Cells stay clickable for re-toggling. */
-.rp-mon-table tr.is-selected td {
-  background: var(--rp-accent-soft);
-}
+/* Selected-row tone is now inherited from the shared .rt-table rule
+   (table.css: `.rt-table tbody tr.is-selected { background: accent-soft }`)
+   after the 2026-05-25 wrap+table rename. The Home-specific override
+   that previously painted at the TD level was redundant — dropped. */
 /* The select toolbar button gets `.is-active` while select mode
    is on — visual confirmation that future row clicks toggle
    selection instead of navigating. */

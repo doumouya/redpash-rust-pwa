@@ -508,7 +508,7 @@ export function mountTools(panelBody, ctx) {
       + (activeSheet ? renderColumnsSheet(cols) : '')
       + (castConfirm ? renderCastConfirm() : '')
       + '<div class="rt-tool-columns-tablewrap">'
-      +   '<table class="rp-table rt-tool-columns-table">'
+      +   '<table class="rt-table rt-tool-columns-table">'
       +     '<thead><tr>'
       +       '<th class="is-check"><input type="checkbox" class="rt-chk rt-col-check-all"'
       +         (allSelected ? ' checked' : '') + ' /></th>'
