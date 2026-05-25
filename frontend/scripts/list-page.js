@@ -136,13 +136,15 @@ export function listPanel(columns, tbodyId) {
     // columns-picker dropdown (decorateColsPicker in home.js) can hide
     // matching TH + nth-child TDs by id rather than by index. String-
     // column callers (no key set) fall back to the label as the key.
+    // `draggable="true"` enables click-and-grab column reordering;
+    // handlers + persistence live in home.js renderListBody.
     if (typeof c === "string") {
-      return '<th data-col-key="' + esc(c) + '">' + esc(c) + '</th>';
+      return '<th draggable="true" data-col-key="' + esc(c) + '">' + esc(c) + '</th>';
     }
     const { label, key, sortable } = c;
     const ck = esc(key || label);
-    if (!sortable) return '<th data-col-key="' + ck + '">' + esc(label) + '</th>';
-    return '<th class="rp-list-sortable" data-col-key="' + ck + '" data-sort="' + ck + '">'
+    if (!sortable) return '<th draggable="true" data-col-key="' + ck + '">' + esc(label) + '</th>';
+    return '<th draggable="true" class="rp-list-sortable" data-col-key="' + ck + '" data-sort="' + ck + '">'
       + esc(label)
       + '<i class="bi bi-chevron-expand rp-list-sort-icon"></i>'
       + '</th>';

@@ -1424,6 +1424,105 @@ export default function home(app, { session: _session }) {
         applyHiddenColumns();
       });
 
+      // ── column reorder (click + drag) ─────────────────────────
+      // Persisted at localStorage `rp-cols-order-${tab.key}` as an
+      // array of col-keys in the user's preferred order. applyColumnOrder
+      // walks the saved order, reorders the THs in thead, then reorders
+      // each row's TDs to match. The .rp-list-sel checkbox column (when
+      // present) stays anchored as the first cell — only data-col-key
+      // cells reorder.
+      const colsOrderKey = "rp-cols-order-" + tab.key;
+      function readColOrder() {
+        try { return JSON.parse(localStorage.getItem(colsOrderKey)) || []; }
+        catch { return []; }
+      }
+      function applyColumnOrder() {
+        const table = view.querySelector(".rt-table");
+        if (!table) return;
+        const headRow = table.querySelector("thead tr");
+        if (!headRow) return;
+        const ths = [...headRow.querySelectorAll("th[data-col-key]")];
+        if (ths.length === 0) return;
+        const saved = readColOrder();
+        // Target sequence: items from saved that still exist in the
+        // current header, then any new THs not yet in the saved order
+        // (so adding a column to the spec doesn't lose its visibility).
+        const byKey = new Map(ths.map((th) => [th.dataset.colKey, th]));
+        const targetKeys = saved.filter((k) => byKey.has(k));
+        ths.forEach((th) => {
+          if (!targetKeys.includes(th.dataset.colKey)) targetKeys.push(th.dataset.colKey);
+        });
+        // No-op if already in target order.
+        const currentKeys = ths.map((th) => th.dataset.colKey);
+        if (targetKeys.every((k, i) => currentKeys[i] === k)) return;
+        // Record original positions so we can move TDs by the same delta.
+        const oldDataIndex = new Map(ths.map((th, i) => [th.dataset.colKey, i]));
+        // Reorder THs by appending in the new sequence (appendChild moves).
+        targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
+        // Reorder each body row's data cells (skip leading .rp-list-sel).
+        table.querySelectorAll("tbody tr").forEach((tr) => {
+          const selCell  = tr.querySelector(".rp-list-sel");
+          const dataCells = [...tr.children].filter((td) => !td.classList.contains("rp-list-sel"));
+          const reordered = targetKeys.map((k) => dataCells[oldDataIndex.get(k)]);
+          // Clear, then re-append in target order (preserving the
+          // leading select cell when present).
+          while (tr.firstChild) tr.removeChild(tr.firstChild);
+          if (selCell) tr.appendChild(selCell);
+          reordered.forEach((cell) => cell && tr.appendChild(cell));
+        });
+      }
+      view._applyColumnOrder = applyColumnOrder;
+
+      // Drag handlers — delegated on the thead so they survive refetches.
+      // No CSS framework dependency; standard HTML5 drag-and-drop.
+      const headEl = view.querySelector(".rt-table thead");
+      headEl?.addEventListener("dragstart", (e) => {
+        const th = e.target.closest("th[data-col-key]");
+        if (!th) return;
+        e.dataTransfer.setData("text/col-key", th.dataset.colKey);
+        e.dataTransfer.effectAllowed = "move";
+        th.classList.add("is-dragging");
+      });
+      headEl?.addEventListener("dragend", (e) => {
+        const th = e.target.closest("th[data-col-key]");
+        if (th) th.classList.remove("is-dragging");
+        // Strip any drop-indicator state.
+        headEl?.querySelectorAll("th.is-drop-target")
+          .forEach((el) => el.classList.remove("is-drop-target"));
+      });
+      headEl?.addEventListener("dragover", (e) => {
+        const th = e.target.closest("th[data-col-key]");
+        if (!th) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        headEl.querySelectorAll("th.is-drop-target")
+          .forEach((el) => { if (el !== th) el.classList.remove("is-drop-target"); });
+        th.classList.add("is-drop-target");
+      });
+      headEl?.addEventListener("drop", (e) => {
+        const tgt = e.target.closest("th[data-col-key]");
+        if (!tgt) return;
+        e.preventDefault();
+        const srcKey = e.dataTransfer.getData("text/col-key");
+        const tgtKey = tgt.dataset.colKey;
+        if (!srcKey || srcKey === tgtKey) return;
+        const ths = [...headEl.querySelectorAll("th[data-col-key]")];
+        const currentOrder = ths.map((th) => th.dataset.colKey);
+        const srcIdx = currentOrder.indexOf(srcKey);
+        const tgtIdx = currentOrder.indexOf(tgtKey);
+        if (srcIdx === -1 || tgtIdx === -1) return;
+        currentOrder.splice(srcIdx, 1);
+        currentOrder.splice(tgtIdx, 0, srcKey);
+        localStorage.setItem(colsOrderKey, JSON.stringify(currentOrder));
+        applyColumnOrder();
+        // Clear drop indicators
+        headEl.querySelectorAll("th.is-drop-target")
+          .forEach((el) => el.classList.remove("is-drop-target"));
+      });
+
+      // Initial apply — restore any saved order from a prior session.
+      applyColumnOrder();
+
       // ── export ─────────────────────────────────────────────────
       // CSV + JSON build client-side from `lastRows` (the most recent
       // fetchList page). Only visible columns are exported — hidden
@@ -1737,6 +1836,12 @@ export default function home(app, { session: _session }) {
       // Re-apply the hidden-columns set so new rows pick up the hide.
       if (typeof view._applyHiddenColumns === "function") {
         view._applyHiddenColumns();
+      }
+      // Re-apply the column-reorder saved order so new rows pick up
+      // the user's preferred column sequence (drag-reorder persists
+      // across refetches + tab switches).
+      if (typeof view._applyColumnOrder === "function") {
+        view._applyColumnOrder();
       }
       renderListPager();
     } catch (err) {

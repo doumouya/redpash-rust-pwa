@@ -97,6 +97,18 @@
 .rp-list-sortable.is-asc  .rp-list-sort-icon::before { content: "\F285"; }
 .rp-list-sortable.is-desc .rp-list-sort-icon::before { content: "\F282"; }
 
+/* Column reorder (click-and-grab) — every TH carries draggable="true"
+   so the user can pick up a header and drop it on another. The two
+   states below light up during the drag: `.is-dragging` on the source
+   (faded so the user sees it's being moved) and `.is-drop-target`
+   on the hovered-over TH (left-edge accent line as the drop hint).
+   Em 2026-05-25: "there's a feature in the live app that has been
+   lost here, reordering columns order". */
+.rt-table thead th[draggable="true"] { cursor: grab; }
+.rt-table thead th[draggable="true"]:active { cursor: grabbing; }
+.rt-table thead th.is-dragging { opacity: 0.45; }
+.rt-table thead th.is-drop-target { box-shadow: inset 0.1875rem 0 0 var(--rp-accent-2); }
+
 /* Clickable list rows — navigate via data-href on click. Used by
    /home's charts tab to land users in the Designer for a picked
    chart. Cursor + hover affordance to mark the row interactive. */
