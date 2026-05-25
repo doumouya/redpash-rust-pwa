@@ -10,7 +10,7 @@
 //!
 //! See docs/internal/roadmap-webassembly.md §5 Phase B.
 
-use crate::{clean, steps};
+use crate::{clean, dtype, parse, stats, steps};
 use polars::prelude::*;
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
@@ -150,6 +150,66 @@ pub fn auto_clean(rows_json: &str) -> Result<String, JsValue> {
     let summary_value = serde_json::to_value(&summary)
         .map_err(|e| JsValue::from_str(&format!("summary serialize: {e}")))?;
     Ok(json!({ "rows": rows_value, "summary": summary_value }).to_string())
+}
+
+/// Phase C — browser-side CSV parse + cleanness scoring.
+///
+/// Takes raw CSV bytes, sniffs encoding via chardetng, parses through
+/// polars `CsvReader`, runs the same `dtype::summarize` + `stats::
+/// cleanness_report` the server uses on `/api/demo/parse`. Returns a
+/// `DemoResult`-shaped JSON object — the wire shape matches the
+/// existing demo endpoint so the frontend can swap server-side parse
+/// for in-browser parse without changing its data path.
+///
+/// Phase C deliverables (per roadmap §5):
+///   1. Does it compile? — adding this wrapper answers that.
+///   2. Size delta? — measured before/after `tools/build-wasm.sh`.
+///   3. Parse-time delta vs server round-trip? — measured by the
+///      bench harness in `tools/wasm-bench/` against the 3-shape
+///      corpus (small / 10k × 20 / 431k × 5).
+///
+/// Timing is the caller's concern — `performance.now()` in JS brackets
+/// the call. We don't take a `std::time::Instant` here since wasm32's
+/// `Instant` has been historically flaky (depends on the runtime's
+/// monotonic clock); JS-side measurement is canonical.
+#[wasm_bindgen]
+pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
+    let (df, encoding) = parse::from_csv_bytes(bytes, None)
+        .map_err(|e| JsValue::from_str(&format!("parse: {e}")))?;
+    let cols = dtype::summarize(&df)
+        .map_err(|e| JsValue::from_str(&format!("summarize: {e}")))?;
+    let score = stats::cleanness_report(&df, &cols, &[])
+        .map(|r| r.score as f64)
+        .unwrap_or(0.0);
+
+    // Type drift — string columns that semantically are numbers / dates
+    // / bools. Same yardstick the demo endpoint uses.
+    let type_mismatches = cols
+        .iter()
+        .filter(|c| {
+            c.dtype == "string"
+                && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool")
+        })
+        .count();
+
+    // Empty-cell fraction across the whole grid.
+    let total_cells = df.width() * df.height();
+    let empty_cells: usize = df.get_columns().iter().map(|s| s.null_count()).sum();
+    let empty_pct = if total_cells > 0 {
+        empty_cells as f64 / total_cells as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(json!({
+        "rows":            df.height(),
+        "columns":         df.width(),
+        "score":           score,
+        "type_mismatches": type_mismatches,
+        "empty_pct":       empty_pct,
+        "encoding":        encoding,
+    })
+    .to_string())
 }
 
 /// Generic step preview — dispatch any `steps::apply` kind. The full
