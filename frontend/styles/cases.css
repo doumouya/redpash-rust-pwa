@@ -25,8 +25,8 @@
    variant used for individual case rows. */
 .rp-cases-rail-new,
 .rp-cases-rail-collapse {
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -42,18 +42,18 @@
 }
 .rp-cases-rail-filter {
   flex-shrink: 0;
-  padding: 4px 10px 8px;
+  padding: 0.25rem 0.625rem 0.5rem;
 }
 .rp-cases-rail-search {
   width: 100%;
-  height: 30px;
-  padding: 0 10px;
+  height: 1.875rem;
+  padding: 0 0.625rem;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 7px;
+  border-radius: 0.4375rem;
   color: var(--rp-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   outline: 0;
 }
 .rp-cases-rail-search:focus { border-color: var(--rp-accent-2); }
@@ -62,24 +62,24 @@
    indent. Uses the .rt-tab atom but reset the left-padding that
    the workspace's nested-under-group items use. */
 .rp-cases-rail-board {
-  padding: 0 8px;
-  margin: 4px 0 8px;
+  padding: 0 0.5rem;
+  margin: 0.25rem 0 0.5rem;
 }
-.rp-cases-rail-board .rt-tab-icon { font-size: 13px; }
+.rp-cases-rail-board .rt-tab-icon { font-size: 0.8125rem; }
 
 /* Case row in the rail — priority dot replaces the workspace's
    per-file dirty/clean dot. Reset the left-padding so the dot
    aligns with the group mark above. */
-.rp-cases-rail-item { padding: 0 8px; }
+.rp-cases-rail-item { padding: 0 0.5rem; }
 .rp-cases-rail-item .rp-cases-priority-dot {
-  width: 7px;
-  height: 7px;
+  width: 0.4375rem;
+  height: 0.4375rem;
   flex-shrink: 0;
 }
 .rp-cases-rail-empty {
   margin: 0;
-  padding: 6px 8px 8px 32px;
-  font-size: 11px;
+  padding: 0.375rem 0.5rem 0.5rem 2rem;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
 }
 
@@ -90,31 +90,31 @@
    Persists via the `casesDoneWindow` pref (prefs.js) so the choice
    survives reload and syncs per-user. */
 .rp-cases-done-window {
-  margin: 4px 0 8px;
-  padding: 4px 4px 6px;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.25rem 0.25rem 0.375rem;
   border-bottom: 1px dashed var(--rp-border);
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
 }
 .rp-cases-done-window .rp-chip-row-label {
-  font-size: 9.5px;
-  margin-right: 2px;
+  font-size: 0.5938rem;
+  margin-right: 0.125rem;
 }
 .rp-cases-done-chip {
-  height: 22px;
-  padding: 0 8px;
-  font-size: 11px;
+  height: 1.375rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
 }
 /* Rail-context chip-row sits inside .rt-group-body, which has a
    tighter inset than the kanban column body — pull padding in so
    the chips read as part of the rail's column rhythm. */
 .rt-group-body > .rp-cases-done-window {
-  padding-left: 28px;       /* aligns with .rt-tab's text inset */
-  padding-right: 8px;
+  padding-left: 1.75rem;       /* aligns with .rt-tab's text inset */
+  padding-right: 0.5rem;
 }
 
 /* compact rail — hide the search + collapse the head's gap.
-   The rail itself collapses to 60px via .rt-nav.compact (rail.css);
+   The rail itself collapses to 3.75rem via .rt-nav.compact (rail.css);
    these page-specific overrides keep the cases extras hidden so
    the icon-only view stays clean. */
 .rt-nav.compact .rp-cases-rail-filter,
@@ -129,7 +129,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 14px 16px;
+  padding: 0.875rem 1rem;
 }
 /* Explicit [hidden] override — the `display: flex` above wins over
    the UA stylesheet's `[hidden] { display: none }`, so without
@@ -145,7 +145,7 @@
   flex: 1;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 0.75rem;
   min-height: 0;
   overflow: hidden;
 }
@@ -156,7 +156,7 @@
   min-height: 0;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   overflow: hidden;
 }
 /* Per-status accent stripe across the top edge of each column —
@@ -167,7 +167,7 @@
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 3px;
+  height: 0.1875rem;
   background: var(--rp-text-mute);
 }
 .rp-cases-col[data-status="backlog"]::before     { background: var(--rp-text-mute); }
@@ -179,36 +179,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px;
+  padding: 0.5625rem 0.75rem;
   background: var(--rp-surface);
   border-bottom: 1px solid var(--rp-border);
 }
 .rp-cases-col-name {
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--rp-text);
 }
 .rp-cases-col-count {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
 .rp-cases-col-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.375rem;
 }
 .rp-cases-col-empty {
   margin: 0;
-  padding: 16px 8px;
+  padding: 1rem 0.5rem;
   text-align: center;
   color: var(--rp-text-mute);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
 }
 
 /* ── card ─────────────────────────────────────────────────────── */
@@ -220,8 +220,8 @@
   display: block;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-radius: 0.5rem;
+  padding: 0.5625rem 0.625rem;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -229,41 +229,41 @@
 }
 .rp-cases-card:hover {
   border-color: var(--rp-accent-2);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.18);
 }
 .rp-cases-card:focus-visible {
-  outline: 2px solid var(--rp-accent-2);
+  outline: 0.125rem solid var(--rp-accent-2);
   outline-offset: 1px;
 }
 .rp-cases-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 5px;
+  gap: 0.375rem;
+  margin-bottom: 0.3125rem;
 }
 .rp-cases-card-rid {
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--rp-text-mute);
   background: var(--rp-bg);
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 0.375rem;
+  border-radius: 0.25rem;
   letter-spacing: 0.02em;
 }
 .rp-cases-priority-dot {
-  width: 9px;
-  height: 9px;
+  width: 0.5625rem;
+  height: 0.5625rem;
   border-radius: 50%;
   background: var(--rp-text-mute);
 }
 .rp-cases-priority-dot.is-low      { background: var(--rp-ok); }
 .rp-cases-priority-dot.is-medium   { background: var(--rp-accent-2); }
 .rp-cases-priority-dot.is-high     { background: var(--rp-warn); }
-.rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rp-accent) 25%, transparent); }
+.rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
 .rp-cases-card-title {
-  margin: 0 0 6px;
-  font-size: 12.5px;
+  margin: 0 0 0.375rem;
+  font-size: 0.7812rem;
   font-weight: 500;
   line-height: 1.35;
   color: var(--rp-text);
@@ -272,8 +272,8 @@
 .rp-cases-card-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
+  gap: 0.375rem;
+  font-size: 0.6562rem;
   color: var(--rp-text-mute);
 }
 .rp-cases-card-assignee {
@@ -289,9 +289,9 @@
   background: transparent;
   border: 0;
   color: var(--rp-text-mute);
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 0.3125rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -317,7 +317,7 @@
 .rp-cases-detail {
   position: absolute;
   top: 0; right: 0; bottom: 0;
-  width: min(720px, 70vw);
+  width: min(45rem, 70vw);
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -325,7 +325,7 @@
   padding: 0;
   background: var(--rp-bg);
   border-left: 1px solid var(--rp-border);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.32);
+  box-shadow: -0.625rem 0 1.875rem rgba(0, 0, 0, 0.32);
   overflow: hidden;
 }
 .rp-cases-detail[hidden] { display: none; }
@@ -338,14 +338,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
   border-bottom: 1px solid var(--rp-border);
   background: var(--rp-surface-2);
 }
 .rp-cases-detail-rid {
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
 }
 /* Close X — anchors to /cases (no ?id=) so the router clears
@@ -355,9 +355,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
   color: var(--rp-text-mute);
   text-decoration: none;
 }
@@ -369,14 +369,14 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 18px 16px;
+  padding: 0.875rem 1.125rem 1rem;
 }
 .rp-cases-detail-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   color: var(--rp-text);
   word-break: break-word;
@@ -388,38 +388,38 @@
 .rp-cases-detail-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 0.375rem 0.625rem;
   align-items: center;
 }
 .rp-cases-control {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
 }
 .rp-cases-control-lbl {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--rp-text-mute);
 }
 .rp-cases-control-select {
-  height: 28px;
-  padding: 0 26px 0 10px;          /* extra right pad for the native chevron */
+  height: 1.75rem;
+  padding: 0 1.625rem 0 0.625rem;          /* extra right pad for the native chevron */
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 14px;             /* pill — reads as a chip */
+  border-radius: 0.875rem;             /* pill — reads as a chip */
   color: var(--rp-text);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
   outline: 0;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--rp-text-mute) 50%),
                     linear-gradient(135deg, var(--rp-text-mute) 50%, transparent 50%);
-  background-position: right 11px center, right 7px center;
-  background-size: 4px 4px;
+  background-position: right 0.6875rem center, right 0.4375rem center;
+  background-size: 0.25rem 0.25rem;
   background-repeat: no-repeat;
 }
 .rp-cases-control-select:focus,
@@ -438,17 +438,17 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
-  font-size: 11.5px;
+  gap: 0.25rem 0.375rem;
+  font-size: 0.7188rem;
   color: var(--rp-text-mute);
 }
 .rp-cases-detail-info-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3125rem;
 }
 .rp-cases-detail-info-lbl {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -464,19 +464,19 @@
 
 .rp-cases-detail-meta-strip {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   flex-wrap: wrap;
 }
 .rp-cases-detail-description {
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
 }
 .rp-cases-detail-description pre {
   margin: 0;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.5;
   color: var(--rp-text);
   white-space: pre-wrap;
@@ -486,18 +486,18 @@
 /* tabs — reuse panel.css's .rt-panel-tabs; scope inside detail */
 .rp-cases-detail-tabs {
   display: flex;
-  gap: 2px;
+  gap: 0.125rem;
   border-bottom: 1px solid var(--rp-border);
 }
 .rp-cases-detail-tabs button {
   background: transparent;
   border: 0;
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   color: var(--rp-text-mute);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   font-weight: 600;
-  border-bottom: 2px solid transparent;
+  border-bottom: 0.125rem solid transparent;
   cursor: pointer;
 }
 .rp-cases-detail-tabs button:hover { color: var(--rp-text); }
@@ -519,14 +519,14 @@
 .rp-cases-comments-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 4px 2px;
+  gap: 0.625rem;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.125rem;
 }
 .rp-cases-comment {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 0.5rem;
   max-width: 100%;
 }
 .rp-cases-comment--own {
@@ -535,24 +535,24 @@
 .rp-cases-comment-bubble {
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 12px;
-  border-bottom-left-radius: 4px;        /* "tail" hint pointing at the avatar */
-  padding: 7px 11px;
+  border-radius: 0.75rem;
+  border-bottom-left-radius: 0.25rem;        /* "tail" hint pointing at the avatar */
+  padding: 0.4375rem 0.6875rem;
   max-width: 78%;
   min-width: 0;
 }
 .rp-cases-comment--own .rp-cases-comment-bubble {
   background: var(--rp-accent-soft);
   border-color: color-mix(in srgb, var(--rp-accent-2) 28%, transparent);
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 4px;
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.25rem;
 }
 .rp-cases-comment-head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 3px;
-  font-size: 10.5px;
+  gap: 0.5rem;
+  margin-bottom: 0.1875rem;
+  font-size: 0.6562rem;
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
@@ -562,13 +562,13 @@
 .rp-cases-comment-author {
   color: var(--rp-text);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .rp-cases-comment-edited { font-style: italic; }
 .rp-cases-comment-body pre {
   margin: 0;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.45;
   color: var(--rp-text);
   white-space: pre-wrap;
@@ -580,10 +580,10 @@
 .rp-cases-comment-day {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 6px 0 2px;
+  gap: 0.5rem;
+  margin: 0.375rem 0 0.125rem;
   color: var(--rp-text-mute);
-  font-size: 10.5px;
+  font-size: 0.6562rem;
 }
 .rp-cases-comment-day::before,
 .rp-cases-comment-day::after {
@@ -593,7 +593,7 @@
   background: var(--rp-border);
 }
 .rp-cases-comment-day span {
-  padding: 0 4px;
+  padding: 0 0.25rem;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-weight: 600;
@@ -606,13 +606,13 @@
 .rp-cases-comment-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
 }
 .rp-cases-comment-form-meta {
-  font-size: 10.5px;
+  font-size: 0.6562rem;
   color: var(--rp-text-mute);
-  padding-left: 2px;
+  padding-left: 0.125rem;
 }
 .rp-cases-comment-form-meta span {
   color: var(--rp-text);
@@ -626,26 +626,26 @@
 .rp-cases-comment-input {
   flex: 1;
   width: 100%;
-  padding: 12px 52px 12px 14px;          /* right pad clears the send button */
+  padding: 0.75rem 3.25rem 0.75rem 0.875rem;          /* right pad clears the send button */
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 8px;                    /* squared off — reads as a body composer, not a chat reply */
+  border-radius: 0.5rem;                    /* squared off — reads as a body composer, not a chat reply */
   color: var(--rp-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   resize: none;                          /* no drag handle — height is fixed at min-height */
   outline: 0;
-  min-height: 260px;                     /* ~12 lines — angry customers need room to vent without scrolling */
+  min-height: 16.25rem;                     /* ~12 lines — angry customers need room to vent without scrolling */
 }
 .rp-cases-comment-input:focus { border-color: var(--rp-accent-2); }
 .rp-cases-comment-form-send {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;                    /* matches the textarea's corner radius */
+  right: 0.5rem;
+  bottom: 0.5rem;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 0.5rem;                    /* matches the textarea's corner radius */
   border: 0;
   background: var(--rp-accent-2);
   color: var(--rp-bg);
@@ -657,14 +657,14 @@
 .rp-cases-comment-form-send:hover {
   background: color-mix(in srgb, var(--rp-accent-2) 88%, white);
 }
-.rp-cases-comment-form-send i { font-size: 14px; }
+.rp-cases-comment-form-send i { font-size: 0.875rem; }
 
 /* Small avatar variant — used inside comment bubbles. The default
-   24px is for the side-panel reporter/assignee badge. */
+   1.5rem is for the side-panel reporter/assignee badge. */
 .rp-cases-user-avatar--sm {
-  width: 22px;
-  height: 22px;
-  font-size: 9px;
+  width: 1.375rem;
+  height: 1.375rem;
+  font-size: 0.5625rem;
   flex-shrink: 0;
 }
 
@@ -672,33 +672,33 @@
 .rp-cases-activity-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 .rp-cases-activity-item {
   display: grid;
-  grid-template-columns: 140px 120px 1fr;
-  gap: 10px;
+  grid-template-columns: 8.75rem 7.5rem 1fr;
+  gap: 0.625rem;
   align-items: baseline;
-  padding: 6px 10px;
+  padding: 0.375rem 0.625rem;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
 }
 .rp-cases-activity-time {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   color: var(--rp-text-mute);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .rp-cases-activity-kind {
-  font-size: 10.5px;
+  font-size: 0.6562rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--rp-accent-2);
   background: color-mix(in srgb, var(--rp-accent-2) 12%, transparent);
-  padding: 2px 7px;
-  border-radius: 99px;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 6.1875rem;
   display: inline-block;
   justify-self: start;
 }
@@ -711,9 +711,9 @@
 .rp-cases-chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 99px;
-  font-size: 11px;
+  padding: 0.125rem 0.5rem;
+  border-radius: 6.1875rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -739,15 +739,15 @@
 .rp-cases-side-edit {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 0.5rem;
+  height: 1.75rem;
+  padding: 0 0.625rem;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 14px;
+  border-radius: 0.875rem;
   color: var(--rp-text);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
   text-align: left;
   cursor: pointer;
 }
@@ -755,14 +755,14 @@
   border-color: var(--rp-accent-2);
 }
 .rp-cases-side-edit-value {
-  max-width: 160px;
+  max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rp-cases-side-edit-icon {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
 }
 .rp-cases-side-edit:hover .rp-cases-side-edit-icon {
@@ -770,23 +770,23 @@
 }
 .rp-cases-side-picker {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 0.375rem);
   left: 0;
   z-index: 25;
-  width: 280px;
+  width: 17.5rem;
 }
 .rp-cases-side-picker[hidden] { display: none; }
 
 /* ── shared empty states ──────────────────────────────────────── */
 .rp-cases-empty {
   margin: 0;
-  padding: 16px;
+  padding: 1rem;
   text-align: center;
   color: var(--rp-text-mute);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .rp-cases-empty--inline {
-  padding: 4px 0;
+  padding: 0.25rem 0;
   text-align: left;
 }
 
@@ -800,10 +800,10 @@
   justify-content: flex-end;
 }
 .rp-cases-advance-btn {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   font-weight: 600;
-  padding: 0 14px;
-  height: 32px;
+  padding: 0 0.875rem;
+  height: 2rem;
 }
 .rp-cases-advance-btn[disabled] {
   opacity: 0.5;
@@ -820,18 +820,18 @@
 .rp-cases-user-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   min-width: 0;
 }
 .rp-cases-user-avatar {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   color: var(--rp-bg);
   letter-spacing: 0.02em;
@@ -847,11 +847,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   color: var(--rp-text);
 }
 .rp-cases-side-unassigned {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--rp-text-mute);
   font-style: italic;
 }
@@ -866,14 +866,14 @@
    Above the activity feed inside the Activity tab. Caps the
    firehose by case_* kind group. Default "All". */
 .rp-cases-activity-filter {
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
 }
 .rp-cases-activity-filter .rp-chip {
-  height: 24px;
-  padding: 0 10px;
-  font-size: 11.5px;
+  height: 1.5rem;
+  padding: 0 0.625rem;
+  font-size: 0.7188rem;
 }
 
 /* ── create-case modal ───────────────────────────────────────────
@@ -895,32 +895,32 @@
   position: absolute;
   inset: 0;
   background: rgba(17, 17, 27, 0.55);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(0.125rem);
 }
 .rp-cases-modal-body {
   position: relative;
-  width: min(560px, 92vw);
+  width: min(35rem, 92vw);
   max-height: 86vh;
   display: flex;
   flex-direction: column;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 10px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  border-radius: 0.625rem;
+  box-shadow: 0 1.5rem 3.75rem rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 .rp-cases-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--rp-border);
   background: var(--rp-surface-2);
 }
 .rp-cases-modal-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--rp-text);
 }
@@ -928,9 +928,9 @@
   background: transparent;
   border: 0;
   color: var(--rp-text-mute);
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -941,19 +941,19 @@
   color: var(--rp-text);
 }
 .rp-cases-modal-content {
-  padding: 14px 16px 18px;
+  padding: 0.875rem 1rem 1.125rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0.875rem;
 }
 .rp-cases-modal-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 0.3125rem;
 }
 .rp-cases-modal-label {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -962,13 +962,13 @@
 .rp-cases-modal-input,
 .rp-cases-modal-textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 7px;
+  border-radius: 0.4375rem;
   color: var(--rp-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   outline: 0;
   resize: vertical;
 }
@@ -977,45 +977,45 @@
   border-color: var(--rp-accent-2);
 }
 .rp-cases-modal-textarea {
-  min-height: 96px;
+  min-height: 6rem;
   font-family: inherit;
   line-height: 1.5;
 }
 .rp-cases-modal-hint {
   margin: 0;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-text-mute);
 }
 .rp-cases-modal-attachments-pending {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
   border: 1px dashed var(--rp-border);
-  border-radius: 7px;
+  border-radius: 0.4375rem;
   background: var(--rp-surface-2);
   color: var(--rp-text-mute);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   line-height: 1.45;
 }
 .rp-cases-modal-attachments-pending i {
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--rp-accent-2);
   margin-top: 1px;
 }
 .rp-cases-modal-attachments-pending code {
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--rp-accent-2);
   background: var(--rp-bg);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: 1px 0.3125rem;
+  border-radius: 0.25rem;
 }
 .rp-cases-modal-foot {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
   border-top: 1px solid var(--rp-border);
   background: var(--rp-surface-2);
 }
