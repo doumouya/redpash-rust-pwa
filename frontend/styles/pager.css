@@ -1,17 +1,28 @@
 /* ── pager (rt-pager) ────────────────────────────────────────────
-   The redtable footer: a rows readout on the left, page buttons on
-   the right. */
-
+   The redtable footer. Two shapes share one class:
+   - Workspace: rows-info on the left + page buttons on the right.
+   - Home / Monitoring: page buttons only (no rows-info — the KPI
+     strip above the table already shows total / shown / page).
+   Layout uses `justify-content: flex-end` as the default so the
+   single-child shape (pages only) anchors right, and `.rt-rows-info`
+   carries `margin-right: auto` so when present it pushes itself to
+   the left edge — both layouts render correctly without a modifier
+   class. Unified per [[naming-consistency]] (2026-05-25 alignment;
+   sibling of the .rt-table-wrap / .rt-table rename). */
 .rt-pager {
   flex-shrink: 0;
   height: 2.875rem;
   padding: 0 0.75rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   border-top: 1px solid var(--rp-border);
 }
-.rt-rows-info { font-size: 0.7812rem; color: var(--rp-text-dim); }
+.rt-rows-info {
+  margin-right: auto;
+  font-size: 0.7812rem;
+  color: var(--rp-text-dim);
+}
 
 .rt-pages { display: flex; align-items: center; gap: 0.125rem; }
 .rt-pg {

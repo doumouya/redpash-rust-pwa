@@ -35,7 +35,7 @@
        → #rpHomeView (flex col, flex: 1)
          → chip-row / composite-strip / toolbar (fixed-height)
          → .rt-table-wrap (flex: 1) — fills the rest
-         → .rp-list-pager (fixed-height) */
+         → .rt-pager (fixed-height) */
 #rpHomeView {
   display: flex;
   flex-direction: column;

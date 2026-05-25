@@ -65,14 +65,9 @@
 .rp-chip:hover { color: var(--rp-text); }
 .rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
 
-/* shared pager wrapper — right-aligned, used by /home + /monitoring
-   list-view bodies. The pager widget itself (.rt-pages, .rt-pg) lives
-   in pager.css; this just positions it. */
-.rp-list-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--rp-sp-3);
-}
+/* /home + /monitoring list-view pagers now use the canonical .rt-pager
+   (pager.css) — same class as Workspace. Per [[naming-consistency]]
+   2026-05-25 alignment; the previous .rp-list-pager rule was retired. */
 
 /* Toolbar above a list — emits from list-page.js's listToolbarHTML.
    Reuses workspace's .rt-toolbar atoms (button + search input +

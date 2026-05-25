@@ -692,7 +692,7 @@ export default function monitoring(app, { session }) {
         ])
       + chartsStripHTML(viewSpec.charts || [])
       + listPanel(viewSpec.columns)
-      + '<div class="rp-list-pager" id="rp-mon-list-pager"></div>';
+      + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
     if (viewSpec.charts && viewSpec.charts.length) {
       charts.mount(viewSpec).catch((err) =>
@@ -1244,7 +1244,7 @@ export default function monitoring(app, { session }) {
       +   '</tr></thead>'
       +   '<tbody id="rp-mon-raw-tbody"></tbody>'
       + '</table>'
-      + '<div class="rp-list-pager" id="rp-mon-raw-pager"></div>'
+      + '<div class="rt-pager" id="rp-mon-raw-pager"></div>'
       + '</section>';
   }
   // M-3 — panic pane on the Requests landing. The wrapper has hidden=true

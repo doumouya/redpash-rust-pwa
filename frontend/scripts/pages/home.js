@@ -729,7 +729,7 @@ export default function home(app, { session: _session }) {
           : kpiStripHTML(kpiTiles) + chartsStripHTML(extraCharts))
       + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
-      + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
+      + '<div class="rt-pager" id="rp-home-list-pager"></div>';
 
     // Tear down any charts from a prior tab + mount this tab's
     // (if it declares any) against the /stats endpoint. Each tab's
