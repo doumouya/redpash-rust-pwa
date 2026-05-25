@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-22
+last modified date: 2026-05-25
 ---
 
 # RedPash REDMAP
@@ -299,6 +299,16 @@ redpash-app/
 | **Persisted prefs** | `prefs.accent` (color override), `prefs.density` (`comfortable` \| `compact`) |
 | **Boot apply** | `main.js::loadSession` sets `--rp-accent` from `prefs.accent` so the override survives reloads |
 
+### `#/cases` and `#/cases?id=CAS_…` — issue tracker (kanban + detail overlay)
+| Asset | Location |
+|---|---|
+| **Partial** | `partials/cases.html` — rail-page shell; main column hosts a kanban board grouped by status (`backlog`/`todo`/`in_progress`/`in_review`/`done`); a detail panel (`.rp-cases-detail`) slides over from the right when `?id=CAS_…` is present |
+| **Detail panel** | head bar (rid · hero title · ✕) over a two-column body: left = comments thread + sticky compose form; right = 14rem sidebar with editable controls (status / priority / type / assignee), meta dl, collapsible `<details>` Description + Activity. `@media (max-width: 40rem)` falls back to single-column. Restructure shipped 2026-05-25 (`4fbafe4`). |
+| **CSS** | `styles/cases.css` — kanban + rail + detail panel atoms (`.rp-cases-detail-main`, `.rp-cases-detail-side`, `.rp-cases-detail-side-meta`, `.rp-cases-detail-side-section`, `.rp-cases-detail-side-desc-body`) + sidebar-scoped activity-item compaction |
+| **JS** | `scripts/pages/cases.js` — board paint, `loadCaseDetail` / `paintDetail`, assignee picker, comment compose + submit, activity render + filter pills (`ACTIVITY_PILLS` single-source) |
+| **Endpoints** | `GET /api/cases` · `GET /api/cases/:rid` (case + comments + activity) · `POST /api/cases` · `PATCH /api/cases/:rid` (sparse status/priority/type/assignee) · `POST /api/cases/:rid/comments` · `GET /api/admin/users?q=…` (assignee picker) |
+| **Docs** | [`internal/subsystems/cases.md`](internal/subsystems/cases.md) (detail-panel structure) · [`internal/cases/agent-cookbook.md`](internal/cases/agent-cookbook.md) (HTTP API recipes) |
+
 ### `#/docs` and `#/docs/<slug>` — public docs viewer
 | Asset | Location |
 |---|---|
@@ -408,6 +418,15 @@ redpash-app/
 | POST | `/api/events` | frontend-reported event — `origin=frontend`, `user`/`session` stamped server-side |
 | POST | `/api/auth/dev-login` | mint a session for any user RID — gated by `REDPASH_DEV_LOGIN=1`, otherwise 403 |
 | GET | `/api/docs`, `/api/docs/:slug` | rendered markdown |
+| GET | `/api/cases` | session user's cases (paginated `Page<CaseSummary>`) |
+| POST | `/api/cases` | create — body `{ title, description?, type?, priority?, project_id? }` |
+| GET | `/api/cases/:rid` | full case + comments thread + activity feed in one payload |
+| PATCH | `/api/cases/:rid` | sparse: `status` / `priority` / `type` / `assignee_id` / `title` / `description`. Status changes emit `case_status_change` events; assignee changes emit `case_assignee_change`. |
+| DELETE | `/api/cases/:rid` | cascades `comments` (ON DELETE CASCADE per mig 014) |
+| GET·POST | `/api/cases/:rid/comments` | list / append. Body shape is Markdown (`comments.body` annotated as such in mig 014); render layer pending — see [`internal/subsystems/cases.md`](internal/subsystems/cases.md) open lanes |
+| GET | `/api/charts` | session user's chart-typed files (`project_files.file_type = 'chart'`) |
+| POST | `/api/charts` | create a chart-typed File row; body `{ project_id, source_file_id, spec: { option, svg } }` |
+| GET·PUT·DELETE | `/api/charts/:rid` | read / update spec / delete. `file_stages` derives `report` stage when ≥1 chart exists in the project |
 
 ---
 
