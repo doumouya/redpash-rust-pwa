@@ -220,3 +220,31 @@
   height: 11.25rem;
   min-height: 11.25rem;
 }
+
+/* Composite KPI / charts row — opt-in via `spec.compositeStrip` in
+   home.js. Used on the Users tab today (Em 2026-05-25). Layout:
+     [chart1 20%]  [4 KPI tiles, 2-col × 2-row]  [chart2 20%]
+   Tile width per Em's spec: 15% of full row each → the middle
+   column is 30% wide (2 tiles per row × 15%). 20 + 30 + 20 = 70%
+   declared; `justify-content: space-between` distributes the
+   remaining 30% as inter-column gaps so the row feels balanced
+   instead of left-clumped. */
+.rp-home-composite {
+  display: grid;
+  grid-template-columns: 20% 30% 20%;
+  justify-content: space-between;
+  margin-bottom: var(--rp-sp-6);
+}
+.rp-home-composite__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--rp-sp-2);
+}
+/* Empty chart slot (when the spec has <2 charts) — reserves
+   layout space so the grid doesn't reflow + the present chart
+   stays anchored at its 20% column. */
+.rp-home-chart-card--empty {
+  background: transparent;
+  border: 0;
+}

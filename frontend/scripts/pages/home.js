@@ -84,6 +84,12 @@ export default function home(app, { session: _session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      // Composite layout for this tab — KPI tiles flanked by the two
+      // charts in a single row. Per Em's 2026-05-25 spec (Users tab
+      // only): [chart1 20%] [stats 2×2, 15% each] [chart2 20%].
+      // Other tabs keep the default kpi-strip-then-charts-strip
+      // stacked shape.
+      compositeStrip: true,
       // Visual placeholder — `?window=` isn't wired on /admin/users yet
       // (backend TODO). The chip submits the query param but the
       // backend ignores it today; flipping the active chip is a no-op
@@ -491,6 +497,38 @@ export default function home(app, { session: _session }) {
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
+  // Composite KPI / charts row — replaces the default kpiStrip +
+  // chartsStrip stack when `spec.compositeStrip === true`. Layout
+  // per Em's Users-tab spec (2026-05-25):
+  //
+  //   [ chart1 20% ] [ 4 KPI tiles in 2×2, each 15% ] [ chart2 20% ]
+  //
+  // The middle column houses the 4 standard list KPIs (Total / On
+  // page / Page / Last fetch) in a 2-col × 2-row sub-grid. Falls
+  // back gracefully if the spec has fewer than 2 charts — the
+  // empty chart-card slot still reserves layout space so the row
+  // doesn't reflow. Class names sit in list-page.css's home block
+  // (see `.rp-home-composite*`).
+  function compositeStripHTML(tiles, charts) {
+    const chartCard = (c) => c
+      ? '<div class="rp-home-chart-card">'
+      +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
+      +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+      + '</div>'
+      : '<div class="rp-home-chart-card rp-home-chart-card--empty"></div>';
+    const statsCells = tiles.map((t) =>
+      '<div class="rp-kpi">'
+      + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
+      + '<span class="rp-kpi-value" id="' + esc(t.id) + '">—</span>'
+      + '</div>'
+    ).join("");
+    return '<div class="rp-home-composite">'
+      +   chartCard(charts[0])
+      +   '<div class="rp-home-composite__stats">' + statsCells + '</div>'
+      +   chartCard(charts[1])
+      + '</div>';
+  }
+
   function renderListBody(tab, spec) {
     listPage   = 1;
     listSearch = "";
@@ -501,16 +539,19 @@ export default function home(app, { session: _session }) {
     const chipState = {};
     (spec.chipRows || []).forEach((cr) => { chipState[cr.name] = cr.default; });
 
+    const kpiTiles = [
+      { label: "Total",      id: "rp-home-list-total" },
+      { label: "On page",    id: "rp-home-list-shown" },
+      { label: "Page",       id: "rp-home-list-page" },
+      { label: "Last fetch", id: "rp-home-list-ms"   },
+    ];
+
     view.innerHTML = ''
       + headHTML(spec.title, "")
       + (spec.chipRows || []).map((cr) => chipRowHTML(cr, chipState[cr.name])).join("")
-      + kpiStripHTML([
-          { label: "Total",      id: "rp-home-list-total" },
-          { label: "On page",    id: "rp-home-list-shown" },
-          { label: "Page",       id: "rp-home-list-page" },
-          { label: "Last fetch", id: "rp-home-list-ms"   },
-        ])
-      + chartsStripHTML(spec.charts || [])
+      + (spec.compositeStrip
+          ? compositeStripHTML(kpiTiles, spec.charts || [])
+          : kpiStripHTML(kpiTiles) + chartsStripHTML(spec.charts || []))
       + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
       + '<div class="rp-list-pager" id="rp-home-list-pager"></div>';
