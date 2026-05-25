@@ -23,15 +23,6 @@ import {
   createListCharts,
 } from "/scripts/list-page.js";
 
-// Stage labels mirror backend's file_stages view (migration 022,
-// 2026-06-05). Renamed from `import|report` to `new|design`:
-//   new    — file just arrived (no presumption that data is raw —
-//            an already-clean upload sits here too until it goes to design).
-//   clean  — at least one cleaning step has been applied.
-//   design — file is the source of ≥1 chart (the design surface).
-//   publish — a chart from this file lives in a public dashboard.
-const STAGES = ["new", "clean", "design", "publish"];
-
 // Declarative tab definitions — also drives the rail render. The
 // `perm` field is non-load-bearing today (everyone is admin in
 // pre-prod / solo-dev); kept so the RBAC switch later is filter,
@@ -94,6 +85,20 @@ export default function home(app, { session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      // Visual placeholder — `?window=` isn't wired on /admin/users yet
+      // (backend TODO). The chip submits the query param but the
+      // backend ignores it today; flipping the active chip is a no-op
+      // until that lands. Keeps the unified 6-section stack visible.
+      chipRows: [{
+        name: "window",
+        label: "Activity",
+        options: [
+          { label: "All time", value: "all" },
+          { label: "Last 7d",  value: "7d"  },
+          { label: "Last 30d", value: "30d" },
+        ],
+        default: "all",
+      }],
       charts: [
         { id: "rp-home-users-plan",   title: "By plan",       kind: "donut",
           data: (s) => s.by_plan },
@@ -126,6 +131,18 @@ export default function home(app, { session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      // Visual placeholder — `?view=` isn't wired on /admin/companies
+      // yet (backend TODO). Same shape as the users tab's window chip.
+      chipRows: [{
+        name: "view",
+        label: "View",
+        options: [
+          { label: "All",         value: "all"    },
+          { label: "Active 30d",  value: "active" },
+          { label: "With projects", value: "wp"   },
+        ],
+        default: "all",
+      }],
       charts: [
         { id: "rp-home-co-active", title: "Active last 30d", kind: "gauge",
           data: (s) => s.total ? Math.round((s.active_30d / s.total) * 100) : 0,
@@ -189,6 +206,21 @@ export default function home(app, { session }) {
       title: "Files",
       endpoint: "/admin/files",
       statsEndpoint: "/admin/files/stats",
+      // Functional — /admin/files's FilesQuery already accepts ?stage=
+      // (see backend/crates/api/src/routes/admin.rs:86). Empty value
+      // means "no filter".
+      chipRows: [{
+        name: "stage",
+        label: "Stage",
+        options: [
+          { label: "All",     value: ""        },
+          { label: "New",     value: "new"     },
+          { label: "Clean",   value: "clean"   },
+          { label: "Design",  value: "design"  },
+          { label: "Publish", value: "publish" },
+        ],
+        default: "",
+      }],
       charts: [
         { id: "rp-home-files-stage", title: "By stage",  kind: "donut",
           data: (s) => s.by_stage },
@@ -230,6 +262,18 @@ export default function home(app, { session }) {
     charts: {
       title: "Charts",
       endpoint: "/admin/charts",
+      // Visual placeholder — /admin/charts doesn't accept ?window= yet
+      // (backend TODO). Mirrors the users tab's activity-window shape.
+      chipRows: [{
+        name: "window",
+        label: "Window",
+        options: [
+          { label: "All time", value: "all" },
+          { label: "Last 7d",  value: "7d"  },
+          { label: "Last 30d", value: "30d" },
+        ],
+        default: "all",
+      }],
       charts: [
         { id: "rp-home-cht-recent", title: "Created last 7d", kind: "gauge",
           data: (s) => s.total ? Math.round((s.last_7d / s.total) * 100) : 0,
@@ -254,6 +298,78 @@ export default function home(app, { session }) {
         + '<td>' + esc(c.project_name) + '</td>'
         + '<td>' + stageChip(c.stage) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
+        + '</tr>',
+    },
+    projects: {
+      title: "Projects",
+      // /api/projects today returns { items: [...] } (no Page<T>
+      // wrapper, no pagination). fetchList falls back to `items` when
+      // `rows` is absent; page size becomes a no-op for this endpoint.
+      // Backend Page<T> conversion + ?status= / ?q= / ?sort= queued
+      // as a follow-up; the visual chips below will start filtering
+      // once that lands.
+      endpoint: "/projects",
+      // No dedicated /projects/stats endpoint. Charts source from the
+      // same /projects payload — `statsEndpoint` is set to the list
+      // endpoint so the charts controller fetches the list shape and
+      // the data callbacks derive aggregates client-side. Single
+      // duplicate fetch is acceptable for projects-volume; if we cross
+      // ~500 projects the right move is a dedicated stats endpoint.
+      statsEndpoint: "/projects",
+      // Visual placeholder — `?status=` isn't wired on /api/projects
+      // yet. Backend TODO mirrors the users / companies / charts chips.
+      chipRows: [{
+        name: "status",
+        label: "Status",
+        options: [
+          { label: "All",      value: "all"      },
+          { label: "Active",   value: "active"   },
+          { label: "Draft",    value: "draft"    },
+          { label: "Archived", value: "archived" },
+        ],
+        default: "all",
+      }],
+      // Each data callback reads `stats.items` (the list payload) and
+      // aggregates client-side. The data shape (ProjectSummary[]) is
+      // stable across the spec.
+      charts: [
+        { id: "rp-home-proj-stage", title: "By stage",   kind: "donut",
+          data: (stats) => (stats?.items || []).reduce((acc, r) => {
+            const k = r.stage || "new"; acc[k] = (acc[k] || 0) + 1; return acc;
+          }, {}) },
+        { id: "rp-home-proj-clean", title: "Avg cleanness", kind: "gauge",
+          data: (stats) => {
+            const xs = (stats?.items || []).map((r) => r.cleanness_pct).filter((v) => v != null);
+            return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+          },
+          opts: { max: 100, unit: "%" } },
+        { id: "rp-home-proj-files", title: "Files / project", kind: "bar",
+          data: (stats) => {
+            const buckets = { "0": 0, "1-4": 0, "5-9": 0, "10+": 0 };
+            for (const r of (stats?.items || [])) {
+              const n = r.file_count || 0;
+              const k = n === 0 ? "0" : n < 5 ? "1-4" : n < 10 ? "5-9" : "10+";
+              buckets[k]++;
+            }
+            return buckets;
+          } },
+      ],
+      toolbar: {
+        searchPlaceholder: "Search project name…",
+        modes: true, refresh: true, columns: true, export: true,
+      },
+      columns: ["Name", "Files", "Stage", "Status", "Updated"],
+      // Click-through to the Workspace with the project rid pinned —
+      // same pattern as charts above so the rail tab acts as a
+      // launchpad into the working surface.
+      row: (p) =>
+        '<tr class="rp-home-row--clickable"'
+        + ' data-href="#/workspace?project=' + encodeURIComponent(p.redpash_id) + '">'
+        + '<td>' + esc(p.name || "(untitled)") + '</td>'
+        + '<td class="is-num">' + (p.file_count != null ? p.file_count : "—") + '</td>'
+        + '<td>' + stageChip(p.stage) + '</td>'
+        + '<td>' + esc(p.status || "—") + '</td>'
+        + '<td>' + fmtTime(p.updated_at) + '</td>'
         + '</tr>',
     },
   };
@@ -338,40 +454,14 @@ export default function home(app, { session }) {
   }
 
   // ─── per-tab body renderers ──────────────────────────────────
-  // Dispatch: Projects keeps its card-grid renderer; the six admin
-  // tabs share renderListBody (driven by LIST_VIEWS above).
+  // Every rail tab — including Projects — renders through the same
+  // 6-section stack (head / chip-row / kpi-strip / charts / toolbar /
+  // table) driven by its LIST_VIEWS spec. Projects previously had a
+  // bespoke card-grid renderer; it moved into the unified path so
+  // the rail's UI shape is identical across tabs.
   function renderTabBody(tab) {
-    if (tab.key === "projects") return renderProjectsBody();
     const spec = LIST_VIEWS[tab.key];
     if (spec) renderListBody(tab, spec);
-  }
-
-  async function renderProjectsBody() {
-    view.innerHTML = ''
-      + headHTML("Projects", "")
-      + kpiStripHTML([
-          { label: "Total",        id: "rp-kpi-projects" },
-          { label: "With files",   id: "rp-kpi-with-files" },
-          { label: "Avg cleanness", id: "rp-kpi-clean" },
-          { label: "Active 7d",    id: "rp-kpi-active" },
-        ])
-      + '<div class="rp-home__board" id="rp-home-board" aria-busy="true">'
-      +   '<p class="rp-shell-state">Loading your projects…</p>'
-      + '</div>';
-
-    const board = view.querySelector("#rp-home-board");
-    try {
-      const data  = await api.get("/projects");
-      const items = data?.items || [];
-      paintProjectKpis(items);
-      paintProjectBoard(board, items);
-      view.querySelector(".rp-shell-head-count").textContent = items.length
-        ? items.length + (items.length === 1 ? " project" : " projects") : "";
-    } catch (err) {
-      board.setAttribute("aria-busy", "false");
-      board.innerHTML = '<p class="rp-shell-state">Couldn’t load your projects'
-        + (err.status ? " (" + err.status + ")" : "") + ".</p>";
-    }
   }
 
   // ─── list-view tabs (Users / Companies / Memberships / Files /
@@ -553,15 +643,22 @@ export default function home(app, { session }) {
     const t0 = performance.now();
     try {
       const data = await api.get(spec.endpoint + "?" + params.toString());
-      const rows = data?.rows || [];
+      // Page<T> endpoints (admin/*) carry `rows` + `total` + `pages`.
+      // Legacy endpoints (`/api/projects` today) return `{ items: [...] }`
+      // — fall back to `items` and synthesise the pagination fields so
+      // the same render path serves both. When projects moves to
+      // Page<T> shape (queued follow-up), the fallback becomes dead
+      // weight + can be removed.
+      const rows = data?.rows || data?.items || [];
+      const total = data?.total != null ? data.total : rows.length;
       listTotalPages = data?.pages || 1;
       listPage       = data?.page  || listPage;
       const elapsed = Math.round(performance.now() - t0);
-      setKpi("rp-home-list-total", fmtCount(data?.total || 0));
+      setKpi("rp-home-list-total", fmtCount(total));
       setKpi("rp-home-list-shown", String(rows.length));
       setKpi("rp-home-list-page",  listPage + " / " + listTotalPages);
       setKpi("rp-home-list-ms",    elapsed + "ms");
-      view.querySelector(".rp-shell-head-count").textContent = (data?.total || 0) + " rows";
+      view.querySelector(".rp-shell-head-count").textContent = total + " rows";
       if (tbody) {
         tbody.innerHTML = rows.length
           ? rows.map(spec.row).join("")
@@ -578,74 +675,7 @@ export default function home(app, { session }) {
     }
   }
 
-  function paintProjectKpis(items) {
-    const withFiles = items.filter((p) => (p.file_count || 0) > 0).length;
-    const cleans = items.map((p) => p.cleanness_pct).filter((v) => v != null);
-    const avgClean = cleans.length
-      ? Math.round(cleans.reduce((a, b) => a + b, 0) / cleans.length)
-      : null;
-    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
-    const active7d = items.filter((p) => {
-      const t = Date.parse(p.updated_at);
-      return Number.isFinite(t) && t >= weekAgo;
-    }).length;
-    setKpi("rp-kpi-projects", items.length);
-    setKpi("rp-kpi-with-files", withFiles);
-    setKpi("rp-kpi-clean", avgClean == null ? "—" : avgClean + "%");
-    setKpi("rp-kpi-active", active7d);
-  }
-
-  function paintProjectBoard(board, items) {
-    board.setAttribute("aria-busy", "false");
-    if (!items.length) {
-      board.innerHTML = '<p class="rp-shell-state">No projects yet — '
-        + 'scan a CSV from the <a href="#/login">landing page</a> to start.</p>';
-      return;
-    }
-    board.innerHTML = items.map(projectCard).join("");
-  }
-
-  function projectCard(p) {
-    const at = STAGES.indexOf(p.stage);
-    const pipe = STAGES.map((s, i) => {
-      const cls = i < at ? " is-done" : i === at ? " is-current" : "";
-      return '<li class="rp-proj__step' + cls + '">' + cap(s) + "</li>";
-    }).join("");
-    const meta = [
-      p.file_count + (p.file_count === 1 ? " file" : " files"),
-      "updated " + fmtDate(p.updated_at),
-    ].join("  ·  ");
-    return '<a class="rp-proj" href="#/workspace?project=' + encodeURIComponent(p.redpash_id) + '">'
-      +   '<div class="rp-proj__top">'
-      +     '<h2 class="rp-proj__name">' + esc(p.name) + "</h2>"
-      +     (p.is_default ? '<span class="rp-proj__tag">default</span>' : "")
-      +   "</div>"
-      +   '<ol class="rp-proj__pipe">' + pipe + "</ol>"
-      +   '<p class="rp-proj__meta">' + meta + "</p>"
-      +   cleannessBar(p.cleanness_pct)
-      + "</a>";
-  }
-
-  function cleannessBar(pct) {
-    if (pct == null) return "";
-    const v = Math.max(0, Math.min(100, pct));
-    const band = v >= 80 ? "is-ok" : v >= 50 ? "is-warn" : "";
-    return '<div class="rp-proj__cleanness">'
-      +   '<div class="rp-proj__cleanness-track">'
-      +     '<div class="rp-proj__cleanness-fill ' + band + '" style="width:' + v + '%"></div>'
-      +   "</div>"
-      +   '<span class="rp-proj__cleanness-label">' + Math.round(v) + "% clean</span>"
-      + "</div>";
-  }
-
   // ─── small render utilities ──────────────────────────────────
-  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-  function fmtDate(iso) {
-    const d = new Date(iso);
-    return isNaN(d.getTime())
-      ? "—"
-      : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  }
   // Compact local timestamp for list rows — "May 23, 19:42".
   function fmtTime(iso) {
     const d = new Date(iso);
