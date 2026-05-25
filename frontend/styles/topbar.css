@@ -14,7 +14,9 @@
   background: var(--rp-glass);
   -webkit-backdrop-filter: blur(1rem) saturate(1.5);
   backdrop-filter: blur(1rem) saturate(1.5);
-  border-bottom: 1px solid var(--rp-border);
+  /* Topbar + body separate by the glass blur + the rpHomeMain
+     surface contrast underneath — no hairline needed under the
+     topbar's bottom edge (Em 2026-05-25). */
 }
 /* The topbar wraps a flyout dropdown (omnisearch). Without an
    explicit z-index, later-in-DOM siblings (rail / shell-body /
