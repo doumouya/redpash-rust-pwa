@@ -107,7 +107,6 @@ export default function cases(app, { session }) {
   let railAssigneeExpanded = new Map();        // per-mount, keyed by assignee_id (or "__unassigned__")
   let activityFilter = "all";                  // sticky per-mount; per-case mem only
   let lastDetailActivity = [];                 // memoized for filter pill re-render
-  let currentDetailCase = null;                // for the primary advance button
 
   // ── done-window filter — drop Done cases older than the window ───
   // Lives outside paint functions so cycleStatus + the chip-row both
@@ -658,15 +657,12 @@ export default function cases(app, { session }) {
   // ── detail view ─────────────────────────────────────────────
   const ridEl      = app.querySelector("#rp-cases-detail-rid");
   const titleEl    = app.querySelector("#rp-cases-detail-title");
-  const controlsRow = app.querySelector("#rp-cases-detail-controls");
-  const tabsEl     = app.querySelector("#rp-cases-detail-tabs");
   const commentsList    = app.querySelector("#rp-cases-comments-list");
   const commentForm     = app.querySelector("#rp-cases-comment-form");
   const commentInput    = app.querySelector("#rp-cases-comment-input");
   const commentSend     = app.querySelector("#rp-cases-comment-form-send");
   const commentError    = app.querySelector("#rp-cases-comment-form-error");
   const activityList    = app.querySelector("#rp-cases-activity-list");
-  const detailsDl       = app.querySelector("#rp-cases-details-dl");
   const sideStatus   = app.querySelector("#rp-cases-side-status");
   const sidePriority = app.querySelector("#rp-cases-side-priority");
   const sideType     = app.querySelector("#rp-cases-side-type");
@@ -678,25 +674,13 @@ export default function cases(app, { session }) {
   const sideReporter = app.querySelector("#rp-cases-side-reporter");
   const sideCreated  = app.querySelector("#rp-cases-side-created");
   const sideUpdated  = app.querySelector("#rp-cases-side-updated");
-  const advanceBtn   = app.querySelector("#rp-cases-advance-btn");
-  const advanceLabel = app.querySelector("#rp-cases-advance-label");
+  const sideDescDetails = app.querySelector("#rp-cases-side-desc");
+  const sideDescBody    = app.querySelector("#rp-cases-side-desc-body");
+  const activityCountEl = app.querySelector("#rp-cases-side-activity-count");
   const activityFilterEl = app.querySelector("#rp-cases-activity-filter");
 
   let currentDetailRid = null;
   let assigneePickerTimer = null;
-
-  tabsEl?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tab]");
-    if (!btn) return;
-    const tab = btn.dataset.tab;
-    tabsEl.querySelectorAll("button[data-tab]").forEach((b) =>
-      b.classList.toggle("is-active", b.dataset.tab === tab));
-    detailEl.querySelectorAll(".rp-cases-detail-tab").forEach((s) => {
-      const match = s.dataset.tab === tab;
-      s.hidden = !match;
-      s.classList.toggle("is-active", match);
-    });
-  });
 
   // Side-panel selects fire sparse PATCHes — single field per change.
   [
@@ -756,14 +740,6 @@ export default function cases(app, { session }) {
     commentError.textContent = msg;
     commentError.hidden = false;
   }
-
-  // Primary advance button — advances current status to the next
-  // in the lifecycle. Uses cycleStatus under the hood (same wrap-to-
-  // backlog semantics for the Done case, which reads as "Reopen").
-  advanceBtn?.addEventListener("click", () => {
-    if (!currentDetailCase) return;
-    cycleStatus(currentDetailRid, currentDetailCase.status || "backlog");
-  });
 
   // Activity feed filter pills — change the in-memory filter, re-
   // render the list from the memoized last activity payload (no
@@ -858,8 +834,7 @@ export default function cases(app, { session }) {
   async function loadCaseDetail(rid) {
     currentDetailRid = rid;
     if (ridEl) ridEl.textContent = rid;
-    if (titleEl) titleEl.textContent = "Loading…";
-    if (controlsRow) controlsRow.innerHTML = "";
+    if (titleEl) { titleEl.textContent = "Loading…"; titleEl.title = ""; }
     if (commentsList) commentsList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading comments…</p>';
     if (activityList) activityList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading activity…</p>';
     try {
@@ -881,37 +856,12 @@ export default function cases(app, { session }) {
     const comments = detail?.comments || [];
     const activity = detail?.activity || detail?.events || [];
 
-    currentDetailCase = c;                       // for the advance button
     lastDetailActivity = activity;               // memoize for filter re-render
 
-    if (titleEl) titleEl.textContent = c.title || "(untitled)";
-    // Centered at-a-glance badge row — read-only. The matching
-    // editable selects + picker live in the Case details tab.
-    if (controlsRow) {
-      const assigneeChip = c.assignee_id
-        ? '<span class="rp-cases-chip rp-cases-chip--assignee">'
-            + userAvatarHTML(c.assignee_id, c.assignee_display_name, "xs")
-            + '<span>' + esc(c.assignee_display_name || c.assignee_id) + '</span>'
-          + '</span>'
-        : '<span class="rp-cases-chip rp-cases-chip--unassigned">— unassigned —</span>';
-      controlsRow.innerHTML = ''
-        + statusChip(c.status)
-        + priorityChip(c.priority)
-        + typeChip(c.type)
-        + assigneeChip;
-    }
-    // Description lives in the Case details tab now (renderDetailsDl);
-    // dropped from the overview region per Em — the duplicate was
-    // making the layout awkward.
-
-    // Primary advance button label — verb-based, matched to the
-    // current status. cycleStatus wraps Done → Backlog so the Done
-    // label reads as "Reopen" (advances to backlog → user moves to
-    // todo if they want).
-    if (advanceBtn && advanceLabel) {
-      const next = ADVANCE_LABEL[c.status] || "Advance status";
-      advanceLabel.textContent = next;
-      advanceBtn.disabled = !c.status;
+    if (titleEl) {
+      const t = c.title || "(untitled)";
+      titleEl.textContent = t;
+      titleEl.title = t;                         // full title on hover (ellipsis fallback)
     }
 
     if (sideStatus && c.status)     sideStatus.value = c.status;
@@ -930,57 +880,35 @@ export default function cases(app, { session }) {
     if (sideCreated)  sideCreated.textContent = c.created_at ? fmtTime(c.created_at) : "—";
     if (sideUpdated)  sideUpdated.textContent = c.updated_at ? fmtTime(c.updated_at) : "—";
 
+    // Description — auto-open when populated, closed when empty.
+    // Native <details>/<summary> handles the affordance + a11y.
+    if (sideDescBody) {
+      sideDescBody.innerHTML = c.description
+        ? esc(c.description)
+        : '<span class="rp-cases-side-unassigned">— no description —</span>';
+    }
+    if (sideDescDetails) sideDescDetails.open = !!c.description;
+
+    // Activity count in the summary — gives the user a sense of
+    // whether expanding is worthwhile without forcing it open.
+    if (activityCountEl) {
+      const n = activity.length;
+      activityCountEl.textContent = n ? "(" + n + ")" : "";
+      activityCountEl.hidden = !n;
+    }
+
     if (commentsList) {
       commentsList.innerHTML = comments.length
         ? commentsListHTML(comments)
         : '<p class="rt-empty rp-cases-empty">No comments yet.</p>';
     }
     renderActivityList(activity);
-    renderDetailsDl(c);
     // Pin to latest comment after the paint settles. requestAnimationFrame
     // so the new comment nodes are laid out before we read scrollHeight.
     requestAnimationFrame(scrollCommentsToLatest);
   }
 
-  // Case details tab — full reference card. Renders every hydrated
-  // field as a definition-list row. Mirrors what the inline meta
-  // strip + info row carry, expanded (full RIDs, ISO timestamps,
-  // category, error_message) for the copy / print / audit case.
-  function renderDetailsDl(c) {
-    if (!detailsDl) return;
-    const rows = [];
-    const add = (label, value) => {
-      if (value === null || value === undefined || value === "") return;
-      rows.push(
-        '<dt>' + esc(label) + '</dt>'
-        + '<dd>' + value + '</dd>'              // value pre-escaped or HTML by caller
-      );
-    };
-    add("Case ID",     '<code>' + esc(c.redpash_id || "—") + '</code>');
-    add("Title",       esc(c.title || "(untitled)"));
-    add("Type",        esc(TYPE_LABEL[c.type] || c.type || "—"));
-    add("Status",      esc(STATUS_LABEL[c.status] || c.status || "—"));
-    add("Priority",    esc(PRIORITY_LABEL[c.priority] || c.priority || "—"));
-    if (c.category_id) add("Category", '<code>' + esc(c.category_id) + '</code>');
-    add("Reporter",    c.reporter_id ? userBadgeHTML(c.reporter_id, c.reporter_display_name) : "—");
-    add("Assignee",    c.assignee_id ? userBadgeHTML(c.assignee_id, c.assignee_display_name) : '<span class="rp-cases-side-unassigned">— unassigned —</span>');
-    if (c.project_id)  add("Project",  '<code>' + esc(c.project_id) + '</code>');
-    if (c.company_id)  add("Company",  '<code>' + esc(c.company_id) + '</code>');
-    add("Created",     esc(c.created_at || "—"));
-    add("Updated",     esc(c.updated_at || "—"));
-    // Description always renders — the slot needs to be visible even
-    // when empty so the user knows the field exists (and where to
-    // edit when inline-edit ships).
-    add("Description", c.description
-      ? '<pre class="rp-cases-details-pre">' + esc(c.description) + '</pre>'
-      : '<span class="rp-cases-side-unassigned">— no description —</span>');
-    if (c.error_message) {
-      add("Error",     '<pre class="rp-cases-details-pre rp-cases-details-error">' + esc(c.error_message) + '</pre>');
-    }
-    detailsDl.innerHTML = rows.join("");
-  }
-
-  // Verb-based labels for the primary advance button. Reads as a
+  // Verb-based labels for the card chevron tooltip. Reads as a
   // workflow command, not as a state-machine assertion. Done →
   // "Reopen" since the click cycles back to backlog.
   const ADVANCE_LABEL = {
@@ -1170,19 +1098,6 @@ export default function cases(app, { session }) {
     commentsList.scrollTop = commentsList.scrollHeight;
   }
 
-  // ── chip + format helpers ──────────────────────────────────
-  function statusChip(s) {
-    return '<span class="rp-cases-chip rp-cases-chip--status is-' + esc(s || "backlog") + '">'
-      + esc(STATUS_LABEL[s] || s || "—") + '</span>';
-  }
-  function typeChip(t) {
-    return '<span class="rp-cases-chip rp-cases-chip--type">'
-      + esc(TYPE_LABEL[t] || t || "task") + '</span>';
-  }
-  function priorityChip(p) {
-    return '<span class="rp-cases-chip rp-cases-chip--priority is-' + esc(p || "medium") + '">'
-      + esc(PRIORITY_LABEL[p] || p || "—") + '</span>';
-  }
   // fmtTime / fmtAge now imported from /scripts/format.js.
 
   // ── boot ─────────────────────────────────────────────────────

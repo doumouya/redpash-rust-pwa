@@ -73,10 +73,16 @@
       </div>
 
       <!-- detail panel — slides over the kanban from the right when
-           ?id=CAS_… is present. -->
+           ?id=CAS_… is present. Two-column layout: left = comments
+           thread (primary work surface) + sticky compose; right =
+           sidebar with always-visible editable controls (status /
+           priority / type / assignee), meta line, and two
+           collapsible <details> blocks (Description, Activity).
+           No tabs — the sidebar is always-on context. -->
       <aside id="rp-cases-detail" class="rp-cases-detail" hidden>
         <header class="rp-cases-detail-head">
           <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
+          <h1 class="rp-cases-detail-title" id="rp-cases-detail-title" title="">Loading…</h1>
           <a class="rp-cases-detail-close" href="#/cases" title="Close (Esc)">
             <i class="bi bi-x-lg"></i>
           </a>
@@ -84,73 +90,10 @@
 
         <div class="rp-cases-detail-body">
 
-          <!-- ════ overview region — always visible, never scrolls
-               at this level. Wraps the identity surface of the case:
-               title, badges, info, advance, description. ════ -->
-          <section class="rp-cases-detail-overview">
-          <h1 class="rp-cases-detail-title" id="rp-cases-detail-title">Loading…</h1>
-
-          <!-- At-a-glance badges — centered chip row of status /
-               priority / type / assignee. Read-only; the editable
-               versions live in the Case details tab. JS fills. -->
-          <div class="rp-cases-detail-controls" id="rp-cases-detail-controls">
-          </div>
-
-          <!-- Read-only metadata: reporter + create/update timestamps.
-               Thin info line — informational, not actionable. The
-               between-items separator is a CSS pseudo-element on
-               each non-first item so wrap-to-new-line carries the
-               separator with the item (no orphan `·` at line ends). -->
-          <div class="rp-cases-detail-info">
-            <span class="rp-cases-detail-info-item">
-              <span class="rp-cases-detail-info-lbl">Reporter</span>
-              <span id="rp-cases-side-reporter">—</span>
-            </span>
-            <span class="rp-cases-detail-info-item">
-              Created <span id="rp-cases-side-created">—</span>
-            </span>
-            <span class="rp-cases-detail-info-item">
-              Updated <span id="rp-cases-side-updated">—</span>
-            </span>
-          </div>
-
-          <!-- Primary action — verb-based advance to the next status.
-               Label updates with the current status; same PATCH as
-               the status select but discoverable. -->
-          <div class="rp-cases-detail-action">
-            <button class="rt-btn rt-btn--accent rp-cases-advance-btn"
-                    id="rp-cases-advance-btn" type="button"
-                    title="Advance to the next status">
-              <span id="rp-cases-advance-label">Advance status</span>
-              <i class="bi bi-arrow-right"></i>
-            </button>
-          </div>
-
-          </section>
-
-          <!-- ════ thread region — flexes to fill the remaining body
-               height. Wraps the tab nav (fixed at the top of this
-               region) + the scrolling tab content (each pane scrolls
-               inside its own bounds). ════ -->
-          <section class="rp-cases-detail-thread">
-          <nav class="rt-panel-tabs rp-cases-detail-tabs" id="rp-cases-detail-tabs">
-            <button class="is-active" type="button" data-tab="comments" title="Comments thread">
-              <i class="bi bi-chat-left-text"></i> Comments
-            </button>
-            <button type="button" data-tab="activity" title="Activity feed (events)">
-              <i class="bi bi-clock-history"></i> Activity
-            </button>
-            <button type="button" data-tab="details" title="Case details — full reference card">
-              <i class="bi bi-info-circle"></i> Case details
-            </button>
-          </nav>
-
-          <!-- Tab content wrapper — takes the remaining body height
-               and scrolls inside. The nav above stays put; the
-               active pane scrolls within these bounds. Switching
-               tabs doesn't shift the top region or the nav. -->
-          <div class="rp-cases-detail-tabs-content" id="rp-cases-detail-tabs-content">
-          <section class="rp-cases-detail-tab is-active" data-tab="comments" id="rp-cases-comments">
+          <!-- ════ main column — comments thread (primary work).
+               The list scrolls; the compose form is anchored at the
+               bottom so the user can reply from any scroll position. -->
+          <section class="rp-cases-detail-main">
             <div class="rp-cases-comments-list" id="rp-cases-comments-list">
               <!-- JS renders comments here -->
             </div>
@@ -171,22 +114,19 @@
             </form>
           </section>
 
-          <section class="rp-cases-detail-tab" data-tab="activity" id="rp-cases-activity" hidden>
-            <!-- Filter pills cap the firehose: All / Comments /
-                 Status / Assignment / Edits — picks a case_* kind
-                 group and re-renders the list. Rendered by JS from
-                 ACTIVITY_PILLS (cases.js) so the predicate map and
-                 the pills stay single-sourced. -->
-            <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter"></div>
-            <div class="rp-cases-activity-list" id="rp-cases-activity-list">
-              <!-- JS renders activity-feed events (case_* kinds) -->
-            </div>
-          </section>
+          <!-- ════ sidebar — always-on metadata + collapsible blocks.
+               Scrolls independently of the comments thread so each
+               half manages its own height. Sections (top→bottom):
+                 • Edit controls (status/priority/type/assignee)
+                 • Meta line (Reporter · Created · Updated)
+                 • <details> Description (auto-open when populated)
+                 • <details> Activity (filter pills + feed) ════ -->
+          <aside class="rp-cases-detail-side">
 
-          <section class="rp-cases-detail-tab" data-tab="details" id="rp-cases-details-tab" hidden>
-            <!-- Editable controls — moved here from the top of the
-                 panel; the read-only badges above remain the at-a-
-                 glance view, this is where actual mutation happens. -->
+            <!-- Editable controls — these ARE the mutation surface
+                 (no read-only chip-row above duplicating them, no
+                 separate "Advance" button — the status select cycles
+                 the case forward). One row per field, label inline. -->
             <div class="rp-cases-detail-edit">
               <label class="rp-cases-control">
                 <span class="rp-cases-control-lbl">Status</span>
@@ -234,17 +174,42 @@
               </div>
             </div>
 
-            <!-- Definition-list reference card — all hydrated Case
-                 fields in one read-only view. Mirrors the inline
-                 controls + info row above but expanded (full RIDs,
-                 full timestamps, error_message, category, etc.) for
-                 the copy / print / audit use case. -->
-            <dl class="rp-cases-details-dl" id="rp-cases-details-dl">
-              <!-- JS paint fills this. -->
+            <!-- Meta — reporter + timestamps. Read-only, thin. -->
+            <dl class="rp-cases-detail-side-meta">
+              <div>
+                <dt>Reporter</dt>
+                <dd id="rp-cases-side-reporter">—</dd>
+              </div>
+              <div>
+                <dt>Opened</dt>
+                <dd id="rp-cases-side-created">—</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd id="rp-cases-side-updated">—</dd>
+              </div>
             </dl>
-          </section>
-          </div>
-          </section>
+
+            <!-- Description — auto-opens when populated, stays
+                 closed when empty. JS toggles the `open` attribute. -->
+            <details class="rp-cases-detail-side-section" id="rp-cases-side-desc">
+              <summary>Description</summary>
+              <div class="rp-cases-detail-side-desc-body" id="rp-cases-side-desc-body">
+                <span class="rp-cases-side-unassigned">— no description —</span>
+              </div>
+            </details>
+
+            <!-- Activity — filter pills + scrolling feed. Closed by
+                 default (feed can be long; users come for comments).
+                 Filter pills rendered from ACTIVITY_PILLS in cases.js. -->
+            <details class="rp-cases-detail-side-section" id="rp-cases-side-activity">
+              <summary>Activity <span class="rp-cases-side-section-count" id="rp-cases-side-activity-count" hidden></span></summary>
+              <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter"></div>
+              <div class="rp-cases-activity-list" id="rp-cases-activity-list">
+                <!-- JS renders activity-feed events (case_* kinds) -->
+              </div>
+            </details>
+          </aside>
         </div>
       </aside>
 
