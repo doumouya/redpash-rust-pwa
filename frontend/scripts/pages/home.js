@@ -57,9 +57,8 @@ const HOME_GROUPS = [
 
 const HOME_DEFAULT_TAB = "projects";
 
-export default function home(app, { session }) {
-  mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session });
-  renderGreeting(app, session);
+export default function home(app, { session: _session }) {
+  mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
 
   const nav     = app.querySelector("#rpHomeNav");
   const navBody = app.querySelector("#rpHomeNavBody");
@@ -731,19 +730,5 @@ export default function home(app, { session }) {
       + '</span>';
   }
 
-}
-
-// Time-of-day salutation + first_name (display_name fallback).
-function renderGreeting(app, session) {
-  const el = app.querySelector("#rp-home-greeting");
-  if (!el) return;
-  const hour = new Date().getHours();
-  const tod  = hour < 5  ? "Good night"
-            : hour < 12 ? "Good morning"
-            : hour < 18 ? "Good afternoon"
-            : hour < 22 ? "Good evening"
-            :             "Good night";
-  const name = session?.first_name || session?.display_name || "there";
-  el.textContent = tod + ", " + name + ".";
 }
 

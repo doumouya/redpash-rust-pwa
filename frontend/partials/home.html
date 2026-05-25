@@ -1,14 +1,9 @@
 <!-- Home — the org command center. Uses the shared rail-page shell
-     (shell.css: outer flex column, greeting, rail+body split, per-tab
-     head, KPI strip). Page-specific styles (board grid + project
-     card) live in home.css. -->
+     (shell.css: outer flex column, rail+body split, per-tab head,
+     KPI strip). Per-tab content (head / chips / KPIs / charts /
+     toolbar / table) is the rendered context; no greeting block. -->
 <section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
-
-  <header class="rp-shell-greeting">
-    <h1 class="rp-shell-greeting-title" id="rp-home-greeting">Welcome.</h1>
-    <p class="rp-shell-greeting-sub">Pick up a project or scan a new CSV.</p>
-  </header>
 
   <div class="rp-shell-body">
 

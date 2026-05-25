@@ -15,26 +15,6 @@
   overflow: hidden;
 }
 
-/* greeting — full-width compact header above the rail+body split */
-.rp-shell-greeting {
-  flex-shrink: 0;
-  padding: var(--rp-sp-5) var(--rp-sp-6) var(--rp-sp-4);
-  border-bottom: 1px solid var(--rp-border);
-}
-.rp-shell-greeting-title {
-  margin: 0;
-  font-family: var(--rp-font-brand);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-.rp-shell-greeting-sub {
-  margin: 4px 0 0;
-  color: var(--rp-text-mute);
-  font-size: var(--rp-text-sm);
-}
-
 /* rail + body horizontal split */
 .rp-shell-body { flex: 1; display: flex; min-height: 0; }
 
