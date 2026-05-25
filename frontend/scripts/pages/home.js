@@ -168,15 +168,15 @@ export default function home(app, { session: _session }) {
         +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
         +   ' <span class="rp-home-handle">@' + esc(u.username) + '</span>'
         + '</td>'
-        + '<td class="rp-home-meta">@' + esc(u.username || "") + '</td>'
-        + '<td class="rp-home-meta">' + esc(u.email || "—") + '</td>'
+        + '<td class="rp-meta">@' + esc(u.username || "") + '</td>'
+        + '<td class="rp-meta">' + esc(u.email || "—") + '</td>'
         + '<td>' + planChip(u.plan) + '</td>'
-        + '<td class="rp-home-meta">' + esc(u.job_title || "—") + '</td>'
-        + '<td class="rp-home-meta">' + esc(u.organisation || "—") + '</td>'
-        + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-home-meta">—</span>') + '</td>'
-        + '<td>' + (u.org_role ? roleChip(u.org_role) : '<span class="rp-home-meta">—</span>') + '</td>'
-        + '<td class="rp-home-meta">' + esc(u.avatar_url || "—") + '</td>'
-        + '<td class="rp-home-meta">' + fmtTime(u.created_at) + '</td>'
+        + '<td class="rp-meta">' + esc(u.job_title || "—") + '</td>'
+        + '<td class="rp-meta">' + esc(u.organisation || "—") + '</td>'
+        + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
+        + '<td>' + (u.org_role ? roleChip(u.org_role) : '<span class="rp-meta">—</span>') + '</td>'
+        + '<td class="rp-meta">' + esc(u.avatar_url || "—") + '</td>'
+        + '<td class="rp-meta">' + fmtTime(u.created_at) + '</td>'
         + '<td><span class="rp-mon-method">' + esc(u.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
@@ -235,7 +235,7 @@ export default function home(app, { session: _session }) {
         + '<td><span class="rp-mon-method">' + esc(c.slug || "—") + '</span></td>'
         + '<td class="is-num">' + (c.member_count || 0) + '</td>'
         + '<td>' + (c.my_role ? roleChip(c.my_role) : "—") + '</td>'
-        + '<td class="rp-home-meta">' + esc(c.avatar_url || "—") + '</td>'
+        + '<td class="rp-meta">' + esc(c.avatar_url || "—") + '</td>'
         + '<td>' + fmtTime(c.created_at) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
         + '<td><span class="rp-mon-method">' + esc(c.redpash_id || "—") + '</span></td>'
@@ -306,7 +306,7 @@ export default function home(app, { session: _session }) {
         + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""))
         + '">'
         + '<td>' + esc(m.user_display_name) + ' <span class="rp-mon-method">@' + esc(m.user_username) + '</span></td>'
-        + '<td class="rp-home-meta">@' + esc(m.user_username || "") + '</td>'
+        + '<td class="rp-meta">@' + esc(m.user_username || "") + '</td>'
         + '<td>' + roleChip(m.role) + '</td>'
         + '<td><span class="rp-mon-method">' + esc(m.scope || "—") + '</span></td>'
         + '<td>' + esc(m.scope_name) + '</td>'
@@ -415,8 +415,8 @@ export default function home(app, { session: _session }) {
           + '<td><span class="rp-mon-method">' + esc(c.project_id || "—") + '</span></td>'
           + '<td><span class="rp-mon-method">' + esc(c.company_id || "—") + '</span></td>'
           + '<td>' + categoryLabel + '</td>'
-          + '<td class="rp-home-meta">' + esc((c.description || "").slice(0, 120) || "—") + '</td>'
-          + '<td class="rp-home-meta">' + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
+          + '<td class="rp-meta">' + esc((c.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td class="rp-meta">' + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
           + '<td>' + fmtTime(c.created_at) + '</td>'
           + '<td>' + fmtTime(c.updated_at) + '</td>'
           + '<td><span class="rp-mon-method">' + esc(c.redpash_id || "—") + '</span></td>'
@@ -504,7 +504,7 @@ export default function home(app, { session: _session }) {
           + '<td>' + stageChip(f.stage) + '</td>'
           + '<td class="is-num">' + (f.row_count != null ? f.row_count : "—") + '</td>'
           + '<td class="is-num">' + (f.col_count != null ? f.col_count : "—") + '</td>'
-          + '<td class="is-num rp-home-meta">' + sizeKb + '</td>'
+          + '<td class="is-num rp-meta">' + sizeKb + '</td>'
           + '<td class="is-num">' + clean + '</td>'
           + '<td>' + fmtTime(f.created_at) + '</td>'
           + '<td>' + fmtTime(f.updated_at) + '</td>'
@@ -680,11 +680,11 @@ export default function home(app, { session: _session }) {
           + '<td class="is-num">' + (p.file_count != null ? p.file_count : "—") + '</td>'
           + '<td>' + stageChip(p.stage) + '</td>'
           + '<td>' + esc(p.status || "—") + '</td>'
-          + '<td>' + (p.is_default ? '<i class="bi bi-check2"></i>' : '<span class="rp-home-meta">—</span>') + '</td>'
+          + '<td>' + (p.is_default ? '<i class="bi bi-check2"></i>' : '<span class="rp-meta">—</span>') + '</td>'
           + '<td>' + esc(p.owner_display_name || p.owner_id || "—") + '</td>'
           + '<td><span class="rp-mon-method">' + esc(p.company_id || "—") + '</span></td>'
           + '<td class="is-num">' + clean + '</td>'
-          + '<td class="rp-home-meta">' + esc((p.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td class="rp-meta">' + esc((p.description || "").slice(0, 120) || "—") + '</td>'
           + '<td>' + fmtTime(p.created_at) + '</td>'
           + '<td>' + fmtTime(p.updated_at) + '</td>'
           + '<td><span class="rp-mon-method">' + esc(p.redpash_id || "—") + '</span></td>'
@@ -1080,7 +1080,7 @@ export default function home(app, { session: _session }) {
       if (!btn || !dd) return;
       if (actionLog.length === 0) {
         btn.setAttribute("disabled", "");
-        dd.innerHTML = '<div class="rt-dd-item rp-home-meta">No actions yet</div>';
+        dd.innerHTML = '<div class="rt-dd-item rp-meta">No actions yet</div>';
         return;
       }
       btn.removeAttribute("disabled");
@@ -1090,7 +1090,7 @@ export default function home(app, { session: _session }) {
       const recent = actionLog.slice(-50).reverse();
       dd.innerHTML = recent.map((e) => {
         const t = e.when.toLocaleTimeString();
-        return '<div class="rt-dd-item rp-home-meta">'
+        return '<div class="rt-dd-item rp-meta">'
           + '<span style="opacity:0.6;margin-right:0.5rem">' + esc(t) + '</span>'
           + esc(e.label)
           + '</div>';

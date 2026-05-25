@@ -63,7 +63,7 @@
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
-.rp-home-meta {
+.rp-meta {
   color: var(--rp-text-dim);
   font-size: var(--rp-text-sm);
 }

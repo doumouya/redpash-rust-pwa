@@ -23,7 +23,7 @@
 // Naming notes:
 //   - tbodyId is page-local (rp-home-list-tbody / rp-mon-list-tbody)
 //     so each page passes its own.
-//   - CSS class `.rp-home-charts` is shared across both pages today
+//   - CSS class `.rp-charts` is shared across both pages today
 //     (a naming smell — both pages use the home prefix); renaming
 //     to `.rp-list-charts` belongs in a separate CSS pass.
 
@@ -63,12 +63,12 @@ export function kpiStripHTML(tiles) {
 // were identical except for a wrapper class name. Both now call this.
 export function compositeStripHTML(tiles, charts) {
   const chartCard = (c) => c
-    ? '<div class="rp-home-chart-card">'
-    +   '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-    +   '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+    ? '<div class="rp-chart-card">'
+    +   '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+    +   '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
     + '</div>'
-    : '<div class="rp-home-chart-card rp-home-chart-card--empty">'
-    +   '<div class="rp-home-chart-canvas"></div>'
+    : '<div class="rp-chart-card rp-chart-card--empty">'
+    +   '<div class="rp-chart-canvas"></div>'
     + '</div>';
   const statsCells = tiles.map((t) =>
     '<div class="rp-kpi">'
@@ -90,11 +90,11 @@ export function compositeStripHTML(tiles, charts) {
 // against the canvas after the /stats fetch resolves.
 export function chartsStripHTML(charts) {
   if (!charts || !charts.length) return "";
-  return '<div class="rp-home-charts">'
+  return '<div class="rp-charts">'
     + charts.map((c) =>
-        '<div class="rp-home-chart-card">'
-        + '<div class="rp-home-chart-title">' + esc(c.title || "") + '</div>'
-        + '<div class="rp-home-chart-canvas" id="' + esc(c.id) + '"></div>'
+        '<div class="rp-chart-card">'
+        + '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+        + '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
         + '</div>'
       ).join("")
     + '</div>';
@@ -295,7 +295,7 @@ export function listToolbarHTML(spec) {
     +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
     +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
     +   '<div class="rt-dd-item" data-fmt="xlsx" title="Needs backend round-trip — coming soon">'
-    +     'Export as Excel <span class="rp-home-meta">(soon)</span>'
+    +     'Export as Excel <span class="rp-meta">(soon)</span>'
     +   '</div>'
     + '</div>'
     + '</div>',
@@ -309,7 +309,7 @@ export function listToolbarHTML(spec) {
     + '<button class="rt-btn" data-dd="rp-list-toolbar-history-dd" type="button" '
     +   'title="Session history" disabled><i class="bi bi-clock-history"></i></button>'
     + '<div class="rt-dd" id="rp-list-toolbar-history-dd">'
-    +   '<div class="rt-dd-item rp-home-meta">No actions yet</div>'
+    +   '<div class="rt-dd-item rp-meta">No actions yet</div>'
     + '</div>'
     + '</div>',
   );
