@@ -1286,6 +1286,12 @@ export default function home(app, { session: _session }) {
       // every body row's TD at the same column index. decorate runs
       // after every fetchList paint via the view._applyHiddenColumns
       // hook so freshly-rendered rows pick up the hide state.
+      // Cache of the last fetched page — feeds the export handlers
+       // (they need the raw row data, not the DOM render). Populated
+       // in fetchList on success; survives across re-renders.
+       let lastRows = [];
+       view._setLastRows = (rows) => { lastRows = rows; };
+
       // Columns picker — seed with spec defaults when storage is
       // untouched. `defaultHidden: true` on a column hides it on a
       // user's first visit; their picker clicks override + persist.
@@ -1351,6 +1357,87 @@ export default function home(app, { session: _session }) {
         localStorage.setItem(colsStorageKey, JSON.stringify([...hiddenCols]));
         decorateColsPicker();
         applyHiddenColumns();
+      });
+
+      // ── export ─────────────────────────────────────────────────
+      // CSV + JSON build client-side from `lastRows` (the most recent
+      // fetchList page). Only visible columns are exported — hidden
+      // columns are absent from the file just like they're absent
+      // from the view. XLSX needs a backend round-trip (the existing
+      // csv-to-xlsx-rs binary is upload-side); the menu item stays
+      // disabled with a tooltip until that lands. Scope is the
+      // current page — large datasets should bump rows-per-page to
+      // "All" (clamped to backend MAX_PAGE_SIZE 500) before exporting.
+      function visibleColumns() {
+        return (spec.columns || []).filter((c) => {
+          const k = typeof c === "string" ? c : (c.key || c.label);
+          return !hiddenCols.has(k);
+        });
+      }
+      function colKey(c)   { return typeof c === "string" ? c : (c.key || c.label); }
+      function colLabel(c) { return typeof c === "string" ? c : (c.label || c.key); }
+      function csvEscape(val) {
+        if (val == null) return "";
+        const s = String(val);
+        return /[",\r\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s;
+      }
+      function downloadBlob(text, mime, filename) {
+        const blob = new Blob([text], { type: mime });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      function exportTimestamp() {
+        return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      }
+
+      function exportCsv() {
+        const cols = visibleColumns();
+        if (!cols.length || !lastRows.length) return;
+        const header = cols.map((c) => csvEscape(colLabel(c))).join(",");
+        const lines  = lastRows.map((r) =>
+          cols.map((c) => csvEscape(r[colKey(c)])).join(",")
+        );
+        downloadBlob(
+          [header, ...lines].join("\n"),
+          "text/csv;charset=utf-8",
+          tab.key + "-" + exportTimestamp() + ".csv",
+        );
+      }
+      function exportJson() {
+        const cols = visibleColumns();
+        if (!cols.length || !lastRows.length) return;
+        const keys = cols.map(colKey);
+        const out  = lastRows.map((r) => {
+          const o = {};
+          keys.forEach((k) => { o[k] = r[k] ?? null; });
+          return o;
+        });
+        downloadBlob(
+          JSON.stringify(out, null, 2),
+          "application/json",
+          tab.key + "-" + exportTimestamp() + ".json",
+        );
+      }
+
+      // Enable the export button + wire the dropdown items.
+      const exportBtn = view.querySelector('[data-dd="rp-list-toolbar-export-dd"]');
+      if (exportBtn) {
+        exportBtn.removeAttribute("disabled");
+        exportBtn.title = "Export current page";
+      }
+      view.querySelector("#rp-list-toolbar-export-dd")?.addEventListener("click", (e) => {
+        const item = e.target.closest(".rt-dd-item[data-fmt]");
+        if (!item) return;
+        switch (item.dataset.fmt) {
+          case "csv":  exportCsv(); break;
+          case "json": exportJson(); break;
+          case "xlsx":
+            alert("XLSX export needs a backend round-trip — coming soon. CSV / JSON work today.");
+            break;
+        }
       });
 
       // Click-to-sort — header delegation. Three-state per column:
@@ -1555,6 +1642,9 @@ export default function home(app, { session: _session }) {
       listPage       = data?.page  || listPage;
       listTotal      = total;
       listShown      = rows.length;
+      // Cache the raw rows so the export handlers can serialize them
+      // without re-parsing the DOM. Hook is set in renderListBody.
+      if (typeof view._setLastRows === "function") view._setLastRows(rows);
       const elapsed = Math.round(performance.now() - t0);
       setKpi("rp-home-list-total", fmtCount(total));
       setKpi("rp-home-list-shown", String(rows.length));

@@ -247,8 +247,10 @@ export function listToolbarHTML(spec) {
     +   'title="Export" disabled><i class="bi bi-download"></i></button>'
     + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
     +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
-    +   '<div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>'
     +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
+    +   '<div class="rt-dd-item" data-fmt="xlsx" title="Needs backend round-trip — coming soon">'
+    +     'Export as Excel <span class="rp-home-meta">(soon)</span>'
+    +   '</div>'
     + '</div>'
     + '</div>',
   );
