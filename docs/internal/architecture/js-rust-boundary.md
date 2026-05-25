@@ -2,16 +2,19 @@
 title: JS ↔ Rust boundary
 section: Internal
 order: 0
-last modified date: 2026-05-22
+last modified date: 2026-05-25
 ---
 
 # JS ↔ Rust boundary
 
 The responsibility contract between the two halves of RedPash — what JS
-owns, what Rust owns, and where they are allowed to meet. **Draft,
-2026-05-22.** Written because the JS and Rust refactor audits both
-flagged the same blurred area (filter / sort / step): the audits map
-each side's *internals*; this doc maps the *seam*.
+owns, what Rust owns, and where they are allowed to meet. **Locked
+2026-05-25 by Em.** Written because the JS and Rust refactor audits
+both flagged the same blurred area (filter / sort / step): the audits
+map each side's *internals*; this doc maps the *seam*. The rule and
+the seam rulings below are now binding on new work; the audit triad
+(`js-audit` + `rs-audit` + `crossing-audit`) is the linter that holds
+the code to them.
 
 ## The rule
 
@@ -126,9 +129,12 @@ classes and ids.
 
 ## Status
 
-Draft for the team. Woz owns the frontend side of every seam ruling;
-Torv owns `rs-audit` + the crossing diff. Lock the rule and the seam
-rulings, then the migration wires across a boundary that is written
-down — not discovered mid-wiring.
+**Locked 2026-05-25 by Em.** The rule and the three seam rulings are
+binding on new work. Woz owns the frontend side of every seam ruling;
+Torv owns `rs-audit` + the crossing diff. Open carry-over from the
+draft: the redtable prototype's client-side JS filter / sort is demo
+scaffolding to be replaced by the `/page` endpoint, not hardened; and
+`render.rs` + its four unused workspace deps (`maud`, `pulldown-cmark`,
+`syntect`, `gray_matter`) are scheduled for deletion.
 
-— Gus
+— Gus (authored 2026-05-22), locked by Em 2026-05-25
