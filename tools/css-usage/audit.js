@@ -107,7 +107,11 @@ cssFiles.forEach(function (file) {
       if (!s) return;
       // Drop pseudo-classes / pseudo-elements / attribute selectors
       // before tokenizing — we want the BASE class/id names.
+      // Strip url(...) values first so `url(/foo/bar.svg)` doesn't
+      // give a spurious `.svg` class match. Then drop pseudo-classes,
+      // pseudo-elements, attribute selectors before tokenizing.
       var bare = s
+        .replace(/url\([^)]*\)/g, '')
         .replace(/::[\w-]+/g, '')
         .replace(/:[\w-]+(\([^)]*\))?/g, '')
         .replace(/\[[^\]]+\]/g, '');
@@ -200,6 +204,56 @@ jsFiles.forEach(function (file) {
   }
 });
 
+// ── second-pass JS scan: literal class names anywhere in source ─────────
+// The structured scan above misses inline-HTML string concat — the
+// `'<div class="rp-foo' + bar + '">'` pattern (the js-audit "inline-HTML
+// string concat" declined pattern, 78 live hits in cases.js etc.). For
+// each class defined in CSS, grep the JS source for the literal name as
+// a word boundary token; if found, count as a JS use. Conservative:
+// a literal that matches a class name is almost always a class ref in
+// our codebase (no method or var uses kebab-case dashes).
+function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+var jsSourceByFile = new Map();
+jsFiles.forEach(function (f) { jsSourceByFile.set(f, fs.readFileSync(f, 'utf8')); });
+function recordJsUse(name, file) {
+  if (!CLASS_USES_JS.has(name)) CLASS_USES_JS.set(name, []);
+  if (!CLASS_USES_JS.get(name).some(function (u) { return u.file === rel(file); })) {
+    CLASS_USES_JS.get(name).push({ file: file, line: 0 });
+  }
+}
+CLASS_DEFS.forEach(function (_defs, name) {
+  // Only kebab-cased names (containing a `-`) are pattern-safe to grep
+  // as bareword. Pure-word classes like `chip` could match anything.
+  if (!/-/.test(name)) return;
+  var re = new RegExp('(["\'`\\s])' + escapeRe(name) + '(?=["\'`\\s])', 'g');
+  jsSourceByFile.forEach(function (src, file) {
+    if (re.test(src)) recordJsUse(name, file);
+    re.lastIndex = 0;
+  });
+});
+
+// Dynamic-modifier detection: for any class with `--` (BEM modifier
+// pattern), check if its base prefix appears in JS as a string
+// followed by concat (`'rp-cases-user-avatar--' + size`). When yes,
+// the modifier class is dynamically constructed and shouldn't count
+// as orphan — JS picks the suffix at runtime.
+CLASS_DEFS.forEach(function (_defs, name) {
+  var doubleDash = name.lastIndexOf('--');
+  if (doubleDash < 0) return;
+  var base = name.slice(0, doubleDash + 2);  // include the trailing `--`
+  // Look for the base as a quoted string in JS — `"prefix--"` or
+  // `'prefix--'` or `` `prefix--` ``. If found, the modifier is
+  // dynamic; record a JS use.
+  // Allow a quote OR whitespace before the base prefix — covers both
+  // `'rp-foo--'+x` (quote-then-base) and `'<div class="rp-foo rp-foo--'+x`
+  // (the latter has whitespace inside the string before the prefix).
+  var re = new RegExp('["\'`\\s]' + escapeRe(base), 'g');
+  jsSourceByFile.forEach(function (src, file) {
+    if (re.test(src)) recordJsUse(name, file);
+    re.lastIndex = 0;
+  });
+});
+
 // ── merge into a single payload ─────────────────────────────────────────
 function uniqFiles(uses) {
   if (!uses) return [];
@@ -213,22 +267,66 @@ function uniqFiles(uses) {
     .sort(function (a, b) { return a.file.localeCompare(b.file); });
 }
 
+// Keep-list for orphan classes (per Em 2026-05-25):
+//   • the 8 component atoms — anything starting with `rt-` (workspace
+//     redtable family: rt-btn, rt-table, rt-toolbar, rt-nav (rail),
+//     rt-pager, rt-panel, rt-chart, plus topbar / surface / search
+//     helpers under the same prefix)
+//   • state-modifier classes (.is-*, .has-*) — typically combined
+//     with other classes via JS .classList.add("is-active"),
+//     can read as orphan when the JS uses a class never matched
+//   • selectors that include an id (#wsXxx, #home, etc.) —
+//     page-bound surfaces stay, page-prefixed (.rp-foo-*) orphans go
+function keepDecision(row) {
+  if (row.status !== 'orphan') return { keep: true, reason: row.status };
+  if (row.kind === 'id')       return { keep: true, reason: 'id (rarely orphan)' };
+  // 8-atom family: rt-* prefix
+  if (/^rt-/.test(row.name))   return { keep: true, reason: '8-component atom (rt-*)' };
+  // state-modifiers
+  if (/^(is-|has-)/.test(row.name)) return { keep: true, reason: 'state modifier' };
+  // id-scoped: any definition selector includes a `#`
+  var idScoped = row.defined_in.some(function (d) {
+    return d.selectors && d.selectors.some(function (s) { return s.indexOf('#') >= 0; });
+  });
+  if (idScoped) return { keep: true, reason: 'id-scoped' };
+  return { keep: false, reason: 'orphan, not protected' };
+}
+
 function buildRow(name, kind, defs, htmlUses, jsUses) {
   var def     = defs.get(name) || [];
   var inHtml  = htmlUses.get(name) || [];
   var inJs    = jsUses.get(name) || [];
   var used    = inHtml.length + inJs.length > 0;
   var defined = def.length > 0;
-  return {
+  // Group def file→[{line,selector}] so the keep-decision can see
+  // the full selector text for the id-scoped check.
+  var defByFile = new Map();
+  def.forEach(function (d) {
+    if (!defByFile.has(d.file)) defByFile.set(d.file, []);
+    defByFile.get(d.file).push({ line: d.line, selector: d.selector });
+  });
+  var defined_in = Array.from(defByFile.entries()).map(function (e) {
+    return {
+      file: e[0],
+      count: e[1].length,
+      selectors: e[1].map(function (x) { return x.selector; }),
+      lines:     e[1].map(function (x) { return x.line; }),
+    };
+  }).sort(function (a, b) { return a.file.localeCompare(b.file); });
+  var row = {
     name:       name,
-    kind:       kind,                                 // "class" | "id"
-    defined_in: uniqFiles(def),
+    kind:       kind,
+    defined_in: defined_in,
     used_html:  uniqFiles(inHtml),
     used_js:    uniqFiles(inJs),
     status:     !defined ? 'undefined'
               : !used    ? 'orphan'
               :           'used',
   };
+  var decision = keepDecision(row);
+  row.cleanup  = decision.keep ? 'KEEP' : 'CUT';
+  row.reason   = decision.reason;
+  return row;
 }
 
 var allClassNames = new Set([
@@ -397,6 +495,22 @@ var html = [
 
 fs.writeFileSync(HTML_OUT, html);
 
+// ── cleanup audit ───────────────────────────────────────────────────────
+// Cuts only target ORPHAN classes that aren't protected by the keep-list
+// (8-component prefix, state modifier, or id-scoped selector). Each cut
+// row is grouped by its source file so we can preview the deletion scope
+// per sheet.
+var cuts = rows.filter(function (r) { return r.cleanup === 'CUT'; });
+var cutsByFile = new Map();
+cuts.forEach(function (r) {
+  r.defined_in.forEach(function (d) {
+    if (!cutsByFile.has(d.file)) cutsByFile.set(d.file, []);
+    d.selectors.forEach(function (sel, i) {
+      cutsByFile.get(d.file).push({ name: r.name, selector: sel, line: d.lines[i] });
+    });
+  });
+});
+
 // ── stdout summary ──────────────────────────────────────────────────────
 console.log('RedPash CSS-usage audit');
 console.log('');
@@ -411,6 +525,16 @@ console.log('  ids total          ' + summary.ids.total);
 console.log('    used             ' + summary.ids.used);
 console.log('    orphan           ' + summary.ids.orphan);
 console.log('    undefined        ' + summary.ids.undefined);
+console.log('');
+console.log('');
+console.log('  cleanup proposal (orphans not protected by keep-list):');
+console.log('    cut classes      ' + cuts.length);
+console.log('    by sheet:');
+Array.from(cutsByFile.entries())
+  .sort(function (a, b) { return b[1].length - a[1].length; })
+  .forEach(function (e) {
+    console.log('      ' + (e[0] + ':').padEnd(36) + e[1].length + ' selector' + (e[1].length === 1 ? '' : 's'));
+  });
 console.log('');
 console.log('  report -> ' + path.relative(ROOT, HTML_OUT));
 console.log('  payload -> ' + path.relative(ROOT, JSON_OUT));
