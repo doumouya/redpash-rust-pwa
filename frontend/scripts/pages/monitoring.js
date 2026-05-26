@@ -139,7 +139,7 @@ export default function monitoring(app, { session }) {
       row: (r) =>
         '<tr>'
         + '<td>' + fmtTime(r.ran_at) + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(r.tool) + '</span></td>'
+        + '<td><span class="rt-mono-pill">' + esc(r.tool) + '</span></td>'
         + '<td>' + (r.git_sha ? '<code>' + esc(String(r.git_sha).slice(0, 7)) + '</code>' : "—") + '</td>'
         + '<td>' + esc(r.git_branch || "—") + '</td>'
         + '<td>' + summarizeStats(r.stats) + '</td>'
@@ -159,7 +159,7 @@ export default function monitoring(app, { session }) {
       row: (f) =>
         '<tr>'
         + '<td class="is-num">#' + f.run_id + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(f.tool) + '</span></td>'
+        + '<td><span class="rt-mono-pill">' + esc(f.tool) + '</span></td>'
         + '<td>' + esc(f.kind) + '</td>'
         + '<td>' + esc(f.finding_key) + '</td>'
         + '<td class="is-num">' + (f.severity != null ? f.severity : "—") + '</td>'
@@ -210,9 +210,9 @@ export default function monitoring(app, { session }) {
         '<tr>'
         + '<td>' + esc(s.file_filename) + '</td>'
         + '<td class="is-num">' + s.ordinal + '</td>'
-        + '<td><span class="rp-mon-method">' + esc(s.kind) + '</span></td>'
-        + '<td>' + (s.applied ? '<span class="rp-mon-method rp-mon-err-low">yes</span>'
-                              : '<span class="rp-mon-method">no</span>') + '</td>'
+        + '<td><span class="rt-mono-pill">' + esc(s.kind) + '</span></td>'
+        + '<td>' + (s.applied ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
+                              : '<span class="rt-mono-pill">no</span>') + '</td>'
         + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
     },
@@ -330,7 +330,7 @@ export default function monitoring(app, { session }) {
     const clickable = r.request_id ? ' class="rp-mon-row-clickable" data-request-id="' + esc(r.request_id) + '"' : '';
     return '<tr' + clickable + '>'
       + '<td>' + fmtTime(r.at) + '</td>'
-      + '<td><span class="rp-mon-method">' + esc(r.method) + '</span></td>'
+      + '<td><span class="rt-mono-pill">' + esc(r.method) + '</span></td>'
       + '<td class="is-num ' + statusBand(r.status) + '">' + r.status + '</td>'
       + '<td>' + esc(r.route) + '</td>'
       + '<td class="is-num">' + r.duration_ms + 'ms</td>'
@@ -419,7 +419,7 @@ export default function monitoring(app, { session }) {
     const reqLine = req
       ? '<section class="rp-mon-modal-request">'
         + '<div class="rp-mon-modal-request-row">'
-        +   '<span class="rp-mon-method">' + esc(req.method || "?") + '</span>'
+        +   '<span class="rt-mono-pill">' + esc(req.method || "?") + '</span>'
         +   '<span class="is-num ' + statusBand(req.status) + '">' + (req.status || "?") + '</span>'
         +   '<span class="rp-mon-modal-route">' + esc(req.route || "—") + '</span>'
         +   '<span class="rp-mon-modal-meta">' + (req.duration_ms ?? "?") + 'ms · ' + fmtTime(req.at) + '</span>'
@@ -470,10 +470,10 @@ export default function monitoring(app, { session }) {
 
   function statusBand(status) {
     const code = status | 0;
-    if (code >= 500) return "rp-mon-err-high";
-    if (code >= 400) return "rp-mon-err-mid";
+    if (code >= 500) return "rt-tone--high";
+    if (code >= 400) return "rt-tone--mid";
     if (code >= 300) return "";
-    return "rp-mon-err-low";
+    return "rt-tone--low";
   }
 
   // ─── list-view tabs (Requests / Events / Runs / Findings / Steps) ─
@@ -881,9 +881,9 @@ export default function monitoring(app, { session }) {
         : '';
       return '<tr' + clickable + '>'
         + '<td>' + fmtTime(item.at) + '</td>'
-        + '<td><span class="rp-mon-method">REQ</span></td>'
+        + '<td><span class="rt-mono-pill">REQ</span></td>'
         + '<td>'
-        +   '<span class="rp-mon-method">' + esc(item.kind) + '</span>'
+        +   '<span class="rt-mono-pill">' + esc(item.kind) + '</span>'
         +   ' <span class="rp-mon-modal-meta">' + (ctx.duration_ms ?? "?") + 'ms</span>'
         + '</td>'
         + '<td class="is-num ' + statusBand(status) + '">' + (item.summary || "?") + '</td>'
@@ -897,9 +897,9 @@ export default function monitoring(app, { session }) {
     const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
       + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
         + fmtTime(item.at) + '</td>'
-      + '<td><span class="rp-mon-method">EVT</span></td>'
+      + '<td><span class="rt-mono-pill">EVT</span></td>'
       + '<td>'
-      +   '<span class="rp-mon-method">' + esc(item.kind) + '</span> '
+      +   '<span class="rt-mono-pill">' + esc(item.kind) + '</span> '
       +   esc(item.summary || "")
       + '</td>'
       + '<td class="is-num">' + levelChip(item.level) + '</td>'
@@ -1020,7 +1020,7 @@ export default function monitoring(app, { session }) {
       + '<td>' + esc(r.subsystem) + '</td>'
       + '<td>' + esc(r.phase) + '</td>'
       + '<td>' + esc(r.current_cost) + '</td>'
-      + '<td class="is-num ' + (r.tipped === true ? "rp-mon-err-high" : "") + '">'
+      + '<td class="is-num ' + (r.tipped === true ? "rt-tone--high" : "") + '">'
       +   fmtMeasurement(r.current_value, r.threshold_unit)
       + '</td>'
       + '<td class="is-num">' + fmtMeasurement(r.threshold_value, r.threshold_unit) + '</td>'
@@ -1103,11 +1103,11 @@ export default function monitoring(app, { session }) {
   }
   function levelChip(level) {
     const v = String(level || "").toLowerCase();
-    const cls = v === "error" || v === "err" || v === "panic" ? "rp-mon-err-high"
-              : v === "warn"  || v === "warning"              ? "rp-mon-err-mid"
-              : v === "info"  || v === "debug" || v === "trace" ? "rp-mon-err-low"
+    const cls = v === "error" || v === "err" || v === "panic" ? "rt-tone--high"
+              : v === "warn"  || v === "warning"              ? "rt-tone--mid"
+              : v === "info"  || v === "debug" || v === "trace" ? "rt-tone--low"
               : "";
-    return '<span class="rp-mon-method ' + cls + '">' + esc(level || "—") + '</span>';
+    return '<span class="rt-mono-pill ' + cls + '">' + esc(level || "—") + '</span>';
   }
   function summarizeStats(stats) {
     if (!stats || typeof stats !== "object") return "—";

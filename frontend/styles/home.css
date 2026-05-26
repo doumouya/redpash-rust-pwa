@@ -44,7 +44,7 @@
 
 /* ── Users tab row polish ───────────────────────────────────────
    The Users row had three different concepts wearing the same
-   monospace-pill (.rp-mon-method): the @handle, the Plan, the
+   monospace-pill (.rt-mono-pill): the @handle, the Plan, the
    Role. Strip the handle out of pill styling (it's metadata, not
    a category), and give Org its own soft chip so it reads as the
    user's company affiliation rather than flat text fighting two

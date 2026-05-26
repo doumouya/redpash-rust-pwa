@@ -115,7 +115,7 @@ const MIXED_PREFIX_RX = /^rt-(mon|home|list|kpi|chip|cases|shell)-/;
 const CLASS_RX = /class=["']([^"']+)["']/g;
 // Chip-helper call detector inside `row(...)` bodies — looks for
 // `<word>Chip(` calls so the audit can follow them into their
-// emitted-classes (e.g. stageChip → emits `.rp-mon-method`).
+// emitted-classes (e.g. stageChip → emits `.rt-mono-pill`).
 const CHIP_HELPER_CALL_RX = /\b([a-zA-Z][a-zA-Z0-9]*Chip)\s*\(/g;
 
 // ─── argv ──────────────────────────────────────────────────────────────────
@@ -331,7 +331,7 @@ function inventoryTab(pageName, tabKey) {
 
   // 2. Chip / pill helpers called from the row template — follow
   //    each into its body so chips' inner classes (e.g. stageChip's
-  //    `.rp-mon-method`) join the inventory. Same routine handles
+  //    `.rt-mono-pill`) join the inventory. Same routine handles
   //    nested calls (helper-of-helper) by re-scanning their bodies.
   const HELPER_NAME_RX = /\b([a-zA-Z][a-zA-Z0-9]*(?:Chip|HTML|Row|Cell|Body|Header|Pill|Badge|Avatar))\s*\(/g;
   function collectHelperClasses(seedSrc) {

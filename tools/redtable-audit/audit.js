@@ -161,8 +161,8 @@ function scanForRetiredClasses(file, text) {
 
 /* ── R-4 — CSS rules whose SUBJECT is .rt-table* outside canonical files ── */
 /* The "subject" of a CSS rule is the rightmost compound selector — the
-   element it actually styles. A rule like `.rt-table td .rp-mon-method`
-   has `.rp-mon-method` as its subject, not `.rt-table`, so it's NOT an
+   element it actually styles. A rule like `.rt-table td .rt-mono-pill`
+   has `.rt-mono-pill` as its subject, not `.rt-table`, so it's NOT an
    override of the redtable; it's a rule for content INSIDE the redtable.
    We flag only rules where the SUBJECT is a .rt-table* class.
 

@@ -37,22 +37,11 @@
   display: none;
 }
 
-/* Monitoring tables use the canonical `.rt-table` (table.css). The
-   mono method pill is page-content (HTTP method label in cells),
-   not table chrome, so it stays here. */
-.rt-table td .rp-mon-method {
-  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  padding: 1px 0.375rem;
-  border-radius: 0.25rem;
-  background: var(--rp-surface-2);
-  color: var(--rp-text-dim);
-}
-
-/* error-rate emphasis — colour by band, like cleanness on home */
-.rp-mon-err-low  { color: var(--rp-ok); }
-.rp-mon-err-mid  { color: var(--rp-warn); }
-.rp-mon-err-high { color: var(--rp-accent); font-weight: 600; }
+/* Mono pill + tone modifiers moved to table.css as `.rt-mono-pill`
+   and `.rt-tone--{low,mid,high}` — those atoms now serve every page
+   that needs an inline mono label or severity-tinted text. Previous
+   selectors `.rt-table td .rp-mon-method` + `.rp-mon-err-*` removed
+   2026-05-25 (the cross-page audit caught the borrow). */
 
 /* ── Composite strip — Monitoring's 5-cell version ───────────────
    Em 2026-05-25: "2 charts 20% each, 2 rows of 2 r-stats 10% width
