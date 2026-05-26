@@ -1,0 +1,36 @@
+# parse-diag — measurement spike comparing parse_and_rescue (draft) vs
+# the production data::parse path with RescueDiag.
+#
+# Standalone — deliberately NOT a member of the backend workspace so it
+# doesn't bloat `cargo check -p api` and so its native-only feature set
+# (csv crate + chardetng directly) stays out of the runtime's compile
+# graph. Same in-tools pattern as csv-to-xlsx-rs.
+#
+# Per [[feedback-data-decides]]: the harness IS the deliverable; the
+# data it produces decides whether parse_and_rescue's simpler shape
+# recovers the same fixtures the current unwrap_csv-in-parse path does.
+# Mirrors the FromRow spike (681350b) — measurement, not rollout.
+
+[package]
+name    = "parse-diag"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "compare"
+path = "src/main.rs"
+
+[dependencies]
+# The production path under test — depped by path so we measure the
+# real algorithm, not a snapshot.
+data = { path = "../../backend/crates/data" }
+
+# Em's draft uses the csv crate verbatim; same dep here so the inlined
+# parse_and_rescue is byte-identical to the original.
+csv = "1.3"
+
+# Encoding detect + transcode — matches what data::encoding does so both
+# impls see the same UTF-8 string in their hot path.
+chardetng   = "0.1"
+encoding_rs = "0.8"
