@@ -82,11 +82,39 @@ async function mount(path) {
 }
 
 function navigate() {
-  mount(currentPath()).catch((err) => {
-    console.error("[router] mount failed:", err);
-    document.getElementById("app").innerHTML =
-      errorShell("⚠", "Something went wrong", "Reload to try again.");
-  });
+  mount(currentPath())
+    .then(tryAuditCapture)
+    .catch((err) => {
+      console.error("[router] mount failed:", err);
+      document.getElementById("app").innerHTML =
+        errorShell("⚠", "Something went wrong", "Reload to try again.");
+    });
+}
+
+// ─── ?audit=1 mode — UI-snapshot self-report ─────────────────────
+// When the SPA loads with `?audit=1` in the URL, every page mount
+// triggers a computed-style snapshot of the foundation atom catalog
+// (.rt-* + .rp-* — see scripts/audit/snapshot.js) and downloads the
+// JSON. Feed the files into tools/ui-snapshot/audit.js (Layer 2b)
+// to surface drift in the standard audit pipeline (audit.run_diff).
+//
+// Lazy-imported so non-audit page loads never pay the module-fetch
+// cost. Errors swallowed (only console.warn) so a snapshot failure
+// can't break the page — the audit is best-effort instrumentation,
+// not a hard dependency.
+function isAuditMode() {
+  return new URLSearchParams(location.search).get("audit") === "1";
+}
+async function tryAuditCapture() {
+  if (!isAuditMode()) return;
+  try {
+    const { captureSnapshot, downloadSnapshot } =
+      await import("/scripts/audit/snapshot.js");
+    const snap = await captureSnapshot();
+    downloadSnapshot(snap);
+  } catch (err) {
+    console.warn("[audit] snapshot capture failed:", err);
+  }
 }
 
 // Shared shell for 404 + mount-failure surfaces. Uses .rp-page tokens
