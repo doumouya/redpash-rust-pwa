@@ -76,6 +76,35 @@ parameter triggers a per-page-mount capture that downloads
 5. `node tools/ui-snapshot-audit/audit.js` emits `audit.json` for ingest.
 6. `sh tools/ci-audit/check.sh` then catches any drift vs the previous run.
 
+#### v2 — capturing interactive states
+
+The v1 walker captures default page state only. Many atoms live
+behind interactions (`.rt-card` on `/monitoring` mounts on
+request-row click; tabs on Home/Monitoring swap visible content
+without a page navigation; etc.). v2 adds two paths to capture
+those states without breaking the v1 baseline:
+
+- **Auto on tab switch.** A `MutationObserver` watches for
+  `.rp-chip.is-active` class transitions anywhere on the page;
+  on a tab switch it debounces 250 ms and re-captures with
+  `state = <new chip's data-value or textContent>`. Same atoms,
+  different state name, separate finding_keys.
+- **Manual.** A floating "📸 Capture" bar lands bottom-right in
+  audit mode with a state-tag input. Click anytime to record the
+  current DOM state with whatever tag you type. For programmatic
+  use (devtools, future test harnesses), `window.__rpCapture(state)`
+  bypasses the UI.
+
+Filename + finding_key encoding:
+
+| State | Filename | finding_key |
+|---|---|---|
+| default (page mount) | `ui-snapshot__<route>__<theme>.json` | `<route>#<atom>#<prop>@<theme>` |
+| tagged (tab / manual) | `ui-snapshot__<route>__<theme>__<state>.json` | `<route>:<state>#<atom>#<prop>@<theme>` |
+
+v1 captures (no `state` field) default to `state="default"` on
+ingest — backward compatible, finding_keys unchanged.
+
 Source-of-truth for the atom catalog + tracked properties:
 `frontend/scripts/audit/snapshot.js` (`ATOM_CATALOG` + `TRACKED_PROPS`).
 v1 is conservative — catalog expands in response to findings, not in

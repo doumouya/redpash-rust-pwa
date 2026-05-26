@@ -81,8 +81,20 @@ const TRACKED_PROPS = [
  * page-script async rendering (echarts mounts, redtable initial paint,
  * etc.) complete before we sample. Empirically sufficient for every
  * RedPash page tested; bumpable if a slow page surfaces drift here.
+ *
+ * `state` (v2) is an optional tag identifying the interactive UI state
+ * the capture is recording. Default `null` (auto-captures on page
+ * mount). Explicit values come from two sources:
+ *   - The tab-change MutationObserver in main.js (state = the new
+ *     `.rp-chip.is-active`'s `data-value` / textContent).
+ *   - Manual capture button / `window.__rpCapture(state)` from
+ *     devtools (state = whatever the operator types in).
+ *
+ * The state propagates into the JSON's `state` field + the filename
+ * suffix + the audit.js finding_key encoding. v1 captures (no state
+ * field) read as `state = "default"` on ingest — backward compatible.
  */
-export async function captureSnapshot() {
+export async function captureSnapshot(state = null) {
   await new Promise((r) => requestAnimationFrame(r));
   await new Promise((r) => requestAnimationFrame(r));
 
@@ -108,6 +120,7 @@ export async function captureSnapshot() {
   return {
     route:       location.hash || "#/",
     theme:       document.documentElement.getAttribute("data-theme") || "dark",
+    state:       state || "default",
     captured_at: new Date().toISOString(),
     viewport:    { width: window.innerWidth, height: window.innerHeight },
     atoms,
@@ -129,7 +142,14 @@ export function downloadSnapshot(snapshot) {
     .replace(/[^a-z0-9]+/gi, "_")
     .replace(/^_+|_+$/g, "")
     || "root";
-  const fname = `ui-snapshot__${safeRoute}__${snapshot.theme}.json`;
+  // v2: state suffix in filename when non-default. Keeps v1 filenames
+  // (`ui-snapshot__<route>__<theme>.json`) unchanged for default
+  // page-mount captures; tagged captures get `__<state>` to avoid
+  // overwriting the default snapshot in Downloads.
+  const state = snapshot.state && snapshot.state !== "default"
+    ? "_" + snapshot.state.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")
+    : "";
+  const fname = `ui-snapshot__${safeRoute}__${snapshot.theme}${state}.json`;
 
   const blob = new Blob(
     [JSON.stringify(snapshot, null, 2)],

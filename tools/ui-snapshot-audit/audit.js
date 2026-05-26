@@ -19,11 +19,23 @@
    as exit-code failures.
 
    ── Finding key + severity encoding ─────────────────────────────────────
-   finding_key:  "<route>#<atom>#<prop>@<theme>"
+   finding_key:  "<route>#<atom>#<prop>@<theme>"          (state = default)
+                 "<route>:<state>#<atom>#<prop>@<theme>"  (state ≠ default)
                  — e.g. "#/home#.rt-toolbar#background-color@dark"
+                 — e.g. "#/home:tab-charts#.rt-toolbar#background-color@dark"
                  — stable across runs, no value embedded (per
                    audit.run_diff contract: same key, different severity
                    = regressed/improved)
+                 — v2 state suffix (Em 2026-05-27): the SPA's walker
+                   now captures additional UI states beyond page-mount —
+                   tab switches (auto, via MutationObserver on
+                   `.rp-chip.is-active`) + manual states (floating
+                   capture button + window.__rpCapture API). The state
+                   tag isolates each interactive state into its own
+                   set of finding_keys so the dark/light × default/tab
+                   matrix doesn't collide on the (run_id, finding_key)
+                   PK in audit.finding. v1 captures (no state field)
+                   read as state="default" — backward compatible.
    severity:     djb2 hash of the property value, masked to 31 bits
                  (positive INTEGER, fits Postgres int4)
                  — value change → severity change → diff surfaces it
@@ -31,17 +43,20 @@
 
    kind values:
      "atom_style"    — atom is present on the page; one finding per
-                       (route, atom, prop, theme) tuple
+                       (route, atom, prop, theme, state) tuple
      "atom_missing"  — atom expected on a route but not found (the page
                        walker reported `found: false`). Severity = 0;
-                       finding_key = "<route>#<atom>@<theme>" (no prop).
+                       finding_key = "<route>#<atom>@<theme>"
+                       or "<route>:<state>#<atom>@<theme>" (no prop).
 
    ── Input layout ────────────────────────────────────────────────────────
    Default snapshots dir: tools/ui-snapshot-audit/snapshots/
-   Each file: ui-snapshot__<route>__<theme>.json (the canonical filename
-   `downloadSnapshot()` emits). The script is path-tolerant — anything
-   .json under the snapshots dir is parsed; the filename is a hint, the
-   actual `route` / `theme` come from the JSON body.
+   Each file: ui-snapshot__<route>__<theme>.json                 (v1 default)
+              ui-snapshot__<route>__<theme>__<state>.json        (v2 tagged)
+   The script is path-tolerant — anything .json under the snapshots dir is
+   parsed; the filename is a hint, the actual route / theme / state come
+   from the JSON body. v1 captures without a `state` field read as
+   state="default" — backward compatible.
 
    Usage:  node tools/ui-snapshot-audit/audit.js [snapshotsDir]
    Output: tools/ui-snapshot-audit/audit.json (canonical, ingest-ready)
@@ -119,11 +134,19 @@ snapshotFiles.forEach(function (file) {
   }
   var route = raw.route || '#/';
   var theme = raw.theme || 'dark';
+  var state = raw.state || 'default';
+  // routePart embeds the state inline when non-default. v1 captures
+  // (no `state` field on the JSON) hit the default branch and their
+  // finding_keys are byte-identical to the v1 encoding — diff
+  // machinery treats them as the same finding across the v1→v2
+  // transition, which is what backward-compat means here.
+  var routePart = state === 'default' ? route : (route + ':' + state);
 
   snapshots.push({
     file: file,
     route: route,
     theme: theme,
+    state: state,
     captured_at: raw.captured_at || null,
     viewport: raw.viewport || null,
   });
@@ -135,15 +158,16 @@ snapshotFiles.forEach(function (file) {
 
     if (!entry.found) {
       atomsMissing++;
-      // One finding per (route × atom × theme) when the atom is expected
-      // but missing. Severity 0 to read as "not present" at a glance in
-      // the audit.finding table.
+      // One finding per (route × atom × theme × state) when the atom
+      // is expected but missing. Severity 0 to read as "not present"
+      // at a glance in the audit.finding table.
       findings.push({
         kind:        'atom_missing',
-        finding_key: route + '#' + selector + '@' + theme,
+        finding_key: routePart + '#' + selector + '@' + theme,
         severity:    0,
         route:       route,
         theme:       theme,
+        state:       state,
         atom:        selector,
         prop:        null,
         value:       null,
@@ -158,10 +182,11 @@ snapshotFiles.forEach(function (file) {
       var value = styles[prop];
       findings.push({
         kind:        'atom_style',
-        finding_key: route + '#' + selector + '#' + prop + '@' + theme,
+        finding_key: routePart + '#' + selector + '#' + prop + '@' + theme,
         severity:    djb2(value),
         route:       route,
         theme:       theme,
+        state:       state,
         atom:        selector,
         prop:        prop,
         value:       value,

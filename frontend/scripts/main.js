@@ -95,8 +95,20 @@ function navigate() {
 // When the SPA loads with `?audit=1` in the URL, every page mount
 // triggers a computed-style snapshot of the foundation atom catalog
 // (.rt-* + .rp-* — see scripts/audit/snapshot.js) and downloads the
-// JSON. Feed the files into tools/ui-snapshot-audit/audit.js (Layer 2b)
-// to surface drift in the standard audit pipeline (audit.run_diff).
+// JSON. Feed the files into tools/ui-snapshot-audit/audit.js to
+// surface drift in the standard audit pipeline (audit.run_diff).
+//
+// v2 (Em's "we need v2 bro — capturing at tab switch, other actions"):
+// the auto-on-mount capture (state=default) is the v1 baseline;
+// additional interactive states surface via two paths:
+//   • Auto on tab switch — MutationObserver on `.rp-chip.is-active`
+//     class transitions; debounced; state = the new chip's
+//     `data-value` (or textContent fallback). Catches Home tab
+//     switches, Monitoring tabs, any future chip-driven nav.
+//   • Manual — floating "📸 Capture" button bottom-right + the
+//     programmatic `window.__rpCapture(state?)` API for devtools /
+//     test harnesses. Use for non-tab interactions: drill-down
+//     panels, modals, mode toggles, etc.
 //
 // Lazy-imported so non-audit page loads never pay the module-fetch
 // cost. Errors swallowed (only console.warn) so a snapshot failure
@@ -105,16 +117,103 @@ function navigate() {
 function isAuditMode() {
   return new URLSearchParams(location.search).get("audit") === "1";
 }
-async function tryAuditCapture() {
+
+let _snapshotApi = null;
+async function loadSnapshotApi() {
+  if (!_snapshotApi) _snapshotApi = await import("/scripts/audit/snapshot.js");
+  return _snapshotApi;
+}
+
+async function tryAuditCapture(state = null) {
   if (!isAuditMode()) return;
   try {
-    const { captureSnapshot, downloadSnapshot } =
-      await import("/scripts/audit/snapshot.js");
-    const snap = await captureSnapshot();
+    const { captureSnapshot, downloadSnapshot } = await loadSnapshotApi();
+    const snap = await captureSnapshot(state);
     downloadSnapshot(snap);
   } catch (err) {
     console.warn("[audit] snapshot capture failed:", err);
   }
+}
+
+// v2 auto-capture: watch for tab switches via `.rp-chip.is-active`
+// class transitions. Debounced because chip clicks usually trigger
+// two class mutations (one removes is-active from the old chip,
+// one adds it to the new); we want one capture per logical switch.
+//
+// State derivation: when a chip gains is-active, prefer its
+// data-value (the chip-row's canonical tag); fall back to its
+// trimmed textContent. The state string lands in the filename +
+// finding_key so the same route's multi-tab snapshots don't
+// collide.
+let _auditObserverArmed = false;
+let _tabCaptureTimer = null;
+function armTabCaptureObserver() {
+  if (!isAuditMode() || _auditObserverArmed) return;
+  _auditObserverArmed = true;
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (m.type !== "attributes" || m.attributeName !== "class") continue;
+      const el = m.target;
+      if (!(el instanceof HTMLElement) || !el.classList.contains("rp-chip")) continue;
+      if (!el.classList.contains("is-active")) continue;
+      // Newly active chip — debounce + capture. Re-firing across the
+      // 250ms window collapses to the latest state.
+      const state = (el.getAttribute("data-value") || el.textContent || "tab")
+        .trim()
+        .replace(/\s+/g, "-")
+        .toLowerCase()
+        .slice(0, 32);
+      clearTimeout(_tabCaptureTimer);
+      _tabCaptureTimer = setTimeout(() => tryAuditCapture(state), 250);
+      return;
+    }
+  });
+  observer.observe(document.body, {
+    attributes:       true,
+    attributeFilter:  ["class"],
+    subtree:          true,
+  });
+}
+
+// v2 floating capture button — manual control for non-tab states
+// (drill-downs, modals, row-clicks, mode toggles, anything the
+// auto-observer doesn't catch). Bottom-right corner, minimal
+// chrome so it doesn't interfere with the page being audited.
+// Idempotent — only mounts once per session.
+let _captureBarMounted = false;
+function mountCaptureBar() {
+  if (!isAuditMode() || _captureBarMounted) return;
+  _captureBarMounted = true;
+  const bar = document.createElement("div");
+  bar.id = "rp-audit-bar";
+  bar.style.cssText =
+    "position:fixed;bottom:12px;right:12px;z-index:99999;" +
+    "display:flex;gap:6px;align-items:center;" +
+    "padding:6px 8px;border-radius:8px;" +
+    "background:rgba(15,15,25,0.92);color:#cdd6f4;" +
+    "font:12px/1 system-ui,sans-serif;" +
+    "box-shadow:0 4px 12px rgba(0,0,0,0.3);";
+  bar.innerHTML =
+    '<input type="text" id="rp-audit-state" placeholder="state tag" '
+    + 'style="width:120px;padding:4px 6px;border:1px solid #45475a;'
+    + 'border-radius:4px;background:#1e1e2e;color:inherit;font:inherit;">'
+    + '<button type="button" id="rp-audit-snap" '
+    + 'style="padding:4px 10px;border:0;border-radius:4px;'
+    + 'background:#89b4fa;color:#1e1e2e;font:inherit;font-weight:600;'
+    + 'cursor:pointer;">📸 Capture</button>';
+  document.body.appendChild(bar);
+  document.getElementById("rp-audit-snap").addEventListener("click", () => {
+    const input = document.getElementById("rp-audit-state");
+    const state = input.value.trim() || "manual";
+    tryAuditCapture(state);
+    input.value = "";
+  });
+}
+
+// Programmatic API for devtools / future test harnesses. Bypasses
+// the floating UI — useful for scripting a sequence of captures.
+if (typeof window !== "undefined") {
+  window.__rpCapture = (state) => tryAuditCapture(state);
 }
 
 // Shared shell for 404 + mount-failure surfaces. Uses .rp-page tokens
@@ -161,4 +260,10 @@ bindDropdown();
 (async () => {
   await loadSession();
   navigate();
+  // v2 audit-mode wiring — both armers are idempotent + cheap when
+  // not in audit mode (early-return on the isAuditMode check). Run
+  // them after navigate kicks off so the body has the first-page DOM
+  // when the observer attaches and when the floating bar mounts.
+  armTabCaptureObserver();
+  mountCaptureBar();
 })();
