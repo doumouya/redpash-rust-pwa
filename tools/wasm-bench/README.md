@@ -10,6 +10,7 @@ Deliverable contract: `docs/internal/architecture/roadmap-webassembly.md`
 |---|---|
 | `generate.py` | Generates 3 deterministic clean CSV shapes into `corpus/` |
 | `generate-tricky.py` | Generates a chaos-at-scale CSV (70% clean + 30% mixed trap shapes) into `corpus/` |
+| `generate-type-truth.py` | Generates a known-truth dtype-mismatch CSV (exactly 1000 traps across 4 typed columns) into `corpus/` |
 | `corpus/` | Output dir (gitignored — regenerable) |
 | `fixtures/` | Hand-curated permanent regression fixtures (tracked) |
 | `README.md` | This doc |
@@ -27,6 +28,7 @@ standalone measurement tool, not part of the SPA router.
     python3 tools/wasm-bench/generate.py
     python3 tools/wasm-bench/generate-tricky.py        # chaos-at-scale, 100k rows
     # python3 tools/wasm-bench/generate-tricky.py 1000000   # 1M-row variant
+    python3 tools/wasm-bench/generate-type-truth.py    # known-truth dtype probe (1000 traps)
 
     # 3. (if wasm.rs or the data crate changed) rebuild the bundle
     sh tools/build-wasm.sh
@@ -46,6 +48,7 @@ iters reuse the cached engine.
 | `medium.csv` | 10,000 | 20 | ~2 MB | the §5 Phase C target |
 | `large.csv` | 431,000 | 5 | ~19 MB | size-budget edge (temps shape) |
 | `tricky-100k.csv` | 100,000 | 6 | ~8 MB | lenient-mode chaos at scale — 70% clean + 30% trap mix (commas, multi-line, wrap, missing/extra cols, UTF-8, quote soup) |
+| `type-truth-100k.csv` | 100,000 | 5 | ~3.8 MB | known-truth dtype probe — exactly 1000 type mismatches (250 int + 250 bool + 250 float + 250 date); answer key for the parse_csv mismatch counter |
 
 Schema is deterministic — same `SEED` yields the same bytes — so
 repeated bench runs are comparable across sessions. The medium file's
