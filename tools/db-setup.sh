@@ -100,9 +100,25 @@ run_sudo() {
 }
 
 # ── config (env-overridable) ────────────────────────────────────────────────
+# PG_PORT default discovery: PG 14 (Ubuntu 22.04) clusters on 5432 but
+# PG 18 (Ubuntu 26.04) clusters on 5433 when 22.04's cluster co-existed
+# on the same host, and that "next port up" assignment can stick on a
+# fresh single-cluster install too. Hardcoding 5432 made the script's
+# step-6 self-verify fail on the 26.04 retirement host even though
+# the role + db were correctly created on the live cluster via
+# `sudo -u postgres psql` (which uses the local socket, port-agnostic).
+# Detect the live cluster's port via pg_lsclusters; fall back to 5432
+# only if detection fails (e.g. pg_lsclusters unavailable).
+detect_pg_port() {
+  if command -v pg_lsclusters >/dev/null 2>&1; then
+    pg_lsclusters -h 2>/dev/null \
+      | awk '$4 == "online" { print $3; exit }'
+  fi
+}
 PG_USER="${PG_USER:-mansa}"
 PG_PASS="${PG_PASS:-mansa}"
 PG_HOST="${PG_HOST:-localhost}"
+PG_PORT="${PG_PORT:-$(detect_pg_port)}"
 PG_PORT="${PG_PORT:-5432}"
 PG_DB="${PG_DB:-redpash_prerelease}"
 
