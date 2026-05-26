@@ -5,9 +5,10 @@
 // bytes. The browser stream-compiles the .wasm, so engine ops become
 // callable before the download finishes.
 //
-// Source of truth: backend/crates/data/src/wasm.rs (five wrappers
-// — apply_filter, apply_sort, auto_clean, step_preview, parse_csv).
-// Regenerate after a data-crate change: `sh tools/build-wasm.sh`.
+// Source of truth: backend/crates/data/src/wasm.rs (six wrappers
+// — apply_filter, apply_sort, auto_clean, step_preview, parse_csv,
+// parse_csv_compare). Regenerate after a data-crate change:
+// `sh tools/build-wasm.sh`.
 // Architecture: docs/internal/roadmap-webassembly.md §5 Phase B + C.
 
 /** Demo upload cap. Files larger than this go through the sign-up CTA
@@ -28,11 +29,12 @@ export async function getEngine() {
     const mod = await import('/wasm/data.js');
     await mod.default(); // wasm-bindgen init — fetches + instantiates data_bg.wasm
     return {
-      apply_filter:  mod.apply_filter,
-      apply_sort:    mod.apply_sort,
-      auto_clean:    mod.auto_clean,
-      step_preview:  mod.step_preview,
-      parse_csv:     mod.parse_csv,
+      apply_filter:       mod.apply_filter,
+      apply_sort:         mod.apply_sort,
+      auto_clean:         mod.auto_clean,
+      step_preview:       mod.step_preview,
+      parse_csv:          mod.parse_csv,
+      parse_csv_compare:  mod.parse_csv_compare,
     };
   })();
   return _enginePromise;

@@ -260,3 +260,112 @@ pub fn step_preview(rows_json: &str, kind: &str, params_json: &str) -> Result<St
         .map_err(|e| JsValue::from_str(&format!("step {kind}: {e}")))?;
     df_to_rows(&out).map_err(|e| JsValue::from_str(&e))
 }
+
+/// Helper: compute the same metric tuple `parse_csv` reports — rows /
+/// columns / score / type_mismatches / empty_pct — for an arbitrary
+/// DataFrame. Reused for both the raw and corrected legs of
+/// `parse_csv_compare`. Keeps the metric definitions in one place so
+/// the two reported sets share a single semantics.
+fn df_metrics(df: &polars::prelude::DataFrame) -> (usize, usize, f64, usize, f64) {
+    let cols = dtype::summarize(df).unwrap_or_default();
+    let score = stats::cleanness_report(df, &cols, &[])
+        .map(|r| r.score as f64)
+        .unwrap_or(0.0);
+    let type_mismatches = cols
+        .iter()
+        .filter(|c| {
+            c.dtype == "string"
+                && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool")
+        })
+        .count();
+    let total_cells = df.width() * df.height();
+    let empty_cells: usize = df.get_columns().iter().map(|s| s.null_count()).sum();
+    let empty_pct = if total_cells > 0 {
+        empty_cells as f64 / total_cells as f64 * 100.0
+    } else {
+        0.0
+    };
+    (df.height(), df.width(), score, type_mismatches, empty_pct)
+}
+
+/// Comparison parse — runs the parse pipeline twice's worth of work in
+/// one wasm boundary crossing: once with the diagnostic-only output
+/// (what production `parse_csv` returns; the user-confirms-transforms
+/// model per Em 2026-05-26's product call), and once with the suggested
+/// `unwrap_csv` step automatically applied (what the user would see
+/// after clicking "apply this fix?" in the Cleaner UI).
+///
+/// The bench page (`frontend/wasm-bench.html`) renders both metric sets
+/// side-by-side as two rows per iter — testing users see the trade-off
+/// directly: raw = "what the parser hands the user when it detects a
+/// wrap-shape it won't silently transform"; corrected = "what the user
+/// gets after confirming the suggested step." When `wrap_detected` is
+/// false there's nothing to apply; `corrected` equals `raw` and the
+/// bench can collapse the rows visually.
+///
+/// JSON shape:
+/// ```json
+/// {
+///   "raw":            { rows, columns, score, type_mismatches, empty_pct },
+///   "corrected":      { rows, columns, score, type_mismatches, empty_pct },
+///   "encoding":       "utf-8" | "windows-1252" | ...,
+///   "wrap_detected":  bool,
+///   "suggested_step": "unwrap_csv" | null,
+///   "rescue_reason":  "no_whole_file_wrap_signature" | "whole_file_wrap_detected"
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn parse_csv_compare(bytes: &[u8]) -> Result<String, JsValue> {
+    let (df_raw, encoding, rescue) = parse::from_csv_bytes_with_diag(bytes, None)
+        .map_err(|e| JsValue::from_str(&format!("parse: {e}")))?;
+
+    let (raw_rows, raw_cols, raw_score, raw_tm, raw_empty) = df_metrics(&df_raw);
+
+    let (wrap_detected, suggested_step, rescue_reason) = match rescue {
+        parse::RescueDiag::NotAttempted => (
+            false,
+            Value::Null,
+            "no_whole_file_wrap_signature",
+        ),
+        parse::RescueDiag::WrapDetected { preview_width: _ } => (
+            true,
+            json!("unwrap_csv"),
+            "whole_file_wrap_detected",
+        ),
+    };
+
+    // Corrected leg — apply `unwrap_csv` when a wrap was detected.
+    // Falls back to the raw frame if the step errors (defensive: same
+    // shape as parse.rs's pre-d1ea8df bake-in fallback). When no wrap
+    // was detected, there's nothing to apply — corrected == raw.
+    let (cor_rows, cor_cols, cor_score, cor_tm, cor_empty) = if wrap_detected {
+        match steps::apply(df_raw.clone(), "unwrap_csv", &Value::Null) {
+            Ok(df_cor) => df_metrics(&df_cor),
+            Err(_) => (raw_rows, raw_cols, raw_score, raw_tm, raw_empty),
+        }
+    } else {
+        (raw_rows, raw_cols, raw_score, raw_tm, raw_empty)
+    };
+
+    Ok(json!({
+        "raw": {
+            "rows":            raw_rows,
+            "columns":         raw_cols,
+            "score":           raw_score,
+            "type_mismatches": raw_tm,
+            "empty_pct":       raw_empty,
+        },
+        "corrected": {
+            "rows":            cor_rows,
+            "columns":         cor_cols,
+            "score":           cor_score,
+            "type_mismatches": cor_tm,
+            "empty_pct":       cor_empty,
+        },
+        "encoding":        encoding,
+        "wrap_detected":   wrap_detected,
+        "suggested_step":  suggested_step,
+        "rescue_reason":   rescue_reason,
+    })
+    .to_string())
+}

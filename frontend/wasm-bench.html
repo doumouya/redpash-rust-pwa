@@ -230,11 +230,21 @@ async function run(file) {
   table.hidden = false;
   let lastWasmJson = null;
 
+  // Each iter calls `parse_csv_compare` once — it does parse + (if a
+  // whole-file wrap was detected) apply `unwrap_csv` internally, and
+  // returns both metric sets in one wasm boundary crossing. Two rows
+  // are emitted per iter so testing users see the trade-off the
+  // d1ea8df revert encodes: `raw` = "what production parse returns
+  // when wrap_detected=true (the 1-col line-literal preservation,
+  // user-confirms-transforms model)"; `corrected` = "what the user
+  // sees after clicking 'apply this fix?' in the Cleaner." For files
+  // that don't trigger rescue, corrected == raw and the bench labels
+  // it clearly via the rescue chip.
   for (let i = 1; i <= n; i++) {
     const t0 = performance.now();
     let res, ok = true, errMsg = "";
     try {
-      res = engine.parse_csv(bytes);
+      res = engine.parse_csv_compare(bytes);
       lastWasmJson = res;
     } catch (err) {
       ok = false;
@@ -242,7 +252,23 @@ async function run(file) {
     }
     const ms = performance.now() - t0;
     if (ok) summary.wasmOk = true;
-    appendRow("wasm", i, ms, ok ? JSON.parse(res) : null, errMsg);
+    if (!ok) {
+      appendRow("wasm raw",       i, ms, null, errMsg, "raw");
+      appendRow("wasm corrected", i, ms, null, errMsg, "corrected");
+      continue;
+    }
+    const parsed = JSON.parse(res);
+    // Top-level rescue diag is shared by both views; nest into each
+    // metric body so appendRow's existing chip logic sees a unified
+    // shape per row.
+    const diag = {
+      wrap_detected:  parsed.wrap_detected,
+      suggested_step: parsed.suggested_step,
+      rescue_reason:  parsed.rescue_reason,
+      encoding:       parsed.encoding,
+    };
+    appendRow("wasm raw",       i, ms, { ...parsed.raw,       ...diag }, "", "raw");
+    appendRow("wasm corrected", i, ms, { ...parsed.corrected, ...diag }, "", "corrected");
   }
 
   // Server lane — POST raw bytes to /api/demo/parse. Demo endpoint
@@ -348,7 +374,7 @@ function renderAnnotation() {
 // verbatim — closes the "outside reader infers wrong intent" gap surfaced
 // when Gemini read a `false` value and recommended re-introducing the
 // rejected parse_and_rescue path (Torv 22.04 Woz.md 06:45).
-function appendRow(lane, iter, ms, body, errMsg) {
+function appendRow(lane, iter, ms, body, errMsg, rowMode) {
   const failed = !!errMsg;
   const tr = document.createElement("tr");
   if (failed) tr.classList.add("is-failed");
@@ -373,11 +399,29 @@ function appendRow(lane, iter, ms, body, errMsg) {
 
   // Rescue chip — only meaningful on rows where a parse actually ran
   // (i.e. wasm-side, non-failed). Server-lane rows or any failed row
-  // get "—" with no rescue claim. Post-d1ea8df: parse stays diagnostic;
-  // body.wrap_detected is the boolean, body.suggested_step names the
-  // step the user runs to recover, body.rescue_reason names WHY the
-  // diagnostic surface did or didn't fire (closes the Gemini-misread
-  // gap — see header tooltip + the comment block above appendRow).
+  // get "—" with no rescue claim. Post-d1ea8df: parse stays diagnostic
+  // by default (body.wrap_detected is the boolean, body.suggested_step
+  // names the step the user runs to recover); the bench's compare mode
+  // also surfaces the post-correction view as a separate row.
+  //
+  // Three rowMode values drive different chip semantics:
+  //
+  //   undefined / null  (server lane, legacy callers)
+  //     same as "raw" — wrap_detected=true shows "⚠ wrap"
+  //
+  //   "raw"             (WASM raw view — what production parse returns)
+  //     wrap_detected=true  → "⚠ wrap" (warn): parser held the 1-col
+  //                            line-literal frame; user runs suggested_step
+  //     wrap_detected=false → "—" (muted): no whole-file wrap signature
+  //
+  //   "corrected"       (WASM corrected view — post-unwrap-applied)
+  //     wrap_detected=true  → "✓ applied" (ok): unwrap_csv was run on the
+  //                            raw frame inside parse_csv_compare; these
+  //                            metrics are the user's "after clicking apply"
+  //                            outcome
+  //     wrap_detected=false → "—" (muted): nothing to apply; this row is
+  //                            byte-identical to the raw row (shown for
+  //                            visual consistency across files)
   const rescueTd  = document.createElement("td");
   const rescueChip = document.createElement("span");
   const wrapDetected  = body?.wrap_detected === true;
@@ -387,6 +431,20 @@ function appendRow(lane, iter, ms, body, errMsg) {
     rescueChip.className = "result-chip result-chip--muted";
     rescueChip.textContent = "—";
     rescueChip.title = "No parse ran — Rescue not applicable.";
+  } else if (rowMode === "corrected") {
+    if (wrapDetected) {
+      rescueChip.className = "result-chip result-chip--ok";
+      rescueChip.textContent = "✓ applied";
+      rescueChip.title = "Corrected view: '" + suggestedStep + "' step has been "
+        + "applied to the raw frame inside parse_csv_compare. These metrics "
+        + "reflect what the user sees in the Cleaner after confirming the "
+        + "suggested fix (reason: " + rescueReason + ").";
+    } else {
+      rescueChip.className = "result-chip result-chip--muted";
+      rescueChip.textContent = "—";
+      rescueChip.title = "Corrected view: nothing to apply. File parsed as "
+        + "a normal CSV; corrected metrics are byte-identical to the raw row.";
+    }
   } else if (!wrapDetected) {
     rescueChip.className = "result-chip result-chip--muted";
     rescueChip.textContent = "—";
@@ -395,9 +453,11 @@ function appendRow(lane, iter, ms, body, errMsg) {
   } else {
     rescueChip.className = "result-chip result-chip--warn";
     rescueChip.textContent = "⚠ wrap";
-    rescueChip.title = "Whole-file wrap signature detected (reason: " + rescueReason + "). "
-      + "Parser held the 1-col line-literal preservation — apply the '" + suggestedStep
-      + "' step in the Cleaner to recover the N-col frame.";
+    rescueChip.title = "Raw view (parse-stays-diagnostic per d1ea8df): "
+      + "whole-file wrap signature detected (reason: " + rescueReason + "). "
+      + "Parser held the 1-col line-literal preservation — apply the '"
+      + suggestedStep + "' step in the Cleaner to recover the N-col frame. "
+      + "See the 'wasm corrected' row below for the post-unwrap metrics.";
   }
   rescueTd.appendChild(rescueChip);
   tr.appendChild(rescueTd);
