@@ -2,7 +2,7 @@
 title: Unified surface
 section: Frontend
 order: 6
-last modified date: 2026-05-22
+last modified date: 2026-05-26
 ---
 
 # Unified surface — RedPash as one window
@@ -62,6 +62,30 @@ in place:
 The same data surface is the **Cleaner** or the **Designer** depending
 on which side-panel tab is live. Cleaner and Designer stop being
 separate pages and become tool modes over one table.
+
+## Component inventory
+
+The surface is a small, stable set of **atoms** dropped into a fixed
+**skeleton**. This is the factorisation that makes it cheap to build
+and fast to rebuild — you assemble known parts, you don't redesign.
+
+**The skeleton** — structural slots, top to bottom:
+
+| Slot | Holds |
+|------|-------|
+| Topbar | glass buttons |
+| Parent-tabs | the tab strip + a `(+)` icon → dropdown with autocomplete (adds an object-type tab) |
+| Header | title · glass buttons · cleanness-score component |
+| Child-tabs | the second tab row |
+| Toolbar | search input · glass buttons · pill-shape dropdowns |
+| Left panel | filter |
+| Right panel | tools / charts |
+| Body | panel components · table data rows |
+| Pagination | page strip |
+
+**The atoms** — reused across every slot: glass button · pill-shape
+dropdown · search input · `(+)` autocomplete dropdown · cleanness-score
+component · table data row.
 
 ## Why the object model makes this cheap
 
