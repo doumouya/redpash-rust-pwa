@@ -4,7 +4,7 @@ section: Internal
 order: 38
 last modified date: 2026-05-26
 owner: Woz
-status: filled — perf cliff crossed at ~45 ms/MB plateau, Phase D unlocked, parse algorithm baked in unwrap_csv
+status: filled — perf cliff crossed at ~45 ms/MB clean-dense plateau, Phase D unlocked, parse algorithm baked in unwrap_csv. Per-shape spectrum addendum tracks 2 sub-cliffs (sparse-wide, legacy-encoded) as verdict-refinement follow-ups.
 ---
 
 # WASM Phase C spike — parse on wasm
@@ -139,6 +139,62 @@ server-medium (1,241 ms on 1.95 MB / 10k × 20) — wasm on a 2× larger
 file at similar wall-time is **suggestive but not conclusive**, since
 no same-file comparison exists.
 
+### Per-shape spectrum — 5 corpus shapes, per-cell normalisation (2026-05-26 follow-on)
+
+The `ms/MB` view above is the steady-state for clean dense CSVs but
+masks shape-dependent regimes. Re-normalising the bench data to
+`μs/cell` (the only axis that's invariant across width × density)
+exposes **two sub-cliffs** that flatten into the headline plateau:
+
+| file                              | size      | rows × cols | μs/row | μs/cell | regime                                      |
+|-----------------------------------|-----------|-------------|--------|---------|---------------------------------------------|
+| `ressources.csv`                  | 21.01 MB  | 389k × 9    |   2.47 |    0.27 | utf-8 dense — **steady-state floor**        |
+| `large.csv`                       | 16.90 MB  | 431k × 5    |   1.71 |    0.34 | utf-8 2% empty — narrow tax                 |
+| `synthetic` 27k × 20              |  3.70 MB  | 27k × 20    |  10.8  |    0.54 | utf-8 10% empty — wide tax begins           |
+| `raw_101_clients_fr.csv` (prod)   |  4.06 MB  | 24k × 20    |  49.0  | **2.45** | utf-8 **94% empty** — sparse-wide sub-cliff |
+| `dossier.csv` (real FR insurance) | 13.46 MB  | 101k × 1    |  11.1  | **11.1** | **windows-1252 + malformed** — encoding sub-cliff |
+
+**Sub-cliff A — sparse-wide tax (~4.5× over clean wide).** Compare
+`synthetic 27k × 20 @ 0.54 μs/cell` to the production `24k × 20 @
+2.45 μs/cell`: same width, similar size, only difference is empty-cell
+ratio (10% → 94%). The Polars CSV parser does NULL detection +
+dtype-inference per blank field; on a 94%-empty file most of the work
+is "is this token a null in this column's inferred type?" The
+intuitive read ("empty cells are cheap") is backwards here.
+
+**Sub-cliff B — encoding+malformed tax (~40× over clean dense).**
+`dossier.csv @ 11.1 μs/cell` vs `ressources.csv @ 0.27 μs/cell`. The
+chardetng probe runs once, but the malformed-byte recovery path is
+hot — every cell touches the slow path when the source is
+windows-1252 with mixed line endings or unclosed quotes.
+
+**What this refines about the verdict.** The "~45 ms/MB plateau"
+claim holds for clean utf-8 dense (the bottom two rows of the
+spectrum). On sparse-business-shaped CSVs (94% empty is realistic for
+SaaS exports), per-cell cost climbs 4.5× — still tolerable at the
+4 MB / ~1 s point measured, becomes user-visible above ~10 MB. On
+encoding-confused legacy files, per-cell cost climbs 40× — the
+13.46 MB `dossier.csv` parses in ~1.1 s (same wall-time as the 4 MB
+sparse file) because the encoding tax masks size scaling. Phase D
+remains unlocked, but the **two sub-cliffs are tracked work-items**:
+
+1. **Profile empty-cell cost in `data/parse.rs`.** Hypothesis: per-blank
+   work is dtype-inference + null-mask construction; once a column's
+   first N rows establish a stable type, subsequent blanks can skip
+   the inference. If the optimisation lands, sparse-wide collapses
+   back toward the 0.54 μs/cell floor of `synthetic 27k × 20`.
+
+2. **Sniff + transcode upstream of `parse_csv` (wasm entry).** The
+   `encoding.rs` chardetng sniff already runs server-side; expose it
+   to the wasm path so a non-utf-8 source gets transcoded to utf-8
+   *once*, then parses as clean utf-8 instead of triggering the
+   per-cell malformed-recovery path. The 13.46 MB encoding-cliff case
+   should collapse toward the clean ~45 ms/MB plateau.
+
+Neither item blocks Phase D — they're refinements to the verdict's
+fine print, not gates. Added 2026-05-26 after the multi-shape bench
+data landed.
+
 ---
 
 ## Capability gap surfaced AND closed — `unwrap_csv` baked into the parse algorithm
@@ -254,7 +310,7 @@ spikes is real but secondary to its first concrete catch.
 | Cliff | Status |
 |---|---|
 | Size cliff (cliff #1) | **Crossed.** +0.15 MB gzipped over-the-wire is below any threshold the roadmap §5 / §6 named. |
-| Perf cliff (cliff #2) | **Crossed.** Plateau at ~45 ms/MB on multi-MB files (16.9 + 21.0 MB measured); 4.06 MB at 290 ms/MB shows the small-file overhead floor. Under the §5 verdict's 4-second ceiling by a wide margin. |
+| Perf cliff (cliff #2) | **Crossed.** Steady-state plateau at ~45 ms/MB / 0.27–0.34 μs/cell on clean utf-8 dense (16.9 + 21.0 MB measured); under the §5 verdict's 4-second ceiling by a wide margin. Two shape-conditional sub-cliffs tracked in the per-shape spectrum addendum: **sparse-wide** (94%-empty wide files take 4.5× per-cell vs clean wide — `parse.rs` empty-cell profile is the optimisation target) and **encoding-confused legacy** (windows-1252 + malformed pays 40× per-cell — chardetng-then-transcode upstream of `parse_csv` is the fix). Neither sub-cliff blocks Phase D unlock; both are verdict-refinement work items. |
 | Capability parity (latent, surfaced by bench, closed in same wave) | **Closed.** Parse algorithm now bakes in `unwrap_csv` rescue when the wrapped-shape detector fires. WASM parse ≡ Cleaner parse for wrapped CSVs. |
 | Phase D unlock decision | **Unlocked.** Browser-side step engine + ingest path is on. |
 
