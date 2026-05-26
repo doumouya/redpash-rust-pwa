@@ -17,11 +17,12 @@
 //! bootstrap dev_user.
 
 use axum::{
+    body::Bytes,
     extract::{Query, State},
     http::{header::{HeaderMap, HeaderName, HeaderValue, SET_COOKIE}, StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 use serde::Deserialize;
 
@@ -220,23 +221,37 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Res
 
 // ─── dev-login (dev only) ────────────────────────────────────────
 //
-// `POST /api/auth/dev-login` — mints a session for ANY user by RID
-// with no credentials. Powers the Home header's "log in as user"
-// switcher for testing owner-scoped flows (project reassignment,
-// company membership, …) without juggling Google accounts.
+// `POST /api/auth/dev-login` — mints a session. Two call shapes:
+//
+//   • No body at all (`fetch('/api/auth/dev-login', { method: 'POST' })`)
+//     → mints a session for `state.dev_user` (the bootstrap user).
+//     Powers the login page's "Continue as dev user" button — the
+//     frontend doesn't need to know any specific RID to drop in.
+//
+//   • `{ "user_id": "USR_…" }` JSON body
+//     → mints a session for that user. Powers the Home header's
+//     "log in as user" switcher for testing owner-scoped flows
+//     (project reassignment, company membership, …) without
+//     juggling Google accounts.
+//
+// Body is extracted as raw `Bytes` rather than `Json<T>` so a no-body
+// POST doesn't get rejected with 415 on the missing `Content-Type`.
+// Empty body short-circuits to `state.dev_user`; a non-empty body is
+// then parsed as `DevLoginBody`.
 //
 // Gated behind `state.dev_login` (the `REDPASH_DEV_LOGIN` env flag),
 // off by default. This is a deliberate unauthenticated session-mint —
 // it must never be enabled in production.
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct DevLoginBody {
-    user_id: String,
+    #[serde(default)]
+    user_id: Option<String>,
 }
 
 async fn dev_login(
     State(state): State<AppState>,
-    Json(body):   Json<DevLoginBody>,
+    body:         Bytes,
 ) -> Result<Response, AppError> {
     if !state.dev_login {
         return Err(AppError {
@@ -246,9 +261,21 @@ async fn dev_login(
             inner:   None,
         });
     }
+
+    // Empty body → bootstrap dev_user. Non-empty → parse as JSON;
+    // omitted `user_id` also falls back to the bootstrap dev_user
+    // (so `{}` is equivalent to no body).
+    let user_id = if body.is_empty() {
+        state.dev_user.as_ref().clone()
+    } else {
+        let parsed: DevLoginBody = serde_json::from_slice(&body)
+            .map_err(|e| AppError::bad_request("invalid_json", e.to_string()))?;
+        parsed.user_id.unwrap_or_else(|| state.dev_user.as_ref().clone())
+    };
+
     // Target must be a real user — clean 404 rather than minting a
     // session pointing at a non-existent RID.
-    let user = db::find_user_by_id(&state.db, &body.user_id)
+    let user = db::find_user_by_id(&state.db, &user_id)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", "user not found"))?;
 
