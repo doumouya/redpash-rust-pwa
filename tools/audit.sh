@@ -74,7 +74,13 @@ for dir in tools/*-audit/; do
         echo
         continue
       fi
-      if ! "$INGEST" --tool "$tool"; then
+      # Pass --file explicitly so the binary doesn't auto-derive the
+      # path from the canonical tool name. The canonical names dropped
+      # the `css-` prefix per the broadening (slice c — `468bfad`), so
+      # `--tool tab-compare` would look up `tools/tab-compare-audit/` and
+      # miss the real `tools/css-tab-compare-audit/`. Script knows the
+      # dir; binary just ingests what it's pointed at.
+      if ! "$INGEST" --tool "$tool" --file "$dir/audit.json"; then
         echo "  !! $tool ingest failed"
         fail=1
         continue
