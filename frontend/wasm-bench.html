@@ -123,10 +123,22 @@ const payloadWrap = document.getElementById("payload-wrap");
 const annotation  = document.getElementById("annotation");
 
 // Per-run summary tracker — feeds the size-cliff annotation below
-// the table. A 413 on the server lane is the load-bearing Phase C
-// signal (the demo lane's 4 MiB safety floor doing its job); the
-// annotation names it so the table isn't misread as "server fast".
-let summary = { sizeMb: 0, anyServer413: false, wasmOk: false };
+// the table. Server-lane failure is the load-bearing Phase C signal
+// (the demo lane's 4 MiB safety floor doing its job), but it can
+// surface two ways:
+//   - clean HTTP 413 (small overshoot — server reads content-length,
+//     rejects before consuming the body)
+//   - network-level fail (large overshoot — Axum closes mid-upload;
+//     fetch() sees the RST as `TypeError: Failed to fetch`)
+// Both mean the same thing for Phase C: server lane refused this
+// shape. The annotation collapses them into one narrative + cites
+// the actual transport behavior for the operator.
+let summary = {
+  sizeMb:           0,
+  serverHttp413:    false,
+  serverNetworkErr: false,
+  wasmOk:           false,
+};
 
 document.getElementById("picker-btn")
         .addEventListener("click", () => picker.click());
@@ -148,7 +160,9 @@ async function run(file) {
   table.hidden = true;
   payloadWrap.hidden = true;
   annotation.hidden = true;
-  summary = { sizeMb: 0, anyServer413: false, wasmOk: false };
+  summary = {
+    sizeMb: 0, serverHttp413: false, serverNetworkErr: false, wasmOk: false,
+  };
 
   const n = Math.max(1, Math.min(20, parseInt(itersEl.value, 10) || 3));
   const sizeMb = (file.size / 1024 / 1024).toFixed(2);
@@ -182,13 +196,17 @@ async function run(file) {
   }
 
   // Server lane — POST raw bytes to /api/demo/parse. Demo endpoint
-  // currently caps at 4 MiB; larger files will 413 — that's a real
-  // datapoint, not a bug. A 413 on this lane is the load-bearing
-  // signal for [[reference-redpash-rust-pwa]] §5 Phase C: WASM
-  // unlocks shapes the no-auth demo path refuses.
+  // currently caps at 4 MiB; oversized bodies are the load-bearing
+  // signal for [[reference-redpash-rust-pwa]] §5 Phase C (WASM
+  // unlocks shapes the no-auth demo path refuses). Two failure
+  // shapes both meaning "refused":
+  //   small overshoot → clean HTTP 413 (content-length check)
+  //   large overshoot → Axum closes mid-upload; fetch() throws
+  //                     `TypeError: Failed to fetch` (RST on the wire)
   for (let i = 1; i <= n; i++) {
     const t0 = performance.now();
-    let payload = null, ok = true, errMsg = "", status413 = false;
+    let payload = null, ok = true, errMsg = "";
+    let hit413 = false, hitNetwork = false;
     try {
       const r = await fetch("/api/demo/parse", {
         method: "POST",
@@ -198,16 +216,18 @@ async function run(file) {
       if (!r.ok) {
         ok = false;
         errMsg = `HTTP ${r.status}` + (r.status === 413 ? " PAYLOAD_TOO_LARGE" : "");
-        status413 = (r.status === 413);
+        hit413 = (r.status === 413);
       } else {
         payload = await r.json();
       }
     } catch (err) {
       ok = false;
       errMsg = err?.toString() || "unknown";
+      hitNetwork = true;
     }
     const ms = performance.now() - t0;
-    if (status413) summary.anyServer413 = true;
+    if (hit413)    summary.serverHttp413    = true;
+    if (hitNetwork) summary.serverNetworkErr = true;
     appendRow("server", i, ms, payload, errMsg);
   }
 
@@ -222,21 +242,34 @@ async function run(file) {
 
 // Surfaces the Phase C narrative inline when the size-cliff data
 // is on screen. Reads from `summary` — the per-run accumulator
-// fed by both lanes' loops. Three cases:
-//   wasm OK + server 413 — the headline cut: WASM unlocked a shape
-//                          the demo refused.
-//   wasm OK + server OK  — apples-to-apples cut: both completed.
-//   wasm failed          — bench broken; surface nothing rather
-//                          than misleading prose.
+// fed by both lanes' loops. Cases:
+//   wasm OK + server 413          — small overshoot of the 4 MiB cap;
+//                                   server returned clean HTTP 413.
+//   wasm OK + server network err  — large overshoot; Axum closed the
+//                                   connection mid-upload. fetch() saw
+//                                   `TypeError: Failed to fetch`. Same
+//                                   underlying refusal — different
+//                                   transport. Both fold into the size-
+//                                   cliff narrative; the annotation
+//                                   cites which transport happened.
+//   wasm OK + server OK           — apples-to-apples cut: both completed.
+//   wasm failed                   — bench itself broken; surface nothing
+//                                   rather than misleading prose.
 function renderAnnotation() {
   if (!summary.wasmOk) { annotation.hidden = true; return; }
-  if (summary.anyServer413) {
+  const serverFailed = summary.serverHttp413 || summary.serverNetworkErr;
+  if (serverFailed) {
+    // Pick the transport-honest description of what happened on the
+    // wire. 413 = small overshoot (clean reject); network err = large
+    // overshoot (Axum closed mid-stream — typically over 2× the cap).
+    const transport = summary.serverHttp413
+      ? `clean HTTP 413 — server checked content-length and refused before consuming the body`
+      : `connection reset mid-upload (<code>TypeError: Failed to fetch</code>) — server closed once the streamed body exceeded the cap. The per-iter ms readings are upload-then-RST time, not parse time.`;
     annotation.innerHTML =
       `<b>Size cliff:</b> the ${summary.sizeMb} MB corpus is past the `
-      + `4 MiB demo cap on <code>/api/demo/parse</code>. The 413 is the `
-      + `safety floor doing its job — WASM is the only lane that completed `
-      + `this shape without forcing the visitor to sign up. The server-lane `
-      + `ms is reject latency, not parse time.`;
+      + `4 MiB demo cap on <code>/api/demo/parse</code>. ${transport} `
+      + `WASM is the only lane that completed this shape without forcing `
+      + `the visitor to sign up — the load-bearing Phase C signal.`;
     annotation.hidden = false;
   } else {
     annotation.innerHTML =
