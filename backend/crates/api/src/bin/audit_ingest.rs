@@ -43,10 +43,23 @@ async fn main() -> Result<()> {
     let data: Value = serde_json::from_str(&raw)
         .with_context(|| format!("parse {}", path.display()))?;
 
-    let stats = data.get("stats").cloned().unwrap_or(Value::Null);
-    if stats.is_null() {
-        bail!("audit.json missing top-level `stats`");
-    }
+    // `stats` is the human-summary blob persisted alongside the full
+    // payload. Originally required (the css + html convention had it),
+    // but the audit family grew tools whose audit.json doesn't follow
+    // that convention — tab-compare carries `{tool, ran_at, pairs}` with
+    // no top-level stats; parallel's parallels.json likewise. Default
+    // to `{}` so those tools can still ingest cleanly; the full payload
+    // remains the source of truth in audit.run.payload.
+    //
+    // audit.run.stats is NOT NULL per mig 028 — `{}` (empty object)
+    // satisfies that without requiring a schema change. The
+    // audit-in-loop convention surfaced this regression on the first
+    // baseline run after slice (b) shipped the tool-family broadening
+    // (`9791281`); fixed here as a pre-decomposition cleanup.
+    let stats = data
+        .get("stats")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
 
     let git_sha = git(&["rev-parse", "HEAD"]).ok();
     let git_branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]).ok();
