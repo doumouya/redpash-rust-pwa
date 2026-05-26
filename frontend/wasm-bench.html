@@ -29,14 +29,32 @@
   .drop.over { border-color: #4a8; background: #f0fbf6; }
   .ctl  { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
   .ctl label { color: #444; }
-  table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
   th, td { border-bottom: 1px solid #eee; padding: 8px 12px;
            text-align: right; }
   th:first-child, td:first-child { text-align: left; }
   thead th { background: #fafafa; font-weight: 600; }
   .num  { font-variant-numeric: tabular-nums; }
-  .ok   { color: #270; }
-  .err  { color: #a33; }
+  /* Result chip — soft-tinted, the only visual signal that says
+     "completed" vs "rejected" at a glance. Per the inspo deck's
+     pill vocabulary: tinted bg + saturated text, no border. */
+  .result-chip { display: inline-block; padding: 2px 8px;
+                 border-radius: 999px; font-size: 12px; font-weight: 600;
+                 font-variant-numeric: tabular-nums; }
+  .result-chip--ok   { color: #2f6f3a; background: rgba(64, 160, 43, 0.14); }
+  .result-chip--err  { color: #b3324a; background: rgba(210, 15, 57, 0.12); }
+  /* Failed row treatment: soft-tint the whole row + italicize the ms
+     cell (so its number reads as reject-latency, not parse-time). */
+  tr.is-failed td        { background: rgba(210, 15, 57, 0.04); color: #8a4a55; }
+  tr.is-failed td.ms     { font-style: italic; }
+  /* The size-cliff annotation — surfaces once below the table when
+     any server-lane iter failed with 413. The 413 is the load-bearing
+     Phase C datapoint, not noise; the annotation names it explicitly
+     so the table isn't misread as "server is fast / wasm is slow". */
+  .annotation { margin-bottom: 24px; padding: 12px 16px;
+                border-radius: 8px; background: rgba(254, 100, 11, 0.08);
+                color: #6b3408; font-size: 13px; line-height: 1.5; }
+  .annotation b { color: #b04207; }
   pre   { background: #fafafa; padding: 12px; border-radius: 6px;
           font-size: 12px; max-height: 320px; overflow: auto; }
   button { font: inherit; padding: 6px 14px; border-radius: 6px;
@@ -78,10 +96,13 @@
       <th>Cols</th>
       <th>Score</th>
       <th>Empty %</th>
+      <th>Result</th>
     </tr>
   </thead>
   <tbody id="rows"></tbody>
 </table>
+
+<div id="annotation" class="annotation" hidden></div>
 
 <details id="payload-wrap" hidden>
   <summary>Raw wasm response (last iter)</summary>
@@ -99,6 +120,13 @@ const rowsEl = document.getElementById("rows");
 const itersEl = document.getElementById("iters");
 const payload = document.getElementById("payload");
 const payloadWrap = document.getElementById("payload-wrap");
+const annotation  = document.getElementById("annotation");
+
+// Per-run summary tracker — feeds the size-cliff annotation below
+// the table. A 413 on the server lane is the load-bearing Phase C
+// signal (the demo lane's 4 MiB safety floor doing its job); the
+// annotation names it so the table isn't misread as "server fast".
+let summary = { sizeMb: 0, anyServer413: false, wasmOk: false };
 
 document.getElementById("picker-btn")
         .addEventListener("click", () => picker.click());
@@ -119,9 +147,12 @@ async function run(file) {
   rowsEl.innerHTML = "";
   table.hidden = true;
   payloadWrap.hidden = true;
+  annotation.hidden = true;
+  summary = { sizeMb: 0, anyServer413: false, wasmOk: false };
 
   const n = Math.max(1, Math.min(20, parseInt(itersEl.value, 10) || 3));
   const sizeMb = (file.size / 1024 / 1024).toFixed(2);
+  summary.sizeMb = sizeMb;
   status.textContent = `${file.name} · ${sizeMb} MB · ${n} iters per lane…`;
 
   const buf = await file.arrayBuffer();
@@ -146,15 +177,18 @@ async function run(file) {
       errMsg = err?.toString() || "unknown";
     }
     const ms = performance.now() - t0;
+    if (ok) summary.wasmOk = true;
     appendRow("wasm", i, ms, ok ? JSON.parse(res) : null, errMsg);
   }
 
   // Server lane — POST raw bytes to /api/demo/parse. Demo endpoint
   // currently caps at 4 MiB; larger files will 413 — that's a real
-  // datapoint, not a bug.
+  // datapoint, not a bug. A 413 on this lane is the load-bearing
+  // signal for [[reference-redpash-rust-pwa]] §5 Phase C: WASM
+  // unlocks shapes the no-auth demo path refuses.
   for (let i = 1; i <= n; i++) {
     const t0 = performance.now();
-    let payload = null, ok = true, errMsg = "";
+    let payload = null, ok = true, errMsg = "", status413 = false;
     try {
       const r = await fetch("/api/demo/parse", {
         method: "POST",
@@ -163,7 +197,8 @@ async function run(file) {
       });
       if (!r.ok) {
         ok = false;
-        errMsg = `HTTP ${r.status}`;
+        errMsg = `HTTP ${r.status}` + (r.status === 413 ? " PAYLOAD_TOO_LARGE" : "");
+        status413 = (r.status === 413);
       } else {
         payload = await r.json();
       }
@@ -172,10 +207,12 @@ async function run(file) {
       errMsg = err?.toString() || "unknown";
     }
     const ms = performance.now() - t0;
+    if (status413) summary.anyServer413 = true;
     appendRow("server", i, ms, payload, errMsg);
   }
 
   status.textContent = `${file.name} · ${sizeMb} MB · done.`;
+  renderAnnotation();
 
   if (lastWasmJson) {
     payload.textContent = lastWasmJson;
@@ -183,30 +220,67 @@ async function run(file) {
   }
 }
 
+// Surfaces the Phase C narrative inline when the size-cliff data
+// is on screen. Reads from `summary` — the per-run accumulator
+// fed by both lanes' loops. Three cases:
+//   wasm OK + server 413 — the headline cut: WASM unlocked a shape
+//                          the demo refused.
+//   wasm OK + server OK  — apples-to-apples cut: both completed.
+//   wasm failed          — bench broken; surface nothing rather
+//                          than misleading prose.
+function renderAnnotation() {
+  if (!summary.wasmOk) { annotation.hidden = true; return; }
+  if (summary.anyServer413) {
+    annotation.innerHTML =
+      `<b>Size cliff:</b> the ${summary.sizeMb} MB corpus is past the `
+      + `4 MiB demo cap on <code>/api/demo/parse</code>. The 413 is the `
+      + `safety floor doing its job — WASM is the only lane that completed `
+      + `this shape without forcing the visitor to sign up. The server-lane `
+      + `ms is reject latency, not parse time.`;
+    annotation.hidden = false;
+  } else {
+    annotation.innerHTML =
+      `<b>Apples-to-apples:</b> both lanes completed at ${summary.sizeMb} MB. `
+      + `Compare the per-lane ms columns directly — WASM iter 1 includes the `
+      + `cold-load (~3 MB engine download); iter 2+ is warm.`;
+    annotation.hidden = false;
+  }
+}
+
+// Build one results row — same column count regardless of pass/fail,
+// so the table reads straight. Failed rows tint soft-red + italicise
+// the ms cell (so its number reads as reject-latency, not parse-time);
+// the Result chip carries the verbatim status (`OK` or `HTTP 413 …`).
 function appendRow(lane, iter, ms, body, errMsg) {
+  const failed = !!errMsg;
   const tr = document.createElement("tr");
+  if (failed) tr.classList.add("is-failed");
+
   const cells = [
-    lane,
-    String(iter),
-    ms.toFixed(1),
-    body?.rows ?? "—",
-    body?.columns ?? "—",
-    body?.score?.toFixed?.(1) ?? "—",
-    body?.empty_pct?.toFixed?.(1) ?? "—",
+    { v: lane,                                              cls: "" },
+    { v: String(iter),                                      cls: "num" },
+    { v: ms.toFixed(1),                                     cls: "num ms",
+      title: failed ? "Reject latency (no parse work was done)." : "" },
+    { v: body?.rows ?? "—",                                 cls: "num" },
+    { v: body?.columns ?? "—",                              cls: "num" },
+    { v: body?.score?.toFixed?.(1) ?? "—",                  cls: "num" },
+    { v: body?.empty_pct?.toFixed?.(1) ?? "—",              cls: "num" },
   ];
-  cells.forEach((c, i) => {
+  cells.forEach(({ v, cls, title }) => {
     const td = document.createElement("td");
-    if (i > 1) td.className = "num";
-    td.textContent = c;
+    if (cls) td.className = cls;
+    if (title) td.title = title;
+    td.textContent = v;
     tr.appendChild(td);
   });
-  if (errMsg) {
-    const td = document.createElement("td");
-    td.colSpan = cells.length;
-    td.className = "err";
-    td.textContent = "  " + errMsg;
-    tr.appendChild(td);
-  }
+
+  const resultTd = document.createElement("td");
+  const chip = document.createElement("span");
+  chip.className = "result-chip " + (failed ? "result-chip--err" : "result-chip--ok");
+  chip.textContent = failed ? errMsg : "OK";
+  resultTd.appendChild(chip);
+  tr.appendChild(resultTd);
+
   rowsEl.appendChild(tr);
 }
 </script>
