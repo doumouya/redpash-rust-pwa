@@ -28,10 +28,19 @@ Then write your agent name into `Internal-Slack/.agent` (one line —
 
 ```sh
 node tools/team/board.js     # what's everyone on, any clashes, last 15 commits
+sh   tools/team/verify.sh    # commits.log audit: any git commits missing from the log?
 ```
 
-Before claiming a new folder, run it. If someone's already there,
-hold or pick another lane.
+Before claiming a new folder, run `board.js`. If someone's already
+there, hold or pick another lane.
+
+`verify.sh` is the audit-layer check on the log itself — useful when
+the shared `Internal-Slack/` directory is also externally synced
+(rsync / scp between hosts) and an overwrite-style sync may have
+stomped recent hook-written entries. Default scans the last 100 git
+commits; `--fix` backfills missing entries with the same line shape
+the hook emits. See `sh tools/team/verify.sh --help` for the full
+flag set.
 
 ## Presence file format
 
