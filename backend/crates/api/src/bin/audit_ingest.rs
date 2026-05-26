@@ -174,17 +174,29 @@ fn parse_args() -> Result<(String, Option<PathBuf>)> {
             "--tool" => tool = args.next(),
             "--file" => file = args.next().map(PathBuf::from),
             "-h" | "--help" => {
-                println!("usage: redpash-audit-ingest --tool <css|html> [--file <path>]");
+                println!("usage: redpash-audit-ingest --tool <TOOL> [--file <path>]");
+                println!("  TOOL ∈ {{css, html, tab-compare, cross-page, parallel, ui-snapshot}}");
                 std::process::exit(0);
             }
             _ => bail!("unknown arg {a}"),
         }
     }
-    let tool = tool.ok_or_else(|| anyhow!("missing --tool <css|html>"))?;
-    // The audit.run CHECK constraint allows only these two; keep the binary
-    // honest about it so a typo fails fast instead of hitting the DB error.
-    if tool != "css" && tool != "html" {
-        bail!("--tool must be 'css' or 'html' (audit.run schema constraint)");
+    let tool = tool.ok_or_else(|| {
+        anyhow!("missing --tool <css|html|tab-compare|cross-page|parallel|ui-snapshot>")
+    })?;
+    // The audit.run CHECK constraint allows only these names (see mig
+    // 20260613000001_relax_audit_tool_check.sql); keep the binary honest so a
+    // typo fails fast with a clear message instead of a SQLSTATE 23514 surfacing
+    // 50 lines down the call stack.
+    const ALLOWED: &[&str] = &[
+        "css", "html",
+        "tab-compare", "cross-page", "parallel", "ui-snapshot",
+    ];
+    if !ALLOWED.contains(&tool.as_str()) {
+        bail!(
+            "--tool '{tool}' not in {ALLOWED:?} — keep this list in sync with \
+             the audit.run.tool CHECK constraint."
+        );
     }
     Ok((tool, file))
 }
@@ -265,6 +277,80 @@ fn explode(tool: &str, data: &Value) -> Result<Vec<Finding>> {
                     });
                 }
             }
+        }
+        // Spec: tools/ui-snapshot-audit/audit.js header block "Finding key +
+        // severity encoding" + Woz's Woz.md 23:21 canonical sample. The
+        // `findings` array is pre-formatted by the JS side: each finding
+        // already carries its own `finding_key`, `severity`, and `kind`.
+        // The Rust explode is therefore a straight projection — unpack
+        // each finding object into a `Finding` row, preserving the JS-
+        // side keying so audit.run_diff joins cleanly across runs.
+        // Canonical contract recorded in docs/internal/specs/audit-
+        // ingest-explode.md.
+        "ui-snapshot" => {
+            if let Some(arr) = data.get("findings").and_then(Value::as_array) {
+                for item in arr {
+                    let kind = item
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .unwrap_or("atom_style")
+                        .to_string();
+                    let key = item
+                        .get("finding_key")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    if key.is_empty() {
+                        // Defensive: a finding without a finding_key is
+                        // unstable across runs (audit.run_diff joins on
+                        // it); skip rather than insert a row that can't
+                        // diff. The JS side always emits one, but the
+                        // skip guards against a future shape regression.
+                        continue;
+                    }
+                    let severity = item
+                        .get("severity")
+                        .and_then(Value::as_i64)
+                        .map(|v| v as i32);
+                    out.push(Finding {
+                        kind,
+                        key,
+                        severity,
+                        detail: item.clone(),
+                    });
+                }
+            }
+        }
+        // Stubs — argv-validated + CHECK-accepted but explode logic
+        // pending Woz's per-tool finding_key + severity spec. Per the
+        // ACK at Woz.md 23:02, each gets a follow-up commit once the
+        // canonical spec lands on the channel. Current behavior: ingest
+        // the run row (so audit.run captures the payload + ran_at
+        // baseline) but produce zero findings — no audit.finding rows
+        // means no spurious diff signals downstream. Logged so a run
+        // doesn't silently swallow drift detection.
+        //
+        //   tab-compare: tools/css-tab-compare-audit/audit.json carries
+        //                {pairs: [{a, b, crossPrefix, misnamedShared,
+        //                mixed, onlyA, onlyB, shared, inventory}]} — the
+        //                drift signals are crossPrefix/misnamedShared/
+        //                mixed; current sample data has all three empty
+        //                so a stub here is a no-op against today's run.
+        //   cross-page:  no audit.json emitted yet per Woz's audit-cadence
+        //                doc (97e35aa) + tools/css-cross-page-audit/ inv-
+        //                entory. Stub will activate the moment cross-page
+        //                gains its emit + Woz spec'd shape lands.
+        //   parallel:    emits parallels.json (not audit.json) — needs a
+        //                filename override at the `let path = ...` site
+        //                AND lives at tools/css-parallel/ (no -audit/
+        //                suffix; audit.sh for-loop doesn't iterate it
+        //                today). Two coordination items above the
+        //                explode itself; defer.
+        "tab-compare" | "cross-page" | "parallel" => {
+            eprintln!(
+                "warning: --tool {tool} explode logic stubbed (await Woz spec); \
+                 audit.run row recorded with 0 findings."
+            );
         }
         _ => unreachable!("--tool validated upstream"),
     }
