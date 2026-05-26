@@ -303,6 +303,31 @@ extension cheap.
 gap could have shipped invisibly. The reusability for Phase D/E
 spikes is real but secondary to its first concrete catch.
 
+### Since-then additions (post-`c340e68`)
+
+- **`14cd43c` — `tools/wasm-bench/fixtures/ultimate-tricky.csv`.**
+  15-row hand-curated regression pin covering every parse edge
+  case (commas-in-quoted-fields, doubled-quote escape, multi-line
+  cells, partial-wrap, unescaped/mismatched quotes, backslash
+  escape, UTF-8 mojibake, leading/trailing whitespace). Tracked in
+  git so it survives `python3 generate.py` and corpus changes;
+  doubles as a **lane-parity probe** — both wasm and server should
+  produce identical metrics modulo the documented rescue delta.
+- **`270be66` — `tools/wasm-bench/generate-tricky.py`.** Sibling to
+  `generate.py`; produces a chaos-at-scale CSV (70% clean + 30%
+  rotating across 10 trap shapes — the same edge cases as
+  `ultimate-tricky.csv` but generated at N=100k+). Deterministic
+  via `SEED=20260526`; default 100k rows → ~8 MB, CLI arg unlocks
+  the 1M-row variant for scale-stress. Output gitignored under
+  `corpus/`. Design: rescue heuristic should **stay off** at this
+  blend (only ~9% wrapped rows — fails the whole-file wrap
+  signature), so this corpus is a lenient-mode scaling probe + a
+  lane-parity probe at volume, not a rescue-path stressor.
+
+The two additions complete the harness's coverage matrix: real
+files for steady-state perf, hand-curated fixtures for behavior
+regression, generated corpora for parity-at-volume.
+
 ---
 
 ## Verdict
