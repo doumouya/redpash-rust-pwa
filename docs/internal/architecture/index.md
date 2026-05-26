@@ -2,7 +2,7 @@
 title: Architecture — index
 section: Internal
 order: 10
-last modified date: 2026-05-24
+last modified date: 2026-05-26
 ---
 
 # Architecture
@@ -21,3 +21,14 @@ edit-in-place. New decisions land as new files; revisions retitle
 | [columns-redtable](columns-redtable.md) | Table 1 of the data-shape index as a UI — cleaning tools as a redtable toolbar |
 | [roadmap-webassembly](roadmap-webassembly.md) | WASM phasing; runtime-neutral DTOs as a hard rule |
 | [ui-shell-pattern](ui-shell-pattern.md) | `.rp-shell` rail-page layout; `.rp-shell--wide` modifier; consumed by `/home` and `/monitoring` |
+
+## Snapshots
+
+Snapshots are dated point-in-time reads of the codebase against a
+locked architecture doc above. They don't bind future work — they
+record where we are, flag what's drifted, and propose follow-ups.
+Rerun + supersede when the next big move in that layer lands.
+
+| Snapshot | What it reads |
+|---|---|
+| [objects-survey-2026-05-26](objects-survey-2026-05-26.md) | All 16 `shared::*` DTO modules vs the locked object-model — 12 clean, 4 carry comment-only drift, 0 broken. Four-diff fix shape + audit-tool proposal. |
