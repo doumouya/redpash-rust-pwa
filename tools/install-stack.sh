@@ -208,6 +208,30 @@ need "npm"       npm       "--version" "9.0.0"  install_node
 # wasm-pack — cargo-installed, runs after Rust is live.
 need "wasm-pack" wasm-pack "--version" "0.12.0" install_wasm_pack
 
+# ── tools/ npm deps ─────────────────────────────────────────────────────────
+# tools/package.json pins the npm deps the audit harnesses load
+# (acorn for js-audit + css-tab-compare-audit). Provisioning is a
+# one-shot `npm install` from the tools/ dir — idempotent + cheap on
+# warm cache; skipped under --dry-run. Node was just verified at the
+# floor above, so npm is live by the time we get here.
+echo "${C_BOLD}── tools/ npm deps${C_RST}"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "  ${C_DIM}[dry] (cd tools && npm install --no-audit --no-fund)${C_RST}"
+elif [ ! -f tools/package.json ]; then
+  echo "  $TAG_FAIL tools/package.json missing — audit harnesses cannot load deps"
+  FAILED=$((FAILED + 1))
+elif ! command -v npm >/dev/null 2>&1; then
+  echo "  $TAG_FAIL npm not on PATH — earlier node install must have failed"
+  FAILED=$((FAILED + 1))
+else
+  if (cd tools && run npm install --no-audit --no-fund); then
+    echo "  $TAG_OK tools/ npm deps installed"
+  else
+    echo "  $TAG_FAIL tools/ npm install failed"
+    FAILED=$((FAILED + 1))
+  fi
+fi
+
 # ── footer ──────────────────────────────────────────────────────────────────
 echo ""
 if [ "$DRY_RUN" -eq 1 ]; then

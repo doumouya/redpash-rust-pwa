@@ -1,0 +1,12 @@
+{
+  "name": "redpash-tools",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Audit / build / install scripts for the RedPash repo. Not a publishable package — exists only to pin the node_modules tree the audit harnesses depend on.",
+  "scripts": {
+    "audit": "sh audit.sh"
+  },
+  "dependencies": {
+    "acorn": "^8.14.0"
+  }
+}
