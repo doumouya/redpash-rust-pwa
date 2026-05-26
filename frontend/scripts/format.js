@@ -6,7 +6,7 @@
 // Today's consumer: pages/cases.js (chat-bubble day dividers + age +
 // timestamp displays). Inline duplicates still live in
 // pages/home.js (`fmtTime`), pages/monitoring.js (`fmtTime`,
-// `fmtCount`, `fmtPct`, `fmtMeasurement`), and pages/workspace.js
+// `fmtCount`, `fmtMeasurement`), and pages/workspace.js
 // (`fmtRelTime` is the same concept as `fmtAge` under a different
 // name) — those migrate naturally on their next touch. Not blocking;
 // the atom existing here is the invitation.
