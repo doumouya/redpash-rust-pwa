@@ -34,16 +34,28 @@ cargo build --quiet --manifest-path backend/crates/api/Cargo.toml \
             --bin redpash-audit-ingest
 INGEST="$REPO_ROOT/backend/target/debug/redpash-audit-ingest"
 
-# Tools whose audit.run CHECK constraint allows ingest. Keep in sync with
-# the migration; broaden when js / rs / crossing audits learn to emit
-# audit.json + the ingest binary learns their explode shape.
-INGEST_TOOLS=" css html "
+# Tools whose audit.run CHECK constraint allows ingest. Kept in sync
+# with the latest migration (broadened 2026-05-26 in mig
+# 20260613000001_relax_audit_tool_check.sql to add the broader audit
+# family). `parallel` + `ui-snapshot` are pre-emptive entries — their
+# directories don't (yet) match the `tools/*-audit/` glob below so the
+# loop won't iterate them; harmless to list. They land for real once
+# `tools/css-parallel/` gets the `-audit` rename + ui-snapshot ships.
+INGEST_TOOLS=" css html tab-compare cross-page parallel ui-snapshot "
 
 fail=0
 for dir in tools/*-audit/; do
   audit="$dir/audit.js"
   [ -f "$audit" ] || continue
+  # Compute the canonical tool name expected by the CHECK + the
+  # diff machinery: strip the `-audit` suffix from the dir name
+  # AND drop a leading `css-` family prefix when present, so
+  # `tools/css-cross-page-audit/` → `cross-page` (not `css-cross-page`),
+  # `tools/css-tab-compare-audit/` → `tab-compare`, but plain
+  # `tools/css-audit/` stays `css` (pattern `css-` requires the dash,
+  # so a bare `css` after suffix strip is left alone).
   tool="$(basename "$dir" -audit)"
+  tool="${tool#css-}"
   echo "════════════════════════  $tool  ════════════════════════"
 
   if ! node "$audit"; then
