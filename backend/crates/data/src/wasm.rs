@@ -213,9 +213,25 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
     // Bench / FE consumers: when `wrap_detected` is true and the user
     // wants the recovered frame, call `step_preview(rows, "unwrap_csv",
     // null)` against the 1-col DF — same step the Cleaner exposes.
-    let (wrap_detected, suggested_step) = match rescue {
-        parse::RescueDiag::NotAttempted                       => (false, Value::Null),
-        parse::RescueDiag::WrapDetected { preview_width: _ }  => (true,  json!("unwrap_csv")),
+    // `rescue_reason` names WHY the rescue surface did or didn't fire,
+    // in our terms — closes the "outside reader infers wrong intent
+    // from a thin wire field" gap that surfaced when Gemini was shown
+    // an ultimate-tricky.csv bench result with zero codebase context
+    // and confidently misread `wrap_detected: false` as "parser didn't
+    // fail hard enough to need rescue" (Torv 22.04 Woz.md 06:45). Two
+    // named reasons today; the enum is extensible if we add more
+    // detection paths (encoding-confused, ragged-only, etc).
+    let (wrap_detected, suggested_step, rescue_reason) = match rescue {
+        parse::RescueDiag::NotAttempted => (
+            false,
+            Value::Null,
+            "no_whole_file_wrap_signature",
+        ),
+        parse::RescueDiag::WrapDetected { preview_width: _ } => (
+            true,
+            json!("unwrap_csv"),
+            "whole_file_wrap_detected",
+        ),
     };
 
     Ok(json!({
@@ -227,6 +243,7 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
         "encoding":        encoding,
         "wrap_detected":   wrap_detected,
         "suggested_step":  suggested_step,
+        "rescue_reason":   rescue_reason,
     })
     .to_string())
 }

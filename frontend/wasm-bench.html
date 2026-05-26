@@ -104,7 +104,7 @@
       <th>Cols</th>
       <th>Score</th>
       <th>Empty %</th>
-      <th>Rescue</th>
+      <th title="Whole-file wrap-shape rescue surface (parse.rs RescueDiag). '—' = no whole-file wrap signature detected (normal CSV — most files); '⚠ wrap' = every row in the file looked wrapped, parser held the 1-col line-literal preservation, user runs the suggested_step ('unwrap_csv') from the Cleaner to recover the N-col frame. ONLY fires when the WHOLE file matches the wrap signature — partial-wrap mixed-shape files (e.g. ultimate-tricky.csv) don't trigger it.">Rescue</th>
       <th>Result</th>
     </tr>
   </thead>
@@ -293,9 +293,20 @@ function renderAnnotation() {
 // so the table reads straight. Failed rows tint soft-red + italicise
 // the ms cell (so its number reads as reject-latency, not parse-time);
 // the Result chip carries the verbatim status (`OK` or `HTTP 413 …`).
-// The Rescue chip surfaces the wasm-side wrapped-CSV rescue outcome
-// (parse.rs's RescueDiag): "—" not attempted / "✗ 1" wrapped + fell
-// back / "✓ N" wrapped + delivered N cols.
+// The Rescue chip surfaces the wasm-side wrapped-CSV rescue DIAGNOSTIC
+// (parse.rs's RescueDiag, post-d1ea8df product call: parse stays
+// diagnostic, the user confirms transforms — parser never auto-applies
+// unwrap_csv). Three visual states:
+//   "—"      not attempted (wrap_detected=false; the common case — most
+//            files don't trip the whole-file wrap signature)
+//   "⚠ wrap" wrap detected (wrap_detected=true; parser held the 1-col
+//            line-literal frame, user runs the named suggested_step via
+//            the Cleaner to recover the N-col shape)
+//
+// The chip title carries the `rescue_reason` and `suggested_step` names
+// verbatim — closes the "outside reader infers wrong intent" gap surfaced
+// when Gemini read a `false` value and recommended re-introducing the
+// rejected parse_and_rescue path (Torv 22.04 Woz.md 06:45).
 function appendRow(lane, iter, ms, body, errMsg) {
   const failed = !!errMsg;
   const tr = document.createElement("tr");
@@ -321,25 +332,31 @@ function appendRow(lane, iter, ms, body, errMsg) {
 
   // Rescue chip — only meaningful on rows where a parse actually ran
   // (i.e. wasm-side, non-failed). Server-lane rows or any failed row
-  // get "—" with no rescue claim. body.rescued is the boolean; when
-  // true, body.rescue_width tells delivered vs fell-back.
+  // get "—" with no rescue claim. Post-d1ea8df: parse stays diagnostic;
+  // body.wrap_detected is the boolean, body.suggested_step names the
+  // step the user runs to recover, body.rescue_reason names WHY the
+  // diagnostic surface did or didn't fire (closes the Gemini-misread
+  // gap — see header tooltip + the comment block above appendRow).
   const rescueTd  = document.createElement("td");
   const rescueChip = document.createElement("span");
-  if (failed || body?.rescued !== true) {
+  const wrapDetected  = body?.wrap_detected === true;
+  const rescueReason  = body?.rescue_reason || "unknown";
+  const suggestedStep = body?.suggested_step || "unwrap_csv";
+  if (failed) {
     rescueChip.className = "result-chip result-chip--muted";
     rescueChip.textContent = "—";
-    rescueChip.title = failed
-      ? "No parse ran — Rescue not applicable."
-      : "File was a normal CSV — wrapped-shape rescue not attempted.";
-  } else if (body.rescue_width > 1) {
-    rescueChip.className = "result-chip result-chip--ok";
-    rescueChip.textContent = "✓ " + body.rescue_width;
-    rescueChip.title = "Wrapped CSV detected; unwrap_csv delivered " + body.rescue_width + " columns.";
+    rescueChip.title = "No parse ran — Rescue not applicable.";
+  } else if (!wrapDetected) {
+    rescueChip.className = "result-chip result-chip--muted";
+    rescueChip.textContent = "—";
+    rescueChip.title = "Rescue not attempted (reason: " + rescueReason + "). "
+      + "File parsed as a normal CSV — no whole-file wrap signature detected.";
   } else {
     rescueChip.className = "result-chip result-chip--warn";
-    rescueChip.textContent = "✗ 1";
-    rescueChip.title = "Wrapped CSV detected; unwrap_csv fell back to line-literal (returned width = 1). "
-      + "Likely an unwrap_record edge case — see parse.rs's `_ => Ok(wrapped_df)` arm.";
+    rescueChip.textContent = "⚠ wrap";
+    rescueChip.title = "Whole-file wrap signature detected (reason: " + rescueReason + "). "
+      + "Parser held the 1-col line-literal preservation — apply the '" + suggestedStep
+      + "' step in the Cleaner to recover the N-col frame.";
   }
   rescueTd.appendChild(rescueChip);
   tr.appendChild(rescueTd);
