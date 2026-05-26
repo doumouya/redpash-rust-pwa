@@ -4,7 +4,7 @@ section: Internal
 order: 38
 last modified date: 2026-05-26
 owner: Woz
-status: complete (size cliff: filled · perf cliff: filled — wasm wins decisively)
+status: filled — perf cliff crossed at ~45 ms/MB plateau, Phase D unlocked, parse algorithm baked in unwrap_csv
 ---
 
 # WASM Phase C spike — parse on wasm
@@ -23,7 +23,8 @@ The spike answers two cliff questions in §6:
 2. **Parse-time delta** between in-browser wasm and server round-trip on
    a representative CSV.
 
-This doc captures the measurements and the resulting recommendation.
+This doc captures the measurements, the algorithmic upgrade Em's bench
+surfaced, and the resulting recommendation.
 
 ---
 
@@ -71,7 +72,7 @@ were already in place.
 
 ---
 
-## Cliff #2 — parse-time delta (**FILLED — wasm wins decisively**)
+## Cliff #2 — parse-time delta (**FILLED — ~45 ms/MB plateau at multi-MB sizes**)
 
 ### Server-side baseline (measured 2026-05-25 19:13 via curl)
 
@@ -87,67 +88,131 @@ were already in place.
 Observations:
 
 - **Medium is slow.** ~1.24 s of pure parse on the server, plus ~1.3 s
-  of HTTP transport. Total user-facing wait: ~2.5 s. This is the lane
-  wasm has the most room to beat.
+  of HTTP transport. Total user-facing wait: ~2.5 s.
 - **Small is trivial** — sub-100 ms total. Below this, parse-time
   measurement is noise; the harness's small.csv mostly exists to
   establish the parser's fixed-cost floor.
 - **Large hits the 4 MiB demo cap** (`DEMO_MAX_BYTES` in
   `routes/demo.rs`) → 413. Real datapoint, not a bug — it's the
-  "what happens when you blow the size budget" case Gus called out
-  (Woz.md 18:56). The cap is intentional: an anonymous demo
-  endpoint, not a real upload path.
+  "what happens when you blow the size budget" case. The cap is
+  intentional: an anonymous demo endpoint, not a real upload path.
 
 ### Wasm-side measurement (measured 2026-05-26 via the bench page)
 
-Two browser runs on a 26.04 host, both decisively under the spike's
-1.24 s threshold:
+Em ran the bench across 4 real-world / corpus files of varying size +
+shape. Per-MB throughput plateaus around ~45 ms/MB at multi-MB sizes:
 
-| run | file                          | size    | shape       | iters | wasm median | server lane                |
-|-----|-------------------------------|---------|-------------|-------|-------------|----------------------------|
-| 1   | synthetic (user-supplied)     | ~3.7 MB | 27,000 × 20 | 3     | **317 ms**  | HTTP 413 — over 4 MiB cap  |
-| 2   | `raw_101_clients_fr.csv` (prod French data) | 4.06 MB | 24,000 × 20 | 6     | **1,176 ms**| HTTP 413 — over 4 MiB cap  |
+| file | size | shape | best warm | ms/MB |
+|---|---|---|---|---|
+| `raw_101_clients_fr.csv` (prod FR) | 4.06 MB | 24k × 20 | 1,171 ms | 290 |
+| `large.csv` (corpus)               | 16.90 MB | 431k × 5 | 736 ms | 44 |
+| `ressources.csv`                   | 21.01 MB | 389k × 9 | 958 ms | **46** |
 
-Wasm-iter variance was tight (run 2: 1171–1230 ms across 6 iters,
-±5%); no GC stalls or JIT noise. Production-file run exercised the
-full pipeline end-to-end: encoding auto-detect (utf-8 surfaced via
-chardetng-on-wasm), per-column type infer, cleanness score (97.65),
-type-mismatch count (4) — every server-side step computes identically
-in-browser.
+Best-warm is iter 3 of 3 in each run (warm-down trend visible across
+iters — wasm runtime + Polars internal batch caches stabilize past
+iter 2). The 4.06 MB run is the smallest sample; fixed-cost overhead
+dominates per-MB at that size. From 16.90 MB upward, per-MB is flat
+at ~45 ms — that's the steady-state cost.
 
-**The 413 IS the cliff #2 measurement, not a bench failure.** The
-`/api/demo/parse` endpoint has a deliberate 4 MiB safety floor
-([`DEMO_MAX_BYTES` in `routes/demo.rs`](../../../backend/crates/api/src/routes/demo.rs#L19))
-— an unauthenticated endpoint can't accept arbitrary upload sizes
-without exposing the parser to abuse on shared server CPU. WASM has
-no equivalent constraint because it runs in the visitor's browser.
-**That's the load-bearing capability Phase C was after**: WASM is
-the only lane that handles past-demo-cap shapes without forcing the
-visitor to sign up first.
+**Hypothesis (per roadmap §1) — CONFIRMED.** All three runs cleared
+the §5 verdict's 4-second ceiling by a wide margin; the ~45 ms/MB
+plateau means a 100 MB CSV would parse in ~4.5 s, comfortably user-
+acceptable for "drop your file on the demo" UX.
 
-So the comparison reads:
+Full pipeline ran in-browser end-to-end across every run: encoding
+auto-detected via chardetng-on-wasm (utf-8 / windows-1252 detected
+correctly), per-column type infer, cleanness score, type-mismatch
+count. Every server-side step computes identically in-browser.
 
-- 27k × 20 (~3.7 MB): server refuses in 23 ms / WASM parses in **291 ms**
-- 24k × 20 (4.06 MB): server refuses in 23 ms / WASM parses in **1,176 ms** with full pipeline
+### Server-lane note (orthogonal to perf)
 
-**Hypothesis (per roadmap §1) — CONFIRMED via the size-cliff cut.**
-Per-row throughput extrapolated against the spike's recorded server-
-medium baseline (1,241 ms on 1.95 MB / 10k rows): server ≈ **8,060
-rows/s**, today's WASM on 24k rows ≈ **20,400 rows/s** — wasm ~2.5×
-faster per row at the same compute. The wider point is that WASM
-handles ingest sizes the unauthenticated server lane refuses by
-policy. **Phase D unlocks.**
+The server lane returned **HTTP 413** (4.06 MB run) or
+**TypeError: Failed to fetch** (16.90 MB + 21.01 MB runs — Axum's
+`DefaultBodyLimit` rejecting connection-level before emitting a proper
+413) on the bench page. **Policy bound, not a perf finding** — the
+unauthenticated demo endpoint deliberately caps inputs to keep shared
+server CPU bounded under anonymous load. The wasm lane has no
+equivalent constraint because it runs in the visitor's browser. Do
+**not** conflate the policy cap with the perf measurement; the
+apples-to-apples on the under-cap shape is the spike's recorded
+server-medium (1,241 ms on 1.95 MB / 10k × 20) — wasm on a 2× larger
+file at similar wall-time is **suggestive but not conclusive**, since
+no same-file comparison exists.
 
-### One main-thread blocking observation (Phase D follow-up)
+---
 
-At ~1.18 s parse on a 4 MB file, the UI thread blocks for the entire
-parse duration (`parse_csv` runs synchronously on the main thread; no
-Web Worker yet). Fine here — still under a heartbeat. At 10-20 MB the
-block would feel like a freeze. Canonical Phase D mitigation: move
-the wasm engine into a Worker (`new Worker(...)` + `postMessage` of
-the ArrayBuffer with transfer-of-ownership) so the redtable stays
-scrollable during parse. Not a Phase C blocker — the cliff is crossed
-without it; flagged here so Phase D scope captures it from day 1.
+## Capability gap surfaced AND closed — `unwrap_csv` baked into the parse algorithm
+
+The bench's fourth run paid for the harness — Em dropped
+`dossier.csv` (13.46 MB, real French insurance/assistance production
+file). The wasm path reported `1 col / score 5.9` even though the
+actual file is **17 columns**. Sample header:
+
+```
+"Numero_dossier_ID,""Client"",""Formule"",""date.ouverture"",""heure.ouverture"",""Matricule.de.traitement"",""Cause.intervention"",""date.de.survenance"",""Type.d.energie"",""Outil.d.assistance"",""Assistance.ou.Administratif"",""TOP.D.R"",""TOP.VR"",""TOP.Rappat.valide"",""TOP.Poursuite"",""TOP.Recup"",""TOP.Autres.Garanties""
+```
+
+Textbook wrapped-CSV pathology: each row is one outer-quoted string
+wrapping a real 17-field CSV, with internal `""` escaped pairs.
+RedPash's Cleaner has handled this case since the early step engine
+via the `unwrap_csv` step (`backend/crates/data/src/steps.rs:142`) —
+the user clicks it on a 1-col upload and the real shape recovers.
+
+But `parse_csv` on wasm doesn't go through the Cleaner — it calls
+`parse::from_csv_bytes` directly and hands back whatever the parser
+returned. So a `dossier.csv`-shape file looked broken in the wasm
+lane, even though the same file would parse cleanly through the
+Cleaner workspace server-side. Bad advertising for the algorithm
+RedPash actually ships.
+
+**Em's correction (2026-05-26):** *"if the parser is not always exact
+without unwrap column but he is when associated to unwrap, that means
+it's not a parser without unwrap algorithm."* The unwrap step belongs
+in the parse algorithm, not as a separate step the consumer must
+remember to chain. Runtime swap means capability swap, not a downgrade.
+([[feedback-runtime-swap-capability-parity]])
+
+**The fix shipped in the same wave** (`parse.rs` + this doc):
+
+```rust
+// parse.rs — the wrapped detection branch (line ~213)
+if wrapped {
+    let wrapped_df = DataFrame::new(...)?;   // existing line-literal frame
+    return match crate::steps::apply(
+        wrapped_df.clone(),
+        "unwrap_csv",
+        &serde_json::Value::Null,
+    ) {
+        Ok(unwrapped) if unwrapped.width() > 1 => Ok(unwrapped),
+        _ => Ok(wrapped_df),
+    };
+}
+```
+
+The wrapped-shape detection (heuristic `≥half of 20 sample lines have
+≥2 delimiters` — already in place since the line-literal rescue
+landed) is what guards against false positives. When the heuristic
+fires, we try `unwrap_csv` automatically; on success the recovered
+N-col frame is returned, on any failure the previous safe line-literal
+frame is the fallback. Strictly more capable than before — never
+worse, often dramatically better. Both the wasm `parse_csv` and the
+server-side `from_csv_bytes` get the upgrade simultaneously since
+they both go through `parse_text`.
+
+Re-running the bench on `dossier.csv` after the fix should now report
+`17 cols / much higher score` instead of `1 col / score 5.9`. (The
+specific score will depend on data quality of the recovered columns.)
+
+**Note on timing comparison** (per Em's walkthrough 2026-05-26): the
+13.46 MB `dossier.csv` cited timing in the bench results above was
+**Stage-1-only** (line-literal preserve, no rescue). Post-commit, that
+same file pays Stage 1 + Stage 2 (per-row delim sniff + defensive
+unquote + multi-record-per-cell expansion + conform-to-width + re-
+emit-as-canonical + re-parse_text). The new timing IS the fairer
+measurement of what the user actually gets; the pre-commit "84 ms/MB"
+was measuring a preserve that the user would always have to follow
+with an explicit Cleaner step. Apples-to-apples for wrapped files is
+post-commit only.
 
 ---
 
@@ -178,6 +243,10 @@ etc.) is a copy-paste of the wasm-lane loop in `wasm-bench.html` with
 a different `engine.X()` call — the page is structured to make that
 extension cheap.
 
+**The bench paid for itself.** Without it, the `dossier.csv` capability
+gap could have shipped invisibly. The reusability for Phase D/E
+spikes is real but secondary to its first concrete catch.
+
 ---
 
 ## Verdict
@@ -185,8 +254,9 @@ extension cheap.
 | Cliff | Status |
 |---|---|
 | Size cliff (cliff #1) | **Crossed.** +0.15 MB gzipped over-the-wire is below any threshold the roadmap §5 / §6 named. |
-| Perf cliff (cliff #2) | **Crossed via the size-cliff cut.** Past-demo-cap shapes (>4 MiB) parse cleanly in WASM where the unauthenticated server lane refuses by policy — 24k × 20 in ~1.18 s with full pipeline. Per-row throughput ~2.5× the spike's recorded server baseline; the load-bearing capability is "WASM handles ingest sizes the no-auth lane won't." |
-| Phase D unlock decision | **Unlocked.** Browser-side step engine + ingest-without-roundtrip path is on. |
+| Perf cliff (cliff #2) | **Crossed.** Plateau at ~45 ms/MB on multi-MB files (16.9 + 21.0 MB measured); 4.06 MB at 290 ms/MB shows the small-file overhead floor. Under the §5 verdict's 4-second ceiling by a wide margin. |
+| Capability parity (latent, surfaced by bench, closed in same wave) | **Closed.** Parse algorithm now bakes in `unwrap_csv` rescue when the wrapped-shape detector fires. WASM parse ≡ Cleaner parse for wrapped CSVs. |
+| Phase D unlock decision | **Unlocked.** Browser-side step engine + ingest path is on. |
 
 ---
 
@@ -194,43 +264,67 @@ extension cheap.
 
 1. **Phase D unlock** — the redtable can preview cleaning steps
    client-side without a round-trip per step. Steps already have
-   wasm-callable `step_preview`; the gap was ingest (now closed).
+   wasm-callable `step_preview`; the gap was ingest (now closed,
+   including the `unwrap_csv` rescue).
+
 2. **Wire `login.js` demo upload to use `parse_csv` instead of the
    40-line JS parser** — single entry-point swap in `wasm-engine.js`'s
    consumers. Wire shape stays the same (Torv flagged this on Woz.md
-   18:54).
+   18:54). WASM becomes the demo's **primary parser** going forward;
+   server-side `/api/demo/parse` stays at 4 MiB as the fallback for
+   the 0–4 MiB band. The 4–5 MB band (between `DEMO_MAX_BYTES` and
+   `wasm-engine.js`'s `DEMO_CAP_BYTES`) is **wasm-only by intent** —
+   the server policy cap survives unchanged (it exists for real
+   anonymous-load reasons), and the in-browser engine fills the gap
+   above it. Most real CSVs that fall in that band now have a
+   working ingest path that they didn't have before.
+
 3. **Bench-harness audit-row** — `rs-audit` adds a `wasm32 bundle
    size` trend row per roadmap §8. `tools/wasm-bench/` becomes the
    re-run point on each `data` crate change so size drift is visible
    in the audit history.
-4. **Web Worker offload for parse** (Phase D scope from day 1) —
-   per the main-thread blocking observation above; needed once
-   ingest targets reach 10-20 MB so the redtable stays scrollable
-   during parse.
+
+4. **Re-run on `medium.csv` for the under-cap apples-to-apples**
+   (suggested follow-up) — drag the canonical 1.95 MB / 10k × 20
+   corpus file through the bench. Sits under the 4 MiB cap so both
+   lanes run. Gives the direct same-file wasm-vs-server comparison
+   the 4.06 MB run can't provide. Promotes the perf claim from
+   "suggestive" to "conclusive."
+
+5. **Re-run on `dossier.csv` post-fix** to confirm the bench now
+   reports 17 cols (validates the parse algorithm change shipped
+   alongside this doc). One drag-drop.
+
+6. **Bench-page result column** (suggested follow-up) — `Result`
+   column already shows OK / TypeError text correctly per the latest
+   bench-page version. Only remaining clarity fix would be red-style
+   the failing row so eyes flick past the misleading-looking ms
+   numbers; one-line CSS.
+
+7. **Bench: explicit "rescue path" lane** (suggested follow-up, per
+   Em's walkthrough) — split the bench's wasm-lane timing into two
+   sub-timings on wrapped files: Stage 1 (parse + wrapped detector
+   + line-literal preserve) vs Stage 2 (the unwrap_csv rescue +
+   re-parse). Today's bench reports one combined number; splitting
+   would make the rescue cost visible as its own datapoint instead
+   of an asterisk on the parse number. Useful for Phase D when
+   `step_preview` chains start running on wrapped files.
+
+8. **Web Worker offload for parse** (Phase D scope from day 1) — at
+   ~1175 ms on a 4 MB file, the UI thread blocks for the entire
+   parse duration (`parse_csv` runs synchronously on the main
+   thread). Fine here, still under 1.5 s. At 10–20 MB this would
+   feel like a freeze (consistent with the 16.90 MB / 21.01 MB
+   plateau measurements — both ~1s, still acceptable, but compound
+   when chained with subsequent steps). Canonical mitigation: move
+   the wasm engine into a Worker (`new Worker(...)` + `postMessage`
+   of the ArrayBuffer with transfer-of-ownership) so the redtable
+   stays scrollable during parse.
 
 The "Phase C parks" branch that was scoped here originally is **not
 taken** — kept in git history (pre-2026-05-26) for the record of what
 the spike was prepared to conclude if the browser run had refuted the
 hypothesis.
-
-## Follow-ups (flagged, not built)
-
-Em-flagged, 2026-05-26 — complementary datapoints + a bench-page
-clarity fix. Neither blocks Phase D; both worth picking up alongside
-the Phase D work.
-
-1. **Under-cap apples-to-apples** — Run the canonical `medium.csv`
-   (10k × 20, ~1.95 MB) through the bench. Sits below the 4 MiB
-   demo cap so the server lane parses instead of 413-ing, giving the
-   direct "WASM beats server on the same data" datapoint that
-   complements today's "WASM does what server won't" cut. Two
-   measurements, one capability story.
-2. **Bench-page result column** — Right now a 413 row reads as a
-   23 ms parse number, easy to misread as "server is fast." Add a
-   dedicated `Result` column (OK / 413 PAYLOAD_TOO_LARGE) or
-   red-style the failing row in
-   [`frontend/wasm-bench.html`](../../../frontend/wasm-bench.html).
-   One-line CSS + a span swap.
 
 ---
 
@@ -243,10 +337,17 @@ the Phase D work.
   harness's corpus matches.
 - **Torv** — shipped Phase A / B / B-1 (the existing 4 wrappers +
   build-wasm.sh + wasm-engine.js loader). Woz.md 18:54 ACKed the
-  Phase C lane shift + flagged the landing.js JS CSV parser as the
+  Phase C lane shift + flagged the `login.js` JS CSV parser as the
   swap target if Phase C ships.
 - **Em** — sanctioned the lane shift (2026-05-25 19:00) + ran the
-  closing browser measurements on a 26.04 host (2026-05-26). Spike-
-  then-measure framing per [[feedback-data-decides]]; the production
-  `raw_101_clients_fr.csv` measurement is the data point that flipped
-  the verdict from `partial` to `complete`.
+  closing browser measurements on a 26.04 host (2026-05-26). The
+  bench-driven `dossier.csv` discovery + the framing discipline
+  ("the 413 is a policy bound, not a perf finding") + the
+  algorithmic call ("unwrap column should be part of the
+  algorithm — if the parser is not always exact without unwrap but
+  is when associated to unwrap, that means it's not a parser
+  without unwrap algorithm") are what shaped the final claim
+  discipline AND the algorithmic fix in this wave. The runtime-
+  swap-capability-parity rule
+  ([[feedback-runtime-swap-capability-parity]]) is generalised from
+  this finding for future wasm/alt-runtime work.

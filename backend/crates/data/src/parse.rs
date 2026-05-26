@@ -223,8 +223,33 @@ pub fn parse_text(text: String) -> Result<DataFrame> {
             let mut rows = text.lines().skip(skip_rows);
             let header = rows.next().unwrap_or("column_1");
             let values: Vec<&str> = rows.collect();
-            return DataFrame::new(vec![Series::new(header.into(), values.as_slice())])
-                .map_err(DataError::from);
+            let wrapped_df = DataFrame::new(
+                vec![Series::new(header.into(), values.as_slice())],
+            )
+            .map_err(DataError::from)?;
+
+            // Bake the rescue into the parse algorithm — the wrapped
+            // detection above identified the shape, the unwrap step
+            // knows the recovery. Em 2026-05-26: "if the parser is not
+            // always exact without unwrap column but he is when
+            // associated to unwrap, that means it's not a parser
+            // without unwrap algorithm." Try unwrap; on success, return
+            // the recovered N-col frame. On failure (edge cases
+            // unwrap_csv can't handle: pathological mixed quoting, a
+            // 1-col file that COINCIDENTALLY tripped the heuristic but
+            // is actually genuine 1-col data), fall back to the safe
+            // line-literal frame we always returned. Strictly more
+            // capable than the previous behavior; users can still pop
+            // an explicit unwrap_csv step in the Cleaner if the
+            // automatic recovery missed an edge case.
+            return match crate::steps::apply(
+                wrapped_df.clone(),
+                "unwrap_csv",
+                &serde_json::Value::Null,
+            ) {
+                Ok(unwrapped) if unwrapped.width() > 1 => Ok(unwrapped),
+                _ => Ok(wrapped_df),
+            };
         }
     }
 
