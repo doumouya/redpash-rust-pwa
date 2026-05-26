@@ -149,6 +149,22 @@ let summary = {
   wasmOk:           false,
 };
 
+// WASM-lane size ceiling. wasm32 linear memory caps at 4 GB; the parse
+// pipeline allocates roughly 2-3x raw bytes during parse (Polars
+// DataFrame buffers + JS-side ArrayBuffer copy of the original + the
+// rescue path's intermediate string allocations on malformed input).
+// Files past ~1.3 GB therefore exceed the wasm32 envelope; we cap at
+// 1 GB to leave headroom for the full pipeline (chardetng transcode +
+// per-column type inference + cleanness scoring) and for browser-side
+// JS heap pressure (V8 default ~4 GB shared with the page itself).
+//
+// Without this upfront gate, oversized files crash the tab or throw
+// `RangeError: Array buffer allocation failed` on the FileReader call
+// — a useless error from the user's point of view. The gate's job is
+// to convert that silent failure into a clear "file too large + here's
+// why + here's what to do instead" message.
+const MAX_BYTES = 1024 * 1024 * 1024;  // 1 GB
+
 document.getElementById("picker-btn")
         .addEventListener("click", () => picker.click());
 picker.addEventListener("change", e => run(e.target.files[0]));
@@ -173,8 +189,33 @@ async function run(file) {
     sizeMb: 0, serverHttp413: false, serverNetworkErr: false, wasmOk: false,
   };
 
-  const n = Math.max(1, Math.min(20, parseInt(itersEl.value, 10) || 3));
   const sizeMb = (file.size / 1024 / 1024).toFixed(2);
+
+  // Upfront size gate — reject before the FileReader / arrayBuffer
+  // call that would otherwise OOM-crash the tab. See MAX_BYTES comment
+  // for the wasm32 envelope reasoning.
+  if (file.size > MAX_BYTES) {
+    const capMb = (MAX_BYTES / 1024 / 1024).toFixed(0);
+    status.textContent = `${file.name} · ${sizeMb} MB — rejected (over ${capMb} MB cap)`;
+    annotation.innerHTML =
+      `<b>File too large for the WASM lane.</b> <code>${file.name}</code> ` +
+      `is <b>${sizeMb} MB</b>; the bench caps at <b>${capMb} MB</b>. WASM ` +
+      `linear memory on wasm32 is 4 GB and the parse pipeline allocates ` +
+      `roughly 2-3× raw bytes during parse (DataFrame buffers, the JS-side ` +
+      `ArrayBuffer copy, rescue-path intermediates, chardetng transcoding). ` +
+      `Past the cap, the browser would fail the allocation with a cryptic ` +
+      `<code>RangeError: Array buffer allocation failed</code> or crash ` +
+      `the tab outright — the gate trades that for an explicit refusal.` +
+      `<br><br>` +
+      `For files this size, the authenticated upload route ` +
+      `(<code>POST /api/files/*</code>) runs server-side Polars with ` +
+      `native 64-bit memory and disk-backed <code>project_files</code> ` +
+      `storage — not constrained by the browser's wasm sandbox.`;
+    annotation.hidden = false;
+    return;
+  }
+
+  const n = Math.max(1, Math.min(20, parseInt(itersEl.value, 10) || 3));
   summary.sizeMb = sizeMb;
   status.textContent = `${file.name} · ${sizeMb} MB · ${n} iters per lane…`;
 
