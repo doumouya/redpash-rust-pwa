@@ -4,7 +4,7 @@ section: Internal
 order: 39
 last modified date: 2026-05-26
 owner: Gus
-status: live (ui-snapshot landed; tab-compare / cross-page / parallel stubbed pending Woz spec)
+status: live (ui-snapshot landed; tab-compare / cross-page / parallel stubbed pending Torv spec)
 ---
 
 # Audit-ingest explode contract
@@ -97,7 +97,11 @@ The JS side pre-formats every finding with its own `finding_key`,
 into `audit.finding`; sample finding_key reads
 `#/profile#.rt-btn#line-height@dark` with severity `2119002650`.
 
-### `tab-compare` (stubbed, pending Woz spec)
+### `tab-compare` (stubbed, pending Torv spec)
+
+**Source authoring:** Torv (per his `0482f47` + `516fc48` history). Woz
+consumes via Layer 1b CI but doesn't own the source shape; the canonical
+finding_key + severity contract for tab-compare findings is Torv's call.
 
 **Source:** `tools/css-tab-compare-audit/audit.json`
 **Status:** the explode arm currently logs a warning and emits zero
@@ -128,7 +132,7 @@ arrays empty, so stubbing is a no-op against today's run):
 }
 ```
 
-**Likely explode shape** (pending Woz's canonical spec — DO NOT
+**Likely explode shape** (pending Torv's canonical spec — DO NOT
 implement on this guess; the items inside `crossPrefix` etc. may be
 strings OR objects, and the diff semantics for the inventory arrays
 are not yet defined):
@@ -140,23 +144,28 @@ are not yet defined):
 - `severity` for drift arrays: probably `1` per occurrence, OR a
   weight per the kind. TBD.
 
-### `cross-page` (stubbed, pending Woz spec + emit)
+### `cross-page` (stubbed, pending Torv spec + emit)
 
-**Source:** `tools/css-cross-page-audit/audit.json` — **not yet
+**Source authoring:** Torv (same lane as tab-compare). Woz consumes
+via Layer 1b CI; Torv owns the source shape.
+**Source path:** `tools/css-cross-page-audit/audit.json` — **not yet
 emitted**. `tools/css-cross-page-audit/audit.js` exists but no
 `audit.json` artifact in the tree today per the audit-cadence inv-
 entory.
 
 **Status:** explode arm stubbed (warns + emits zero findings) so the
 INGEST_TOOLS extension can include `cross-page` without breakage; the
-arm activates the moment the audit gains its emit + Woz spec'd
+arm activates the moment the audit gains its emit + Torv spec'd
 finding shape.
 
 ### `parallel` (stubbed, two coordination items above explode)
 
-**Source:** `tools/css-parallel/parallels.json` — note **non-canonical
-filename** (`parallels.json` not `audit.json`) AND non-canonical dir
-(`tools/css-parallel/` not `tools/css-parallel-audit/`).
+**Source authoring:** Torv (per the css-parallel commits in his
+earlier history). Woz consumes via Layer 1b CI; Torv owns the
+source shape.
+**Source path:** `tools/css-parallel/parallels.json` — note
+**non-canonical filename** (`parallels.json` not `audit.json`) AND
+non-canonical dir (`tools/css-parallel/` not `tools/css-parallel-audit/`).
 
 **Status:** explode arm stubbed; two upstream coordination items must
 land before the arm is reachable from `tools/audit.sh`:
