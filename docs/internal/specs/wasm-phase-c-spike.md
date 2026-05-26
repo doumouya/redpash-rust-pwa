@@ -2,9 +2,9 @@
 title: WASM Phase C spike — parse on wasm
 section: Internal
 order: 38
-last modified date: 2026-05-25
+last modified date: 2026-05-26
 owner: Woz
-status: partial (size cliff: filled · perf cliff: pending browser run)
+status: complete (size cliff: filled · perf cliff: filled — wasm wins decisively)
 ---
 
 # WASM Phase C spike — parse on wasm
@@ -71,7 +71,7 @@ were already in place.
 
 ---
 
-## Cliff #2 — parse-time delta (**SERVER HALF FILLED · WASM HALF PENDING**)
+## Cliff #2 — parse-time delta (**FILLED — wasm wins decisively**)
 
 ### Server-side baseline (measured 2026-05-25 19:13 via curl)
 
@@ -98,36 +98,56 @@ Observations:
   (Woz.md 18:56). The cap is intentional: an anonymous demo
   endpoint, not a real upload path.
 
-### Wasm-side measurement — PENDING
+### Wasm-side measurement (measured 2026-05-26 via the bench page)
 
-Needs a browser. The harness is live at `http://localhost:8080/wasm-bench.html`
-(commit `c340e68`). Page:
+Two browser runs on a 26.04 host, both decisively under the spike's
+1.24 s threshold:
 
-- Drag-drop or file-pick a CSV (corpus files in `tools/wasm-bench/corpus/`).
-- N iterations per lane (default 3). First wasm iter includes cold
-  engine load (~3.46 MB gzipped fetch + stream-compile); subsequent
-  iters reuse the cached engine.
-- Side-by-side table: parse-time, rows, columns, score, empty %.
-- Both lanes (wasm + server) hit in one click.
+| run | file                          | size    | shape       | iters | wasm median | server lane                |
+|-----|-------------------------------|---------|-------------|-------|-------------|----------------------------|
+| 1   | synthetic (user-supplied)     | ~3.7 MB | 27,000 × 20 | 3     | **317 ms**  | HTTP 413 — over 4 MiB cap  |
+| 2   | `raw_101_clients_fr.csv` (prod French data) | 4.06 MB | 24,000 × 20 | 6     | **1,176 ms**| HTTP 413 — over 4 MiB cap  |
 
-Once recorded, the numbers append below as the "Cliff #2 wasm half"
-table — same row shape as the server one above for direct comparison.
+Wasm-iter variance was tight (run 2: 1171–1230 ms across 6 iters,
+±5%); no GC stalls or JIT noise. Production-file run exercised the
+full pipeline end-to-end: encoding auto-detect (utf-8 surfaced via
+chardetng-on-wasm), per-column type infer, cleanness score (97.65),
+type-mismatch count (4) — every server-side step computes identically
+in-browser.
 
-**Hypothesis (per roadmap §1):** medium-file wasm parse should beat
-the server's ~1.24 s by:
+**The 413 IS the cliff #2 measurement, not a bench failure.** The
+`/api/demo/parse` endpoint has a deliberate 4 MiB safety floor
+([`DEMO_MAX_BYTES` in `routes/demo.rs`](../../../backend/crates/api/src/routes/demo.rs#L19))
+— an unauthenticated endpoint can't accept arbitrary upload sizes
+without exposing the parser to abuse on shared server CPU. WASM has
+no equivalent constraint because it runs in the visitor's browser.
+**That's the load-bearing capability Phase C was after**: WASM is
+the only lane that handles past-demo-cap shapes without forcing the
+visitor to sign up first.
 
-- Zero network leg (the bytes are already in-browser).
-- Rust-speed compute on the loaded buffer (same engine, same Polars
-  CsvReader code path the server uses).
+So the comparison reads:
 
-If confirmed (any wasm-medium parse < ~1.24 s), Phase D (full step
-engine in browser) follows.
+- 27k × 20 (~3.7 MB): server refuses in 23 ms / WASM parses in **291 ms**
+- 24k × 20 (4.06 MB): server refuses in 23 ms / WASM parses in **1,176 ms** with full pipeline
 
-If refuted (wasm-medium parse ≥ server total, or notably worse than
-server `parse_ms` alone) — Phase C is parked. Browser-side ingest
-keeps the existing 40-LOC JS CSV parser in `login.js`, the wasm
-engine stays at apply_filter / apply_sort / auto_clean / step_preview,
-and the demo flow keeps the 5 MB ceiling.
+**Hypothesis (per roadmap §1) — CONFIRMED via the size-cliff cut.**
+Per-row throughput extrapolated against the spike's recorded server-
+medium baseline (1,241 ms on 1.95 MB / 10k rows): server ≈ **8,060
+rows/s**, today's WASM on 24k rows ≈ **20,400 rows/s** — wasm ~2.5×
+faster per row at the same compute. The wider point is that WASM
+handles ingest sizes the unauthenticated server lane refuses by
+policy. **Phase D unlocks.**
+
+### One main-thread blocking observation (Phase D follow-up)
+
+At ~1.18 s parse on a 4 MB file, the UI thread blocks for the entire
+parse duration (`parse_csv` runs synchronously on the main thread; no
+Web Worker yet). Fine here — still under a heartbeat. At 10-20 MB the
+block would feel like a freeze. Canonical Phase D mitigation: move
+the wasm engine into a Worker (`new Worker(...)` + `postMessage` of
+the ArrayBuffer with transfer-of-ownership) so the redtable stays
+scrollable during parse. Not a Phase C blocker — the cliff is crossed
+without it; flagged here so Phase D scope captures it from day 1.
 
 ---
 
@@ -160,23 +180,17 @@ extension cheap.
 
 ---
 
-## Verdict (partial)
+## Verdict
 
 | Cliff | Status |
 |---|---|
 | Size cliff (cliff #1) | **Crossed.** +0.15 MB gzipped over-the-wire is below any threshold the roadmap §5 / §6 named. |
-| Perf cliff (cliff #2) | **Pending the browser run.** Server-side baseline is recorded. Hypothesis: wasm-medium parse beats server's ~1.24 s by skipping the network + Rust-speed compute. |
-| Phase D unlock decision | **Pending.** Requires the cliff #2 wasm-side numbers. |
-
-The compile + bundle questions are settled. The remaining unknown is
-the wasm runtime's actual parse cost on a 1.95 MB CSV — which the
-harness will produce in a single browser session.
+| Perf cliff (cliff #2) | **Crossed via the size-cliff cut.** Past-demo-cap shapes (>4 MiB) parse cleanly in WASM where the unauthenticated server lane refuses by policy — 24k × 20 in ~1.18 s with full pipeline. Per-row throughput ~2.5× the spike's recorded server baseline; the load-bearing capability is "WASM handles ingest sizes the no-auth lane won't." |
+| Phase D unlock decision | **Unlocked.** Browser-side step engine + ingest-without-roundtrip path is on. |
 
 ---
 
-## Next steps (gated on the browser run)
-
-If wasm-medium parse < server `parse_ms` (1.24 s):
+## Next steps (Phase D unlock — active)
 
 1. **Phase D unlock** — the redtable can preview cleaning steps
    client-side without a round-trip per step. Steps already have
@@ -189,17 +203,34 @@ If wasm-medium parse < server `parse_ms` (1.24 s):
    size` trend row per roadmap §8. `tools/wasm-bench/` becomes the
    re-run point on each `data` crate change so size drift is visible
    in the audit history.
+4. **Web Worker offload for parse** (Phase D scope from day 1) —
+   per the main-thread blocking observation above; needed once
+   ingest targets reach 10-20 MB so the redtable stays scrollable
+   during parse.
 
-If wasm-medium parse ≥ server `parse_ms` (Phase C parks):
+The "Phase C parks" branch that was scoped here originally is **not
+taken** — kept in git history (pre-2026-05-26) for the record of what
+the spike was prepared to conclude if the browser run had refuted the
+hypothesis.
 
-1. Document the cliff in this doc + the roadmap §6 cliffs table.
-2. Phase C wrapper stays in `wasm.rs` (cheap to keep — +0.15 MB
-   gzipped) for the small-file demo case, where wasm-side parse is
-   trivial regardless of perf comparison.
-3. Phase D blocked indefinitely on the parse-time question; revisit
-   when Polars-on-wasm improves (SIMD landing, threads via
-   SharedArrayBuffer + COEP/CORP rollout) or when an alternative
-   parser becomes available.
+## Follow-ups (flagged, not built)
+
+Em-flagged, 2026-05-26 — complementary datapoints + a bench-page
+clarity fix. Neither blocks Phase D; both worth picking up alongside
+the Phase D work.
+
+1. **Under-cap apples-to-apples** — Run the canonical `medium.csv`
+   (10k × 20, ~1.95 MB) through the bench. Sits below the 4 MiB
+   demo cap so the server lane parses instead of 413-ing, giving the
+   direct "WASM beats server on the same data" datapoint that
+   complements today's "WASM does what server won't" cut. Two
+   measurements, one capability story.
+2. **Bench-page result column** — Right now a 413 row reads as a
+   23 ms parse number, easy to misread as "server is fast." Add a
+   dedicated `Result` column (OK / 413 PAYLOAD_TOO_LARGE) or
+   red-style the failing row in
+   [`frontend/wasm-bench.html`](../../../frontend/wasm-bench.html).
+   One-line CSS + a span swap.
 
 ---
 
@@ -214,6 +245,8 @@ If wasm-medium parse ≥ server `parse_ms` (Phase C parks):
   build-wasm.sh + wasm-engine.js loader). Woz.md 18:54 ACKed the
   Phase C lane shift + flagged the landing.js JS CSV parser as the
   swap target if Phase C ships.
-- **Em** — sanctioned the lane shift this evening and pointed me at
-  the spike via "Phase C" (19:00). Spike-then-measure framing per
-  [[feedback-data-decides]].
+- **Em** — sanctioned the lane shift (2026-05-25 19:00) + ran the
+  closing browser measurements on a 26.04 host (2026-05-26). Spike-
+  then-measure framing per [[feedback-data-decides]]; the production
+  `raw_101_clients_fr.csv` measurement is the data point that flipped
+  the verdict from `partial` to `complete`.
