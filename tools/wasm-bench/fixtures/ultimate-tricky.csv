@@ -1,0 +1,19 @@
+id,name,description,status,amount
+1,Alice,Normal row,OK,100.00
+2,"Bob, Jr.","Contains, commas",OK,200.50
+3,"Charlie ""The Boss""","Quotes "" inside",OK,300.00
+4,David,"Multi
+line
+description",OK,400.00
+5,,,,,
+"6,""Eve"",""Wrapped in outer quotes"",""OK"",600.00"
+7,Frank "The Tank" Smith,Bad unescaped quotes,WARN,700.00
+8,Grace,Mixed backslash escape \",WARN,800.00
+9,Hank,Missing columns
+10,Ivy,Extra columns,OK,1000.00,EXTRA1,EXTRA2
+11,JosÃ©,UTF-8 encoded text with emoji ð®ð¥,OK,1100.00
+12,  Kevin  ,  Leading/trailing spaces inside and outside  , OK , 1200.00
+13,"""","""""""",OK,1300.00
+14,"Single 'quote'","Mismatched "" quote",ERR,1400.00
+"15,""One-col trap
+with newline"",""Inside"",""OK"",1500"

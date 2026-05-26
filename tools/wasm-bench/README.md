@@ -10,6 +10,7 @@ Deliverable contract: `docs/internal/architecture/roadmap-webassembly.md`
 |---|---|
 | `generate.py` | Generates 3 deterministic CSV shapes into `corpus/` |
 | `corpus/` | Output dir (gitignored — regenerable) |
+| `fixtures/` | Hand-curated permanent regression fixtures (tracked) |
 | `README.md` | This doc |
 
 The bench **page** lives at `frontend/wasm-bench.html` (served by Axum
@@ -61,6 +62,25 @@ date / datetime / bool / enum) so `dtype::summarize` and
   bench corpus is UTF-8 so encoding detection is a fixed cost; testing
   encoding-sniff perf on a non-UTF-8 file requires a separate corpus
   (out of scope for §5 Phase C).
+
+## Fixtures (hand-curated regression tests)
+
+Unlike `corpus/` (regenerable, gitignored, perf-focused),
+`fixtures/` holds small hand-written files that pin specific edge
+cases. They're tracked in git so they survive `python3 generate.py`
+and any future corpus changes; they exist to catch behavior
+regressions, not to measure throughput.
+
+| File | Rows × Cols | Size | What it pins |
+|---|---|---|---|
+| `ultimate-tricky.csv` | 15 × 5 | ~0.7 KB | Multi-shape torture: commas-in-quoted-fields, doubled-quote (`""`) escape, multi-line cells, missing/extra columns, partial-wrap (rows 6+15), unescaped/mismatched quotes, backslash-escape (`\"`), UTF-8 mojibake (`JosÃ©`), leading/trailing whitespace. Rescue should NOT fire (whole-file wrap signature fails). |
+
+These fixtures double as **lane-parity probes** — both wasm and
+server should produce identical metrics on each (modulo the rescue
+delta documented in `docs/internal/specs/wasm-phase-c-spike.md`).
+Adding a new fixture: drop the file in `fixtures/`, add a row to
+the table above noting what it pins + the expected behavior. The
+bench page picks it up automatically via drag-drop.
 
 ## Reusability
 
