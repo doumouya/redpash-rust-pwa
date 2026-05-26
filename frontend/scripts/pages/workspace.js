@@ -196,12 +196,21 @@ export default function workspace(app, { session }) {
     uploadBtn.disabled = true;
     uploadBtn.classList.add("is-busy");
 
+    // Ghost tabs land in whichever group the upload will hit — focused
+    // project if set, else the default group. Expanded + loaded so the
+    // user actually sees them appear. Sequential processing means one
+    // ghost is "active" (shimmering) at a time; the rest sit waiting.
+    const ghostGroup = await ensureUploadGhostGroup();
+    const ghosts = files.map((f) => createGhostTab(ghostGroup, f.name));
+
     let succeeded   = 0;
     let lastEnv     = null;
     const failures  = [];
 
     for (let i = 0; i < total; i++) {
       const file = files[i];
+      const ghost = ghosts[i];
+      ghost?.classList.add("rt-tab-ghost-active");
       if (labelEl) {
         labelEl.textContent = total === 1
           ? "Uploading…"
@@ -218,9 +227,19 @@ export default function workspace(app, { session }) {
         }
         lastEnv = env;
         succeeded++;
+        // Briefly flash success before the rail refresh wipes the ghost.
+        ghost?.classList.remove("rt-tab-ghost-active");
+        ghost?.classList.add("rt-tab-ghost-done");
       } catch (err) {
         const msg = err?.body?.message || err?.body?.error || err?.message || "upload failed";
         failures.push({ name: file.name, msg, status: err?.status });
+        if (ghost) {
+          ghost.classList.remove("rt-tab-ghost-active");
+          ghost.classList.add("rt-tab-ghost-failed");
+          ghost.setAttribute("title", msg);
+          // Linger long enough for the user to read the cause, then go.
+          setTimeout(() => ghost.remove(), 6000);
+        }
       }
     }
 
@@ -278,6 +297,46 @@ export default function workspace(app, { session }) {
   // no project context → server uses the user's default project.
   function activeProjectName() {
     return focusedProjectGroup()?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+  }
+
+  // Resolve the rail group the upload will land in (focused project,
+  // or the default group as fallback) and make sure it's expanded +
+  // its file body is loaded. Ghost tabs go inside `.rt-group-body`, so
+  // a collapsed/empty body means the user wouldn't actually see them.
+  async function ensureUploadGhostGroup() {
+    const group = focusedProjectGroup()
+      || navBody.querySelector('.rt-group[data-default="1"]')
+      || navBody.querySelector('.rt-group');
+    if (!group) return null;
+    if (!group.classList.contains("expanded")) {
+      group.classList.add("expanded");
+      await loadFilesForGroup(group);
+    }
+    return group;
+  }
+
+  // Insert a placeholder tab into a group's body for an in-flight
+  // upload. The ghost shows the filename + a spinner; CSS classes
+  // (`rt-tab-ghost-active` / `done` / `failed`) drive the state
+  // animation. Returns the node so doUpload can flip its state per
+  // outcome; null when no group was resolvable (caller no-ops).
+  function createGhostTab(group, filename) {
+    if (!group) return null;
+    const body = group.querySelector(".rt-group-body");
+    if (!body) return null;
+    // "No files yet" placeholder gets replaced — the ghost IS a file
+    // (from the user's perspective) and the empty-state caption would
+    // contradict that.
+    const emptyState = body.querySelector(".rt-nav-state");
+    if (emptyState) emptyState.remove();
+    const ghost = document.createElement("div");
+    ghost.className = "rt-tab rt-tab-ghost";
+    ghost.setAttribute("aria-busy", "true");
+    ghost.innerHTML = '<i class="bi bi-arrow-up-circle rt-tab-icon"></i>'
+      + '<span class="rt-tab-name">' + esc(filename) + '</span>'
+      + '<span class="rt-tab-spinner" aria-hidden="true"></span>';
+    body.appendChild(ghost);
+    return ghost;
   }
 
   async function refreshAndOpen(newRid, projRid) {
@@ -358,10 +417,73 @@ export default function workspace(app, { session }) {
       +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
       +     '<span class="rt-group-mark" data-c="' + c + '">' + esc(initials) + '</span>'
       +     '<span class="rt-group-name">' + esc(p.name) + '</span>'
+      +     '<span class="rt-group-rename" title="Rename project"><i class="bi bi-pencil"></i></span>'
       +     '<span class="rt-group-count">' + (p.file_count || 0) + '</span>'
       +   '</button>'
       +   '<div class="rt-group-body" aria-busy="false"></div>'
       + '</div>';
+  }
+
+  // Inline rename for a project's rail entry. Swaps `.rt-group-name` to
+  // contenteditable, selects all, listens for Enter (commit) / Esc
+  // (cancel) / blur (commit). Empty or unchanged values cancel silently;
+  // PATCH failures revert. Bubble-suppression on mousedown/click keeps
+  // the parent `.rt-group-head` button from toggling expand while the
+  // user clicks inside the editable text.
+  function enterProjectRename(group, span) {
+    const rid = group.dataset.rid;
+    const original = span.textContent;
+    let commit = true;
+
+    span.setAttribute("contenteditable", "plaintext-only");
+    span.classList.add("rt-group-name-editing");
+
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    span.focus();
+
+    const suppress = (e) => e.stopPropagation();
+    const onKey = (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); commit = true;  span.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); commit = false; span.blur(); }
+    };
+    const onBlur = async () => {
+      span.removeEventListener("keydown", onKey);
+      span.removeEventListener("mousedown", suppress);
+      span.removeEventListener("click", suppress);
+      span.removeAttribute("contenteditable");
+      span.classList.remove("rt-group-name-editing");
+
+      const next = (span.textContent || "").trim();
+      if (!commit || !next || next === original) {
+        span.textContent = original;
+        return;
+      }
+      span.textContent = next;
+      try {
+        const updated = await api.patch("/projects/" + encodeURIComponent(rid), { name: next });
+        // Server may normalize (trim, truncate). Reflect the canonical value.
+        if (updated?.name && updated.name !== next) span.textContent = updated.name;
+        // Initials are derived from the name — refresh the mark too.
+        const mark = group.querySelector(".rt-group-mark");
+        if (mark) {
+          const init = ((updated?.name || next).trim().split(/\s+/)
+            .map((w) => w[0]).join("") || "?").slice(0, 2).toUpperCase();
+          mark.textContent = init;
+        }
+      } catch {
+        span.textContent = original;
+      }
+    };
+
+    span.addEventListener("keydown", onKey);
+    span.addEventListener("mousedown", suppress);
+    span.addEventListener("click", suppress);
+    span.addEventListener("blur", onBlur, { once: true });
   }
 
   async function loadFilesForGroup(group) {
@@ -420,6 +542,16 @@ export default function workspace(app, { session }) {
 
   // ─── rail body — expand groups, switch / close tabs ────────────
   navBody.addEventListener("click", (e) => {
+    // Rename pencil short-circuits the head toggle. The pencil lives
+    // inside the head button, so its click bubbles here too — catch it
+    // first and bail before the expand/collapse branch runs.
+    const renameBtn = e.target.closest(".rt-group-rename");
+    if (renameBtn) {
+      const group = renameBtn.closest(".rt-group");
+      const nameSpan = group?.querySelector(".rt-group-name");
+      if (group && nameSpan) enterProjectRename(group, nameSpan);
+      return;
+    }
     const head = e.target.closest(".rt-group-head");
     if (head) {
       const group = head.closest(".rt-group");
@@ -1701,8 +1833,9 @@ export default function workspace(app, { session }) {
 
   // ─── new project — POST /api/projects + expand the new group ──
   // No prompt — the project lands with a placeholder name + an empty
-  // file list. Rename lives on the Objects page (PATCH /api/projects/:rid
-  // is wired backend-side; rail inline-rename for projects isn't yet).
+  // file list. The hover pencil on the group head opens inline rename
+  // (see enterProjectRename above); the Objects page exposes the same
+  // PATCH for batch edits.
   $("#wsNewProject")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;

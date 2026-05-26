@@ -120,6 +120,38 @@
 .rt-group-head:hover .rt-group-add { opacity: 1; }
 .rt-group-add:hover { background: var(--rp-surface-2); color: var(--rp-text); }
 
+/* Inline-rename affordance — appears on hover, mirrors .rt-group-add. */
+.rt-group-rename {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rt-group-rename i { font-size: 0.75rem; }
+.rt-group-head:hover .rt-group-rename { opacity: 1; }
+.rt-group-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+
+/* Editing state — drops the ellipsis so the full value is visible while
+   the user types. Outline matches the accent so it reads as a focused
+   text input even though it's a contenteditable span. */
+.rt-group-name-editing {
+  background: var(--rp-surface-2);
+  outline: 1px solid var(--rp-accent);
+  outline-offset: 0;
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  cursor: text;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 /* a tab = a file */
 .rt-group-body { padding: 0.125rem 0 0.25rem; }
 .rt-group:not(.expanded) .rt-group-body { display: none; }
@@ -182,6 +214,70 @@
 .rt-tab-close i { font-size: 0.8125rem; }
 .rt-tab:hover .rt-tab-close, .rt-tab.active .rt-tab-close { opacity: 1; }
 .rt-tab-close:hover { background: var(--rp-surface-2); color: var(--rp-accent); }
+
+/* ─── upload-in-flight placeholder ──────────────────────────────
+   A "ghost" tab appears in the rail for each file being uploaded,
+   so the user sees concrete progress at the place the file will
+   ultimately land. Three states:
+     .rt-tab-ghost          — idle, waiting its turn (queued)
+     .rt-tab-ghost-active   — currently uploading (shimmer)
+     .rt-tab-ghost-done     — succeeded, briefly visible until the
+                              rail refreshes with the real tab
+     .rt-tab-ghost-failed   — error tint; lingers ~6s before removal
+   The spinner sits where the cleanness dot would on a real tab. */
+.rt-tab-ghost {
+  cursor: default;
+  color: var(--rp-text-dim);
+  pointer-events: none;
+}
+.rt-tab-ghost .rt-tab-icon { color: var(--rp-accent-2); }
+.rt-tab-ghost-active {
+  color: var(--rp-text);
+  background: linear-gradient(
+    90deg,
+    var(--rp-hover) 0%,
+    var(--rp-accent-soft) 50%,
+    var(--rp-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: rp-rail-shimmer 1.4s linear infinite;
+}
+.rt-tab-ghost-done {
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+}
+.rt-tab-ghost-done .rt-tab-spinner {
+  border: none;
+  background: var(--rp-ok);
+  animation: none;
+}
+.rt-tab-ghost-failed {
+  background: rgba(243, 139, 168, 0.12);
+  color: var(--rp-text);
+}
+.rt-tab-ghost-failed .rt-tab-icon { color: var(--rp-accent); }
+.rt-tab-ghost-failed .rt-tab-spinner {
+  border: none;
+  background: var(--rp-accent);
+  animation: none;
+}
+.rt-tab-spinner {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid var(--rp-text-mute);
+  border-top-color: var(--rp-accent-2);
+  box-sizing: border-box;
+  animation: rp-spin 0.8s linear infinite;
+}
+@keyframes rp-rail-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes rp-spin {
+  to { transform: rotate(360deg); }
+}
 
 /* compact mode — icon only */
 .rt-nav.compact .rt-group-head { padding: 0; justify-content: center; }
