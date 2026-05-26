@@ -61,8 +61,8 @@ exactly as authored.
 | Aspect | Value | Notes |
 |--------|-------|-------|
 | Language | JavaScript — **ES2020+ (ES11+)** | Uses `??` and `?.` (ES2020), `async` / `await` (ES2017), ES modules (ES2015). **Not ES5, not ES6 / ES2015.** No transpilation — targets evergreen browsers. |
-| Modules | ES modules | Entry `scripts/main.js` is `type="module"`; ~43 script files use `import` / `export`. Three legacy classic `defer` scripts remain (`include.js`, `controls.js`, `file-review.js`). |
-| PWA | service worker | `frontend/service-worker.js`; `CACHE_VERSION` currently `v588` (bump on breaking asset changes). |
+| Modules | ES modules | Entry `scripts/main.js` is `type="module"`; every first-party script imports through it. The remaining `<script>` tags in `index.html` are third-party (ECharts + bundled themes). |
+| PWA | service worker | `frontend/service-worker.js`; bump `CACHE_VERSION` on breaking asset changes. |
 | Charts | ECharts 6 | chart rendering (CDN). |
 | Fonts | Google Fonts — Savate | CDN. |
 | npm | none | the frontend has no `package.json` / dependency tree. |

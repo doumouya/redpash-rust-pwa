@@ -311,6 +311,6 @@ are `rp`-prefixed (`.rp-modal--glass`, `.rp-rt-*`). The two modal
   neutralises the `<dialog>` UA box.
 - **`.rp-modal-overlay` + `.rp-modal` + `.rp-modal-hdr` / `.rp-modal-ttl`**
   (library `modals-sandbox.css`, loaded globally) — the sandbox
-  modal recipe used by every cleaner tool modal, every objects /
-  reports modal, and the file-review modal on home. The legacy app
-  BEM (`.rp-modal__head` / `__title` / …) is gone from live code.
+  modal recipe used by every cleaner tool modal and every objects /
+  reports modal. The legacy app BEM (`.rp-modal__head` / `__title`
+  / …) is gone from live code.

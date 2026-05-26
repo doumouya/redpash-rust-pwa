@@ -66,8 +66,8 @@ Net: the migration removes **~22k LOC** (the doomed 18.6k + the dead
 ## Survivor refactor targets
 
 The genuine audit — the ~3.6k that lives on: the shell (`main.js`,
-`api.js`, `include.js`, `events.js`), `file-review.js`, the surviving
-pages (Home / Landing / Profile / Settings / Docs), `ui/{toast,modal}`.
+`api.js`, `events.js`), the surviving pages (Home / Landing / Profile
+/ Settings / Docs), `ui/{toast,modal}`.
 
 ### 1. Page lifecycle / teardown contract — highest value
 There is **no `destroy` hook** between navigations. `main.js::mount`
@@ -81,12 +81,11 @@ next navigation — a small router change that closes a whole class of
 leaks. (Overlaps the `fix-to-do.md` "no router unmount hook" item.)
 Best done as part of the new shell, not bolted onto the old one.
 
-### 2. One `esc()` — 6 copies
-`escapeHtml` / `esc` is near-identically reimplemented in
-`file-review.js`, `home.js`, `settings.js` (×2 — twice in one file),
-`landing.js`, `redtable/index.js`, plus `controls.js`. One
-`scripts/ui/esc.js` export collapses all of them. The cheapest
-factor-to-the-atom win in the frontend.
+### 2. One `esc()` — multiple copies
+`escapeHtml` / `esc` is near-identically reimplemented across
+`home.js`, `settings.js` (×2 — twice in one file), `landing.js`,
+`redtable/index.js`. One `scripts/ui/esc.js` export collapses all of
+them. The cheapest factor-to-the-atom win in the frontend.
 
 ### 3. Shared shell utilities — three more duplications
 - **`doLogout`** — the same `POST /auth/logout` + redirect + reload in
@@ -102,22 +101,16 @@ The "cached → paint, fresh → repaint" triad recurs in `home.js`,
 `profile.js::loadUsage`, `settings.js`. A `swr(paths, applyFn)` helper
 would carry the pattern once.
 
-### 5. `scoreClass` thresholds — divergent, latent bug
-`file-review.js:202` and `home.js:380` both bucket a percentage into
-hi / mid / lo — with **different thresholds** (90/70 vs 90/60). Two
-definitions of "a good score." Reconcile to one.
+### 5. `scoreClass` thresholds — was a divergent, latent bug
+~~`file-review.js:202` and `home.js:380` both bucket a percentage into
+hi / mid / lo — with **different thresholds** (90/70 vs 90/60).~~
+Resolved as part of the file-review.js removal — `home.js`'s threshold
+is now the single definition.
 
 ### 6. `main.js` — dead route machinery
 `_matchPath` (246-258) supports `:param` patterns; **no route uses
 them**. The `params` plumbing threaded `resolve → navigate → mount` is
 unexercised — pages read query strings themselves. Delete it.
-
-### 7. `file-review.js` — one oversized function
-`renderSinglePanel` (259-396) is 137 lines building a donut + legend +
-hbars + 4 issue cards + a preview table as one string — split per
-visual block. The hbar-row markup is duplicated verbatim with
-`renderMultiPane`. Also: `window.openFileReview` is documented in the
-file header but never defined — delete the dead doc line.
 
 ## Priority
 

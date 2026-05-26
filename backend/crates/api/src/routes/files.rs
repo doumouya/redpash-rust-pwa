@@ -140,11 +140,10 @@ async fn upload(
                 tld_hint = field.text().await.ok()
                     .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
             }
-            // The file-review modal in the frontend collects a project
-            // name. When present we route the upload into that named
-            // project (find-or-create) instead of pooling every file
-            // into the user's default "Workspace". Empty / whitespace
-            // strings fall through to the default.
+            // The workspace rail sends `project_name` so uploads route
+            // into the focused project (find-or-create) instead of
+            // pooling every file into the user's default "Workspace".
+            // Empty / whitespace strings fall through to the default.
             Some("project_name") => {
                 project_name = field.text().await.ok()
                     .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());

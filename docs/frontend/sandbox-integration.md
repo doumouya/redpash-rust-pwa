@@ -422,33 +422,6 @@ page renders empty (`partials/cleaner.html` / `partials/objects.html`
 are now thin shells whose child includes load via this call). Mirror
 for any new full-bleed page that adopts the sub-partial convention.
 
-### Pattern: modal-shell migration (file-review on /home, 2026-05-18)
-
-*Home ✅ — this entry IS the implementation. Re-use as the migration template for any other vendored modal adopting sandbox chrome.*
-
-The file-review modal (`#modal-ul-review`) was wrapped in the
-sandbox `.rp-modal` shell to match cleaner / objects modal chrome
-without rewriting the vendored `file-review.js`:
-
-- **Outer `.modal-overlay` kept** — `position: fixed` (modal.css)
-  covers the viewport; sandbox's `.rp-modal-overlay` uses
-  `position: absolute` and assumes an `.rp-rt-body` host, which
-  /home doesn't have.
-- **Inner `.rp-modal` + `.rp-modal-hdr` added** — provides the
-  sandbox shell + title bar with sandbox close button.
-- **IDs preserved** — `file-review.js` looks up `modal-ul-review` /
-  `ul-review` / `ul-review-multi` by id; rename them and it breaks.
-- **Scoped overrides** (in `home.css` under `.rp-modal--ul-review`):
-  width 56rem (sandbox default 28rem is too narrow), `padding: 0;
-  gap: 0` (panels carry their own internal padding), neutralized
-  `.rp-fr-panel { background: transparent; border: 0; ... }` so the
-  panel's own border/bg/radius doesn't paint inside the shell.
-- **CSS import** — `home.css` now imports `modals-sandbox.css` so
-  the shell classes resolve.
-
-Same pattern is the migration path for any other vendored modal
-that should adopt sandbox chrome without rewriting its internals.
-
 ### Pattern: objects-page port (Phase 1 visual, state TBD)
 
 *Objects 🔄 Phase 1 (visual chrome) ✅ · Phase 2 (state wiring) pending — mirror the cleaner playbook (`mountObjectsSandbox()` + `_installObjectsLiveHandlers()`).*

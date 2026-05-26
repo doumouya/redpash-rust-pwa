@@ -575,8 +575,7 @@ shell as the landing page's login / contact modals:
   `ensure_named_project` does the find-or-create.
 - **Upload** — POSTs each file to `/api/files/upload` with
   `project_name`; on success refreshes `STATE.projects.rows` + the
-  active tab so the new rows appear. (Direct upload — no client-side
-  file-review analysis; that's Home's flow.)
+  active tab so the new rows appear.
 
 ---
 

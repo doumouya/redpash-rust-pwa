@@ -306,7 +306,7 @@ redpash-app/
 | **Partial** | `partials/home.html` — full-bleed (`chrome: "full"`); float bars + avatar; a top strip (greeting + Projects/Files/Published counts + upload zone) above the `#home-pipe` board |
 | **Board** | four stage columns — import → clean → report → publish. Every project is a card in its computed-stage column; a card click jumps to the tool for the project's next step |
 | **CSS** | `styles/pages/home.css` — `rp-pipe` board styles; `#page-home` accent pinned to the app blue (`#60a5fa` / `#2563eb`) |
-| **JS** | `scripts/pages/home.js` — `renderBoard()` buckets `/api/projects` by stage into the four columns; upload → file-review → confirm flow |
+| **JS** | `scripts/pages/home.js` — `renderBoard()` buckets `/api/projects` by stage into the four columns |
 | **Endpoints** | `GET /api/projects` (the board) · `GET /api/reports` · `GET /api/dashboards` (the Published count) · `POST /api/files/upload` (XLSX→CSV dispatch) · `POST /api/auth/logout` |
 | **Docs** | [`frontend/redpash-components-pages/home-page/`](frontend/redpash-components-pages/home-page/index.md) |
 

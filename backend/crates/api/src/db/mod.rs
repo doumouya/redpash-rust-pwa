@@ -520,12 +520,13 @@ pub async fn find_project_by_name(pool: &PgPool, owner: &str, name: &str) -> sql
 
 /// Find-or-create a project under `owner` with the given name.
 ///
-/// Called from the upload handler when the file-review modal supplies a
-/// project_name field — without this, every upload pools into the
-/// auto-created "Workspace" default and the user can never split files
-/// into separate projects. The matching is case-sensitive on `name`, so
-/// a fresh capitalisation creates a new project. is_default stays false
-/// here so the user's default-Workspace assignment isn't disturbed.
+/// Called from the upload handler when the multipart payload carries a
+/// `project_name` field (the workspace rail focuses a project before
+/// upload). Without this, every upload would pool into the auto-created
+/// default "Workspace" and the user couldn't split files into separate
+/// projects. The matching is case-sensitive on `name`, so a fresh
+/// capitalisation creates a new project. is_default stays false here so
+/// the user's default-Workspace assignment isn't disturbed.
 pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sqlx::Result<String> {
     if let Some(rid) = find_project_by_name(pool, owner, name).await? {
         return Ok(rid);
