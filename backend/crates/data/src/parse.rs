@@ -122,26 +122,33 @@ fn cell_to_string(v: &calamine::Data) -> String {
     }
 }
 
-/// Wrapped-CSV rescue outcome — what the in-parse `unwrap_csv` branch
-/// did with the input. Surfaced by the `*_with_diag` parse variants so
-/// callers (bench harness, future diagnostic tools) can tell apart
-/// "file was normal" from "rescue attempted + delivered" from "rescue
-/// attempted + fell back". The single-return-tuple variants
-/// (`parse_text`, `from_csv_bytes`) keep their existing signature and
-/// drop the diag; only callers that explicitly want it use the
-/// `_with_diag` form.
+/// Wrapped-CSV classification — what `parse_text_with_diag` recognised
+/// about the input's shape. Surfaced by the `*_with_diag` parse variants
+/// so callers (bench harness, the Cleaner UI's "apply this fix?" banner,
+/// future diagnostic tools) can present the diagnosis to the user and
+/// let them decide whether to apply the rescue step. The single-return
+/// variants (`parse_text`, `from_csv_bytes`) drop the diag.
+///
+/// **Em 2026-05-26 product call:** parse stays diagnostic. The user
+/// confirms transforms; the parser does NOT silently apply `unwrap_csv`.
+/// This enum names what parse SAW, not what parse DID. The previous
+/// auto-apply behaviour (commit 5bad5a2) is reverted — see the
+/// `WrapDetected` arm in `parse_text_with_diag`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RescueDiag {
     /// Pass-1 sniff found a normal multi-column CSV (or a legitimate
-    /// 1-col preamble file) — wrapped-detection never fired.
+    /// 1-col preamble file) — wrapped detection never fired. No
+    /// rescue suggestion; the returned DataFrame IS the parse result.
     NotAttempted,
-    /// Wrapped shape was detected and `unwrap_csv` ran. `delivered_width`
-    /// is the post-unwrap column count: > 1 means the rescue delivered
-    /// (the returned DataFrame is the recovered N-col frame); == 1 means
-    /// it fell back to the safe line-literal frame (the unwrap step
-    /// errored or returned width = 1 — see parse.rs's `_ => Ok(wrapped_df)`
-    /// arm).
-    Attempted { delivered_width: u32 },
+    /// Wrapped shape was detected. The returned DataFrame is the safe
+    /// line-literal preservation (1 column, every physical line one
+    /// cell, every row survives intact). The user / caller decides
+    /// whether to apply `unwrap_csv` as an explicit step to recover the
+    /// N-col frame — that step is exposed through the Cleaner's step
+    /// palette + `step_preview` in the WASM engine. `preview_width` is
+    /// reserved for a future optional preview-then-confirm shape; today
+    /// it is always `None` (no auto-preview computed).
+    WrapDetected { preview_width: Option<u32> },
 }
 
 /// Decode + parse a CSV upload, sniffing the encoding via chardetng.
@@ -270,35 +277,21 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
             )
             .map_err(DataError::from)?;
 
-            // Bake the rescue into the parse algorithm — the wrapped
-            // detection above identified the shape, the unwrap step
-            // knows the recovery. Em 2026-05-26: "if the parser is not
-            // always exact without unwrap column but he is when
-            // associated to unwrap, that means it's not a parser
-            // without unwrap algorithm." Try unwrap; on success, return
-            // the recovered N-col frame. On failure (edge cases
-            // unwrap_csv can't handle: pathological mixed quoting, a
-            // 1-col file that COINCIDENTALLY tripped the heuristic but
-            // is actually genuine 1-col data), fall back to the safe
-            // line-literal frame we always returned. Strictly more
-            // capable than the previous behavior; users can still pop
-            // an explicit unwrap_csv step in the Cleaner if the
-            // automatic recovery missed an edge case.
-            return match crate::steps::apply(
-                wrapped_df.clone(),
-                "unwrap_csv",
-                &serde_json::Value::Null,
-            ) {
-                Ok(unwrapped) if unwrapped.width() > 1 => {
-                    let w = unwrapped.width() as u32;
-                    Ok((unwrapped, RescueDiag::Attempted { delivered_width: w }))
-                }
-                // Err OR width = 1 — fall back to the safe line-literal
-                // frame. delivered_width: 1 names the fall-back state so
-                // the bench can distinguish "rescue tried and failed" from
-                // "rescue not attempted" (NotAttempted).
-                _ => Ok((wrapped_df, RescueDiag::Attempted { delivered_width: 1 })),
-            };
+            // Parse stops at classification. Em 2026-05-26: *"the goal
+            // is not to solve all type of tricky csv in one click,
+            // before cleaning in one click, the priority is to provide
+            // enough data about the files, with accuracy. then ask to
+            // user 'apply this fix?'"* Reverts the auto-apply baked in
+            // by commit 5bad5a2 — the rescue step is surfaced as a
+            // *suggested* transform via `RescueDiag::WrapDetected`, but
+            // the returned DataFrame is the safe 1-col line-literal
+            // preservation. The user (or the FE Cleaner banner / the
+            // wasm-bench's "apply" chip) decides whether to run the
+            // explicit `unwrap_csv` step via `steps::apply` /
+            // `step_preview`. Same machinery that handles every other
+            // user-confirmed transform in the cleaning pipeline; parse
+            // stops being the exception.
+            return Ok((wrapped_df, RescueDiag::WrapDetected { preview_width: None }));
         }
     }
 

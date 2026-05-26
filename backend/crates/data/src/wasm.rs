@@ -201,14 +201,21 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
         0.0
     };
 
-    // Wrapped-CSV rescue outcome — `rescued` flips true when pass-1
-    // detected a wrapped shape and ran `unwrap_csv`; `rescue_width`
-    // is the post-unwrap column count (1 = fell back to line-literal,
-    // > 1 = rescue delivered the recovered N-col frame). The bench's
-    // Rescue column reads both fields to render "—" / "✗" / "✓ N".
-    let (rescued, rescue_width) = match rescue {
-        parse::RescueDiag::NotAttempted                  => (false, 0u32),
-        parse::RescueDiag::Attempted { delivered_width } => (true,  delivered_width),
+    // Wrapped-CSV classification — `wrap_detected` is true when the
+    // parser's pass-1 sniff identified a wrapped shape AND held the
+    // returned DataFrame as the safe 1-col line-literal preservation.
+    // `suggested_step` names the explicit cleaning step the user (or
+    // the Cleaner UI's "apply this fix?" banner) can run to recover
+    // the N-col frame. Per Em 2026-05-26's product call, parse stays
+    // diagnostic — the user confirms transforms; the parser does NOT
+    // silently auto-apply.
+    //
+    // Bench / FE consumers: when `wrap_detected` is true and the user
+    // wants the recovered frame, call `step_preview(rows, "unwrap_csv",
+    // null)` against the 1-col DF — same step the Cleaner exposes.
+    let (wrap_detected, suggested_step) = match rescue {
+        parse::RescueDiag::NotAttempted                       => (false, Value::Null),
+        parse::RescueDiag::WrapDetected { preview_width: _ }  => (true,  json!("unwrap_csv")),
     };
 
     Ok(json!({
@@ -218,8 +225,8 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
         "type_mismatches": type_mismatches,
         "empty_pct":       empty_pct,
         "encoding":        encoding,
-        "rescued":         rescued,
-        "rescue_width":    rescue_width,
+        "wrap_detected":   wrap_detected,
+        "suggested_step":  suggested_step,
     })
     .to_string())
 }
