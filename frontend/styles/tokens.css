@@ -31,6 +31,15 @@
   --rp-blur:         16px;
   --rp-shadow:       0 24px 60px -16px rgba(0, 0, 0, 0.7);
 
+  /* The lifted-card chrome — soft delineation for content cards on
+     the page bg. In dark mode the page bg is so dark that shadow is
+     invisible; the inset border-color via `box-shadow 0 0 0 1px`
+     does the delineating instead. Light mode below redefines this
+     as a real drop-shadow. Used by .rp-page__section + the per-page
+     panel cards that adopt the "lifted on calm bg" direction. */
+  --rp-shadow-card:  0 0 0 1px var(--rp-border),
+                     0 1px 2px rgba(0, 0, 0, 0.25);
+
   /* spacing scale */
   --rp-sp-1: 4px;
   --rp-sp-2: 8px;
@@ -88,4 +97,13 @@ html[data-theme="light"] {
   --rp-hover:        rgba(76, 79, 105, 0.06);
   --rp-accent-soft:  rgba(30, 102, 245, 0.10);
   --rp-shadow:       0 1px 2px rgba(76, 79, 105, 0.08), 0 12px 32px rgba(76, 79, 105, 0.10);
+
+  /* Light-mode lifted-card chrome — a real drop-shadow + the lightest
+     1px ring. The ring is what the dark theme's `0 0 0 1px border`
+     does; the actual elevation comes from the two-stop shadow. Tuned
+     against the inspo deck (AI thread / Bexet / Nexus) — calm + soft,
+     never harsh. */
+  --rp-shadow-card:  0 0 0 1px rgba(76, 79, 105, 0.06),
+                     0 1px 2px rgba(76, 79, 105, 0.04),
+                     0 8px 24px rgba(76, 79, 105, 0.06);
 }

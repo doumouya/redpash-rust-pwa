@@ -1,19 +1,24 @@
 /* ── profile ─────────────────────────────────────────────────────
    Page-specific styles for /profile only. Inherits the page shell
-   (.rp-page + .rp-page__section + .rp-page__row) from page.css and
-   the avatar atom from topbar.css. Owns the 2-column grid, the
-   identity card, the use-case option pills, the usage stat strip,
-   the plan card, and the connected-accounts list.
-   Ported from main's Step-1 Profile (commit f690550-era), trimmed
-   to features backed by existing endpoints. */
+   (.rp-page + .rp-page__head + .rp-page__section + .rp-page__row)
+   from page.css and the avatar atom (.rp-avatar / --lg) from
+   topbar.css. Owns the 2-column grid, the identity hero, the
+   use-case option pills, the usage chart container, the plan card,
+   and the connected-accounts list.
 
-.rp-profile { max-width: 67.5rem; }
+   2026-05-26 polish pass: aligned to the "lifted card on calm bg"
+   inspo deck (AI thread / Nexus / Bexet). Cards inherit the new
+   --rp-shadow-card lift from .rp-page__section (page.css); this
+   file owns the per-card content typography + pill chip vocabulary
+   (soft-tinted, no border) the inspo uses everywhere. */
+
+.rp-profile { max-width: 70rem; }
 
 /* 2-col layout: form on the left, stacked side-panels on the right.
    Collapses to one column under 55rem so phones get a vertical read. */
 .rp-profile__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: var(--rp-sp-5);
   align-items: start;
 }
@@ -22,50 +27,82 @@
   flex-direction: column;
   gap: var(--rp-sp-5);
 }
+.rp-profile__side .rp-page__section { margin-top: 0; }
 @media (max-width: 55rem) {
   .rp-profile__grid { grid-template-columns: 1fr; }
 }
 
-/* ─── Identity row inside the form card ──────────────────────── */
+/* ─── Identity hero inside the form card ─────────────────────
+   Large avatar + stacked name/email/plan-pill + Edit/Save text-pill
+   actions on the right. Underlined with a soft hairline so the
+   personal-info form below reads as a distinct section. */
 .rp-profile__id {
   display: flex;
   align-items: center;
   gap: var(--rp-sp-4);
-  padding-bottom: var(--rp-sp-4);
-  margin-bottom: var(--rp-sp-2);
+  padding-bottom: var(--rp-sp-5);
+  margin-bottom: var(--rp-sp-5);
   border-bottom: 1px solid var(--rp-border);
 }
 .rp-profile__id-meta { flex: 1; min-width: 0; }
 .rp-profile__id-name {
   margin: 0;
-  font-size: var(--rp-text-lg);
+  font-size: 1.375rem;
   font-weight: 650;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rp-profile__id-email {
-  margin: 0.125rem 0 0.375rem;
+  margin: 0.125rem 0 0.5rem;
   color: var(--rp-text-mute);
   font-size: var(--rp-text-sm);
 }
+
+/* Plan pill — soft-tinted, no border. The inspo's badge vocabulary:
+   soft bg / saturated text / no outline. Replaces the previous
+   bordered pill style. */
 .rp-profile__plan-pill {
   display: inline-block;
   font-size: 0.6875rem;
-  padding: 0.125rem 0.5rem;
+  font-weight: 600;
+  padding: 0.1875rem 0.625rem;
   border-radius: 62.4375rem;
   color: var(--rp-ok);
-  background: color-mix(in srgb, var(--rp-ok) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--rp-ok) 35%, transparent);
+  background: color-mix(in srgb, var(--rp-ok) 14%, transparent);
 }
+
 .rp-profile__id-actions {
   display: flex;
   gap: var(--rp-sp-2);
   flex-shrink: 0;
 }
-.rp-profile__id-actions .rp-btn.is-active {
-  border-color: var(--rp-accent-2);
+
+/* Edit / Save pill buttons in the hero. Compact text-pill shape,
+   not the chunky .rp-btn default (the base .rp-btn padding +
+   border-radius are overridden so Edit/Save read as soft action
+   pills, matching the inspo's small CTAs). Save is the primary —
+   filled text-on-bg, like the "New Thread" black CTA in inspo 1.
+   Edit picks up an accent-soft fill when pressed (aria-pressed). */
+.rp-profile__id-btn {
+  padding: 0.4375rem 0.875rem;
+  font-size: var(--rp-text-sm);
+  border-radius: 62.4375rem;
+}
+.rp-profile__id-btn i { font-size: 0.875rem; }
+.rp-profile__id-btn.is-active {
   color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+  border-color: color-mix(in srgb, var(--rp-accent-2) 35%, transparent);
+}
+.rp-profile__id-btn--primary {
+  color: var(--rp-bg);
+  background: var(--rp-text);
+  border-color: var(--rp-text);
+}
+.rp-profile__id-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rp-text) 88%, transparent);
 }
 
 /* ─── Hint text under row labels ─────────────────────────────── */
@@ -77,29 +114,38 @@
   font-weight: 400;
 }
 
-/* ─── Inputs — readonly looks flat, editable gets a border ───── */
+/* ─── Inputs — readonly looks flat (label-style), editable gets a
+   bordered surface + focus ring. The focus ring is a soft accent
+   halo per inspo (not a 2px hard outline). */
 .rp-input {
   width: 17.5rem;
   max-width: 100%;
-  padding: 0.375rem 0.625rem;
+  padding: 0.4375rem 0.6875rem;
   font: inherit;
   font-size: var(--rp-text-sm);
   color: var(--rp-text);
   background: var(--rp-surface-2);
   border: 1px solid transparent;
-  border-radius: var(--rp-radius);
-  transition: border-color 0.15s var(--rp-ease), background 0.15s var(--rp-ease);
+  border-radius: 0.5rem;
+  transition: border-color 0.15s var(--rp-ease),
+              background 0.15s var(--rp-ease),
+              box-shadow 0.15s var(--rp-ease);
 }
 .rp-input:read-only {
   background: transparent;
   color: var(--rp-text-dim);
   cursor: default;
+  padding-left: 0;
 }
 .rp-input:not(:read-only) {
   border-color: var(--rp-border);
   background: var(--rp-surface);
 }
-.rp-input:focus { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 1px; }
+.rp-input:focus {
+  outline: none;
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
+}
 
 /* Row variant: label on top, control beneath (for the use-case grid) */
 .rp-page__row--col { flex-direction: column; align-items: stretch; gap: var(--rp-sp-3); }
@@ -110,9 +156,13 @@
   gap: var(--rp-sp-2);
   align-items: center;
 }
-.rp-profile__rid { width: 20rem; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 0.6875rem; }
+.rp-profile__rid {
+  width: 20rem;
+  font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+}
 
-/* ─── Memberships (real company affiliations from /me) ──────── */
+/* ─── Memberships (soft-tinted accent-2 chips, no border) ──────── */
 .rp-profile__memberships {
   display: flex;
   flex-wrap: wrap;
@@ -127,54 +177,57 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0.625rem 0.25rem 0.5rem;
+  padding: 0.3125rem 0.75rem 0.3125rem 0.5625rem;
   font-size: var(--rp-text-sm);
   color: var(--rp-accent-2);
   text-decoration: none;
-  background: color-mix(in srgb, var(--rp-accent-2) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--rp-accent-2) 32%, transparent);
+  background: var(--rp-accent-soft);
   border-radius: 62.4375rem;
   transition: background 0.15s var(--rp-ease);
 }
 .rp-profile__membership:hover { background: color-mix(in srgb, var(--rp-accent-2) 18%, transparent); }
-.rp-profile__membership-icon { font-size: 0.6875rem; opacity: 0.85; }
+.rp-profile__membership-icon { font-size: 0.75rem; opacity: 0.85; }
 .rp-profile__membership-name { font-weight: 550; }
 .rp-profile__membership-role {
   font-size: 0.625rem;
-  padding: 1px 0.4375rem;
+  padding: 1px 0.5rem;
   border-radius: 62.4375rem;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
+  background: var(--rp-surface);
   color: var(--rp-text-dim);
   text-transform: lowercase;
+  font-weight: 500;
 }
-.rp-profile__membership-role--owner { color: var(--rp-accent);   border-color: color-mix(in srgb, var(--rp-accent)   35%, transparent); }
-.rp-profile__membership-role--admin { color: var(--rp-warn);     border-color: color-mix(in srgb, var(--rp-warn)     35%, transparent); }
-.rp-profile__membership-role--member{ color: var(--rp-ok);       border-color: color-mix(in srgb, var(--rp-ok)       35%, transparent); }
+.rp-profile__membership-role--owner { color: var(--rp-accent); background: color-mix(in srgb, var(--rp-accent) 12%, transparent); }
+.rp-profile__membership-role--admin { color: var(--rp-warn);   background: color-mix(in srgb, var(--rp-warn)   12%, transparent); }
+.rp-profile__membership-role--member{ color: var(--rp-ok);     background: color-mix(in srgb, var(--rp-ok)     12%, transparent); }
 
-/* ─── Use-case option pills ──────────────────────────────────── */
+/* ─── Use-case option pills — soft-tinted pill chips, no border ─
+   Inactive: muted text on hover-tone bg. Active: accent-soft fill +
+   accent text + bolder weight. Matches the inspo's "Suggested tasks"
+   chip vocabulary (AI thread inspo) and the home-page pill row. */
 .rp-profile__opts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--rp-sp-2);
 }
 .rp-profile__opt {
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 0.875rem;
   font: inherit;
   font-size: var(--rp-text-sm);
+  font-weight: 500;
   color: var(--rp-text-dim);
   background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius);
+  border: 1px solid transparent;
+  border-radius: 62.4375rem;
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s var(--rp-ease), color 0.15s var(--rp-ease);
+  transition: color 0.15s var(--rp-ease), background 0.15s var(--rp-ease);
 }
-.rp-profile__opt:hover    { border-color: rgba(205, 214, 244, 0.28); color: var(--rp-text); }
+.rp-profile__opt:hover { color: var(--rp-text); background: var(--rp-hover); }
 .rp-profile__opt.is-active {
   color: var(--rp-accent-2);
-  background: color-mix(in srgb, var(--rp-accent-2) 10%, transparent);
-  border-color: color-mix(in srgb, var(--rp-accent-2) 50%, transparent);
+  background: var(--rp-accent-soft);
+  font-weight: 600;
 }
 
 /* ─── Usage chart (ECharts horizontal bar) ─────────────────────
@@ -182,42 +235,66 @@
    Fixed height so the section doesn't reflow when counts arrive. */
 .rp-profile__usage-chart {
   width: 100%;
-  height: 11.25rem;
+  height: 12.5rem;
 }
 
-/* ─── Plan card ──────────────────────────────────────────────── */
+/* ─── Plan card — big plan name + features list ─────────────────
+   The right-rail "value card" per inspo 2 (Sources panel): clear
+   hierarchy, headline number/name treatment, soft hairline between
+   the head and the features. */
+.rp-profile__plan-card .rp-page__section-h { margin: 0; }
+.rp-profile__plan-h {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .rp-profile__plan-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-3);
+  padding-bottom: var(--rp-sp-4);
+  border-bottom: 1px solid var(--rp-border);
 }
 .rp-profile__plan-name {
-  font-size: var(--rp-text-lg);
-  font-weight: 650;
+  margin-top: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--rp-text);
 }
 .rp-profile__plan-sub {
-  margin-top: 0.125rem;
+  margin-top: 0.25rem;
   color: var(--rp-text-mute);
   font-size: var(--rp-text-sm);
+  line-height: 1.5;
 }
 .rp-profile__plan-features {
   list-style: none;
-  margin: var(--rp-sp-4) 0 0;
+  margin: 0;
   padding: 0;
 }
 .rp-profile__plan-features li {
   display: flex;
   align-items: center;
-  gap: var(--rp-sp-2);
-  padding: 0.25rem 0;
+  gap: var(--rp-sp-3);
+  padding: 0.375rem 0;
   font-size: var(--rp-text-sm);
   color: var(--rp-text-dim);
 }
-.rp-profile__plan-features i { color: var(--rp-ok); font-size: 0.8125rem; }
+.rp-profile__plan-features i {
+  color: var(--rp-ok);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
 
-/* ─── Connected accounts ─────────────────────────────────────── */
+/* ─── Connected accounts ─────────────────────────────────────────
+   Each row: icon-on-tinted-bg + name + detail + state pill on the
+   right. State pills are soft-tinted (green-tint = Connected,
+   warn-tint = Soon, muted = Not connected). */
 .rp-profile__conn {
   display: flex;
   align-items: center;
@@ -225,16 +302,20 @@
   padding: var(--rp-sp-3) 0;
   border-top: 1px solid var(--rp-border);
 }
-.rp-profile__conn:first-of-type { border-top: 0; }
+.rp-profile__conn:first-of-type { border-top: 0; padding-top: var(--rp-sp-2); }
 .rp-profile__conn-icon {
-  width: 1.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
+  background: var(--rp-surface-2);
+  border-radius: 0.625rem;
+  font-size: 1.125rem;
+  flex-shrink: 0;
 }
 .rp-profile__conn-info { flex: 1; min-width: 0; }
-.rp-profile__conn-name { font-size: var(--rp-text-sm); color: var(--rp-text); }
+.rp-profile__conn-name { font-size: var(--rp-text-sm); font-weight: 550; color: var(--rp-text); }
 .rp-profile__conn-detail {
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
@@ -244,24 +325,29 @@
 }
 .rp-profile__conn-state {
   font-size: 0.6875rem;
-  padding: 0.125rem 0.5rem;
+  font-weight: 600;
+  padding: 0.1875rem 0.625rem;
   border-radius: 62.4375rem;
   color: var(--rp-text-mute);
   background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .rp-profile__conn-state.is-connected {
   color: var(--rp-ok);
-  background: color-mix(in srgb, var(--rp-ok) 12%, transparent);
-  border-color: color-mix(in srgb, var(--rp-ok) 35%, transparent);
+  background: color-mix(in srgb, var(--rp-ok) 14%, transparent);
 }
 
-/* Generic "Soon" badge — reused on plan + connections rows */
+/* Generic "Soon" badge — warn-tinted pill, reused on plan + connections.
+   Replaces the previous dashed-border style; soft tint reads as
+   "future" without the dashed-outline noise. */
 .rp-profile__soon {
   font-size: 0.6875rem;
-  padding: 0.125rem 0.5rem;
+  font-weight: 600;
+  padding: 0.1875rem 0.625rem;
   border-radius: 62.4375rem;
-  color: var(--rp-text-mute);
-  background: var(--rp-surface-2);
-  border: 1px dashed var(--rp-border);
+  color: var(--rp-warn);
+  background: color-mix(in srgb, var(--rp-warn) 14%, transparent);
+  white-space: nowrap;
+  flex-shrink: 0;
 }

@@ -21,7 +21,7 @@
 
 .rp-page__head { margin-bottom: var(--rp-sp-5); }
 .rp-page__head--row { display: flex; align-items: center; gap: var(--rp-sp-4); }
-.rp-page__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; }
+.rp-page__title { margin: 0; font-size: var(--rp-text-xl); font-weight: 700; letter-spacing: -0.01em; }
 .rp-page__sub { margin: var(--rp-sp-2) 0 0; color: var(--rp-text-mute); }
 
 .rp-page__placeholder {
@@ -34,13 +34,18 @@
 }
 
 /* a card section inside the page body — used by Settings, Profile.
-   Generic, not page-specific; the same atom every flat page uses. */
+   Generic, not page-specific; the same atom every flat page uses.
+   The "lifted card on calm page bg" chrome from
+   [[chrome-visual-direction]]: no hairline border, soft drop-shadow
+   (light) / inset 1px ring (dark) via --rp-shadow-card; larger inner
+   padding so content breathes. The padding matches the inspo deck
+   (Bexet metric card / Nexus dashboard card / AI thread sources). */
 .rp-page__section {
   margin-top: var(--rp-sp-5);
   padding: var(--rp-sp-5) var(--rp-sp-6);
   background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
   border-radius: var(--rp-radius-lg);
+  box-shadow: var(--rp-shadow-card);
 }
 .rp-page__section-h {
   margin: 0 0 var(--rp-sp-3);

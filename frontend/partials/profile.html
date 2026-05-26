@@ -2,11 +2,19 @@
      PROFILE_FORM_ROWS in profile.js via page-row.js helpers
      (inputRow / mountRow + two structurally-unique inlines for Use
      case and Account ID); identity card + side-panel sections remain
-     inline (each structurally unique). Ported from main's Step-1
-     Profile, adapted to the prerelease design language. -->
+     inline (each structurally unique). The page now leads with a
+     proper rp-page__head (title + sub) before the 2-col grid, and
+     uses the lifted-card chrome from [[chrome-visual-direction]] so
+     each .rp-page__section reads as a card-on-calm-bg per the inspo
+     deck (AI thread / Nexus / Bexet). -->
 <section class="rp-page">
   <header id="rp-topbar"></header>
   <div class="rp-page__body rp-profile">
+
+    <header class="rp-page__head">
+      <h1 class="rp-page__title">Profile</h1>
+      <p class="rp-page__sub">Manage how you appear in RedPash, your plan, and your connected accounts.</p>
+    </header>
 
     <div class="rp-profile__grid">
 
@@ -17,23 +25,23 @@
         <div class="rp-profile__id">
           <span class="rp-avatar rp-avatar--lg" id="rp-profile-avatar">··</span>
           <div class="rp-profile__id-meta">
-            <h1 class="rp-profile__id-name" id="rp-profile-id-name">—</h1>
+            <h2 class="rp-profile__id-name" id="rp-profile-id-name">—</h2>
             <p class="rp-profile__id-email" id="rp-profile-id-email">—</p>
             <span class="rp-profile__plan-pill" id="rp-profile-plan-pill">Free</span>
           </div>
           <div class="rp-profile__id-actions">
-            <button type="button" class="rp-btn rp-btn--ghost rp-btn--sm" id="rp-profile-edit"
+            <button type="button" class="rp-btn rp-btn--ghost rp-profile__id-btn" id="rp-profile-edit"
                     aria-pressed="false" title="Edit mode">
-              <i class="bi bi-pencil-fill"></i>
+              <i class="bi bi-pencil"></i><span>Edit</span>
             </button>
-            <button type="submit" class="rp-btn rp-btn--sm" id="rp-profile-save"
-                    title="Save changes" disabled>
-              <i class="bi bi-floppy-fill"></i>
+            <button type="submit" class="rp-btn rp-profile__id-btn rp-profile__id-btn--primary"
+                    id="rp-profile-save" title="Save changes" disabled>
+              <i class="bi bi-check2"></i><span>Save</span>
             </button>
           </div>
         </div>
 
-        <h2 class="rp-page__section-h">Personal info</h2>
+        <h3 class="rp-page__section-h">Personal info</h3>
         <div data-rp-rows="form"></div>
       </form>
 
@@ -43,38 +51,36 @@
         <!-- Usage — horizontal bar chart (ECharts). Bars are clickable;
              each routes to the matching Home tab. -->
         <section class="rp-page__section">
-          <h2 class="rp-page__section-h">Usage</h2>
+          <h3 class="rp-page__section-h">Usage</h3>
           <div class="rp-profile__usage-chart" id="rp-profile-usage-chart"></div>
         </section>
 
         <!-- Plan card -->
-        <section class="rp-page__section">
-          <h2 class="rp-page__section-h">Plan</h2>
-          <div class="rp-profile__plan">
-            <div class="rp-profile__plan-top">
-              <div>
-                <div class="rp-profile__plan-name" id="rp-profile-plan-name">Free</div>
-                <div class="rp-profile__plan-sub" id="rp-profile-plan-sub">
-                  3 projects, 5 files per project, CSV export only.
-                </div>
+        <section class="rp-page__section rp-profile__plan-card">
+          <div class="rp-profile__plan-top">
+            <div>
+              <h3 class="rp-page__section-h rp-profile__plan-h">Plan</h3>
+              <div class="rp-profile__plan-name" id="rp-profile-plan-name">Free</div>
+              <div class="rp-profile__plan-sub" id="rp-profile-plan-sub">
+                3 projects, 5 files per project, CSV export only.
               </div>
-              <span class="rp-profile__soon">Upgrade · Soon</span>
             </div>
-            <ul class="rp-profile__plan-features">
-              <li><i class="bi bi-check-lg"></i> Up to 3 projects on the free tier</li>
-              <li><i class="bi bi-check-lg"></i> Up to 5 files per project (CSV / Excel)</li>
-              <li><i class="bi bi-check-lg"></i> All cleaning tools + join wizard</li>
-              <li><i class="bi bi-check-lg"></i> Charts + dashboards (CSV export)</li>
-            </ul>
+            <span class="rp-profile__soon">Upgrade · Soon</span>
           </div>
+          <ul class="rp-profile__plan-features">
+            <li><i class="bi bi-check-lg"></i> Up to 3 projects on the free tier</li>
+            <li><i class="bi bi-check-lg"></i> Up to 5 files per project (CSV / Excel)</li>
+            <li><i class="bi bi-check-lg"></i> All cleaning tools + join wizard</li>
+            <li><i class="bi bi-check-lg"></i> Charts + dashboards (CSV export)</li>
+          </ul>
         </section>
 
         <!-- Connected accounts -->
         <section class="rp-page__section">
-          <h2 class="rp-page__section-h">Connected accounts</h2>
+          <h3 class="rp-page__section-h">Connected accounts</h3>
           <div class="rp-profile__conn">
             <span class="rp-profile__conn-icon">
-              <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" width="20" height="20">
+              <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" width="22" height="22">
                 <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
                 <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
                 <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>

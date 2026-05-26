@@ -312,6 +312,13 @@ function setEditMode(app, editing) {
     edit.classList.toggle("is-active", editing);
     edit.setAttribute("aria-pressed", String(editing));
     edit.title = editing ? "Lock fields" : "Edit mode";
+    // The Edit pill carries a text label now (was icon-only) — keep
+    // the wording honest when toggled. Icon swaps pencil↔lock to
+    // reinforce the state in case the label is clipped on narrow.
+    const editLabel = edit.querySelector("span");
+    if (editLabel) editLabel.textContent = editing ? "Lock" : "Edit";
+    const editIcon = edit.querySelector("i");
+    if (editIcon) editIcon.className = editing ? "bi bi-lock" : "bi bi-pencil";
   }
   if (save) save.disabled = !editing;
 }
