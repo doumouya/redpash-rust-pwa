@@ -174,7 +174,7 @@ pub fn auto_clean(rows_json: &str) -> Result<String, JsValue> {
 /// monotonic clock); JS-side measurement is canonical.
 #[wasm_bindgen]
 pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
-    let (df, encoding) = parse::from_csv_bytes(bytes, None)
+    let (df, encoding, rescue) = parse::from_csv_bytes_with_diag(bytes, None)
         .map_err(|e| JsValue::from_str(&format!("parse: {e}")))?;
     let cols = dtype::summarize(&df)
         .map_err(|e| JsValue::from_str(&format!("summarize: {e}")))?;
@@ -201,6 +201,16 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
         0.0
     };
 
+    // Wrapped-CSV rescue outcome — `rescued` flips true when pass-1
+    // detected a wrapped shape and ran `unwrap_csv`; `rescue_width`
+    // is the post-unwrap column count (1 = fell back to line-literal,
+    // > 1 = rescue delivered the recovered N-col frame). The bench's
+    // Rescue column reads both fields to render "—" / "✗" / "✓ N".
+    let (rescued, rescue_width) = match rescue {
+        parse::RescueDiag::NotAttempted                  => (false, 0u32),
+        parse::RescueDiag::Attempted { delivered_width } => (true,  delivered_width),
+    };
+
     Ok(json!({
         "rows":            df.height(),
         "columns":         df.width(),
@@ -208,6 +218,8 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
         "type_mismatches": type_mismatches,
         "empty_pct":       empty_pct,
         "encoding":        encoding,
+        "rescued":         rescued,
+        "rescue_width":    rescue_width,
     })
     .to_string())
 }

@@ -41,8 +41,16 @@
   .result-chip { display: inline-block; padding: 2px 8px;
                  border-radius: 999px; font-size: 12px; font-weight: 600;
                  font-variant-numeric: tabular-nums; }
-  .result-chip--ok   { color: #2f6f3a; background: rgba(64, 160, 43, 0.14); }
-  .result-chip--err  { color: #b3324a; background: rgba(210, 15, 57, 0.12); }
+  .result-chip--ok    { color: #2f6f3a; background: rgba(64, 160, 43, 0.14); }
+  .result-chip--err   { color: #b3324a; background: rgba(210, 15, 57, 0.12); }
+  /* Rescue chip variants. `--muted` = rescue not attempted (file was
+     normal); `--warn` = rescue attempted but delivered width=1 (the
+     `_ => Ok(wrapped_df)` fall-back in parse.rs fired — file was
+     wrapped, unwrap couldn't recover N>1 cols). The `--ok` variant is
+     reused for "rescue delivered" so the green chip means the same
+     thing across the table: "the lane produced usable data". */
+  .result-chip--muted { color: #6b7280; background: rgba(107, 114, 128, 0.10); }
+  .result-chip--warn  { color: #b04207; background: rgba(254, 100, 11, 0.12); }
   /* Failed row treatment: soft-tint the whole row + italicize the ms
      cell (so its number reads as reject-latency, not parse-time). */
   tr.is-failed td        { background: rgba(210, 15, 57, 0.04); color: #8a4a55; }
@@ -96,6 +104,7 @@
       <th>Cols</th>
       <th>Score</th>
       <th>Empty %</th>
+      <th>Rescue</th>
       <th>Result</th>
     </tr>
   </thead>
@@ -264,7 +273,7 @@ function renderAnnotation() {
     // overshoot (Axum closed mid-stream — typically over 2× the cap).
     const transport = summary.serverHttp413
       ? `clean HTTP 413 — server checked content-length and refused before consuming the body`
-      : `connection reset mid-upload (<code>TypeError: Failed to fetch</code>) — server closed once the streamed body exceeded the cap. The per-iter ms readings are upload-then-RST time, not parse time.`;
+      : `Connection reset mid-upload (<code>TypeError: Failed to fetch</code>) — server closed once the streamed body exceeded the cap. The per-iter ms readings are upload-then-RST time, not parse time.`;
     annotation.innerHTML =
       `<b>Size cliff:</b> the ${summary.sizeMb} MB corpus is past the `
       + `4 MiB demo cap on <code>/api/demo/parse</code>. ${transport} `
@@ -284,6 +293,9 @@ function renderAnnotation() {
 // so the table reads straight. Failed rows tint soft-red + italicise
 // the ms cell (so its number reads as reject-latency, not parse-time);
 // the Result chip carries the verbatim status (`OK` or `HTTP 413 …`).
+// The Rescue chip surfaces the wasm-side wrapped-CSV rescue outcome
+// (parse.rs's RescueDiag): "—" not attempted / "✗ 1" wrapped + fell
+// back / "✓ N" wrapped + delivered N cols.
 function appendRow(lane, iter, ms, body, errMsg) {
   const failed = !!errMsg;
   const tr = document.createElement("tr");
@@ -306,6 +318,31 @@ function appendRow(lane, iter, ms, body, errMsg) {
     td.textContent = v;
     tr.appendChild(td);
   });
+
+  // Rescue chip — only meaningful on rows where a parse actually ran
+  // (i.e. wasm-side, non-failed). Server-lane rows or any failed row
+  // get "—" with no rescue claim. body.rescued is the boolean; when
+  // true, body.rescue_width tells delivered vs fell-back.
+  const rescueTd  = document.createElement("td");
+  const rescueChip = document.createElement("span");
+  if (failed || body?.rescued !== true) {
+    rescueChip.className = "result-chip result-chip--muted";
+    rescueChip.textContent = "—";
+    rescueChip.title = failed
+      ? "No parse ran — Rescue not applicable."
+      : "File was a normal CSV — wrapped-shape rescue not attempted.";
+  } else if (body.rescue_width > 1) {
+    rescueChip.className = "result-chip result-chip--ok";
+    rescueChip.textContent = "✓ " + body.rescue_width;
+    rescueChip.title = "Wrapped CSV detected; unwrap_csv delivered " + body.rescue_width + " columns.";
+  } else {
+    rescueChip.className = "result-chip result-chip--warn";
+    rescueChip.textContent = "✗ 1";
+    rescueChip.title = "Wrapped CSV detected; unwrap_csv fell back to line-literal (returned width = 1). "
+      + "Likely an unwrap_record edge case — see parse.rs's `_ => Ok(wrapped_df)` arm.";
+  }
+  rescueTd.appendChild(rescueChip);
+  tr.appendChild(rescueTd);
 
   const resultTd = document.createElement("td");
   const chip = document.createElement("span");

@@ -122,14 +122,48 @@ fn cell_to_string(v: &calamine::Data) -> String {
     }
 }
 
+/// Wrapped-CSV rescue outcome — what the in-parse `unwrap_csv` branch
+/// did with the input. Surfaced by the `*_with_diag` parse variants so
+/// callers (bench harness, future diagnostic tools) can tell apart
+/// "file was normal" from "rescue attempted + delivered" from "rescue
+/// attempted + fell back". The single-return-tuple variants
+/// (`parse_text`, `from_csv_bytes`) keep their existing signature and
+/// drop the diag; only callers that explicitly want it use the
+/// `_with_diag` form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RescueDiag {
+    /// Pass-1 sniff found a normal multi-column CSV (or a legitimate
+    /// 1-col preamble file) — wrapped-detection never fired.
+    NotAttempted,
+    /// Wrapped shape was detected and `unwrap_csv` ran. `delivered_width`
+    /// is the post-unwrap column count: > 1 means the rescue delivered
+    /// (the returned DataFrame is the recovered N-col frame); == 1 means
+    /// it fell back to the safe line-literal frame (the unwrap step
+    /// errored or returned width = 1 — see parse.rs's `_ => Ok(wrapped_df)`
+    /// arm).
+    Attempted { delivered_width: u32 },
+}
+
 /// Decode + parse a CSV upload, sniffing the encoding via chardetng.
 ///
 /// `tld_hint` is forwarded to chardetng (e.g. `Some("fr")` for French
 /// CSVs — disambiguates windows-1252 vs other single-byte codecs).
 pub fn from_csv_bytes(bytes: &[u8], tld_hint: Option<&str>) -> Result<(DataFrame, String)> {
+    let (df, enc, _diag) = from_csv_bytes_with_diag(bytes, tld_hint)?;
+    Ok((df, enc))
+}
+
+/// Same as [`from_csv_bytes`] but also returns the wrapped-CSV rescue
+/// outcome. Used by the wasm bench harness's `parse_csv` so the diag
+/// surfaces alongside the parse stats — lets the table differentiate a
+/// genuinely 1-col CSV from a wrapped file the rescue couldn't unwrap.
+pub fn from_csv_bytes_with_diag(
+    bytes:     &[u8],
+    tld_hint:  Option<&str>,
+) -> Result<(DataFrame, String, RescueDiag)> {
     let (text, encoding) = crate::encoding::decode(bytes, tld_hint);
-    let df = parse_text(text)?;
-    Ok((df, encoding))
+    let (df, diag) = parse_text_with_diag(text)?;
+    Ok((df, encoding, diag))
 }
 
 /// Decode + parse with a caller-specified encoding (the user's override
@@ -142,7 +176,15 @@ pub fn from_csv_bytes_with_encoding(bytes: &[u8], encoding_label: &str) -> Resul
     parse_text(cow.into_owned())
 }
 
+/// Thin wrapper that drops the rescue diag — every existing caller
+/// (`from_csv_bytes`, `from_csv_bytes_with_encoding`, `steps::unwrap_csv`'s
+/// re-parse) doesn't need it. The wasm bench's `parse_csv` calls
+/// [`parse_text_with_diag`] directly through [`from_csv_bytes_with_diag`].
 pub fn parse_text(text: String) -> Result<DataFrame> {
+    parse_text_with_diag(text).map(|(df, _)| df)
+}
+
+pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
     // Heuristic header / delimiter sniff. Real-world CSVs ride in with
     // junk on top — `""` blank lines, `# Export …` comments,
     // `Source: legacy v2` metadata, `Domaine: clients` markers, an
@@ -247,8 +289,15 @@ pub fn parse_text(text: String) -> Result<DataFrame> {
                 "unwrap_csv",
                 &serde_json::Value::Null,
             ) {
-                Ok(unwrapped) if unwrapped.width() > 1 => Ok(unwrapped),
-                _ => Ok(wrapped_df),
+                Ok(unwrapped) if unwrapped.width() > 1 => {
+                    let w = unwrapped.width() as u32;
+                    Ok((unwrapped, RescueDiag::Attempted { delivered_width: w }))
+                }
+                // Err OR width = 1 — fall back to the safe line-literal
+                // frame. delivered_width: 1 names the fall-back state so
+                // the bench can distinguish "rescue tried and failed" from
+                // "rescue not attempted" (NotAttempted).
+                _ => Ok((wrapped_df, RescueDiag::Attempted { delivered_width: 1 })),
             };
         }
     }
@@ -273,6 +322,7 @@ pub fn parse_text(text: String) -> Result<DataFrame> {
         )
         .into_reader_with_file_handle(cursor)
         .finish()
+        .map(|df| (df, RescueDiag::NotAttempted))
         .map_err(DataError::from)
 }
 
