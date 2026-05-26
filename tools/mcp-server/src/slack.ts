@@ -81,12 +81,23 @@ export interface AppendArgs {
   stamp?: string;
 }
 
+// Strip a trailing "— <name>" signature line from the body, if present.
+// The protocol contract is "server stamps the signature" — callers
+// shouldn't include one in the body — but in practice agents paste
+// from drafts and prior posts that already carry signatures, which
+// produced visible duplicate-signature output (e.g. Woz's 2026-05-26
+// 08:21 entry on Torv.md ended with two "— Woz · 26.04 session"
+// lines). Defensive strip = belt-and-suspenders.
+function stripTrailingSignature(body: string): string {
+  return body.replace(/(?:\r?\n)+— [^\r\n]+\s*$/, "");
+}
+
 /** Append a protocol-compliant entry to a channel file. Returns the
  *  full text of the new entry as written (for the tool's response). */
 export async function appendEntry(args: AppendArgs): Promise<string> {
   const stamp = args.stamp ?? nowStamp();
   const header = `### ${stamp} — ${args.intent}: ${args.subject}`;
-  const body = args.body.trim();
+  const body = stripTrailingSignature(args.body.trim()).trimEnd();
   const signature = `— ${args.from}`;
   const entry = `\n${header}\n\n${body}\n\n${signature}\n`;
   await fs.appendFile(channelPath(args.agent), entry, "utf-8");
