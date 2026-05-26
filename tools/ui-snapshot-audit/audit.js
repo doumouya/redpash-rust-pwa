@@ -37,14 +37,14 @@
                        finding_key = "<route>#<atom>@<theme>" (no prop).
 
    ── Input layout ────────────────────────────────────────────────────────
-   Default snapshots dir: tools/ui-snapshot/snapshots/
+   Default snapshots dir: tools/ui-snapshot-audit/snapshots/
    Each file: ui-snapshot__<route>__<theme>.json (the canonical filename
    `downloadSnapshot()` emits). The script is path-tolerant — anything
    .json under the snapshots dir is parsed; the filename is a hint, the
    actual `route` / `theme` come from the JSON body.
 
-   Usage:  node tools/ui-snapshot/audit.js [snapshotsDir]
-   Output: tools/ui-snapshot/audit.json (canonical, ingest-ready)
+   Usage:  node tools/ui-snapshot-audit/audit.js [snapshotsDir]
+   Output: tools/ui-snapshot-audit/audit.json (canonical, ingest-ready)
    ────────────────────────────────────────────────────────────────────── */
 'use strict';
 

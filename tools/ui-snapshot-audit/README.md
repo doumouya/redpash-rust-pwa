@@ -1,4 +1,4 @@
-# `tools/ui-snapshot/` — computed-style audit for the atom catalog
+# `tools/ui-snapshot-audit/` — computed-style audit for the atom catalog
 
 Pairs with the SPA's `?audit=1` self-report mode
 ([`frontend/scripts/audit/snapshot.js`](../../frontend/scripts/audit/snapshot.js)).
@@ -15,11 +15,11 @@ existing audit pipeline.
         ▼  page mount triggers captureSnapshot()
   ui-snapshot__<route>__<theme>.json (downloaded to ~/Downloads)
         │
-        ▼  user moves files into tools/ui-snapshot/snapshots/
-  tools/ui-snapshot/audit.js
+        ▼  user moves files into tools/ui-snapshot-audit/snapshots/
+  tools/ui-snapshot-audit/audit.js
         │
         ▼  builds findings list, emits audit.json
-  tools/ui-snapshot/audit.json
+  tools/ui-snapshot-audit/audit.json
         │
         ▼  redpash-audit-ingest --tool ui-snapshot   (gated on Gus's slice 1a)
   audit.run + audit.finding rows (Postgres)
@@ -42,15 +42,15 @@ on CHECK; the JSON is still inspectable / diffable by hand.
 # 1. Open the SPA with ?audit=1 in the URL bar (e.g. http://localhost:8080/?audit=1)
 # 2. Navigate through each page you want covered
 # 3. Each page-mount downloads ui-snapshot__<route>__<theme>.json
-# 4. Move all the downloaded files into tools/ui-snapshot/snapshots/
+# 4. Move all the downloaded files into tools/ui-snapshot-audit/snapshots/
 # 5. Run the audit
-node tools/ui-snapshot/audit.js
+node tools/ui-snapshot-audit/audit.js
 
 # Or against a custom snapshots dir
-node tools/ui-snapshot/audit.js /path/to/snapshots
+node tools/ui-snapshot-audit/audit.js /path/to/snapshots
 ```
 
-Output: `tools/ui-snapshot/audit.json` — the canonical payload
+Output: `tools/ui-snapshot-audit/audit.json` — the canonical payload
 ready for ingest.
 
 ## Why computed styles, not pixel-diff

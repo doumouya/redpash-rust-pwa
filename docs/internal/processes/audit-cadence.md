@@ -36,7 +36,7 @@ The current practice (live since 2026-05-21):
 | `tools/auth-audit/` | Auth surface invariants (cookie / session / OAuth shape) | `audit.html` + `audit.json` |
 | `tools/observability-audit/` | Cross-cutting observability invariants — event capture, log levels, perf marks, error airlock; meta-check `X-AUD` (counts other tools' `audit.json` artifacts as a freshness signal) | stdout + `audit.json` |
 | `tools/css-tab-compare-audit/` | Cross-tab CSS naming-leak detector — same-role-different-name candidates, mixed-prefix violations (`.rt-mon-*`), misnamed shared atoms (list-page.js atoms with page-prefix names) | `audit.html` + `audit.json` |
-| `tools/ui-snapshot/` | **Computed-style drift on the foundation atom catalog** — reads JSON snapshots captured by the SPA's `?audit=1` mode (`frontend/scripts/audit/snapshot.js`), emits one finding per (route × atom × prop × theme) with a value-hash severity. Drift surfaces as `regressed`/`improved` via `audit.run_diff()`. | `audit.json` |
+| `tools/ui-snapshot-audit/` | **Computed-style drift on the foundation atom catalog** — reads JSON snapshots captured by the SPA's `?audit=1` mode (`frontend/scripts/audit/snapshot.js`), emits one finding per (route × atom × prop × theme) with a value-hash severity. Drift surfaces as `regressed`/`improved` via `audit.run_diff()`. | `audit.json` |
 
 Added 2026-05-25: `css-tab-compare-audit` (`516fc48`). Added 2026-05-26:
 `ui-snapshot` (`c119cee`). Today's suite count: **10**.
@@ -72,8 +72,8 @@ parameter triggers a per-page-mount capture that downloads
 1. Open the SPA with `?audit=1` (e.g. `http://localhost:8080/?audit=1`).
 2. Navigate through every page that needs coverage.
 3. Each page-mount downloads one JSON file (route + theme in the name).
-4. Move the downloaded files into `tools/ui-snapshot/snapshots/`.
-5. `node tools/ui-snapshot/audit.js` emits `audit.json` for ingest.
+4. Move the downloaded files into `tools/ui-snapshot-audit/snapshots/`.
+5. `node tools/ui-snapshot-audit/audit.js` emits `audit.json` for ingest.
 6. `sh tools/ci-audit/check.sh` then catches any drift vs the previous run.
 
 Source-of-truth for the atom catalog + tracked properties:

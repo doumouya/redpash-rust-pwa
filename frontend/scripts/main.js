@@ -95,7 +95,7 @@ function navigate() {
 // When the SPA loads with `?audit=1` in the URL, every page mount
 // triggers a computed-style snapshot of the foundation atom catalog
 // (.rt-* + .rp-* — see scripts/audit/snapshot.js) and downloads the
-// JSON. Feed the files into tools/ui-snapshot/audit.js (Layer 2b)
+// JSON. Feed the files into tools/ui-snapshot-audit/audit.js (Layer 2b)
 // to surface drift in the standard audit pipeline (audit.run_diff).
 //
 // Lazy-imported so non-audit page loads never pay the module-fetch

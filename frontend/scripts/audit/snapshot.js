@@ -4,7 +4,7 @@
 // triggers `captureSnapshot()` from this module — walks the rendered
 // DOM, captures `getComputedStyle()` for the foundation atom catalog,
 // and downloads a JSON file. Feed the captured files into
-// `tools/ui-snapshot/audit.js` to surface computed-style drift in the
+// `tools/ui-snapshot-audit/audit.js` to surface computed-style drift in the
 // standard audit pipeline (audit.run / audit.finding / audit.run_diff).
 //
 // Per [[feedback-no-frameworks]] + Em's "tailor-made for our app"
@@ -120,7 +120,7 @@ export async function captureSnapshot() {
  * other in the Downloads folder.
  *
  * The file format is the canonical input shape for
- * `tools/ui-snapshot/audit.js` (Layer 2b) — that script reads the
+ * `tools/ui-snapshot-audit/audit.js` (Layer 2b) — that script reads the
  * captured JSONs, emits a standard `audit.json` for ingest, and the
  * existing `audit.run_diff` SQL function does the drift comparison.
  */
