@@ -35,7 +35,7 @@ PWA assets used by the install flow:
 
 ## Library components composed
 
-Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/landing.css). All internalized under `frontend/styles/` — no external library, no `/vendor/` mount (see [`all-css-in-redpash-project.md`](../../../../all-css-in-redpash-project.md)).
+Imported via `@import` in [`landing.css`](../../../../frontend/styles/pages/landing.css). All internalized under `frontend/styles/` — no external library, no `/vendor/` mount (see [`internal/archive/all-css-in-redpash-project.md`](../../../internal/archive/all-css-in-redpash-project.md)).
 
 ```css
 @import "/styles/base/typography.css";

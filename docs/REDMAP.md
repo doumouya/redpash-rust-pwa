@@ -622,5 +622,5 @@ Files are listed in chronological (boot-replay) order. The **Ord** column tracks
 
 ## Sister projects
 
-- `/home/mansa/redpash-components/` — the original CSS/JS design-system library. **No longer a dependency** — all CSS was internalized into `frontend/styles/` (2026-05-20; see [`all-css-in-redpash-project.md`](../all-css-in-redpash-project.md)). The directory remains only for the standalone design sandbox.
+- `/home/mansa/redpash-components/` — the original CSS/JS design-system library. **No longer a dependency** — all CSS was internalized into `frontend/styles/` (2026-05-20; see [`internal/archive/all-css-in-redpash-project.md`](internal/archive/all-css-in-redpash-project.md) for the one-time internalization log). The directory remains only for the standalone design sandbox.
 - `/home/mansa/streamlit-proj/clarna-django/` — historical Django app. Useful as a reference for behaviours not yet ported (the `md/` tree there maps roughly 1:1 to ours).

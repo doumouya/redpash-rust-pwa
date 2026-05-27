@@ -43,7 +43,7 @@ Settings (Phase 4) writes a tiny `<style>` tag to `<head>` rebinding
 
 The component CSS was internalized from the old `redpash-components`
 design-system library into `frontend/styles/` (see
-[`all-css-in-redpash-project.md`](../../all-css-in-redpash-project.md)).
+[`internal/archive/all-css-in-redpash-project.md`](../internal/archive/all-css-in-redpash-project.md)).
 That library used **bare token names**, and the internalized sheets
 keep them — so the convention persists:
 
