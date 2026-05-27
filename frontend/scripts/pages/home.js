@@ -872,9 +872,13 @@ export default function home(app, { session: _session }) {
   let listSearch = "";
   let listSort   = null;  // { col, dir } | null
 
-  // Active tab — from hash (?tab=<key>) or default.
-  const params = new URLSearchParams(location.hash.split("?")[1] || "");
-  const wantTab = params.get("tab") || HOME_DEFAULT_TAB;
+  // Active tab — precedence: explicit ?tab=<key> in the hash (deep
+  // link wins) → `homeActiveTab` pref (last tab the user activated
+  // in any prior session) → HOME_DEFAULT_TAB. activate() coerces
+  // unknown / unwired keys to the default, so a stale pref naming a
+  // retired tab degrades gracefully.
+  const params  = new URLSearchParams(location.hash.split("?")[1] || "");
+  const wantTab = params.get("tab") || getPref("homeActiveTab") || HOME_DEFAULT_TAB;
   activate(wantTab);
 
   // ─── rail click delegation ───────────────────────────────────
@@ -937,6 +941,10 @@ export default function home(app, { session: _session }) {
     if (btn) btn.classList.add("active");
     renderTabBody(tab);
     syncCreateButton(tab);
+    // Persist the actually-rendered tab key (after any coercion to
+    // HOME_DEFAULT_TAB for unwired requests) so the next reload lands
+    // back here instead of always defaulting to Projects.
+    setPref("homeActiveTab", tab.key);
   }
 
   // ─── rail-foot create button + generic create-modal ──────────
