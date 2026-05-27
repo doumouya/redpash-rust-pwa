@@ -23,6 +23,34 @@ The current practice (live since 2026-05-21):
 3. New findings trigger a small, immediate cleanup — *not* a deferred big-bang pass
 4. Trend reading: `audit.run_diff()` SQL surfaces drift between runs
 
+## Slice-grain runs during decomp campaigns
+
+Convention adopted 2026-05-27 (per Em's routing call) for any
+multi-slice decomposition campaign (the god-object cleanup that
+started that day; the pattern generalises):
+
+- Run `sh tools/audit.sh` **between slices, not just at session-end**.
+- Cadence: after every 2-3 slices, OR before every push-request,
+  whichever comes first.
+- Eyeball the per-tool diff summary the binary prints
+  (`vs audit.run #N: X new · Y fixed · Z regressed · W improved`).
+- If any tool reports `new` or `regressed` rows, **stop + investigate
+  before continuing**. The slice that surfaced the regression is the
+  cheapest commit to bisect against; later slices stacking on top
+  multiply the bisect cost.
+
+The cost is low — the suite runs in seconds and the ingest is
+fire-and-forget. The earned value is that a misplaced selector / a
+class divergence / a structural drift surfaces within one slice
+rather than at PR-review time. Em's framing: "errors will be
+spotted faster for direct resolution."
+
+The audit's static-analysis side (every `tools/*-audit/audit.js`) is
+unaffected by `cargo check` state, so a compile-broken intermediate
+state in one lane (common during parallel-session decomposition)
+does NOT invalidate the audit signal — the static suite stays a
+meaningful regression check throughout.
+
 ## Current audit suite
 
 | Tool | What it catches | Output |
