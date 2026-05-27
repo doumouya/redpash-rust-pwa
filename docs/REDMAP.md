@@ -26,7 +26,12 @@ redpash-app/
 │   │   │       ├── state.rs                AppState — db pool, FileEntry cache, OAuthConfig, http client
 │   │   │       ├── bootstrap.rs            idempotent dev_user + default project on first run
 │   │   │       ├── id.rs                   RedPash-ID generator (`PFX_<32 uppercase hex>`)
-│   │   │       ├── db.rs                   SQL helpers — every query lives here
+│   │   │       ├── db/                     SQL helpers — decomposed per resource (2026-05-27). Re-exports at `db::*` so call sites stay frozen.
+│   │   │       │   ├── mod.rs              shared imports + count_total + remaining resources (decomp in flight: charts → dashboards → steps → companies → events → cases)
+│   │   │       │   ├── sessions.rs         auth-cookie → user-rid lookups
+│   │   │       │   ├── sentinels.rs        cleanness-vocabulary promotion plumbing
+│   │   │       │   ├── users.rs            users table + Google-OAuth upsert + memberships join
+│   │   │       │   └── projects.rs         projects CRUD + shared PROJECT_SELECT
 │   │   │       ├── error.rs                AppError + IntoResponse + From<DataError>
 │   │   │       ├── event.rs                runtime event capture — fire-and-forget record()
 │   │   │       └── routes/
@@ -35,7 +40,13 @@ redpash-app/
 │   │   │           ├── me.rs               GET + PATCH /api/me + resolve_user_rid (shared)
 │   │   │           ├── health.rs           liveness
 │   │   │           ├── projects.rs         list + per-project file list + PATCH/DELETE
-│   │   │           ├── files.rs            upload (CSV+Excel), list, page, steps, undo/redo, joins, snapshots, export, sentinels, cleanness, cast-preview, clear-filters
+│   │   │           ├── files/              upload + reads + cleaner step ops (decomposed 2026-05-27)
+│   │   │           │   ├── mod.rs          router wiring + upload + page + steps + undo/redo + encoding
+│   │   │           │   ├── joins.rs        /joins detect + apply
+│   │   │           │   ├── stats.rs        /dedup + /uniques + /sentinels + /cleanness
+│   │   │           │   ├── output.rs       /snapshot + /export
+│   │   │           │   ├── meta.rs         PATCH /:rid + DELETE /:rid + display-name/move/encoding
+│   │   │           │   └── state_ops.rs    /cast-preview + /clear-filters + cleaner cursor ops
 │   │   │           ├── reports.rs          CRUD + /preview + /run + favorite + PATCH (sparse meta)
 │   │   │           ├── dashboards.rs       CRUD + favorite + PATCH (sparse meta)
 │   │   │           ├── users.rs            dev-permissive directory CRUD
@@ -43,9 +54,18 @@ redpash-app/
 │   │   │           └── events.rs           runtime observability log — capture + read API
 │   │   ├── data/                           Polars-backed compute. No HTTP.
 │   │   │   └── src/
-│   │   │       ├── parse.rs                CSV → DataFrame; preamble + delimiter sniff; apply_filter; Excel→CSV via calamine
+│   │   │       ├── parse/                  CSV → DataFrame (decomposed 2026-05-27)
+│   │   │       │   ├── mod.rs              entry points + Excel→CSV via calamine + apply_filter dispatch
+│   │   │       │   ├── filter.rs           predicate-tree evaluator
+│   │   │       │   └── sniff.rs            preamble + delimiter sniff + RescueDiag
 │   │   │       ├── dtype.rs                column summaries
-│   │   │       ├── steps.rs                replay applied steps; dispatch by kind (18 kinds)
+│   │   │       ├── steps/                  cleaning-step replay (decomposed 2026-05-27)
+│   │   │       │   ├── mod.rs              `apply()` dispatcher — 17 one-line arms over the per-kind families
+│   │   │       │   ├── util.rs             shared helpers (column-index lookup, type coercion)
+│   │   │       │   ├── rows.rs             drop_rows / drop_nulls / filter_rows
+│   │   │       │   ├── columns.rs          drop_columns / filter_columns / rename / snake_case / replace_in_names / join_columns / split_column
+│   │   │       │   ├── cells.rs            set_cell / fill_nulls / cast / change_case / replace_text / fix_invalid / format_dates
+│   │   │       │   └── structure.rs        unwrap_csv (wrapped-CSV rescue path)
 │   │   │       ├── group_by.rs             report engine — group/agg/sort/top_n/windows
 │   │   │       ├── stats.rs                cleanness scorer + sentinel scan + unique-value extractor + cell-diff counter
 │   │   │       ├── joins.rs                overlap-coefficient detector
@@ -77,18 +97,18 @@ redpash-app/
 │       ├── main.js                         hash router + page bootstrap
 │       ├── api.js                          fetch wrapper; 401 → #/landing
 │       ├── events.js                       frontend error capture → POST /api/events
+│       ├── audit/                          ?audit=1 SPA capture mode (`snapshot.js`) — feeds tools/ui-snapshot-audit
 │       ├── ui/
 │       │   ├── toast.js                    success/error/info toasts
-│       │   └── history.js                  generic undo/redo ring buffer (reports + dashboards)
-│       ├── cleaner/                        cleaner controller + filter panel + tools sidebar
-│       ├── reports/index.js                ⚠ legacy builder — superseded by scripts/pages/reports.js
+│       │   └── history.js                  generic undo/redo ring buffer
+│       ├── tools/                          cleaning-step UI dispatch (decomposed 2026-05-27)
+│       │   ├── (catalog.js, action sets)   12-tool catalog + GLOBAL_ACTIONS + SELECT_ACTIONS + per-kind UI modules
+│       │   └── …                           re-exported through tools.js so consumers stay frozen
 │       ├── dashboards/
-│       │   ├── index.js                    dashboard builder (template + slots)
 │       │   ├── widgets.js                  chart-ref and text widget renderers
-│       │   ├── templates.js                grid template registry
 │       │   ├── echarts.js                  lazy loaders (loadECharts + loadECStat)
 │       │   └── chart-render.js             shared chartOption + per-kind extractors. Used by reports AND dashboards.
-│       └── pages/                          per-page modules (sandbox pages: cleaner, objects, reports, profile…)
+│       └── pages/                          per-page modules — workspace (cleaner+reports+dashboards unified), home, monitoring, cases, profile, settings, docs, landing
 │
 └── docs/                                   served at /docs (this file lives here)
     ├── REDMAP.md (this)                    one-page navigation
@@ -300,43 +320,26 @@ redpash-app/
 | **Auth fallback** | `api.js` redirects here on any 401 response |
 | **Docs** | [`frontend/redpash-components-pages/landing-page/`](frontend/redpash-components-pages/landing-page/index.md) |
 
-### `#/home` — authenticated home (pipeline board)
+### `#/home` — authenticated home (rail-shell + LIST_VIEWS tabs)
 | Asset | Location |
 |---|---|
-| **Partial** | `partials/home.html` — full-bleed (`chrome: "full"`); float bars + avatar; a top strip (greeting + Projects/Files/Published counts + upload zone) above the `#home-pipe` board |
-| **Board** | four stage columns — import → clean → report → publish. Every project is a card in its computed-stage column; a card click jumps to the tool for the project's next step |
-| **CSS** | `styles/pages/home.css` — `rp-pipe` board styles; `#page-home` accent pinned to the app blue (`#60a5fa` / `#2563eb`) |
-| **JS** | `scripts/pages/home.js` — `renderBoard()` buckets `/api/projects` by stage into the four columns |
-| **Endpoints** | `GET /api/projects` (the board) · `GET /api/reports` · `GET /api/dashboards` (the Published count) · `POST /api/files/upload` (XLSX→CSV dispatch) · `POST /api/auth/logout` |
+| **Partial** | `partials/home.html` — rail-shell host with the locked 6-section template (head / chip / kpi-or-composite / charts / toolbar / panel) inside `#rpHomeMain` |
+| **Tabs** | 7 LIST_VIEWS (Users / Companies / Memberships / Cases / Projects / Files / Charts) — sortable + reorderable + columns picker per tab; the panel flex-fills the remaining height |
+| **Composite strip** | opt-in chart\|kpi\|chart tabs (`Users today`) via per-tab LIST_VIEWS config — new tabs join via a LIST_VIEWS entry, the template auto-applies |
+| **CSS** | `styles/pages/home.css` |
+| **JS** | `scripts/pages/home.js` — LIST_VIEWS-driven tab rendering, columns picker, sort state |
+| **Endpoints** | `GET /api/projects` · `GET /api/users` · `GET /api/companies` · `GET /api/charts` · `GET /api/cases` · `POST /api/files/upload` (XLSX→CSV dispatch) · `POST /api/auth/logout` |
 | **Docs** | [`frontend/redpash-components-pages/home-page/`](frontend/redpash-components-pages/home-page/index.md) |
 
-### `#/cleaner?file=FIL_…` — redtable + tools
+### `#/workspace?project=PRJ_…&file=FIL_…` — unified surface (cleaner + report-builder + chart-builder + dashboard-builder)
 | Asset | Location |
 |---|---|
-| **Partial** | `partials/cleaner.html` |
-| **Controller** | `scripts/cleaner/index.js` — uploader, redtable mount, action dispatch |
-| **Filter panel** | `scripts/cleaner/filters/panel.js` (also reused by reports) |
-| **Tools sidebar** | `scripts/cleaner/tools/sidebar.js` + one module per tool |
-| **Endpoint** | `GET /api/files/:rid/page?…` |
-| **Docs** | [`features/cleaner.md`](features/cleaner.md) |
-
-### `#/reports?project=PRJ_…&file=FIL_…` — reports + chart builder
-| Asset | Location |
-|---|---|
-| **Partials** | `partials/reports/` — `index.html` composition root + `proj-tabs` / `header` / `file-tabs` / `toolbar` / `table` / `chart-dock` |
-| **Module** | `scripts/pages/reports.js` — sandbox port |
-| **Layout** | 2-page vertical scroll-snap deck — Page 1 Data (chrome + read-only source redtable), Page 2 Charts (builder rail + chart dock) |
-| **Chart builder** | left rail: family `<select>` + inline-SVG variant tiles; no modal |
-| **Persistence** | saved charts → `localStorage['rp_saved_charts_v1']` (per-project stopgap; backend `FIL_` File pending) |
-| **Endpoint** | `POST /api/reports/preview` (one per chart) |
-
-### `#/dashboards?id=DSH_…` or `?new=1` — dashboard builder
-| Asset | Location |
-|---|---|
-| **Partial** | `partials/dashboards.html` |
-| **Controller** | `scripts/dashboards/index.js` |
-| **Widget renderers** | `scripts/dashboards/widgets.js` |
-| **Templates** | `scripts/dashboards/templates.js` |
+| **Partial** | `partials/workspace.html` — rail-shell host: project/file rail, redtable canvas, mode-switching toolbar |
+| **Page module** | `scripts/pages/workspace.js` — file-by-rid dispatcher routes by prefix (`CHT_…` → chart builder; else by `file_type` → csv viewer / dashboard builder) |
+| **Modes** | csv viewer (cleaner steps), report builder (group-by + sort + top-n + windows), chart builder (family `<select>` + variant tiles), dashboard builder (templates + widgets) — all on one page, mode-switching via the toolbar |
+| **Rail UX** | inline project rename (hover pencil); upload-progress ghost tabs per file with shimmer/done/failed states (see `service-worker.js` `CACHE_VERSION` for cache discipline) |
+| **Endpoints** | `GET /api/files/:rid/page?…` · `POST /api/files/:rid/steps` · `GET·POST·PUT·DELETE /api/charts` · `GET·POST·PATCH /api/dashboards` |
+| **Docs** | [`features/cleaner.md`](features/cleaner.md) · [`features/reports.md`](features/reports.md) · [`features/dashboards.md`](features/dashboards.md) · [`features/charts.md`](features/charts.md) — all four describe modes of the unified Workspace |
 
 ### `#/profile` — Profile + Settings (full-bleed 2-step scroll-snap)
 | Asset | Location |
@@ -421,11 +424,20 @@ redpash-app/
 - Explicit `event::record(&db, EventDraft { … })` at lifecycle sites for `info` events. **Fire-and-forget** — the insert is spawned on a detached task, never awaited; a logging failure can't break the request.
 - **Frontend capture** (`scripts/events.js`) — global `error` / `unhandledrejection` handlers, an `api.js` transport-failure funnel, and router page script/mount failures, all POSTed to `/api/events` (`origin=frontend`; `user`/`session` stamped server-side from the cookie, never trusted from the body). Captures what the backend can't see — HTTP 4xx/5xx responses are *not* re-reported client-side, `capture_mw` already owns them. Repeats deduped within 10s, session capped at 100, and `reportEvent` uses raw `fetch` so a failed event POST can't recurse.
 
+### MCP server (cross-WSL2 team-coordination bridge)
+- **Lane:** [[project-mcp-server-lane]] — Torv (architecture) + Woz (FE/TS adjacency); SDK is the no-frameworks carve-out alongside Acorn ([[feedback-no-frameworks]]).
+- **Location:** `tools/mcp-server/` — TypeScript + `@modelcontextprotocol/sdk`.
+- **v1 — stdio transport:** local-only IPC for in-host MCP clients reading Internal-Slack channels as resources.
+- **v2 — HTTP/SSE transport:** retires cross-WSL2-distro channel divergence via canonical-file semantics. One agent's stdio session no longer fragments the team's view of the channels; HTTP/SSE serves the same canonical files through a network endpoint readable from any host.
+- **v3 — memory-as-resource:** extends the resource model to expose auto-memory entries per the [`internal/specs/mcp-memory-bridge.md`](internal/specs/mcp-memory-bridge.md) spec.
+- **Why it's here:** the cross-host team-coordination story (Internal-Slack + `broadcast.md` + ping-hook) leans on the MCP server's canonical-file semantics for any session not on the local Unix socket. The [`internal/processes/team-coordination.md`](internal/processes/team-coordination.md) doc covers the surface; this entry pins the architecture.
+
 ### Audit ingest (dev-meta, NOT app data)
 - `tools/audit.sh` runs every `tools/*-audit/audit.js` and ingests the JSON outputs into `audit.run` + `audit.finding` via `backend/crates/api/src/bin/audit_ingest.rs`.
 - Accepted tool names (per [mig 031][m031]): `css`, `html`, `parallel`, `tab-compare`, `cross-page`, `ui-snapshot`. Names are canonical — the audit.sh script strips the `css-` directory prefix so `tools/css-tab-compare-audit/` ingests as `tab-compare`.
 - Each tool's findings are exploded into `audit.finding` rows via `explode()`'s per-tool match. The finding shape (key, severity, detail) per tool is the canonical contract that drives `audit.run_diff(latest, prev)` — same key + different severity → `regressed` / `improved`; new key → `new`; missing key → `fixed`.
 - **Source of truth for the per-tool contract:** [`internal/specs/audit-ingest-explode.md`](internal/specs/audit-ingest-explode.md).
+- **`ui-snapshot` specifically** (Path-B UX/UI automation): reads computed-style JSONs captured by the SPA's `?audit=1` walker (`frontend/scripts/audit/snapshot.js` — v2 covers tab switches via `MutationObserver` on `.rp-chip.is-active`, plus `window.__rpCapture(state)` + a floating button for non-tab interactive states). Emits one finding per (route × atom × prop × theme × state); severity = djb2 hash of the value, so drift on a *theme-independent* property (radius / padding / type) surfaces as `regressed` — the token-bypassed-hardcode regression catcher. Workflow + atom catalog: [`internal/processes/audit-cadence.md`](internal/processes/audit-cadence.md). CI exit-code wrapper: `tools/ci-audit/check.sh` runs the suite, queries `audit.run_diff`, exits 1 on `new` / `regressed`.
 
 [m031]: ../backend/migrations/20260613000001_relax_audit_tool_check.sql
 
@@ -498,10 +510,10 @@ redpash-app/
 
 ## Files cheatsheet
 
-**"I want to add an API endpoint"** → pick the matching `routes/*.rs`, add a handler, wire into the module's `routes()` fn.
-**"I want to add a SQL query"** → `crates/api/src/db.rs`. One helper per task. Take `&PgPool`, return DTOs from `shared::*`.
-**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `chart-render.js`, `scripts/pages/reports.js` (`_CHART_FAMILIES`), `partials/reports/chart-dock.html`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
-**"I want to add a cleaning tool"** → backend: a new arm in `data::steps::replay` plus a helper in `data::*`. Frontend: `scripts/cleaner/tools/<tool>.js` + sidebar wiring.
+**"I want to add an API endpoint"** → pick the matching `routes/*.rs` (or `routes/files/<family>.rs` for cleaner sub-handlers), add a handler, wire into the module's `routes()` fn.
+**"I want to add a SQL query"** → `crates/api/src/db/<resource>.rs` (per-resource sub-module post the 2026-05-27 decomp). One helper per task. Take `&PgPool`, return DTOs from `shared::*`. Re-exports at `db::*` mean callers keep working without import changes.
+**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `chart-render.js`, the workspace chart-builder mode in `scripts/pages/workspace.js`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
+**"I want to add a cleaning tool"** → backend: a new arm in `data::steps::apply` (the dispatcher, one-line route into the matching `steps/<family>.rs`) plus a helper in `data::steps::<family>`. Frontend: a tool module under `scripts/tools/` (and re-export via `tools.js`).
 **"I want to add a dashboard widget kind"** → extend `widgets.js` dispatch; new entry in `index.js` `KINDS` array; widget spec lives in `DashboardSpec.widgets[].spec`.
 **"I want to add a wire-format field"** → `crates/shared/src/<obj>.rs`. Use `#[serde(default)]` so older specs deserialise.
 **"I want to add a migration"** → `backend/migrations/NNNNNN_*.sql`. The api crate runs `sqlx::migrate!` at boot.
