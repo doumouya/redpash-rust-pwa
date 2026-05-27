@@ -19,50 +19,18 @@ import {
   createListCharts,
 } from "/scripts/list-page.js";
 
-// Same MON_TABS declaration shape as home.js — explicit, RBAC-friendly.
-// `endpoint` is the un-prefixed path; the /api/ literal is never in a
-// string by itself so the crossing audit doesn't mistake it for a call.
-const MON_TABS = [
-  // ── REQUESTS ───────────────────────────────────────────────
-  { group: "REQUESTS", key: "requests", label: "Requests", icon: "bi-globe2",         endpoint: "/monitoring/requests",    wired: true },
-  { group: "REQUESTS", key: "events",   label: "Events",   icon: "bi-envelope",       endpoint: "/monitoring/events",      wired: true },
-  // ── AUDITS ─────────────────────────────────────────────────
-  { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",          endpoint: "/monitoring/audit-runs",     wired: true },
-  { group: "AUDITS",   key: "findings", label: "Findings", icon: "bi-exclamation-triangle", endpoint: "/monitoring/audit-findings", wired: true },
-  // Moved from Home — Steps are operational audit-trail records of
-  // cleaning ops, fits Monitoring's "what happened" framing better
-  // than Home's org/data inventory.
-  { group: "AUDITS",   key: "steps",    label: "Steps",    icon: "bi-wrench",               endpoint: "/admin/steps",               wired: true },
-  // ── OPTIMIZATION — known opportunities × live measurements ─
-  // Spec: docs/internal/specs/optimization-map.md. Each row pairs a
-  // doc-side optimization point with the metadata to evaluate its
-  // current cost; the server returns current_value + tipped on every
-  // fetch.
-  { group: "OPTIMIZATION", key: "optimization", label: "Map", icon: "bi-wrench-adjustable", endpoint: "/monitoring/optimization-points", wired: true },
-  // ── USERS — per-user activity feed (M-2 from slice E) ────
-  // "What is this user doing right now?" lens — different from
-  // /admin/users (organisational inventory). Combines request_log
-  // + events into one time-ordered timeline scoped to a user_rid.
-  { group: "USERS",    key: "user_activity", label: "Activity", icon: "bi-person-lines-fill", endpoint: "/monitoring/users",        wired: true },
-  // ── INSPECT — stripped redtable variant ────────────────────
-  // Disabled until Gus ships the unified /api/monitoring/logs
-  // endpoint. The button telegraphs the surface that's coming
-  // (workspace-style filter + read-only table across event /
-  // request / audit / finding sources); not clickable yet.
-  { group: "INSPECT",  key: "logs",     label: "Logs",     icon: "bi-card-list",            endpoint: "/monitoring/logs",           wired: false },
-];
-
-const MON_GROUPS = [
-  { name: "REQUESTS",     mark: "RQ", color: "blue"  },
-  { name: "AUDITS",       mark: "AD", color: "peach" },
-  { name: "OPTIMIZATION", mark: "OP", color: "green" },
-  { name: "USERS",        mark: "US", color: "sky"   },
-  { name: "INSPECT",      mark: "IN", color: "mauve" },
-];
-
-const WINDOWS = ["1h", "24h", "7d", "30d"];
-const MON_DEFAULT_TAB    = "requests";
-const DEFAULT_WINDOW = "24h";
+// Tab inventory + group partition + window options extracted into
+// `monitoring/tabs.js` as slice 5 of the god-object decomposition
+// (broadcast.md 00:53; mirror of slice 4's home/tabs.js extract).
+// Module-private to monitoring.js — promote if another page composes
+// the same vocabulary.
+import {
+  MON_TABS,
+  MON_GROUPS,
+  WINDOWS,
+  MON_DEFAULT_TAB,
+  DEFAULT_WINDOW,
+} from "/scripts/pages/monitoring/tabs.js";
 
 export default function monitoring(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "monitoring", session });
