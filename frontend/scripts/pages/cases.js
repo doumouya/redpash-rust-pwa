@@ -36,54 +36,20 @@ import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
 
-const STATUS_ORDER = ["backlog", "todo", "in_progress", "in_review", "done"];
-const STATUS_LABEL = {
-  backlog:     "Backlog",
-  todo:        "Todo",
-  in_progress: "In progress",
-  in_review:   "In review",
-  done:        "Done",
-};
-const PRIORITY_LABEL = {
-  low: "Low", medium: "Medium", high: "High", critical: "Critical",
-};
-const TYPE_LABEL = {
-  task: "Task", bug: "Bug", feature: "Feature", epic: "Epic",
-};
-
-// Status → color token name for the rail group's .rt-group-mark.
-// Same mapping the column accent stripe uses (cases.css) so the
-// rail mark + column stripe + status chip read as one palette.
-const RAIL_MARK_COLOR = {
-  backlog:     "mute",
-  todo:        "blue",
-  in_progress: "mauve",
-  in_review:   "peach",
-  done:        "green",
-};
-
-// Done-window filter — caps the Done column / rail group to
-// recently-closed cases so the productivity view stays focused.
-// Default "day" (today's closed). Persisted via the `casesDoneWindow`
-// registered pref (prefs.js) so it survives reloads + syncs per-user.
-// Edge: we use updated_at as the proxy for "closed at" — accurate
-// for the common case (Done cases rarely get edits), wrong if a Done
-// case gets its description edited months after closing. The honest
-// fix is a closed_at column on cases or a derived value from the
-// events table; queued for Gus's lane.
-const DONE_WINDOW_MS = {
-  day:   86_400_000,         // 24h
-  week:  604_800_000,        // 7d
-  month: 2_592_000_000,      // 30d
-  all:   Infinity,
-};
-const DONE_WINDOW_LABEL = {
-  day:   "Today",
-  week:  "Week",
-  month: "Month",
-  all:   "All",
-};
-const DONE_WINDOW_ORDER = ["day", "week", "month", "all"];
+// Case-state label vocabulary + done-window filter constants
+// extracted into `cases/labels.js` as slice 6 of the god-object
+// decomposition (broadcast.md 00:53). Module-private to cases.js;
+// promote if a future surface composes the kanban vocabulary.
+import {
+  STATUS_ORDER,
+  STATUS_LABEL,
+  PRIORITY_LABEL,
+  TYPE_LABEL,
+  RAIL_MARK_COLOR,
+  DONE_WINDOW_MS,
+  DONE_WINDOW_LABEL,
+  DONE_WINDOW_ORDER,
+} from "/scripts/pages/cases/labels.js";
 
 export default function cases(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "cases", session });
