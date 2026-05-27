@@ -264,6 +264,63 @@ export default function home(app, { session: _session }) {
       // right table (project_memberships vs company_memberships).
       itemNoun: "membership",
       itemNounPlural: "memberships",
+      // First consumer of the generic create-modal's select +
+      // entity-picker field types — scope flips both the scope_id
+      // picker endpoint and the role options. POST /api/admin/memberships
+      // landed in 1fc0a63; the scope/role allow-lists below mirror the
+      // backend's PROJECT_ROLES / COMPANY_ROLES + the SQL CHECK.
+      createSpec: {
+        kind:     "modal",
+        label:    "New membership",
+        icon:     "bi-person-plus-fill",
+        endpoint: "/admin/memberships",
+        title:    "New membership",
+        fields: [
+          { key: "scope", label: "Scope", type: "select",
+            options: [
+              { value: "project", label: "Project" },
+              { value: "company", label: "Company" },
+            ],
+            default: "project",
+          },
+          { key: "scope_id", label: "Project / company", type: "entity-picker",
+            required: true,
+            placeholder: "Search by name…",
+            dependsOn: ["scope"],
+            endpointFn: (s) => s.scope === "company" ? "/admin/companies" : "/projects",
+            labelKey: "name",
+            ridKey:   "redpash_id",
+          },
+          { key: "user_id", label: "User", type: "entity-picker",
+            required: true,
+            placeholder: "Search by name, handle, email…",
+            endpoint: "/admin/users",
+            labelKey: "display_name",
+            subKey:   "username",
+            ridKey:   "redpash_id",
+          },
+          { key: "role", label: "Role", type: "select",
+            dependsOn: ["scope"],
+            optionsFn: (s) => s.scope === "company"
+              ? [
+                  { value: "member", label: "Member" },
+                  { value: "admin",  label: "Admin"  },
+                  { value: "owner",  label: "Owner"  },
+                ]
+              : [
+                  { value: "viewer",       label: "Viewer"       },
+                  { value: "collaborator", label: "Collaborator" },
+                  { value: "owner",        label: "Owner"        },
+                ],
+            // Default mirrors the migration column-default per scope
+            // (project=viewer, company=member). selectHTML falls back
+            // to the first option when default doesn't match — for
+            // memberships the first option IS the per-scope default,
+            // so the fall-back happens to be correct.
+            default: "viewer",
+          },
+        ],
+      },
       modes: { select: true, delete: true },
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // The endpoint takes ?scope=project|company; flip via the chip row.
@@ -920,32 +977,221 @@ export default function home(app, { session: _session }) {
     if (spec.kind === "modal") openCreateModal(spec);
   });
 
-  function fieldHTML(f) {
-    const id    = "rp-home-create-f-" + f.key;
+  // Field types supported by the generic create-modal:
+  //   text / email (default)   simple <input>
+  //   textarea                  multi-line <textarea>
+  //   select                    <select> with options[] or optionsFn(state).
+  //                             options items can be {value, label} or a
+  //                             plain string (used as both).
+  //   entity-picker             search-as-you-type pulling from an endpoint
+  //                             (fixed `endpoint` or `endpointFn(state)`).
+  //                             Result rows render via labelKey + optional
+  //                             subKey; on pick the rid (ridKey) lands in
+  //                             a hidden input name=<key> so the form
+  //                             submit reads it like any other field.
+  //
+  // Field dependencies: any field can declare `dependsOn: [keys]` —
+  // when a listed field changes, the dependent field is re-rendered in
+  // place (preserving the rest of the form state). select.optionsFn
+  // and entity-picker.endpointFn receive the current form state, so a
+  // role's options can switch by scope, or a picker's endpoint by scope.
+
+  const PICKER_ID = (key) => "rp-home-create-pick-" + key;
+  const FIELD_ID  = (key) => "rp-home-create-f-"    + key;
+
+  function readFormState() {
+    const state = {};
+    if (!createFields) return state;
+    createFields.querySelectorAll("[data-field-key]").forEach((wrap) => {
+      const key = wrap.dataset.fieldKey;
+      const valEl = wrap.querySelector('[name="' + cssEsc(key) + '"]');
+      state[key] = (valEl?.value || "").trim();
+    });
+    return state;
+  }
+
+  function normalizeOptions(opts) {
+    return (opts || []).map((o) =>
+      typeof o === "string" ? { value: o, label: o } : o
+    );
+  }
+
+  function selectHTML(f, state, idAttr) {
+    const opts = normalizeOptions(typeof f.optionsFn === "function" ? f.optionsFn(state) : f.options);
+    const def  = f.default || (opts[0] && opts[0].value) || "";
+    return '<select class="rp-cases-modal-input" id="' + idAttr + '" name="' + esc(f.key) + '">'
+      + opts.map((o) =>
+          '<option value="' + esc(o.value) + '"' + (o.value === def ? ' selected' : '') + '>'
+          + esc(o.label) + '</option>'
+        ).join("")
+      + '</select>';
+  }
+
+  function entityPickerHTML(f, idAttr) {
+    // Reuses the .rp-user-picker atom (user-picker.css) — generic by
+    // design, the comment in that file invites non-user callers. The
+    // hidden input carries the picked rid for the submit; the text
+    // input drives the search. A small "x" clear chip resets both.
+    return ''
+      + '<div class="rp-user-picker">'
+      +   '<input type="hidden" name="' + esc(f.key) + '" />'
+      +   '<div class="rp-user-picker-wrap">'
+      +     '<input id="' + idAttr + '" type="text" autocomplete="off" '
+      +       'placeholder="' + esc(f.placeholder || "Search…") + '" '
+      +       'data-picker-search="1" />'
+      +     '<div class="rp-user-picker-results" id="' + PICKER_ID(f.key) + '" hidden></div>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  function inputHTML(f, idAttr) {
     const req   = f.required ? " required" : "";
     const ac    = f.autocomplete ? ' autocomplete="' + esc(f.autocomplete) + '"' : "";
     const ph    = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : "";
     const type  = f.type || "text";
-    const ctrl  = type === "textarea"
-      ? '<textarea class="rp-cases-modal-textarea" id="' + id + '" name="' + esc(f.key) + '" rows="5"' + req + ph + '></textarea>'
-      : '<input class="rp-cases-modal-input" id="' + id + '" name="' + esc(f.key) + '" type="' + esc(type) + '"' + req + ac + ph + ' />';
+    if (type === "textarea") {
+      return '<textarea class="rp-cases-modal-textarea" id="' + idAttr + '" '
+        + 'name="' + esc(f.key) + '" rows="5"' + req + ph + '></textarea>';
+    }
+    return '<input class="rp-cases-modal-input" id="' + idAttr + '" '
+      + 'name="' + esc(f.key) + '" type="' + esc(type) + '"' + req + ac + ph + ' />';
+  }
+
+  function fieldHTML(f, state) {
+    const idAttr = FIELD_ID(f.key);
+    let ctrl;
+    if (f.type === "select") {
+      ctrl = selectHTML(f, state, idAttr);
+    } else if (f.type === "entity-picker") {
+      ctrl = entityPickerHTML(f, idAttr);
+    } else {
+      ctrl = inputHTML(f, idAttr);
+    }
     return ''
-      + '<div class="rp-cases-modal-field">'
-      +   '<label class="rp-cases-modal-label" for="' + id + '">' + esc(f.label) + '</label>'
+      + '<div class="rp-cases-modal-field" data-field-key="' + esc(f.key) + '">'
+      +   '<label class="rp-cases-modal-label" for="' + idAttr + '">' + esc(f.label) + '</label>'
       +   ctrl
       + '</div>';
+  }
+
+  // Re-render one field in place — used when a dependency changes
+  // (a select.optionsFn or picker.endpointFn that closes over the
+  // changed key). Re-mounts the field's own JS handlers afterwards.
+  function rerenderField(spec, key) {
+    if (!createFields) return;
+    const wrap = createFields.querySelector('[data-field-key="' + cssEsc(key) + '"]');
+    const f = (spec.fields || []).find((x) => x.key === key);
+    if (!wrap || !f) return;
+    const state = readFormState();
+    wrap.outerHTML = fieldHTML(f, state);
+    mountField(spec, f);
+  }
+
+  // Wire the per-field JS handlers — change-cascade for dependencies,
+  // picker search/result-click for entity-pickers. Idempotent so a
+  // re-render can call it again safely.
+  let pickerTimer = null;
+  function mountField(spec, f) {
+    if (!createFields) return;
+    const wrap = createFields.querySelector('[data-field-key="' + cssEsc(f.key) + '"]');
+    if (!wrap) return;
+
+    // Change-cascade: any field whose dependsOn list contains f.key
+    // re-renders when this field changes.
+    const valEl = wrap.querySelector('[name="' + cssEsc(f.key) + '"]');
+    if (f.type === "select") {
+      valEl?.addEventListener("change", () => {
+        (spec.fields || []).forEach((dep) => {
+          if (Array.isArray(dep.dependsOn) && dep.dependsOn.includes(f.key)) {
+            rerenderField(spec, dep.key);
+          }
+        });
+      });
+    }
+
+    if (f.type !== "entity-picker") return;
+
+    // Picker: debounced search → endpoint → render results. Result
+    // click sets the hidden rid + displays the picked label in the
+    // search input, then closes the dropdown. Outside-click also
+    // closes; first-result Enter picks.
+    const searchEl  = wrap.querySelector("[data-picker-search]");
+    const resultsEl = wrap.querySelector(".rp-user-picker-results");
+    const hiddenEl  = wrap.querySelector('input[type="hidden"]');
+    if (!searchEl || !resultsEl || !hiddenEl) return;
+
+    const labelKey = f.labelKey || "name";
+    const subKey   = f.subKey;
+    const ridKey   = f.ridKey   || "redpash_id";
+    const searchKey = f.searchKey || "q";
+
+    async function runSearch(q) {
+      const state    = readFormState();
+      const endpoint = typeof f.endpointFn === "function"
+        ? f.endpointFn(state)
+        : f.endpoint;
+      if (!endpoint) { resultsEl.hidden = true; return; }
+      try {
+        const data = await api.get(endpoint + "?" + searchKey + "=" + encodeURIComponent(q) + "&size=10");
+        const rows = data?.items || data?.rows || [];
+        if (!rows.length) {
+          resultsEl.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
+        } else {
+          resultsEl.innerHTML = rows.map((r) => {
+            const label = r[labelKey] || r[ridKey] || "—";
+            const sub   = subKey ? (r[subKey] || "") : "";
+            return '<div class="rp-user-picker-result" '
+              + 'data-rid="'   + esc(r[ridKey] || "") + '" '
+              + 'data-label="' + esc(label) + '">'
+              +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
+              +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
+              + '</div>';
+          }).join("");
+        }
+        resultsEl.hidden = false;
+      } catch (err) {
+        resultsEl.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
+          + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
+        resultsEl.hidden = false;
+      }
+    }
+    searchEl.addEventListener("input", () => {
+      const q = searchEl.value.trim();
+      clearTimeout(pickerTimer);
+      // Clearing the search input also clears the picked rid so a
+      // form re-submission without a re-pick fails validation.
+      hiddenEl.value = "";
+      if (!q) { resultsEl.hidden = true; resultsEl.innerHTML = ""; return; }
+      pickerTimer = setTimeout(() => runSearch(q), 200);
+    });
+    resultsEl.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-rid]");
+      if (!item) return;
+      hiddenEl.value = item.dataset.rid;
+      searchEl.value = item.dataset.label;
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = "";
+    });
   }
 
   function openCreateModal(spec) {
     if (!createModal || !spec) return;
     if (createTitle) createTitle.textContent = spec.title || spec.label || "Create";
-    if (createFields) createFields.innerHTML = (spec.fields || []).map(fieldHTML).join("");
+    if (createFields) {
+      const initState = {};
+      // Seed initial state from each field's default so optionsFn /
+      // endpointFn see something coherent on first render.
+      (spec.fields || []).forEach((f) => {
+        if (f.default !== undefined) initState[f.key] = f.default;
+      });
+      createFields.innerHTML = (spec.fields || []).map((f) => fieldHTML(f, initState)).join("");
+      (spec.fields || []).forEach((f) => mountField(spec, f));
+    }
     if (createError) { createError.hidden = true; createError.textContent = ""; }
     if (createSubmit) createSubmit.disabled = false;
-    createForm?.reset();
     createModal.hidden = false;
-    // Focus first required field for keyboard-first flow.
-    const first = createFields?.querySelector("input, textarea");
+    // Focus first interactive field for keyboard-first flow.
+    const first = createFields?.querySelector("input, textarea, select");
     setTimeout(() => first?.focus(), 0);
   }
   function closeCreateModal() {
@@ -963,6 +1209,17 @@ export default function home(app, { session: _session }) {
     if (e.key === "Escape" && createModal && !createModal.hidden) {
       closeCreateModal();
     }
+  });
+  // Outside-click closes any open entity-picker dropdowns inside the
+  // modal. Scoped via target.closest so a click inside the search
+  // input or a result row doesn't trigger the close.
+  document.addEventListener("click", (e) => {
+    if (!createModal || createModal.hidden) return;
+    if (e.target.closest(".rp-user-picker")) return;
+    createFields?.querySelectorAll(".rp-user-picker-results").forEach((r) => {
+      r.hidden = true;
+      r.innerHTML = "";
+    });
   });
 
   createForm?.addEventListener("submit", async (e) => {
