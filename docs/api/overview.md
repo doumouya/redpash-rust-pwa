@@ -31,6 +31,7 @@ request/response detail.
 | [Reports](reports.md)      | `/api/reports/*`         | CRUD + live preview / run; the polymorphic source resolver. |
 | [Dashboards](dashboards.md)| `/api/dashboards/*`      | Dashboard CRUD; widgets fetch data through `/api/reports`. |
 | [Users](users.md)          | `/api/users/*`           | User directory + dev-permissive CRUD (powers Objects' Users tab + owner-reassign picker). |
+| Docs (no per-page doc)     | `/api/docs/*`            | Public — serves the markdown tree under `docs/` as an index (`GET /api/docs`) + rendered HTML per slug (`GET /api/docs/:slug`). Drives the in-app docs viewer at `#/docs`. |
 
 ---
 
@@ -123,11 +124,3 @@ bounded.
 
 ---
 
-## What's not here
-
-- **`/api/docs`** — the frontend's docs viewer calls `/api/docs` and
-  `/api/docs/:slug`, but the backend route isn't wired yet. Today the
-  docs page falls back to serving static markdown via `ServeDir`; the
-  rendered-HTML endpoint is planned (the `data::render::doc` helper +
-  `pulldown-cmark` + `syntect` + `gray_matter` deps are already in
-  place, just not mounted).
