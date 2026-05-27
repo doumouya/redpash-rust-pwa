@@ -18,73 +18,13 @@
 
 import { api } from "/scripts/api.js";
 import { esc } from "/scripts/dom.js";
-
-// ─── field-type renderers ────────────────────────────────────────────
-// Each renderer returns { html, read(rootEl) }. Read returns the typed
-// value for that field; toParams composes them into the step params.
-
-const FIELDS = {
-  column: ({ key, label, columns }) => ({
-    html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<select class="rt-pred-col" data-key="' + esc(key) + '">'
-      +   columns.map((c) =>
-            '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join("")
-      + '</select>'
-      + '</div>',
-    read: (root) => root.querySelector('[data-key="' + key + '"]').value,
-  }),
-
-  enum: ({ key, label, options }) => ({
-    html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<select class="rt-pred-op" data-key="' + esc(key) + '">'
-      +   options.map(([v, l]) =>
-            '<option value="' + esc(v) + '">' + esc(l) + '</option>').join("")
-      + '</select>'
-      + '</div>',
-    read: (root) => root.querySelector('[data-key="' + key + '"]').value,
-  }),
-
-  text: ({ key, label, placeholder }) => ({
-    html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<input class="rt-pred-val" data-key="' + esc(key) + '"'
-      + (placeholder ? ' placeholder="' + esc(placeholder) + '"' : '') + ' />'
-      + '</div>',
-    read: (root) => root.querySelector('[data-key="' + key + '"]').value.trim(),
-  }),
-
-  boolean: ({ key, label }) => ({
-    html:
-      '<div class="rt-pred rt-pred--inline">'
-      + '<label class="rt-pred-lbl">'
-      +   '<input type="checkbox" class="rt-chk" data-key="' + esc(key) + '" /> ' + esc(label)
-      + '</label>'
-      + '</div>',
-    read: (root) => root.querySelector('[data-key="' + key + '"]').checked,
-  }),
-
-  // Multi-column: a vertical list of checkboxes, one per active column.
-  // Returns the array of checked column names (or [] if none).
-  multicolumn: ({ key, label, columns }) => ({
-    html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<div class="rt-pred-multi" data-key="' + esc(key) + '">'
-      +   columns.map((c) =>
-            '<label class="rt-dd-item"><input type="checkbox" class="rt-chk" value="'
-              + esc(c.name) + '" /> ' + esc(c.name) + '</label>').join("")
-      + '</div>'
-      + '</div>',
-    read: (root) => Array.from(
-      root.querySelectorAll('[data-key="' + key + '"] input:checked')
-    ).map((el) => el.value),
-  }),
-};
+// First slice of the tools.js decomposition (god-object campaign,
+// Em 2026-05-27 — Internal-Slack/broadcast.md 00:53). FIELDS is the
+// 5-renderer dispatch object consumed at this file's sheet-renderer
+// (~line 558 in the pre-slice file; ~line 498 post-slice). Module-
+// private — no external surface change. Promote `tools/fields.js`
+// to a re-export if a future page composes the same field family.
+import { FIELDS } from "/scripts/tools/fields.js";
 
 // ─── factory + the 12-tool catalog ───────────────────────────────────
 // Order matters — it's the order shown in the picker.
