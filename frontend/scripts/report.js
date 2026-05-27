@@ -116,12 +116,12 @@ export function mountReport(panelBody, ctx) {
     const measureRows = aggregations.map((a, i) => {
       // Reorder: [fn ▾] of [col ▾] [alias?] [×] — reads as English
       // "Sum of price" / "Mean of age" instead of "price sum".
-      const fnSelect = '<select class="rt-pred-op rt-report-fn" data-key="fn">'
+      const fnSelect = '<select class="rt-pred-op" data-key="fn">'
         + AGG_FNS.map(([v, l]) =>
             '<option value="' + esc(v) + '"'
             + (v === a.fn ? ' selected' : '') + '>' + esc(l) + '</option>').join('')
         + '</select>';
-      const colSelect = '<select class="rt-pred-col rt-report-col" data-key="col">'
+      const colSelect = '<select class="rt-pred-col" data-key="col">'
         + cols.map((c) =>
             '<option value="' + esc(c.name) + '"'
             + (c.name === a.col ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('')
@@ -136,13 +136,21 @@ export function mountReport(panelBody, ctx) {
       // DOM order matches the visual order — alias comes last (after
       // the delete button) so screen readers + keyboard nav move
       // through the row before stepping down to the rename.
-      return '<div class="rt-report-measure rt-report-agg" data-i="' + i + '">'
+      // Carries `.rt-pred` so the canonical row chrome (border /
+      // padding / radius / sub-field bordered form treatment) flows in
+      // from the filter panel's shared atom set. `.rt-report-measure`
+      // stays on the element as the layout-modifier (4-track row 1 +
+      // full-width alias row 2) and as the JS selector handlers
+      // target. `.rt-report-agg` is the legacy alias for change-event
+      // delegation. See docs/internal/processes/replicable-feature-
+      // pattern.md — same UI concept = one canonical class set.
+      return '<div class="rt-pred rt-report-measure rt-report-agg" data-i="' + i + '">'
         + fnSelect
         + '<span class="rt-report-measure-of">of</span>'
         + colSelect
         + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
         + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
-        + '<input class="rt-pred-val rt-report-alias" data-key="alias" type="text"'
+        + '<input class="rt-pred-val" data-key="alias" type="text"'
         + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
         + '</div>';
     }).join('');

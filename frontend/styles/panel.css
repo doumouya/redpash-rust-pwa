@@ -930,64 +930,43 @@
 
 /* Single measure row — [fn ▾] of [col ▾] [rename] [×]. Reads
    left-to-right as "Sum of price". */
-/* Two-row grid:
+/* Layout-modifier on top of the canonical .rt-pred row chrome (which
+   already provides border / padding / radius / gap / margin-bottom +
+   bordered form-field treatment on its child selects + inputs via
+   `.rt-pred select` / `.rt-pred input`). The HTML carries `.rt-pred
+   .rt-report-measure` — the modifier here only overrides the grid
+   layout to fit the measure-row shape:
      Row 1 — [fn ▾]  of  [col ▾]  [×]  — `1fr auto 1fr auto`, so the
               two selects share the available width 50/50 and "of"
               + the delete button stay sized to content.
-     Row 2 — [alias input....................................] spanning
-              all 4 columns via `grid-column: 1 / -1`.
-     `width: 100%` claims the full parent track (the .rt-report-q-
-     measures flex container is `display: flex; flex-wrap: wrap`, so
-     measure rows stack vertically when more than one). */
+     Row 2 — [alias input....................................] spans
+              all 4 columns via `grid-column: 1 / -1` on .rt-pred-val.
+   `width: 100%` claims the full parent flex track (the .rt-report-q-
+   measures flex container is `display: flex; flex-wrap: wrap`, so
+   measure rows stack vertically when more than one). */
 .rt-report-measure {
   width: 100%;
-  display: grid;
   grid-template-columns: 1fr auto 1fr auto;
   align-items: center;
-  gap: 0.25rem 0.375rem;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.4375rem;
-  padding: 0.1875rem 0.25rem 0.1875rem 0.375rem;
 }
-.rt-report-measure .rt-report-alias {
+/* Alias input spans both rows of the measure-row grid (the row 2
+   continuation). Targets the canonical .rt-pred-val since the
+   measure-row html dropped its parallel `.rt-report-alias` class
+   as part of the cross-panel atom unification (2026-05-27). */
+.rt-report-measure .rt-pred-val {
   grid-column: 1 / -1;
-}
-.rt-report-measure .rt-report-fn,
-.rt-report-measure .rt-report-col {
-  width: 100%;
-  min-width: 0;   /* grid 1fr can't shrink below intrinsic without this */
 }
 .rt-report-measure-of {
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
   padding: 0 0.125rem;
 }
-.rt-report-fn,
-.rt-report-col {
-  height: 1.625rem;
-  padding: 0 0.375rem;
-  border: 0;
-  background: transparent;
-  color: var(--rp-text);
-  font-size: 0.75rem;
-  cursor: pointer;
-  outline: 0;
-}
-.rt-report-fn:focus,
-.rt-report-col:focus { background: var(--rp-hover); border-radius: 0.25rem; }
-.rt-report-alias {
-  height: 1.625rem;
-  padding: 0 0.5rem;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.25rem;
-  color: var(--rp-text);
-  font-size: 0.6875rem;
-  width: 6rem;
-  outline: 0;
-}
-.rt-report-alias:focus { border-color: var(--rp-accent-2); }
+/* `.rt-report-fn` / `.rt-report-col` / `.rt-report-alias` rules
+   retired 2026-05-27 — the .rt-pred select / .rt-pred input rules at
+   the top of this file now cover both panels' form-field treatment
+   (border + surface bg + standard padding + height). The classes
+   are gone from the HTML too; if a third panel needs the inline-
+   text variant later, ship it as a .rt-pred--variant modifier. */
 
 /* Advanced disclosure — native <details> wrapping pivot / windows /
    top-N / show toggles. Custom summary chrome (caret + label +
