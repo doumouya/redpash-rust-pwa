@@ -13,6 +13,13 @@ import {
   entriesSince,
   appendEntry,
 } from "./slack.js";
+import {
+  CaseApiError,
+  createCase,
+  getCase,
+  listCases,
+  addComment,
+} from "./cases.js";
 
 // ── resources ───────────────────────────────────────────────────────────
 
@@ -101,6 +108,75 @@ const ReadSinceArgsZ = z.object({
     ),
 });
 
+// ── case tool schemas ───────────────────────────────────────────────
+// Thin shells around /api/cases — the backend owns validation,
+// invariants, and audit-event emission; these schemas only enforce
+// shape at the MCP boundary so a malformed argument fails before the
+// HTTP roundtrip.
+
+const CaseCreateArgsZ = z.object({
+  title: z.string().min(1).describe("Case title. Required, non-empty."),
+  description: z
+    .string()
+    .optional()
+    .describe("Optional markdown description / context. Plain text in v1."),
+  type: z
+    .enum(["bug", "feature", "task", "epic"])
+    .optional()
+    .describe("Defaults to 'task' on the backend if omitted."),
+  priority: z
+    .enum(["low", "medium", "high", "critical"])
+    .optional()
+    .describe("Defaults to 'medium' on the backend if omitted."),
+  assignee_id: z.string().optional().describe("USR_<rid> of the assignee."),
+  project_id: z.string().optional().describe("PRJ_<rid> for project-scoped cases."),
+  company_id: z.string().optional().describe("CMP_<rid> for company-scoped cases."),
+});
+
+const CaseGetArgsZ = z.object({
+  rid: z.string().describe("CAS_<rid> of the case to read."),
+});
+
+const CaseListArgsZ = z.object({
+  status: z
+    .string()
+    .optional()
+    .describe("Filter by status (backlog / todo / in_progress / in_review / done)."),
+  assignee: z
+    .string()
+    .optional()
+    .describe("USR_<rid> filter. Pass the caller's own RID for a 'my assigned' view."),
+  project: z.string().optional().describe("PRJ_<rid> filter."),
+  q: z.string().optional().describe("Free-text search across title + description."),
+  page: z.number().int().min(1).optional(),
+  size: z.number().int().min(1).max(500).optional(),
+});
+
+const CaseCommentArgsZ = z.object({
+  rid: z.string().describe("CAS_<rid> of the case to comment on."),
+  body: z.string().min(1).describe("Comment body. Plain text in v1; markdown render is v2 polish."),
+});
+
+// Common error mapping for case-tool branches — keep the response
+// shape consistent so the calling agent sees the same HTTP-mapped
+// text regardless of which tool tripped the error.
+function caseErrorContent(err: unknown) {
+  if (err instanceof CaseApiError) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text:
+            `Case API error (HTTP ${err.status}): ${err.message}` +
+            (err.body ? `\n\n${JSON.stringify(err.body, null, 2)}` : ""),
+        },
+      ],
+      isError: true,
+    };
+  }
+  throw err;
+}
+
 export async function listTools() {
   return {
     tools: [
@@ -138,6 +214,74 @@ export async function listTools() {
           required: ["agent"],
         },
       },
+      {
+        name: "case_create",
+        description:
+          "File a new RedPash case. Returns the created Case row including its " +
+            "CAS_<rid>. title is required; type defaults to 'task', priority to " +
+            "'medium', status to 'backlog' on the server. Use this when a piece of " +
+            "work spans multiple back-and-forths or needs cross-agent visibility — " +
+            "quick lookups stay on the slack channel.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title:        { type: "string" },
+            description:  { type: "string" },
+            type:         { type: "string", enum: ["bug", "feature", "task", "epic"] },
+            priority:     { type: "string", enum: ["low", "medium", "high", "critical"] },
+            assignee_id:  { type: "string" },
+            project_id:   { type: "string" },
+            company_id:   { type: "string" },
+          },
+          required: ["title"],
+        },
+      },
+      {
+        name: "case_get",
+        description:
+          "Fetch a single case by CAS_<rid>. Returns the full CaseDetail shape — " +
+            "the case row plus its comments thread and activity-feed events. Use " +
+            "this when picking up assigned work to see prior context.",
+        inputSchema: {
+          type: "object",
+          properties: { rid: { type: "string" } },
+          required: ["rid"],
+        },
+      },
+      {
+        name: "case_list",
+        description:
+          "List cases with optional filters. Pass `assignee` = your own USR_<rid> " +
+            "for a 'my assigned' view; `status` for kanban-column slices; `q` for " +
+            "free-text search. Returns { items, total, page, size }.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            status:   { type: "string" },
+            assignee: { type: "string" },
+            project:  { type: "string" },
+            q:        { type: "string" },
+            page:     { type: "number" },
+            size:     { type: "number" },
+          },
+        },
+      },
+      {
+        name: "case_comment",
+        description:
+          "Append a comment to an existing case. Comments are the agent-to-agent " +
+            "thread surface — the replacement for cross-channel slack pings now " +
+            "that Cases is live. Plain text body in v1; markdown render comes with " +
+            "v2 polish.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            rid:  { type: "string" },
+            body: { type: "string" },
+          },
+          required: ["rid", "body"],
+        },
+      },
     ],
   };
 }
@@ -170,6 +314,65 @@ export async function callTool(name: string, args: unknown) {
         },
       ],
     };
+  }
+  if (name === "case_create") {
+    const parsed = CaseCreateArgsZ.parse(args);
+    try {
+      const created = await createCase(parsed);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `Created case ${created.redpash_id ?? "(unknown rid)"}: ${created.title ?? parsed.title}\n\n` +
+              JSON.stringify(created, null, 2),
+          },
+        ],
+      };
+    } catch (err) { return caseErrorContent(err); }
+  }
+  if (name === "case_get") {
+    const parsed = CaseGetArgsZ.parse(args);
+    try {
+      const detail = await getCase(parsed.rid);
+      return {
+        content: [
+          { type: "text" as const, text: JSON.stringify(detail, null, 2) },
+        ],
+      };
+    } catch (err) { return caseErrorContent(err); }
+  }
+  if (name === "case_list") {
+    const parsed = CaseListArgsZ.parse(args);
+    try {
+      const result = await listCases(parsed);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `Found ${result.total} case(s); showing page ${result.page} (size ${result.size}):\n\n` +
+              JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (err) { return caseErrorContent(err); }
+  }
+  if (name === "case_comment") {
+    const parsed = CaseCommentArgsZ.parse(args);
+    try {
+      const comment = await addComment(parsed);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `Appended comment to ${parsed.rid}:\n\n` +
+              JSON.stringify(comment, null, 2),
+          },
+        ],
+      };
+    } catch (err) { return caseErrorContent(err); }
   }
   throw new Error(`unknown tool: ${name}`);
 }
