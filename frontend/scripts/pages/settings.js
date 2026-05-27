@@ -186,38 +186,92 @@ function render(app) {
   }
 }
 
-// Sticky-rail navigation for the 2-column settings layout. Reuses
-// the workspace rail's .rt-nav + .rt-tab atom set; the `active`
-// class is the canonical state marker (same naming as workspace
-// file tabs). Two behaviors:
-// (1) Click a rail item → native anchor jump scrolls the main
-//     column to that section; we also flip .active to the clicked
-//     item so the visual state matches the click without waiting
-//     for the observer.
-// (2) IntersectionObserver watches each section card; whichever
-//     one's top crosses the upper observation band wins .active.
-//     Keeps the rail synced as the user scrolls manually.
+// Rail data — section index, grouped to match the canonical
+// home / monitoring rail (rt-group with two-letter color marks +
+// rt-tab children). The settings rail's tabs are anchor links, not
+// view-switchers — click jumps to the section inside the scrolling
+// surface; the IntersectionObserver below keeps the active item in
+// sync as the user scrolls manually.
+const SET_GROUPS = [
+  { name: "UI",      mark: "UI", color: "blue"  },
+  { name: "DATA",    mark: "DA", color: "teal"  },
+  { name: "CHARTS",  mark: "CH", color: "peach" },
+  { name: "ACCOUNT", mark: "AC", color: "mauve" },
+];
+const SET_TABS = [
+  { group: "UI",      key: "set-appearance",        label: "Appearance",        icon: "bi-palette"         },
+  { group: "UI",      key: "set-tables",            label: "Tables",            icon: "bi-table"           },
+  { group: "UI",      key: "set-workspace",         label: "Workspace",         icon: "bi-grid-3x3"        },
+  { group: "DATA",    key: "set-data",              label: "Data & Export",     icon: "bi-database"        },
+  { group: "DATA",    key: "set-cleaner",           label: "Cleaner",           icon: "bi-tools"           },
+  { group: "CHARTS",  key: "set-monitoring-charts", label: "Monitoring charts", icon: "bi-bar-chart-line"  },
+  { group: "CHARTS",  key: "set-home-charts",       label: "Home charts",       icon: "bi-bar-chart-fill"  },
+  { group: "ACCOUNT", key: "set-account",           label: "Account",           icon: "bi-person-circle"   },
+  { group: "ACCOUNT", key: "set-about",             label: "About",             icon: "bi-info-circle"     },
+];
+
+// Standard rail population — mirrors monitoring.js / home.js
+// renderGroup + renderTab. The settings rail is anchor-driven (each
+// rt-tab is an <a href="#set-…">) so the scroll-spy can flip .active
+// as the user scrolls; rail clicks just nudge the browser's anchor
+// jump + flip .active eagerly so the visual state matches the click.
 function mountSettingsRail(app) {
-  const items = Array.from(app.querySelectorAll(".rp-settings__nav .rt-tab"));
-  if (!items.length) return;
+  const nav     = app.querySelector("#rpSetNav");
+  const body    = app.querySelector("#rpSetNavBody");
+  const surface = app.querySelector("#rpSetView");
+  if (!nav || !body || !surface) return;
 
-  const activate = (rid) => {
-    items.forEach((el) => el.classList.toggle("active", el.getAttribute("href") === "#" + rid));
-  };
+  // ── render grouped rail ────────────────────────────────────
+  body.innerHTML = SET_GROUPS.map((g) => {
+    const tabs = SET_TABS.filter((t) => t.group === g.name);
+    if (!tabs.length) return "";
+    const items = tabs.map((t) =>
+      '<a class="rt-tab" data-key="' + esc(t.key) + '" href="#' + esc(t.key) + '">'
+      +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
+      +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
+      + '</a>').join("");
+    return ''
+      + '<div class="rt-group expanded">'
+      +   '<button class="rt-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
+      +     '<span class="rt-group-mark" data-c="' + esc(g.color) + '">' + esc(g.mark) + '</span>'
+      +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
+      +     '<span class="rt-group-count">' + tabs.length + '</span>'
+      +   '</button>'
+      +   '<div class="rt-group-body">' + items + '</div>'
+      + '</div>';
+  }).join("");
 
-  items.forEach((el) => {
-    el.addEventListener("click", () => {
-      const rid = el.getAttribute("href")?.slice(1);
-      if (rid) activate(rid);
-    });
+  const items = Array.from(body.querySelectorAll(".rt-tab"));
+
+  // ── collapse button + group-head toggle ───────────────────
+  app.querySelector("#rpSetNavCollapse")?.addEventListener("click", (e) => {
+    nav.classList.toggle("compact");
+    const ic = e.currentTarget.querySelector("i");
+    if (ic) ic.className = nav.classList.contains("compact")
+      ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
+  });
+  body.addEventListener("click", (e) => {
+    const head = e.target.closest(".rt-group-head");
+    if (head) { head.parentElement.classList.toggle("expanded"); return; }
+    const tab = e.target.closest(".rt-tab");
+    if (tab) activate(tab.dataset.key);
   });
 
-  // Section observer — `rootMargin: -20% 0% -75% 0%` shrinks the
-  // observation zone to a band near the top of the viewport, so the
-  // active item flips when a section's heading crosses that band
-  // (not when its bottom leaves the screen).
+  function activate(rid) {
+    items.forEach((el) => el.classList.toggle("active", el.dataset.key === rid));
+  }
+  // Initial active = first wired tab.
+  activate(SET_TABS[0].key);
+
+  // ── scroll-spy ────────────────────────────────────────────
+  // Sections live INSIDE the scrolling rt-surface (#rpSetView); the
+  // observer's `root` is that surface so scroll calculations track
+  // its scroll offset, not the document's. rootMargin shrinks the
+  // observation band to a strip near the top so the active flips
+  // when a section's heading crosses it.
   const sections = items
-    .map((el) => app.querySelector(el.getAttribute("href") || ""))
+    .map((el) => surface.querySelector("#" + el.dataset.key))
     .filter(Boolean);
   if (!sections.length || typeof IntersectionObserver !== "function") return;
 
@@ -225,7 +279,7 @@ function mountSettingsRail(app) {
     const hit = entries.filter((e) => e.isIntersecting)
       .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
     if (hit?.target?.id) activate(hit.target.id);
-  }, { rootMargin: "-20% 0% -75% 0%", threshold: 0 });
+  }, { root: surface, rootMargin: "-10% 0% -75% 0%", threshold: 0 });
 
   sections.forEach((sec) => obs.observe(sec));
 }

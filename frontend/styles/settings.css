@@ -2,7 +2,43 @@
    Page-specific styles for /settings only. Inherits the page shell
    (.rp-page + .rp-page__section + .rp-page__row) from page.css and
    .rt-btn from button.css. Owns the row hint, the sentinel chip
-   list, and the About brand row. */
+   list, the About brand row, and (2026-05-27) the 2-column
+   rail+main layout that lets the page scale as more setting groups
+   land. */
+
+/* ─── rail-page shell adaptation (2026-05-27) ──────────────────
+   Settings migrated to the standard `.rp-shell` rail layout used by
+   Home / Monitoring / Workspace / Cases — same `.rt-nav` rail
+   atom + `<main class="rt-main"><div class="rt-surface">` content
+   shell + the JS-populated grouped-tab rail body (rt-group +
+   rt-tab) from settings.js's mountSettingsRail. The rail visual
+   itself lives in rail.css; this file owns the surface treatment
+   and the section scroll-margin so the IntersectionObserver hits
+   each section's heading at the right band.
+
+   Em's framing 2026-05-27: "replace the nav in settings with the
+   same rail side-nav as in all the other page." */
+.rp-settings__surface {
+  /* rt-surface is the scrolling container; the IntersectionObserver
+     in mountSettingsRail uses it as its `root`. The default
+     rt-surface chrome (border + radius) reads great here, only the
+     interior padding needs to give the .rp-page__head + sections
+     room to breathe. */
+  padding: var(--rp-sp-5) var(--rp-sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-5);
+}
+.rp-settings__surface .rp-page__head {
+  margin-bottom: 0;
+}
+.rp-settings__surface .rp-page__section {
+  margin-top: 0;
+  /* Anchor jump lands the section's heading just below the surface
+     top so the rail's scroll-spy band finds it cleanly. */
+  scroll-margin-top: var(--rp-sp-3);
+}
+
 
 /* Secondary line under a row label — same vocabulary as
    profile.css's .rp-profile__hint; kept locally to avoid coupling
