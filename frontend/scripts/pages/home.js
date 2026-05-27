@@ -61,6 +61,113 @@ export default function home(app, { session: _session }) {
   const createSubmit   = app.querySelector("#rpHomeCreateSubmit");
   let   activeCreateSpec = null;
 
+  // ── hide / restore per Home tab — replicates the workspace 8d070eb
+  //    pattern per docs/internal/processes/replicable-feature-pattern.md.
+  //    Em's call 2026-05-28: per-tab recovery surface, like workspace.
+  //    Pref key namespace: home_hidden_<tabKey>. Each value is an array
+  //    of {rid, name, sub?} — pre-resolved labels so the recovery
+  //    surface renders with zero network.
+  const HOME_HIDDEN_KEY = (tabKey) => "home_hidden_" + tabKey;
+  function getHomeHidden(tabKey) {
+    const list = getPref(HOME_HIDDEN_KEY(tabKey));
+    return Array.isArray(list) ? list : [];
+  }
+  function hideHomeRow(tabKey, entry) {
+    const list = getHomeHidden(tabKey);
+    if (list.some((x) => x.rid === entry.rid)) return;
+    list.push(entry);
+    setPref(HOME_HIDDEN_KEY(tabKey), list);
+  }
+  function unhideHomeRow(tabKey, rid) {
+    setPref(HOME_HIDDEN_KEY(tabKey), getHomeHidden(tabKey).filter((x) => x.rid !== rid));
+  }
+  // Invariant 1: filter at render-time, never fetch-time. Server returns
+  // the full page; the hidden set is applied here before tbody-render
+  // so the same /admin/* endpoints stay shape-stable.
+  function applyHomeHiddenFilter(spec, tabKey, rows) {
+    if (!spec.hideMeta) return rows;
+    const hidden = new Set(getHomeHidden(tabKey).map((x) => x.rid));
+    if (!hidden.size) return rows;
+    return rows.filter((r) => !hidden.has(spec.hideMeta(r).rid));
+  }
+  function hideCellHTML(rid) {
+    return '<td class="rp-home-hide-cell">'
+      + '<span class="rt-tab-close rp-home-hide" data-hide-rid="' + esc(rid) + '" title="Hide from list">'
+      +   '<i class="bi bi-x"></i>'
+      + '</span>'
+      + '</td>';
+  }
+  function renderHomeHiddenSection(tabKey) {
+    const hidden = getHomeHidden(tabKey);
+    if (!hidden.length) return "";
+    const items = hidden.map((h) =>
+      '<button class="rt-hidden-item" type="button" data-rid="' + esc(h.rid) + '">'
+      +   '<span class="rt-hidden-name">' + esc(h.name || h.rid)
+      +     (h.sub ? ' <span class="rt-hidden-meta">· ' + esc(h.sub) + '</span>' : "")
+      +   '</span>'
+      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      + '</button>'
+    ).join("");
+    return '<details class="rt-hidden">'
+      +   '<summary class="rt-hidden-summary">'
+      +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
+      +   '</summary>'
+      +   '<div class="rt-hidden-body">' + items + '</div>'
+      + '</details>';
+  }
+  function paintHomeHiddenSection() {
+    const tabKey = view.dataset.activeTab || "";
+    const host = view.querySelector("#rp-home-hidden-host");
+    if (host) host.innerHTML = renderHomeHiddenSection(tabKey);
+  }
+
+  // Set by renderListBody to a closure capturing the active tab's
+  // spec + chipState. Hide × removes a row visually + writes the
+  // pref (no network). Restore drops from the pref and refetches so
+  // the row reappears in the table.
+  let refetchActiveList = null;
+
+  // Single delegator on the page surface — view is a stable element
+  // (view.innerHTML changes per renderListBody but the node persists),
+  // so this listener wires once at mount and stays valid across tab
+  // switches. Both branches end in `return` per Invariant 2 — don't
+  // let a hide click also fire a row action (select-mode checkbox,
+  // edit-mode focus) that lives in the same delegation tree.
+  view.addEventListener("click", (e) => {
+    const hideBtn = e.target.closest(".rp-home-hide");
+    if (hideBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tabKey = view.dataset.activeTab || "";
+      if (!tabKey) return;
+      hideHomeRow(tabKey, {
+        rid:  hideBtn.dataset.hideRid,
+        name: hideBtn.dataset.hideName,
+        sub:  hideBtn.dataset.hideSub,
+      });
+      // Visual remove — cheaper than refetch + matches the user's
+      // mental model (click × → row gone immediately).
+      hideBtn.closest("tr")?.remove();
+      paintHomeHiddenSection();
+      return;
+    }
+    const restoreItem = e.target.closest(".rt-hidden-item");
+    if (restoreItem?.dataset.rid) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tabKey = view.dataset.activeTab || "";
+      if (!tabKey) return;
+      unhideHomeRow(tabKey, restoreItem.dataset.rid);
+      // Refetch — restoring requires the row's data to reappear in
+      // the table, and the source of truth for that data is the
+      // server response. paintHomeHiddenSection is implicit since
+      // fetchList re-runs the full render path including the host.
+      paintHomeHiddenSection();
+      refetchActiveList?.();
+      return;
+    }
+  });
+
   // List-page bindings — partial-apply the view + the page-specific
   // ID prefixes once so call sites keep their original short-arg
   // signatures (setKpi(id, val), renderListPager(), listPanel(cols)).
@@ -92,6 +199,16 @@ export default function home(app, { session: _session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      // Hide/restore — per [[replicable-feature-pattern]]. Each tab's
+      // hideMeta(item) returns the {rid, name, sub?} captured into the
+      // home_hidden_<tabKey> pref when the user hits the × on a row.
+      // Defined per tab because the displayable fields differ across
+      // entity types. Tabs without hideMeta opt out of hide/restore.
+      hideMeta: (u) => ({
+        rid:  u.redpash_id,
+        name: u.display_name || u.username,
+        sub:  u.username ? "@" + u.username : "",
+      }),
       // createSpec drives the rail-foot "New <noun>" button + the generic
       // modal renderer. kind:"modal" posts a JSON body built from
       // fields[]; kind:"route" navigates to href. The label/icon shows
@@ -200,6 +317,11 @@ export default function home(app, { session: _session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      hideMeta: (c) => ({
+        rid:  c.redpash_id,
+        name: c.name,
+        sub:  c.slug ? c.slug : "",
+      }),
       createSpec: {
         kind:     "modal",
         label:    "New company",
@@ -272,6 +394,13 @@ export default function home(app, { session: _session }) {
     memberships: {
       title: "Memberships",
       endpoint: "/admin/memberships",
+      // Memberships use a synthetic compound rid (matches row()'s
+      // data-rid attr) since the table PK is composite.
+      hideMeta: (m) => ({
+        rid:  (m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""),
+        name: m.user_display_name || m.user_username || "—",
+        sub:  m.scope_name || m.scope || "",
+      }),
       // DELETE /api/admin/memberships/:rid — added 2026-05-25. The rid
       // is a synthetic compound: `{scope}:{scope_id}:{user_id}` since
       // membership rows have a composite PK. row() below constructs
@@ -402,6 +531,11 @@ export default function home(app, { session: _session }) {
     },
     cases: {
       title: "Cases",
+      hideMeta: (c) => ({
+        rid:  c.redpash_id,
+        name: c.title || "(untitled)",
+        sub:  c.status || "",
+      }),
       // /api/cases returns { items, total, page, size } (paginated
       // — see routes/cases.rs:list). fetchList's items-fallback
       // handles the shape; pagination + ?q= / ?status= / ?assignee=
@@ -523,6 +657,11 @@ export default function home(app, { session: _session }) {
     files: {
       title: "Files",
       endpoint: "/admin/files",
+      hideMeta: (f) => ({
+        rid:  f.redpash_id,
+        name: f.display_name || f.filename || "(untitled)",
+        sub:  f.project_name || "",
+      }),
       // DELETE goes to /api/files/:rid (the file ownership endpoint),
       // not /admin/files. Decoupled so the bulk-delete handler in
       // renderListBody can hit the right route. PATCH is the same
@@ -622,6 +761,11 @@ export default function home(app, { session: _session }) {
     charts: {
       title: "Charts",
       endpoint: "/admin/charts",
+      hideMeta: (c) => ({
+        rid:  c.redpash_id,
+        name: c.display_name || c.filename || "(untitled)",
+        sub:  c.project_name || "",
+      }),
       // DELETE goes to /api/charts/:rid (the chart-specific endpoint).
       // Charts are project_files under the hood; the canonical PATCH
       // for display_name is /api/files/:rid (the file ownership path),
@@ -700,6 +844,11 @@ export default function home(app, { session: _session }) {
     },
     projects: {
       title: "Projects",
+      hideMeta: (p) => ({
+        rid:  p.redpash_id,
+        name: p.name,
+        sub:  p.company_name || (p.is_default ? "default" : ""),
+      }),
       // DELETE + PATCH both go to /api/projects/:rid — same path as
       // the list endpoint so deleteEndpoint / patchEndpoint default
       // via spec.endpoint, no override needed. Name is editable.
@@ -1702,7 +1851,34 @@ export default function home(app, { session: _session }) {
           : kpiStripHTML(kpiTiles) + chartsStripHTML(extraCharts))
       + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
-      + '<div class="rt-pager" id="rp-home-list-pager"></div>';
+      + '<div class="rt-pager" id="rp-home-list-pager"></div>'
+      // Hide/restore recovery host — paintHomeHiddenSection fills this
+      // with a <details class="rt-hidden"> when getHomeHidden(tabKey)
+      // is non-empty, else stays empty. Same atom set workspace + cases
+      // use (rail.css .rt-hidden-* family). Per-tab list per Em's
+      // 2026-05-28 placement call (matches workspace's tail-of-rail).
+      + '<div class="rp-home-hidden-host" id="rp-home-hidden-host"></div>';
+
+    // Stash the active tab key on the view element so the hide ×
+    // delegator (wired once at home() init) can resolve which tab's
+    // pref to write. paintHomeHiddenSection also reads this.
+    view.dataset.activeTab = tab.key;
+    // Append a no-label hide-th to the thead when this tab declares
+    // hideMeta — keeps the column count aligned with the per-row
+    // hideCellHTML(...) injected at fetch-render time. Skipped when
+    // the tab opts out (no hideMeta).
+    if (spec.hideMeta) {
+      const headRow = view.querySelector(".rt-table thead tr");
+      if (headRow) headRow.insertAdjacentHTML(
+        "beforeend",
+        '<th class="rp-home-hide-th" aria-hidden="true"></th>',
+      );
+    }
+    // Refetch hook for the restore branch of the view-level delegator.
+    // Captures spec + chipState by closure so the hidden-recovery click
+    // can rerun the same fetch the activate path would.
+    refetchActiveList = () => fetchList(spec, chipState);
+    paintHomeHiddenSection();
 
     // Tear down any charts from a prior tab + mount this tab's
     // (if it declares any) against the /stats endpoint. Each tab's
@@ -2284,7 +2460,10 @@ export default function home(app, { session: _session }) {
     setKpi("rp-home-list-page",  String(listPage));
     setKpi("rp-home-list-ms",    "…");
     const tbody = view.querySelector("#rp-home-list-tbody");
-    const colCount = spec.columns.length;
+    // colCount bumps by 1 when hide-mode is on so the colspan in the
+    // Loading / No-rows / error states stays flush with the data rows
+    // (which gain a hideCellHTML at fetch-render time).
+    const colCount = spec.columns.length + (spec.hideMeta ? 1 : 0);
     if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '">Loading…</td></tr>';
 
     const params = new URLSearchParams();
@@ -2320,8 +2499,28 @@ export default function home(app, { session: _session }) {
       setKpi("rp-home-list-ms",    elapsed + "ms");
       view.querySelector(".rp-shell-head-count").textContent = total + " rows";
       if (tbody) {
-        tbody.innerHTML = rows.length
-          ? rows.map(spec.row).join("")
+        // Invariant 1: filter at render-time, not at fetch-time. The
+        // server returned the full page; the hidden set is applied
+        // here before tbody-render. The per-row hide × cell is
+        // injected just before the row's closing </tr> so spec.row()
+        // doesn't need to know about hide/restore.
+        const tabKey = view.dataset.activeTab || "";
+        const visible = applyHomeHiddenFilter(spec, tabKey, rows);
+        tbody.innerHTML = visible.length
+          ? visible.map((item) => {
+              const html = spec.row(item);
+              if (!spec.hideMeta) return html;
+              const meta = spec.hideMeta(item);
+              if (!meta || !meta.rid) return html;
+              const cell = '<td class="rp-home-hide-cell">'
+                + '<span class="rt-tab-close rp-home-hide" '
+                +   'data-hide-rid="'  + esc(meta.rid)        + '" '
+                +   'data-hide-name="' + esc(meta.name || "") + '" '
+                +   'data-hide-sub="'  + esc(meta.sub  || "") + '" '
+                +   'title="Hide from list"><i class="bi bi-x"></i></span>'
+                + '</td>';
+              return html.replace(/<\/tr>\s*$/, cell + '</tr>');
+            }).join("")
           : '<tr><td colspan="' + colCount + '">No rows.</td></tr>';
       }
       // Re-paint mode-dependent cell decorations after the tbody

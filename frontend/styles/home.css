@@ -124,3 +124,30 @@
   color: var(--rp-warn);
 }
 
+/* Hide/restore — Home tab. Pattern from workspace 8d070eb; per-tab
+   pref namespace + per-tab recovery surface per Em's 2026-05-28
+   placement call. The hide × lives in a dedicated last-column cell
+   (added per row at fetch-render time, no-label th matching it in
+   the thead). Fade-on-row-hover trigger here because rows don't
+   carry the .rt-tab parent class the rail.css base rule scopes to. */
+.rp-home-hide-th {
+  width: 2rem;
+}
+.rp-home-hide-cell {
+  width: 2rem;
+  text-align: right;
+  padding-right: 0.375rem;
+}
+#rp-home-list-tbody tr .rt-tab-close { opacity: 0; }
+#rp-home-list-tbody tr:hover .rt-tab-close,
+#rp-home-list-tbody tr:focus-within .rt-tab-close { opacity: 1; }
+
+/* Recovery host — sits below the pager, inside .rt-surface. Matches
+   the .rt-hidden atoms' inset so the <details> reads as part of the
+   list surface, not a stray block. */
+.rp-home-hidden-host {
+  flex-shrink: 0;
+  padding: 0 0.5rem;
+}
+.rp-home-hidden-host .rt-hidden { margin-top: 0.25rem; }
+
