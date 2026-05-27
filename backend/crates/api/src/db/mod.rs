@@ -14,9 +14,13 @@
 //!
 //! Sub-modules so far:
 //!   - [`sessions`] — `sessions` row CRUD (auth cookie → user-rid).
+//!   - [`sentinels`] — `sentinel_submissions` + `global_sentinels`
+//!     reads + writes (cleanness-vocabulary promotion plumbing).
 
 mod sessions;
+mod sentinels;
 pub use sessions::*;
+pub use sentinels::*;
 
 use chrono::{DateTime, Utc};
 use shared::case::{Case, Category, Comment};
@@ -434,40 +438,7 @@ pub async fn upsert_google_user(
 // sessions — extracted to `db/sessions.rs`, re-exported at the module root.
 
 // ─── sentinel_submissions ───────────────────────────────────────
-
-/// Canonicals currently promoted to the global cleanness vocabulary.
-/// The view's promotion threshold (≥2 distinct users) is enforced in
-/// SQL — callers don't need to filter again.
-///
-/// Stable ascending order so a checksum / diff of the returned slice
-/// is meaningful across calls (handy for in-process caching).
-pub async fn list_global_sentinels(pool: &PgPool) -> sqlx::Result<Vec<String>> {
-    let rows = sqlx::query("SELECT canonical FROM global_sentinels ORDER BY canonical")
-        .fetch_all(pool)
-        .await?;
-    Ok(rows.into_iter().map(|r| r.get::<String, _>(0)).collect())
-}
-
-/// Record (or no-op) one submission. The PK is `(canonical, user_id)`
-/// so re-submitting the same value from the same user is a no-op
-/// (matches the user's expectation that picking the same sentinel
-/// across multiple files doesn't count as multiple votes).
-///
-/// `canonical` is expected to be already trimmed + lowercased by the
-/// caller — the table doesn't normalise.
-pub async fn record_sentinel_submission(
-    pool: &PgPool, canonical: &str, user_rid: &str,
-) -> sqlx::Result<()> {
-    sqlx::query(
-        "INSERT INTO sentinel_submissions (canonical, user_id) \
-         VALUES ($1, $2) ON CONFLICT (canonical, user_id) DO NOTHING"
-    )
-    .bind(canonical)
-    .bind(user_rid)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
+// Extracted to db/sentinels.rs, re-exported at the module root.
 
 // ─── projects ───────────────────────────────────────────────────
 
