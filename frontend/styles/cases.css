@@ -264,6 +264,15 @@
 .rp-cases-priority-dot.is-high     { background: var(--rp-warn); }
 .rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
 
+/* Hide × on the kanban card — reuses the .rt-tab-close atom from
+   rail.css for shape, but the hover-fade trigger there is scoped to
+   .rt-tab parents. Card needs its own fade trigger. margin-left:auto
+   keeps the rid+dot cluster flush-left while the × pins to the right
+   edge of the card head. */
+.rp-cases-card .rt-tab-close { opacity: 0; margin-left: auto; }
+.rp-cases-card:hover .rt-tab-close,
+.rp-cases-card:focus-within .rt-tab-close { opacity: 1; }
+
 /* Rail status dot — shown only in assignee-grouped mode (the group
    header doesn't carry the status signal there). Rounded-square
    shape (rather than the priority dot's filled circle) distinguishes

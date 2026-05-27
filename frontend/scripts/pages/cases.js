@@ -74,6 +74,34 @@ export default function cases(app, { session }) {
   let activityFilter = "all";                  // sticky per-mount; per-case mem only
   let lastDetailActivity = [];                 // memoized for filter pill re-render
 
+  // ── hide / restore — replicated from workspace `8d070eb` per the
+  //    docs/internal/processes/replicable-feature-pattern.md recipe.
+  //    Pref key + helper trio + applyHiddenFilter; render-time filter
+  //    in paintBoard + paintRail; `<details class="rt-hidden">` recovery
+  //    surface appended at the tail of the rail body. One pref key
+  //    because cases are a single entity type (vs workspace's two).
+  const HIDDEN_CASES_KEY = "cases_hidden";
+  function getHidden() {
+    const list = getPref(HIDDEN_CASES_KEY);
+    return Array.isArray(list) ? list : [];
+  }
+  function hideOne(entry) {
+    const list = getHidden();
+    if (list.some((x) => x.rid === entry.rid)) return;
+    list.push(entry);
+    setPref(HIDDEN_CASES_KEY, list);
+  }
+  function unhideOne(rid) {
+    setPref(HIDDEN_CASES_KEY, getHidden().filter((x) => x.rid !== rid));
+  }
+  // Invariant 1: filter at render-time, never fetch-time. cachedCases
+  // always carries the full roster; the hidden set is applied here
+  // before grouping/painting in both surfaces.
+  function applyHiddenFilter(rows) {
+    const hiddenSet = new Set(getHidden().map((x) => x.rid));
+    return hiddenSet.size ? rows.filter((c) => !hiddenSet.has(c.redpash_id || c.rid)) : rows;
+  }
+
   // ── done-window filter — drop Done cases older than the window ───
   // Lives outside paint functions so cycleStatus + the chip-row both
   // see the same source of truth (the pref). Anything not-Done
@@ -191,22 +219,69 @@ export default function cases(app, { session }) {
 
   // Cards are <a href="#/cases?id=…"> anchors — browser handles
   // the navigation for ordinary clicks (and middle-click → new tab,
-  // and keyboard activation). The delegate only intercepts the
-  // cycle-status chevron: preventDefault stops the nav, then we
-  // PATCH the next status.
+  // and keyboard activation). The delegate intercepts the action
+  // children: hide × hides + repaints; cycle chevron PATCHes status.
+  // Each branch preventDefault + stopPropagation + return per
+  // Invariant 2 — let one slip through and the click would navigate
+  // to detail on top of the action.
   colsHost?.addEventListener("click", (e) => {
+    const hideBtn = e.target.closest(".rp-cases-card-hide");
+    if (hideBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = hideBtn.closest(".rp-cases-card");
+      if (card?.dataset.rid) {
+        hideOne({
+          rid:    card.dataset.rid,
+          name:   card.dataset.title || card.dataset.rid,
+          status: card.dataset.status,
+        });
+        paintBoard(cachedCases);
+        paintRail(cachedCases, activeCaseRid());
+      }
+      return;
+    }
     const cycleBtn = e.target.closest(".rp-cases-card-cycle");
-    if (!cycleBtn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const card = cycleBtn.closest(".rp-cases-card");
-    if (card) cycleStatus(card.dataset.rid, card.dataset.status);
+    if (cycleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = cycleBtn.closest(".rp-cases-card");
+      if (card) cycleStatus(card.dataset.rid, card.dataset.status);
+      return;
+    }
   });
 
-  // Rail click delegate — handles group-head expand/collapse and the
-  // Done-window chip-row. Case tabs are <a> anchors so the browser
-  // handles those clicks for free.
+  // Rail click delegate — handles hide × on rail rows, restore on
+  // hidden items, group-head expand/collapse, and the Done-window
+  // chip-row. Case tabs are <a> anchors so the browser handles
+  // ordinary clicks for free. Action branches per Invariant 2 each
+  // end in `return` so the click never bubbles to the parent <a>.
   railBody?.addEventListener("click", (e) => {
+    const hideBtn = e.target.closest(".rp-cases-rail-item .rt-tab-close");
+    if (hideBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = hideBtn.closest(".rp-cases-rail-item");
+      if (item?.dataset.rid) {
+        hideOne({
+          rid:    item.dataset.rid,
+          name:   item.dataset.title || item.dataset.rid,
+          status: item.dataset.status,
+        });
+        paintRail(cachedCases, activeCaseRid());
+        paintBoard(cachedCases);
+      }
+      return;
+    }
+    const restoreItem = e.target.closest(".rt-hidden-item");
+    if (restoreItem?.dataset.rid) {
+      e.preventDefault();
+      e.stopPropagation();
+      unhideOne(restoreItem.dataset.rid);
+      paintRail(cachedCases, activeCaseRid());
+      paintBoard(cachedCases);
+      return;
+    }
     const chip = e.target.closest("[data-done-window]");
     if (chip) {
       e.preventDefault();
@@ -311,7 +386,7 @@ export default function cases(app, { session }) {
   }
 
   function paintBoard(rows) {
-    const filtered = applyDoneWindow(rows);
+    const filtered = applyHiddenFilter(applyDoneWindow(rows));
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
     filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
@@ -363,10 +438,12 @@ export default function cases(app, { session }) {
     return ''
       + '<a class="rp-cases-card" href="' + esc(href) + '" '
       +    'data-rid="' + esc(rid) + '" '
-      +    'data-status="' + esc(c.status || "backlog") + '">'
+      +    'data-status="' + esc(c.status || "backlog") + '" '
+      +    'data-title="' + esc(c.title || "(untitled)") + '">'
       +   '<div class="rp-cases-card-head">'
       +     '<span class="rp-cases-card-rid">' + esc(rid.slice(0, 8)) + '</span>'
       +     priorityDotHTML(c.priority)
+      +     '<span class="rt-tab-close rp-cases-card-hide" title="Hide from board"><i class="bi bi-x"></i></span>'
       +   '</div>'
       +   '<div class="rp-cases-card-title">' + esc(c.title || "(untitled)") + '</div>'
       +   '<div class="rp-cases-card-foot">'
@@ -421,7 +498,7 @@ export default function cases(app, { session }) {
   }
 
   function paintRailByStatus(rows, activeRid) {
-    const filtered = applyDoneWindow(rows);
+    const filtered = applyHiddenFilter(applyDoneWindow(rows));
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
     filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
@@ -450,7 +527,7 @@ export default function cases(app, { session }) {
         + '</div>';
     }).join("");
 
-    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML;
+    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML + renderHiddenSection();
   }
 
   // Assignee grouping — one group per `assignee_id` plus a single
@@ -460,7 +537,7 @@ export default function cases(app, { session }) {
   // row so the user still sees where the case sits without the
   // status-grouped header context.
   function paintRailByAssignee(rows, activeRid) {
-    const filtered = applyDoneWindow(rows);
+    const filtered = applyHiddenFilter(applyDoneWindow(rows));
     const byAssignee = new Map();
     filtered.forEach((c) => {
       const key = c.assignee_id || "__unassigned__";
@@ -503,7 +580,29 @@ export default function cases(app, { session }) {
         + '</div>';
     }).join("");
 
-    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML;
+    railBody.innerHTML = railBoardItemHTML(activeRid) + groupsHTML + renderHiddenSection();
+  }
+
+  // Recovery surface — rendered only when ≥1 case is hidden. Native
+  // <details> drives the open/closed state + a11y; reuses the
+  // `.rt-hidden-*` atoms from rail.css that workspace shares.
+  function renderHiddenSection() {
+    const hidden = getHidden();
+    if (!hidden.length) return "";
+    const items = hidden.map((c) =>
+      '<button class="rt-hidden-item" type="button" data-rid="' + esc(c.rid) + '">'
+      +   '<span class="rt-hidden-name">' + esc(c.name || c.rid)
+      +     (c.status ? ' <span class="rt-hidden-meta">· ' + esc(STATUS_LABEL[c.status] || c.status) + '</span>' : "")
+      +   '</span>'
+      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      + '</button>'
+    ).join("");
+    return '<details class="rt-hidden">'
+      +   '<summary class="rt-hidden-summary">'
+      +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
+      +   '</summary>'
+      +   '<div class="rt-hidden-body">' + items + '</div>'
+      + '</details>';
   }
 
   function railItemHTML(c, activeRid, mode) {
@@ -521,10 +620,14 @@ export default function cases(app, { session }) {
       : '';
     return ''
       + '<a class="rt-tab rp-cases-rail-item' + (isActive ? ' active' : '') + '" '
-      +    'href="' + esc(href) + '" title="' + esc(c.title || rid) + '">'
+      +    'href="' + esc(href) + '" title="' + esc(c.title || rid) + '" '
+      +    'data-rid="' + esc(rid) + '" '
+      +    'data-status="' + esc(c.status || "backlog") + '" '
+      +    'data-title="' + esc(c.title || "(untitled)") + '">'
       +   priorityDotHTML(c.priority)
       +   '<span class="rt-tab-name">' + esc(c.title || "(untitled)") + '</span>'
       +   statusDot
+      +   '<span class="rt-tab-close" title="Hide from rail"><i class="bi bi-x"></i></span>'
       + '</a>';
   }
 
