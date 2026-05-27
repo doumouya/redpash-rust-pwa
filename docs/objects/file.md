@@ -297,11 +297,12 @@ step to `applied = false`; redo flips the first un-applied step to
 ## Step kinds (`StepRequest.kind`)
 
 Dispatched by `data::steps::apply` (and `replay` for the cache-miss
-rebuild). 18 kinds today, grouped by what they mutate. The per-kind
-docstring in [`crates/data/src/steps.rs`](../../backend/crates/data/src/steps.rs)
-is the authoritative param-shape reference; the [Step kinds section in
-api/files.md](../api/files.md#step-kinds) has the same grouped table
-with the same param shapes.
+rebuild). 18 kinds today, grouped by what they mutate. The per-family
+docstrings in [`crates/data/src/steps/`](../../backend/crates/data/src/steps/)
+(decomposed 2026-05-27 — `rows.rs` / `columns.rs` / `cells.rs` /
+`structure.rs` / `util.rs`) are the authoritative param-shape reference;
+the [Step kinds section in api/files.md](../api/files.md#step-kinds) has
+the same grouped table with the same param shapes.
 
 **Column-shape:** `drop_columns` · `filter_columns` (keep listed) ·
 `rename_column` · `snake_case_columns` · `replace_in_names` ·

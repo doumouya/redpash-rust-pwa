@@ -14,10 +14,12 @@ entire app. One enum, one tree, three engine paths that all
 honor it.
 
 Source of truth: `backend/crates/shared/src/filter.rs`. Engine
-consumers: `backend/crates/data/src/parse.rs::filter_expr`
-(query-time `/api/files/:rid/page`),
-`backend/crates/data/src/steps.rs::build_filter_predicate`
-(persisted `filter_rows` step), and `backend/crates/data/src/wasm.rs::apply_filter`
+consumers: `backend/crates/data/src/parse/filter.rs::filter_expr`
+(query-time `/api/files/:rid/page`; lives in the decomposed
+`parse/` module as of 2026-05-27),
+`backend/crates/data/src/steps/` (`rows.rs` carries `filter_rows`;
+the predicate-builder helpers live in `util.rs`), and
+`backend/crates/data/src/wasm.rs::apply_filter`
 (browser preview, wraps the steps path).
 
 ## Three modules, one DTO

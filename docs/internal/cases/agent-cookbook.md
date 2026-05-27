@@ -221,7 +221,7 @@ curl -sS -H "Cookie: rp_session=$RP_SID" "$RP_API/cases/CAS_a1b2c3…"
 The activity feed reads through the audit-everything spine — every
 case mutation emits a `case_*` event, the feed query is
 `SELECT * FROM events WHERE context->>'case' = $1 ORDER BY occurred_at ASC`
-([db.rs::list_activity_for_case](../../../backend/crates/api/src/db.rs)).
+([`db::list_activity_for_case`](../../../backend/crates/api/src/db/mod.rs) — still in `db/mod.rs` until the cases slice extracts).
 No separate history table.
 
 ---

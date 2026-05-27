@@ -121,7 +121,7 @@ dashboards).
 
 ---
 
-## DB helpers (`crates/api/src/db.rs`)
+## DB helpers (`crates/api/src/db/projects.rs`)
 
 | Helper | SQL | Used by |
 |---|---|---|

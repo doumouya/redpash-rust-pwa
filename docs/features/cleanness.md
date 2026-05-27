@@ -260,4 +260,4 @@ Per call-site:
 - [`features/cleaner.md`](cleaner.md) — the UI on top of the score, including the cast-suggestion loop.
 - `crates/data/src/stats.rs` — the scorer.
 - `crates/data/src/dtype.rs` — `summarize` + `sniff_semantic_type`.
-- `crates/data/src/parse.rs` — the two-pass parser (header / delimiter sniff + 1-col preamble walk).
+- `crates/data/src/parse/` — the two-pass parser: `mod.rs` ties it together, `sniff.rs` does header + delimiter sniff + 1-col preamble walk, `filter.rs` carries the predicate evaluator.

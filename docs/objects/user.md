@@ -98,7 +98,7 @@ company also has `[]`.
 
 ---
 
-## DB helpers (`crates/api/src/db.rs`)
+## DB helpers (`crates/api/src/db/users.rs` + `db/sessions.rs`)
 
 | Helper | SQL | Used by |
 |---|---|---|

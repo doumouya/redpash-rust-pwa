@@ -211,7 +211,7 @@ actual file is **17 columns**. Sample header:
 Textbook wrapped-CSV pathology: each row is one outer-quoted string
 wrapping a real 17-field CSV, with internal `""` escaped pairs.
 RedPash's Cleaner has handled this case since the early step engine
-via the `unwrap_csv` step (`backend/crates/data/src/steps.rs:142`) —
+via the `unwrap_csv` step (in `backend/crates/data/src/steps/structure.rs` post the 2026-05-27 decomp) —
 the user clicks it on a 1-col upload and the real shape recovers.
 
 But `parse_csv` on wasm doesn't go through the Cleaner — it calls

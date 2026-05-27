@@ -197,7 +197,7 @@ broke any callsite that assumed `filename` ended in `.csv`. Folding the
 responsibility onto `file_type` makes new tables / labels / toasts
 correct by default.
 
-**Upload + snapshot + join** ([`routes/files.rs`](../../backend/crates/api/src/routes/files.rs))
+**Upload + snapshot + join** ([`routes/files/`](../../backend/crates/api/src/routes/files/) — `mod.rs` upload, `output.rs` snapshot, `joins.rs` join)
 all run incoming filenames through `data::parse::strip_upload_ext`
 before persisting. **Export** (`GET /api/files/:rid/export`)
 reassembles the download name as `${filename}.csv` (file_type is always
@@ -244,8 +244,10 @@ INSERT clears the redo stack via
 | `applied`         | `BOOLEAN`     | NO       | `TRUE`        | `FALSE` = undone but still in the redo stack. |
 | `created_at`      | `TIMESTAMPTZ` | NO       | `now()`       | |
 
-**Step kinds** — 18 kinds, dispatched by `data::steps::replay` (see
-[`data/src/steps.rs`](../../backend/crates/data/src/steps.rs)):
+**Step kinds** — 18 kinds, dispatched by `data::steps::apply` /
+`replay` (see [`data/src/steps/`](../../backend/crates/data/src/steps/) —
+`mod.rs` is the dispatcher; per-family bodies live in
+`rows.rs` / `columns.rs` / `cells.rs` / `structure.rs` / `util.rs`):
 
 - **Column shape (7):** `drop_columns`, `filter_columns`,
   `rename_column`, `snake_case_columns`, `replace_in_names`,

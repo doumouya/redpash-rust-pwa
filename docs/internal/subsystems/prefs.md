@@ -15,8 +15,10 @@ truth; client `localStorage` is a write-through SWR cache so
 values instead of defaults.
 
 Spec + decision history: [specs/user-preferences](../specs/user-preferences.md).
-Source of truth: `backend/crates/api/src/db.rs` (`get_user_prefs` /
-`patch_user_prefs`), `backend/crates/api/src/routes/me.rs`
+Source of truth: `backend/crates/api/src/db/users.rs`
+(`patch_user_prefs` lives in the users sub-module; the read path goes
+through `find_user_by_*` which folds prefs in via the correlated
+`user_preferences` subquery), `backend/crates/api/src/routes/me.rs`
 (`patch_me_prefs` + the deprecation forward), `frontend/scripts/prefs.js`,
 `frontend/index.html` (FOUC-safe inline apply).
 

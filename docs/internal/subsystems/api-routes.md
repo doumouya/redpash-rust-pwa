@@ -121,9 +121,12 @@ Routes that need ownership enforcement layer
 - **Auth / session lifecycle** — `routes::auth` mints + revokes
   the cookie; `routes::me` reads it. Don't validate sessions ad-
   hoc inside a resource module; use `resolve_user_rid`.
-- **DB queries that mix concerns** — long SQL strings live in
-  `backend/crates/api/src/db.rs` so route handlers stay the
-  "shape + auth + error mapping" layer. See [data-engine](data-engine.md).
+- **DB queries that mix concerns** — long SQL strings live under
+  `backend/crates/api/src/db/` (decomposed into per-resource modules
+  2026-05-27: `sessions.rs`, `sentinels.rs`, `users.rs`, `projects.rs`,
+  with files / charts / dashboards / steps / companies / events /
+  cases following) so route handlers stay the "shape + auth + error
+  mapping" layer. See [data-engine](data-engine.md).
 
 ## Cross-cuts
 

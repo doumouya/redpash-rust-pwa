@@ -10,7 +10,7 @@ last modified date: 2026-05-21
 The cleaner page's home base. Upload, read paged rows, apply cleaning
 steps, undo / redo, snapshot, detect & apply joins.
 
-**Route file:** [`crates/api/src/routes/files.rs`](../../backend/crates/api/src/routes/files.rs)
+**Route module:** [`crates/api/src/routes/files/`](../../backend/crates/api/src/routes/files/) — `mod.rs` is the router wiring + upload + cleaner core; per-family handlers split across `joins.rs` / `stats.rs` / `output.rs` / `meta.rs` / `state_ops.rs` (decomposed 2026-05-27)
 **DTOs:** [`shared::file::*`](../objects/file.md)
 **Persistence:**
 - Bytes → `<REDPASH_DATA_DIR>/files/<rid>.bin` (immutable)
@@ -250,7 +250,7 @@ The handler:
 
 The cleaner's full vocabulary — 18 kinds, grouped here by what they
 mutate. The complete authoritative param shape for each one lives in
-the module-level doc-comment of [`crates/data/src/steps.rs`](../../backend/crates/data/src/steps.rs);
+the per-family file docstrings under [`crates/data/src/steps/`](../../backend/crates/data/src/steps/);
 the table below is the field-by-field summary.
 
 #### Column-shape

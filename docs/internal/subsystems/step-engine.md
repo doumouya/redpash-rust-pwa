@@ -19,9 +19,11 @@ This is the layer that makes cleaning **non-destructive** — the
 original bytes on disk never change. Every transform is a step;
 undo flips the row, doesn't rewind it.
 
-Source of truth: `backend/crates/data/src/steps.rs` (the dispatch
-match arm) + `backend/crates/api/src/routes/files.rs` (the apply /
-undo / redo / snapshot endpoints).
+Source of truth: `backend/crates/data/src/steps/mod.rs` (the dispatch
+match arm; per-family bodies live in `steps/{rows,columns,cells,structure,util}.rs`)
++ `backend/crates/api/src/routes/files/mod.rs` (the apply / undo /
+redo endpoints) + `routes/files/state_ops.rs` (the cleaner cursor
+ops) + `routes/files/output.rs` (snapshot).
 
 ## Model
 

@@ -83,8 +83,10 @@ operation.
 ## Step kinds
 
 18 kinds, dispatched by `data::steps::apply` (and `replay` for the
-cache-miss rebuild) — see
-[`crates/data/src/steps.rs`](../../backend/crates/data/src/steps.rs).
+cache-miss rebuild) — see the `data/src/steps/` module
+([`mod.rs`](../../backend/crates/data/src/steps/mod.rs) is the
+dispatcher; per-family implementations live in `rows.rs` / `columns.rs`
+/ `cells.rs` / `structure.rs` / `util.rs`).
 Grouped by what they mutate:
 
 **Column-shape (7):** `drop_columns` · `filter_columns` (keep listed) ·
@@ -102,7 +104,7 @@ Grouped by what they mutate:
 
 The authoritative per-kind **`params` shapes** live in the
 [Step kinds section of api/files.md](../api/files.md#step-kinds) and in the
-per-arm docstrings of `data/src/steps.rs` — not duplicated here.
+per-family file docstrings under `data/src/steps/` — not duplicated here.
 
 ---
 
@@ -134,7 +136,7 @@ the live cursor, so it clears any un-applied (redo-stack) steps first.
 
 ---
 
-## DB helpers (`crates/api/src/db.rs`)
+## DB helpers (`crates/api/src/db/mod.rs` — steps section)
 
 | Helper | Purpose |
 |---|---|

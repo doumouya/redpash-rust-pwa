@@ -76,7 +76,7 @@ served its first project list.
 ## Post Checking
 
 - `cargo check -p api` clean after `84f3939`.
-- `grep -rni 'dashboards' backend/crates/api/src/db.rs` — only the
+- `grep -rni 'dashboards' backend/crates/api/src/db/` — only the
   re-pointed dashboards helpers remain, all on `project_files`.
 - `GET /api/projects` returns 200 with the project list (verified on
   the `frontend-reset` Workspace wiring).

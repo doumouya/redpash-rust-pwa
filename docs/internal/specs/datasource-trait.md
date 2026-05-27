@@ -19,7 +19,7 @@ status: sketch
 
 Today RedPash has **one** kind of data source: a CSV/Excel file
 parsed into a Polars `DataFrame`, persisted as a `project_files` row,
-hydrated on first access via [`routes::files::hydrate`](../../backend/crates/api/src/routes/files.rs).
+hydrated on first access via [`routes::files::hydrate`](../../backend/crates/api/src/routes/files/mod.rs).
 Every read path (paged rows, distinct values, joins detect, exports)
 calls into the same hot frame.
 
