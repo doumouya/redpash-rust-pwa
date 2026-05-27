@@ -39,6 +39,21 @@ export default function home(app, { session: _session }) {
   const navBody = app.querySelector("#rpHomeNavBody");
   const view    = app.querySelector("#rpHomeView");
 
+  // Rail-foot create button + generic create-modal refs — captured
+  // here (rather than next to their helpers later in the file) because
+  // the FIRST activate() call at the boot path fires before that point
+  // and needs syncCreateButton's closure to see initialised consts.
+  const createBtn      = app.querySelector("#rpHomeNavCreate");
+  const createBtnIcon  = app.querySelector("#rpHomeNavCreateIcon");
+  const createBtnLabel = app.querySelector("#rpHomeNavCreateLabel");
+  const createModal    = app.querySelector("#rpHomeCreateModal");
+  const createForm     = app.querySelector("#rpHomeCreateForm");
+  const createFields   = app.querySelector("#rpHomeCreateFields");
+  const createTitle    = app.querySelector("#rpHomeCreateTitle");
+  const createError    = app.querySelector("#rpHomeCreateError");
+  const createSubmit   = app.querySelector("#rpHomeCreateSubmit");
+  let   activeCreateSpec = null;
+
   // List-page bindings — partial-apply the view + the page-specific
   // ID prefixes once so call sites keep their original short-arg
   // signatures (setKpi(id, val), renderListPager(), listPanel(cols)).
@@ -62,6 +77,23 @@ export default function home(app, { session: _session }) {
     users: {
       title: "Users",
       endpoint: "/admin/users",
+      // createSpec drives the rail-foot "New <noun>" button + the generic
+      // modal renderer. kind:"modal" posts a JSON body built from
+      // fields[]; kind:"route" navigates to href. The label/icon shows
+      // on the button when the tab is active. After a successful POST
+      // the active tab refetches so the new row appears in the list.
+      createSpec: {
+        kind:     "modal",
+        label:    "New user",
+        icon:     "bi-person-plus",
+        endpoint: "/users",
+        title:    "New user",
+        fields: [
+          { key: "display_name", label: "Display name", required: true, placeholder: "Full name" },
+          { key: "username",     label: "Handle",       required: true, placeholder: "e.g. mansa", autocomplete: "off" },
+          { key: "email",        label: "Email",        required: false, type: "email", placeholder: "optional" },
+        ],
+      },
       // DELETE /api/admin/users/:rid — added 2026-05-25. Cascades to
       // projects (owner_id), memberships (CASCADE), sessions (CASCADE).
       // PATCH /api/users/:rid — sparse update; display_name is the
@@ -153,6 +185,17 @@ export default function home(app, { session: _session }) {
     companies: {
       title: "Companies",
       endpoint: "/admin/companies",
+      createSpec: {
+        kind:     "modal",
+        label:    "New company",
+        icon:     "bi-building-add",
+        endpoint: "/companies",
+        title:    "New company",
+        fields: [
+          { key: "name", label: "Name", required: true, placeholder: "Company name" },
+          { key: "slug", label: "Slug", required: false, placeholder: "optional — auto-derived from name" },
+        ],
+      },
       // DELETE /api/admin/companies/:rid — added 2026-05-25. Cascades
       // to company_memberships; projects.company_id is SET NULL so
       // company-scoped projects survive as personal.
@@ -293,6 +336,18 @@ export default function home(app, { session: _session }) {
       // are real on this endpoint, unlike the projects + admin
       // placeholders elsewhere in this file.
       endpoint: "/cases",
+      createSpec: {
+        kind:     "modal",
+        label:    "New case",
+        icon:     "bi-plus-lg",
+        endpoint: "/cases",
+        title:    "New case",
+        fields: [
+          { key: "title",       label: "Title",       required: true, placeholder: "What's the case about?" },
+          { key: "description", label: "Description", required: false, type: "textarea",
+            placeholder: "Steps to reproduce, context, expected behavior… (optional)" },
+        ],
+      },
       // PATCH /api/cases/:rid — same path as DELETE; defaults via
       // spec.endpoint, no override needed. Title is the editable cell.
       itemNoun: "case",
@@ -404,6 +459,16 @@ export default function home(app, { session: _session }) {
       patchEndpoint:  "/files",
       itemNoun: "file",
       itemNounPlural: "files",
+      // File creation = upload, which lives on the Workspace surface
+      // (the rail-foot wsUpload button + the wsUploadInput file input).
+      // Route the Home Files-tab Create button there rather than build
+      // a duplicate uploader here.
+      createSpec: {
+        kind:  "route",
+        label: "Upload file",
+        icon:  "bi-upload",
+        href:  "#/workspace",
+      },
       // Wired modes: select toggles the checkbox column, delete fires
       // bulk DELETE /files/:rid against the selection.
       modes: { select: true, delete: true },
@@ -493,6 +558,15 @@ export default function home(app, { session: _session }) {
       patchEndpoint:  "/files",
       itemNoun: "chart",
       itemNounPlural: "charts",
+      // Chart creation requires an open data file in the Workspace
+      // designer — there's no standalone "create chart" form. Route to
+      // workspace; the user opens a CSV → New chart from the designer.
+      createSpec: {
+        kind:  "route",
+        label: "New chart",
+        icon:  "bi-bar-chart-line",
+        href:  "#/workspace",
+      },
       modes: { select: true, delete: true },
       compositeStrip: true,   // 2 charts → KPI 2×2 flanked
       // Visual placeholder — /admin/charts doesn't accept ?window= yet
@@ -559,6 +633,18 @@ export default function home(app, { session: _session }) {
       // via spec.endpoint, no override needed. Name is editable.
       itemNoun: "project",
       itemNounPlural: "projects",
+      createSpec: {
+        kind:     "modal",
+        label:    "New project",
+        icon:     "bi-folder-plus",
+        endpoint: "/projects",
+        title:    "New project",
+        fields: [
+          { key: "name",        label: "Name",        required: true, placeholder: "Project name" },
+          { key: "description", label: "Description", required: false, type: "textarea",
+            placeholder: "Optional — what's this project for?" },
+        ],
+      },
       // Note: the owner's DEFAULT project can't be deleted (backend
       // returns 400 is_default). Promise.allSettled in bulkDelete
       // handles the partial failure cleanly — non-default ones still
@@ -793,6 +879,133 @@ export default function home(app, { session: _session }) {
     const btn = navBody.querySelector('.rt-tab[data-key="' + cssEsc(tab.key) + '"]');
     if (btn) btn.classList.add("active");
     renderTabBody(tab);
+    syncCreateButton(tab);
+  }
+
+  // ─── rail-foot create button + generic create-modal ──────────
+  // Single button repointed per active tab from the tab's createSpec
+  // in LIST_VIEWS. kind:"modal" opens the generic form (#rpHomeCreateModal)
+  // with the spec's fields + endpoint; kind:"route" navigates to href
+  // (used by tabs where create lives elsewhere — Files = upload via
+  // Workspace, Charts = designer on top of an open data file). Tabs
+  // without a createSpec (memberships, org) hide the button entirely.
+  // Const refs for the button + modal are captured at the top of the
+  // function (next to `nav` / `navBody`) to avoid TDZ on the first
+  // activate() call from the boot path.
+
+  function syncCreateButton(tab) {
+    const spec = LIST_VIEWS[tab.key]?.createSpec || null;
+    activeCreateSpec = spec;
+    if (!createBtn) return;
+    if (!spec) {
+      createBtn.hidden = true;
+      return;
+    }
+    createBtn.hidden = false;
+    if (createBtnLabel) createBtnLabel.textContent = spec.label || "New";
+    if (createBtnIcon) {
+      // Reset to a single class (always carry `bi`) then add the spec icon.
+      createBtnIcon.className = "bi " + (spec.icon || "bi-plus-lg");
+    }
+    createBtn.title = spec.label || "Create";
+  }
+
+  createBtn?.addEventListener("click", () => {
+    const spec = activeCreateSpec;
+    if (!spec) return;
+    if (spec.kind === "route" && spec.href) {
+      location.hash = spec.href;
+      return;
+    }
+    if (spec.kind === "modal") openCreateModal(spec);
+  });
+
+  function fieldHTML(f) {
+    const id    = "rp-home-create-f-" + f.key;
+    const req   = f.required ? " required" : "";
+    const ac    = f.autocomplete ? ' autocomplete="' + esc(f.autocomplete) + '"' : "";
+    const ph    = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : "";
+    const type  = f.type || "text";
+    const ctrl  = type === "textarea"
+      ? '<textarea class="rp-cases-modal-textarea" id="' + id + '" name="' + esc(f.key) + '" rows="5"' + req + ph + '></textarea>'
+      : '<input class="rp-cases-modal-input" id="' + id + '" name="' + esc(f.key) + '" type="' + esc(type) + '"' + req + ac + ph + ' />';
+    return ''
+      + '<div class="rp-cases-modal-field">'
+      +   '<label class="rp-cases-modal-label" for="' + id + '">' + esc(f.label) + '</label>'
+      +   ctrl
+      + '</div>';
+  }
+
+  function openCreateModal(spec) {
+    if (!createModal || !spec) return;
+    if (createTitle) createTitle.textContent = spec.title || spec.label || "Create";
+    if (createFields) createFields.innerHTML = (spec.fields || []).map(fieldHTML).join("");
+    if (createError) { createError.hidden = true; createError.textContent = ""; }
+    if (createSubmit) createSubmit.disabled = false;
+    createForm?.reset();
+    createModal.hidden = false;
+    // Focus first required field for keyboard-first flow.
+    const first = createFields?.querySelector("input, textarea");
+    setTimeout(() => first?.focus(), 0);
+  }
+  function closeCreateModal() {
+    if (!createModal) return;
+    createModal.hidden = true;
+  }
+
+  createModal?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-modal-dismiss]")) {
+      e.preventDefault();
+      closeCreateModal();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && createModal && !createModal.hidden) {
+      closeCreateModal();
+    }
+  });
+
+  createForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const spec = activeCreateSpec;
+    if (!spec || spec.kind !== "modal") return;
+    // Build the POST body — trim each field; empty-and-not-required → omit.
+    const body = {};
+    let missingRequired = null;
+    for (const f of spec.fields || []) {
+      const el = createFields?.querySelector('[name="' + cssEsc(f.key) + '"]');
+      const v  = (el?.value || "").trim();
+      if (!v) {
+        if (f.required) { missingRequired = f.label; break; }
+        continue;
+      }
+      body[f.key] = v;
+    }
+    if (missingRequired) {
+      showCreateError(missingRequired + " is required");
+      return;
+    }
+    if (createSubmit) createSubmit.disabled = true;
+    try {
+      await api.post(spec.endpoint, body);
+      closeCreateModal();
+      // Refetch the current tab's list so the new row appears. fetchList
+      // is closure-scoped to renderListBody; route through activate() on
+      // the same tab to trigger a fresh render.
+      const activeKey = navBody.querySelector(".rt-tab.active")?.dataset.key;
+      if (activeKey) activate(activeKey);
+    } catch (err) {
+      const msg = err?.body?.message || err?.body?.error || err?.message || "Create failed";
+      showCreateError(msg + (err?.status ? " (" + err.status + ")" : ""));
+    } finally {
+      if (createSubmit) createSubmit.disabled = false;
+    }
+  });
+
+  function showCreateError(msg) {
+    if (!createError) return;
+    createError.textContent = msg;
+    createError.hidden = false;
   }
 
   // ─── per-tab body renderers ──────────────────────────────────

@@ -114,3 +114,13 @@
   color: var(--rp-accent-2);
 }
 
+/* Generic create-modal error line — reuses the .rp-cases-modal-hint
+   shape from cases.css for layout; this override paints the warn
+   color when the paragraph is showing an error from the POST. The
+   modal markup itself reuses .rp-cases-modal-* atoms — promoting
+   those to a shared modal.css is a follow-up clean per
+   [[feedback-naming-consistency]]. */
+.rp-home-create-error {
+  color: var(--rp-warn);
+}
+
