@@ -198,10 +198,16 @@
   border: 1px solid var(--rp-border);
   border-radius: 0.375rem;
 }
-.rt-pred-col { grid-column: 1 / span 10; }
-.rt-pred-op  { grid-column: 11 / span 10; }
-.rt-pred-val-slot { grid-column: 1 / span 17; }
-.rt-pred-del { grid-column: 18 / span 3; justify-self: stretch; }
+/* Grid-column placements are scoped to the predicate variant only —
+   the .rt-report-measure modifier uses a different 4-track grid
+   (1fr auto 1fr auto) where these 20-track positions don't apply.
+   With the :not() guard, measure-row children auto-place onto the
+   measure grid (fn → col 1, of → col 2, col → col 3, del → col 4,
+   alias → row 2 spanning via .rt-report-measure .rt-pred-val). */
+.rt-pred:not(.rt-report-measure) > .rt-pred-col { grid-column: 1 / span 10; }
+.rt-pred:not(.rt-report-measure) > .rt-pred-op  { grid-column: 11 / span 10; }
+.rt-pred:not(.rt-report-measure) .rt-pred-val-slot { grid-column: 1 / span 17; }
+.rt-pred:not(.rt-report-measure) > .rt-pred-del { grid-column: 18 / span 3; justify-self: stretch; }
 .rt-pred select, .rt-pred input {
   height: 1.875rem;
   padding: 0 0.4375rem;
