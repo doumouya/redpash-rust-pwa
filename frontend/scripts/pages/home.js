@@ -24,43 +24,13 @@ import {
   createListCharts,
 } from "/scripts/list-page.js";
 
-// Declarative tab definitions — also drives the rail render. The
-// `perm` field is non-load-bearing today (everyone is admin in
-// pre-prod / solo-dev); kept so the RBAC switch later is filter,
-// not rewrite. `endpoint` is the un-prefixed path (no /api/) — it's
-// for the pending-stub display only, not a call site; keeping the
-// /api/ prefix out lets the crossing audit not mistake it for one.
-const HOME_TABS = [
-  // ── ORG ────────────────────────────────────────────────────
-  { group: "ORG",    key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true  },
-  { group: "ORG",    key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true  },
-  { group: "ORG",    key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true  },
-  // Cases — flat-table read of /api/cases for the rail. The /cases
-  // page renders the kanban + detail; this Home tab gives the
-  // sortable inventory view alongside Users / Companies / Memberships.
-  { group: "ORG",    key: "cases",       label: "Cases",       icon: "bi-card-list",    perm: "user",  endpoint: "/cases",             wired: true  },
-  // ── DATA ───────────────────────────────────────────────────
-  { group: "DATA",   key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true  },
-  { group: "DATA",   key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true  },
-  { group: "DATA",   key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/admin/charts",      wired: true  },
-  // Steps moved to /monitoring (AUDITS group) — operational audit-
-  // trail records of cleaning ops, fits Monitoring's "what happened"
-  // framing better than Home's org/data inventory.
-  // ── MANAGE — stripped redtable variant ─────────────────────
-  // Disabled until the unified org-management endpoint lands. The
-  // button telegraphs the future surface (workspace-style filter +
-  // read-only table across users / companies / memberships); not
-  // clickable yet. Parallel pattern to Monitoring's INSPECT > Logs.
-  { group: "MANAGE", key: "org",         label: "Org",         icon: "bi-diagram-3",    perm: "admin", endpoint: "/admin/org",         wired: false },
-];
-
-const HOME_GROUPS = [
-  { name: "ORG",    mark: "OR", color: "mauve" },
-  { name: "DATA",   mark: "DA", color: "teal"  },
-  { name: "MANAGE", mark: "MG", color: "peach" },
-];
-
-const HOME_DEFAULT_TAB = "projects";
+// Tab definitions extracted into `home/tabs.js` as slice 4 of the
+// god-object decomposition (broadcast.md 00:53). HOME_TABS drives
+// the rail + redtable surface; HOME_GROUPS partitions the rail into
+// ORG / DATA / MANAGE sections; HOME_DEFAULT_TAB is the boot fallback.
+// Module-private to home.js — promote if another page composes the
+// same tab vocabulary.
+import { HOME_TABS, HOME_GROUPS, HOME_DEFAULT_TAB } from "/scripts/pages/home/tabs.js";
 
 export default function home(app, { session: _session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
