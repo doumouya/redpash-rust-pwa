@@ -50,11 +50,13 @@ const SERVER_PREF_KEYS = ["share_sentinels", "learned_sentinels"];
 
 // Reusable option-button sets.
 const ROWS_PER_PAGE = [
-  { value: "10",  label: "10"  },
-  { value: "25",  label: "25"  },
-  { value: "50",  label: "50"  },
-  { value: "100", label: "100" },
-  { value: "all", label: "All" },
+  { value: "10",   label: "10"  },
+  { value: "25",   label: "25"  },
+  { value: "50",   label: "50"  },
+  { value: "100",  label: "100" },
+  { value: "250",  label: "250" },
+  { value: "500",  label: "500" },
+  { value: "1000", label: "1k"  },
 ];
 const ON_OFF = [
   { value: "1", label: "On"  },
@@ -188,10 +190,12 @@ function render(app) {
 
 // Rail data — section index, grouped to match the canonical
 // home / monitoring rail (rt-group with two-letter color marks +
-// rt-tab children). The settings rail's tabs are anchor links, not
-// view-switchers — click jumps to the section inside the scrolling
-// surface; the IntersectionObserver below keeps the active item in
-// sync as the user scrolls manually.
+// rt-tab children). Tab-switch UX (Em 2026-05-28): each rt-tab
+// click shows ONE section + hides the others — same affordance
+// as Home / Monitoring / Workspace, so a tab opens at its head
+// with the full surface available for that section's content.
+// URL hash `#/settings?tab=<key>` drives the initial active tab
+// so a refresh / deep-link lands the user back where they were.
 const SET_GROUPS = [
   { name: "UI",      mark: "UI", color: "blue"  },
   { name: "DATA",    mark: "DA", color: "teal"  },
@@ -211,10 +215,12 @@ const SET_TABS = [
 ];
 
 // Standard rail population — mirrors monitoring.js / home.js
-// renderGroup + renderTab. The settings rail is anchor-driven (each
-// rt-tab is an <a href="#set-…">) so the scroll-spy can flip .active
-// as the user scrolls; rail clicks just nudge the browser's anchor
-// jump + flip .active eagerly so the visual state matches the click.
+// renderGroup + renderTab. Tab-switch UX (Em 2026-05-28: "switching
+// the tabs just switch the content, and we have full screen
+// availability for each tabs"): each rt-tab click shows ONE section
+// + hides the others, URL hash sticks the choice. No scroll-spy /
+// IntersectionObserver — only the active section is visible at a
+// time, scrolling-stack is gone.
 function mountSettingsRail(app) {
   const nav     = app.querySelector("#rpSetNav");
   const body    = app.querySelector("#rpSetNavBody");
@@ -226,10 +232,10 @@ function mountSettingsRail(app) {
     const tabs = SET_TABS.filter((t) => t.group === g.name);
     if (!tabs.length) return "";
     const items = tabs.map((t) =>
-      '<a class="rt-tab" data-key="' + esc(t.key) + '" href="#' + esc(t.key) + '">'
+      '<button type="button" class="rt-tab" data-key="' + esc(t.key) + '">'
       +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
-      + '</a>').join("");
+      + '</button>').join("");
     return ''
       + '<div class="rt-group expanded">'
       +   '<button class="rt-group-head" type="button">'
@@ -242,7 +248,9 @@ function mountSettingsRail(app) {
       + '</div>';
   }).join("");
 
-  const items = Array.from(body.querySelectorAll(".rt-tab"));
+  const items     = Array.from(body.querySelectorAll(".rt-tab"));
+  const sections  = Array.from(surface.querySelectorAll(".rp-page__section"));
+  const validKeys = new Set(SET_TABS.map((t) => t.key));
 
   // ── collapse button + group-head toggle ───────────────────
   app.querySelector("#rpSetNavCollapse")?.addEventListener("click", (e) => {
@@ -255,33 +263,34 @@ function mountSettingsRail(app) {
     const head = e.target.closest(".rt-group-head");
     if (head) { head.parentElement.classList.toggle("expanded"); return; }
     const tab = e.target.closest(".rt-tab");
-    if (tab) activate(tab.dataset.key);
+    if (!tab) return;
+    const key = tab.dataset.key;
+    activate(key);
+    // Persist the choice in the URL hash so refresh / share lands
+    // back on the same tab. Same `#/settings?tab=<key>` shape that
+    // Monitoring + Home use for their per-tab deep links.
+    const url = new URL(location.href);
+    url.hash = "/settings?tab=" + encodeURIComponent(key);
+    history.replaceState(null, "", url);
   });
 
-  function activate(rid) {
-    items.forEach((el) => el.classList.toggle("active", el.dataset.key === rid));
+  // ── activate: rail + section visibility + scroll reset ────
+  function activate(key) {
+    items.forEach((el) => el.classList.toggle("active", el.dataset.key === key));
+    // [hidden] toggles per-section; the chosen one fills the surface.
+    // The scroll position resets to the top — same affordance as
+    // Home/Monitoring (a fresh tab opens at its head, not wherever
+    // the prior tab was scrolled to).
+    sections.forEach((sec) => { sec.hidden = sec.id !== key; });
+    surface.scrollTop = 0;
   }
-  // Initial active = first wired tab.
-  activate(SET_TABS[0].key);
 
-  // ── scroll-spy ────────────────────────────────────────────
-  // Sections live INSIDE the scrolling rt-surface (#rpSetView); the
-  // observer's `root` is that surface so scroll calculations track
-  // its scroll offset, not the document's. rootMargin shrinks the
-  // observation band to a strip near the top so the active flips
-  // when a section's heading crosses it.
-  const sections = items
-    .map((el) => surface.querySelector("#" + el.dataset.key))
-    .filter(Boolean);
-  if (!sections.length || typeof IntersectionObserver !== "function") return;
-
-  const obs = new IntersectionObserver((entries) => {
-    const hit = entries.filter((e) => e.isIntersecting)
-      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-    if (hit?.target?.id) activate(hit.target.id);
-  }, { root: surface, rootMargin: "-10% 0% -75% 0%", threshold: 0 });
-
-  sections.forEach((sec) => obs.observe(sec));
+  // Initial active = ?tab=<key> from the hash, falling back to the
+  // first registered tab if the param is missing / unknown.
+  const params  = new URLSearchParams(location.hash.split("?")[1] || "");
+  const wantTab = params.get("tab");
+  const initial = (wantTab && validKeys.has(wantTab)) ? wantTab : SET_TABS[0].key;
+  activate(initial);
 }
 
 export default async function settings(app, { session }) {

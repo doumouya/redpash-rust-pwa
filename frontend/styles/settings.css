@@ -19,33 +19,25 @@
    Em's framing 2026-05-27: "replace the nav in settings with the
    same rail side-nav as in all the other page." */
 .rp-settings__surface {
-  /* rt-surface is the scrolling container; the IntersectionObserver
-     in mountSettingsRail uses it as its `root`. The default
-     rt-surface chrome (border + radius) reads great here, only the
-     interior padding needs to give the .rp-page__head + sections
-     room to breathe.
+  /* rt-surface is the scrolling container for the active section's
+     content (a single section can still exceed the viewport — the
+     chart pickers can hold many rows). Tab-switch UX (Em 2026-05-28):
+     only one .rp-page__section is visible at a time (others carry
+     [hidden]); the surface fills with that section's content.
 
      **Overflow override.** Workspace/Home/Monitoring keep
      `.rt-surface { overflow: hidden }` because their content is a
-     redtable that scrolls inside its own panel. Settings has a
-     vertical stack of sections that overflows the viewport — the
-     surface itself has to scroll, otherwise everything past
-     `set-cleaner` is clipped (Em: "bro we lost scrolling on
-     settings page"). */
+     redtable that scrolls inside its own panel. Settings doesn't
+     have that inner scrolling panel — the section IS the scrolling
+     content. */
   padding: var(--rp-sp-5) var(--rp-sp-6);
   display: flex;
   flex-direction: column;
   gap: var(--rp-sp-5);
   overflow-y: auto;
 }
-.rp-settings__surface .rp-page__head {
-  margin-bottom: 0;
-}
 .rp-settings__surface .rp-page__section {
   margin-top: 0;
-  /* Anchor jump lands the section's heading just below the surface
-     top so the rail's scroll-spy band finds it cleanly. */
-  scroll-margin-top: var(--rp-sp-3);
 }
 
 
