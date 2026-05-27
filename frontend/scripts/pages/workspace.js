@@ -362,6 +362,30 @@ export default function workspace(app, { session }) {
   // ─── rail — load projects + lazy files ─────────────────────────
   loadProjects();
 
+  // Rail hide/restore — per-user, persisted via `user_preferences`
+  // (unregistered prefs path; `setPref` does the PATCH /api/me/prefs
+  // write-through, `getPref` reads the cached value). Each list is
+  // [{rid, name, project?}] so the recovery UI can label entries
+  // without re-fetching the server-side metadata. Hiding a project
+  // implicitly hides its files (the group disappears); restoring a
+  // project brings back its files minus any individually-hidden ones.
+  const HIDDEN_PROJECTS_KEY = "rail_hidden_projects";
+  const HIDDEN_FILES_KEY    = "rail_hidden_files";
+
+  function getHidden(key) {
+    const list = getPref(key);
+    return Array.isArray(list) ? list : [];
+  }
+  function hideOne(key, entry) {
+    const list = getHidden(key);
+    if (list.some((x) => x.rid === entry.rid)) return;
+    list.push(entry);
+    setPref(key, list);
+  }
+  function unhideOne(key, rid) {
+    setPref(key, getHidden(key).filter((x) => x.rid !== rid));
+  }
+
   async function loadProjects() {
     try {
       const data = await api.get("/projects");
@@ -375,11 +399,19 @@ export default function workspace(app, { session }) {
 
   function renderRail(items) {
     navBody.setAttribute("aria-busy", "false");
-    if (!items.length) {
+    const hiddenProjects = getHidden(HIDDEN_PROJECTS_KEY);
+    const hiddenFiles    = getHidden(HIDDEN_FILES_KEY);
+    const hiddenProjSet  = new Set(hiddenProjects.map((x) => x.rid));
+    const visible        = items.filter((p) => !hiddenProjSet.has(p.redpash_id));
+    if (!visible.length && !hiddenProjects.length && !hiddenFiles.length) {
       navBody.innerHTML = '<div class="rt-nav-state">No projects yet.</div>';
       return;
     }
-    navBody.innerHTML = items.map(projectGroup).join("");
+    let html = visible.map(projectGroup).join("");
+    if (hiddenProjects.length || hiddenFiles.length) {
+      html += renderHiddenSection(hiddenProjects, hiddenFiles);
+    }
+    navBody.innerHTML = html;
     // Deep-link via #/workspace?project=<rid>&file=<rid>. Project
     // auto-opens that project; file (optional) jumps straight to
     // that file instead of the project's first tab — used by Home
@@ -418,6 +450,7 @@ export default function workspace(app, { session }) {
       +     '<span class="rt-group-mark" data-c="' + c + '">' + esc(initials) + '</span>'
       +     '<span class="rt-group-name">' + esc(p.name) + '</span>'
       +     '<span class="rt-group-rename" title="Rename project"><i class="bi bi-pencil"></i></span>'
+      +     '<span class="rt-group-hide" title="Hide from rail"><i class="bi bi-x"></i></span>'
       +     '<span class="rt-group-count">' + (p.file_count || 0) + '</span>'
       +   '</button>'
       +   '<div class="rt-group-body" aria-busy="false"></div>'
@@ -486,6 +519,64 @@ export default function workspace(app, { session }) {
     span.addEventListener("blur", onBlur, { once: true });
   }
 
+  // Inline rename for a file's rail tab. Same contenteditable swap +
+  // Enter/Esc/blur lifecycle as enterProjectRename, with two
+  // differences: (1) PATCH /api/files/:rid {display_name} instead of
+  // /api/projects/:rid {name}, (2) the parent button is the .rt-tab
+  // which also triggers loadFile on plain click — the bubble-
+  // suppression on mousedown/click prevents the file from being
+  // re-opened while the user clicks inside the editable text.
+  function enterFileRename(tab, span) {
+    const rid = tab.dataset.rid;
+    const original = span.textContent;
+    let commit = true;
+
+    span.setAttribute("contenteditable", "plaintext-only");
+    span.classList.add("rt-tab-name-editing");
+
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    span.focus();
+
+    const suppress = (e) => e.stopPropagation();
+    const onKey = (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter")       { e.preventDefault(); commit = true;  span.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); commit = false; span.blur(); }
+    };
+    const onBlur = async () => {
+      span.removeEventListener("keydown", onKey);
+      span.removeEventListener("mousedown", suppress);
+      span.removeEventListener("click", suppress);
+      span.removeAttribute("contenteditable");
+      span.classList.remove("rt-tab-name-editing");
+
+      const next = (span.textContent || "").trim();
+      if (!commit || !next || next === original) {
+        span.textContent = original;
+        return;
+      }
+      span.textContent = next;
+      try {
+        const updated = await api.patch("/files/" + encodeURIComponent(rid), { display_name: next });
+        // Server may normalise (trim, strip extension). Reflect the
+        // canonical value so the rail stays accurate.
+        const canonical = updated?.summary?.display_name || updated?.display_name;
+        if (canonical && canonical !== next) span.textContent = canonical;
+      } catch {
+        span.textContent = original;
+      }
+    };
+
+    span.addEventListener("keydown", onKey);
+    span.addEventListener("mousedown", suppress);
+    span.addEventListener("click", suppress);
+    span.addEventListener("blur", onBlur, { once: true });
+  }
+
   async function loadFilesForGroup(group) {
     if (group.dataset.filesLoaded === "1") return;
     const body = group.querySelector(".rt-group-body");
@@ -517,11 +608,55 @@ export default function workspace(app, { session }) {
   }
 
   function renderFiles(body, items) {
-    if (!items.length) {
+    const hiddenSet = new Set(getHidden(HIDDEN_FILES_KEY).map((x) => x.rid));
+    const visible = items.filter((f) => !hiddenSet.has(f.redpash_id));
+    if (!visible.length) {
       body.innerHTML = '<div class="rt-nav-state">No files yet.</div>';
       return;
     }
-    body.innerHTML = items.map(fileTab).join("");
+    body.innerHTML = visible.map(fileTab).join("");
+  }
+
+  // Recovery section at the rail body's tail — appears only when at
+  // least one project or file is hidden. Native <details> for the
+  // toggle so we get the open-state animation + a11y for free. Each
+  // entry's click hits the navBody delegator (see the .rt-hidden-item
+  // branch) which restores the rid via unhideOne + loadProjects.
+  function renderHiddenSection(projects, files) {
+    const count = projects.length + files.length;
+    let body = "";
+    if (projects.length) {
+      body += '<div class="rt-hidden-section">'
+        + '<div class="rt-hidden-title">Projects</div>'
+        + projects.map((p) =>
+            '<button class="rt-hidden-item" type="button"'
+            + ' data-kind="project" data-rid="' + esc(p.rid) + '">'
+            +   '<span class="rt-hidden-name">' + esc(p.name) + '</span>'
+            +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+            + '</button>').join("")
+        + '</div>';
+    }
+    if (files.length) {
+      body += '<div class="rt-hidden-section">'
+        + '<div class="rt-hidden-title">Files</div>'
+        + files.map((f) =>
+            '<button class="rt-hidden-item" type="button"'
+            + ' data-kind="file" data-rid="' + esc(f.rid) + '">'
+            +   '<span class="rt-hidden-name">' + esc(f.name)
+            +     (f.project
+                    ? ' <span class="rt-hidden-meta">· ' + esc(f.project) + '</span>'
+                    : "")
+            +   '</span>'
+            +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+            + '</button>').join("")
+        + '</div>';
+    }
+    return '<details class="rt-hidden">'
+      +   '<summary class="rt-hidden-summary">'
+      +     '<i class="bi bi-eye-slash"></i> Hidden (' + count + ')'
+      +   '</summary>'
+      +   '<div class="rt-hidden-body">' + body + '</div>'
+      + '</details>';
   }
 
   function fileTab(f) {
@@ -535,13 +670,14 @@ export default function workspace(app, { session }) {
     return '<button class="rt-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
       +   '<i class="bi ' + icon + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(name) + '</span>'
+      +   '<span class="rt-tab-rename" title="Rename file"><i class="bi bi-pencil"></i></span>'
       +   '<span class="rt-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
       +   '<span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>'
       + '</button>';
   }
 
   // ─── rail body — expand groups, switch / close tabs ────────────
-  navBody.addEventListener("click", (e) => {
+  navBody.addEventListener("click", async (e) => {
     // Rename pencil short-circuits the head toggle. The pencil lives
     // inside the head button, so its click bubbles here too — catch it
     // first and bail before the expand/collapse branch runs.
@@ -550,6 +686,44 @@ export default function workspace(app, { session }) {
       const group = renameBtn.closest(".rt-group");
       const nameSpan = group?.querySelector(".rt-group-name");
       if (group && nameSpan) enterProjectRename(group, nameSpan);
+      return;
+    }
+    // Project hide × — adds the project rid to rail_hidden_projects
+    // pref, re-renders the rail. Same hover-affordance pattern as the
+    // rename pencil; same short-circuit before the head-toggle branch.
+    const hideBtn = e.target.closest(".rt-group-hide");
+    if (hideBtn) {
+      const group = hideBtn.closest(".rt-group");
+      const rid   = group?.dataset.rid;
+      const name  = group?.querySelector(".rt-group-name")?.textContent?.trim();
+      if (rid && name) {
+        hideOne(HIDDEN_PROJECTS_KEY, { rid, name });
+        if (focusedProjectRid === rid) focusedProjectRid = null;
+        await loadProjects();
+      }
+      return;
+    }
+    // File rename pencil — same pattern as the project rename pencil,
+    // short-circuits before the tab-click branch so the pencil click
+    // doesn't trigger loadFile. PATCH /api/files/:rid is the wire.
+    const tabRenameBtn = e.target.closest(".rt-tab-rename");
+    if (tabRenameBtn) {
+      const tab = tabRenameBtn.closest(".rt-tab");
+      const nameSpan = tab?.querySelector(".rt-tab-name");
+      if (tab && nameSpan) enterFileRename(tab, nameSpan);
+      return;
+    }
+    // Hidden-section item — click anywhere on a hidden entry restores
+    // it (removes from the pref + re-renders). The restore icon is
+    // visual only; the whole button is the click target.
+    const hiddenItem = e.target.closest(".rt-hidden-item");
+    if (hiddenItem) {
+      const kind = hiddenItem.dataset.kind;
+      const rid  = hiddenItem.dataset.rid;
+      if (rid) {
+        unhideOne(kind === "project" ? HIDDEN_PROJECTS_KEY : HIDDEN_FILES_KEY, rid);
+        await loadProjects();
+      }
       return;
     }
     const head = e.target.closest(".rt-group-head");
@@ -567,7 +741,20 @@ export default function workspace(app, { session }) {
     if (e.target.closest(".rt-tab-close")) {
       const tab = e.target.closest(".rt-tab");
       const closingActive = tab.dataset.rid === activeFileRid;
+      // Persist the hide via the rail_hidden_files pref so the tab
+      // stays gone across reloads. The Hidden (N) recovery section
+      // at the rail tail brings it back on click. project name is
+      // captured at hide-time so the recovery UI can label the
+      // entry without re-fetching.
+      const rid     = tab.dataset.rid;
+      const name    = tab.querySelector(".rt-tab-name")?.textContent?.trim() || rid;
+      const group   = tab.closest(".rt-group");
+      const project = group?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+      if (rid) hideOne(HIDDEN_FILES_KEY, { rid, name, project });
       tab.remove();
+      // Show the new Hidden (N) section / refresh its count without
+      // a full reload — cheap re-render of just the rail body.
+      loadProjects();
       if (closingActive) {
         // The file backing the table just disappeared — clear state so
         // loadFile(rid) can re-open the same rid later, and blank the

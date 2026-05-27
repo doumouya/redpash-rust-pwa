@@ -137,6 +137,25 @@
 .rt-group-head:hover .rt-group-rename { opacity: 1; }
 .rt-group-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
 
+/* Project-hide × — same hover-fade pattern as the rename pencil but
+   accent-coloured on hover to read as destructive (parallel to the
+   .rt-tab-close pattern for files). */
+.rt-group-hide {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rt-group-hide i { font-size: 0.875rem; }
+.rt-group-head:hover .rt-group-hide { opacity: 1; }
+.rt-group-hide:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+
 /* Editing state — drops the ellipsis so the full value is visible while
    the user types. Outline matches the accent so it reads as a focused
    text input even though it's a contenteditable span. */
@@ -199,6 +218,40 @@
 .rt-tab-dot.is-clean { background: var(--rp-ok); }
 .rt-tab-dot.is-warn  { background: var(--rp-warn); }
 .rt-tab-dot.is-dirty { background: var(--rp-accent); }
+/* File rename pencil — mirrors .rt-group-rename for projects. Hover-
+   fades in on the tab. Sits between the name and the stage dot so the
+   close × stays at the right edge as the destructive action. */
+.rt-tab-rename {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rt-tab-rename i { font-size: 0.75rem; }
+.rt-tab:hover .rt-tab-rename, .rt-tab.active .rt-tab-rename { opacity: 1; }
+.rt-tab-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+
+/* Editing state for the file-name span while inline rename is active.
+   Mirrors .rt-group-name-editing — undo ellipsis so the full value
+   shows, accent outline reads as a focused text input. */
+.rt-tab-name-editing {
+  background: var(--rp-surface-2);
+  outline: 1px solid var(--rp-accent);
+  outline-offset: 0;
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  cursor: text;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .rt-tab-close {
   width: 1.25rem;
   height: 1.25rem;
@@ -302,3 +355,65 @@
 }
 .rt-nav-foot .rt-btn { width: 100%; }
 .rt-nav-foot .rt-btn.is-busy { opacity: 0.7; cursor: progress; }
+
+/* ─── hidden recovery section ───────────────────────────────────
+   Collapsible <details> at the tail of the rail body, visible only
+   when ≥1 project or file is hidden via the × buttons (project)
+   or .rt-tab-close (file). Click an entry to restore it via the
+   navBody click delegator. */
+.rt-hidden {
+  margin: 0.5rem 0.375rem 0;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rt-hidden-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.rt-hidden-summary::-webkit-details-marker { display: none; }
+.rt-hidden-summary::marker { content: ""; }
+.rt-hidden-summary:hover { color: var(--rp-text); }
+.rt-hidden[open] .rt-hidden-summary { color: var(--rp-text); }
+.rt-hidden-body { padding: 0.25rem 0 0.5rem; }
+.rt-hidden-section { margin-bottom: 0.375rem; }
+.rt-hidden-section:last-child { margin-bottom: 0; }
+.rt-hidden-title {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rp-text-mute);
+  padding: 0.25rem 0.25rem 0.1875rem;
+}
+.rt-hidden-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.4375rem;
+  border: 0;
+  background: transparent;
+  border-radius: 0.375rem;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+.rt-hidden-item:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rt-hidden-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-hidden-meta { color: var(--rp-text-mute); }
+.rt-hidden-restore { font-size: 0.8125rem; color: var(--rp-accent-2); flex-shrink: 0; }
+.rt-hidden-item:hover .rt-hidden-restore { color: var(--rp-text); }
