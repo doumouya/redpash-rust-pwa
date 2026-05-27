@@ -1133,6 +1133,38 @@ pub async fn delete_membership(
     Ok(n.rows_affected() > 0)
 }
 
+/// Insert a membership row in the right table per `scope`. Role
+/// allow-lists are enforced at the route layer (different per scope:
+/// project = owner/collaborator/viewer, company = owner/admin/member);
+/// the SQL CHECK is the last line of defense. Returns the bare scope
+/// + user pair on success so the route can emit the audit event
+/// without an extra round-trip. Bubbles 23503 (FK violation) and
+/// 23505 (duplicate PK) up so the route maps them to 404 / 409.
+pub async fn insert_membership(
+    pool:     &PgPool,
+    scope:    &str,
+    scope_id: &str,
+    user_id:  &str,
+    role:     &str,
+) -> sqlx::Result<()> {
+    let sql = match scope {
+        "project" => "INSERT INTO project_memberships
+                       (project_redpash_id, user_redpash_id, role)
+                       VALUES ($1, $2, $3)",
+        // scope == "company"
+        _         => "INSERT INTO company_memberships
+                       (company_id, user_redpash_id, role)
+                       VALUES ($1, $2, $3)",
+    };
+    sqlx::query(sql)
+        .bind(scope_id)
+        .bind(user_id)
+        .bind(role)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list_company_members(
     pool:        &PgPool,
     company_rid: &str,

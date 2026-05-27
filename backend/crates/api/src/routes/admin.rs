@@ -49,7 +49,7 @@ pub fn routes() -> Router<AppState> {
         .route("/companies",         get(list_companies))
         .route("/companies/stats",   get(stats_companies))
         .route("/companies/:rid",    axum::routing::delete(delete_company))
-        .route("/memberships",       get(list_memberships))
+        .route("/memberships",       get(list_memberships).post(create_membership))
         .route("/memberships/stats", get(stats_memberships))
         // Memberships use a synthetic compound rid in the path —
         // `{scope}:{scope_redpash_id}:{user_redpash_id}` — since the
@@ -1071,6 +1071,111 @@ async fn delete_company(
         .context(serde_json::json!({ "company": rid }))
         .send();
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Per-scope role allow-lists. The SQL CHECK constraint is the
+/// safety net; this is the public contract used to validate the
+/// request body before the INSERT (cleaner 400 than letting the CHECK
+/// surface as a 500). Mirrors the migration at
+/// 20260521000001_companies.sql:23-37.
+const PROJECT_ROLES: &[&str] = &["owner", "collaborator", "viewer"];
+const COMPANY_ROLES: &[&str] = &["owner", "admin", "member"];
+
+#[derive(Deserialize)]
+struct CreateMembershipBody {
+    scope:    String,        // "project" | "company"
+    scope_id: String,        // PRJ_… or CMP_…
+    user_id:  String,        // USR_…
+    /// Optional — defaults per scope (viewer / member) to match the
+    /// SQL column default. Validated against the per-scope allow-list.
+    #[serde(default)] role: Option<String>,
+}
+
+/// Create a membership row. Scope picks the table (project_memberships
+/// vs company_memberships); the rest is field-validation + a single
+/// INSERT. Returns 201 with the bare membership triple so the FE can
+/// reconstruct the synthetic rid without an extra GET; the full
+/// MembershipSummary is recoverable via /api/admin/memberships (the
+/// FE refetches after a successful POST anyway).
+///
+/// Errors:
+///   - 400 invalid scope / role / empty id
+///   - 404 if scope_id or user_id doesn't exist (FK 23503 → not_found)
+///   - 409 if the (scope_id, user_id) pair already has a membership
+///     (PK 23505 → conflict)
+async fn create_membership(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Json(body):   Json<CreateMembershipBody>,
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let scope    = body.scope.trim();
+    let scope_id = body.scope_id.trim();
+    let user_id  = body.user_id.trim();
+    if scope_id.is_empty() || user_id.is_empty() {
+        return Err(AppError::bad_request("invalid", "scope_id and user_id are required"));
+    }
+    let allow = match scope {
+        "project" => PROJECT_ROLES,
+        "company" => COMPANY_ROLES,
+        _ => return Err(AppError::bad_request(
+            "invalid",
+            "scope must be one of: project, company",
+        )),
+    };
+    // Default per migration column-default (viewer / member). The SQL
+    // DEFAULT would handle this if we omitted the column, but binding
+    // explicitly keeps the audit event accurate.
+    let role_owned: String = body.role
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(if scope == "project" { "viewer" } else { "member" })
+        .to_string();
+    if !allow.contains(&role_owned.as_str()) {
+        return Err(AppError::bad_request(
+            "invalid",
+            format!("role for {scope} must be one of: {}", allow.join(", ")),
+        ));
+    }
+    match db::insert_membership(&state.db, scope, scope_id, user_id, &role_owned).await {
+        Ok(()) => {
+            crate::event::info(
+                &state.db,
+                "membership_create",
+                format!("added {role_owned} {scope} membership: {user_id} → {scope_id}"),
+            )
+            .user(caller)
+            .context(serde_json::json!({
+                "scope":    scope,
+                "scope_id": scope_id,
+                "user_id":  user_id,
+                "role":     role_owned,
+            }))
+            .send();
+            Ok((
+                StatusCode::CREATED,
+                Json(serde_json::json!({
+                    "scope":    scope,
+                    "scope_id": scope_id,
+                    "user_id":  user_id,
+                    "role":     role_owned,
+                })),
+            ))
+        }
+        Err(sqlx::Error::Database(e)) => match e.code().as_deref() {
+            Some("23503") => Err(AppError::not_found(
+                "not_found",
+                format!("{scope} or user not found"),
+            )),
+            Some("23505") => Err(AppError::conflict(
+                "membership_exists",
+                "membership already exists for this user + scope",
+            )),
+            _ => Err(AppError::internal("db", e.to_string())),
+        },
+        Err(e) => Err(AppError::internal("db", e.to_string())),
+    }
 }
 
 /// Memberships have a composite primary key (scope_id + user_id), so
