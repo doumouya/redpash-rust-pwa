@@ -797,6 +797,127 @@ export default function cases(app, { session }) {
     await patchCase({ assignee_id: userRid });
   }
 
+  // ── delete case ─────────────────────────────────────────────
+  // Trash icon in the detail head → window.confirm → DELETE /cases/:rid
+  // → navigate back to /cases (board). Refresh pulls the deleted row
+  // out of the rail + board. v3 RBAC overlay gates this by reporter /
+  // admin role; v1 is dev-permissive per [[redpash-stage]].
+  const deleteBtn = app.querySelector("#rp-cases-detail-delete");
+  deleteBtn?.addEventListener("click", async () => {
+    if (!currentDetailRid) return;
+    const title = titleEl?.textContent || currentDetailRid;
+    if (!confirm('Delete case "' + title + '"? This cannot be undone.')) return;
+    deleteBtn.disabled = true;
+    try {
+      await api.delete("/cases/" + encodeURIComponent(currentDetailRid));
+      location.hash = "#/cases";
+      refreshCases();
+    } catch (err) {
+      const msg = err?.body?.message || err?.body?.error || err?.message || "Delete failed";
+      alert(msg + (err?.status ? " (" + err.status + ")" : ""));
+    } finally {
+      deleteBtn.disabled = false;
+    }
+  });
+
+  // ── inline title edit ───────────────────────────────────────
+  // Click the H1 → contenteditable=plaintext-only + focus + select-all.
+  // Enter commits; Escape reverts; Blur commits if changed. Suppresses
+  // newline insertion (Enter triggers commit, not a line break).
+  let titleEditing = false;
+  let titleEditOriginal = "";
+  function startTitleEdit() {
+    if (!titleEl || titleEditing) return;
+    titleEditing = true;
+    titleEditOriginal = titleEl.textContent || "";
+    titleEl.setAttribute("contenteditable", "plaintext-only");
+    titleEl.classList.add("is-editing");
+    titleEl.focus();
+    // Select-all so a quick re-type replaces the title without manual selection
+    const range = document.createRange();
+    range.selectNodeContents(titleEl);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+  function endTitleEdit(commit) {
+    if (!titleEl || !titleEditing) return;
+    titleEditing = false;
+    titleEl.removeAttribute("contenteditable");
+    titleEl.classList.remove("is-editing");
+    window.getSelection()?.removeAllRanges();
+    const next = (titleEl.textContent || "").trim();
+    if (!commit || !next || next === titleEditOriginal) {
+      titleEl.textContent = titleEditOriginal;
+      return;
+    }
+    patchCase({ title: next });
+  }
+  titleEl?.addEventListener("click", () => { if (!titleEditing) startTitleEdit(); });
+  titleEl?.addEventListener("keydown", (e) => {
+    if (!titleEditing) return;
+    if (e.key === "Enter")  { e.preventDefault(); endTitleEdit(true);  }
+    // stopPropagation — the global Escape handler closes the detail
+    // panel; while editing, Escape should only exit edit mode.
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      endTitleEdit(false);
+    }
+  });
+  titleEl?.addEventListener("blur", () => { if (titleEditing) endTitleEdit(true); });
+
+  // ── inline description edit ─────────────────────────────────
+  // Pencil button below the description body → swap to a textarea
+  // form prefilled with the current value. Save PATCHes; Cancel
+  // restores. patchCase's repaint re-renders the body from the
+  // server response so we don't have to optimistically rewrite it.
+  const descEditBtn   = app.querySelector("#rp-cases-side-desc-edit-btn");
+  const descForm      = app.querySelector("#rp-cases-side-desc-form");
+  const descInput     = app.querySelector("#rp-cases-side-desc-input");
+  function openDescEdit() {
+    if (!descForm || !sideDescBody) return;
+    // Prefill from the live case (the rendered span sometimes carries
+    // the unassigned-placeholder; descBody's data-raw stash holds the
+    // real value set in paintDetail).
+    const raw = sideDescBody.dataset.raw || "";
+    if (descInput) descInput.value = raw;
+    sideDescBody.hidden = true;
+    if (descEditBtn) descEditBtn.hidden = true;
+    descForm.hidden = false;
+    descInput?.focus();
+  }
+  function closeDescEdit() {
+    if (!descForm || !sideDescBody) return;
+    descForm.hidden = true;
+    sideDescBody.hidden = false;
+    if (descEditBtn) descEditBtn.hidden = false;
+  }
+  descEditBtn?.addEventListener("click", openDescEdit);
+  // Escape inside the textarea cancels the edit without bubbling to
+  // the global handler (which would close the whole detail panel).
+  descInput?.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeDescEdit();
+  });
+  descForm?.addEventListener("click", (e) => {
+    if (e.target.closest('[data-act="cancel"]')) {
+      e.preventDefault();
+      closeDescEdit();
+    }
+  });
+  descForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const next = (descInput?.value || "").trim();
+    const prev = sideDescBody?.dataset.raw || "";
+    if (next === prev) { closeDescEdit(); return; }
+    closeDescEdit();
+    // Empty string clears the description (backend trims + maps "" → NULL).
+    await patchCase({ description: next });
+  });
+
   async function loadCaseDetail(rid) {
     currentDetailRid = rid;
     if (ridEl) ridEl.textContent = rid;
@@ -819,10 +940,16 @@ export default function cases(app, { session }) {
 
   function paintDetail(detail) {
     const c = detail?.case || detail || {};
-    const comments = detail?.comments || [];
-    const activity = detail?.activity || detail?.events || [];
+    // PATCH responses are bare Case rows (no comments / activity);
+    // GET /cases/:rid returns the full CaseDetail. Detect which shape
+    // we got so a field-edit repaint doesn't wipe the comments thread
+    // or reset the activity filter's memoized payload.
+    const hasComments = Array.isArray(detail?.comments);
+    const hasActivity = Array.isArray(detail?.activity) || Array.isArray(detail?.events);
+    const comments = hasComments ? detail.comments : null;
+    const activity = hasActivity ? (detail.activity || detail.events) : null;
 
-    lastDetailActivity = activity;               // memoize for filter re-render
+    if (hasActivity) lastDetailActivity = activity;
 
     if (titleEl) {
       const t = c.title || "(untitled)";
@@ -848,7 +975,10 @@ export default function cases(app, { session }) {
 
     // Description — auto-open when populated, closed when empty.
     // Native <details>/<summary> handles the affordance + a11y.
+    // dataset.raw stashes the unrendered value for the inline editor
+    // (the rendered DOM may be escaped HTML or a placeholder span).
     if (sideDescBody) {
+      sideDescBody.dataset.raw = c.description || "";
       sideDescBody.innerHTML = c.description
         ? esc(c.description)
         : '<span class="rp-cases-side-unassigned">— no description —</span>';
@@ -857,21 +987,21 @@ export default function cases(app, { session }) {
 
     // Activity count in the summary — gives the user a sense of
     // whether expanding is worthwhile without forcing it open.
-    if (activityCountEl) {
+    if (hasActivity && activityCountEl) {
       const n = activity.length;
       activityCountEl.textContent = n ? "(" + n + ")" : "";
       activityCountEl.hidden = !n;
     }
 
-    if (commentsList) {
+    if (hasComments && commentsList) {
       commentsList.innerHTML = comments.length
         ? commentsListHTML(comments)
         : '<p class="rt-empty rp-cases-empty">No comments yet.</p>';
     }
-    renderActivityList(activity);
+    if (hasActivity) renderActivityList(activity);
     // Pin to latest comment after the paint settles. requestAnimationFrame
     // so the new comment nodes are laid out before we read scrollHeight.
-    requestAnimationFrame(scrollCommentsToLatest);
+    if (hasComments) requestAnimationFrame(scrollCommentsToLatest);
   }
 
   // Verb-based labels for the card chevron tooltip. Reads as a

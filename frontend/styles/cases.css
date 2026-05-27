@@ -125,7 +125,6 @@
    these page-specific overrides keep the cases extras hidden so
    the icon-only view stays clean. */
 .rt-nav.compact .rp-cases-rail-filter,
-.rt-nav.compact .rp-cases-rail-new,
 .rt-nav.compact .rp-cases-done-window {
   display: none;
 }
@@ -377,6 +376,18 @@
   background: var(--rp-hover);
   color: var(--rp-text);
 }
+
+/* Delete — same dimensions as close, destructive tint on hover.
+   `.rt-icon-btn` provides the base square shape; only the hover
+   color carries the destructive intent. */
+.rp-cases-detail-delete {
+  flex-shrink: 0;
+  color: var(--rp-text-mute);
+}
+.rp-cases-detail-delete:hover {
+  background: var(--rp-warn);
+  color: var(--rp-bg);
+}
 /* Body splits horizontally into main + side. Each column manages
    its own height + scroll context, independent of the other:
    • .rp-cases-detail-main — comments list (scrolls) + sticky
@@ -443,17 +454,34 @@
 
 /* Title in the head bar — single-line truncated; full title
    exposed via the `title=` attribute (browser tooltip). Hero
-   sized within the constraint of a thin head bar. */
+   sized within the constraint of a thin head bar.
+   Click to edit: cursor + subtle hover ring invite the click;
+   `.is-editing` (toggled by JS while contenteditable) drops the
+   ellipsis truncation so the user can see the whole string, and
+   draws an accent ring for the focused state. */
 .rp-cases-detail-title {
   flex: 1;
   min-width: 0;
   margin: 0;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--rp-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: text;
+  transition: background 0.12s var(--rp-ease);
+}
+.rp-cases-detail-title:hover { background: var(--rp-hover); }
+.rp-cases-detail-title.is-editing {
+  background: var(--rp-surface);
+  outline: 0.125rem solid var(--rp-accent-2);
+  outline-offset: 0;
+  text-overflow: clip;
+  overflow: auto;
+  cursor: text;
 }
 
 /* Editable controls — vertical stack of label + control rows in
@@ -559,6 +587,54 @@
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.45;
+}
+
+/* Inline-edit affordance under the description body — small,
+   unobtrusive text+icon button. Click → hide the body, reveal the
+   form below. The form occupies the same slot as the body so the
+   panel doesn't shift. */
+.rp-cases-side-desc-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.375rem 0 0;
+  padding: 0.1875rem 0.375rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+.rp-cases-side-desc-edit:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-cases-side-desc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+.rp-cases-side-desc-input {
+  width: 100%;
+  padding: 0.4375rem 0.5rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  resize: vertical;
+  outline: 0;
+}
+.rp-cases-side-desc-input:focus { border-color: var(--rp-accent-2); }
+.rp-cases-side-desc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
 }
 
 /* Sidebar activity items — the main .rp-cases-activity-item grid

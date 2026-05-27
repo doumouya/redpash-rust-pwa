@@ -22,10 +22,6 @@
     <aside class="rt-nav" id="rp-cases-rail">
       <div class="rt-nav-head">
         <span class="rt-nav-title">Cases</span>
-        <button class="rt-btn rt-btn--accent rt-icon-btn rp-cases-rail-new" id="rp-cases-new"
-                type="button" title="New case">
-          <i class="bi bi-plus-lg"></i>
-        </button>
         <button class="rt-btn rt-icon-btn rp-cases-rail-collapse" id="rp-cases-rail-collapse"
                 type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
@@ -51,6 +47,12 @@
       </div>
       <div class="rt-nav-body" id="rp-cases-rail-body">
         <p class="rt-nav-state">Loading cases…</p>
+      </div>
+      <div class="rt-nav-foot">
+        <button class="rt-btn rt-btn--glass" id="rp-cases-new" type="button"
+                title="New case">
+          <i class="bi bi-plus-lg"></i><span>New case</span>
+        </button>
       </div>
     </aside>
 
@@ -82,7 +84,12 @@
       <aside id="rp-cases-detail" class="rp-cases-detail" hidden>
         <header class="rp-cases-detail-head">
           <span class="rp-cases-detail-rid" id="rp-cases-detail-rid"></span>
-          <h1 class="rp-cases-detail-title" id="rp-cases-detail-title" title="">Loading…</h1>
+          <h1 class="rp-cases-detail-title" id="rp-cases-detail-title"
+              title="" spellcheck="false">Loading…</h1>
+          <button class="rt-icon-btn rp-cases-detail-delete" id="rp-cases-detail-delete"
+                  type="button" title="Delete case">
+            <i class="bi bi-trash3"></i>
+          </button>
           <a class="rp-cases-detail-close" href="#/cases" title="Close (Esc)">
             <i class="bi bi-x-lg"></i>
           </a>
@@ -191,12 +198,27 @@
             </dl>
 
             <!-- Description — auto-opens when populated, stays
-                 closed when empty. JS toggles the `open` attribute. -->
+                 closed when empty. JS toggles the `open` attribute.
+                 Edit affordance below the body: click → hides body,
+                 reveals the textarea form; Save PATCHes, Cancel
+                 restores. -->
             <details class="rp-cases-detail-side-section" id="rp-cases-side-desc">
               <summary>Description</summary>
               <div class="rp-cases-detail-side-desc-body" id="rp-cases-side-desc-body">
                 <span class="rp-cases-side-unassigned">— no description —</span>
               </div>
+              <button class="rp-cases-side-desc-edit" id="rp-cases-side-desc-edit-btn"
+                      type="button" title="Edit description">
+                <i class="bi bi-pencil-square"></i><span>Edit</span>
+              </button>
+              <form class="rp-cases-side-desc-form" id="rp-cases-side-desc-form" hidden>
+                <textarea class="rp-cases-side-desc-input" id="rp-cases-side-desc-input"
+                          rows="6" placeholder="Steps to reproduce, context, expected behavior…"></textarea>
+                <div class="rp-cases-side-desc-actions">
+                  <button class="rt-btn" type="button" data-act="cancel">Cancel</button>
+                  <button class="rt-btn rt-btn--accent" type="submit">Save</button>
+                </div>
+              </form>
             </details>
 
             <!-- Activity — filter pills + scrolling feed. Closed by
