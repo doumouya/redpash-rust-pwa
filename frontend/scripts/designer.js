@@ -25,14 +25,20 @@
 import { api } from "/scripts/api.js";
 import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import { esc } from "/scripts/dom.js";
-// THEMES / TYPE_TO_KIND / TYPE_LIST / SMOOTHABLE / buildOption lifted
-// into /scripts/charts/build.js (Slice A of the chart-pipeline
-// unification — Em 2026-05-27). Pure refactor; this module imports
-// what it used to define locally so the Settings-driven Monitoring
-// chart picker (Slice D) can share the same vocabulary.
-import {
-  THEMES, TYPE_TO_KIND, TYPE_LIST, SMOOTHABLE, buildOption,
-} from "/scripts/charts/build.js";
+// THEMES + TYPE_TO_KIND + buildOption lifted into
+// /scripts/charts/build.js (Slice A — Em 2026-05-27). Designer
+// still needs THEMES (theme lookup) + TYPE_TO_KIND (mountChartTile
+// kind inference) + buildOption (tile setOption). TYPE_LIST +
+// SMOOTHABLE moved with the accordion to /scripts/charts/builder-ui.js
+// (Slice C) — no longer referenced here.
+import { THEMES, TYPE_TO_KIND, buildOption } from "/scripts/charts/build.js";
+// Slice C of the chart-pipeline unification (Em 2026-05-27): the
+// right-side accordion (Chart type / Data / Axes / Legend / Tooltip /
+// Style) is now `mountBuilder` over in /scripts/charts/builder-ui.js.
+// Designer mounts it against a "file" source descriptor; the future
+// Monitoring chart picker (Slice D) mounts the same UI against a
+// "monitoring-stats" source descriptor.
+import { mountBuilder } from "/scripts/charts/builder-ui.js";
 
 // Defaults applied to a new chart cfg. Mirrors the prototype's D
 // plus the modifiers added in C3.1 (smooth for line/area).
@@ -58,25 +64,32 @@ export function mountDesigner(designerEl, ctx) {
   let dirty = false;     // any unsaved spec changes
   let busy  = false;     // PUT in flight
 
-  // Build the static shell once. Tiles + accordion content render
-  // into stable children so toggles + edits don't re-create the
-  // ECharts instances.
+  // Build the static shell once. Tiles render into the grid; the
+  // aside is the slot mountBuilder fills with its head + accordion
+  // body (it owns its own innerHTML — designer just hands it the
+  // container so the existing .ds-config CSS hooks stay in place).
   designerEl.innerHTML = ''
     + '<div class="ds-canvas">'
     +   '<div class="ds-grid" id="dsGrid"></div>'
     + '</div>'
-    + '<aside class="ds-config" id="dsConfig">'
-    +   '<div class="ds-config-head">'
-    +     '<span class="ds-config-title"><i class="bi bi-sliders"></i> Chart</span>'
-    +     '<button class="ds-config-save rt-btn rt-btn--accent" type="button" disabled>'
-    +       '<i class="bi bi-save"></i> Save'
-    +     '</button>'
-    +   '</div>'
-    +   '<div class="ds-config-body" id="dsAcc"></div>'
-    + '</aside>';
-  const gridEl = designerEl.querySelector("#dsGrid");
-  const accEl  = designerEl.querySelector("#dsAcc");
-  const saveBtn = designerEl.querySelector(".ds-config-save");
+    + '<aside class="ds-config" id="dsConfig"></aside>';
+  const gridEl  = designerEl.querySelector("#dsGrid");
+  const asideEl = designerEl.querySelector("#dsConfig");
+
+  // Mount the chart-spec builder against this designer's "file"
+  // source. getCfg / getSource read live designer state; onCfgChange
+  // pipes accordion edits back through rerender + setDirty.
+  const builder = mountBuilder(asideEl, {
+    getCfg:      () => sel?.cfg || null,
+    getSource:   () => sel ? {
+      kind:    "file",
+      rid:     ctx.getSource?.()?.rid || null,
+      label:   ctx.getSource?.()?.rid || null,
+      columns: ctx.getSource?.()?.columns || [],
+    } : null,
+    onCfgChange: () => { if (sel) { rerender(sel); setDirty(true); } },
+    onSave:      () => save(),
+  });
 
   // ── load ──────────────────────────────────────────────────────────
   // Called from workspace.js when a chart or dashboard file opens.
@@ -169,14 +182,14 @@ export function mountDesigner(designerEl, ctx) {
     dirty = false;
     busy = false;
     if (gridEl) gridEl.innerHTML = "";
-    if (accEl)  accEl.innerHTML  = "";
-    if (saveBtn) saveBtn.disabled = true;
+    builder.render();
+    builder.setDirty(false);
   }
 
   function renderCanvasEmpty() {
     if (gridEl) gridEl.innerHTML = '<p class="ds-empty">No chart loaded.</p>';
-    if (accEl)  accEl.innerHTML  = "";
-    if (saveBtn) saveBtn.disabled = true;
+    builder.render();
+    builder.setDirty(false);
   }
 
   // Merge the saved chart.spec with display defaults so the
@@ -226,92 +239,11 @@ export function mountDesigner(designerEl, ctx) {
     return el;
   }
 
-  // ── accordion ─────────────────────────────────────────────────────
-  // Six sections — type / data / axes / legend / tooltip / style.
-  // Re-rendered on selection change so values reflect the picked
-  // tile; per-section edits write through to sel.cfg + rerender.
-  function renderAccordion() {
-    if (!sel) { accEl.innerHTML = ""; return; }
-    const cfg = sel.cfg;
-    // Flattened type grid — every kind in one place so the user can
-    // switch any chart to any other shape without leaving the picker.
-    // Family grouping is implicit in adjacency (cartesian first, then
-    // barh, scatter, pie variants, radar, gauge, pictorial).
-    const typeBtns = TYPE_LIST.map(([t, icon, label]) =>
-      '<button type="button" class="ds-type-btn' + (t === cfg.type ? " active" : "") + '"'
-      + ' data-type="' + esc(t) + '"><i class="bi ' + esc(icon) + '"></i>' + esc(label)
-      + '</button>').join('');
-    const themeRows = Object.entries(THEMES).map(([key, t]) =>
-      '<button type="button" class="ds-theme-opt' + (key === cfg.theme ? " active" : "") + '"'
-      + ' data-theme="' + esc(key) + '">'
-      + '<span class="ds-sw">' + t.series.slice(0, 5).map((c) =>
-          '<i style="background:' + c + '"></i>').join('') + '</span>'
-      + '<span>' + esc(t.name) + '</span>'
-      + (key === cfg.theme ? '<i class="bi bi-check2 ds-check"></i>' : '')
-      + '</button>').join('');
-    const src = ctx.getSource?.() || { rid: null, columns: [] };
-    const sourceLabel = src.rid ? src.rid : "(no source bound)";
-    accEl.innerHTML = ''
-      + section("type",    "bi-bar-chart",      "Chart type", true,
-          '<div class="ds-type-grid">' + typeBtns + '</div>'
-          + '<span class="ds-lbl">Title</span>'
-          + '<input class="ds-input" data-key="title" value="' + esc(cfg.title) + '" />')
-      + section("data",    "bi-database",       "Data", false,
-          '<span class="ds-lbl">Source view</span>'
-          + '<div class="ds-source"><i class="bi bi-filetype-csv"></i> ' + esc(sourceLabel) + '</div>'
-          + '<span class="ds-lbl">Group by</span>'
-          + '<div class="ds-chip-row">'
-          +   (cfg.group_by
-                ? '<span class="ds-chip">' + esc(cfg.group_by) + '</span>'
-                : '<span class="ds-muted">— not set</span>')
-          + '</div>'
-          + '<span class="ds-lbl">Measure</span>'
-          + '<div class="ds-chip-row">'
-          +   '<span class="ds-chip">' + esc(cfg.agg_fn) + '('
-          +     esc(cfg.agg_col === "*" ? "*" : cfg.agg_col) + ')</span>'
-          + '</div>')
-      + section("axes",    "bi-rulers",         "Axes", false,
-          (["pie", "gauge", "radar"].includes(cfg.kind)
-            ? '<p class="ds-muted">Axes don\'t apply to this chart kind.</p>'
-            : toggleRow("splitLines", cfg.splitLines, "Show split lines")
-              + toggleRow("axisLine", cfg.axisLine, "Show axis line")))
-      + section("legend",  "bi-list-ul",        "Legend", false,
-          toggleRow("legend", cfg.legend, "Show legend")
-          + '<span class="ds-lbl">Position</span>'
-          + '<select class="ds-input" data-key="legendPos">'
-          +   '<option value="bottom"' + (cfg.legendPos === "bottom" ? " selected" : "") + '>Bottom</option>'
-          +   '<option value="top"'    + (cfg.legendPos === "top"    ? " selected" : "") + '>Top</option>'
-          + '</select>')
-      + section("tooltip", "bi-chat-square-text", "Tooltip", false,
-          toggleRow("tooltip", cfg.tooltip, "Show tooltip on hover"))
-      + section("style",   "bi-palette",        "Style", false,
-          (SMOOTHABLE.has(cfg.type)
-            ? toggleRow("smooth", cfg.smooth, "Smooth lines")
-            : "")
-          + '<span class="ds-lbl">Chart theme</span>'
-          + '<div class="ds-theme-opts">' + themeRows + '</div>');
-  }
-  function section(name, icon, label, open, body) {
-    return '<div class="ds-sec' + (open ? " open" : "") + '" data-sec="' + esc(name) + '">'
-      + '<button class="ds-sec-head" type="button">'
-      +   '<i class="bi bi-chevron-down ds-sec-caret"></i>'
-      +   '<i class="bi ' + esc(icon) + ' ds-sec-icon"></i>'
-      +   '<span class="ds-sec-label">' + esc(label) + '</span>'
-      + '</button>'
-      + '<div class="ds-sec-body">' + body + '</div>'
-      + '</div>';
-  }
-  function toggleRow(key, on, label) {
-    return '<label class="ds-toggle-row">'
-      + '<input type="checkbox" data-key="' + esc(key) + '"' + (on ? " checked" : "") + ' /> '
-      + esc(label) + '</label>';
-  }
-
   // ── selection ─────────────────────────────────────────────────────
   function selectTile(entry) {
     sel = entry;
     tiles.forEach((t) => t.tileEl.classList.toggle("selected", t === entry));
-    renderAccordion();
+    builder.render();
   }
 
   // ── rerender / dirty / save ───────────────────────────────────────
@@ -333,12 +265,12 @@ export function mountDesigner(designerEl, ctx) {
   }
   function setDirty(on) {
     dirty = on;
-    if (saveBtn) saveBtn.disabled = !on || busy;
+    builder.setDirty(on && !busy);
   }
 
   async function save() {
     if (!sel || busy) return;
-    busy = true; saveBtn.disabled = true;
+    busy = true; builder.setDirty(false);
     try {
       const baked = sel.inst?.getOption?.() || null;
       const body = {
@@ -369,7 +301,7 @@ export function mountDesigner(designerEl, ctx) {
       console.warn("[designer] save failed:", err);
     } finally {
       busy = false;
-      if (saveBtn) saveBtn.disabled = !dirty;
+      builder.setDirty(dirty);
     }
   }
 
@@ -382,54 +314,19 @@ export function mountDesigner(designerEl, ctx) {
     if (entry) selectTile(entry);
   });
 
-  // Accordion: section toggle + type-grid + theme + form fields.
-  accEl.addEventListener("click", (e) => {
-    const head = e.target.closest(".ds-sec-head");
-    if (head) { head.parentElement.classList.toggle("open"); return; }
-    const tBtn = e.target.closest(".ds-type-btn");
-    if (tBtn && sel) {
-      sel.cfg.type = tBtn.dataset.type;
-      sel.cfg.kind = TYPE_TO_KIND[sel.cfg.type] || sel.cfg.kind;
-      renderAccordion();
-      rerender(sel);
-      setDirty(true);
-      return;
-    }
-    const themeBtn = e.target.closest(".ds-theme-opt");
-    if (themeBtn && sel) {
-      sel.cfg.theme = themeBtn.dataset.theme;
-      renderAccordion();
-      rerender(sel);
-      setDirty(true);
-      return;
-    }
-  });
-  accEl.addEventListener("input", (e) => {
+  // Accordion event handlers + the save button wiring now live
+  // inside mountBuilder. The `onCfgChange` hook in the mountBuilder
+  // call pipes every accordion edit through rerender(sel) +
+  // setDirty(true); `onSave` calls save(). The one side effect that
+  // stays here is the tile-header text — it sits outside the chart
+  // canvas so ECharts setOption doesn't reach it.
+  asideEl.addEventListener("input", (e) => {
     if (!sel) return;
-    const fld = e.target.closest("[data-key]");
+    const fld = e.target.closest('[data-key="title"]');
     if (!fld) return;
-    const key = fld.dataset.key;
-    if (key === "title") {
-      sel.cfg.title = e.target.value;
-      sel.tileEl.querySelector(".ds-tile-title").textContent = e.target.value || "Untitled chart";
-      setDirty(true);
-    }
+    const t = sel.tileEl.querySelector(".ds-tile-title");
+    if (t) t.textContent = e.target.value || "Untitled chart";
   });
-  accEl.addEventListener("change", (e) => {
-    if (!sel) return;
-    const fld = e.target.closest("[data-key]");
-    if (!fld) return;
-    const key = fld.dataset.key;
-    if (["legend", "tooltip", "splitLines", "axisLine", "smooth"].includes(key)) {
-      sel.cfg[key] = e.target.checked;
-    } else if (key === "legendPos") {
-      sel.cfg.legendPos = e.target.value;
-    }
-    rerender(sel);
-    setDirty(true);
-  });
-
-  saveBtn.addEventListener("click", () => void save());
 
   // ── dashboard mutations ───────────────────────────────────────────
   // Append a chart widget to the open dashboard's spec + persist via
