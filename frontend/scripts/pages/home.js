@@ -32,6 +32,13 @@ import {
 // same tab vocabulary.
 import { HOME_TABS, HOME_GROUPS, HOME_DEFAULT_TAB } from "/scripts/pages/home/tabs.js";
 
+// Slice D2 — pref-driven user charts on Home tabs. Same pattern as
+// Monitoring (Slice D): when `homeCharts.<tab>` is saved, REPLACE the
+// curated kpiX strip with user-built specs rendered via the unified
+// `renderChart` pipeline. Empty pref falls back to the existing kpiX
+// path unchanged. Builder lives on the Settings page.
+import { renderChart } from "/scripts/charts/render.js";
+
 export default function home(app, { session: _session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
 
@@ -60,6 +67,14 @@ export default function home(app, { session: _session }) {
   // The chart controller hosts mount/dispose against the shared
   // /scripts/list-page.js runtime.
   const charts          = createListCharts(view, { logPrefix: "home" });
+  // Slice D2 — user-built chart instances tracked outside the kpiX
+  // controller so tab-switch + chip-flip teardown disposes both from
+  // one site. Same hoisted-tracker shape as monitoring.js.
+  let userInstances = [];
+  function disposeUserInstances() {
+    userInstances.forEach((i) => { try { i.dispose(); } catch { /* gone */ } });
+    userInstances = [];
+  }
   const setKpi          = (id, val) => _setKpi(view, id, val);
   const renderListPager = () =>
     _renderListPager(view, "rp-home-list-pager", {
@@ -1659,7 +1674,19 @@ export default function home(app, { session: _session }) {
     // composite slot reads worse than the legacy stack. Named
     // `specCharts` (not `charts`) to avoid shadowing the
     // module-scope `charts` controller from createListCharts().
-    const specCharts      = spec.charts || [];
+    // Slice D2 — pref override. When the user has saved charts for
+    // this Home tab, they REPLACE spec.charts entirely (rendered via
+    // renderChart below). Each user spec carries id + title — the
+    // composite/extras layout only needs those shape-light fields, so
+    // the layout decision still works against the user list.
+    const userPref     = getPref("homeCharts") || {};
+    const userCharts   = Array.isArray(userPref[tab.key]) && userPref[tab.key].length
+                            ? userPref[tab.key]
+                            : null;
+    const baseCharts   = userCharts
+                            ? userCharts.map((c) => ({ id: c.id, title: c.title }))
+                            : (spec.charts || []);
+    const specCharts      = baseCharts;
     const useComposite    = spec.compositeStrip && specCharts.length >= 2;
     // Composite has 4 chart slots flanking the KPI stats grid.
     // First 4 specCharts go into the composite slots; anything
@@ -1683,7 +1710,20 @@ export default function home(app, { session: _session }) {
     // the same response. chipState threads through so memberships'
     // ?scope= flips the stats payload alongside the list.
     charts.dispose();
-    if (spec.charts && spec.charts.length) {
+    disposeUserInstances();      // Slice D2 — user-built charts too
+    function mountUserCharts(specs) {
+      disposeUserInstances();
+      specs.forEach((s) => {
+        const el = view.querySelector('[id="' + cssEsc(s.id) + '"]');
+        if (!el) return;
+        renderChart(el, s)
+          .then((inst) => { if (inst) userInstances.push(inst); })
+          .catch((err) => console.warn("[home] user chart render failed:", s.id, err));
+      });
+    }
+    if (userCharts) {
+      mountUserCharts(userCharts);
+    } else if (spec.charts && spec.charts.length) {
       charts.mount(spec, chipState).catch((err) => {
         console.warn("[home] charts mount failed:", err);
       });
@@ -1703,8 +1743,11 @@ export default function home(app, { session: _session }) {
         fetchList(spec, chipState);
         // Chip flip can change the stats shape too (memberships'
         // ?scope=…). Refetch + re-render the charts so the cards
-        // stay in sync with the list.
-        if (spec.charts && spec.charts.length) {
+        // stay in sync with the list. User-built charts (Slice D2)
+        // re-render in place; kpiX flow uses the controller as before.
+        if (userCharts) {
+          mountUserCharts(userCharts);
+        } else if (spec.charts && spec.charts.length) {
           charts.dispose();
           charts.mount(spec, chipState).catch((err) =>
             console.warn("[home] charts refetch failed:", err));

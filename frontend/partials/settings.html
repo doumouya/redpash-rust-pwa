@@ -3,52 +3,108 @@
      (prefRow / valueRow / actionsRow / mountRow), so the page is
      declarative data + one render call. Visual-impact prefs (theme,
      density, font size) drive token overrides on <html> so every
-     component reshapes without a per-page edit. -->
-<section class="rp-page">
+     component reshapes without a per-page edit.
+
+     2-column layout (2026-05-27): reuses the workspace rail atom
+     (`.rt-nav`) for the section navigator on the left; main column
+     flows the section cards. Page body widens to 90vw so the two
+     columns breathe as the settings list grows. -->
+<section class="rp-page rp-settings">
   <header id="rp-topbar"></header>
-  <div class="rp-page__body">
+  <div class="rp-page__body rp-settings__body">
     <header class="rp-page__head">
       <h1 class="rp-page__title">Settings</h1>
       <p class="rp-page__sub">App preferences. Stored on this device.</p>
     </header>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Appearance</h2>
-      <div class="rp-page__section-body" data-rp-rows="appearance"></div>
-    </section>
+    <div class="rp-settings__columns">
+      <nav class="rt-nav rp-settings__nav" aria-label="Settings sections">
+        <div class="rt-nav-head"><span class="rt-nav-title">Sections</span></div>
+        <div class="rt-nav-body">
+          <a class="rt-tab active" href="#set-appearance">
+            <i class="bi bi-palette rt-tab-icon"></i>
+            <span class="rt-tab-name">Appearance</span>
+          </a>
+          <a class="rt-tab" href="#set-tables">
+            <i class="bi bi-table rt-tab-icon"></i>
+            <span class="rt-tab-name">Tables</span>
+          </a>
+          <a class="rt-tab" href="#set-workspace">
+            <i class="bi bi-grid-3x3 rt-tab-icon"></i>
+            <span class="rt-tab-name">Workspace</span>
+          </a>
+          <a class="rt-tab" href="#set-data">
+            <i class="bi bi-database rt-tab-icon"></i>
+            <span class="rt-tab-name">Data &amp; Export</span>
+          </a>
+          <a class="rt-tab" href="#set-cleaner">
+            <i class="bi bi-tools rt-tab-icon"></i>
+            <span class="rt-tab-name">Cleaner</span>
+          </a>
+          <a class="rt-tab" href="#set-monitoring-charts">
+            <i class="bi bi-bar-chart-line rt-tab-icon"></i>
+            <span class="rt-tab-name">Monitoring charts</span>
+          </a>
+          <a class="rt-tab" href="#set-home-charts">
+            <i class="bi bi-bar-chart-fill rt-tab-icon"></i>
+            <span class="rt-tab-name">Home charts</span>
+          </a>
+          <a class="rt-tab" href="#set-account">
+            <i class="bi bi-person-circle rt-tab-icon"></i>
+            <span class="rt-tab-name">Account</span>
+          </a>
+          <a class="rt-tab" href="#set-about">
+            <i class="bi bi-info-circle rt-tab-icon"></i>
+            <span class="rt-tab-name">About</span>
+          </a>
+        </div>
+      </nav>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Tables</h2>
-      <div class="rp-page__section-body" data-rp-rows="tables"></div>
-    </section>
+      <main class="rp-settings__main">
+        <section class="rp-page__section" id="set-appearance">
+          <h2 class="rp-page__section-h">Appearance</h2>
+          <div class="rp-page__section-body" data-rp-rows="appearance"></div>
+        </section>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Workspace</h2>
-      <div class="rp-page__section-body" data-rp-rows="workspace"></div>
-    </section>
+        <section class="rp-page__section" id="set-tables">
+          <h2 class="rp-page__section-h">Tables</h2>
+          <div class="rp-page__section-body" data-rp-rows="tables"></div>
+        </section>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Data &amp; Export</h2>
-      <div class="rp-page__section-body" data-rp-rows="data"></div>
-    </section>
+        <section class="rp-page__section" id="set-workspace">
+          <h2 class="rp-page__section-h">Workspace</h2>
+          <div class="rp-page__section-body" data-rp-rows="workspace"></div>
+        </section>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Cleaner</h2>
-      <div class="rp-page__section-body" data-rp-rows="cleaner"></div>
-    </section>
+        <section class="rp-page__section" id="set-data">
+          <h2 class="rp-page__section-h">Data &amp; Export</h2>
+          <div class="rp-page__section-body" data-rp-rows="data"></div>
+        </section>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Monitoring charts</h2>
-      <div class="rp-page__section-body" data-rp-rows="monitoringCharts"></div>
-    </section>
+        <section class="rp-page__section" id="set-cleaner">
+          <h2 class="rp-page__section-h">Cleaner</h2>
+          <div class="rp-page__section-body" data-rp-rows="cleaner"></div>
+        </section>
 
-    <section class="rp-page__section">
-      <h2 class="rp-page__section-h">Account</h2>
-      <div class="rp-page__section-body" data-rp-rows="account"></div>
-    </section>
+        <section class="rp-page__section" id="set-monitoring-charts">
+          <h2 class="rp-page__section-h">Monitoring charts</h2>
+          <div class="rp-page__section-body" data-rp-rows="monitoringCharts"></div>
+        </section>
 
-    <section class="rp-page__section rp-settings__about">
-      <div class="rp-page__section-body" data-rp-rows="about"></div>
-    </section>
+        <section class="rp-page__section" id="set-home-charts">
+          <h2 class="rp-page__section-h">Home charts</h2>
+          <div class="rp-page__section-body" data-rp-rows="homeCharts"></div>
+        </section>
+
+        <section class="rp-page__section" id="set-account">
+          <h2 class="rp-page__section-h">Account</h2>
+          <div class="rp-page__section-body" data-rp-rows="account"></div>
+        </section>
+
+        <section class="rp-page__section rp-settings__about" id="set-about">
+          <div class="rp-page__section-body" data-rp-rows="about"></div>
+        </section>
+      </main>
+    </div>
   </div>
 </section>

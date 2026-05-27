@@ -24,7 +24,7 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { api } from "/scripts/api.js";
 import { applyTheme, currentTheme } from "/scripts/theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
-import { esc, cssEsc } from "/scripts/dom.js";
+import { esc } from "/scripts/dom.js";
 import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
 // Slice D — Monitoring chart picker. Mounts the shared mountBuilder
 // (from Slice C) against a `monitoring-stats` source so the user can
@@ -33,8 +33,16 @@ import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
 // pages/monitoring.js via the same pref name.
 import { mountBuilder } from "/scripts/charts/builder-ui.js";
 import { renderChart } from "/scripts/charts/render.js";
-import { MON_STATS_SCHEMA, MON_DEFAULT_CHARTS, chartsForTab, newChartTemplate }
-  from "/scripts/charts/monitoring-bank.js";
+import {
+  MON_STATS_SCHEMA, MON_DEFAULT_CHARTS,
+  newChartTemplate as newMonitoringChart,
+} from "/scripts/charts/monitoring-bank.js";
+// Slice D2 — Home tabs join the picker. Same registry shape +
+// monitoring-stats source kind (the resolver is endpoint-agnostic).
+import {
+  HOME_STATS_SCHEMA, HOME_DEFAULT_CHARTS,
+  newChartTemplate as newHomeChart,
+} from "/scripts/charts/home-bank.js";
 
 // Server-side pref keys read on mount. Distinct from PREFS in prefs.js:
 // these come from /me, not the local registered enum.
@@ -126,13 +134,24 @@ const SETTINGS_ROWS = {
     }),
   ],
   // Slice D — Monitoring chart picker. The panel body is rendered
-  // by JS (renderMonitoringCharts below); mountRow just stamps the
+  // by JS (mountChartPickerPanel below); mountRow just stamps the
   // slot the panel paints into.
   monitoringCharts: [
     mountRow({
       label: "Per-tab chart layouts",
       hint:  "your saved charts replace the curated defaults on each Monitoring tab. Build via the chart designer.",
       id:    "rp-settings-mon-charts",
+      containerClass: "rp-settings__mon-charts",
+    }),
+  ],
+  // Slice D2 — Home chart picker. Same panel implementation; only the
+  // tabs / schema / defaults registry differs (the picker is
+  // surface-parameterised in mountChartPickerPanel below).
+  homeCharts: [
+    mountRow({
+      label: "Per-tab chart layouts",
+      hint:  "your saved charts replace the curated defaults on each Home tab. Build via the chart designer.",
+      id:    "rp-settings-home-charts",
       containerClass: "rp-settings__mon-charts",
     }),
   ],
@@ -167,9 +186,54 @@ function render(app) {
   }
 }
 
+// Sticky-rail navigation for the 2-column settings layout. Reuses
+// the workspace rail's .rt-nav + .rt-tab atom set; the `active`
+// class is the canonical state marker (same naming as workspace
+// file tabs). Two behaviors:
+// (1) Click a rail item → native anchor jump scrolls the main
+//     column to that section; we also flip .active to the clicked
+//     item so the visual state matches the click without waiting
+//     for the observer.
+// (2) IntersectionObserver watches each section card; whichever
+//     one's top crosses the upper observation band wins .active.
+//     Keeps the rail synced as the user scrolls manually.
+function mountSettingsRail(app) {
+  const items = Array.from(app.querySelectorAll(".rp-settings__nav .rt-tab"));
+  if (!items.length) return;
+
+  const activate = (rid) => {
+    items.forEach((el) => el.classList.toggle("active", el.getAttribute("href") === "#" + rid));
+  };
+
+  items.forEach((el) => {
+    el.addEventListener("click", () => {
+      const rid = el.getAttribute("href")?.slice(1);
+      if (rid) activate(rid);
+    });
+  });
+
+  // Section observer — `rootMargin: -20% 0% -75% 0%` shrinks the
+  // observation zone to a band near the top of the viewport, so the
+  // active item flips when a section's heading crosses that band
+  // (not when its bottom leaves the screen).
+  const sections = items
+    .map((el) => app.querySelector(el.getAttribute("href") || ""))
+    .filter(Boolean);
+  if (!sections.length || typeof IntersectionObserver !== "function") return;
+
+  const obs = new IntersectionObserver((entries) => {
+    const hit = entries.filter((e) => e.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+    if (hit?.target?.id) activate(hit.target.id);
+  }, { rootMargin: "-20% 0% -75% 0%", threshold: 0 });
+
+  sections.forEach((sec) => obs.observe(sec));
+}
+
 export default async function settings(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "settings", session });
   render(app);
+  mountSettingsRail(app);
 
   // ─── account section — read-only from session ────────────────
   const name = (session?.display_name || "—").trim();
@@ -244,47 +308,70 @@ export default async function settings(app, { session }) {
     renderSentinels(app, serverPrefs);
   });
 
-  // ─── Slice D — Monitoring chart picker ──────────────────────
-  mountMonitoringChartsPanel(app);
+  // ─── Slice D / D2 — chart pickers ──────────────────────────
+  // Same picker implementation drives Monitoring + Home; only the
+  // schema / defaults / pref name / labels differ. Adding a third
+  // surface = registering another config entry.
+  CHART_PICKERS.forEach((cfg) => mountChartPickerPanel(app, cfg));
 }
 
-// ── Monitoring chart picker (Slice D) ─────────────────────────────
-// Self-contained panel that:
-//   • lets the user pick which Monitoring tab to configure,
-//   • lists the saved chart specs for that tab (or the defaults
-//     when nothing's saved yet),
-//   • opens an "Add chart" modal that mounts the shared mountBuilder
-//     against a monitoring-stats source descriptor with live preview.
-// Persists to localStorage + PATCH /api/me/prefs via setPref.
-const MON_TAB_KEYS = Object.keys(MON_STATS_SCHEMA);
-const TAB_LABELS   = {
-  requests: "Requests", events: "Events", runs: "Runs",
-  findings: "Findings", steps:  "Steps",
-};
+// ── chart-picker panel (Slice D / D2) ──────────────────────────────
+// Surface-parameterised: same implementation paints Monitoring and
+// Home picker sections. Each config entry names where its slot lives
+// (rootId), what pref key persists its layouts (prefName), which
+// tabs participate (schema), what the defaults look like (defaults),
+// what an empty starter spec looks like (newTemplate), and what
+// human labels to show (labels — fallback is the tab key).
+const CHART_PICKERS = [
+  {
+    surface:    "monitoring",
+    rootId:     "rp-settings-mon-charts",
+    prefName:   "monitoringCharts",
+    schema:     MON_STATS_SCHEMA,
+    defaults:   MON_DEFAULT_CHARTS,
+    newTemplate: newMonitoringChart,
+    labels:     { requests: "Requests", events: "Events", runs: "Runs",
+                  findings: "Findings", steps:  "Steps" },
+  },
+  {
+    surface:    "home",
+    rootId:     "rp-settings-home-charts",
+    prefName:   "homeCharts",
+    schema:     HOME_STATS_SCHEMA,
+    defaults:   HOME_DEFAULT_CHARTS,
+    newTemplate: newHomeChart,
+    // Only tabs with directly-addressable stats fields participate in
+    // Slice D2; companies/cases/projects/charts use gauge ratios or
+    // client-derived aggregates, deferred to a `transform` source kind.
+    labels:     { users: "Users", memberships: "Memberships", files: "Files" },
+  },
+];
 
-function mountMonitoringChartsPanel(app) {
-  const root = app.querySelector("#rp-settings-mon-charts");
+function mountChartPickerPanel(app, cfg) {
+  const root = app.querySelector("#" + cfg.rootId);
   if (!root) return;
-  let activeTab = MON_TAB_KEYS[0];
+  const tabKeys = Object.keys(cfg.schema);
+  if (!tabKeys.length) return;
+  let activeTab = tabKeys[0];
 
   function readPref() {
-    const v = getPref("monitoringCharts");
+    const v = getPref(cfg.prefName);
     return (v && typeof v === "object") ? v : {};
   }
-  function writePref(next) { setPref("monitoringCharts", next); }
-
+  function writePref(next) { setPref(cfg.prefName, next); }
   function chartsForActive() {
-    return chartsForTab(activeTab, readPref());
+    const pref = readPref();
+    const saved = pref[activeTab];
+    return Array.isArray(saved) ? saved : (cfg.defaults[activeTab] || []);
   }
   function isCustomised() {
-    const pref = readPref();
-    return Array.isArray(pref[activeTab]);
+    return Array.isArray(readPref()[activeTab]);
   }
 
   function render() {
-    const tabs = MON_TAB_KEYS.map((k) =>
+    const tabs = tabKeys.map((k) =>
       '<button type="button" class="rp-settings__mon-tab' + (k === activeTab ? " is-active" : "") + '"'
-      + ' data-tab="' + esc(k) + '">' + esc(TAB_LABELS[k] || k) + '</button>').join("");
+      + ' data-tab="' + esc(k) + '">' + esc(cfg.labels[k] || k) + '</button>').join("");
     const list = chartsForActive();
     const customised = isCustomised();
     const items = list.length
@@ -333,14 +420,14 @@ function mountMonitoringChartsPanel(app) {
       return;
     }
     if (e.target.closest(".rp-settings__mon-add")) {
-      openAddChartModal(activeTab, (spec) => {
+      openAddChartModal(activeTab, cfg, (spec) => {
         const pref = readPref();
         // First "Add" on a tab promotes the defaults to a user list so
         // the user starts from "the defaults plus mine," not "blank +
         // mine" — surfacing the +1 instead of replacing.
         const base = Array.isArray(pref[activeTab])
           ? pref[activeTab]
-          : (MON_DEFAULT_CHARTS[activeTab] || []).map(cloneSpec);
+          : (cfg.defaults[activeTab] || []).map(cloneSpec);
         pref[activeTab] = [...base, spec];
         writePref(pref);
         render();
@@ -361,16 +448,23 @@ function cloneSpec(s) { return JSON.parse(JSON.stringify(s)); }
 // accordion (right). The builder owns the cfg; every onCfgChange
 // reruns the preview's renderChart. "Add" persists via the caller's
 // onAdd(spec) callback; cancel dismisses.
-function openAddChartModal(tabKey, onAdd) {
-  const schema = MON_STATS_SCHEMA[tabKey];
+//
+// `pickerCfg` carries the surface-specific knobs: schema (drives
+// the field-picker), newTemplate (creates the starter spec), labels
+// (for the modal title), surface name (drives the Add button label
+// + the modal title preposition).
+function openAddChartModal(tabKey, pickerCfg, onAdd) {
+  const schema = pickerCfg.schema[tabKey];
   if (!schema) return;
 
   // The starter spec drives both the preview and the builder. We
   // pass the SAME object — builder mutates in place, preview reads
   // the same reference.
-  const spec = newChartTemplate(tabKey);
+  const spec = pickerCfg.newTemplate(tabKey);
   if (!spec) return;
-  spec.title = spec.cfg.title = "New " + (TAB_LABELS[tabKey] || tabKey) + " chart";
+  const tabLabel = pickerCfg.labels[tabKey] || tabKey;
+  spec.title = spec.cfg.title = "New " + tabLabel + " chart";
+  const surfaceLabel = pickerCfg.surface === "home" ? "Home" : "Monitoring";
 
   // Modal shell — reuse the rp-mon-modal pattern (overlay backdrop +
   // centered card) but namespaced rp-settings-chart-modal so the
@@ -384,7 +478,7 @@ function openAddChartModal(tabKey, onAdd) {
     + '<div class="rp-settings-chart-modal-backdrop"></div>'
     + '<div class="rp-settings-chart-modal-body">'
     +   '<header class="rp-settings-chart-modal-head">'
-    +     '<h3>Add chart to <em>' + esc(TAB_LABELS[tabKey] || tabKey) + '</em></h3>'
+    +     '<h3>Add chart to <em>' + esc(tabLabel) + '</em></h3>'
     +     '<button type="button" class="rt-btn rp-settings-chart-modal-close" aria-label="Close">×</button>'
     +   '</header>'
     +   '<div class="rp-settings-chart-modal-grid">'
@@ -393,7 +487,7 @@ function openAddChartModal(tabKey, onAdd) {
     +   '</div>'
     +   '<footer class="rp-settings-chart-modal-foot">'
     +     '<button type="button" class="rt-btn rp-settings-chart-modal-cancel">Cancel</button>'
-    +     '<button type="button" class="rt-btn rt-btn--accent rp-settings-chart-modal-add">Add to Monitoring</button>'
+    +     '<button type="button" class="rt-btn rt-btn--accent rp-settings-chart-modal-add">Add to ' + esc(surfaceLabel) + '</button>'
     +   '</footer>'
     + '</div>';
   document.body.appendChild(modal);
