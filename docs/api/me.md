@@ -65,7 +65,7 @@ context the frontend needs at bootstrap. Today: `global_sentinels` —
 the canonical sentinel values that have been flagged by **at least 2
 distinct users** via the Cleaner's *Fix invalid values* modal (see
 [features/cleanness.md](../features/cleanness.md) and
-[cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn)).
+the workspace cleaner mode in [features/cleaner.md](../features/cleaner.md)).
 
 The list is sourced from the `global_sentinels` view (a
 `COUNT(DISTINCT user_id) >= 2 GROUP BY canonical` over
@@ -165,7 +165,7 @@ shared-sentinel learning loop:
 See [features/cleanness.md](../features/cleanness.md) for how
 submissions are promoted to the shared vocabulary and used by the
 scorer; the Cleaner modal flow lives in
-[cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn).
+the workspace cleaner mode in [features/cleaner.md](../features/cleaner.md).
 
 ### Response
 

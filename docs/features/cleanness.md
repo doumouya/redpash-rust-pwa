@@ -195,8 +195,8 @@ etc. The system learns from users via three tiers:
 
 ### Frontend flow
 
-The Cleaner's *Fix invalid values* modal (see
-[cleaner-page](../frontend/redpash-components-pages/cleaner-page/index.md#the-tool-invalid-exception--surface-whats-actually-there--learn))
+The Workspace cleaner mode's *Fix invalid values* modal (see
+[features/cleaner.md](cleaner.md))
 lets the user type any string that's polluting their file → backend
 re-scans for it (`GET /api/files/:rid/sentinels?extra=`) → user picks
 it → `Apply` runs one `fix_invalid` step that covers the whole

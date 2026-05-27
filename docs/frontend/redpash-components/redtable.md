@@ -7,11 +7,12 @@ last modified date: 2026-05-16
 
 # Redtable (app-side integration)
 
-The **redtable** is the data-table surface that powers four pages —
-[Objects](../redpash-components-pages/objects-page/index.md), the
-[Cleaner](../redpash-components-pages/cleaner-page/index.md), the
-[Reports list](../redpash-components-pages/reports-page/index.md), and
-the [Dashboards list](../redpash-components-pages/dashboards-page/index.md).
+The **redtable** is the data-table surface that powers two pages —
+[Objects](../redpash-components-pages/objects-page/index.md) and the
+unified [Workspace](../../features/cleaner.md) (cleaner / report /
+chart / dashboard modes all share the redtable canvas; the per-page
+Cleaner / Reports list / Dashboards list docs were retired into
+`docs/internal/archive/` when those pages folded into Workspace).
 The component itself lives in the
 [`redpash-components` library](/home/mansa/redpash-components/) as
 `.rp-rt-*` markup + CSS; this doc covers how the **app** wires that
@@ -292,11 +293,11 @@ so the user knows to apply a `replace_text` step first.
 | **Reports list** | `GET /api/reports` (flat) | `POST /api/reports`, `PATCH /api/reports/:rid`, `DELETE /api/reports/:rid` (via Objects' Reports tab today) | base redtable (Objects-style) | Builder is a separate non-redtable view |
 | **Dashboards list** | `GET /api/dashboards` (flat) | `POST /api/dashboards`, `PATCH /api/dashboards/:rid`, `DELETE /api/dashboards/:rid` (via Objects' Dashboards tab today) | base redtable (Objects-style) | Builder is a separate non-redtable view |
 
-The reports and dashboards **builders** don't use the redtable at all —
-their data model is a pre-aggregated report spec, not a raw row table,
-so they paint a custom preview pane instead. See
-[`reports-page`](../redpash-components-pages/reports-page/index.md) and
-[`dashboards-page`](../redpash-components-pages/dashboards-page/index.md).
+The report-builder and dashboard-builder **modes of Workspace** don't
+use the redtable at all — their data model is a pre-aggregated report
+spec, not a raw row table, so they paint a custom preview pane instead.
+See [`features/reports.md`](../../features/reports.md) and
+[`features/dashboards.md`](../../features/dashboards.md).
 
 ---
 
@@ -313,7 +314,7 @@ the page in Firefox private (the dev server's `ServeDir` sends no
 ## Related
 
 - [`objects-page/index.md`](../redpash-components-pages/objects-page/index.md) — the canonical schema-driven implementation.
-- [`cleaner-page/index.md`](../redpash-components-pages/cleaner-page/index.md) — the redtable-pro variant with per-file tabs + tools panel.
+- [`features/cleaner.md`](../../features/cleaner.md) — Workspace's cleaner mode, the redtable-pro variant with per-file tabs + tools panel.
 - [`features/cleanness.md`](../../features/cleanness.md) — the score that lives in the cleaner's header chrome + drives the cast-suggestion loop.
 - [`api/files.md`](../../api/files.md) — `GET /api/files/:rid/page` + `PageQuery` contract.
 - [`objects/file.md`](../../objects/file.md) — `ColumnMeta` (incl. `semantic_dtype`) + `FileSummary` DTOs.
