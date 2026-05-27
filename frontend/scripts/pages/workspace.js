@@ -31,7 +31,6 @@ import { esc, cssEsc } from "/scripts/dom.js";
 const STAGE_DOT     = { new: "is-dirty", clean: "is-warn", design: "is-clean", publish: "is-clean" };
 const MARK_COLORS   = ["blue", "mauve", "teal", "peach"];
 const DATE_DTYPES   = new Set(["date"]);
-const ALL_ROWS_SIZE = 50000;       // "All rows" is a one-shot big page, not a separate code path.
 const DEFAULT_PAGE_SIZE = 25;
 
 export default function workspace(app, { session }) {
@@ -152,12 +151,9 @@ export default function workspace(app, { session }) {
   let stepInFlight  = false;
 
   // The wire-level pref ("10" / "25" / "50" / "100" / "all") into the
-  // numeric pageSize the fetch uses. "all" maps to a large one-shot
-  // page so the rest of the code stays in a single paginated path.
+  // numeric pageSize the fetch uses.
   function pageSizeFromPref() {
-    const raw = getPref("rowsPerPageWorkspace");
-    if (raw === "all") return ALL_ROWS_SIZE;
-    const n = parseInt(raw || "", 10);
+    const n = parseInt(getPref("rowsPerPageWorkspace") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
   }
 
@@ -2096,7 +2092,7 @@ export default function workspace(app, { session }) {
     if (!item) return;
     const raw = item.dataset.rows;
     setPref("rowsPerPageWorkspace", raw);
-    pageSize = raw === "all" ? ALL_ROWS_SIZE : parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
+    pageSize = parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
     currentPage = 1;
     syncRowsDropdown();
     refetchPage();
@@ -2114,7 +2110,7 @@ export default function workspace(app, { session }) {
       sel.classList.add("selected");
       sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
     }
-    $("#wsRowsLabel").textContent = raw === "all" ? "All rows" : raw + " rows";
+    $("#wsRowsLabel").textContent = raw + " rows";
   }
   $("#wsColsDd").addEventListener("click", (e) => e.stopPropagation());
 

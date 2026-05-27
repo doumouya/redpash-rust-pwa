@@ -195,14 +195,11 @@ export default function monitoring(app, { session }) {
   };
 
   // Honors the user's `rowsPerPageMonitoring` pref (set on /settings).
-  // "all" maps to a large one-shot page so the same paginated path
-  // stays in service. Read on each fetch so a mid-session pref change
-  // picks up on the next navigation. Workspace + Home have their own
-  // per-surface keys (rowsPerPageWorkspace / rowsPerPageHome).
+  // Read on each fetch so a mid-session pref change picks up on the
+  // next navigation. Workspace + Home have their own per-surface
+  // keys (rowsPerPageWorkspace / rowsPerPageHome).
   function pageSizeFromPref() {
-    const raw = getPref("rowsPerPageMonitoring");
-    if (raw === "all") return 500; // backend MAX_PAGE_SIZE
-    const n = parseInt(raw || "", 10);
+    const n = parseInt(getPref("rowsPerPageMonitoring") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
@@ -608,7 +605,7 @@ export default function monitoring(app, { session }) {
     function syncRowsLabel() {
       const raw = getPref("rowsPerPageMonitoring") || "25";
       const lbl = view.querySelector("#rp-list-toolbar-rows-label");
-      if (lbl) lbl.textContent = raw === "all" ? "All rows" : raw + " rows";
+      if (lbl) lbl.textContent = raw + " rows";
       if (rowsDd) {
         rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
           i.classList.remove("selected");

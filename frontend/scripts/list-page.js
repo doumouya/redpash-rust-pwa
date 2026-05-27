@@ -261,7 +261,9 @@ export function listToolbarHTML(spec) {
     +   '<div class="rt-dd-item" data-rows="25">25 rows</div>'
     +   '<div class="rt-dd-item" data-rows="50">50 rows</div>'
     +   '<div class="rt-dd-item" data-rows="100">100 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="all">All rows</div>'
+    +   '<div class="rt-dd-item" data-rows="250">250 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="500">500 rows</div>'
+    +   '<div class="rt-dd-item" data-rows="1000">1k rows</div>'
     + '</div>'
     + '</div>',
   );

@@ -1460,9 +1460,7 @@ export default function home(app, { session: _session }) {
   // on the next navigation. Workspace + Monitoring have their own
   // per-surface keys (rowsPerPageWorkspace / rowsPerPageMonitoring).
   function listPageSize() {
-    const raw = getPref("rowsPerPageHome");
-    if (raw === "all") return 500; // backend MAX_PAGE_SIZE
-    const n = parseInt(raw || "", 10);
+    const n = parseInt(getPref("rowsPerPageHome") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
@@ -1987,7 +1985,7 @@ export default function home(app, { session: _session }) {
       function syncRowsLabel() {
         const raw = getPref("rowsPerPageHome") || "25";
         const lbl = view.querySelector("#rp-list-toolbar-rows-label");
-        if (lbl) lbl.textContent = raw === "all" ? "All rows" : raw + " rows";
+        if (lbl) lbl.textContent = raw + " rows";
         if (rowsDd) {
           rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
             i.classList.remove("selected");

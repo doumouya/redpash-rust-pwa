@@ -33,9 +33,9 @@ export const PREFS = {
   // browse size (and vice versa). Migration of the old shared
   // `rowsPerPage` key into all three happens once at module load (see
   // SPLIT_LEGACY_KEYS below).
-  rowsPerPageWorkspace:  { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
-  rowsPerPageHome:       { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
-  rowsPerPageMonitoring: { values: ["10", "25", "50", "100", "all"], default: "25", attr: null },
+  rowsPerPageWorkspace:  { values: ["10", "25", "50", "100", "250", "500", "1000"], default: "25", attr: null },
+  rowsPerPageHome:       { values: ["10", "25", "50", "100", "250", "500", "1000"], default: "25", attr: null },
+  rowsPerPageMonitoring: { values: ["10", "25", "50", "100", "250", "500", "1000"], default: "25", attr: null },
   showRowNumbers: { values: ["1", "0"],                         default: "1",    attr: "showRownum"   },
   showStageDots:  { values: ["1", "0"],                         default: "1",    attr: "showStageDots"},
   // Defaults the cleaner + export flows read. None of them reshape
