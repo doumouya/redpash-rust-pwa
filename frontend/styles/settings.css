@@ -23,11 +23,20 @@
      in mountSettingsRail uses it as its `root`. The default
      rt-surface chrome (border + radius) reads great here, only the
      interior padding needs to give the .rp-page__head + sections
-     room to breathe. */
+     room to breathe.
+
+     **Overflow override.** Workspace/Home/Monitoring keep
+     `.rt-surface { overflow: hidden }` because their content is a
+     redtable that scrolls inside its own panel. Settings has a
+     vertical stack of sections that overflows the viewport — the
+     surface itself has to scroll, otherwise everything past
+     `set-cleaner` is clipped (Em: "bro we lost scrolling on
+     settings page"). */
   padding: var(--rp-sp-5) var(--rp-sp-6);
   display: flex;
   flex-direction: column;
   gap: var(--rp-sp-5);
+  overflow-y: auto;
 }
 .rp-settings__surface .rp-page__head {
   margin-bottom: 0;
