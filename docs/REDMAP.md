@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-25
+last modified date: 2026-05-27
 ---
 
 # RedPash REDMAP
@@ -421,6 +421,14 @@ redpash-app/
 - Explicit `event::record(&db, EventDraft { … })` at lifecycle sites for `info` events. **Fire-and-forget** — the insert is spawned on a detached task, never awaited; a logging failure can't break the request.
 - **Frontend capture** (`scripts/events.js`) — global `error` / `unhandledrejection` handlers, an `api.js` transport-failure funnel, and router page script/mount failures, all POSTed to `/api/events` (`origin=frontend`; `user`/`session` stamped server-side from the cookie, never trusted from the body). Captures what the backend can't see — HTTP 4xx/5xx responses are *not* re-reported client-side, `capture_mw` already owns them. Repeats deduped within 10s, session capped at 100, and `reportEvent` uses raw `fetch` so a failed event POST can't recurse.
 
+### Audit ingest (dev-meta, NOT app data)
+- `tools/audit.sh` runs every `tools/*-audit/audit.js` and ingests the JSON outputs into `audit.run` + `audit.finding` via `backend/crates/api/src/bin/audit_ingest.rs`.
+- Accepted tool names (per [mig 031][m031]): `css`, `html`, `parallel`, `tab-compare`, `cross-page`, `ui-snapshot`. Names are canonical — the audit.sh script strips the `css-` directory prefix so `tools/css-tab-compare-audit/` ingests as `tab-compare`.
+- Each tool's findings are exploded into `audit.finding` rows via `explode()`'s per-tool match. The finding shape (key, severity, detail) per tool is the canonical contract that drives `audit.run_diff(latest, prev)` — same key + different severity → `regressed` / `improved`; new key → `new`; missing key → `fixed`.
+- **Source of truth for the per-tool contract:** [`internal/specs/audit-ingest-explode.md`](internal/specs/audit-ingest-explode.md).
+
+[m031]: ../backend/migrations/20260613000001_relax_audit_tool_check.sql
+
 ---
 
 ## API quick reference
@@ -596,6 +604,7 @@ Files are listed in chronological (boot-replay) order. The **Ord** column tracks
 | 028 | `20260610000001_cases.sql`                 | `cases` + `comments` tables — Jira-flow workstream v1. CAS_ + CMT_ rids. Lifecycle changes mirror into `events` (`case_*` kinds) |
 | 029 | `20260611000001_cases_error_message.sql`   | `cases.error_message` — raw error payload field for cases auto-triaged from FE crash / panic events |
 | 030 | `20260612000001_case_categories.sql`       | `case_categories` table + `cases.category_id` FK. Two-level taxonomy via self-FK on `parent_id` |
+| 031 | `20260613000001_relax_audit_tool_check.sql` | Relaxes `audit.run.tool` CHECK to the broader audit family — adds `parallel`, `tab-compare`, `cross-page`, `ui-snapshot` alongside the original `css` + `html`. Gates Layer 1a audit-ingest broadening; see [`internal/specs/audit-ingest-explode.md`](internal/specs/audit-ingest-explode.md) for the per-tool finding contract |
 
 ---
 
