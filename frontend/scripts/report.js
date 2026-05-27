@@ -22,40 +22,18 @@
 import { api } from "/scripts/api.js";
 import { esc } from "/scripts/dom.js";
 
-// Aggregation functions — vocabulary from shared::report::AggFn. The
-// values are exactly what the backend expects (snake_case enum).
-const AGG_FNS = [
-  ["count",          "Count"],
-  ["count_distinct", "Count distinct"],
-  ["sum",            "Sum"],
-  ["mean",           "Mean"],
-  ["min",            "Min"],
-  ["max",            "Max"],
-  ["first",          "First"],
-  ["last",           "Last"],
-  ["median",         "Median"],
-  ["q1",             "Q1 (25%)"],
-  ["q3",             "Q3 (75%)"],
-];
-
-// Window functions — split into aggregate kinds (operate on a column
-// within a partition; can express "% of partition" via as_percent) and
-// value kinds (positional: lag/lead/first/last; need order_by). Both
-// shapes come from shared::report::WindowSpec.
-const WINDOW_FN_GROUPS = [
-  ["Aggregate", [["sum","Sum"], ["mean","Mean"], ["count","Count"],
-                 ["min","Min"], ["max","Max"]]],
-  ["Value",     [["lag","Lag"], ["lead","Lead"],
-                 ["first_value","First value"], ["last_value","Last value"]]],
-];
-const WINDOW_VALUE_FNS = new Set(["lag","lead","first_value","last_value"]);
-const WINDOW_OFFSET_FNS = new Set(["lag","lead"]);
-
-// Live preview debounce — every spec mutation calls previewSoon(),
-// which collapses bursts into one /group/preview round-trip. 300ms is
-// the historic Phase-3 default; fast enough to feel live, slow enough
-// that typing an alias doesn't fire per-keystroke.
-const PREVIEW_DEBOUNCE_MS = 300;
+// Report builder vocabulary (AGG_FNS / WINDOW_FN_GROUPS /
+// WINDOW_VALUE_FNS / WINDOW_OFFSET_FNS / PREVIEW_DEBOUNCE_MS)
+// extracted into `report/vocab.js` as slice 7 of the god-object
+// decomposition (broadcast.md 00:53). Module-private; promote if
+// a future surface composes the aggregation vocabulary.
+import {
+  AGG_FNS,
+  WINDOW_FN_GROUPS,
+  WINDOW_VALUE_FNS,
+  WINDOW_OFFSET_FNS,
+  PREVIEW_DEBOUNCE_MS,
+} from "/scripts/report/vocab.js";
 
 export function mountReport(panelBody, ctx) {
   // ── spec state ────────────────────────────────────────────────────
