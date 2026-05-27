@@ -32,3 +32,4 @@ Rerun + supersede when the next big move in that layer lands.
 | Snapshot | What it reads |
 |---|---|
 | [objects-survey-2026-05-26](objects-survey-2026-05-26.md) | All 16 `shared::*` DTO modules vs the locked object-model — 12 clean, 4 carry comment-only drift, 0 broken. Four-diff fix shape + audit-tool proposal. |
+| [edge-compute-tradeoffs-2026-05-27](edge-compute-tradeoffs-2026-05-27.md) | Honest framing of what client-side parse + rescue actually buys vs. the marketing-style "$0 / zero-trust / serverless-routing" pitch. Real moat is the `unwrap_csv` rescue heuristic; WASM is implementation, not product. Phase D is the unlocked question. |
