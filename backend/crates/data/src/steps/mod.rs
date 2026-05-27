@@ -42,38 +42,18 @@ use crate::{DataError, Result};
 use polars::prelude::*;
 use std::collections::HashSet;
 
+mod columns;
 mod rows;
 mod util;
 use util::{
-    arr_strings, default_strptime, json_to_string,
-    parse_date_flex, parse_datetime_flex, select_keep, snake_case,
+    default_strptime, json_to_string,
+    parse_date_flex, parse_datetime_flex, select_keep,
 };
 
 pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<DataFrame> {
     match kind {
-        "drop_columns" => {
-            let cols = arr_strings(params, "cols");
-            if cols.is_empty() {
-                return Err(DataError::InvalidSpec(
-                    "drop_columns needs params.cols: [string]".into()));
-            }
-            let to_drop: HashSet<&str> = cols.iter().map(|s| s.as_str()).collect();
-            let keep: Vec<String> = df.get_columns().iter()
-                .map(|c| c.name().to_string())
-                .filter(|n| !to_drop.contains(n.as_str()))
-                .collect();
-            select_keep(df, &keep)
-        }
-
-        "filter_columns" => {
-            // params.cols = the names to KEEP, in the order to keep them.
-            let cols = arr_strings(params, "cols");
-            if cols.is_empty() {
-                return Err(DataError::InvalidSpec(
-                    "filter_columns needs params.cols: [string]".into()));
-            }
-            select_keep(df, &cols)
-        }
+        "drop_columns"   => columns::drop_columns(df, params),
+        "filter_columns" => columns::filter_columns(df, params),
 
         "drop_rows"   => rows::drop_rows(df, params),
         "filter_rows" => rows::filter_rows(df, params),
@@ -341,49 +321,9 @@ pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<Da
             df.lazy().with_columns([expr.alias(column)]).collect().map_err(DataError::from)
         }
 
-        "rename_column" => {
-            let from = params.get("from").and_then(|v| v.as_str())
-                .ok_or_else(|| DataError::InvalidSpec(
-                    "rename_column needs params.from: string".into()))?;
-            let to = params.get("to").and_then(|v| v.as_str())
-                .ok_or_else(|| DataError::InvalidSpec(
-                    "rename_column needs params.to: string".into()))?;
-            df.lazy().rename([from], [to]).collect().map_err(DataError::from)
-        }
-
-        "snake_case_columns" => {
-            let pairs: Vec<(String, String)> = df.get_columns().iter()
-                .map(|c| {
-                    let old = c.name().to_string();
-                    let new = snake_case(&old);
-                    (old, new)
-                })
-                .filter(|(a, b)| a != b)
-                .collect();
-            if pairs.is_empty() { return Ok(df); }
-            let olds: Vec<&str> = pairs.iter().map(|(a, _)| a.as_str()).collect();
-            let news: Vec<&str> = pairs.iter().map(|(_, b)| b.as_str()).collect();
-            df.lazy().rename(olds, news).collect().map_err(DataError::from)
-        }
-
-        "replace_in_names" => {
-            let find    = params.get("find").and_then(|v| v.as_str())
-                .ok_or_else(|| DataError::InvalidSpec(
-                    "replace_in_names needs params.find: string".into()))?;
-            let replace = params.get("replace").and_then(|v| v.as_str()).unwrap_or("");
-            let pairs: Vec<(String, String)> = df.get_columns().iter()
-                .map(|c| {
-                    let old = c.name().to_string();
-                    let new = old.replace(find, replace);
-                    (old, new)
-                })
-                .filter(|(a, b)| a != b)
-                .collect();
-            if pairs.is_empty() { return Ok(df); }
-            let olds: Vec<&str> = pairs.iter().map(|(a, _)| a.as_str()).collect();
-            let news: Vec<&str> = pairs.iter().map(|(_, b)| b.as_str()).collect();
-            df.lazy().rename(olds, news).collect().map_err(DataError::from)
-        }
+        "rename_column"      => columns::rename_column(df, params),
+        "snake_case_columns" => columns::snake_case_columns(df, params),
+        "replace_in_names"   => columns::replace_in_names(df, params),
 
         "change_case" => {
             let mode = params.get("mode").and_then(|v| v.as_str())
