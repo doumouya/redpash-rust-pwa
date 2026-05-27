@@ -32,6 +32,14 @@ import {
   DEFAULT_WINDOW,
 } from "/scripts/pages/monitoring/tabs.js";
 
+// Slice D — pref-driven user charts. When the user has saved chart
+// specs under `monitoringCharts.<tab>` (configured in Settings), they
+// REPLACE the tab's curated kpiX charts in the composite strip,
+// rendered via the unified `renderChart` pipeline. Empty pref falls
+// back to the existing kpiX path unchanged.
+import { renderChart } from "/scripts/charts/render.js";
+import { chartsForTab } from "/scripts/charts/monitoring-bank.js";
+
 export default function monitoring(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "monitoring", session });
 
@@ -214,6 +222,14 @@ export default function monitoring(app, { session }) {
   // call sites keep their original short-arg signatures. Charts
   // controller is the dispose/mount handle.
   const charts          = createListCharts(view, { logPrefix: "monitoring" });
+  // User-built chart instances (Slice D) — renderChart-mounted, lives
+  // outside the kpiX charts controller so the tab-switch / window-flip
+  // teardown can dispose both controllers from one site.
+  let userInstances = [];
+  function disposeUserInstances() {
+    userInstances.forEach((i) => { try { i.dispose(); } catch { /* gone */ } });
+    userInstances = [];
+  }
   const setKpi          = (id, val) => _setKpi(view, id, val);
   const renderListPager = () =>
     _renderListPager(view, "rp-mon-list-pager", {
@@ -459,6 +475,7 @@ export default function monitoring(app, { session }) {
 
   function renderListBody(tab, viewSpec) {
     charts.dispose();      // user switching between list tabs
+    disposeUserInstances();// dispose any Slice D user-built charts too
     listPage = 1;
     listWindow = DEFAULT_WINDOW;
     listSearch = "";
@@ -500,15 +517,52 @@ export default function monitoring(app, { session }) {
     // Home doesn't have them, so neither does Monitoring. Future
     // per-tab filters land via spec.chipRows (the same path Home
     // already uses), not via a sliding panel.
+    // Slice D — pref-driven chart strip. When the user has saved
+    // chart specs for this tab in `monitoringCharts.<tab>`, they
+    // REPLACE the curated kpiX path entirely (rendered via the
+    // unified `renderChart`). Otherwise the existing viewSpec.charts
+    // / charts.mount path stays in effect.
+    const userPref       = getPref("monitoringCharts") || {};
+    const userCharts     = Array.isArray(userPref[tab.key]) && userPref[tab.key].length
+                              ? userPref[tab.key]
+                              : null;
+    const stripCharts    = userCharts
+                              ? userCharts.map((c) => ({ id: c.id, title: c.title }))
+                              : (viewSpec.charts || []);
+
     view.innerHTML = ''
       + headHTML(viewSpec.title, "")
       + (viewSpec.useWindow ? windowChipsHTML(DEFAULT_WINDOW) : "")
-      + compositeStripHTML(kpiTiles, viewSpec.charts || [])
+      + compositeStripHTML(kpiTiles, stripCharts)
       + listToolbarHTML(toolbarSpec)
       + listPanel(viewSpec.columns)
       + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
 
-    if (viewSpec.charts && viewSpec.charts.length) {
+    // ── chart mount (one path or the other, never both) ─────────
+    // userInstances is hoisted to the outer scope so tab-switch +
+    // window-flip teardown can dispose it alongside the kpiX
+    // controller. Local mountUserCharts uses the outer disposer.
+    function mountUserCharts(specs) {
+      disposeUserInstances();
+      specs.forEach((spec) => {
+        const el = view.querySelector('[id="' + cssEsc(spec.id) + '"]');
+        if (!el) return;
+        // Per-spec window override: when the tab's chip is active,
+        // spread the chip window onto the spec so the resolver
+        // fetches with it. The spec's own .source.window stays the
+        // saved default for tabs that aren't window-aware.
+        const liveSource = viewSpec.useWindow
+          ? { ...spec.source, window: listWindow }
+          : spec.source;
+        renderChart(el, { ...spec, source: liveSource })
+          .then((inst) => { if (inst) userInstances.push(inst); })
+          .catch((err) => console.warn("[monitoring] user chart render failed:", spec.id, err));
+      });
+    }
+
+    if (userCharts) {
+      mountUserCharts(userCharts);
+    } else if (viewSpec.charts && viewSpec.charts.length) {
       charts.mount(viewSpec).catch((err) =>
         console.warn("[monitoring] charts mount failed:", err));
     }
@@ -522,9 +576,16 @@ export default function monitoring(app, { session }) {
         listWindow = chip.dataset.window;
         listPage = 1;
         fetchList(viewSpec);
-        // Window-sensitive charts (Requests' status-mix donut) re-derive
-        // from /stats?window=…; remount so they track the chip.
-        if (viewSpec.charts && viewSpec.charts.length) {
+        // Window-sensitive charts re-derive from /stats?window=…;
+        // remount so they track the chip. Same branch as initial mount.
+        if (userCharts) {
+          // renderChart instances aren't tracked by the createListCharts
+          // controller; the DOM nodes get blown away on next selection
+          // change. For window flips inside one tab, we re-render in
+          // place — the prior ECharts instances inside those nodes
+          // get garbage-collected when the new init overwrites them.
+          mountUserCharts(userCharts);
+        } else if (viewSpec.charts && viewSpec.charts.length) {
           charts.dispose();
           charts.mount(viewSpec).catch((err) =>
             console.warn("[monitoring] charts remount on window change failed:", err));
@@ -687,6 +748,7 @@ export default function monitoring(app, { session }) {
 
   function renderUserActivityBody() {
     charts.dispose();
+    disposeUserInstances();
     userActivityPick = null;
     view.innerHTML = ''
       + headHTML("Per-user activity", "")
@@ -890,6 +952,7 @@ export default function monitoring(app, { session }) {
 
   function renderOptimizationBody() {
     charts.dispose();
+    disposeUserInstances();
     optStatus = "all";
     view.innerHTML = ''
       + headHTML("Optimization map", "")
