@@ -517,6 +517,7 @@ redpash-app/
 **"I want to add a dashboard widget kind"** → extend `widgets.js` dispatch; new entry in `index.js` `KINDS` array; widget spec lives in `DashboardSpec.widgets[].spec`.
 **"I want to add a wire-format field"** → `crates/shared/src/<obj>.rs`. Use `#[serde(default)]` so older specs deserialise.
 **"I want to add a migration"** → `backend/migrations/NNNNNN_*.sql`. The api crate runs `sqlx::migrate!` at boot.
+**"I want to add a feature on one page AND replicate it on another"** → read [`internal/processes/replicable-feature-pattern.md`](internal/processes/replicable-feature-pattern.md). Three-piece anatomy (persistence + affordance + recovery) + two invariants (filter-at-render-time + bubble-suppression) + a 10-step replication checklist. Codified from the workspace rail hide/restore + the project→file rename replications.
 
 ---
 
