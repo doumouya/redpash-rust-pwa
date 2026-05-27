@@ -7,6 +7,14 @@
    no raw values of its own.
    ───────────────────────────────────────────────────────────────── */
 :root {
+  /* Tells browsers which colour scheme to use when rendering native
+     form widgets (<select> popups, default scrollbars, native input
+     chrome). Without this, the OS scheme wins regardless of our
+     tokens, so a dark RedPash on a light-OS shows light dropdown
+     popups (and vice versa). The `html[data-theme="light"]` override
+     below flips it for the latte theme. */
+  color-scheme: dark;
+
   /* surface — a calm dark base */
   --rp-bg:        #11111b;
   --rp-surface:   #181825;
@@ -75,6 +83,8 @@
    Overrides only the colour tokens; spacing / radius / type / motion
    are theme-independent and stay on :root. ─────────────────────────── */
 html[data-theme="light"] {
+  color-scheme: light;
+
   --rp-bg:        #eff1f5;
   --rp-surface:   #ffffff;
   --rp-surface-2: #e6e9ef;

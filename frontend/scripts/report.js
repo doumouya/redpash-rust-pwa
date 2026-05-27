@@ -130,14 +130,20 @@ export function mountReport(panelBody, ctx) {
       // Keeping the `rt-report-agg` class alongside the new visual
       // class so the existing change/input event handlers (which
       // target `.rt-report-agg`) keep working without rewires.
+      // Two-row grid layout. Row 1: [fn ▾] of [col ▾] [×] — the two
+      // selects fill the row width via grid `1fr` tracks. Row 2: the
+      // alias input spans the full width via `grid-column: 1 / -1`.
+      // DOM order matches the visual order — alias comes last (after
+      // the delete button) so screen readers + keyboard nav move
+      // through the row before stepping down to the rename.
       return '<div class="rt-report-measure rt-report-agg" data-i="' + i + '">'
         + fnSelect
         + '<span class="rt-report-measure-of">of</span>'
         + colSelect
-        + '<input class="rt-pred-val rt-report-alias" data-key="alias" type="text"'
-        + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
         + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
         + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
+        + '<input class="rt-pred-val rt-report-alias" data-key="alias" type="text"'
+        + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
         + '</div>';
     }).join('');
     const measuresEmpty = !aggregations.length
@@ -165,7 +171,19 @@ export function mountReport(panelBody, ctx) {
         + '</div>'
       : '';
 
+    // Order: breakdowns first ("For each X"), then measures
+    // ("show me Y") — defines the grouping axis before naming what
+    // to compute over it, which mirrors how the user thinks about
+    // the question. The measures-empty hint stays under the
+    // measures line where it's contextual.
     return '<section class="rt-report-question">'
+      +    '<div class="rt-report-q-line">'
+      +      '<span class="rt-report-q-label">For each</span>'
+      +      '<div class="rt-report-q-breakdowns">'
+      +        (breakdownChips || '<span class="rt-report-q-hint">no breakdown — one grand row</span>')
+      +        breakdownAdd
+      +      '</div>'
+      +    '</div>'
       +    '<div class="rt-report-q-line">'
       +      '<span class="rt-report-q-label">Show me</span>'
       +      '<div class="rt-report-q-measures">'
@@ -176,13 +194,6 @@ export function mountReport(panelBody, ctx) {
       +      '</div>'
       +    '</div>'
       +    measuresEmpty
-      +    '<div class="rt-report-q-line">'
-      +      '<span class="rt-report-q-label">For each</span>'
-      +      '<div class="rt-report-q-breakdowns">'
-      +        (breakdownChips || '<span class="rt-report-q-hint">no breakdown — one grand row</span>')
-      +        breakdownAdd
-      +      '</div>'
-      +    '</div>'
       +    '</section>';
   }
 
