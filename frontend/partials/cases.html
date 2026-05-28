@@ -126,30 +126,21 @@
           </a>
         </header>
 
-        <!-- ════ status path hero — connected dot stepper (Em 2026-05-28,
-             replacing the Salesforce chevron). Each step is a node dot
-             + label, joined by a progress line. Completed nodes fill
-             accent; current node fills + gets an accent ring; upcoming
-             stay hollow. Click a node → PATCH status to that value
-             (direct set, not just cycle-forward). paintDetail toggles
-             the is-done / is-current classes per the case's status. -->
-        <div class="rp-cases-detail-path" id="rp-cases-detail-path"
-             role="group" aria-label="Case status">
-          <button type="button" class="rp-cases-path-step" data-path-status="backlog">
-            <span class="rp-cases-path-node"></span><span class="rp-cases-path-label">Backlog</span>
-          </button>
-          <button type="button" class="rp-cases-path-step" data-path-status="todo">
-            <span class="rp-cases-path-node"></span><span class="rp-cases-path-label">Todo</span>
-          </button>
-          <button type="button" class="rp-cases-path-step" data-path-status="in_progress">
-            <span class="rp-cases-path-node"></span><span class="rp-cases-path-label">In progress</span>
-          </button>
-          <button type="button" class="rp-cases-path-step" data-path-status="in_review">
-            <span class="rp-cases-path-node"></span><span class="rp-cases-path-label">In review</span>
-          </button>
-          <button type="button" class="rp-cases-path-step" data-path-status="done">
-            <span class="rp-cases-path-node"></span><span class="rp-cases-path-label">Done</span>
-          </button>
+        <!-- ════ status path hero — pill segmented control (Em 2026-05-28,
+             reusing the .rp-chip-row capsule + .rp-chip atoms). The band
+             centers the capsule; the current status pill carries the
+             atom's .is-active accent fill; completed pills get a
+             done-tint; upcoming stay muted. Click a pill → PATCH status
+             to it. paintDetail toggles is-active (current) + is-done
+             (completed) per the case's status. -->
+        <div class="rp-cases-detail-path" id="rp-cases-detail-path">
+          <div class="rp-chip-row" role="group" aria-label="Case status">
+            <button type="button" class="rp-chip" data-path-status="backlog">Backlog</button>
+            <button type="button" class="rp-chip" data-path-status="todo">Todo</button>
+            <button type="button" class="rp-chip" data-path-status="in_progress">In progress</button>
+            <button type="button" class="rp-chip" data-path-status="in_review">In review</button>
+            <button type="button" class="rp-chip" data-path-status="done">Done</button>
+          </div>
         </div>
 
         <div class="rp-cases-detail-body">

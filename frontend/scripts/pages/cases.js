@@ -1079,8 +1079,9 @@ export default function cases(app, { session }) {
       pathEl.dataset.current = cur;
       pathEl.querySelectorAll("[data-path-status]").forEach((step) => {
         const idx = STATUS_ORDER.indexOf(step.dataset.pathStatus);
-        step.classList.toggle("is-done",    idx < curIdx);
-        step.classList.toggle("is-current", idx === curIdx);
+        step.classList.toggle("is-done",   idx < curIdx);
+        // is-active reuses the .rp-chip atom's accent-fill active state.
+        step.classList.toggle("is-active", idx === curIdx);
       });
     }
     if (sidePriority && c.priority) sidePriority.value = c.priority;
