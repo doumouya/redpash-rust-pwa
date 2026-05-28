@@ -54,6 +54,12 @@ struct ListQuery {
     #[serde(default)] assignee: Option<String>,
     #[serde(default)] project:  Option<String>,
     #[serde(default)] q:        Option<String>,
+    /// "internal" | "external". Drives the Cases page's rail tabs.
+    /// Internal = reporter is a member of the canonical RedPash
+    /// company (resolved at startup); external = NOT member (or
+    /// reporter is null). When state.internal_company_id is None,
+    /// the filter is a no-op — see db::list_cases for the SQL.
+    #[serde(default)] source:   Option<String>,
     #[serde(default)] page:     Option<u32>,
     #[serde(default)] size:     Option<u32>,
     /// Click-to-sort header support. Validated against SORTABLE_CASES;
@@ -115,6 +121,17 @@ async fn list(
     let assignee = trim(q.assignee);
     let project  = trim(q.project);
     let qtext    = trim(q.q);
+    // Validate `source` early so a typo gets a clean 400 instead of
+    // silently passing through as a no-match filter.
+    let source   = match trim(q.source).as_deref() {
+        None                     => None,
+        Some("internal")         => Some("internal".to_string()),
+        Some("external")         => Some("external".to_string()),
+        Some(_) => return Err(AppError::bad_request(
+            "invalid", "source must be one of: internal, external",
+        )),
+    };
+    let internal_company_id = state.internal_company_id.as_deref();
 
     let (sort_key, sort_dir) = super::admin::sort_clause(
         q.sort.as_deref(), q.dir.as_deref(), SORTABLE_CASES, "updated_at",
@@ -143,6 +160,8 @@ async fn list(
         assignee.as_deref(),
         project.as_deref(),
         qtext.as_deref(),
+        source.as_deref(),
+        internal_company_id,
         sort_col, sort_dir,
         size as i64, offset,
     ).await?;
@@ -150,6 +169,7 @@ async fn list(
     let total = db::count_cases(
         &state.db,
         status.as_deref(), assignee.as_deref(), project.as_deref(), qtext.as_deref(),
+        source.as_deref(), internal_company_id,
     ).await? as u64;
 
     Ok(Json(CaseList { items, total, page, size }))

@@ -1453,17 +1453,28 @@ const CASE_USER_JOINS: &str =
 /// filter when None (the `$n::text IS NULL OR …` idiom). LEFT JOINs
 /// users so reporter_display_name + assignee_display_name come back
 /// hydrated — saves the FE a per-row N+1 user-lookup.
+///
+/// `source` is "internal" | "external" | None. When set, an EXISTS
+/// clause against company_memberships filters by whether the case's
+/// reporter shares membership with the canonical internal company
+/// (resolved at AppState init from REDPASH_INTERNAL_COMPANY_NAME).
+/// Cases with NULL reporter_id are external by construction (NOT
+/// EXISTS of nothing → true). When `internal_company_id` is None
+/// (no matching company at startup), the source filter is a no-op:
+/// every case passes regardless of `source`.
 #[allow(clippy::too_many_arguments)]
 pub async fn list_cases(
-    pool:        &PgPool,
-    status:      Option<&str>,
-    assignee_id: Option<&str>,
-    project_id:  Option<&str>,
-    q:           Option<&str>,
-    sort_col:    &str,   // sourced from SORTABLE_CASES allowlist — safe to splice
-    sort_dir:    &str,   // "ASC" | "DESC" — sourced from sort_clause
-    limit:       i64,
-    offset:      i64,
+    pool:                &PgPool,
+    status:              Option<&str>,
+    assignee_id:         Option<&str>,
+    project_id:          Option<&str>,
+    q:                   Option<&str>,
+    source:              Option<&str>,
+    internal_company_id: Option<&str>,
+    sort_col:            &str,   // sourced from SORTABLE_CASES allowlist — safe to splice
+    sort_dir:            &str,   // "ASC" | "DESC" — sourced from sort_clause
+    limit:               i64,
+    offset:              i64,
 ) -> sqlx::Result<Vec<Case>> {
     let rows: Vec<CaseRow> = sqlx::query_as(&format!(
         "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
@@ -1472,13 +1483,22 @@ pub async fn list_cases(
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
+           AND ($5::text IS NULL OR $6::text IS NULL
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM company_memberships cm
+                                                    WHERE cm.user_redpash_id = c.reporter_id
+                                                      AND cm.company_id = $6))
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM company_memberships cm
+                                                    WHERE cm.user_redpash_id = c.reporter_id
+                                                      AND cm.company_id = $6)))
          ORDER BY {sort_col} {sort_dir} NULLS LAST
-         LIMIT $5 OFFSET $6"
+         LIMIT $7 OFFSET $8"
     ))
     .bind(status)
     .bind(assignee_id)
     .bind(project_id)
     .bind(q)
+    .bind(source)
+    .bind(internal_company_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
@@ -1486,12 +1506,15 @@ pub async fn list_cases(
     Ok(rows.into_iter().map(Into::into).collect())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn count_cases(
-    pool:        &PgPool,
-    status:      Option<&str>,
-    assignee_id: Option<&str>,
-    project_id:  Option<&str>,
-    q:           Option<&str>,
+    pool:                &PgPool,
+    status:              Option<&str>,
+    assignee_id:         Option<&str>,
+    project_id:          Option<&str>,
+    q:                   Option<&str>,
+    source:              Option<&str>,
+    internal_company_id: Option<&str>,
 ) -> sqlx::Result<i64> {
     let (n,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*)::BIGINT FROM cases c
@@ -1499,12 +1522,21 @@ pub async fn count_cases(
            AND ($2::text IS NULL OR c.assignee_id = $2)
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
-                                OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')",
+                                OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
+           AND ($5::text IS NULL OR $6::text IS NULL
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM company_memberships cm
+                                                    WHERE cm.user_redpash_id = c.reporter_id
+                                                      AND cm.company_id = $6))
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM company_memberships cm
+                                                    WHERE cm.user_redpash_id = c.reporter_id
+                                                      AND cm.company_id = $6)))",
     )
     .bind(status)
     .bind(assignee_id)
     .bind(project_id)
     .bind(q)
+    .bind(source)
+    .bind(internal_company_id)
     .fetch_one(pool)
     .await?;
     Ok(n)
