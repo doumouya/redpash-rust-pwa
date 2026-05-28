@@ -16,10 +16,11 @@ import { inputRow, mountRow } from "/scripts/page-row.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
 
-// Profile rail section index — click-scroll anchors to the page's
-// four sections. No IntersectionObserver scroll-spy (the 2-col grid
-// doesn't track linearly the way Settings' single-column stack does);
-// these are nav jumps, not a scroll-position mirror.
+// Profile rail tabs — each section renders full-page on tab switch,
+// like Home / Monitoring (Em 2026-05-28: consistent behavior across
+// pages). The rail tab shows its target [data-prof-tab] panel + hides
+// the rest. Default = Personal info. The Usage chart is lazy-rendered
+// on first activation (ECharts can't size in a display:none tab).
 const PROFILE_SECTIONS = [
   { id: "rp-profile-form", label: "Personal info", icon: "bi-person" },
   { id: "prof-usage",      label: "Usage",         icon: "bi-graph-up" },
@@ -28,24 +29,37 @@ const PROFILE_SECTIONS = [
 ];
 
 function mountProfileRail(app) {
-  const body = app.querySelector("#rpProfileNavBody");
+  const body   = app.querySelector("#rpProfileNavBody");
+  const panels = Array.from(app.querySelectorAll("[data-prof-tab]"));
+  let usageLoaded = false;
+
+  function activate(tabId) {
+    panels.forEach((p) => { p.hidden = p.id !== tabId; });
+    body?.querySelectorAll(".rt-tab").forEach((t) =>
+      t.classList.toggle("active", t.dataset.profTarget === tabId));
+    // Usage's ECharts bar can't compute size while its tab is hidden —
+    // render it the first time the tab actually becomes visible.
+    if (tabId === "prof-usage" && !usageLoaded) {
+      usageLoaded = true;
+      loadUsage(app);
+    }
+  }
+
   if (body) {
     body.innerHTML = PROFILE_SECTIONS.map((s) =>
-      '<a class="rt-tab" href="#/profile" data-scroll="' + esc(s.id) + '">'
+      '<a class="rt-tab" href="#/profile" data-prof-target="' + esc(s.id) + '">'
       +   '<i class="rt-tab-icon bi ' + s.icon + '"></i>'
       +   '<span class="rt-tab-name">' + esc(s.label) + '</span>'
       + '</a>'
     ).join("");
     body.addEventListener("click", (e) => {
-      const tab = e.target.closest("[data-scroll]");
+      const tab = e.target.closest("[data-prof-target]");
       if (!tab) return;
       e.preventDefault();
-      const target = app.querySelector("#" + tab.dataset.scroll);
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
-      body.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
+      activate(tab.dataset.profTarget);
     });
   }
+
   // Collapse toggle — same compact-mode affordance as the other rails.
   const rail     = app.querySelector("#rpProfileNav");
   const collapse = app.querySelector("#rpProfileNavCollapse");
@@ -57,6 +71,9 @@ function mountProfileRail(app) {
     icon?.classList.toggle("bi-chevron-double-right", compact);
     collapse.title = compact ? "Expand" : "Collapse";
   });
+
+  // Default landing tab — Personal info.
+  activate(PROFILE_SECTIONS[0].id);
 }
 
 const PLAN_LABELS = {
@@ -158,7 +175,9 @@ export default async function profile(app, { session }) {
   populateMemberships(app, me);
   populateConnections(app, me);
   setEditMode(app, false);
-  loadUsage(app);
+  // loadUsage is no longer called here — the Usage chart lazy-renders
+  // on first activation of its tab (mountProfileRail), since ECharts
+  // can't size a chart in a display:none panel.
 
   // ── Use-case option pills ───────────────────────────────────────
   app.querySelectorAll("#rp-profile-use-case .rp-profile__opt").forEach((btn) => {

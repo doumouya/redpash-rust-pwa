@@ -38,10 +38,14 @@
       <p class="rp-page__sub">Manage how you appear in RedPash, your plan, and your connected accounts.</p>
     </header>
 
-    <div class="rp-profile__grid">
+    <!-- Tab-switched panels (2026-05-28) — each section renders full-
+         page on rail-tab switch, like Home / Monitoring. profile.js
+         shows one [data-prof-tab] at a time; the rest carry [hidden].
+         Default tab = Personal info. -->
+    <div class="rp-profile__panels">
 
-      <!-- ─── LEFT: Personal info form card ─── -->
-      <form class="rp-page__section rp-profile__form" id="rp-profile-form" novalidate>
+      <!-- ─── Personal info ─── -->
+      <form class="rp-page__section rp-profile__form" id="rp-profile-form" data-prof-tab novalidate>
 
         <!-- Identity row: avatar + name/email + plan pill + edit/save -->
         <div class="rp-profile__id">
@@ -67,18 +71,17 @@
         <div data-rp-rows="form"></div>
       </form>
 
-      <!-- ─── RIGHT: Usage strip + Plan card + Connections ─── -->
-      <div class="rp-profile__side">
+      <!-- ─── Usage ─── horizontal bar chart (ECharts). Bars are
+           clickable; each routes to the matching Home tab. Chart is
+           lazy-rendered on first activation (ECharts can't size in a
+           hidden tab). -->
+      <section class="rp-page__section" id="prof-usage" data-prof-tab hidden>
+        <h3 class="rp-page__section-h">Usage</h3>
+        <div class="rp-profile__usage-chart" id="rp-profile-usage-chart"></div>
+      </section>
 
-        <!-- Usage — horizontal bar chart (ECharts). Bars are clickable;
-             each routes to the matching Home tab. -->
-        <section class="rp-page__section" id="prof-usage">
-          <h3 class="rp-page__section-h">Usage</h3>
-          <div class="rp-profile__usage-chart" id="rp-profile-usage-chart"></div>
-        </section>
-
-        <!-- Plan card -->
-        <section class="rp-page__section rp-profile__plan-card" id="prof-plan">
+      <!-- ─── Plan ─── -->
+      <section class="rp-page__section rp-profile__plan-card" id="prof-plan" data-prof-tab hidden>
           <div class="rp-profile__plan-top">
             <div>
               <h3 class="rp-page__section-h rp-profile__plan-h">Plan</h3>
@@ -97,8 +100,8 @@
           </ul>
         </section>
 
-        <!-- Connected accounts -->
-        <section class="rp-page__section" id="prof-connections">
+      <!-- ─── Connections ─── -->
+      <section class="rp-page__section" id="prof-connections" data-prof-tab hidden>
           <h3 class="rp-page__section-h">Connected accounts</h3>
           <div class="rp-profile__conn">
             <span class="rp-profile__conn-icon">
@@ -132,9 +135,8 @@
             <span class="rp-profile__soon">Soon</span>
           </div>
         </section>
-      </div>
 
-    </div><!-- /grid -->
+    </div><!-- /.rp-profile__panels -->
         </div><!-- /.rp-profile -->
       </div><!-- /.rt-surface -->
     </main>
