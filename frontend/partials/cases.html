@@ -47,6 +47,34 @@
             <i class="bi bi-globe2"></i> External
           </button>
         </div>
+        <!-- Filter chip rows — Em 2026-05-28. Two independent filter
+             dimensions (Assignee / Status) ANDing against the active
+             source tab. Each row has its own "All" chip for the
+             unconstrained-on-this-axis state. The per-agent Assignee
+             chips populate dynamically on mount from /api/admin/users
+             (built once, no refetch on tab switch). -->
+        <div class="rp-cases-rail-chips" id="rp-cases-rail-chips">
+          <div class="rp-cases-chip-row" data-row="assignee">
+            <span class="rp-cases-chip-row-label">Assignee</span>
+            <div class="rp-chip-row" id="rp-cases-chips-assignee">
+              <button type="button" class="rp-chip is-active" data-chip-assignee="all">All</button>
+              <button type="button" class="rp-chip" data-chip-assignee="mine">Mine</button>
+              <button type="button" class="rp-chip" data-chip-assignee="__unassigned__">Unassigned</button>
+              <!-- per-agent chips appended here at mount -->
+            </div>
+          </div>
+          <div class="rp-cases-chip-row" data-row="status">
+            <span class="rp-cases-chip-row-label">Status</span>
+            <div class="rp-chip-row" id="rp-cases-chips-status">
+              <button type="button" class="rp-chip is-active" data-chip-status="all">All</button>
+              <button type="button" class="rp-chip" data-chip-status="backlog">Backlog</button>
+              <button type="button" class="rp-chip" data-chip-status="todo">Todo</button>
+              <button type="button" class="rp-chip" data-chip-status="in_progress">In progress</button>
+              <button type="button" class="rp-chip" data-chip-status="in_review">In review</button>
+              <button type="button" class="rp-chip" data-chip-status="done">Done</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="rt-nav-body" id="rp-cases-rail-body">
         <p class="rt-nav-state">Loading cases…</p>

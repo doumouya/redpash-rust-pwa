@@ -64,6 +64,54 @@
 }
 .rp-cases-rail-source button i { font-size: 0.75rem; }
 
+/* Filter chip rows (Em 2026-05-28) — two stacked rows, Assignee +
+   Status. Each row carries the shared .rp-chip atom (shell.css) but
+   the rail context is narrower than Home/Monitoring's chip rows, so
+   we override to wrap + tighter type. The row label sits as a
+   muted prefix on its own line so the chips get the full width. */
+.rp-cases-rail-chips {
+  margin-top: 0.4375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.rp-cases-chip-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.rp-cases-chip-row-label {
+  font-size: 0.5938rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  padding: 0 0.25rem;
+}
+/* Override the shared .rp-chip-row to wrap + drop the pill-container
+   chrome — the rail's chips read better as a flat flow than as a
+   single-pill segmented control at this width. */
+.rp-cases-chip-row .rp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1875rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.rp-cases-chip-row .rp-chip {
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.6875rem;
+  border-radius: 6.1875rem;
+  background: var(--rp-surface-2);
+}
+.rp-cases-chip-row .rp-chip.is-active {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+
 /* "Board" pseudo-tab — sits above the status groups, no group
    indent. Uses the .rt-tab atom but reset the left-padding that
    the workspace's nested-under-group items use. */
@@ -125,6 +173,7 @@
    the icon-only view stays clean. */
 .rt-nav.compact .rp-cases-rail-filter,
 .rt-nav.compact .rp-cases-rail-source,
+.rt-nav.compact .rp-cases-rail-chips,
 .rt-nav.compact .rp-cases-done-window {
   display: none;
 }

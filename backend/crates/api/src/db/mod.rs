@@ -1479,7 +1479,9 @@ pub async fn list_cases(
     let rows: Vec<CaseRow> = sqlx::query_as(&format!(
         "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
          WHERE ($1::text IS NULL OR c.status      = $1)
-           AND ($2::text IS NULL OR c.assignee_id = $2)
+           AND ($2::text IS NULL
+                OR ($2 = '__unassigned__' AND c.assignee_id IS NULL)
+                OR c.assignee_id = $2)
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
@@ -1519,7 +1521,9 @@ pub async fn count_cases(
     let (n,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*)::BIGINT FROM cases c
          WHERE ($1::text IS NULL OR c.status      = $1)
-           AND ($2::text IS NULL OR c.assignee_id = $2)
+           AND ($2::text IS NULL
+                OR ($2 = '__unassigned__' AND c.assignee_id IS NULL)
+                OR c.assignee_id = $2)
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')

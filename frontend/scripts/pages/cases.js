@@ -221,6 +221,80 @@ export default function cases(app, { session }) {
   if (getPref("casesActiveSource") == null) setPref("casesActiveSource", "internal");
   syncSourceToggle(getPref("casesActiveSource") || "internal");
 
+  // ── filter chip rows (Assignee / Status) ───────────────────────
+  // Em 2026-05-28: two independent filter dimensions ANDing against
+  // the active source tab. Each chip row is single-select with an
+  // "All" chip for the unconstrained-on-this-axis state. Selections
+  // persist via per-row prefs so a reload keeps the user's filter.
+  //
+  // Assignee chips are dynamic — per-agent chips populate from
+  // /api/admin/users on mount. Static chips ([All] [Mine]
+  // [Unassigned]) are pre-rendered in the partial.
+  const chipsAssignee = app.querySelector("#rp-cases-chips-assignee");
+  const chipsStatus   = app.querySelector("#rp-cases-chips-status");
+  function syncChipRow(row, value) {
+    if (!row) return;
+    row.querySelectorAll(".rp-chip").forEach((b) => {
+      const key = b.dataset.chipAssignee || b.dataset.chipStatus;
+      b.classList.toggle("is-active", key === value);
+    });
+  }
+  if (getPref("casesFilterAssignee") == null) setPref("casesFilterAssignee", "all");
+  if (getPref("casesFilterStatus")   == null) setPref("casesFilterStatus",   "all");
+  syncChipRow(chipsAssignee, getPref("casesFilterAssignee"));
+  syncChipRow(chipsStatus,   getPref("casesFilterStatus"));
+
+  chipsAssignee?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-chip-assignee]");
+    if (!btn) return;
+    const next = btn.dataset.chipAssignee;
+    if (next && next !== getPref("casesFilterAssignee")) {
+      setPref("casesFilterAssignee", next);
+      syncChipRow(chipsAssignee, next);
+      refreshCases();
+    }
+  });
+  chipsStatus?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-chip-status]");
+    if (!btn) return;
+    const next = btn.dataset.chipStatus;
+    if (next && next !== getPref("casesFilterStatus")) {
+      setPref("casesFilterStatus", next);
+      syncChipRow(chipsStatus, next);
+      refreshCases();
+    }
+  });
+
+  // Populate the per-agent chips after the static chips. Fire-and-
+  // forget: if the admin endpoint 403s (non-admin session in future
+  // RBAC) the chip row just stays with the static set, no crash.
+  async function loadAgentChips() {
+    if (!chipsAssignee) return;
+    try {
+      const data = await api.get("/admin/users?size=20");
+      const users = data?.rows || [];
+      // Skip the current user — already covered by [Mine]. Skip users
+      // without a usable display name.
+      const others = users.filter((u) =>
+        u.redpash_id && u.redpash_id !== meRid && (u.display_name || u.username));
+      const html = others.map((u) =>
+        '<button type="button" class="rp-chip" data-chip-assignee="' + esc(u.redpash_id) + '">'
+        +   esc(u.display_name || u.username)
+        + '</button>'
+      ).join("");
+      // Insert before the Unassigned chip so the per-agent chips
+      // cluster between [Mine] and [Unassigned].
+      const unassignedBtn = chipsAssignee.querySelector('[data-chip-assignee="__unassigned__"]');
+      if (unassignedBtn) unassignedBtn.insertAdjacentHTML("beforebegin", html);
+      else               chipsAssignee.insertAdjacentHTML("beforeend", html);
+      // Re-sync in case the active pref is a per-agent rid.
+      syncChipRow(chipsAssignee, getPref("casesFilterAssignee"));
+    } catch (err) {
+      console.warn("[cases] couldn't load agent chips:", err);
+    }
+  }
+  loadAgentChips();
+
   // Cards are <a href="#/cases?id=…"> anchors — browser handles
   // the navigation for ordinary clicks (and middle-click → new tab,
   // and keyboard activation). The delegate intercepts the action
@@ -353,6 +427,17 @@ export default function cases(app, { session }) {
       // Defaults to "internal" so the agent team's queue shows on
       // first paint. External cases require flipping the toggle.
       params.set("source", getPref("casesActiveSource") || "internal");
+      // Assignee / Status chip filters — "all" = no constraint
+      // (don't send the param). "mine" resolves to the caller's own
+      // rid; "__unassigned__" is a sentinel the backend matches as
+      // assignee_id IS NULL. Per-agent chips carry their USR_<rid>
+      // directly in data-chip-assignee.
+      const fa = getPref("casesFilterAssignee");
+      if (fa && fa !== "all") {
+        params.set("assignee", fa === "mine" ? meRid : fa);
+      }
+      const fs = getPref("casesFilterStatus");
+      if (fs && fs !== "all") params.set("status", fs);
       const data = await api.get("/cases?" + params.toString());
       // Backend returns { items, total, page, size } per the cookbook
       // contract — the original v1 shell read `.rows` (wrong).
