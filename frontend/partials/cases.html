@@ -126,6 +126,22 @@
           </a>
         </header>
 
+        <!-- ════ status path hero (Salesforce "Path" adapted to our
+             5-status flow) — Em 2026-05-28. Replaces the sidebar status
+             <select> as the status control. Completed steps (left of
+             current) tint done-green; current fills accent; upcoming
+             greys. Click a step → PATCH status to that value (direct
+             set, not just cycle-forward). paintDetail toggles the
+             is-done / is-current classes per the case's status. -->
+        <div class="rp-cases-detail-path" id="rp-cases-detail-path"
+             role="group" aria-label="Case status">
+          <button type="button" class="rp-cases-path-step" data-path-status="backlog"><span>Backlog</span></button>
+          <button type="button" class="rp-cases-path-step" data-path-status="todo"><span>Todo</span></button>
+          <button type="button" class="rp-cases-path-step" data-path-status="in_progress"><span>In progress</span></button>
+          <button type="button" class="rp-cases-path-step" data-path-status="in_review"><span>In review</span></button>
+          <button type="button" class="rp-cases-path-step" data-path-status="done"><span>Done</span></button>
+        </div>
+
         <div class="rp-cases-detail-body">
 
           <!-- ════ main column — comments thread (primary work).
@@ -161,21 +177,11 @@
                  • <details> Activity (filter pills + feed) ════ -->
           <aside class="rp-cases-detail-side">
 
-            <!-- Editable controls — these ARE the mutation surface
-                 (no read-only chip-row above duplicating them, no
-                 separate "Advance" button — the status select cycles
-                 the case forward). One row per field, label inline. -->
+            <!-- Editable controls — these ARE the mutation surface.
+                 Status moved OUT to the path hero above (2026-05-28);
+                 priority / type / assignee stay here. One row per
+                 field, label inline. -->
             <div class="rp-cases-detail-edit">
-              <label class="rp-cases-control">
-                <span class="rp-cases-control-lbl">Status</span>
-                <select class="rp-cases-control-select" id="rp-cases-side-status">
-                  <option value="backlog">Backlog</option>
-                  <option value="todo">Todo</option>
-                  <option value="in_progress">In progress</option>
-                  <option value="in_review">In review</option>
-                  <option value="done">Done</option>
-                </select>
-              </label>
               <label class="rp-cases-control">
                 <span class="rp-cases-control-lbl">Priority</span>
                 <select class="rp-cases-control-select" id="rp-cases-side-priority">

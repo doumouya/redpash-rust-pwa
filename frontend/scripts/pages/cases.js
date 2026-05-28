@@ -736,7 +736,7 @@ export default function cases(app, { session }) {
   const commentSend     = app.querySelector("#rp-cases-comment-form-send");
   const commentError    = app.querySelector("#rp-cases-comment-form-error");
   const activityList    = app.querySelector("#rp-cases-activity-list");
-  const sideStatus   = app.querySelector("#rp-cases-side-status");
+  const pathEl       = app.querySelector("#rp-cases-detail-path");
   const sidePriority = app.querySelector("#rp-cases-side-priority");
   const sideType     = app.querySelector("#rp-cases-side-type");
   const sideAssignee        = app.querySelector("#rp-cases-side-assignee");
@@ -756,12 +756,24 @@ export default function cases(app, { session }) {
   let assigneePickerTimer = null;
 
   // Side-panel selects fire sparse PATCHes — single field per change.
+  // Status moved to the path hero (below); priority + type stay here.
   [
-    [sideStatus,   "status"],
     [sidePriority, "priority"],
     [sideType,     "type"],
   ].forEach(([el, field]) => {
     el?.addEventListener("change", () => patchCase({ [field]: el.value }));
+  });
+
+  // Status path hero — click a step → set status directly (not just
+  // cycle-forward). Allows backward moves (reopen) + jumps. The
+  // PATCH emits the case_status_change event same as any status edit.
+  pathEl?.addEventListener("click", (e) => {
+    const step = e.target.closest("[data-path-status]");
+    if (!step || !currentDetailRid) return;
+    const next = step.dataset.pathStatus;
+    // No-op if already on this status — avoids a redundant PATCH +
+    // event row when the user clicks the current step.
+    if (next && next !== pathEl.dataset.current) patchCase({ status: next });
   });
 
   // "Sending as X" hint — fills once at mount; the session is
@@ -1064,7 +1076,20 @@ export default function cases(app, { session }) {
       titleEl.title = t;                         // full title on hover (ellipsis fallback)
     }
 
-    if (sideStatus && c.status)     sideStatus.value = c.status;
+    // Status path hero — mark steps left-of-current as done, the
+    // current step as current, the rest upcoming. Stash the current
+    // status on the container so the click handler can no-op a click
+    // on the already-active step.
+    if (pathEl) {
+      const cur = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
+      const curIdx = STATUS_ORDER.indexOf(cur);
+      pathEl.dataset.current = cur;
+      pathEl.querySelectorAll("[data-path-status]").forEach((step) => {
+        const idx = STATUS_ORDER.indexOf(step.dataset.pathStatus);
+        step.classList.toggle("is-done",    idx < curIdx);
+        step.classList.toggle("is-current", idx === curIdx);
+      });
+    }
     if (sidePriority && c.priority) sidePriority.value = c.priority;
     if (sideType && c.type)         sideType.value = c.type;
     if (sideAssignee) {

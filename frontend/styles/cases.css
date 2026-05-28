@@ -445,6 +445,78 @@
   background: var(--rp-warn);
   color: var(--rp-bg);
 }
+
+/* ── status path hero (Salesforce "Path" adapted) ─────────────────
+   A horizontal pipeline of chevron steps below the detail head.
+   Completed steps (left of current) tint done-green; the current
+   step fills accent; upcoming steps stay muted. Each step is a
+   button → PATCH status to that value. The chevron shape comes from
+   a clip-path arrow notch on the right edge of each step (+ a
+   matching left inset so they interlock). */
+.rp-cases-detail-path {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.1875rem;
+  padding: 0.5rem 1rem;
+  background: var(--rp-surface-2);
+  border-bottom: 1px solid var(--rp-border);
+  overflow: hidden;
+}
+.rp-cases-path-step {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.875rem;
+  padding: 0 0.875rem 0 1.25rem;
+  border: 0;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Chevron: arrow point on the right, matching notch on the left so
+     adjacent steps interlock. First step is flat-left, last is
+     flat-right (overridden below). */
+  clip-path: polygon(0 0, calc(100% - 0.625rem) 0, 100% 50%, calc(100% - 0.625rem) 100%, 0 100%, 0.625rem 50%);
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-cases-path-step span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-cases-path-step:first-child {
+  padding-left: 0.875rem;
+  clip-path: polygon(0 0, calc(100% - 0.625rem) 0, 100% 50%, calc(100% - 0.625rem) 100%, 0 100%);
+}
+.rp-cases-path-step:last-child {
+  padding-right: 0.875rem;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0.625rem 50%);
+}
+.rp-cases-path-step:hover { color: var(--rp-text); background: var(--rp-hover); }
+/* Completed — left of current. Done-green tint, readable text. */
+.rp-cases-path-step.is-done {
+  background: color-mix(in srgb, var(--rp-ok) 22%, var(--rp-surface));
+  color: var(--rp-text);
+}
+.rp-cases-path-step.is-done:hover {
+  background: color-mix(in srgb, var(--rp-ok) 32%, var(--rp-surface));
+}
+/* Current — accent fill, bg-color text for contrast. */
+.rp-cases-path-step.is-current {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+.rp-cases-path-step.is-current:hover {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+
 /* Body splits horizontally into main + side. Each column manages
    its own height + scroll context, independent of the other:
    • .rp-cases-detail-main — comments list (scrolls) + sticky
