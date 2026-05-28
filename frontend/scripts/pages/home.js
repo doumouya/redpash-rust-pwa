@@ -28,7 +28,7 @@ import {
 // Tab definitions extracted into `home/tabs.js` as slice 4 of the
 // god-object decomposition (broadcast.md 00:53). HOME_TABS drives
 // the rail + redtable surface; HOME_GROUPS partitions the rail into
-// ORG / DATA / MANAGE sections; HOME_DEFAULT_TAB is the boot fallback.
+// ORG / DATA sections; HOME_DEFAULT_TAB is the boot fallback.
 // Module-private to home.js — promote if another page composes the
 // same tab vocabulary.
 import { HOME_TABS, HOME_GROUPS, HOME_DEFAULT_TAB } from "/scripts/pages/home/tabs.js";

@@ -5,15 +5,15 @@
 //
 // Five exports drive Monitoring's rail + window-selector + redtable:
 //
-//   MON_TABS — tab inventory across five rail groups (REQUESTS /
-//     AUDITS / OPTIMIZATION / USERS / INSPECT). Same shape as
-//     HOME_TABS: group / key / label / icon / endpoint / wired.
+//   MON_TABS — tab inventory across four rail groups (REQUESTS /
+//     AUDITS / OPTIMIZATION / USERS). Same shape as HOME_TABS:
+//     group / key / label / icon / endpoint / wired.
 //     The `endpoint` field's no-/api/-prefix convention keeps the
 //     crossing audit from flagging it as a call site (the route
 //     literal is only spliced into the call site via
 //     `/api/${endpoint}` in the fetch path).
 //
-//   MON_GROUPS — five rail sections with their two-letter mark +
+//   MON_GROUPS — four rail sections with their two-letter mark +
 //     color token. Drives the rail's visual grouping.
 //
 //   WINDOWS — the four time-window options for windowed views
@@ -48,12 +48,6 @@ export const MON_TABS = [
   // /admin/users (organisational inventory). Combines request_log
   // + events into one time-ordered timeline scoped to a user_rid.
   { group: "USERS",    key: "user_activity", label: "Activity", icon: "bi-person-lines-fill", endpoint: "/monitoring/users",        wired: true },
-  // ── INSPECT — stripped redtable variant ────────────────────
-  // Disabled until Gus ships the unified /api/monitoring/logs
-  // endpoint. The button telegraphs the surface that's coming
-  // (workspace-style filter + read-only table across event /
-  // request / audit / finding sources); not clickable yet.
-  { group: "INSPECT",  key: "logs",     label: "Logs",     icon: "bi-card-list",            endpoint: "/monitoring/logs",           wired: false },
 ];
 
 export const MON_GROUPS = [
@@ -61,7 +55,6 @@ export const MON_GROUPS = [
   { name: "AUDITS",       mark: "AD", color: "peach" },
   { name: "OPTIMIZATION", mark: "OP", color: "green" },
   { name: "USERS",        mark: "US", color: "sky"   },
-  { name: "INSPECT",      mark: "IN", color: "mauve" },
 ];
 
 export const WINDOWS = ["1h", "24h", "7d", "30d"];

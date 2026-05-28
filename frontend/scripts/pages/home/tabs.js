@@ -15,10 +15,10 @@
 //     doesn't mistake it for a call site; it's display-only for the
 //     pending-stub UI when `wired: false`.
 //
-//   HOME_GROUPS — three rail sections (ORG / DATA / MANAGE) with
-//     their two-letter mark + color-token name. Drives the rail's
-//     visual grouping; HOME_TABS entries assign themselves to a
-//     group via the `group` field.
+//   HOME_GROUPS — two rail sections (ORG / DATA) with their
+//     two-letter mark + color-token name. Drives the rail's visual
+//     grouping; HOME_TABS entries assign themselves to a group via
+//     the `group` field.
 //
 //   HOME_DEFAULT_TAB — the default tab key when no hash query says
 //     otherwise. Today: "projects" (the DATA group's first tab).
@@ -44,18 +44,11 @@ export const HOME_TABS = [
   // Steps moved to /monitoring (AUDITS group) — operational audit-
   // trail records of cleaning ops, fits Monitoring's "what happened"
   // framing better than Home's org/data inventory.
-  // ── MANAGE — stripped redtable variant ─────────────────────
-  // Disabled until the unified org-management endpoint lands. The
-  // button telegraphs the future surface (workspace-style filter +
-  // read-only table across users / companies / memberships); not
-  // clickable yet. Parallel pattern to Monitoring's INSPECT > Logs.
-  { group: "MANAGE", key: "org",         label: "Org",         icon: "bi-diagram-3",    perm: "admin", endpoint: "/admin/org",         wired: false },
 ];
 
 export const HOME_GROUPS = [
   { name: "ORG",    mark: "OR", color: "mauve" },
   { name: "DATA",   mark: "DA", color: "teal"  },
-  { name: "MANAGE", mark: "MG", color: "peach" },
 ];
 
 export const HOME_DEFAULT_TAB = "projects";
