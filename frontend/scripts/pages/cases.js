@@ -384,6 +384,61 @@ export default function cases(app, { session }) {
     }
   });
 
+  // ── kanban drag-drop — move a card between status columns ───────
+  // Native HTML5 DnD (no library, per [[feedback-no-frameworks]]).
+  // proposition.md deferred this to v2 ("if interaction data justifies
+  // the lift") — Em greenlit 2026-05-28. The dragged rid is held in a
+  // closure var (cross-document transfer isn't needed); dataTransfer
+  // is still seeded so Firefox initiates the drag. Drop reads the
+  // target column's data-status and routes through setCaseStatus
+  // (optimistic move + PATCH + revert-on-error). A drag gesture
+  // doesn't fire a click, so the card anchor's navigation is
+  // unaffected — plain clicks still open the case.
+  let draggedRid = null;
+  let draggedFromStatus = null;
+  function clearDropTargets() {
+    colsHost?.querySelectorAll(".rp-cases-col.is-drop-target")
+      .forEach((c) => c.classList.remove("is-drop-target"));
+  }
+  colsHost?.addEventListener("dragstart", (e) => {
+    const card = e.target.closest(".rp-cases-card");
+    if (!card) return;
+    draggedRid = card.dataset.rid || null;
+    draggedFromStatus = card.dataset.status || null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", draggedRid || "");
+    }
+    card.classList.add("is-dragging");
+  });
+  colsHost?.addEventListener("dragend", (e) => {
+    e.target.closest(".rp-cases-card")?.classList.remove("is-dragging");
+    clearDropTargets();
+    draggedRid = null;
+    draggedFromStatus = null;
+  });
+  colsHost?.addEventListener("dragover", (e) => {
+    if (!draggedRid) return;
+    const col = e.target.closest(".rp-cases-col");
+    if (!col) return;
+    e.preventDefault();                       // mark as a valid drop zone
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    if (!col.classList.contains("is-drop-target")) {
+      clearDropTargets();
+      col.classList.add("is-drop-target");
+    }
+  });
+  colsHost?.addEventListener("drop", (e) => {
+    if (!draggedRid) return;
+    const col = e.target.closest(".rp-cases-col");
+    if (!col) return;
+    e.preventDefault();
+    const target = col.dataset.status;
+    const rid = draggedRid;
+    clearDropTargets();
+    if (target && target !== draggedFromStatus) setCaseStatus(rid, target);
+  });
+
   // ── rail collapse toggle ─────────────────────────────────────
   // Same compact-mode affordance as the Workspace / Docs / Monitoring
   // rails — the chevron-double-left button on the head flips the
@@ -509,7 +564,7 @@ export default function cases(app, { session }) {
     // click is taking them. Done cycles back to backlog → "Reopen".
     const cycleLabel = ADVANCE_LABEL[c.status || "backlog"] || "Advance status";
     return ''
-      + '<a class="rp-cases-card" href="' + esc(href) + '" '
+      + '<a class="rp-cases-card" href="' + esc(href) + '" draggable="true" '
       +    'data-rid="' + esc(rid) + '" '
       +    'data-status="' + esc(c.status || "backlog") + '" '
       +    'data-title="' + esc(c.title || "(untitled)") + '">'
@@ -640,11 +695,32 @@ export default function cases(app, { session }) {
   async function cycleStatus(rid, currentStatus) {
     const idx = STATUS_ORDER.indexOf(currentStatus);
     const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+    setCaseStatus(rid, next);
+  }
+
+  // Direct status set — used by the kanban drag-drop + the cycle
+  // button. Optimistic: mutate the cached case + repaint so the card
+  // lands in the target column immediately, then PATCH; on error
+  // revert the cache + repaint. No-op when the status is unchanged.
+  async function setCaseStatus(rid, status) {
+    const c = cachedCases.find((x) => (x.redpash_id || x.rid) === rid);
+    const prev = c ? c.status : null;
+    if (prev === status) return;
+    if (c) {
+      c.status = status;
+      paintBoard(cachedCases);
+      paintRail(cachedCases, activeCaseRid());
+    }
     try {
-      await api.patch("/cases/" + encodeURIComponent(rid), { status: next });
-      refreshCases();
+      await api.patch("/cases/" + encodeURIComponent(rid), { status });
+      refreshCases();                 // reconcile updated_at + ordering
     } catch (err) {
-      console.warn("[cases] cycle status failed:", err);
+      console.warn("[cases] set status failed:", err);
+      if (c) {                        // revert the optimistic move
+        c.status = prev;
+        paintBoard(cachedCases);
+        paintRail(cachedCases, activeCaseRid());
+      }
     }
   }
 

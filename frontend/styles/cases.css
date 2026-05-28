@@ -286,6 +286,20 @@
   outline: 0.125rem solid var(--rp-accent-2);
   outline-offset: 1px;
 }
+/* Drag-drop (Em 2026-05-28) — grab cursor hints draggability; the
+   dragged card dims + the target column lifts an accent ring. */
+.rp-cases-card { cursor: grab; }
+.rp-cases-card.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+.rp-cases-col.is-drop-target {
+  border-color: var(--rp-accent-2);
+  box-shadow: inset 0 0 0 1px var(--rp-accent-2);
+}
+.rp-cases-col.is-drop-target .rp-cases-col-body {
+  background: var(--rp-accent-soft);
+}
 .rp-cases-card-head {
   display: flex;
   align-items: center;
