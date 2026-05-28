@@ -129,10 +129,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ds-tile-menu {
+/* Tile-head action buttons (edit / save / delete / close). Hover-
+   fade in like the rail affordances; the destructive pair (delete +
+   close) tint accent on hover. The save button sits disabled until
+   the tile is dirty (an accordion edit), and gets the accent fill
+   when active so "this chart has unsaved edits" reads at a glance. */
+.ds-tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+.ds-tile-act {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.3125rem;
+  background: transparent;
   color: var(--rp-text-mute);
-  font-size: 0.8125rem;
-  padding: 0.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.ds-tile-act i { font-size: 0.75rem; }
+.ds-tile:hover .ds-tile-act,
+.ds-tile.selected .ds-tile-act { opacity: 1; }
+.ds-tile-act:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+.ds-tile-del:hover,
+.ds-tile-close:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.ds-tile-act:disabled { opacity: 0; cursor: default; }
+/* Dirty tile → its save button stays visible + accent-filled even
+   without hover, signalling unsaved edits. */
+.ds-tile--dirty .ds-tile-save:not(:disabled) {
+  opacity: 1;
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
 }
 .ds-tile-body {
   flex: 1;
@@ -344,6 +378,15 @@
   font-weight: 550;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
+/* Measure row — agg fn + the column it runs on, side by side. The fn
+   takes a touch less width than the column (column names are longer). */
+.ds-measure-row {
+  display: flex;
+  gap: 0.4375rem;
+}
+.ds-measure-row .ds-agg-fn  { flex: 0 0 44%; }
+.ds-measure-row .ds-agg-col { flex: 1 1 auto; min-width: 0; }
+.ds-measure-row .ds-agg-col:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Style section — theme picker swatches */
 .ds-theme-opts { display: flex; flex-direction: column; gap: 0.3125rem; }

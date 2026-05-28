@@ -19,10 +19,14 @@
 // ------------------
 // The Data section adapts to `ctx.getSource()`:
 //
-//   { kind: "file", label, columns }
-//     → shows the File's rid + the cfg.group_by / cfg.agg_fn(agg_col)
-//       chips (designer's default — picks land via the future column
-//       picker UI; today they're set elsewhere in the workspace).
+//   { kind: "file", rid, label, columns, files }
+//     → three live dropdowns: the source file (picked from `files`,
+//       shown by name), the group-by column (from `columns`), and the
+//       measure (an agg fn + the column it runs on). Editing the source
+//       calls ctx.onSourceChange(rid); editing group-by / fn / col calls
+//       ctx.onDataChange() so the caller can re-aggregate the chart.
+//       `columns` / `files` may arrive async — until they do, each
+//       control degrades to a static line showing the current value.
 //
 //   { kind: "monitoring-stats", endpoint, pointer, window, schema }
 //     → shows the endpoint + the pointer field path (which JSON key
@@ -37,10 +41,17 @@
 // Contract
 // --------
 //   mountBuilder(el, {
-//     getCfg:      () => Object,           // current cfg being edited
-//     getSource:   () => SourceDesc,       // polymorphic per above
-//     onCfgChange: () => void,             // called after each edit
-//     onSave:      () => Promise|void,     // save button handler
+//     getCfg:        () => Object,         // current cfg being edited
+//     getSource:     () => SourceDesc,     // polymorphic per above
+//     onCfgChange:   () => void,           // after a style/type/theme edit
+//     onDataChange:  () => Promise|void,   // after a group-by / fn / col
+//                                          //   edit (file source) — caller
+//                                          //   re-aggregates. Falls back to
+//                                          //   onCfgChange when omitted.
+//     onSourceChange:(rid) => Promise|void,// source-file dropdown changed
+//                                          //   (file source) — caller swaps
+//                                          //   the data file + re-fetches.
+//     onSave:        () => Promise|void,   // save button handler
 //   })
 //   → {
 //     render:    () => void,               // re-render the accordion
@@ -54,6 +65,22 @@ import { esc } from "/scripts/dom.js";
 import { THEMES, TYPE_LIST, TYPE_TO_KIND, SMOOTHABLE } from "/scripts/charts/build.js";
 
 const WINDOW_CHIPS = ["1h", "24h", "7d", "30d"];
+
+// Aggregation functions offered by the file-source Measure dropdown.
+// Values are the snake_case `shared::report::AggFn` variants the
+// /api/group/preview engine accepts; labels are the human wording.
+// `count` is the only fn that operates on "all rows" (agg_col "*");
+// every other fn needs a real column (the renderer + onChange enforce
+// that — switching to a column fn auto-picks the first column).
+const AGG_FNS = [
+  ["count",          "Count"],
+  ["count_distinct", "Count distinct"],
+  ["sum",            "Sum"],
+  ["mean",           "Mean"],
+  ["min",            "Min"],
+  ["max",            "Max"],
+  ["median",         "Median"],
+];
 
 export function mountBuilder(el, ctx) {
   // Shell. Save button lives in the header so the caller's setDirty
@@ -89,21 +116,62 @@ export function mountBuilder(el, ctx) {
       return '<p class="ds-muted">No data source bound.</p>';
     }
     if (source.kind === "file") {
-      const label = source.label || source.rid || "(no source bound)";
+      // Three live controls (Em 2026-05-28): the source file (pick any
+      // data file in the project, shown by name), the group-by column,
+      // and the measure (agg fn + the column it runs on). Editing any of
+      // them re-aggregates the tile via /api/group/preview — they are
+      // functional, not display chips. Columns/files arrive async from
+      // the designer; until they do, each control degrades to a static
+      // line showing the current value so the panel never renders blank.
+      const cols   = Array.isArray(source.columns) ? source.columns : [];
+      const files  = Array.isArray(source.files)   ? source.files   : [];
+      const curRid = source.rid || "";
+      const aggFn  = cfg.agg_fn || "count";
+      const aggCol = cfg.agg_col || "*";
+      const isCount = aggFn === "count";
+
+      const sourceCtl = files.length
+        ? '<select class="ds-input" data-key="source_file_id">'
+          + files.map((f) =>
+              '<option value="' + esc(f.rid) + '"' + (f.rid === curRid ? " selected" : "") + '>'
+              + esc(f.name) + '</option>').join('')
+          + '</select>'
+        : '<div class="ds-source"><i class="bi bi-filetype-csv"></i> '
+          + esc(source.label || curRid || "(no source bound)") + '</div>';
+
+      const groupCtl = cols.length
+        ? '<select class="ds-input" data-key="group_by">'
+          + cols.map((c) =>
+              '<option value="' + esc(c.name) + '"' + (c.name === cfg.group_by ? " selected" : "") + '>'
+              + esc(c.name) + '</option>').join('')
+          + '</select>'
+        : '<div class="ds-source"><i class="bi bi-hash"></i> '
+          + (cfg.group_by ? esc(cfg.group_by) : '<span class="ds-muted">loading columns…</span>')
+          + '</div>';
+
+      const fnCtl = '<select class="ds-input ds-agg-fn" data-key="agg_fn">'
+        + AGG_FNS.map(([v, l]) =>
+            '<option value="' + esc(v) + '"' + (v === aggFn ? " selected" : "") + '>'
+            + esc(l) + '</option>').join('')
+        + '</select>';
+      // Column the measure runs on. `count` can run over all rows ("*");
+      // every other fn needs a real column, so the "All rows" option is
+      // offered only for count.
+      const colCtl = '<select class="ds-input ds-agg-col" data-key="agg_col"'
+          + (cols.length ? "" : " disabled") + '>'
+        + (isCount
+            ? '<option value="*"' + (aggCol === "*" ? " selected" : "") + '>All rows</option>'
+            : '')
+        + cols.map((c) =>
+            '<option value="' + esc(c.name) + '"' + (c.name === aggCol ? " selected" : "") + '>'
+            + esc(c.name) + '</option>').join('')
+        + '</select>';
+
       return ''
-        + '<span class="ds-lbl">Source view</span>'
-        + '<div class="ds-source"><i class="bi bi-filetype-csv"></i> ' + esc(label) + '</div>'
-        + '<span class="ds-lbl">Group by</span>'
-        + '<div class="ds-chip-row">'
-        +   (cfg.group_by
-              ? '<span class="ds-chip">' + esc(cfg.group_by) + '</span>'
-              : '<span class="ds-muted">— not set</span>')
-        + '</div>'
+        + '<span class="ds-lbl">Source view</span>' + sourceCtl
+        + '<span class="ds-lbl">Group by</span>' + groupCtl
         + '<span class="ds-lbl">Measure</span>'
-        + '<div class="ds-chip-row">'
-        +   '<span class="ds-chip">' + esc(cfg.agg_fn || "?") + '('
-        +     esc(cfg.agg_col === "*" ? "*" : (cfg.agg_col || "?")) + ')</span>'
-        + '</div>';
+        + '<div class="ds-measure-row">' + fnCtl + colCtl + '</div>';
     }
     if (source.kind === "monitoring-stats") {
       const endpoint = source.endpoint || cfg.source?.endpoint || "";
@@ -190,17 +258,26 @@ export function mountBuilder(el, ctx) {
   }
 
   // ── render ──────────────────────────────────────────────────────
+  // Preserve which sections are open across re-renders so an edit that
+  // re-renders (type / theme / agg-fn switch) doesn't collapse the
+  // section the user is working in. First render uses the defaults.
+  let rendered = false;
   function render() {
     const cfg = ctx.getCfg?.();
-    if (!cfg) { accBody.innerHTML = ""; return; }
+    if (!cfg) { accBody.innerHTML = ""; rendered = false; return; }
+    const openSecs = rendered
+      ? new Set([...accBody.querySelectorAll(".ds-sec.open")].map((s) => s.dataset.sec))
+      : null;
+    const isOpen = (name, dflt) => openSecs ? openSecs.has(name) : dflt;
     const source = ctx.getSource?.();
     accBody.innerHTML = ''
-      + section("type",    "bi-bar-chart",        "Chart type", true,  renderTypeSection(cfg))
-      + section("data",    "bi-database",         "Data",       false, renderDataSection(cfg, source))
-      + section("axes",    "bi-rulers",           "Axes",       false, renderAxesSection(cfg))
-      + section("legend",  "bi-list-ul",          "Legend",     false, renderLegendSection(cfg))
-      + section("tooltip", "bi-chat-square-text", "Tooltip",    false, renderTooltipSection(cfg))
-      + section("style",   "bi-palette",          "Style",      false, renderStyleSection(cfg));
+      + section("type",    "bi-bar-chart",        "Chart type", isOpen("type", true),     renderTypeSection(cfg))
+      + section("data",    "bi-database",         "Data",       isOpen("data", false),    renderDataSection(cfg, source))
+      + section("axes",    "bi-rulers",           "Axes",       isOpen("axes", false),    renderAxesSection(cfg))
+      + section("legend",  "bi-list-ul",          "Legend",     isOpen("legend", false),  renderLegendSection(cfg))
+      + section("tooltip", "bi-chat-square-text", "Tooltip",    isOpen("tooltip", false), renderTooltipSection(cfg))
+      + section("style",   "bi-palette",          "Style",      isOpen("style", false),   renderStyleSection(cfg));
+    rendered = true;
   }
 
   function setDirty(on) {
@@ -258,6 +335,44 @@ export function mountBuilder(el, ctx) {
     const fld = e.target.closest("[data-key]");
     if (!fld) return;
     const key = fld.dataset.key;
+
+    // ── file-source data keys ──────────────────────────────────────
+    // These change WHAT data the chart plots (not just its style), so
+    // they route through onDataChange (live re-aggregation) rather than
+    // onCfgChange (style-only rerender). Each returns early.
+    if (key === "source_file_id") {
+      // Switching the source file is a heavier op (new columns, maybe a
+      // reset group-by) — the designer owns it.
+      ctx.onSourceChange?.(e.target.value);
+      return;
+    }
+    if (key === "group_by") {
+      cfg.group_by = e.target.value;
+      (ctx.onDataChange || ctx.onCfgChange)?.();
+      return;
+    }
+    if (key === "agg_fn") {
+      cfg.agg_fn = e.target.value;
+      // count is the only fn that runs over all rows; every other fn
+      // needs a real column. Auto-pick the first when leaving count so
+      // the re-aggregation doesn't 400 on agg_col "*".
+      if (cfg.agg_fn !== "count" && (!cfg.agg_col || cfg.agg_col === "*")) {
+        const cols = ctx.getSource?.()?.columns || [];
+        cfg.agg_col = cols[0]?.name || cfg.agg_col || "*";
+      }
+      // Re-render so the column dropdown shows/hides "All rows" and
+      // reflects the (possibly auto-picked) agg_col.
+      render();
+      (ctx.onDataChange || ctx.onCfgChange)?.();
+      return;
+    }
+    if (key === "agg_col") {
+      cfg.agg_col = e.target.value;
+      (ctx.onDataChange || ctx.onCfgChange)?.();
+      return;
+    }
+
+    // ── style keys ──────────────────────────────────────────────────
     if (["legend", "tooltip", "splitLines", "axisLine", "smooth"].includes(key)) {
       cfg[key] = e.target.checked;
     } else if (key === "legendPos") {

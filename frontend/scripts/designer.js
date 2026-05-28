@@ -81,15 +81,41 @@ export function mountDesigner(designerEl, ctx) {
   // pipes accordion edits back through rerender + setDirty.
   const builder = mountBuilder(asideEl, {
     getCfg:      () => sel?.cfg || null,
+    // The Data section reads the SELECTED tile's own source (rid +
+    // columns), not the workspace's last-opened file — a multi-tile
+    // dashboard can mix sources. `files` is the project's data-file
+    // list (for the source dropdown); the workspace supplies it.
     getSource:   () => sel ? {
       kind:    "file",
-      rid:     ctx.getSource?.()?.rid || null,
-      label:   ctx.getSource?.()?.rid || null,
-      columns: ctx.getSource?.()?.columns || [],
+      rid:     sel.sourceRid || sel.chart?.source_file_id || null,
+      label:   sourceLabel(sel.sourceRid || sel.chart?.source_file_id),
+      columns: sel.sourceColumns || [],
+      files:   ctx.getSourceFiles?.() || [],
     } : null,
-    onCfgChange: () => { if (sel) { rerender(sel); setDirty(true); } },
-    onSave:      () => save(),
+    // Style / type / theme edit → live-rerender the selected tile +
+    // mark IT dirty (enabling its own save button). The chart config
+    // persists via the per-tile save, NOT the dashboard save (the
+    // dashboard spec only carries chart_id refs).
+    onCfgChange: () => { if (sel) { rerender(sel); markTileDirty(sel, true); } },
+    // Group-by / agg-fn / agg-col edit → re-aggregate from source
+    // (/api/group/preview) then rerender. Marks the tile dirty so the
+    // new shape persists on the next per-tile save.
+    onDataChange: () => { if (sel) { markTileDirty(sel, true); void reaggregate(sel); } },
+    // Source-file dropdown changed → swap the tile's data file, refetch
+    // its columns, reset stale column picks, re-aggregate.
+    onSourceChange: (rid) => { if (sel) void changeSource(sel, rid); },
+    // ds-config-save (builder header) = save the whole dashboard.
+    onSave:      () => saveDashboard(),
   });
+
+  // Resolve a source-file rid to its display name via the project file
+  // list the workspace supplies. Falls back to the rid when unknown
+  // (e.g. the list hasn't loaded yet).
+  function sourceLabel(rid) {
+    if (!rid) return null;
+    const files = ctx.getSourceFiles?.() || [];
+    return files.find((f) => f.rid === rid)?.name || rid;
+  }
 
   // ── load ──────────────────────────────────────────────────────────
   // Called from workspace.js when a chart or dashboard file opens.
@@ -115,6 +141,10 @@ export function mountDesigner(designerEl, ctx) {
       if (!widgets.length) {
         renderCanvasEmpty();
         if (gridEl) gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+        // A real (saved) dashboard can always be re-saved — enable the
+        // ds-config-save button. Synthetic chart-only wrappers (null
+        // rid) leave it disabled (saveDashboard hints instead).
+        if (dashboard?.redpash_id) builder.setDirty(true);
         return;
       }
       // Fetch every chart in parallel — multi-tile dashboards open
@@ -126,10 +156,21 @@ export function mountDesigner(designerEl, ctx) {
         api.get("/charts/" + encodeURIComponent(w.spec?.chart_id || "")).catch((err) => ({ __err: err, widget: w })));
       const results = await Promise.all(fetches);
       gridEl.innerHTML = "";
+      // 404 on a widget's chart = the chart was deleted out from under
+      // the dashboard. Prune the dead reference instead of leaving a
+      // permanent "chart unavailable" tile (Em 2026-05-28). Other errors
+      // (500 / network) are transient — keep the widget and show a
+      // recoverable error tile.
+      let prunedAny = false;
       results.forEach((res, i) => {
         const w = widgets[i];
         if (res?.__err) {
-          gridEl.appendChild(makeErrorTile(w, res.__err));
+          if (res.__err.status === 404) {
+            dashboard.spec = pruneWidget(dashboard.spec, w.spec?.chart_id);
+            prunedAny = true;
+          } else {
+            gridEl.appendChild(makeErrorTile(w, res.__err));
+          }
           return;
         }
         // Default span — alternate 6/6 for now. Slot/template-aware
@@ -137,9 +178,27 @@ export function mountDesigner(designerEl, ctx) {
         const span = "span-6";
         mountChartTile(res, span, /* selected */ false, w);
       });
-      // Select the first successfully-loaded tile so the accordion
-      // has content.
-      if (tiles.length) selectTile(tiles[0]);
+      // Persist the cleaned spec so the dead refs don't resurface on the
+      // next load. Real dashboards only — synthetic wrappers have no rid.
+      if (prunedAny && dashboard?.redpash_id) {
+        try {
+          const saved = await putDashboard();
+          if (saved) dashboard = saved;
+        } catch (e) {
+          console.warn("[designer] dashboard self-heal persist failed:", e);
+        }
+      }
+      // Select the first successfully-loaded tile so the accordion has
+      // content; if pruning emptied the canvas, show the empty state.
+      if (tiles.length) {
+        selectTile(tiles[0]);
+      } else if (gridEl) {
+        gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+      }
+      // Enable the dashboard-save button for a real dashboard (see
+      // the empty-case note above). Called after selectTile since
+      // builder.render() inside it resets the button baseline.
+      if (dashboard?.redpash_id) builder.setDirty(true);
       return;
     }
   }
@@ -157,7 +216,13 @@ export function mountDesigner(designerEl, ctx) {
     const inst = window.echarts?.init(tileEl.querySelector(".ds-chart"), themeName);
     if (inst) inst.setOption(buildOption(cfg, t));
     const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl,
-                    widget: widget || null, themeName };
+                    widget: widget || null, themeName,
+                    // Per-tile data source. sourceColumns is lazily
+                    // fetched (ensureTileSource) the first time the tile
+                    // is selected — a multi-tile dashboard can have
+                    // tiles drawing from different files.
+                    sourceRid: chart.source_file_id || null,
+                    sourceColumns: null };
     tiles.push(entry);
     return entry;
   }
@@ -230,10 +295,20 @@ export function mountDesigner(designerEl, ctx) {
     const el = document.createElement("div");
     el.className = "ds-tile" + (selected ? " selected" : "") + " " + (spanClass || "span-12");
     el.dataset.rid = chart.redpash_id;
+    // Tile-head actions (Em 2026-05-28): edit (focus the builder on
+    // this chart) · save (PUT this chart to the project) · delete
+    // (DELETE the chart from the project) · close (drop the tile from
+    // the canvas without touching the DB). The save button starts
+    // disabled; an accordion edit on the selected tile enables it.
     el.innerHTML = ''
       + '<div class="ds-tile-head">'
       +   '<span class="ds-tile-title">' + esc(cfg.title) + '</span>'
-      +   '<span class="ds-tile-menu"><i class="bi bi-three-dots"></i></span>'
+      +   '<div class="ds-tile-actions">'
+      +     '<button class="ds-tile-act ds-tile-edit"  type="button" title="Edit chart"><i class="bi bi-pencil"></i></button>'
+      +     '<button class="ds-tile-act ds-tile-save"  type="button" title="Save chart" disabled><i class="bi bi-save"></i></button>'
+      +     '<button class="ds-tile-act ds-tile-del"   type="button" title="Delete chart"><i class="bi bi-trash3"></i></button>'
+      +     '<button class="ds-tile-act ds-tile-close" type="button" title="Remove from canvas"><i class="bi bi-x-lg"></i></button>'
+      +   '</div>'
       + '</div>'
       + '<div class="ds-tile-body"><div class="ds-chart"></div></div>';
     return el;
@@ -244,6 +319,95 @@ export function mountDesigner(designerEl, ctx) {
     sel = entry;
     tiles.forEach((t) => t.tileEl.classList.toggle("selected", t === entry));
     builder.render();
+    // Fetch the tile's source columns lazily; re-render the accordion
+    // once they arrive so the group-by / measure dropdowns populate.
+    // Guarded on `sel === entry` so a fast tile-to-tile switch doesn't
+    // paint stale columns into the now-current tile's panel.
+    ensureTileSource(entry).then(() => { if (sel === entry) builder.render(); });
+  }
+
+  // Fetch + cache a tile's source-file columns (one /files/:rid hit per
+  // tile, memoised on the entry). Best-effort — a failed fetch leaves
+  // the dropdowns degraded to static lines rather than blocking.
+  async function ensureTileSource(entry) {
+    const rid = entry?.sourceRid || entry?.chart?.source_file_id;
+    if (!rid) return;
+    if (entry.sourceRid === rid && Array.isArray(entry.sourceColumns)) return;
+    try {
+      const env = await api.get("/files/" + encodeURIComponent(rid));
+      entry.sourceRid = rid;
+      entry.sourceColumns = env?.columns || [];
+    } catch {
+      entry.sourceRid = rid;
+      entry.sourceColumns = entry.sourceColumns || [];
+    }
+  }
+
+  // Re-aggregate a tile from its source file via the stateless grouping
+  // engine (/api/group/preview), then rebuild the tile's baked option so
+  // buildOption renders the new shape. The spec is the chart's own
+  // group-by + measure — one row group, one aggregation, subtotals only
+  // (details/total are noise for a chart). count(*) maps to a count over
+  // the group-by column (the engine rejects literal aggregations).
+  async function reaggregate(entry) {
+    if (!entry) return;
+    const srcRid = entry.sourceRid || entry.chart?.source_file_id;
+    const groupBy = entry.cfg.group_by;
+    if (!srcRid || !groupBy) { rerender(entry); return; }
+    const aggFn  = entry.cfg.agg_fn  || "count";
+    const aggCol = entry.cfg.agg_col || "*";
+    const col = (aggFn === "count" && aggCol === "*") ? groupBy : aggCol;
+    const spec = {
+      group_by:       [groupBy],
+      aggregations:   [{ col, fn: aggFn }],
+      show_details:   false,
+      show_subtotals: true,
+      show_total:     false,
+    };
+    try {
+      const page = await api.post("/group/preview", { source_file_id: srcRid, spec });
+      const sub  = page?.subtotals;
+      if (sub && Array.isArray(sub.rows) && sub.rows.length) {
+        // subtotals columns = [group_by, …, aggAlias]; label is the
+        // first cell, the measure is the last.
+        const valIdx  = Math.max(0, (sub.columns?.length || 1) - 1);
+        const labels  = sub.rows.map((r) => r[0]);
+        const values  = sub.rows.map((r) => Number(r[valIdx]) || 0);
+        const aggLabel = (aggFn === "count" && aggCol === "*")
+          ? "count" : aggFn + "(" + aggCol + ")";
+        entry.cfg.option = {
+          xAxis:  { data: labels },
+          series: [{ name: aggLabel, data: values }],
+        };
+      }
+    } catch (err) {
+      console.warn("[designer] reaggregate failed:", err);
+    }
+    rerender(entry);
+  }
+
+  // Swap a tile's source data file. Refetches columns, drops column
+  // picks the new file doesn't have (group-by → first column; a column
+  // measure → count(*)), marks the tile dirty so the new source_file_id
+  // persists on save, then re-aggregates.
+  async function changeSource(entry, newRid) {
+    if (!entry || !newRid) return;
+    if (newRid === (entry.sourceRid || entry.chart?.source_file_id)) return;
+    entry.chart = { ...(entry.chart || {}), source_file_id: newRid };
+    entry.sourceRid = newRid;
+    entry.sourceColumns = null;
+    await ensureTileSource(entry);
+    const colNames = (entry.sourceColumns || []).map((c) => c.name);
+    if (!colNames.includes(entry.cfg.group_by)) {
+      entry.cfg.group_by = colNames[0] || "";
+    }
+    if (entry.cfg.agg_col !== "*" && !colNames.includes(entry.cfg.agg_col)) {
+      entry.cfg.agg_col = "*";
+      entry.cfg.agg_fn  = "count";
+    }
+    markTileDirty(entry, true);
+    builder.render();
+    await reaggregate(entry);
   }
 
   // ── rerender / dirty / save ───────────────────────────────────────
@@ -268,58 +432,196 @@ export function mountDesigner(designerEl, ctx) {
     builder.setDirty(on && !busy);
   }
 
-  async function save() {
-    if (!sel || busy) return;
-    busy = true; builder.setDirty(false);
+  // Per-tile chart save — PUT /api/charts/:rid for one tile's chart.
+  // Persists the chart's current config (the live accordion edits +
+  // the baked ECharts option) to the project. Independent of the
+  // dashboard save below — a chart is a project_files row in its own
+  // right; saving the chart doesn't touch the dashboard spec.
+  async function saveChart(entry) {
+    if (!entry || busy) return;
+    busy = true;
+    setTileBusy(entry, true);
     try {
-      const baked = sel.inst?.getOption?.() || null;
+      const baked = entry.inst?.getOption?.() || null;
       const body = {
-        source_file_id: sel.chart.source_file_id,
-        title:          sel.cfg.title,
+        source_file_id: entry.chart.source_file_id,
+        title:          entry.cfg.title,
         spec: {
-          kind:       sel.cfg.kind,
-          type:       sel.cfg.type,
-          title:      sel.cfg.title,
-          legend:     sel.cfg.legend,
-          legendPos:  sel.cfg.legendPos,
-          tooltip:    sel.cfg.tooltip,
-          splitLines: sel.cfg.splitLines,
-          axisLine:   sel.cfg.axisLine,
-          smooth:     sel.cfg.smooth,
-          theme:      sel.cfg.theme,
-          group_by:   sel.cfg.group_by,
-          agg_col:    sel.cfg.agg_col,
-          agg_fn:     sel.cfg.agg_fn,
+          kind:       entry.cfg.kind,
+          type:       entry.cfg.type,
+          title:      entry.cfg.title,
+          legend:     entry.cfg.legend,
+          legendPos:  entry.cfg.legendPos,
+          tooltip:    entry.cfg.tooltip,
+          splitLines: entry.cfg.splitLines,
+          axisLine:   entry.cfg.axisLine,
+          smooth:     entry.cfg.smooth,
+          theme:      entry.cfg.theme,
+          group_by:   entry.cfg.group_by,
+          agg_col:    entry.cfg.agg_col,
+          agg_fn:     entry.cfg.agg_fn,
           option:     baked,
         },
       };
-      const saved = await api.put("/charts/" + encodeURIComponent(sel.rid), body);
-      sel.chart = saved;
+      const saved = await api.put("/charts/" + encodeURIComponent(entry.rid), body);
+      entry.chart = saved;
+      ctx.onSaved?.(saved);
+      markTileDirty(entry, false);
+    } catch (err) {
+      console.warn("[designer] chart save failed:", err);
+    } finally {
+      busy = false;
+      setTileBusy(entry, false);
+    }
+  }
+
+  // Delete a chart from the project — DELETE /api/charts/:rid, then
+  // drop the tile + (when a real dashboard is open) prune the widget
+  // from its spec + persist. Destructive: the chart row is gone.
+  async function deleteChart(entry) {
+    if (!entry || busy) return;
+    busy = true;
+    setTileBusy(entry, true);
+    try {
+      await api.delete("/charts/" + encodeURIComponent(entry.rid));
+      // Drop the matching widget from the open dashboard's spec AND
+      // persist it immediately — otherwise the dead chart_id lingers in
+      // the DB and resurfaces as a "chart unavailable" tile on the next
+      // dashboard load (Em 2026-05-28). Synthetic chart-only wrappers
+      // (null rid) have nothing to persist.
+      if (dashboard?.redpash_id) {
+        dashboard.spec = pruneWidget(dashboard.spec, entry.rid);
+        try {
+          const saved = await putDashboard();
+          if (saved) dashboard = saved;
+        } catch (e) {
+          console.warn("[designer] dashboard prune-persist failed:", e);
+        }
+      }
+      ctx.onSaved?.(null);   // signal the rail to refresh (chart gone)
+      dropTile(entry);
+    } catch (err) {
+      console.warn("[designer] chart delete failed:", err);
+      setTileBusy(entry, false);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // Remove a tile from the canvas WITHOUT deleting the chart. The chart
+  // row stays in the project; only this dashboard's widget reference is
+  // dropped (persisted on the next dashboard save). For a synthetic
+  // (chart-only) canvas, close just clears the canvas back to empty.
+  function closeTile(entry) {
+    if (!entry) return;
+    if (dashboard?.redpash_id) {
+      dashboard.spec = pruneWidget(dashboard.spec, entry.rid);
+    }
+    dropTile(entry);
+  }
+
+  // Shared tile teardown — dispose the ECharts instance, remove the
+  // DOM node, drop from the tiles[] registry, clear selection if it
+  // was selected. Used by both delete + close.
+  function dropTile(entry) {
+    entry.inst?.dispose?.();
+    entry.tileEl?.remove();
+    tiles = tiles.filter((t) => t !== entry);
+    if (sel === entry) { sel = null; builder.render(); }
+    if (!tiles.length && gridEl) {
+      gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+    }
+  }
+
+  // Per-tile dirty flag — accordion edits on the selected tile flip it
+  // on (enabling that tile's save button); a successful chart save
+  // clears it. Distinct from the dashboard-level `dirty` (structural).
+  function markTileDirty(entry, on) {
+    if (!entry) return;
+    entry.dirty = on;
+    const btn = entry.tileEl?.querySelector(".ds-tile-save");
+    if (btn) btn.disabled = !on || busy;
+    entry.tileEl?.classList.toggle("ds-tile--dirty", on);
+  }
+  function setTileBusy(entry, on) {
+    const btn = entry?.tileEl?.querySelector(".ds-tile-save");
+    if (btn) btn.disabled = on || !entry.dirty;
+  }
+
+  // Drop the widget referencing `chartId` from a dashboard spec,
+  // preserving the rest. Shared by per-tile delete, close, and the
+  // load-time self-heal that prunes refs to deleted charts.
+  function pruneWidget(spec, chartId) {
+    return {
+      ...(spec || { template_id: "" }),
+      widgets: (spec?.widgets || []).filter((w) => w.spec?.chart_id !== chartId),
+    };
+  }
+
+  // Persist the open dashboard's current spec. Pure — no UI side
+  // effects, returns the saved row (or null when there's no real DSH_
+  // to write to). Callers decide what to do with the result.
+  async function putDashboard() {
+    if (!dashboard?.redpash_id) return null;
+    return api.put("/dashboards/" + encodeURIComponent(dashboard.redpash_id), {
+      project_redpash_id: dashboard.project_redpash_id,
+      title:              dashboard.title,
+      spec:               dashboard.spec || { template_id: "", widgets: [] },
+      description:        dashboard.description || null,
+      folder:             dashboard.folder || null,
+    });
+  }
+
+  // Whole-dashboard save — persists the current spec (template + widget
+  // refs). Persists structural changes (tiles added / removed /
+  // reordered) — NOT the per-chart config (that's the per-tile save's
+  // job; the dashboard spec only carries chart_id references). No-op +
+  // hint when the canvas is a synthetic chart-only wrapper (no real
+  // DSH_ rid to write to).
+  async function saveDashboard() {
+    if (busy) return;
+    if (!dashboard?.redpash_id) {
+      ctx.onDashboardSaveUnavailable?.();
+      return;
+    }
+    busy = true; builder.setDirty(false);
+    try {
+      const saved = await putDashboard();
+      if (saved) dashboard = saved;
       ctx.onSaved?.(saved);
       setDirty(false);
     } catch (err) {
-      console.warn("[designer] save failed:", err);
+      console.warn("[designer] dashboard save failed:", err);
     } finally {
       busy = false;
-      builder.setDirty(dirty);
     }
   }
 
   // ── handlers ──────────────────────────────────────────────────────
-  // Canvas: click a tile to select.
+  // Canvas: tile-head action buttons short-circuit before the
+  // select-on-click fallback (each ends in `return`). Plain tile
+  // click selects.
   gridEl.addEventListener("click", (e) => {
     const t = e.target.closest(".ds-tile");
     if (!t) return;
     const entry = tiles.find((x) => x.tileEl === t);
-    if (entry) selectTile(entry);
+    if (!entry) return;
+
+    if (e.target.closest(".ds-tile-edit"))  { selectTile(entry); return; }
+    if (e.target.closest(".ds-tile-save"))  { void saveChart(entry); return; }
+    if (e.target.closest(".ds-tile-del"))   { void deleteChart(entry); return; }
+    if (e.target.closest(".ds-tile-close")) { closeTile(entry); return; }
+
+    selectTile(entry);
   });
 
-  // Accordion event handlers + the save button wiring now live
-  // inside mountBuilder. The `onCfgChange` hook in the mountBuilder
-  // call pipes every accordion edit through rerender(sel) +
-  // setDirty(true); `onSave` calls save(). The one side effect that
-  // stays here is the tile-header text — it sits outside the chart
-  // canvas so ECharts setOption doesn't reach it.
+  // Accordion event handlers + the builder header's save button live
+  // inside mountBuilder. The `onCfgChange` hook pipes every accordion
+  // edit through rerender(sel) + markTileDirty(sel, true) (the per-
+  // tile save commits chart config); `onSave` (the ds-config-save
+  // button) calls saveDashboard(). The one side effect that stays
+  // here is the tile-header text — it sits outside the chart canvas
+  // so ECharts setOption doesn't reach it.
   asideEl.addEventListener("input", (e) => {
     if (!sel) return;
     const fld = e.target.closest('[data-key="title"]');

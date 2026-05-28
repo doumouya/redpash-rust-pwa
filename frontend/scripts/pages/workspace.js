@@ -183,6 +183,32 @@ export default function workspace(app, { session }) {
       ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
   });
 
+  // ─── rail — view switcher (Data ↔ Dashboards) ──────────────────
+  // Reuses the .rt-seg--rail atom (same as the Cases source toggle).
+  // The active view is a data attribute on the rail; CSS hides the
+  // file rows that don't belong (no refetch — every project group
+  // already renders all its file kinds). Persisted via the
+  // `workspaceRailView` pref so it survives reloads.
+  const railView = $("#wsRailView");
+  function applyRailView(view) {
+    nav.dataset.railView = view;
+    railView?.querySelectorAll("[data-rail-view]").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.railView === view));
+  }
+  // Persist + apply. Callers that create an object whose kind isn't the
+  // active view (upload → data, new dashboard → dashboards) call this so
+  // the freshly-created row isn't hidden by the current filter.
+  function setRailView(view) {
+    if (view === getPref("workspaceRailView")) { applyRailView(view); return; }
+    setPref("workspaceRailView", view);
+    applyRailView(view);
+  }
+  railView?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-rail-view]");
+    if (btn?.dataset.railView) setRailView(btn.dataset.railView);
+  });
+  applyRailView(getPref("workspaceRailView") || "data");
+
   // ─── upload — POST /api/files/upload (multipart), N at a time ──
   // Files picked from #wsUploadInput → uploaded sequentially into the
   // project of the currently-active file (or default when nothing's
@@ -263,6 +289,9 @@ export default function workspace(app, { session }) {
     if (lastEnv) {
       const newRid  = lastEnv.summary.redpash_id;
       const projRid = lastEnv.summary.project_redpash_id;
+      // Uploads are data files — surface the rail's Data view so the
+      // freshly-uploaded row isn't hidden behind the Dashboards filter.
+      setRailView("data");
       await refreshAndOpen(newRid, projRid);
     }
 
@@ -692,7 +721,13 @@ export default function workspace(app, { session }) {
     const icon = f.file_type === "chart"     ? "bi-bar-chart-line"
               : f.file_type === "dashboard"  ? "bi-grid-1x2"
               :                                 "bi-filetype-csv";
-    return '<button class="rt-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
+    // Which rail view this file belongs to. The view toggle (rail head)
+    // hides the rows whose kind isn't the active view: charts (reports)
+    // + dashboards under "dashboards", everything else under "data".
+    const viewKind = f.file_type === "chart"     ? "report"
+                  : f.file_type === "dashboard"  ? "dashboard"
+                  :                                 "data";
+    return '<button class="rt-tab" type="button" data-view-kind="' + viewKind + '" data-rid="' + esc(f.redpash_id) + '">'
       +   '<i class="bi ' + icon + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(name) + '</span>'
       +   '<span class="rt-tab-rename" title="Rename file"><i class="bi bi-pencil"></i></span>'
@@ -1976,8 +2011,13 @@ export default function workspace(app, { session }) {
     activeSteps   = [];
     activeSummary = null;
     syncToolbar();
-    toolsCtrl?.refresh();
-    reportCtrl?.refresh();
+    // Don't refresh the Tools / Report panels here: they're data-file
+    // surfaces (hidden in designer mode via .is-designer-mode CSS), and
+    // refreshing the Report builder fires a /group/preview against the
+    // open CHT_/dashboard rid — which 400s with not_a_data_file. They
+    // get refreshed against real columns when a data file is next opened
+    // (the CSV branch of loadFile). Entering designer mode just hides
+    // them.
     $("#wsSurface").classList.add("is-designer-mode");
     $("#wsSurface").dataset.designerKind = "dashboard";
     const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
@@ -2125,6 +2165,9 @@ export default function workspace(app, { session }) {
         spec:               { template_id: "free", widgets: [] },
       });
       const newRid = created?.redpash_id;
+      // A dashboard lives in the rail's Dashboards view — switch to it
+      // so the new row is visible (it'd be hidden under the Data view).
+      setRailView("dashboards");
       await loadProjects();
       if (newRid) {
         activeFileRid = null;

@@ -178,6 +178,26 @@
   flex: 1;
 }
 
+/* Rail variant — full-width segmented toggle for a side rail. Two
+   equal icon+label buttons; the rail is narrow so the type tightens.
+   Shared by the Cases source switcher (Internal/External) and the
+   Workspace view switcher (Data/Dashboards). Page sheets add only
+   their own placement (margin) on top. */
+.rt-seg--rail {
+  display: flex;
+  width: 100%;
+}
+.rt-seg--rail button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem;
+  font-size: 0.6875rem;
+}
+.rt-seg--rail button i { font-size: 0.75rem; }
+
 /* filter predicate row — 15.625rem filter panel, two-row layout:
    Row 1: column-select | op-select | delete-btn
    Row 2: value-slot (spans full width — fits comma-lists / two-input

@@ -45,24 +45,11 @@
 }
 .rp-cases-rail-search:focus { border-color: var(--rp-accent-2); }
 
-/* Source toggle — replaces the older status/assignee groupBy
-   (2026-05-28). Same .rt-seg shape, two equal-width buttons,
-   Internal vs External as the primary axis. */
-.rp-cases-rail-source {
-  margin-top: 0.4375rem;
-  display: flex;
-  width: 100%;
-}
-.rp-cases-rail-source button {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0 0.375rem;
-  font-size: 0.6875rem;
-}
-.rp-cases-rail-source button i { font-size: 0.75rem; }
+/* Source toggle — Internal vs External, replacing the older
+   status/assignee groupBy (2026-05-28). Shape comes from the shared
+   .rt-seg--rail variant (panel.css); only the placement margin is
+   cases-specific (it sits below the rail search). */
+.rp-cases-rail-source { margin-top: 0.4375rem; }
 
 /* Filter chip rows (Em 2026-05-28) — two stacked rows, Assignee +
    Status. Each row carries the shared .rp-chip atom (shell.css) but

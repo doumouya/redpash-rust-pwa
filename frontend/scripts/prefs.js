@@ -57,6 +57,11 @@ export const PREFS = {
   // `docs/internal/jira-flow-proposition/proposition.md` as a phase
   // 2-3 migration requirement. Live-toggleable from the rail head.
   casesRailGroupBy: { values: ["status", "assignee"],           default: "status", attr: null },
+  // Workspace rail — which object kind each project group lists.
+  // "data" shows CSV/Excel data files (the redtable surface); whereas
+  // "dashboards" shows reports (chart files) + dashboards (the designer
+  // surface). A single rail-head toggle flips every group at once.
+  workspaceRailView: { values: ["data", "dashboards"],          default: "data", attr: null },
 };
 
 const KEY_PREFIX = "rp-pref-";
