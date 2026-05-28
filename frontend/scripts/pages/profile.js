@@ -9,11 +9,55 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { kpiBarH } from "/scripts/echarts-kpi.js";
 import { esc } from "/scripts/dom.js";
 import { inputRow, mountRow } from "/scripts/page-row.js";
 
 const USE_CASES = ["operational", "research", "reporting", "other"];
+
+// Profile rail section index — click-scroll anchors to the page's
+// four sections. No IntersectionObserver scroll-spy (the 2-col grid
+// doesn't track linearly the way Settings' single-column stack does);
+// these are nav jumps, not a scroll-position mirror.
+const PROFILE_SECTIONS = [
+  { id: "rp-profile-form", label: "Personal info", icon: "bi-person" },
+  { id: "prof-usage",      label: "Usage",         icon: "bi-graph-up" },
+  { id: "prof-plan",       label: "Plan",          icon: "bi-stars" },
+  { id: "prof-connections",label: "Connections",   icon: "bi-plug" },
+];
+
+function mountProfileRail(app) {
+  const body = app.querySelector("#rpProfileNavBody");
+  if (body) {
+    body.innerHTML = PROFILE_SECTIONS.map((s) =>
+      '<a class="rt-tab" href="#/profile" data-scroll="' + esc(s.id) + '">'
+      +   '<i class="rt-tab-icon bi ' + s.icon + '"></i>'
+      +   '<span class="rt-tab-name">' + esc(s.label) + '</span>'
+      + '</a>'
+    ).join("");
+    body.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-scroll]");
+      if (!tab) return;
+      e.preventDefault();
+      const target = app.querySelector("#" + tab.dataset.scroll);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      body.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+    });
+  }
+  // Collapse toggle — same compact-mode affordance as the other rails.
+  const rail     = app.querySelector("#rpProfileNav");
+  const collapse = app.querySelector("#rpProfileNavCollapse");
+  collapse?.addEventListener("click", () => {
+    const compact = !rail?.classList.contains("compact");
+    rail?.classList.toggle("compact", compact);
+    const icon = collapse.querySelector("i");
+    icon?.classList.toggle("bi-chevron-double-left", !compact);
+    icon?.classList.toggle("bi-chevron-double-right", compact);
+    collapse.title = compact ? "Expand" : "Collapse";
+  });
+}
 
 const PLAN_LABELS = {
   free:  "Free",
@@ -95,6 +139,8 @@ function renderForm(app) {
 
 export default async function profile(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "profile", session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "profile", session });
+  mountProfileRail(app);
   renderForm(app);
 
   let me;

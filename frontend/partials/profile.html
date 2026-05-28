@@ -7,9 +7,31 @@
      uses the lifted-card chrome from [[chrome-visual-direction]] so
      each .rp-page__section reads as a card-on-calm-bg per the inspo
      deck (AI thread / Nexus / Bexet). -->
-<section class="rp-page">
+<!-- Shell migration (2026-05-28): adopted the .rp-shell rail-page
+     layout (matching Settings) so Profile carries the shared rail
+     footer nav (Docs / Settings / Profile). The rail body is a
+     section index (Personal / Usage / Plan / Connections) — click-
+     scroll anchors; the 2-col grid stays as the main content inside
+     .rt-surface. -->
+<section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
-  <div class="rp-page__body rp-profile">
+
+  <div class="rp-shell-body">
+
+    <aside class="rt-nav" id="rpProfileNav">
+      <div class="rt-nav-head">
+        <span class="rt-nav-title">Profile</span>
+        <button class="rt-btn" id="rpProfileNavCollapse" type="button" title="Collapse">
+          <i class="bi bi-chevron-double-left"></i>
+        </button>
+      </div>
+      <div class="rt-nav-body" id="rpProfileNavBody"></div>
+      <div class="rt-nav-foot"><!-- rail footer nav mounted by profile.js --></div>
+    </aside>
+
+    <main class="rt-main">
+      <div class="rt-surface rp-profile__surface" id="rpProfileView">
+        <div class="rp-profile">
 
     <header class="rp-page__head">
       <h1 class="rp-page__title">Profile</h1>
@@ -50,13 +72,13 @@
 
         <!-- Usage — horizontal bar chart (ECharts). Bars are clickable;
              each routes to the matching Home tab. -->
-        <section class="rp-page__section">
+        <section class="rp-page__section" id="prof-usage">
           <h3 class="rp-page__section-h">Usage</h3>
           <div class="rp-profile__usage-chart" id="rp-profile-usage-chart"></div>
         </section>
 
         <!-- Plan card -->
-        <section class="rp-page__section rp-profile__plan-card">
+        <section class="rp-page__section rp-profile__plan-card" id="prof-plan">
           <div class="rp-profile__plan-top">
             <div>
               <h3 class="rp-page__section-h rp-profile__plan-h">Plan</h3>
@@ -76,7 +98,7 @@
         </section>
 
         <!-- Connected accounts -->
-        <section class="rp-page__section">
+        <section class="rp-page__section" id="prof-connections">
           <h3 class="rp-page__section-h">Connected accounts</h3>
           <div class="rp-profile__conn">
             <span class="rp-profile__conn-icon">
@@ -113,5 +135,9 @@
       </div>
 
     </div><!-- /grid -->
+        </div><!-- /.rp-profile -->
+      </div><!-- /.rt-surface -->
+    </main>
+
   </div>
 </section>

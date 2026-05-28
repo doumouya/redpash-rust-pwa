@@ -12,7 +12,15 @@
    file owns the per-card content typography + pill chip vocabulary
    (soft-tinted, no border) the inspo uses everywhere. */
 
-.rp-profile { max-width: 70rem; }
+/* Surface = the scrolling container for the profile content (the
+   shell migration 2026-05-28 put profile inside .rt-surface like
+   Settings). rt-surface defaults to overflow:hidden for redtable
+   pages; profile's content IS the scroll, so override to auto. */
+.rp-profile__surface {
+  padding: var(--rp-sp-5) var(--rp-sp-6);
+  overflow-y: auto;
+}
+.rp-profile { max-width: 70rem; margin: 0 auto; }
 
 /* 2-col layout: form on the left, stacked side-panels on the right.
    Collapses to one column under 55rem so phones get a vertical read. */
