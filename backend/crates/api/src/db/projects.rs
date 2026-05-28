@@ -94,25 +94,44 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 // display_name / username. `{where}` is spliced per caller.
 //
 // `stage` is computed: the most advanced stage of any file in the
-// project, aggregated from the `file_stages` view. `status` is the
-// stored column, with a 'published' overlay when the project has a
-// public dashboard (the stored draft/active/archived is what the
-// inline edit-cell writes; 'published' is never persisted).
+// project, aggregated from the `file_stages` view. `status` is
+// DERIVED (precedence: published > archived > active > draft), not the
+// raw stored column:
+//   - 'published' when the project has a public dashboard,
+//   - else 'archived' when the stored p.status is 'archived' — the one
+//     lifecycle state that sticks (set via PATCH /projects; cleared by
+//     the activity auto-unarchive in add_step),
+//   - else 'active' when the project holds at least one (non-chart)
+//     file — it's a real, in-use project,
+//   - else 'draft' (empty / freshly-created, no files yet).
+// The stored draft↔active distinction is content-derived now, so an
+// in-use project reads 'active' without a manual edit (matches the
+// original "open project = active" intent the old Objects page had).
 //
-// PROJECT-FILES-ACK: type=mixed — two project_files subqueries:
-//   1) EXISTS check filtered to dashboard rows for the 'published'
-//      overlay, 2) COUNT excluding charts for the user-facing
-//      file_count (charts aren't surfaced as files in the rail).
+// PROJECT-FILES-ACK: type=mixed — three project_files subqueries:
+//   1) EXISTS dashboard rows for the 'published' overlay,
+//   2) EXISTS any non-chart file for the 'active' derivation
+//      (same predicate as file_count, so Files>0 ⟺ Active),
+//   3) COUNT excluding charts for the user-facing file_count
+//      (charts aren't surfaced as files in the rail).
 const PROJECT_SELECT: &str =
     "SELECT p.redpash_id, p.name, p.description, p.is_default, p.owner_id, p.company_id,
             (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
                       WHEN 3 THEN 'publish' WHEN 2 THEN 'design' WHEN 1 THEN 'clean'
                       ELSE 'new' END
              FROM file_stages fs WHERE fs.project_redpash_id = p.redpash_id) AS stage,
-            CASE WHEN EXISTS (SELECT 1 FROM project_files d
-                              WHERE d.project_redpash_id = p.redpash_id
-                                AND d.file_type = 'dashboard' AND d.is_public)
-                 THEN 'published' ELSE p.status END AS status,
+            CASE
+              WHEN EXISTS (SELECT 1 FROM project_files d
+                           WHERE d.project_redpash_id = p.redpash_id
+                             AND d.file_type = 'dashboard' AND d.is_public)
+                THEN 'published'
+              WHEN p.status = 'archived' THEN 'archived'
+              WHEN EXISTS (SELECT 1 FROM project_files f2
+                           WHERE f2.project_redpash_id = p.redpash_id
+                             AND f2.file_type <> 'chart')
+                THEN 'active'
+              ELSE 'draft'
+            END AS status,
             p.created_at, p.updated_at,
             u.display_name AS owner_display_name, u.username AS owner_username,
             (SELECT COUNT(*) FROM project_files f

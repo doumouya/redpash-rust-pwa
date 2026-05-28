@@ -768,11 +768,11 @@ pub async fn insert_step(
 
     // Implicit unarchive: any cleaning activity on a file inside an
     // archived project means the user is no longer "done with it" —
-    // flip the parent project's status back to 'draft' so the Objects
-    // page derived status (archived > active > draft) re-evaluates and
-    // shows it as Active (since opening the cleaner puts it in the
-    // user's open-projects set). No-op when the project isn't
-    // archived. Runs in-tx so the step + the unarchive land together.
+    // clear the stored 'archived' (flip to 'draft') so the derived
+    // status in PROJECT_SELECT (published > archived > active > draft)
+    // re-evaluates and shows it as Active (the project has files, so
+    // the 'active' branch wins). No-op when the project isn't archived.
+    // Runs in-tx so the step + the unarchive land together.
     //
     // PROJECT-FILES-ACK: type=any — subquery resolves a file rid to
     // its project regardless of file_type (charts/dashboards can also
