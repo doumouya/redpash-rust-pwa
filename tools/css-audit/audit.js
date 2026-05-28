@@ -613,6 +613,77 @@ var reachability = {
   unmatchedRoots:  unmatchedRoots
 };
 
+/* ── view 4: duplicate declaration blocks ─────────────────────────────────────
+   Distinct selectors whose NORMALIZED declaration block is identical — the
+   "same styling under a different class name" smell that orphan + same-selector
+   conflict detection both miss (the rail/source-toggle/chip divergence is the
+   kind of thing this is meant to surface). For each rule, hash its sorted
+   (prop:normValue[!important]) set; group rules by hash; a finding = a hash
+   shared by ≥2 DISTINCT selectors (the same selector repeated is the conflict
+   view's job, not this one).
+
+   MIN_DUP_DECLS guards the signal: a lone `{ display:none }` or `{ margin:0 }`
+   legitimately recurs across unrelated rules and would drown real findings.
+   3+ identical declarations across distinct selectors is a strong "you styled
+   the same component twice" signal. */
+var MIN_DUP_DECLS = 3;
+var byBlock = {};
+rules.forEach(function (r) {
+  if (isKeyframeStep(r.selector)) return;
+  if (r.decls.length < MIN_DUP_DECLS) return;
+  var sig = r.decls.map(function (d) {
+    return d.prop + ':' + normVal(d.value) + (d.important ? '!' : '');
+  }).sort().join(';');
+  (byBlock[sig] || (byBlock[sig] = [])).push(r);
+});
+// Strip trailing pseudo-elements so a `.x::before` / `.x::after` pair
+// (a deliberate two-sided decoration on ONE element) reads as the same
+// base — those aren't "two components styled alike", they're one
+// element's two halves, and shouldn't count as a duplicate finding.
+function pseudoBase(sel) {
+  return sel.replace(/::(before|after|marker|placeholder|selection)\b/g, '').trim();
+}
+var duplicateBlocks = [];
+Object.keys(byBlock).forEach(function (sig) {
+  var rs = byBlock[sig];
+  var selSet = {};
+  rs.forEach(function (r) { selSet[(r.atContext || '') + '|' + r.selector] = 1; });
+  var distinctSels = Object.keys(selSet).length;
+  if (distinctSels < 2) return;   // a single selector repeated — conflict view owns it
+  // Skip when every selector shares one pseudo-base (e.g. .x::before +
+  // .x::after) — a single element's two halves, not a real duplicate.
+  var baseSet = {};
+  Object.keys(selSet).forEach(function (k) {
+    baseSet[k.split('|')[0] + '|' + pseudoBase(k.split('|')[1] || '')] = 1;
+  });
+  if (Object.keys(baseSet).length < 2) return;
+  duplicateBlocks.push({
+    declCount: rs[0].decls.length,
+    distinctSelectors: distinctSels,
+    block: rs[0].decls.map(function (d) {
+      return d.prop + ': ' + d.value + (d.important ? ' !important' : '');
+    }),
+    selectors: (function () {
+      var seen = {}, out = [];
+      rs.forEach(function (r) {
+        var k = (r.atContext || '') + '|' + r.selector + '|' + r.file;
+        if (seen[k]) return;
+        seen[k] = 1;
+        out.push({ selector: r.selector, file: r.file, line: r.line,
+                   group: r.group, atContext: r.atContext || '' });
+      });
+      return out.sort(function (x, y) {
+        return x.selector.localeCompare(y.selector) || x.file.localeCompare(y.file);
+      });
+    })()
+  });
+});
+duplicateBlocks.sort(function (a, b) {
+  return (b.distinctSelectors - a.distinctSelectors)
+      || (b.declCount - a.declCount)
+      || a.block.join(';').localeCompare(b.block.join(';'));
+});
+
 /* ── stats ───────────────────────────────────────────────────────────────── */
 var data = {
   generatedAt: new Date().toISOString(),
@@ -628,6 +699,7 @@ var data = {
     dupSelectors: selectorConflicts.length,
     conflictProps: selectorConflicts.reduce(function (n, s) { return n + s.conflictCount; }, 0),
     divergentClasses: classIndex.filter(function (c) { return c.divergentCount > 0; }).length,
+    duplicateBlocks:  duplicateBlocks.length,
     reachable:        Object.keys(reachable).length,
     orphans:          orphans.length,
     danglingImports:  danglingImports.length,
@@ -635,6 +707,7 @@ var data = {
   },
   selectorConflicts: selectorConflicts,
   classIndex:        classIndex,
+  duplicateBlocks:   duplicateBlocks,
   reachability:      reachability
 };
 
@@ -993,6 +1066,8 @@ console.log('  selectors duplicated 2+ places ' + data.stats.dupSelectors);
 console.log('  classes total         ' + data.stats.classes
   + '  (' + data.stats.multiFileClasses + ' span 2+ files, '
   + data.stats.divergentClasses + ' with property divergence)');
+console.log('  duplicate decl blocks ' + data.stats.duplicateBlocks
+  + (data.stats.duplicateBlocks ? '   (identical styling under 2+ distinct selectors — review)' : ''));
 console.log('  reachable sheets      ' + data.stats.reachable
   + ' of ' + (data.stats.reachable + data.stats.orphans));
 console.log('  orphan CSS            ' + data.stats.orphans
@@ -1014,6 +1089,17 @@ if (data.stats.danglingImports) {
   data.reachability.danglingImports.forEach(function (e) {
     console.log('    ' + e.from + '   ->   ' + e.target);
   });
+}
+if (data.stats.duplicateBlocks) {
+  console.log('');
+  console.log('  duplicate declaration blocks (identical body, distinct selectors):');
+  data.duplicateBlocks.slice(0, 15).forEach(function (b) {
+    console.log('    [' + b.declCount + ' decls × ' + b.distinctSelectors + ' selectors] '
+      + b.selectors.map(function (s) { return s.selector; }).join('  ≡  '));
+  });
+  if (data.duplicateBlocks.length > 15) {
+    console.log('    … +' + (data.duplicateBlocks.length - 15) + ' more (see report)');
+  }
 }
 console.log('');
 console.log('  report -> ' + OUT);
