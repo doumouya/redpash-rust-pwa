@@ -82,11 +82,16 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : "··";
 
-  // theme toggle — the icon shows the theme the click switches to
+  // theme toggle — the icon shows the CURRENT theme so it stays
+  // tightly aligned with the Settings page's Appearance row
+  // (Dark ↔ moon-stars, Light ↔ sun) per Em 2026-05-28. Previously
+  // the icon advertised "what the click switches TO" which inverted
+  // the icon meaning against the same picker in Settings — confusing
+  // when both surfaces are visible together.
   const themeBtn = host.querySelector('[data-act="theme"]');
   const paintTheme = () => {
     themeBtn.querySelector("i").className =
-      currentTheme() === "light" ? "bi bi-moon-stars" : "bi bi-sun";
+      currentTheme() === "light" ? "bi bi-sun" : "bi bi-moon-stars";
   };
   paintTheme();
   themeBtn.addEventListener("click", () => { toggleTheme(); paintTheme(); });
