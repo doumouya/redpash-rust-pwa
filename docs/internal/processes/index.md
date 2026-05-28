@@ -2,7 +2,7 @@
 title: Processes — index
 section: Internal
 order: 50
-last modified date: 2026-05-27
+last modified date: 2026-05-29
 ---
 
 # Processes
@@ -16,5 +16,5 @@ either stays (rewrite when it evolves) or retires (move to `archive/`).
 | [docs-lane-ownership](docs-lane-ownership.md) | each agent is SME for their lane's docs (no centralised editor) |
 | [push-policy](push-policy.md) | agents commit on `prerelease`; Torv (sole designated pusher) pushes after Em confirms |
 | [replicable-feature-pattern](replicable-feature-pattern.md) | three-piece anatomy (persistence + affordance + recovery) + two load-bearing invariants for client-side per-entity features that should look identical across pages |
-| [team-coordination](team-coordination.md) | per-agent channels + `broadcast.md` + the ping-hook automation + parallel-safe commit discipline |
+| [team-coordination](team-coordination.md) | per-agent channels + `broadcast.md` + the ping-hook automation + parallel-safe commit discipline + commit-granularity (file boundaries over hunks) |
 | [ui-change-process](ui-change-process.md) | the standard HTML/CSS/JS-change checklist |

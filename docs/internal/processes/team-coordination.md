@@ -2,7 +2,7 @@
 title: Team coordination
 section: Internal
 order: 53
-last modified date: 2026-05-27
+last modified date: 2026-05-29
 owner: Torv
 status: stable
 ---
@@ -105,6 +105,40 @@ The post-commit hook publishes a line per commit to
 into what the other lanes are landing. Use it as your low-overhead
 ambient signal so per-slice channel pings stay reserved for
 cross-touch coordination.
+
+## Commit granularity — file boundaries over hunks
+
+The commit convention is *one coherent change per commit, no broad
+checkpoints* ([[feedback-commit-convention]]). That's easy when each
+change lives in its own files. It gets hard when several features
+built in one session intermingle edits *within* shared files — e.g.
+three workspace improvements that each touch `workspace.js` +
+`designer.js`. You can't split those by file: any per-feature commit
+either omits the shared file (leaving that feature non-functional) or
+claims edits that belong to a different feature.
+
+The rule when that happens:
+
+- **Split along file boundaries where features are cleanly
+  separable.** A backend fix touching only `db/projects.rs` is its own
+  commit even if it shipped in the same session as unrelated frontend
+  work.
+- **Bundle the features that share a file into one commit** with a
+  structured, per-feature body. That is *not* a "broad checkpoint" —
+  the changes are genuinely co-located, and a body that documents each
+  sub-change keeps the history readable and `git blame` landing on a
+  meaningful message.
+- **Don't hunk-split shared files** (`git add -p`) just to force a
+  cleaner story. It's interactive (the agent harness can't reliably
+  drive the y/n/s prompts), and worse, it risks a broken intermediate
+  commit — e.g. one with the rail-toggle markup but not its JS handler.
+  Every commit must build and run on its own; a smaller-but-broken
+  commit (a bad bisect point) is worse than a coherent-but-bundled one.
+
+Prevention beats cleanup: **commit each feature as you finish it**, not
+at the end of a multi-feature session. Files only accumulate
+cross-feature edits when commits are deferred — land them slice by
+slice and the boundaries stay clean on their own.
 
 ## Identity routing
 
