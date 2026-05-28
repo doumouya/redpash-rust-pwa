@@ -83,6 +83,17 @@ export default function workspace(app, { session }) {
   let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
   let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
 
+  // Per-rid envelope cache — populated by prewarmGroupFiles after a
+  // project group's file list renders (idle-time background fetches)
+  // and consulted by loadFile so subsequent clicks are instant. The
+  // entry shape matches GET /api/files/:rid: { summary, columns, steps }.
+  // Refreshed on every loadFile call so steps/columns reflect the latest
+  // server state even when the user's been mutating the file mid-session.
+  // Charts (CHT_-prefix) skip the prewarm — they go through /api/charts
+  // which has a different shape; their cost is already lower (no /page
+  // round-trip), and prewarming a chart spec is wasted bandwidth.
+  const fileEnvelopeCache = new Map();
+
   // Filter ops — canonical FilterOp on the wire (shared::filter::FilterOp).
   // OP_SPECS drives three things at render time:
   //   1. Which ops show in the dropdown for a given column's dtype.
@@ -562,6 +573,10 @@ export default function workspace(app, { session }) {
         // canonical value so the rail stays accurate.
         const canonical = updated?.summary?.display_name || updated?.display_name;
         if (canonical && canonical !== next) span.textContent = canonical;
+        // Display name change → cached envelope summary is stale.
+        // Drop the entry; next loadFile refetches the fresh summary
+        // (also covers any server-side fields that may have shifted).
+        fileEnvelopeCache.delete(rid);
       } catch {
         span.textContent = original;
       }
@@ -583,6 +598,12 @@ export default function workspace(app, { session }) {
       const data = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
       renderFiles(body, data?.items || []);
       group.dataset.filesLoaded = "1";
+      // Idle-time envelope prewarm — fetch each non-chart file's
+      // /api/files/:rid in the background so a click on the tab
+      // renders from cache instead of waiting for the round-trip.
+      // requestIdleCallback (with setTimeout fallback) keeps it off
+      // the main thread; missed fetches are swallowed (best-effort).
+      prewarmGroupFiles(data?.items || []);
       // Default group — auto-open. If a deep-linked file rid is
       // stashed on the group (?file=<rid>), pick that tab; otherwise
       // pick the first.
@@ -785,6 +806,60 @@ export default function workspace(app, { session }) {
   // columns; refetchPage preserves column-indexed state and re-renders
   // the table body; fetchAndRender does the wire call + render shared
   // by both.
+  // Background prefetch of /files/:rid envelopes for every non-chart
+  // file in a freshly-rendered group. Scheduled via requestIdleCallback
+  // (falls back to setTimeout on browsers without it). Already-cached
+  // rids skip the fetch — repeated group expands are cheap. Hidden
+  // files in the rail-hidden pref still get prewarmed (they're hidden,
+  // not removed from the project) so an unhide-then-click is also fast.
+  function prewarmGroupFiles(items) {
+    if (!Array.isArray(items) || !items.length) return;
+    const targets = items.filter((f) => {
+      const id = f?.redpash_id;
+      if (!id || id.startsWith("CHT_")) return false;   // charts use a different endpoint
+      return !fileEnvelopeCache.has(id);
+    });
+    if (!targets.length) return;
+    const schedule = typeof window !== "undefined" && typeof window.requestIdleCallback === "function"
+      ? window.requestIdleCallback.bind(window)
+      : (cb) => setTimeout(cb, 200);
+    schedule(() => {
+      for (const f of targets) {
+        const id = f.redpash_id;
+        // Race-skip: another caller may have just populated the cache
+        // (loadFile fires on tab click before idle fires for big lists).
+        if (fileEnvelopeCache.has(id)) continue;
+        api.get("/files/" + encodeURIComponent(id))
+          .then((env) => { if (env) fileEnvelopeCache.set(id, env); })
+          .catch(() => { /* prewarm is best-effort */ });
+      }
+    });
+  }
+
+  // Wrap a chart row as a synthetic single-widget dashboard so the
+  // dashboard designer canvas can render it. `redpash_id: null` flags
+  // this wrapper to designer.addChartWidget (skips the PUT/dashboards
+  // round-trip) and to the workspace Add-chart click handler (skips
+  // the navigate-away fallback that would replace the open chart).
+  function chartAsDashboard(chart) {
+    if (!chart) return null;
+    return {
+      redpash_id: null,
+      project_redpash_id: chart.project_redpash_id || null,
+      title: chart.title || "Untitled chart",
+      description: null,
+      folder: null,
+      spec: {
+        template_id: "",
+        widgets: [{
+          slot: "w1",
+          kind: "chart",
+          spec: { chart_id: chart.redpash_id },
+        }],
+      },
+    };
+  }
+
   async function loadFile(rid) {
     if (!rid || rid === activeFileRid) return;
     activeFileRid = rid;
@@ -806,7 +881,14 @@ export default function workspace(app, { session }) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
         enterDesignerMode(chart?.title || "Untitled chart");
-        designerCtrl?.load({ type: "chart", chart });
+        // Em 2026-05-28: "keep only the view where 'Add chart' doesn't
+        // remove the current chart, but where we can add many charts on
+        // the canvas". The dashboard canvas IS that view — single-chart
+        // files render here too, wrapped as a synthetic 1-widget
+        // dashboard. The wrapper has no redpash_id; designer.js + the
+        // Add-chart click handler below recognise that and skip the
+        // dashboard-PUT path (which would 404 against a synthetic rid).
+        designerCtrl?.load({ type: "dashboard", dashboard: chartAsDashboard(chart) });
         // Opening a chart inherits its project as the focus.
         if (chart?.project_redpash_id) focusedProjectRid = chart.project_redpash_id;
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
@@ -816,7 +898,18 @@ export default function workspace(app, { session }) {
         return;
       }
 
-      const envelope = await api.get("/files/" + encodeURIComponent(rid));
+      // Cache-first read. Envelope was already fetched by
+      // prewarmGroupFiles when the file's project group expanded,
+      // so the typical click on a tab in an open group is a
+      // cache hit and renders instantly. Cache miss → fetch and
+      // populate the entry. The cache stays fresh because every
+      // loadFile re-fetches when not cached, and mutations update
+      // the cached entry inline (see invalidateFileCache below).
+      let envelope = fileEnvelopeCache.get(rid);
+      if (!envelope) {
+        envelope = await api.get("/files/" + encodeURIComponent(rid));
+        if (envelope) fileEnvelopeCache.set(rid, envelope);
+      }
       activeColumns = envelope?.columns || [];
       activeSteps   = envelope?.steps   || [];
       activeSummary = envelope?.summary || null;
@@ -836,7 +929,8 @@ export default function workspace(app, { session }) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
         enterDesignerMode(chart?.title || envelope?.summary?.display_name || "Untitled chart");
-        designerCtrl?.load({ type: "chart", chart });
+        // Same synthetic-dashboard wrapping as the CHT_ branch above.
+        designerCtrl?.load({ type: "dashboard", dashboard: chartAsDashboard(chart) });
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
@@ -1509,6 +1603,9 @@ export default function workspace(app, { session }) {
       const res = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/steps", { kind, params });
       if (res?.columns) activeColumns = res.columns;
       if (res?.steps)   activeSteps   = res.steps;
+      // Server returned the rebuilt envelope — refresh the prefetch
+      // cache so a tab-switch-and-return reads the post-mutation state.
+      if (res) fileEnvelopeCache.set(activeFileRid, res);
       // Step landed → cached distinct values are stale for this file.
       invalidateColumnIndex(activeFileRid);
       syncToolbar();
@@ -1541,6 +1638,8 @@ export default function workspace(app, { session }) {
       const env = await api.post("/files/" + encodeURIComponent(activeFileRid) + "/" + action);
       if (env?.columns) activeColumns = env.columns;
       if (env?.steps)   activeSteps   = env.steps;
+      // Same cache-refresh rationale as applyStep above.
+      if (env) fileEnvelopeCache.set(activeFileRid, env);
       // Undo/redo replays the step stack → cached distinct values are
       // stale (a re-applied or rewound delete-row, fill-null, etc.).
       invalidateColumnIndex(activeFileRid);
@@ -1836,8 +1935,14 @@ export default function workspace(app, { session }) {
   });
 
   // Reset data-file state + swap the surface into designer mode.
-  // mode = "chart" | "dashboard" — drives the toolbar icon + the
-  // Add-chart label so the user knows what kind of file is open.
+  // mode = "chart" | "dashboard" — drives the toolbar title icon
+  // (chart-bar vs grid) so the user knows which kind of file is open.
+  // `data-designer-kind` is hardcoded to "dashboard" regardless of
+  // mode — Em 2026-05-28: "I want only data-designer-kind='dashboard'
+  // whenever user clicks on chart file or dashboard file". The
+  // dashboard surface treatment covers both scenarios (a chart is a
+  // single-widget dashboard); future CSS / JS that branches on the
+  // attribute gets one canonical value to read.
   function enterDesignerMode(title, mode) {
     activeColumns = [];
     activeSteps   = [];
@@ -1846,7 +1951,7 @@ export default function workspace(app, { session }) {
     toolsCtrl?.refresh();
     reportCtrl?.refresh();
     $("#wsSurface").classList.add("is-designer-mode");
-    $("#wsSurface").dataset.designerKind = mode || "chart";
+    $("#wsSurface").dataset.designerKind = "dashboard";
     const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
     if (titleSpan) titleSpan.textContent = title || "Untitled";
     const titleIcon = $("#wsDesignerTitle")?.querySelector("i");
@@ -1928,15 +2033,25 @@ export default function workspace(app, { session }) {
 
   $("#wsNewChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
 
-  // Designer-toolbar Add chart — branches on context:
-  //   In a dashboard → create a new chart sourced from a data file
-  //   in the dashboard's project AND append as a widget to the open
-  //   dashboard (no navigation, new tile mounts on the canvas).
-  //   In a single chart → create + navigate (existing flow).
+  // Designer-toolbar Add chart — appends a new chart as a widget to
+  // the open dashboard canvas (no navigation, new tile mounts in place).
+  //
+  // Context recap after the 2026-05-28 unification (Em: "keep only
+  // the view where Add chart doesn't remove the current chart"):
+  //   - Real dashboard file (DSH_) open → dashRid is the DSH_ rid;
+  //     designer.addChartWidget PUTs the new spec + mounts the tile.
+  //   - Chart file (CHT_) open via the synthetic dashboard wrapper →
+  //     dashRid is null. We surface a soft prompt instead of the old
+  //     "create + navigate away" fallback (which Em flagged as
+  //     removing the current chart). Promoting a chart-file to a real
+  //     dashboard is a follow-up step.
   $("#wsDesignerAddChart")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     const dashRid = designerCtrl?.getOpenDashboardRid?.();
-    if (!dashRid) { createChartFromSource(btn); return; }
+    if (!dashRid) {
+      rowsInfo.textContent = "Add chart needs a dashboard — open or create one to add more charts on this canvas.";
+      return;
+    }
     btn.disabled = true;
     try {
       // Resolve a source data file. Preference order:
