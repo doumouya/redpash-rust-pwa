@@ -1219,6 +1219,7 @@ export default function cases(app, { session }) {
   // bubble drops the author name in the header since it's redundant
   // when avatar + alignment + color all signal self-authorship.
   function commentHTML(cm) {
+    const rid = cm.redpash_id || cm.rid || "";
     const author = cm.author_display_name || cm.author_id || "—";
     const isOwn = cm.author_id && cm.author_id === meRid;
     const when = cm.created_at ? fmtClock(cm.created_at) : "";
@@ -1226,14 +1227,25 @@ export default function cases(app, { session }) {
     if (!isOwn) headerParts.push('<span class="rp-cases-comment-author">' + esc(author) + '</span>');
     if (when)   headerParts.push('<span class="rp-cases-comment-when">' + esc(when) + '</span>');
     if (cm.is_edited) headerParts.push('<span class="rp-cases-comment-edited">edited</span>');
+    // Own comments get hover-revealed edit + delete affordances. The
+    // raw body is recoverable from the <pre>'s textContent (esc →
+    // render → textContent round-trips), so no data-raw attr needed.
+    const actions = isOwn
+      ? '<div class="rp-cases-comment-actions">'
+        +   '<button type="button" class="rp-cases-comment-edit" title="Edit"><i class="bi bi-pencil"></i></button>'
+        +   '<button type="button" class="rp-cases-comment-delete" title="Delete"><i class="bi bi-trash3"></i></button>'
+        + '</div>'
+      : '';
     return ''
-      + '<div class="rp-cases-comment' + (isOwn ? ' rp-cases-comment--own' : '') + '">'
+      + '<div class="rp-cases-comment' + (isOwn ? ' rp-cases-comment--own' : '') + '" '
+      +    'data-cmt-rid="' + esc(rid) + '">'
       +   userAvatarHTML(cm.author_id, author, "sm")
       +   '<div class="rp-cases-comment-bubble">'
       +     (headerParts.length
         ? '<header class="rp-cases-comment-head">' + headerParts.join("") + '</header>'
         : '')
       +     '<div class="rp-cases-comment-body"><pre>' + esc(cm.body || "") + '</pre></div>'
+      +     actions
       +   '</div>'
       + '</div>';
   }
@@ -1284,6 +1296,77 @@ export default function cases(app, { session }) {
       console.warn("[cases] patch failed:", err);
     }
   }
+
+  // ── comment edit / delete ───────────────────────────────────
+  // Own comments carry hover-revealed edit + delete buttons (rendered
+  // in commentHTML). One delegator on the comments list routes the
+  // four actions: edit (swap body → inline textarea), save (PATCH),
+  // cancel (local restore, no fetch), delete (confirm → DELETE).
+  // Backend: PATCH/DELETE /cases/:rid/comments/:cmt_rid (cases.rs).
+  function enterCommentEdit(wrap) {
+    const bodyEl = wrap.querySelector(".rp-cases-comment-body");
+    if (!bodyEl || wrap.querySelector(".rp-cases-comment-edit-form")) return;
+    // Raw body round-trips through the <pre>'s textContent.
+    const raw = wrap.querySelector(".rp-cases-comment-body pre")?.textContent || "";
+    bodyEl.hidden = true;
+    const form = document.createElement("div");
+    form.className = "rp-cases-comment-edit-form";
+    form.innerHTML = ''
+      + '<textarea class="rp-cases-comment-edit-input" rows="3"></textarea>'
+      + '<div class="rp-cases-comment-edit-actions">'
+      +   '<button type="button" class="rt-btn rp-cases-comment-edit-cancel">Cancel</button>'
+      +   '<button type="button" class="rt-btn rt-btn--accent rp-cases-comment-edit-save">Save</button>'
+      + '</div>';
+    bodyEl.insertAdjacentElement("afterend", form);
+    const ta = form.querySelector("textarea");
+    ta.value = raw;
+    ta.focus();
+  }
+  function exitCommentEdit(wrap) {
+    wrap.querySelector(".rp-cases-comment-edit-form")?.remove();
+    const bodyEl = wrap.querySelector(".rp-cases-comment-body");
+    if (bodyEl) bodyEl.hidden = false;
+  }
+  commentsList?.addEventListener("click", async (e) => {
+    const wrap = e.target.closest(".rp-cases-comment");
+    if (!wrap || !currentDetailRid) return;
+    const cmtRid = wrap.dataset.cmtRid;
+    if (!cmtRid) return;
+    const base = "/cases/" + encodeURIComponent(currentDetailRid)
+      + "/comments/" + encodeURIComponent(cmtRid);
+
+    if (e.target.closest(".rp-cases-comment-edit")) {
+      enterCommentEdit(wrap);
+      return;
+    }
+    if (e.target.closest(".rp-cases-comment-edit-cancel")) {
+      exitCommentEdit(wrap);
+      return;
+    }
+    if (e.target.closest(".rp-cases-comment-edit-save")) {
+      const ta = wrap.querySelector(".rp-cases-comment-edit-input");
+      const next = (ta?.value || "").trim();
+      const prev = wrap.querySelector(".rp-cases-comment-body pre")?.textContent || "";
+      if (!next || next === prev) { exitCommentEdit(wrap); return; }
+      try {
+        await api.patch(base, { body: next });
+        await loadCaseDetail(currentDetailRid);   // re-render shows the "edited" flag
+      } catch (err) {
+        alert("Couldn't save edit" + (err?.status ? " (" + err.status + ")" : ""));
+      }
+      return;
+    }
+    if (e.target.closest(".rp-cases-comment-delete")) {
+      if (!confirm("Delete this comment? This cannot be undone.")) return;
+      try {
+        await api.delete(base);
+        await loadCaseDetail(currentDetailRid);
+      } catch (err) {
+        alert("Couldn't delete comment" + (err?.status ? " (" + err.status + ")" : ""));
+      }
+      return;
+    }
+  });
 
   async function postComment(body) {
     if (!currentDetailRid) return;
