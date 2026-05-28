@@ -371,29 +371,21 @@
 .rp-cases-card-cycle:hover { color: var(--rp-accent-2); }
 
 /* ── detail ───────────────────────────────────────────────────── */
-/* Detail panel — Linear-style overlay. Kanban stays visible
-   behind so the user can keep scanning while a case is open;
-   the rail handles cross-case nav. Close affordances: X button
-   in the head, Esc key, or clicking another rail/board card
-   (which swaps the loaded case in-place). Clicking the visible
-   kanban behind does NOT auto-close — that would fight rapid
-   case browsing.
-
-   Width is bounded so wide screens don't waste space on a
-   half-empty panel, and narrow screens get a near-full-screen
-   overlay. */
+/* Detail panel — full-bleed surface (Em 2026-05-28). Replaces the
+   earlier right-side overlay-over-kanban: opening a case hides the
+   board entirely (renderRoute toggles boardEl.hidden) and the detail
+   fills the whole main area. Board + detail are mutually exclusive
+   flex children of .rp-cases-main; the rail stays as the constant
+   cross-case nav. Close affordances: X in the head, Esc key, or
+   clicking another rail card (swaps the loaded case in-place). */
 .rp-cases-detail {
-  position: absolute;
-  top: 0; right: 0; bottom: 0;
-  width: min(45rem, 70vw);
-  z-index: 20;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
   padding: 0;
   background: var(--rp-bg);
-  border-left: 1px solid var(--rp-border);
-  box-shadow: -0.625rem 0 1.875rem rgba(0, 0, 0, 0.32);
   overflow: hidden;
 }
 .rp-cases-detail[hidden] { display: none; }

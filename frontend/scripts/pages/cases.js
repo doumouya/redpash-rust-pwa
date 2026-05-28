@@ -58,6 +58,7 @@ export default function cases(app, { session }) {
   const meRid  = session?.redpash_id || "";       // for own/other bubble alignment
   const meName = session?.display_name || session?.username || "you";
   const detailEl = app.querySelector("#rp-cases-detail");
+  const boardEl  = app.querySelector("#rp-cases-board");
   const railBody = app.querySelector("#rp-cases-rail-body");
   let searchQ = "";
   let searchDebounce = null;
@@ -138,30 +139,22 @@ export default function cases(app, { session }) {
     return params.get("id") || null;
   }
 
-  // Tracks whether we were last on detail-view so renderRoute only
-  // auto-folds the rail on actual board ↔ detail transitions, not
-  // on every case-to-case navigation. Initial value matches the
-  // mount-time route so the first renderRoute is also a "transition"
-  // (deep-link to /cases?id=… auto-folds; deep-link to /cases keeps
-  // the rail expanded).
-  let lastWasDetail = null;
-
   function renderRoute() {
     const rid = activeCaseRid();
     const isDetail = !!rid;
-    // Board is ALWAYS rendered now — the detail panel slides over
-    // it as an overlay (Em's call vs the Salesforce full-page swap).
+    // Clean two-state swap (Em 2026-05-28): opening a case shows ONLY
+    // the case (full-bleed detail), closing shows ONLY the board. No
+    // more overlay-over-kanban — the board + detail are mutually
+    // exclusive in the main area. The rail stays as the constant nav.
     detailEl.hidden = !rid;
+    if (boardEl) boardEl.hidden = isDetail;
     if (rid) loadCaseDetail(rid);
+    // Repaint the board even while hidden so it's fresh when the user
+    // closes the detail (cheap; avoids a flash of stale cards).
     if (cachedCases.length) paintBoard(cachedCases);
     paintRail(cachedCases, rid);
-    // Auto-fold the rail on board ↔ detail transitions only. Same-
-    // route navigation (case-to-case, board refresh) leaves the rail
-    // alone so the manual chevron survives until the next transition.
-    if (isDetail !== lastWasDetail) {
-      setRailCompact(isDetail);
-      lastWasDetail = isDetail;
-    }
+    // Rail no longer auto-folds on case-open — the board hiding frees
+    // the width, so the rail stays expanded for case-to-case nav.
   }
 
   // Listen for in-page hash changes (board ↔ detail) — main.js
