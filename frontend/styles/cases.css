@@ -387,6 +387,10 @@
   padding: 0;
   background: var(--rp-bg);
   overflow: hidden;
+  /* Rounded top-left where the surface meets the rail + topbar —
+     the "lifted content surface" chrome pattern ([[chrome-visual-
+     direction]]). overflow:hidden above clips the head to the curve. */
+  border-top-left-radius: 14px;
 }
 .rp-cases-detail[hidden] { display: none; }
 
@@ -543,7 +547,7 @@
   flex-shrink: 0;
 }
 .rp-cases-detail-side {
-  flex: 0 0 14rem;
+  flex: 0 0 30%;
   min-height: 0;
   display: flex;
   flex-direction: column;
