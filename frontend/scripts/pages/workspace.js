@@ -16,6 +16,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
 import { mountTools } from "/scripts/tools.js";
 import { mountJoins } from "/scripts/joins.js";
 import { mountReport } from "/scripts/report.js";
@@ -176,38 +177,23 @@ export default function workspace(app, { session }) {
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
   }
 
-  // ─── rail — collapse to compact ────────────────────────────────
-  $("#wsNavCollapse").addEventListener("click", (e) => {
-    nav.classList.toggle("compact");
-    e.currentTarget.querySelector("i").className = nav.classList.contains("compact")
-      ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
-  });
+  // ─── rail — collapse + view switcher (shared rail-controls) ────
+  mountRailCollapse(nav, $("#wsNavCollapse"));
 
-  // ─── rail — view switcher (Data ↔ Dashboards) ──────────────────
-  // Reuses the .rt-seg--rail atom (same as the Cases source toggle).
-  // The active view is a data attribute on the rail; CSS hides the
-  // file rows that don't belong (no refetch — every project group
-  // already renders all its file kinds). Persisted via the
-  // `workspaceRailView` pref so it survives reloads.
-  const railView = $("#wsRailView");
-  function applyRailView(view) {
-    nav.dataset.railView = view;
-    railView?.querySelectorAll("[data-rail-view]").forEach((b) =>
-      b.classList.toggle("is-active", b.dataset.railView === view));
-  }
-  // Persist + apply. Callers that create an object whose kind isn't the
-  // active view (upload → data, new dashboard → dashboards) call this so
-  // the freshly-created row isn't hidden by the current filter.
-  function setRailView(view) {
-    if (view === getPref("workspaceRailView")) { applyRailView(view); return; }
-    setPref("workspaceRailView", view);
-    applyRailView(view);
-  }
-  railView?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-rail-view]");
-    if (btn?.dataset.railView) setRailView(btn.dataset.railView);
+  // View switcher (Data ↔ Dashboards) — the active view is a data
+  // attribute on the rail; CSS hides the file rows that don't belong
+  // (no refetch — every project group already renders all its file
+  // kinds). fireOnMount so the filter attr applies on load. The
+  // returned `set` is used after create flows (upload → data, new
+  // dashboard → dashboards) so a freshly-created row isn't hidden by
+  // the current filter.
+  const railViewSeg = mountRailSeg($("#wsRailView"), {
+    pref:        "workspaceRailView",
+    fallback:    "data",
+    fireOnMount: true,
+    onChange:    (view) => { nav.dataset.railView = view; },
   });
-  applyRailView(getPref("workspaceRailView") || "data");
+  const setRailView = (view) => railViewSeg.set(view);
 
   // ─── upload — POST /api/files/upload (multipart), N at a time ──
   // Files picked from #wsUploadInput → uploaded sequentially into the

@@ -33,6 +33,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
 import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
@@ -191,30 +192,15 @@ export default function cases(app, { session }) {
   newCaseBtn?.addEventListener("click", () => openCreateModal());
 
   // ── rail source toggle (Internal / External) ──────────────────
-  // Em 2026-05-28: replaces the older status/assignee groupBy. Source
-  // is a server-side filter on /api/cases?source=, so flipping it
-  // refetches rather than re-paints the cached roster (the cached
-  // set is scoped to the previously-active source). syncSourceToggle
-  // keeps the visual is-active in sync with the pref across paints.
-  const sourceToggle = app.querySelector("#rp-cases-rail-source");
-  sourceToggle?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-rail-source]");
-    if (!btn) return;
-    const next = btn.dataset.railSource;
-    if (next && next !== getPref("casesActiveSource")) {
-      setPref("casesActiveSource", next);
-      syncSourceToggle(next);
-      refreshCases();
-    }
+  // Shared rail-controls seg helper. Source is a server-side filter on
+  // /api/cases?source=, so the onChange refetches. No fireOnMount —
+  // the page's own boot calls refreshCases() once, which reads the
+  // pref the helper seeds here.
+  mountRailSeg(app.querySelector("#rp-cases-rail-source"), {
+    pref:     "casesActiveSource",
+    fallback: "internal",
+    onChange: () => refreshCases(),
   });
-  function syncSourceToggle(active) {
-    if (!sourceToggle) return;
-    sourceToggle.querySelectorAll("[data-rail-source]").forEach((b) =>
-      b.classList.toggle("is-active", b.dataset.railSource === active));
-  }
-  // Seed default + reflect pref at mount.
-  if (getPref("casesActiveSource") == null) setPref("casesActiveSource", "internal");
-  syncSourceToggle(getPref("casesActiveSource") || "internal");
 
   // ── filter chip rows (Assignee / Status) ───────────────────────
   // Em 2026-05-28: two independent filter dimensions ANDing against
@@ -442,31 +428,12 @@ export default function cases(app, { session }) {
   });
 
   // ── rail collapse toggle ─────────────────────────────────────
-  // Same compact-mode affordance as the Workspace / Docs / Monitoring
-  // rails — the chevron-double-left button on the head flips the
-  // .rt-nav.compact modifier; rail.css collapses everything to the
-  // 60px icon-only width.
-  //
-  // The rail also auto-folds when a case detail panel opens (board
-  // ↔ detail transition in `renderRoute`) — three columns (rail +
-  // detail-overlay + kanban-behind) competing for width feels
-  // crushed otherwise. `setRailCompact` is the shared mutator so
-  // the manual chevron + the auto-fold can't fight each other.
-  const railEl       = app.querySelector("#rp-cases-rail");
-  const railCollapse = app.querySelector("#rp-cases-rail-collapse");
-  function setRailCompact(compact) {
-    if (!railEl) return;
-    railEl.classList.toggle("compact", compact);
-    const icon = railCollapse?.querySelector("i");
-    if (icon) {
-      icon.classList.toggle("bi-chevron-double-left", !compact);
-      icon.classList.toggle("bi-chevron-double-right", compact);
-    }
-    if (railCollapse) railCollapse.title = compact ? "Expand" : "Collapse";
-  }
-  railCollapse?.addEventListener("click", () => {
-    setRailCompact(!railEl?.classList.contains("compact"));
-  });
+  // Shared rail-controls helper (same chevron compact-toggle as every
+  // other railed page). The auto-fold-on-detail-open was removed when
+  // the board↔detail swap went full-bleed (d407ef4), so the manual
+  // chevron is the only collapse driver now — no bespoke mutator.
+  mountRailCollapse(app.querySelector("#rp-cases-rail"),
+                    app.querySelector("#rp-cases-rail-collapse"));
 
   async function refreshCases() {
     try {

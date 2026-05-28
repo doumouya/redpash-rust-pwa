@@ -10,6 +10,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { kpiBarH } from "/scripts/echarts-kpi.js";
 import { esc } from "/scripts/dom.js";
 import { inputRow, mountRow } from "/scripts/page-row.js";
@@ -60,17 +61,9 @@ function mountProfileRail(app) {
     });
   }
 
-  // Collapse toggle — same compact-mode affordance as the other rails.
-  const rail     = app.querySelector("#rpProfileNav");
-  const collapse = app.querySelector("#rpProfileNavCollapse");
-  collapse?.addEventListener("click", () => {
-    const compact = !rail?.classList.contains("compact");
-    rail?.classList.toggle("compact", compact);
-    const icon = collapse.querySelector("i");
-    icon?.classList.toggle("bi-chevron-double-left", !compact);
-    icon?.classList.toggle("bi-chevron-double-right", compact);
-    collapse.title = compact ? "Expand" : "Collapse";
-  });
+  // Collapse toggle — shared rail-controls helper.
+  mountRailCollapse(app.querySelector("#rpProfileNav"),
+                    app.querySelector("#rpProfileNavCollapse"));
 
   // Default landing tab — Personal info.
   activate(PROFILE_SECTIONS[0].id);

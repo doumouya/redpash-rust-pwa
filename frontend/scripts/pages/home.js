@@ -14,6 +14,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
@@ -1013,12 +1014,8 @@ export default function home(app, { session: _session }) {
     }
   }
 
-  // ─── rail collapse — same affordance as the Workspace rail ───
-  app.querySelector("#rpHomeNavCollapse").addEventListener("click", (e) => {
-    nav.classList.toggle("compact");
-    e.currentTarget.querySelector("i").className = nav.classList.contains("compact")
-      ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
-  });
+  // ─── rail collapse — shared rail-controls helper ────────────
+  mountRailCollapse(nav, app.querySelector("#rpHomeNavCollapse"));
 
   // ─── render the rail (static groups → tabs) ──────────────────
   navBody.innerHTML = HOME_GROUPS.map(renderGroup).join("");

@@ -22,6 +22,7 @@
 
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { api } from "/scripts/api.js";
 import { applyTheme, currentTheme } from "/scripts/theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
@@ -254,12 +255,7 @@ function mountSettingsRail(app) {
   const validKeys = new Set(SET_TABS.map((t) => t.key));
 
   // ── collapse button + group-head toggle ───────────────────
-  app.querySelector("#rpSetNavCollapse")?.addEventListener("click", (e) => {
-    nav.classList.toggle("compact");
-    const ic = e.currentTarget.querySelector("i");
-    if (ic) ic.className = nav.classList.contains("compact")
-      ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
-  });
+  mountRailCollapse(nav, app.querySelector("#rpSetNavCollapse"));
   body.addEventListener("click", (e) => {
     const head = e.target.closest(".rt-group-head");
     if (head) { head.parentElement.classList.toggle("expanded"); return; }

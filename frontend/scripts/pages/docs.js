@@ -13,6 +13,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 
 const GROUP_COLORS = ["blue", "mauve", "teal", "peach"];
@@ -29,12 +30,8 @@ export default function docs(app, { session }) {
   let bySection = [];      // grouped: [{ name, docs: [...] }, ...]
   let activeSlug = null;
 
-  // ─── rail collapse — same affordance as the other rail pages ──
-  app.querySelector("#rpDocsNavCollapse").addEventListener("click", (e) => {
-    nav.classList.toggle("compact");
-    e.currentTarget.querySelector("i").className = nav.classList.contains("compact")
-      ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
-  });
+  // ─── rail collapse — shared rail-controls helper ────────────
+  mountRailCollapse(nav, app.querySelector("#rpDocsNavCollapse"));
 
   // ─── rail click delegation ───────────────────────────────────
   navBody.addEventListener("click", (e) => {
