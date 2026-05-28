@@ -4,7 +4,7 @@ section: Internal
 order: 40
 last modified date: 2026-05-28
 owner: Torv
-status: draft — template + Case worked example land; remaining objects pending Torv's sweep
+status: stable — all 13 objects landed (CAS_E2D56EC0CDAF44A39DEB4752D3F92351 closed). RBAC unblocked.
 ---
 
 # Object metadata spec
