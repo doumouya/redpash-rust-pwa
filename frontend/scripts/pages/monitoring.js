@@ -8,6 +8,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
@@ -42,6 +43,7 @@ import { chartsForTab } from "/scripts/charts/monitoring-bank.js";
 
 export default function monitoring(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "monitoring", session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session });
 
   const nav     = app.querySelector("#rpMonNav");
   const navBody = app.querySelector("#rpMonNavBody");

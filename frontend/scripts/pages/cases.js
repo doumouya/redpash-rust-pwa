@@ -32,6 +32,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
@@ -52,6 +53,7 @@ import {
 
 export default function cases(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "cases", session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session });
 
   // Page state — module-scoped to the mount call (the router calls
   // this function fresh on each route activation).

@@ -21,6 +21,7 @@
 // Fix-invalid modal, not from here.
 
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { api } from "/scripts/api.js";
 import { applyTheme, currentTheme } from "/scripts/theme.js";
 import { getPref, setPref } from "/scripts/prefs.js";
@@ -295,6 +296,7 @@ function mountSettingsRail(app) {
 
 export default async function settings(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "settings", session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "settings", session });
   render(app);
   mountSettingsRail(app);
 

@@ -12,12 +12,14 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 
 const GROUP_COLORS = ["blue", "mauve", "teal", "peach"];
 
 export default function docs(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "docs", session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "docs", session });
 
   const nav     = app.querySelector("#rpDocsNav");
   const navBody = app.querySelector("#rpDocsNavBody");

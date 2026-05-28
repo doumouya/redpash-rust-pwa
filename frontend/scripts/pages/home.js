@@ -13,6 +13,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
@@ -41,6 +42,7 @@ import { renderChart } from "/scripts/charts/render.js";
 
 export default function home(app, { session: _session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
+  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session: _session });
 
   const nav     = app.querySelector("#rpHomeNav");
   const navBody = app.querySelector("#rpHomeNavBody");

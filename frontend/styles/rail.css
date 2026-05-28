@@ -356,6 +356,53 @@
 .rt-nav-foot .rt-btn { width: 100%; }
 .rt-nav-foot .rt-btn.is-busy { opacity: 0.7; cursor: progress; }
 
+/* Rail footer nav — the shared Docs / Settings / Profile utility
+   cluster (rail-footer.js), appended below any page-specific create
+   actions in the foot. A top divider only when it follows siblings
+   (create buttons); when it's the sole foot content the .rt-nav-foot's
+   own top border already separates it from the body. */
+.rp-rail-footnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+.rt-nav-foot .rt-btn + .rp-rail-footnav {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-rail-footnav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4375rem;
+  color: var(--rp-text-mute);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+}
+.rp-rail-footnav-item:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-rail-footnav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+/* Profile avatar — initials chip rather than an icon. */
+.rp-rail-footnav-avatar {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+}
+.rp-rail-footnav-avatar.is-active {
+  background: var(--rp-accent-soft);
+  border-color: var(--rp-accent-2);
+  color: var(--rp-accent-2);
+}
+/* Compact rail — center the cluster as it wraps to a column. */
+.rt-nav.compact .rp-rail-footnav { justify-content: center; }
+
 /* ─── hidden recovery section ───────────────────────────────────
    Collapsible <details> at the tail of the rail body, visible only
    when ≥1 project or file is hidden via the × buttons (project)

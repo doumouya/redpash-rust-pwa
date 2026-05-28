@@ -15,16 +15,15 @@ import { api } from "/scripts/api.js";
 import { toggleTheme, currentTheme } from "/scripts/theme.js";
 import { esc } from "/scripts/dom.js";
 
-// Profile lives on the avatar (bottom-right of the topbar nav), not
-// as a generic rt-btn — saves a slot and the avatar already advertises
-// "this is you", so clicking it for "your profile" is the natural read.
+// Primary page nav. Settings / Docs / Profile moved to the rail
+// footer (rail-footer.js) 2026-05-28 — the topbar carries the primary
+// surfaces + theme + sign-out; the utility destinations live at the
+// bottom of every railed page's rail. Profile's avatar moved with it.
 const NAV = [
   { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
   { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
   { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
   { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring" },
-  { id: "settings",   hash: "#/settings",   icon: "bi-gear",        label: "Settings" },
-  { id: "docs",       hash: "#/docs",       icon: "bi-book-half",   label: "Docs" },
 ];
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's
@@ -72,15 +71,7 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     +     '<i class="bi bi-sun"></i></button>'
     +   '<button class="rt-btn" type="button" data-act="signout" title="Sign out">'
     +     '<i class="bi bi-box-arrow-right"></i></button>'
-    +   '<a class="rp-avatar' + (active === "profile" ? ' is-active' : '') + '"'
-    +     ' href="#/profile" data-avatar title="Profile">··</a>'
     + '</nav>';
-
-  // avatar — the signed-in user's initials
-  const name = (session?.display_name || session?.username || "").trim();
-  host.querySelector("[data-avatar]").textContent = name
-    ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()
-    : "··";
 
   // theme toggle — the icon shows the CURRENT theme so it stays
   // tightly aligned with the Settings page's Appearance row

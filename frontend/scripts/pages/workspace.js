@@ -15,6 +15,7 @@
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
+import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { mountTools } from "/scripts/tools.js";
 import { mountJoins } from "/scripts/joins.js";
 import { mountReport } from "/scripts/report.js";
@@ -38,6 +39,7 @@ export default function workspace(app, { session }) {
   const $$ = (s) => Array.from(app.querySelectorAll(s));
 
   mountTopbar($("#rp-topbar"), { active: "workspace", session });
+  mountRailFooterNav($(".rt-nav-foot"), { active: "", session });
 
   // Warm the wasm engine cache — the user is on the workspace, they're
   // going to do data work, so trigger the lazy fetch now and await
@@ -82,6 +84,12 @@ export default function workspace(app, { session }) {
   let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
   let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
   let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
+  // Project's data files (file_type ∉ {chart, dashboard}), as
+  // [{rid, name}] — feeds the designer's source-file dropdown so a tile
+  // can be re-pointed at any data file in the same project. Refreshed
+  // (ensureProjectSourceFiles) whenever a chart/dashboard/data file
+  // opens; the designer reads it synchronously via getSourceFiles.
+  let projectSourceFiles = { projRid: null, files: [] };
 
   // Per-rid envelope cache — populated by prewarmGroupFiles after a
   // project group's file list renders (idle-time background fetches)
@@ -880,6 +888,7 @@ export default function workspace(app, { session }) {
       if (rid.startsWith("CHT_")) {
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
+        await ensureProjectSourceFiles(chart?.project_redpash_id);
         enterDesignerMode(chart?.title || "Untitled chart");
         // Em 2026-05-28: "keep only the view where 'Add chart' doesn't
         // remove the current chart, but where we can add many charts on
@@ -894,7 +903,6 @@ export default function workspace(app, { session }) {
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
         totalPages = 1;
         renderPager();
-        syncNewChartButton();
         return;
       }
 
@@ -928,32 +936,31 @@ export default function workspace(app, { session }) {
         // could land here.
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
+        await ensureProjectSourceFiles(chart?.project_redpash_id || envelope?.summary?.project_redpash_id);
         enterDesignerMode(chart?.title || envelope?.summary?.display_name || "Untitled chart");
         // Same synthetic-dashboard wrapping as the CHT_ branch above.
         designerCtrl?.load({ type: "dashboard", dashboard: chartAsDashboard(chart) });
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
-        syncNewChartButton();
       } else if (fileType === "dashboard") {
         // Dashboards = FIL_-prefix project_files rows with
         // file_type='dashboard'. Spec carries widgets[] each
         // referencing a chart by id. Designer fetches each in
         // parallel and renders the multi-tile canvas.
         const dashboard = await api.get("/dashboards/" + encodeURIComponent(rid));
+        await ensureProjectSourceFiles(dashboard?.project_redpash_id || envelope?.summary?.project_redpash_id);
         enterDesignerMode(dashboard?.title || envelope?.summary?.display_name || "Untitled dashboard", "dashboard");
         designerCtrl?.load({ type: "dashboard", dashboard });
         rowsInfo.textContent = "Dashboard · " + (dashboard?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
-        syncNewChartButton();
       } else {
         rebuildColsDropdown(activeColumns);
         rebuildFilterCols(activeColumns);
-        // Cache the open data file so + New chart + future designer
-        // opens have an immediate source.
+        // Cache the open data file so the designer's Add-chart (from a
+        // dashboard) has an immediate source to chart against.
         sourceCache = { rid, columns: activeColumns };
-        syncNewChartButton();
         // Tear down any open designer (user navigated from chart to data).
         designerCtrl?.load(null);
         exitDesignerMode();
@@ -1916,10 +1923,31 @@ export default function workspace(app, { session }) {
   if (designerEl) {
     designerCtrl = mountDesigner(designerEl, {
       getSource: () => sourceCache,
+      // The project's data files [{rid, name}] for the per-tile source
+      // dropdown. Refreshed when a chart/dashboard/data file opens.
+      getSourceFiles: () => projectSourceFiles.files,
+      // Fires after a per-tile chart save (PUT /charts), a whole-
+      // dashboard save (PUT /dashboards), or a chart delete (null).
+      // Refresh the rail on delete so the dropped CHT_ row disappears;
+      // update the status line + designer title on a save.
       onSaved:   (saved) => {
-        rowsInfo.textContent = "Chart · " + (saved?.title || "untitled");
+        if (!saved) {
+          rowsInfo.textContent = "Chart deleted.";
+          loadProjects();
+          return;
+        }
+        rowsInfo.textContent = "Saved · " + (saved.title || "untitled");
         const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
-        if (titleSpan) titleSpan.textContent = saved?.title || "Untitled chart";
+        if (titleSpan) titleSpan.textContent = saved.title || "Untitled";
+        // A chart save may have changed the rail's stage dot; refresh.
+        loadProjects();
+      },
+      // ds-config-save pressed while the canvas is a synthetic
+      // chart-only wrapper (no real DSH_ to write to). Soft hint
+      // instead of a 404 — promoting a chart to a real dashboard is
+      // the separate follow-up step.
+      onDashboardSaveUnavailable: () => {
+        rowsInfo.textContent = "Open or create a dashboard to save a multi-chart layout — a single chart saves via its own tile.";
       },
     });
   }
@@ -1986,52 +2014,32 @@ export default function workspace(app, { session }) {
     }
   }
 
-  function syncNewChartButton() {
-    const btn = $("#wsNewChart");
-    if (!btn) return;
-    const hasSource = !!sourceCache.rid && sourceCache.columns.length > 0;
-    btn.disabled = !hasSource;
-    btn.title = hasSource
-      ? "Create a new chart sourced from this file"
-      : "Open a data file first; the chart will source from it";
-  }
-  syncNewChartButton();
-
-  // Create a new chart sourced from the user's current data file.
-  // Used by both the rail-foot + New chart button (sourceCache from
-  // the open data file) and the designer toolbar's Add chart button
-  // (sourceCache = the open chart's source). POST /api/charts +
-  // navigate.
-  async function createChartFromSource(busyBtn) {
-    if (!sourceCache.rid) return;
-    if (busyBtn) busyBtn.disabled = true;
+  // Populate projectSourceFiles with the project's data files (the ones
+  // a chart can source from — charts/dashboards excluded). Cached per
+  // project rid; the designer reads it synchronously via getSourceFiles
+  // to fill the source-file dropdown. Best-effort — a failed fetch
+  // leaves the dropdown degraded to the static current-source line.
+  async function ensureProjectSourceFiles(projRid) {
+    if (!projRid) return;
     try {
-      const firstCol = sourceCache.columns[0]?.name || "";
-      const created = await api.post("/charts", {
-        source_file_id: sourceCache.rid,
-        title:          "Untitled chart",
-        spec: {
-          kind:     "bar",
-          group_by: firstCol,
-          agg_col:  "*",
-          agg_fn:   "count",
-          title:    "",
-        },
-      });
-      const newRid = created?.redpash_id;
-      await loadProjects();
-      if (newRid) {
-        activeFileRid = null;     // force loadFile to re-open
-        await loadFile(newRid);
-      }
-    } catch (err) {
-      console.warn("[designer] create failed:", err);
-    } finally {
-      syncNewChartButton();
+      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
+      const files = (list?.items || [])
+        .filter((f) => f.file_type !== "chart" && f.file_type !== "dashboard")
+        .map((f) => ({ rid: f.redpash_id, name: f.display_name || f.filename || f.redpash_id }));
+      projectSourceFiles = { projRid, files };
+    } catch {
+      // leave the previous cache in place
     }
   }
 
-  $("#wsNewChart")?.addEventListener("click", (e) => createChartFromSource(e.currentTarget));
+  // Chart creation moved entirely into the dashboard view (Em
+  // 2026-05-28): the rail-foot "New chart" button + its
+  // createChartFromSource helper + syncNewChartButton enable-state
+  // logic were removed. Charts are now created via the designer
+  // toolbar's Add-chart button (#wsDesignerAddChart), which appends
+  // a chart widget to the open dashboard's canvas. sourceCache still
+  // feeds that path (it's set when a data file is opened) — the
+  // designer reads it to source the new chart.
 
   // Designer-toolbar Add chart — appends a new chart as a widget to
   // the open dashboard canvas (no navigation, new tile mounts in place).
