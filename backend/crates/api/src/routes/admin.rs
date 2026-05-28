@@ -276,9 +276,15 @@ const SORTABLE_COMPANIES: &[&str] = &[
 
 async fn list_companies(
     State(state): State<AppState>,
+    headers:      HeaderMap,
     Query(q):     Query<AdminQuery>,
 ) -> Result<Json<Page<CompanySummary>>, AppError> {
     let started = Instant::now();
+    // Resolve the caller so each row can carry the caller's own role
+    // in that company (the "My role" column on the Home Companies tab).
+    // The endpoint stays dev-permissive — resolving the caller is only
+    // for the my_role projection, not a gate.
+    let caller = super::resolve_user_rid(&state, &headers).await?;
     let (offset, size, page) = paginate(q.page, q.size);
 
     let (sort_key, sort_dir) = sort_clause(
@@ -307,14 +313,17 @@ async fn list_companies(
     let sql = format!(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url,
                 c.created_at, c.updated_at,
-                (SELECT COUNT(*)::INT FROM company_memberships m WHERE m.company_id = c.redpash_id) AS member_count
+                (SELECT COUNT(*)::INT FROM company_memberships m WHERE m.company_id = c.redpash_id) AS member_count,
+                (SELECT m2.role FROM company_memberships m2
+                  WHERE m2.company_id = c.redpash_id AND m2.user_redpash_id = $2) AS my_role
            FROM companies c
           WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
           ORDER BY {sort_col} {sort_dir} NULLS LAST
-          LIMIT $2 OFFSET $3"
+          LIMIT $3 OFFSET $4"
     );
     let rows = sqlx::query(&sql)
     .bind(q.q.as_deref())
+    .bind(&caller)
     .bind(size as i64)
     .bind(offset)
     .fetch_all(&state.db)
@@ -332,9 +341,10 @@ async fn list_companies(
                 updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
             },
             member_count: r.try_get::<i32, _>("member_count").unwrap_or(0) as u32,
-            // Admin view — no per-caller role here. RBAC will gate the
-            // endpoint itself; for now my_role stays unset.
-            my_role: None,
+            // The caller's own role in this company (NULL when they're
+            // not a member), joined via the my_role subquery. Drives the
+            // "My role" column on the Home Companies tab.
+            my_role: r.try_get::<String, _>("my_role").ok(),
         })
         .collect();
 

@@ -37,7 +37,7 @@ never URL-addressable.
 | `update` | `PATCH /api/companies/:rid` | Sparse — `name` / `slug` / `avatar_url`. Dev-permissive (no membership / role gate). Slug PATCH passes through `slugify` server-side. Duplicate slug → 409 `slug_taken`. |
 | `delete` | `DELETE /api/companies/:rid` | Dev-permissive. Cascades `company_memberships`; `projects.company_id` is `SET NULL` so company-scoped projects survive as personal. |
 | `list (self)` | `GET /api/companies` | Returns `CompanyList { items: Vec<CompanySummary> }` — every company in the system; non-member rows surface with `my_role: null`. Hardcoded ordering, no filter / page params today. |
-| `list (admin)` | `GET /api/admin/companies?page=&size=&sort=&dir=&q=` | Paginated `Page<CompanySummary>` for the Home Companies tab. `member_count` resolved via a correlated subquery, `my_role` is not joined on the admin endpoint (it's caller-relative, not table-derived). |
+| `list (admin)` | `GET /api/admin/companies?page=&size=&sort=&dir=&q=` | Paginated `Page<CompanySummary>` for the Home Companies tab. `member_count` + `my_role` both resolved via correlated subqueries — `my_role` joins the caller's own `company_memberships.role` per company (the caller is resolved from the session; NULL when they're not a member). |
 | `search` | `GET /api/admin/companies?q=...` | ILIKE substring on `name` + `slug`. Single `$1` reused. |
 | `list members` | `GET /api/companies/:rid/members` | Returns `Vec<CompanyMember>` — the membership rows joined with the user's profile (display_name / username / avatar_url) so the members list renders without a second lookup. |
 | `add member` | `POST /api/companies/:rid/members` | Body: `{ user_id, role }`. Owner-only for granting `role: 'owner'`. Existing membership UPSERTs to the new role. Emits `company_member_add`. |
@@ -128,11 +128,14 @@ my_role
   Properties:  Nillable, Layout
   Description: The caller's role in this company ('owner' /
                'admin' / 'member'), or null when they're not a
-               member. Caller-relative — joined only on
-               GET /api/companies (the self-list endpoint),
-               not on the admin endpoint. NOT sortable (per-caller
-               value, not a DB column). "My role" column on the
-               Home Companies tab is explicitly `sortable: false`.
+               member. Caller-relative — joined on BOTH
+               GET /api/companies (the self-list endpoint) AND
+               GET /api/admin/companies (the Home Companies tab's
+               endpoint), each via a correlated subquery keyed on
+               the session-resolved caller rid. NOT sortable
+               (per-caller value, not a stable DB column for an
+               ORDER BY). "My role" column on the Home Companies
+               tab is explicitly `sortable: false`.
 ```
 
 ---
