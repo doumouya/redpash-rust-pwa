@@ -4,7 +4,7 @@ section: Internal
 order: 50
 last modified date: 2026-05-29
 owner: Torv
-status: pattern-lock — key scheme + role model defined; Case worked example locks the shape; sweep pending Em sign-off
+status: stable — all 13 object catalogs landed (Case worked example + the sweep). Polymorphic Membership (company/project/case) + Case Team Member model folded in. RBAC enforcement is the next workstream; this catalog is its spec.
 ---
 
 # RBAC permission catalog
