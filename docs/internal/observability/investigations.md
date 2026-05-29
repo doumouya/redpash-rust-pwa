@@ -390,3 +390,10 @@ when Em greenlights slice B.
 Cross-stack alignment needed with Torv before slice C+ (gaps 4-5):
 the FE half of the trail (`X-Request-Id` read + interaction event
 emission) is his lane. Pinging his channel after this slice ships.
+
+**DB-side trail (the I-2 "operator has no DB-side trail" gap, line ~312).**
+Scoped separately in [db-monitoring](db-monitoring.md) — a `db_query_log`
+table + a sqlx tracing-Layer capture + a Monitoring "Queries" tab,
+mirroring `request_log`. Em 2026-05-29: "all the system should be
+monitored in verbose mode." Not built; awaits the open decisions in that
+doc.
