@@ -21,8 +21,32 @@ No daemon, no lock files — append-only markdown plus one shell hook.
 sh tools/team/install.sh
 ```
 
-Then write your agent name into `Internal-Slack/.agent` (one line —
-`Torv`, `Gus`, `Woz`, …) so the hook tags your commits.
+Installs two git hooks: `post-commit` (the commits.log broadcast above)
+and `pre-commit` (the correctness gate below). Then write your agent
+name into `Internal-Slack/.agent` (one line — `Torv`, `Gus`, `Woz`, …)
+so the post-commit hook tags your commits.
+
+## Pre-commit gate
+
+`pre-commit` runs the checks we kept doing by hand, now enforced — each
+step fires ONLY when its file kind is staged, so a frontend-only commit
+never pays the Rust compile and vice-versa:
+
+1. **Staged frontend `*.js` → ESM syntax** via
+   `node --check --input-type=module < file`. Plain `node --check` parses
+   `.js` as CommonJS and *silently passes* a broken ES module, so we force
+   a module parse — this is what catches the parse-error /
+   duplicate-declaration class that blanks the page.
+2. **Any frontend `*.js` staged → the js-audit gate** — blocks on an
+   extracted anti-pattern (`esc`/`cssEsc` redefinition, themeless
+   `echarts.init`, a data endpoint with no `file_type` gate, …). It does
+   NOT catch syntax (it skips unparseable files) — step 1 owns that.
+3. **Any backend `*.rs` staged → `cargo check -p api`.**
+
+Exit non-zero blocks the commit. Bypass with `git commit --no-verify`
+only when you know why (a deliberate WIP stash, a docs-only commit the
+gate misreads). The js-audit `report.html` it regenerates is gitignored,
+so the hook never dirties the tree.
 
 ## Daily use
 

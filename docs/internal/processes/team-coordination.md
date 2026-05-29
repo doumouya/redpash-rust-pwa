@@ -140,6 +140,17 @@ at the end of a multi-feature session. Files only accumulate
 cross-feature edits when commits are deferred — land them slice by
 slice and the boundaries stay clean on their own.
 
+## Pre-commit gate
+
+`tools/team/install.sh` wires a `pre-commit` hook that enforces the
+checks we used to run by hand (Em 2026-05-29: "we have to add checking
+before commits"). On staged files only: frontend `*.js` get a real ESM
+syntax check (`node --check --input-type=module` — plain `node --check`
+silently passes broken modules), the js-audit gate runs when any JS is
+staged, and `cargo check -p api` runs when backend `*.rs` is staged. A
+failure blocks the commit; `git commit --no-verify` is the deliberate
+escape hatch. Full detail in [tools/team/README.md](../../../tools/team/README.md#pre-commit-gate).
+
 ## Identity routing
 
 `Internal-Slack/.agent` is a single-line file holding the current
