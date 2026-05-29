@@ -13,6 +13,7 @@ mod db;
 mod error;
 mod event;
 mod id;
+mod rbac;
 mod redact;
 mod request_log;
 mod routes;
