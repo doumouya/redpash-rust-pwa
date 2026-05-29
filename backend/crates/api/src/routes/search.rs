@@ -79,8 +79,8 @@ async fn search(
                 COALESCE(p.description, '') AS description
            FROM projects p
           WHERE (p.owner_id = $1
-                 OR EXISTS (SELECT 1 FROM project_memberships m
-                             WHERE m.project_redpash_id = p.redpash_id
+                 OR EXISTS (SELECT 1 FROM memberships m
+                             WHERE m.object_redpash_id = p.redpash_id
                                AND m.user_redpash_id    = $1))
             AND (p.name                 ILIKE '%' || $2 || '%'
                  OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
@@ -129,8 +129,8 @@ async fn search(
               FROM project_files f
               JOIN projects p ON p.redpash_id = f.project_redpash_id
              WHERE (p.owner_id = $1
-                    OR EXISTS (SELECT 1 FROM project_memberships m
-                                WHERE m.project_redpash_id = p.redpash_id
+                    OR EXISTS (SELECT 1 FROM memberships m
+                                WHERE m.object_redpash_id = p.redpash_id
                                   AND m.user_redpash_id    = $1))
                AND (f.filename                 ILIKE '%' || $2 || '%'
                     OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
@@ -240,21 +240,21 @@ async fn search(
         "SELECT scope, scope_redpash_id, scope_name, user_redpash_id,
                 user_display_name, role
            FROM (
-             SELECT 'project' AS scope, m.project_redpash_id AS scope_redpash_id,
+             SELECT 'project' AS scope, m.object_redpash_id AS scope_redpash_id,
                     p.name AS scope_name, m.user_redpash_id,
                     u.display_name AS user_display_name, m.role, m.joined_at
-               FROM project_memberships m
-               JOIN projects p ON p.redpash_id = m.project_redpash_id
+               FROM memberships m
+               JOIN projects p ON p.redpash_id = m.object_redpash_id
                JOIN users    u ON u.redpash_id = m.user_redpash_id
               WHERE u.display_name ILIKE '%' || $1 || '%'
                  OR u.username     ILIKE '%' || $1 || '%'
                  OR p.name         ILIKE '%' || $1 || '%'
              UNION ALL
-             SELECT 'company' AS scope, m.company_id AS scope_redpash_id,
+             SELECT 'company' AS scope, m.object_redpash_id AS scope_redpash_id,
                     c.name AS scope_name, m.user_redpash_id,
                     u.display_name AS user_display_name, m.role, m.joined_at
-               FROM company_memberships m
-               JOIN companies c ON c.redpash_id = m.company_id
+               FROM memberships m
+               JOIN companies c ON c.redpash_id = m.object_redpash_id
                JOIN users     u ON u.redpash_id = m.user_redpash_id
               WHERE u.display_name ILIKE '%' || $1 || '%'
                  OR u.username     ILIKE '%' || $1 || '%'

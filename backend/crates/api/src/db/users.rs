@@ -107,9 +107,9 @@ pub async fn list_memberships_for_user(
     user_rid: &str,
 ) -> sqlx::Result<Vec<UserMembership>> {
     let rows = sqlx::query(
-        "SELECT cm.company_id, c.name AS company_name, cm.role
-           FROM company_memberships cm
-           JOIN companies c ON c.redpash_id = cm.company_id
+        "SELECT cm.object_redpash_id AS company_id, c.name AS company_name, cm.role
+           FROM memberships cm
+           JOIN companies c ON c.redpash_id = cm.object_redpash_id
           WHERE cm.user_redpash_id = $1
           ORDER BY CASE cm.role
                      WHEN 'owner'  THEN 0
@@ -152,9 +152,9 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
     // attach. Cheap at directory scale; if/when the users table grows
     // into thousands, switch to a windowed query or paginate.
     let mem_rows = sqlx::query(
-        "SELECT m.user_redpash_id, m.company_id, m.role, c.name AS company_name
-         FROM company_memberships m
-         JOIN companies c ON c.redpash_id = m.company_id",
+        "SELECT m.user_redpash_id, m.object_redpash_id AS company_id, m.role, c.name AS company_name
+         FROM memberships m
+         JOIN companies c ON c.redpash_id = m.object_redpash_id",
     )
     .fetch_all(pool)
     .await?;
@@ -299,9 +299,9 @@ pub async fn insert_user(
 }
 
 pub async fn delete_user(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    // FKs from sessions / project_memberships / company_memberships /
-    // projects.owner_id all cascade — the row going away takes the
-    // user's auth + their owned projects with it. Use with care; the
+    // FKs from sessions / memberships (user side) / projects.owner_id all
+    // cascade — the row going away takes the user's auth + their owned
+    // projects with it. Use with care; the
     // Users-tab UI in dev mode is intentionally permissive.
     let n = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
         .bind(rid)

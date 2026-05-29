@@ -1,8 +1,8 @@
 //! Company resource DTOs.
 //!
 //! A company is the multi-tenancy boundary: a user belongs to zero or
-//! more companies via `company_memberships`. Projects can be scoped to
-//! a company or stay personal (`company_id = NULL`).
+//! more companies via the unified `memberships` table. Projects can be
+//! scoped to a company or stay personal (`company_id = NULL`).
 
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};

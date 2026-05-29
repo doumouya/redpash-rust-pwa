@@ -1,8 +1,8 @@
 //! `/api/companies` — companies + memberships.
 //!
 //! A company is the multi-tenancy boundary: a user belongs to zero or
-//! more companies via `company_memberships`. That table also IS the
-//! access-control check — every handler resolves the caller's role and
+//! more companies via the unified `memberships` table. That table also IS
+//! the access-control check — every handler resolves the caller's role and
 //! 404s (not 403) when they aren't a member, so company existence is
 //! never leaked.
 //!

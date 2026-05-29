@@ -34,7 +34,7 @@ pub struct UserSummary {
     #[serde(default)] pub job_title:    Option<String>,
     #[serde(default)] pub organisation: Option<String>,
     pub plan:         String,
-    /// User's top company membership, joined from `company_memberships`.
+    /// User's top company membership, joined from `memberships` (company objects).
     /// "Top" = owner first, then admin, then member; ties broken by
     /// most-recent `joined_at`. NULL when the user has no membership.
     /// Distinct from `organisation` (free-text profile field).

@@ -203,7 +203,7 @@ async fn list_users(
     .fetch_one(&state.db)
     .await?;
 
-    // LEFT JOIN LATERAL pulls the user's "top" company_memberships row:
+    // LEFT JOIN LATERAL pulls the user's "top" company membership row:
     // owner before admin before member, ties broken by most-recent
     // joined_at. One company per user — the Home Users tab shows the
     // primary org affiliation, multi-org users can drill into
@@ -220,9 +220,9 @@ async fn list_users(
                 m.role         AS org_role
            FROM users u
            LEFT JOIN LATERAL (
-             SELECT cm.company_id, c.name AS company_name, cm.role
-               FROM company_memberships cm
-               JOIN companies c ON c.redpash_id = cm.company_id
+             SELECT cm.object_redpash_id AS company_id, c.name AS company_name, cm.role
+               FROM memberships cm
+               JOIN companies c ON c.redpash_id = cm.object_redpash_id
               WHERE cm.user_redpash_id = u.redpash_id
               ORDER BY CASE cm.role
                          WHEN 'owner'  THEN 0
@@ -313,9 +313,9 @@ async fn list_companies(
     let sql = format!(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url,
                 c.created_at, c.updated_at,
-                (SELECT COUNT(*)::INT FROM company_memberships m WHERE m.company_id = c.redpash_id) AS member_count,
-                (SELECT m2.role FROM company_memberships m2
-                  WHERE m2.company_id = c.redpash_id AND m2.user_redpash_id = $2) AS my_role
+                (SELECT COUNT(*)::INT FROM memberships m WHERE m.object_redpash_id = c.redpash_id) AS member_count,
+                (SELECT m2.role FROM memberships m2
+                  WHERE m2.object_redpash_id = c.redpash_id AND m2.user_redpash_id = $2) AS my_role
            FROM companies c
           WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
           ORDER BY {sort_col} {sort_dir} NULLS LAST
@@ -394,9 +394,8 @@ async fn list_memberships(
     // all_count = total across BOTH scopes (the rail tab's "everything"
     // count). total = scope+role-filtered count.
     let all_count: i64 = sqlx::query_scalar(
-        "SELECT
-           (SELECT COUNT(*) FROM project_memberships) +
-           (SELECT COUNT(*) FROM company_memberships)",
+        // Post-consolidation: one table holds every scope.
+        "SELECT COUNT(*) FROM memberships",
     )
     .fetch_one(&state.db)
     .await?;
@@ -409,8 +408,8 @@ async fn list_memberships(
     // / user_username / scope_name (project or company name) via ILIKE.
     let count_sql = if scope == "project" {
         "SELECT COUNT(*)::BIGINT
-           FROM project_memberships m
-           JOIN projects p ON p.redpash_id = m.project_redpash_id
+           FROM memberships m
+           JOIN projects p ON p.redpash_id = m.object_redpash_id
            JOIN users    u ON u.redpash_id = m.user_redpash_id
           WHERE ($1::text IS NULL OR m.role = $1)
             AND ($2::text IS NULL OR
@@ -419,8 +418,8 @@ async fn list_memberships(
                  p.name         ILIKE '%' || $2 || '%')"
     } else {
         "SELECT COUNT(*)::BIGINT
-           FROM company_memberships m
-           JOIN companies c ON c.redpash_id = m.company_id
+           FROM memberships m
+           JOIN companies c ON c.redpash_id = m.object_redpash_id
            JOIN users     u ON u.redpash_id = m.user_redpash_id
           WHERE ($1::text IS NULL OR m.role = $1)
             AND ($2::text IS NULL OR
@@ -431,15 +430,15 @@ async fn list_memberships(
     let rows_sql = if scope == "project" {
         format!(
             "SELECT 'project' AS scope,
-                    m.project_redpash_id     AS scope_redpash_id,
+                    m.object_redpash_id      AS scope_redpash_id,
                     p.name                   AS scope_name,
                     m.user_redpash_id        AS user_redpash_id,
                     u.display_name           AS user_display_name,
                     u.username               AS user_username,
                     m.role                   AS role,
                     m.joined_at              AS joined_at
-               FROM project_memberships m
-               JOIN projects p ON p.redpash_id = m.project_redpash_id
+               FROM memberships m
+               JOIN projects p ON p.redpash_id = m.object_redpash_id
                JOIN users    u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
                 AND ($2::text IS NULL OR
@@ -452,15 +451,15 @@ async fn list_memberships(
     } else {
         format!(
             "SELECT 'company' AS scope,
-                    m.company_id     AS scope_redpash_id,
+                    m.object_redpash_id AS scope_redpash_id,
                     c.name           AS scope_name,
                     m.user_redpash_id AS user_redpash_id,
                     u.display_name   AS user_display_name,
                     u.username       AS user_username,
                     m.role           AS role,
                     m.joined_at      AS joined_at
-               FROM company_memberships m
-               JOIN companies c ON c.redpash_id = m.company_id
+               FROM memberships m
+               JOIN companies c ON c.redpash_id = m.object_redpash_id
                JOIN users     u ON u.redpash_id = m.user_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
                 AND ($2::text IS NULL OR
@@ -901,15 +900,17 @@ async fn stats_memberships(
         ));
     }
 
+    // One table now; split scopes by the object rid prefix (\\_ escapes the
+    // literal underscore so the LIKE matches the prefix, not a wildcard).
     let (count_sql, group_sql) = if scope == "project" {
         (
-            "SELECT COUNT(*)::BIGINT FROM project_memberships",
-            "SELECT role, COUNT(*)::BIGINT FROM project_memberships GROUP BY role",
+            "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'PRJ\\_%'",
+            "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'PRJ\\_%' GROUP BY role",
         )
     } else {
         (
-            "SELECT COUNT(*)::BIGINT FROM company_memberships",
-            "SELECT role, COUNT(*)::BIGINT FROM company_memberships GROUP BY role",
+            "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CMP\\_%'",
+            "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CMP\\_%' GROUP BY role",
         )
     };
 
@@ -1040,7 +1041,7 @@ async fn stats_steps(State(state): State<AppState>) -> Result<Json<StepStats>, A
 // console). FK cascades do the heavy lifting:
 //
 //   users          → projects (CASCADE), memberships (CASCADE), sessions (CASCADE)
-//   companies      → company_memberships (CASCADE), projects.company_id (SET NULL)
+//   companies      → memberships (CASCADE via entities), projects.company_id (SET NULL)
 //   memberships    → no cascade; the row itself is the unit of access
 //
 // 404 if the row is missing; otherwise 204 No Content. Every delete
@@ -1101,9 +1102,10 @@ struct CreateMembershipBody {
     #[serde(default)] role: Option<String>,
 }
 
-/// Create a membership row. Scope picks the table (project_memberships
-/// vs company_memberships); the rest is field-validation + a single
-/// INSERT. Returns 201 with the bare membership triple so the FE can
+/// Create a membership row in the unified `memberships` table (the
+/// object rid carries the scope); `scope` drives only the role
+/// allow-list + field-validation, then a single INSERT. Returns 201 with
+/// the bare membership triple so the FE can
 /// reconstruct the synthetic rid without an extra GET; the full
 /// MembershipSummary is recoverable via /api/admin/memberships (the
 /// FE refetches after a successful POST anyway).

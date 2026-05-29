@@ -904,10 +904,10 @@ pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>
 
 // ─── companies ──────────────────────────────────────────────────
 //
-// A company is the multi-tenancy boundary. `company_memberships` is a
-// pure join table — composite PK `(company_id, user_redpash_id)`, no
-// redpash_id — and it doubles as the access-control check: a user with
-// no membership row simply can't see the company.
+// A company is the multi-tenancy boundary. Membership lives in the
+// unified `memberships` table (composite PK `(object_redpash_id,
+// user_redpash_id)`, no redpash_id) and doubles as the access-control
+// check: a user with no membership row simply can't see the company.
 
 #[derive(FromRow)]
 struct CompanyRow {
@@ -944,11 +944,11 @@ pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<C
     let rows = sqlx::query(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url, c.created_at, c.updated_at,
                 m.role AS my_role,
-                (SELECT COUNT(*) FROM company_memberships cm
-                 WHERE cm.company_id = c.redpash_id) AS member_count
+                (SELECT COUNT(*) FROM memberships cm
+                 WHERE cm.object_redpash_id = c.redpash_id) AS member_count
          FROM companies c
-         LEFT JOIN company_memberships m
-                ON m.company_id = c.redpash_id AND m.user_redpash_id = $1
+         LEFT JOIN memberships m
+                ON m.object_redpash_id = c.redpash_id AND m.user_redpash_id = $1
          ORDER BY c.name ASC",
     )
     .bind(user_rid)
@@ -990,8 +990,8 @@ pub async fn company_role(
     user_rid:    &str,
 ) -> sqlx::Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT role FROM company_memberships
-         WHERE company_id = $1 AND user_redpash_id = $2",
+        "SELECT role FROM memberships
+         WHERE object_redpash_id = $1 AND user_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1001,7 +1001,7 @@ pub async fn company_role(
 }
 
 /// Two users share at least one company (i.e. there exists a company
-/// where both hold a `company_memberships` row). Used by the events
+/// where both hold a `memberships` row, object = a company). Used by the events
 /// read-gate so another company can't see another company's logs;
 /// RBAC will tighten this further to per-role checks. Self-match
 /// (user_a == user_b) returns true without touching the DB — saves
@@ -1012,13 +1012,17 @@ pub async fn users_share_company(
     user_b: &str,
 ) -> sqlx::Result<bool> {
     if user_a == user_b { return Ok(true); }
+    // Post-consolidation `memberships` spans companies/projects/cases, so
+    // constrain the shared object to a COMPANY (rid prefix) — otherwise a
+    // shared project/case membership would falsely read as "share company".
     let row: Option<(i64,)> = sqlx::query_as(
         "SELECT 1::BIGINT
-           FROM company_memberships a
-           JOIN company_memberships b
-             ON b.company_id = a.company_id
+           FROM memberships a
+           JOIN memberships b
+             ON b.object_redpash_id = a.object_redpash_id
           WHERE a.user_redpash_id = $1
             AND b.user_redpash_id = $2
+            AND a.object_redpash_id LIKE 'CMP\\_%'
           LIMIT 1",
     )
     .bind(user_a)
@@ -1032,8 +1036,8 @@ pub async fn users_share_company(
 /// owner" rule on member removal / demotion.
 pub async fn company_owner_count(pool: &PgPool, company_rid: &str) -> sqlx::Result<i64> {
     let (n,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM company_memberships
-         WHERE company_id = $1 AND role = 'owner'",
+        "SELECT COUNT(*) FROM memberships
+         WHERE object_redpash_id = $1 AND role = 'owner'",
     )
     .bind(company_rid)
     .fetch_one(pool)
@@ -1063,7 +1067,7 @@ pub async fn create_company(
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO company_memberships (company_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
          VALUES ($1, $2, 'owner')",
     )
     .bind(rid)
@@ -1102,44 +1106,41 @@ pub async fn update_company(
 }
 
 /// Delete a company via the entity registry — cascades to the `companies`
-/// row, then onward: `company_memberships` cascades, `projects.company_id`
-/// is `SET NULL` so company projects survive as personal projects.
+/// row, then onward: `memberships` cascade (object = the company),
+/// `projects.company_id` is `SET NULL` so company projects survive as personal.
 pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     delete_entity(pool, rid).await
 }
 
-/// Delete a membership row (project or company scope). Composite PK is
-/// (scope_id, user_id) so both must match. Caller is responsible for
-/// validating `scope` ∈ {"project", "company"} — admin.rs does that
-/// gate before reaching here.
+/// Delete a membership row. Post-consolidation the object rid (`scope_id`)
+/// uniquely identifies the parent, so the old per-scope table branch
+/// collapses to one query; `scope` is kept for call-site compatibility +
+/// the route's own validation but no longer steers the SQL.
 pub async fn delete_membership(
     pool:     &PgPool,
     scope:    &str,
     scope_id: &str,
     user_id:  &str,
 ) -> sqlx::Result<bool> {
-    let sql = match scope {
-        "project" => "DELETE FROM project_memberships
-                       WHERE project_redpash_id = $1 AND user_redpash_id = $2",
-        // scope == "company"
-        _         => "DELETE FROM company_memberships
-                       WHERE company_id = $1 AND user_redpash_id = $2",
-    };
-    let n = sqlx::query(sql)
-        .bind(scope_id)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
+    let _ = scope;
+    let n = sqlx::query(
+        "DELETE FROM memberships
+          WHERE object_redpash_id = $1 AND user_redpash_id = $2",
+    )
+    .bind(scope_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     Ok(n.rows_affected() > 0)
 }
 
-/// Insert a membership row in the right table per `scope`. Role
-/// allow-lists are enforced at the route layer (different per scope:
-/// project = owner/collaborator/viewer, company = owner/admin/member);
-/// the SQL CHECK is the last line of defense. Returns the bare scope
-/// + user pair on success so the route can emit the audit event
-/// without an extra round-trip. Bubbles 23503 (FK violation) and
-/// 23505 (duplicate PK) up so the route maps them to 404 / 409.
+/// Insert a membership row. Role allow-lists are enforced at the route
+/// layer; the SQL CHECK (owner/admin/member/viewer) is the last line of
+/// defense. Post-consolidation one table holds every scope — the object
+/// rid (`scope_id`) is the parent, so the per-scope branch is gone;
+/// `scope` is kept for call-site compatibility + route validation.
+/// Bubbles 23503 (FK violation → object/user gone) and 23505 (duplicate
+/// PK) up so the route maps them to 404 / 409.
 pub async fn insert_membership(
     pool:     &PgPool,
     scope:    &str,
@@ -1147,21 +1148,16 @@ pub async fn insert_membership(
     user_id:  &str,
     role:     &str,
 ) -> sqlx::Result<()> {
-    let sql = match scope {
-        "project" => "INSERT INTO project_memberships
-                       (project_redpash_id, user_redpash_id, role)
-                       VALUES ($1, $2, $3)",
-        // scope == "company"
-        _         => "INSERT INTO company_memberships
-                       (company_id, user_redpash_id, role)
-                       VALUES ($1, $2, $3)",
-    };
-    sqlx::query(sql)
-        .bind(scope_id)
-        .bind(user_id)
-        .bind(role)
-        .execute(pool)
-        .await?;
+    let _ = scope;
+    sqlx::query(
+        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+         VALUES ($1, $2, $3)",
+    )
+    .bind(scope_id)
+    .bind(user_id)
+    .bind(role)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -1172,9 +1168,9 @@ pub async fn list_company_members(
     let rows = sqlx::query(
         "SELECT m.user_redpash_id, m.role, m.joined_at,
                 u.display_name, u.username, u.avatar_url
-         FROM company_memberships m
+         FROM memberships m
          JOIN users u ON u.redpash_id = m.user_redpash_id
-         WHERE m.company_id = $1
+         WHERE m.object_redpash_id = $1
          ORDER BY m.joined_at ASC",
     )
     .bind(company_rid)
@@ -1202,9 +1198,9 @@ pub async fn add_company_member(
     role:        &str,
 ) -> sqlx::Result<()> {
     sqlx::query(
-        "INSERT INTO company_memberships (company_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
          VALUES ($1, $2, $3)
-         ON CONFLICT (company_id, user_redpash_id)
+         ON CONFLICT (object_redpash_id, user_redpash_id)
          DO UPDATE SET role = EXCLUDED.role",
     )
     .bind(company_rid)
@@ -1227,8 +1223,8 @@ pub async fn update_company_member_role(
     role:        &str,
 ) -> sqlx::Result<bool> {
     let n = sqlx::query(
-        "UPDATE company_memberships SET role = $3
-          WHERE company_id = $1 AND user_redpash_id = $2",
+        "UPDATE memberships SET role = $3
+          WHERE object_redpash_id = $1 AND user_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1244,8 +1240,8 @@ pub async fn remove_company_member(
     user_rid:    &str,
 ) -> sqlx::Result<bool> {
     let n = sqlx::query(
-        "DELETE FROM company_memberships
-         WHERE company_id = $1 AND user_redpash_id = $2",
+        "DELETE FROM memberships
+         WHERE object_redpash_id = $1 AND user_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1455,8 +1451,8 @@ const CASE_USER_JOINS: &str =
 /// hydrated — saves the FE a per-row N+1 user-lookup.
 ///
 /// `source` is "internal" | "external" | None. When set, an EXISTS
-/// clause against company_memberships filters by whether the case's
-/// reporter shares membership with the canonical internal company
+/// clause against `memberships` (object = the internal company) filters by
+/// whether the case's reporter shares membership with the canonical internal company
 /// (resolved at AppState init from REDPASH_INTERNAL_COMPANY_NAME).
 /// Cases with NULL reporter_id are external by construction (NOT
 /// EXISTS of nothing → true). When `internal_company_id` is None
@@ -1486,12 +1482,12 @@ pub async fn list_cases(
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM company_memberships cm
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships cm
                                                     WHERE cm.user_redpash_id = c.reporter_id
-                                                      AND cm.company_id = $6))
-                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM company_memberships cm
+                                                      AND cm.object_redpash_id = $6))
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships cm
                                                     WHERE cm.user_redpash_id = c.reporter_id
-                                                      AND cm.company_id = $6)))
+                                                      AND cm.object_redpash_id = $6)))
          ORDER BY {sort_col} {sort_dir} NULLS LAST
          LIMIT $7 OFFSET $8"
     ))
@@ -1528,12 +1524,12 @@ pub async fn count_cases(
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM company_memberships cm
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships cm
                                                     WHERE cm.user_redpash_id = c.reporter_id
-                                                      AND cm.company_id = $6))
-                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM company_memberships cm
+                                                      AND cm.object_redpash_id = $6))
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships cm
                                                     WHERE cm.user_redpash_id = c.reporter_id
-                                                      AND cm.company_id = $6)))",
+                                                      AND cm.object_redpash_id = $6)))",
     )
     .bind(status)
     .bind(assignee_id)
