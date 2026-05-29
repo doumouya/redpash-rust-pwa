@@ -196,6 +196,30 @@ export default function monitoring(app, { session }) {
         + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
     },
+    queries: {
+      title: "DB Queries",
+      endpoint: "/monitoring/queries",
+      useWindow: false,
+      columns: [
+        { label: "Time",     key: "at",             sortable: true  },
+        { label: "Duration", key: "duration_ms",    sortable: true  },
+        { label: "Rows",     key: "rows",           sortable: true  },
+        { label: "Status",   key: "status",         sortable: true  },
+        { label: "Query",    key: "query_template", sortable: false },
+        { label: "Route",    key: "route",          sortable: true  },
+      ],
+      row: (r) =>
+        '<tr>'
+        + '<td>' + fmtTime(r.at) + '</td>'
+        + '<td class="is-num">' + (r.duration_ms != null ? r.duration_ms + 'ms' : '—') + '</td>'
+        + '<td class="is-num">' + (r.rows != null ? r.rows : '—') + '</td>'
+        + '<td>' + (r.status
+            ? '<span class="rt-mono-pill">error</span>'
+            : '<span class="rt-mono-pill rt-tone--low">ok</span>') + '</td>'
+        + '<td><code>' + esc(r.query_template) + '</code></td>'
+        + '<td>' + esc(r.route || '—') + '</td>'
+        + '</tr>',
+    },
   };
 
   // Honors the user's `rowsPerPageMonitoring` pref (set on /settings).

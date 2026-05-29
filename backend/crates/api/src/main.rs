@@ -10,6 +10,7 @@
 
 mod bootstrap;
 mod db;
+mod db_query;
 mod error;
 mod event;
 mod id;
@@ -19,7 +20,10 @@ mod routes;
 mod state;
 
 use std::net::SocketAddr;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,17 +44,56 @@ async fn main() -> anyhow::Result<()> {
     // Pretty-printed text was operator-friendly in dev but lost the
     // span context to grep noise; JSON is operator-friendly in BOTH
     // surfaces (jq for local dev, log-aggregator-ready for prod).
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,sqlx=info,hyper=warn,tower_http=info")),
+    // Registry + layers (was `fmt().init()`): the fmt layer keeps the
+    // exact same JSON output, and `db_query::layer()` taps sqlx's query
+    // events into the db_query_log table (DB observability). The pool the
+    // capture layer writes to is wired in after Step 3 (init_pool) — it
+    // doesn't exist yet here.
+    //
+    // One GLOBAL filter is the only enablement control; the capture layer
+    // self-selects. Shape rationale:
+    //   1. sqlx logs every statement at `DEBUG` (`log_statements` default),
+    //      so the global max level MUST admit `sqlx::query` at debug or the
+    //      events are dropped at the macro site and capture records nothing.
+    //      `add_directive` forces that target on regardless of what RUST_LOG
+    //      says, so capture can't be silently disabled by an operator's
+    //      RUST_LOG (which otherwise wouldn't mention sqlx::query).
+    //   2. The capture layer is UNFILTERED — it self-selects on the
+    //      `sqlx::query` target inside `on_event` and applies its own
+    //      verbose()/slow-threshold gate. Keeping enablement in the single
+    //      global floor (rather than juggling a second per-layer filter's
+    //      level hint against the fmt layer's) is the simplest shape that
+    //      reliably delivers the DEBUG events, including the ones emitted
+    //      inside the per-request `api` span.
+    //   3. stdout keeps its old non-firehose shape: a per-layer filter on
+    //      the FMT layer alone drops `sqlx::query`, so the forced debug
+    //      directive feeds the capture layer without spamming the log.
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,sqlx=info,hyper=warn,tower_http=info"))
+        .add_directive(
+            "sqlx::query=debug"
+                .parse()
+                .expect("static directive is valid"),
+        );
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .flatten_event(true)
+                .with_filter(filter_fn(|meta: &tracing::Metadata<'_>| {
+                    meta.target() != "sqlx::query"
+                })),
         )
-        .json()
-        .flatten_event(true)
+        .with(db_query::layer())
         .init();
 
     // Step 3 — app state (db pool, caches). Stubbed until Phase 2.
     let state = state::AppState::init().await?;
+
+    // Wire the DB-observability capture pool now that it exists + start
+    // its retention job. The capture layer no-ops until this runs.
+    db_query::init_pool(state.db.clone());
 
     // Step 4 — process-level panic hook. Records every panic into the
     // `events` table (kind="panic", level="error") so background-task

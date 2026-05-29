@@ -72,6 +72,25 @@ pub struct RequestSummary {
     #[serde(default)] pub request_id: Option<String>,
 }
 
+/// One row in `GET /api/monitoring/queries` — the DB-layer sibling of
+/// `RequestSummary`. Mirrors `db_query_log` (DB observability). The
+/// `query_template` is the parameterized SQL (placeholders, no bound
+/// values); `request_id` / `route` / `user_redpash_id` correlate back to
+/// the HTTP request that issued the query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbQuerySummary {
+    pub id:             i64,
+    pub at:             chrono::DateTime<chrono::Utc>,
+    pub query_template: String,
+    pub duration_ms:    i32,
+    #[serde(default)] pub rows:            Option<i64>,
+    pub status:         i16,
+    #[serde(default)] pub error_kind:      Option<String>,
+    #[serde(default)] pub request_id:      Option<String>,
+    #[serde(default)] pub route:           Option<String>,
+    #[serde(default)] pub user_redpash_id: Option<String>,
+}
+
 /// One row in the `top_routes` field of `GET /api/monitoring/requests/stats`.
 /// Same shape as `/api/metrics`'s `by_route` entries, kept distinct so
 /// the two endpoints can drift independently (e.g. monitoring later

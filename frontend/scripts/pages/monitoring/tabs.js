@@ -30,6 +30,8 @@ export const MON_TABS = [
   // ── REQUESTS ───────────────────────────────────────────────
   { group: "REQUESTS", key: "requests", label: "Requests", icon: "bi-globe2",         endpoint: "/monitoring/requests",    wired: true },
   { group: "REQUESTS", key: "events",   label: "Events",   icon: "bi-envelope",       endpoint: "/monitoring/events",      wired: true },
+  // DB-layer perf — per-query capture (db_query_log), sibling of Requests.
+  { group: "REQUESTS", key: "queries",  label: "Queries",  icon: "bi-database",       endpoint: "/monitoring/queries",     wired: true },
   // ── AUDITS ─────────────────────────────────────────────────
   { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",          endpoint: "/monitoring/audit-runs",     wired: true },
   { group: "AUDITS",   key: "findings", label: "Findings", icon: "bi-exclamation-triangle", endpoint: "/monitoring/audit-findings", wired: true },

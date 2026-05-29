@@ -31,7 +31,7 @@ use serde::Deserialize;
 use shared::{
     monitoring::{
         ActivityRow, AuditFindingSummary, AuditFindingsStats, AuditRunSummary, AuditRunsStats,
-        EventSummary, EventsStats, LatencyBucket,
+        DbQuerySummary, EventSummary, EventsStats, LatencyBucket,
         RequestDetail, RequestSummary, RequestsStats, RouteStat, Window,
     },
     optimization::OptimizationPoint,
@@ -52,6 +52,8 @@ pub fn routes() -> Router<AppState> {
         .route("/audit-findings/stats",  get(stats_audit_findings))
         .route("/requests",            get(list_requests))
         .route("/requests/stats",      get(stats_requests))
+        // DB-layer observability — per-query capture (db_query_log).
+        .route("/queries",             get(list_queries))
         // Per-request drill-down (M-1, slice E). Singular path so it
         // can't collide with /requests/stats — :request_id is opaque
         // to axum's matcher and would otherwise swallow "stats".
@@ -390,6 +392,89 @@ struct RequestsQuery {
     /// substring match — feeds the toolbar search box on /monitoring/requests
     /// (same shape as events / runs / findings / steps' ?q=).
     #[serde(default)] q:      Option<String>,
+}
+
+// ── /api/monitoring/queries ───────────────────────────────────────────
+// The DB-layer sibling of /requests — drill-down over db_query_log.
+
+#[derive(Deserialize)]
+struct DbQueriesQuery {
+    #[serde(default)] page:   Option<u32>,
+    #[serde(default)] size:   Option<u32>,
+    #[serde(default)] window: Option<String>,
+    /// Substring match on the query template.
+    #[serde(default)] q:      Option<String>,
+    /// Exact status filter (0 ok / 1 error).
+    #[serde(default)] status: Option<i16>,
+    /// Minimum duration_ms — the "slow queries only" filter.
+    #[serde(default)] slow:   Option<i32>,
+}
+
+async fn list_queries(
+    State(state): State<AppState>,
+    Query(q):     Query<DbQueriesQuery>,
+) -> Result<Json<Page<DbQuerySummary>>, AppError> {
+    let started = Instant::now();
+    let cutoff = window_cutoff(q.window.as_deref())?;
+    let (offset, size, page) = paginate(q.page, q.size);
+
+    let all_count: i64 = db::count_total(&state.db, "db_query_log").await?;
+
+    let where_sql = "WHERE ($1::timestamptz IS NULL OR at >= $1)
+            AND ($2::text IS NULL OR query_template ILIKE '%' || $2 || '%')
+            AND ($3::int2 IS NULL OR status = $3)
+            AND ($4::int4 IS NULL OR duration_ms >= $4)";
+
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*)::BIGINT FROM db_query_log {where_sql}"
+    ))
+    .bind(cutoff)
+    .bind(q.q.as_deref())
+    .bind(q.status)
+    .bind(q.slow)
+    .fetch_one(&state.db)
+    .await?;
+
+    let rows = sqlx::query(&format!(
+        "SELECT id, at, query_template, duration_ms, rows, status, error_kind,
+                request_id, route, user_redpash_id
+           FROM db_query_log {where_sql}
+          ORDER BY at DESC
+          LIMIT $5 OFFSET $6"
+    ))
+    .bind(cutoff)
+    .bind(q.q.as_deref())
+    .bind(q.status)
+    .bind(q.slow)
+    .bind(size as i64)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    let rows: Vec<DbQuerySummary> = rows
+        .into_iter()
+        .map(|r| DbQuerySummary {
+            id:              r.try_get("id").unwrap_or(0),
+            at:              r.try_get("at").unwrap_or_else(|_| Utc::now()),
+            query_template:  r.try_get("query_template").unwrap_or_default(),
+            duration_ms:     r.try_get("duration_ms").unwrap_or(0),
+            rows:            r.try_get("rows").ok(),
+            status:          r.try_get("status").unwrap_or(0),
+            error_kind:      r.try_get("error_kind").ok(),
+            request_id:      r.try_get("request_id").ok(),
+            route:           r.try_get("route").ok(),
+            user_redpash_id: r.try_get("user_redpash_id").ok(),
+        })
+        .collect();
+
+    Ok(Json(build_page(
+        rows,
+        total as u64,
+        all_count as u64,
+        page,
+        size,
+        started,
+    )))
 }
 
 #[tracing::instrument(skip_all)]
