@@ -315,9 +315,10 @@ export function mountJoins(panelBody, ctx) {
     }
   }
 
-  // Kick the first fetch immediately — the lazy-mount caller
-  // (workspace.js setToolsPanelTab) only calls mountJoins once the user
-  // activates the Joins tab, so by definition we want candidates now.
+  // Kick the first detection at mount. With no file open this just
+  // renders the "open a file" placeholder (loadCandidates no-ops without
+  // a rid); when a file is already active it fetches now. The workspace
+  // mounts this eagerly, so loadFile()'s refresh() keeps it current.
   loadCandidates();
   return {
     /** Re-fetch candidates from the server. Called by the workspace when

@@ -2080,7 +2080,7 @@ export default function workspace(app, { session }) {
   // The Tools panel now hosts two tabs via .rt-panel-tabs in the head
   // (same atom as the filter panel's Filter|Report split — see panel.css
   // L720-L753). Clean = the cleaning columns-redtable (this mount); Joins
-  // = sibling-file join picker, mounted on first activate (slice B).
+  // = sibling-file join picker (mounted just below, also eagerly).
   toolsCtrl = mountTools($("#wsToolsCleanBody"), {
     fileRid: () => activeFileRid,
     columns: () => activeColumns,
@@ -2100,6 +2100,26 @@ export default function workspace(app, { session }) {
       loadFile(rid);
     },
   });
+
+  // ─── tools panel — Joins tab ───────────────────────────────────
+  // Mounted eagerly (like Clean above), so loadFile()'s
+  // joinsCtrl.refresh() preloads the sibling-join candidates on every
+  // file open — same readiness as the Clean tab + Filter panel. With no
+  // file open it renders the "open a file" placeholder (no API call).
+  // (Previously lazy-mounted on first tab activate; Em asked for tab
+  // parity 2026-05-29 — the picker should be ready when the tab opens.)
+  const joinsBody = $("#wsToolsJoinsBody");
+  if (joinsBody) {
+    joinsCtrl = mountJoins(joinsBody, {
+      fileRid:      () => activeFileRid,
+      activeFilter: () => activeFilter,
+      // POST /joins returned a fresh FileEnvelope for the new join file;
+      // refresh the rail + open it so the user sees the result at once.
+      onApplied: ({ newFileRid, projectRid }) => {
+        if (newFileRid) refreshAndOpen(newFileRid, projectRid);
+      },
+    });
+  }
 
   // ─── report builder — second tab in the filter panel ──────────
   // Edits a ReportSpec and previews it via POST /api/group/preview.
@@ -2154,9 +2174,8 @@ export default function workspace(app, { session }) {
   $("#wsClearReport")?.addEventListener("click", () => reportCtrl?.clear());
 
   // Clean / Joins tab switcher in the Tools panel head — same atom +
-  // selector shape as setFilterPanelTab above. Joins module is lazy-
-  // mounted on first activate (slice B); slice A leaves the Joins tab
-  // body as a placeholder.
+  // selector shape as setFilterPanelTab above. Both tabs are mounted
+  // eagerly at setup, so switching only toggles visibility.
   const toolsTabs = $("#wsToolsTabs");
   if (toolsTabs) {
     toolsTabs.addEventListener("click", (e) => {
@@ -2177,24 +2196,6 @@ export default function workspace(app, { session }) {
         el.classList.toggle("is-active", match);
       }
     });
-    // Lazy-mount the Joins picker on first activate — saves the
-    // /joins API call for users who never open the tab.
-    if (tab === "joins" && !joinsCtrl) {
-      const joinsBody = $("#wsToolsJoinsBody");
-      if (joinsBody) {
-        joinsCtrl = mountJoins(joinsBody, {
-          fileRid:      () => activeFileRid,
-          activeFilter: () => activeFilter,
-          // POST /joins returned a fresh FileEnvelope for the new join
-          // file. Refresh the rail + open the new file so the user sees
-          // the join result immediately — same path as upload's
-          // "refresh + auto-open" via refreshAndOpen().
-          onApplied: ({ newFileRid, projectRid }) => {
-            if (newFileRid) refreshAndOpen(newFileRid, projectRid);
-          },
-        });
-      }
-    }
   }
 
   // ─── designer — canvas + accordion config ─────────────────────
