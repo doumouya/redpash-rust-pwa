@@ -2,7 +2,7 @@
 title: Me
 section: API
 order: 2
-last modified date: 2026-05-16
+last modified date: 2026-05-29
 ---
 
 # `/api/me`
@@ -102,48 +102,81 @@ async fn list(State(state): State<AppState>, headers: HeaderMap)
 }
 ```
 
-**Every** owner-scoped handler now calls it — list endpoints (`/api/projects`, `/api/reports`, `/api/dashboards`), upload (`POST /api/files/upload`), `PATCH /api/me`, **and** every detail handler on `/api/{projects,reports,dashboards,files}/:rid/*`. Detail handlers pair it with the ownership gate below.
+**Every** owner-scoped handler now calls it — list endpoints
+(`/api/projects`, `/api/charts`, `/api/dashboards`, `/api/cases`),
+upload (`POST /api/files/upload`), `PATCH /api/me` / `/api/me/prefs`,
+**and** every detail handler on `/api/{projects,charts,dashboards,files,cases}/:rid/*`.
+Detail handlers pair it with the ownership gate below.
 
 ## `ensure_owner` (the shared 404 gate)
 
 ```rust
 super::ensure_owner(
-    db::report_owner(&state.db, &rid).await,  // Result<Option<owner_rid>>
-    &user, "report", &rid,
+    db::project_owner(&state.db, &rid).await,  // Result<Option<owner_rid>>
+    &user, "project", &rid,
 )?;
 ```
 
 Re-exported from `routes::mod` as `pub(crate)`. Pairs with one of the
-four lookup helpers — `project_owner`, `report_owner`,
-`dashboard_owner`, `file_owner` — each a single JOIN to
-`projects.owner_id`. 404 with `kind="not_found"` on **both** "resource
-doesn't exist" and "exists but not yours" — same message format so the
-existence of someone else's resource is never leaked.
+lookup helpers — `project_owner`, `chart_owner`, `dashboard_owner`,
+`file_owner` — each of which now resolves through the **owner-membership
+LATERAL** (`memberships WHERE role='owner' ORDER BY joined_at LIMIT 1`)
+instead of the dropped `projects.owner_id` column (post-mig 024). 404
+with `kind="not_found"` on **both** "resource doesn't exist" and
+"exists but not yours" — same message format so the existence of
+someone else's resource is never leaked.
 
 ---
 
 ## `PATCH /api/me`
 
-Sparse update of the session user's profile. Every field is optional;
-`prefs` is shallow-merged with the existing JSONB via the `||` operator
-so callers can flip a single key without re-sending the whole object.
+Sparse update of the session user's profile fields. Every field is
+optional — `COALESCE` keeps any unsent column. **Prefs no longer live on
+this endpoint** — `users.prefs` was dropped in mig 020 (prefs moved to
+the [`user_preferences`](../db/schema.md#user_preferences) table). Use
+[`PATCH /api/me/prefs`](#patch-apimepref) below for prefs writes; this
+endpoint accepts a `prefs` field for one release as a deprecation forward
+(routed to `/api/me/prefs` with a `tracing::warn`; next release returns
+`400 deprecated_field`).
 
 ### Request body
 
 ```jsonc
 {
   "display_name": "Emmanuel",            // optional — overwrites column
+  "first_name":   "Emmanuel",
+  "last_name":    "Doumouya",
   "job_title":    "Ops analyst",
   "organisation": "Acme",
   "use_case":     "weekly dossier exports",
-  "locale":       "fr",
-  "prefs":        { "accent": "#b3001b" } // optional — shallow-merged
+  "locale":       "fr"
 }
 ```
 
-Server side: `UPDATE users SET <col> = COALESCE($n, <col>), …, prefs =
-prefs || COALESCE($prefs, '{}'::jsonb), updated_at = now() WHERE
-redpash_id = $1 RETURNING …`.
+Server side: `UPDATE users SET <col> = COALESCE($n, <col>), …,
+updated_at = now() WHERE redpash_id = $1 RETURNING …`.
+
+---
+
+## `PATCH /api/me/prefs`
+
+Sparse upsert into [`user_preferences`](../db/schema.md#user_preferences)
+for the session user. Body shape: `{ prefs: { key: value, … } }` — only the
+keys present in the patch are written; unmentioned keys stay. JSONB values
+(scalars, arrays, booleans) land verbatim. Returns `204 No Content`.
+
+```jsonc
+PATCH /api/me/prefs
+{
+  "prefs": {
+    "theme":            "dark",
+    "learned_sentinels": ["n/a", "?", "to-confirm"]
+  }
+}
+```
+
+The Settings page sends only `{ prefs: { … } }`; the Profile page hits
+`PATCH /api/me` for the profile fields.
 
 ### Side-effect: sentinel learning loop
 

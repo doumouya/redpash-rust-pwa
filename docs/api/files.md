@@ -2,7 +2,7 @@
 title: Files
 section: API
 order: 6
-last modified date: 2026-05-21
+last modified date: 2026-05-29
 ---
 
 # `/api/files/*`
@@ -13,19 +13,24 @@ steps, undo / redo, snapshot, detect & apply joins.
 **Route module:** [`crates/api/src/routes/files/`](../../backend/crates/api/src/routes/files/) — `mod.rs` is the router wiring + upload + cleaner core; per-family handlers split across `joins.rs` / `stats.rs` / `output.rs` / `meta.rs` / `state_ops.rs` (decomposed 2026-05-27)
 **DTOs:** [`shared::file::*`](../objects/file.md)
 **Persistence:**
-- Bytes → `<REDPASH_DATA_DIR>/files/<rid>.bin` (immutable)
-- Metadata → `project_files` row
+- Bytes → `<REDPASH_DATA_DIR>/files/<rid>.bin` (immutable; csv-typed rows only — chart and dashboard files have no bytes)
+- Metadata → `project_files` row (`file_type IN ('csv','chart','dashboard')` — this resource handles `csv`; `chart` rows go through [`/api/charts`](charts.md), `dashboard` rows through [`/api/dashboards`](dashboards.md))
 - History → `project_steps` rows (append-only, `applied` toggled by undo / redo)
 - Hot frame → in-memory cache; cache miss replays applied steps on top of the freshly-parsed base
+- Entity-registry handshake → every `project_files` insert is preceded by `register_entity('file', rid)`; every delete routes through `delete_entity(rid)` so the FK cascade on `entities` takes out the file row + its `project_steps` + its `memberships` in a single transaction (post-mig 022)
 
 ---
 
 ## `GET /api/files`
 
-Every file the session user owns, across **all** their projects. Powers
-the home page's "My Files" step and the Objects-page Files tab when
-showing the user's full inventory. No pagination — file counts per user
-are bounded today; switch to keyset paging if that ever stops being true.
+Every **csv-typed** file the session user owns, across **all** their
+projects. Server-side filter: `project_files WHERE file_type = 'csv'`
+(chart and dashboard rows are excluded — they have their own list
+endpoints). Powers the home page's "My Files" step and the Objects-page
+Files tab when showing the user's full inventory. No pagination — file
+counts per user are bounded today; switch to keyset paging if that ever
+stops being true. Owner is resolved via the project's owner-membership
+LATERAL (same pattern as charts / dashboards).
 
 ```jsonc
 200 OK
@@ -170,9 +175,15 @@ Returns the updated `FileSummary`.
 ## `DELETE /api/files/:rid`
 
 Remove a file. Auth: session required + owner-match. The DB delete
-cascades to `project_steps` (history) and `reports` built from this
-file; the hot-frame cache entry is evicted first and the on-disk blob
-is removed best-effort afterwards.
+routes through `delete_entity` (`DELETE FROM entities WHERE id = $1`);
+the FK cascade takes out the `project_files` row, its `project_steps`
+(history), its `memberships`, and any chart-typed file whose
+`source_file_id` was this row (`project_files.source_file_id` is
+`ON DELETE CASCADE`). The hot-frame cache entry is evicted first and the
+on-disk blob is removed best-effort afterwards. Dashboards aren't
+data-cascaded — their widgets point at chart rids, so a dashboard whose
+referenced charts vanish degrades to "missing chart" placeholders rather
+than disappearing.
 
 ```
 204 No Content

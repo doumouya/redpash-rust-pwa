@@ -2,7 +2,7 @@
 title: Users
 section: API
 order: 9
-last modified date: 2026-05-16
+last modified date: 2026-05-29
 ---
 
 # `/api/users/*`
@@ -24,9 +24,10 @@ the **Users** browse tab — and, in dev, full CRUD against any user.
 ## `GET /api/users`
 
 Every user, sorted by `display_name`. Each row carries the user's
-`company_memberships` (a separate query attached per-user) so the
-Objects-page Users tab can display a member's companies + roles
-without a second roundtrip.
+company memberships (a separate query against the unified `memberships`
+table, INNER JOINed to `companies` so only company-typed objects come
+back) so the Objects-page Users tab can display a member's companies +
+roles without a second roundtrip.
 
 ```jsonc
 200 OK
@@ -120,8 +121,16 @@ Returns the updated `UserProfile`.
 
 ## `DELETE /api/users/:rid`
 
-Cascades sessions, `company_memberships`, and the user's owned
-projects (via `users.redpash_id` FKs).
+Hard-deletes the `users` row. FK cascades take out the user's `sessions`,
+their `memberships` (the user-side `memberships.user_redpash_id → users
+ON DELETE CASCADE`), their `user_preferences`, and `sentinel_submissions`.
+**Owned projects/companies are *not* cascade-deleted** — `projects.owner_id`
+was dropped in mig 024, so ownership lives in `memberships` and removing the
+owner-membership just leaves the object ownerless (admin reassigns; see the
+**Scrub-Retain-Notify** policy in the [schema permissions model](../db/schema.md#permissions-model)).
+Soft-delete via tombstoning (`users.is_deleted=true` + PII scrub) is the
+intended replacement; this hard-delete is dev-permissive and will be wired
+to the scrub flow when it lands.
 
 ```jsonc
 200 OK
@@ -137,7 +146,8 @@ projects (via `users.redpash_id` FKs).
 ## Related
 
 - [me.md](me.md) — the session user's own profile + `resolve_user_rid`.
-- [companies.md](companies.md) — `company_memberships` and the role
-  model (the `memberships` array on each user comes from there).
+- [companies.md](companies.md) — the unified `memberships` table and the
+  role model (the `memberships` array on each user is the company-typed
+  slice of it).
 - [Objects page](../frontend/redpash-components-pages/objects-page/index.md)
   — the Users tab + addAction + inline edit wiring.

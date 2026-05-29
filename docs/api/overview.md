@@ -2,7 +2,7 @@
 title: API overview
 section: API
 order: 0
-last modified date: 2026-05-16
+last modified date: 2026-05-29
 ---
 
 # API overview
@@ -20,18 +20,23 @@ request/response detail.
 
 ## Resources
 
-| Page                       | Route prefix             | What's there |
-|----------------------------|--------------------------|--------------|
-| [Health](health.md)        | `/api/health`            | Liveness probe. |
-| [Me](me.md)                | `/api/me`                | Session user profile + `resolve_user_rid` resolver spec. |
-| [Auth](auth.md)            | `/api/auth/*`            | Google OAuth code flow + logout. |
-| [Projects](projects.md)    | `/api/projects`          | Workspace list + project-scoped file list. |
-| [Companies](companies.md)  | `/api/companies/*`       | Company CRUD + membership management (the multi-tenancy layer). |
-| [Files](files.md)          | `/api/files/*`           | Upload, paged rows, cleaning steps, undo/redo, joins, snapshots. |
-| [Reports](reports.md)      | `/api/reports/*`         | CRUD + live preview / run; the polymorphic source resolver. |
-| [Dashboards](dashboards.md)| `/api/dashboards/*`      | Dashboard CRUD; widgets fetch data through `/api/reports`. |
-| [Users](users.md)          | `/api/users/*`           | User directory + dev-permissive CRUD (powers Objects' Users tab + owner-reassign picker). |
-| Docs (no per-page doc)     | `/api/docs/*`            | Public — serves the markdown tree under `docs/` as an index (`GET /api/docs`) + rendered HTML per slug (`GET /api/docs/:slug`). Drives the in-app docs viewer at `#/docs`. |
+| Page                         | Route prefix             | What's there |
+|------------------------------|--------------------------|--------------|
+| [Health](health.md)          | `/api/health`            | Liveness probe. |
+| [Me](me.md)                  | `/api/me`                | Session user profile + memberships + prefs + `resolve_user_rid` resolver spec. |
+| [Auth](auth.md)              | `/api/auth/*`            | Google OAuth code flow + logout + (dev) login-as. |
+| [Projects](projects.md)      | `/api/projects`          | Workspace list + project-scoped file list. Ownership is a `memberships` row now. |
+| [Companies](companies.md)    | `/api/companies/*`       | Company CRUD + member management (multi-tenancy layer; members live in the unified `memberships` table). |
+| [Files](files.md)            | `/api/files/*`           | Upload, paged rows, cleaning steps, undo/redo, joins, snapshots. |
+| [Charts](charts.md)          | `/api/charts/*`          | Saved-chart CRUD — chart-typed `project_files` rows (`CHT_…`). Replaces the retired Reports surface. |
+| [Dashboards](dashboards.md)  | `/api/dashboards/*`      | Dashboard CRUD; dashboards are now dashboard-typed `project_files` rows (`DSH_…` preserved). |
+| [Cases](cases.md)            | `/api/cases/*`           | Cases + comments (the Jira-flow workstream). Reporter + case-owner live in `memberships`. |
+| [Users](users.md)            | `/api/users/*`           | User directory + dev-permissive CRUD. |
+| [Events](events.md)          | `/api/events/*`          | Runtime observability log — BE 4xx/5xx + lifecycle, FE `POST /api/events`. |
+| [Monitoring](monitoring.md)  | `/api/monitoring/*`      | Requests / events / db_query_log / audit-runs / audit-findings / optimization / user-activity / case-categories — the Monitoring page surface. |
+| [Admin](admin.md)            | `/api/admin/*`           | Admin reads — paginated users/companies/memberships/steps lists with stats. |
+| [Reports](reports.md)        | *(retired)*              | The `reports` table was dropped in `drop_reports` (mig 016); reports are now derived views over csv-typed `FIL_…`. Saved charts moved to [Charts](charts.md). The page is kept for historical reference. |
+| Docs (no per-page doc)       | `/api/docs/*`            | Public — serves the markdown tree under `docs/` as an index (`GET /api/docs`) + rendered HTML per slug (`GET /api/docs/:slug`). Drives the in-app docs viewer at `#/docs`. |
 
 ---
 
@@ -60,7 +65,7 @@ on. The full set (from `api::error::AppError` + `From<DataError>`):
 | `oauth_disabled`    | 503  | `GOOGLE_OAUTH_*` env vars not all set, but an `/auth/google/*` route was called |
 | `oauth_denied` / `oauth_no_code` / `oauth_no_state` / `oauth_no_state_cookie` / `oauth_state_mismatch` / `oauth_token_rejected` | 400 | Various OAuth callback failures |
 | `oauth_token_request` / `oauth_token_decode` / `oauth_userinfo_*` | 500 | Network/decode failures against Google |
-| `missing_source`    | 400  | `/reports/preview` with neither `source_file_id` nor `source_report_id` |
+| `missing_source`    | 400  | Chart preview with no `source_file_id` (legacy — was also raised by `/reports/preview`, which retired with mig 016) |
 | `missing_file` / `multipart` / `too_large` | 400 | Upload validation |
 | `db`                | 500  | Postgres error |
 | `io`                | 500  | Disk read/write error |
@@ -73,10 +78,10 @@ on. The full set (from `api::error::AppError` + `From<DataError>`):
 |---------------------------|------------|
 | `/api/health`             | Public. |
 | `/api/auth/*`             | Public (mints the session). |
-| `/api/me`                 | Session cookie → user; OAuth-disabled → bootstrap `dev_user`; OAuth-enabled + no session → 401. `PATCH /api/me` updates the session user only. |
-| `/api/projects`, `/api/reports`, `/api/dashboards` (list) + `/api/files/upload` | Same resolver as `/api/me`. |
-| Everything else (`/api/{projects,reports,dashboards,files}/:rid/*`) | Resolves the user via `resolve_user_rid` **and** calls `routes::ensure_owner` against the matching `db::*_owner(rid)` lookup. 404 with `kind="not_found"` on miss *or* owner mismatch — same message either way so existence isn't leaked. |
-| Cross-resource handlers (`/reports` create + update, `/reports/preview`, `/files/:rid/joins` POST, `/dashboards` create) | Gate on the ownership of **every** referenced RID, not just the path. |
+| `/api/me`                 | Session cookie → user; OAuth-disabled → bootstrap `dev_user`; OAuth-enabled + no session → 401. `PATCH /api/me` / `PATCH /api/me/prefs` update the session user only. |
+| `/api/projects`, `/api/charts`, `/api/dashboards`, `/api/cases` (list) + `/api/files/upload` | Same resolver as `/api/me`. |
+| Everything else (`/api/{projects,charts,dashboards,files,cases}/:rid/*`) | Resolves the user via `resolve_user_rid` **and** calls `routes::ensure_owner` against the matching `db::*_owner(rid)` lookup. Owner resolution reads from `memberships WHERE role='owner'` (post-mig 024) — there's no `owner_id` column anymore. 404 with `kind="not_found"` on miss *or* owner mismatch — same message either way so existence isn't leaked. |
+| Cross-resource handlers (`/charts` create + update, `/files/:rid/joins` POST, `/dashboards` create) | Gate on the ownership of **every** referenced RID, not just the path. |
 
 ### Cookies
 
@@ -105,9 +110,11 @@ The redtable page endpoint follows `shared::Page<T>`:
 }
 ```
 
-List endpoints (`/api/projects`, `/api/reports`, `/api/dashboards`)
-return `{ "items": [...] }` without paging — user-owned counts are
-bounded.
+List endpoints (`/api/projects`, `/api/charts`, `/api/dashboards`,
+`/api/companies/:rid/members`) return `{ "items": [...] }` without paging —
+user-owned counts are bounded. Paginated endpoints (`/api/cases`,
+`/api/admin/*`, `/api/monitoring/*`, the redtable page endpoint) use the
+`Page<T>` envelope.
 
 ### Body & rate limits
 

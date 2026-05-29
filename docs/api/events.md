@@ -2,7 +2,7 @@
 title: Events
 section: API
 order: 10
-last modified date: 2026-05-21
+last modified date: 2026-05-29
 ---
 
 # `/api/events`
@@ -175,10 +175,10 @@ once RBAC lands.
 ## Retention
 
 `events` is append-only and grows unbounded. A retention prune (delete
-rows past a cutoff) is planned; the period is not yet set. When the
-`cases` table lands (user support tickets — the reserved `CAS` prefix),
-events pinned to a case will be exempt from the prune so an open case
-can't lose its troubleshooting evidence.
+rows past a cutoff) is planned; the period is not yet set. The `cases`
+table shipped in mig 015 (see [cases.md](cases.md)); events pinned to a
+case will be exempt from the prune so an open case can't lose its
+troubleshooting evidence.
 
 ---
 

@@ -2,17 +2,17 @@
 title: Companies
 section: API
 order: 5
-last modified date: 2026-05-16
+last modified date: 2026-05-29
 ---
 
 # `/api/companies/*`
 
 A company is the multi-tenancy boundary: a user belongs to zero or more
-companies via `company_memberships`, and a project is either
-company-scoped (`projects.company_id`) or personal. The membership
-table doubles as the access-control check — every handler resolves the
-caller's role and **404s** (not 403) when they aren't a member, so
-company existence is never leaked.
+companies via the **unified `memberships` table** (object = the company),
+and a project is either company-scoped (`projects.company_id`) or personal.
+Membership doubles as the access-control check — every handler resolves the
+caller's role and **404s** (not 403) when they aren't a member, so company
+existence is never leaked.
 
 > **Dev relaxation.** While the app is still in active development,
 > the membership gate on `PATCH` and `DELETE` is **off** ("we are
@@ -23,7 +23,7 @@ company existence is never leaked.
 
 **Route file:** [`crates/api/src/routes/companies.rs`](../../backend/crates/api/src/routes/companies.rs)
 **DTOs:** [`shared::company`](../../backend/crates/shared/src/company.rs) — `Company`, `CompanySummary`, `CompanyMember`
-**Migration:** 007 companies
+**Migrations:** 007 (companies + the legacy `company_memberships`) → **023 consolidated** company + project memberships into the polymorphic `memberships` table (PK `(object_redpash_id, user_redpash_id)`, FK → `entities.id ON DELETE CASCADE`).
 
 ---
 
@@ -50,7 +50,7 @@ demoted (transfer ownership first).
 
 All companies, sorted by `name`. Each carries the caller's role (when
 they're a member) and the total member count. The query LEFT JOINs
-`company_memberships ON company_id = companies.redpash_id AND user_id
+`memberships ON object_redpash_id = companies.redpash_id AND user_redpash_id
 = :me`, so non-members see the row with `my_role: null` rather than
 having it filtered out — same dev-relaxation rationale as above (the
 Objects-page Companies tab needs to show every company so it can be
@@ -126,9 +126,10 @@ Empty `name` is dropped server-side. Returns the updated `Company`.
 
 Delete a company. Owner-only is the target gate; currently
 dev-permissive — any signed-in user can delete via the Objects-page
-trash. `company_memberships` cascades; `projects.company_id` is
-`ON DELETE SET NULL`, so company projects survive as personal projects
-rather than being deleted.
+trash. The delete routes through `delete_entity` (`DELETE FROM entities
+WHERE id = $1`); the company row + its `memberships` cascade out of the
+registry, and `projects.company_id` is `ON DELETE SET NULL` so company
+projects survive as personal projects rather than being deleted.
 
 ```jsonc
 200 OK
@@ -206,15 +207,17 @@ The last `owner` can't be removed, and an `admin` can't remove an
 
 - [projects.md](projects.md) — `PATCH /api/projects/:rid` accepts a
   `company_id` to scope a project to a company the editor belongs to.
-- [db/schema.md](../db/schema.md) — `companies`, `company_memberships`,
-  `project_memberships` table definitions.
+- [db/schema.md](../db/schema.md) — `companies`, `entities`, the unified
+  `memberships` table definitions.
 
 ---
 
 ## Scope note
 
-Migration 007 lands the company **data model** and this `/api/companies`
-resource. Company-scoped *visibility* of projects / files / reports /
-dashboards — and any use of `project_memberships` in access checks —
-is a deliberate follow-up; today every owner-scoped endpoint still
-gates on `projects.owner_id` alone.
+Migration 007 landed the company **data model** and this `/api/companies`
+resource. Migrations 022 / 023 / 024 then consolidated the access substrate
+(entity registry + unified memberships + ownership-as-membership) so
+membership lookups are uniform across companies and projects. Company-scoped
+*visibility* of projects / files / charts / dashboards / cases is still a
+deliberate follow-up; the schema is uniform, the read-side gates just
+haven't been extended past the per-resource owner check yet.

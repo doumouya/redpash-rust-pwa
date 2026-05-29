@@ -2,14 +2,19 @@
 title: Dashboards
 section: API
 order: 8
-last modified date: 2026-05-16
+last modified date: 2026-05-29
 ---
 
 # `/api/dashboards/*`
 
-CRUD + favourite toggle. Dashboards persist a layout of widgets; the
-data fetch happens widget-by-widget in the browser via
-[`POST /api/reports/preview`](reports.md) (or `/run`).
+CRUD + favourite toggle. A dashboard is a **dashboard-typed `project_files`
+row** (`file_type='dashboard'`, RID prefix `DSH_…` preserved for continuity);
+the standalone `dashboards` table was retired with mig 016. The persisted
+spec is a layout of widgets; each widget points at a saved chart
+(`CHT_…` — see [charts.md](charts.md)) and the data fetch happens widget-
+by-widget in the browser via the chart's preview/run endpoint. There is no
+backend dashboard-data endpoint — the API stays out of the chart-rendering
+loop.
 
 **Route file:** [`crates/api/src/routes/dashboards.rs`](../../backend/crates/api/src/routes/dashboards.rs)
 **Object reference:** [objects/dashboard.md](../objects/dashboard.md)
@@ -19,15 +24,19 @@ data fetch happens widget-by-widget in the browser via
 
 ## `GET /api/dashboards`
 
-List the session user's dashboards. Same sort as reports:
-`folder ASC NULLS LAST, is_favorite DESC, updated_at DESC`.
+List the session user's dashboards. Sort: `folder ASC NULLS LAST,
+is_favorite DESC, updated_at DESC`. Server-side filter: `project_files
+WHERE file_type = 'dashboard'`.
 
 ```jsonc
 200 OK
 { "items": [ /* Dashboard[] */ ] }
 ```
 
-**Owner join.** Same LEFT JOIN treatment as reports — each row carries
+**Owner join.** Owner is resolved via the **owner-membership LATERAL**
+on the dashboard row's project (`memberships WHERE object_redpash_id =
+projects.redpash_id AND role = 'owner' ORDER BY joined_at LIMIT 1`,
+then `users JOIN`) — same shape as charts. Each row carries
 `owner_id` / `owner_display_name` / `owner_username` for the Objects-
 page **Owner** / **Username** columns. DTO fields are `Option<String>`
 with `#[sqlx(default)]` + `#[serde(default)]`.
@@ -92,11 +101,11 @@ Same body as `POST`. Returns the updated `Dashboard`.
 
 ## `PATCH /api/dashboards/:rid` — sparse metadata edit
 
-Same shape as reports — `PatchDashboardBody` with `title`,
+Same shape as charts — `PatchDashboardBody` with `title`,
 `description`, `is_favorite`, `folder`, all optional (`COALESCE`).
 Drives the Objects-page inline-edit columns and the star toggle;
 keeps the spec out of scope so the Objects page doesn't need to round-
-trip it.
+trip it. Owner mismatch returns `404 not_found` (same shape as miss).
 
 ```jsonc
 PATCH /api/dashboards/DSH_…
@@ -134,33 +143,37 @@ POST /api/dashboards/:rid/favorite
 
 ## How widgets get their data
 
-The widget spec doesn't carry rows — it carries a pointer:
+The widget spec doesn't carry rows — it carries a pointer to a saved
+chart:
 
 ```jsonc
 {
   "slot": "a",
   "kind": "chart",
   "spec": {
-    "report_id":      "RPT_…",
-    "chart_index":    0,
+    "chart_id":       "CHT_…",      // chart-typed project_files row
     "title_override": null
   }
 }
 ```
 
 At render time the frontend:
-1. Calls [`POST /api/reports/:report_id/run`](reports.md) (cached per
-   `(report_id)` for the dashboard view).
-2. Pulls the `ChartSpec` at `report.spec.charts[chart_index]`.
-3. Routes the resulting `ReportPage` through `chart-render.js` based on
-   the spec's `kind`.
+1. Calls [`POST /api/charts/:chart_id/run`](charts.md) (cached per
+   `chart_id` for the dashboard view).
+2. Routes the resulting `ChartPage` through `chart-render.js` based on
+   the chart's `spec.kind`.
 
-So a dashboard fetch fan-out is N report runs, not N widget-specific
+So a dashboard fetch fan-out is N chart runs, not N widget-specific
 endpoints. There's no `/api/dashboards/:rid/run` — the backend stays
 out of the chart-rendering loop.
 
 `text` widgets carry their markdown inline in `spec.markdown` and need
 no fetch.
+
+> **Legacy migration.** Widgets saved before mig 016 referenced
+> `report_id: "RPT_…"` + `chart_index`. The `report_chart_to_chart`
+> shim in [`spec.rs`](../../backend/crates/api/src/routes/dashboards.rs)
+> rewrites them to `chart_id` on read; the upgrade lands on next save.
 
 ---
 
@@ -184,4 +197,5 @@ no fetch.
 
 - [objects/dashboard.md](../objects/dashboard.md) — `Dashboard`, `DashboardSpec`, `Widget` DTOs.
 - [features/dashboards.md](../features/dashboards.md) — templates + slot model + chart-ref refactor.
-- [reports.md](reports.md) — where widgets actually get their data.
+- [charts.md](charts.md) — where widgets actually get their data.
+- [files.md](files.md) — dashboards share the `project_files` row lifecycle (delete cascades via `entities`).
