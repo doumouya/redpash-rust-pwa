@@ -22,10 +22,12 @@
 //!     `PROJECT_SELECT` (file_stages + dashboard-published overlay
 //!     + file_count via subqueries; one row → one ProjectSummary).
 
+mod entities;
 mod sessions;
 mod sentinels;
 mod users;
 mod projects;
+pub use entities::*;
 pub use sessions::*;
 pub use sentinels::*;
 pub use users::*;
@@ -1049,6 +1051,7 @@ pub async fn create_company(
     owner_rid: &str,
 ) -> sqlx::Result<Company> {
     let mut tx = pool.begin().await?;
+    register_entity(&mut *tx, rid, "company").await?;
     let row: CompanyRow = sqlx::query_as(&format!(
         "INSERT INTO companies (redpash_id, name, slug)
          VALUES ($1, $2, $3)
@@ -1098,14 +1101,11 @@ pub async fn update_company(
     Ok(row.map(Into::into))
 }
 
-/// Delete a company. `company_memberships` cascades; `projects.company_id`
+/// Delete a company via the entity registry — cascades to the `companies`
+/// row, then onward: `company_memberships` cascades, `projects.company_id`
 /// is `SET NULL` so company projects survive as personal projects.
 pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    let n = sqlx::query("DELETE FROM companies WHERE redpash_id = $1")
-        .bind(rid)
-        .execute(pool)
-        .await?;
-    Ok(n.rows_affected() > 0)
+    delete_entity(pool, rid).await
 }
 
 /// Delete a membership row (project or company scope). Composite PK is
@@ -1575,6 +1575,10 @@ pub async fn insert_case(
     error_message: Option<&str>,
     category_id:   Option<&str>,
 ) -> sqlx::Result<Case> {
+    // Register the entity first, then insert the case — both in one tx so
+    // the FK (cases.redpash_id -> entities.id) is satisfied atomically.
+    let mut tx = pool.begin().await?;
+    register_entity(&mut *tx, rid, "case").await?;
     let row: CaseRow = sqlx::query_as(&format!(
         "WITH c AS (
              INSERT INTO cases
@@ -1598,8 +1602,9 @@ pub async fn insert_case(
     .bind(company_id)
     .bind(error_message)
     .bind(category_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(row.into())
 }
 
@@ -1659,12 +1664,10 @@ pub async fn update_case(
     Ok(row.map(Into::into))
 }
 
+/// Delete a case via the entity registry — cascades to the `cases` row,
+/// then `comments` (and, from 1b, case memberships) cascade onward.
 pub async fn delete_case(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    let res = sqlx::query("DELETE FROM cases WHERE redpash_id = $1")
-        .bind(rid)
-        .execute(pool)
-        .await?;
-    Ok(res.rows_affected() > 0)
+    delete_entity(pool, rid).await
 }
 
 #[derive(FromRow)]

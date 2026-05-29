@@ -34,13 +34,18 @@ pub async fn find_default_project(pool: &PgPool, owner: &str) -> sqlx::Result<Op
 }
 
 pub async fn insert_project(pool: &PgPool, rid: &str, owner: &str, name: &str, is_default: bool) -> sqlx::Result<()> {
+    // Register the entity first, then insert the project — one tx so the
+    // FK (projects.redpash_id -> entities.id) is satisfied atomically.
+    let mut tx = pool.begin().await?;
+    super::register_entity(&mut *tx, rid, "project").await?;
     sqlx::query("INSERT INTO projects (redpash_id, owner_id, name, is_default) VALUES ($1, $2, $3, $4)")
         .bind(rid)
         .bind(owner)
         .bind(name)
         .bind(is_default)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -258,10 +263,19 @@ pub async fn project_file_rids(pool: &PgPool, project_rid: &str) -> sqlx::Result
 /// promote another project to default first. Cascades to files /
 /// steps / dashboards / memberships via FK.
 pub async fn delete_project(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    let res = sqlx::query("DELETE FROM projects WHERE redpash_id = $1 AND NOT is_default")
-        .bind(rid)
-        .execute(pool)
-        .await?;
+    // Delete via the entity registry so the entities row + every edge
+    // (files / steps / memberships) cascade in one shot. The `is_default`
+    // guard is preserved as an EXISTS predicate: a default project can't be
+    // deleted (the caller must promote another to default first), so
+    // `Ok(false)` still means "exists but is the default."
+    let res = sqlx::query(
+        "DELETE FROM entities
+         WHERE id = $1
+           AND EXISTS (SELECT 1 FROM projects WHERE redpash_id = $1 AND NOT is_default)",
+    )
+    .bind(rid)
+    .execute(pool)
+    .await?;
     Ok(res.rows_affected() > 0)
 }
 
@@ -289,6 +303,7 @@ pub async fn create_project(
         .execute(&mut *tx)
         .await?;
     }
+    super::register_entity(&mut *tx, rid, "project").await?;
     sqlx::query(
         "INSERT INTO projects (redpash_id, owner_id, name, description, company_id, is_default)
          VALUES ($1, $2, $3, $4, $5, $6)",
