@@ -2,7 +2,7 @@
 title: Object metadata spec — template
 section: Internal
 order: 40
-last modified date: 2026-05-28
+last modified date: 2026-05-29
 owner: Torv
 status: stable — all 13 objects landed (CAS_E2D56EC0CDAF44A39DEB4752D3F92351 closed). RBAC unblocked.
 ---
@@ -51,6 +51,7 @@ smaller than Salesforce's:
 | `delete` | `DELETE /api/.../:rid` | Hard delete (note CASCADE / SET NULL behavior) |
 | `list` | `GET /api/...?filters` | Paginated query with filters + sort |
 | `search` | `GET /api/...?q=...` | ILIKE substring on the search-flagged fields |
+| `describe` | `GET /api/.../describe` | Object + field metadata — this spec served at runtime |
 
 Note which verbs are **NOT supported** explicitly when an entity lacks
 some (e.g. "no `delete` — append-only audit log").
