@@ -15,11 +15,14 @@
      below flips it for the latte theme. */
   color-scheme: dark;
 
-  /* surface — a calm dark base */
-  --rp-bg:        #11111b;
-  --rp-surface:   #181825;
-  --rp-surface-2: #1e1e2e;
-  --rp-border:    #313244;
+  /* surface ladder (Catppuccin Mocha) — chrome sits on crust, content
+     lifts to base so the card reads clearly above the topbar+rail.
+     crust → base is a deliberate 2-rung gap; insets/border step up
+     one rung each to stay distinct from the content surface. */
+  --rp-bg:        #11111b;  /* crust   — topbar · rail · page gutter */
+  --rp-surface:   #1e1e2e;  /* base    — lifted content card          */
+  --rp-surface-2: #313244;  /* surface0 — inputs · hover insets · chips */
+  --rp-border:    #45475a;  /* surface1 — card + control borders       */
 
   /* text */
   --rp-text:      #cdd6f4;
@@ -85,10 +88,13 @@
 html[data-theme="light"] {
   color-scheme: light;
 
-  --rp-bg:        #eff1f5;
-  --rp-surface:   #ffffff;
-  --rp-surface-2: #e6e9ef;
-  --rp-border:    #ccd0da;
+  /* surface ladder (Catppuccin Latte) — chrome drops to mantle so the
+     white content card lifts off the topbar+rail; insets step down to
+     base, border holds at surface0. */
+  --rp-bg:        #e6e9ef;  /* mantle   — topbar · rail · page gutter */
+  --rp-surface:   #ffffff;  /* white    — lifted content card          */
+  --rp-surface-2: #eff1f5;  /* base     — inputs · hover insets · chips */
+  --rp-border:    #ccd0da;  /* surface0 — card + control borders       */
 
   --rp-text:      #4c4f69;
   --rp-text-dim:  #5c5f77;
