@@ -1,0 +1,130 @@
+/* modal.css — the shared overlay-modal atom (rp-modal-*).
+ *
+ * Cross-page consolidation (2026-05-29). Three byte-identical
+ * page-prefixed modal families — rp-cases-modal-*, rp-home-modal-*,
+ * rp-mon-modal-* — collapsed into one atom the css-audit's
+ * duplicateBlocks flagged as the single biggest cross-page dup
+ * (~64% of removable cross-page declarations).
+ *
+ * Layers:
+ *   - Shell (every modal): container / backdrop / body / head / title
+ *     / content. Body width is parameterized via `--rp-modal-w`
+ *     (default 35rem; Monitoring's request-detail modal sets 55rem on
+ *     its container).
+ *   - Form set (create-form modals — cases, home): fields / field /
+ *     label / input / textarea / hint / foot. Content modals (the
+ *     Monitoring request-detail view) skip these and keep their own
+ *     rp-mon-modal-* CONTENT classes (route / meta / timeline / …) in
+ *     monitoring.css — those are page-specific, not shell.
+ *
+ * The close button takes its shape + hover from `.rt-icon-btn`
+ * (button.css); `.rp-modal-close` is a binding hook only (handlers
+ * querySelector it), so it carries no rule.
+ */
+
+.rp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-modal[hidden] { display: none; }
+
+.rp-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 17, 27, 0.55);
+  backdrop-filter: blur(0.125rem);
+}
+
+.rp-modal-body {
+  position: relative;
+  width: min(var(--rp-modal-w, 35rem), 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.625rem;
+  box-shadow: 0 1.5rem 3.75rem rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.rp-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
+}
+
+.rp-modal-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+
+.rp-modal-content {
+  padding: 0.875rem 1rem 1.125rem;
+  overflow-y: auto;
+}
+
+/* Form-field list container — create modals stack their fields here.
+   Sits on the same element as `.rp-modal-content` (padding + scroll). */
+.rp-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+.rp-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+}
+.rp-modal-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rp-modal-input,
+.rp-modal-textarea {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  outline: 0;
+  resize: vertical;
+}
+.rp-modal-input:focus,
+.rp-modal-textarea:focus {
+  border-color: var(--rp-accent-2);
+}
+.rp-modal-textarea {
+  min-height: 6rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.rp-modal-hint {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+}
+.rp-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--rp-border);
+  background: var(--rp-surface-2);
+}

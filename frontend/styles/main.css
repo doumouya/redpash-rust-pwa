@@ -42,6 +42,7 @@
 @import "pager.css";     /* .rt-pager + .rt-rows-info + .rt-pages + .rt-pg */
 @import "card.css";      /* .rt-card — generic glass card primitive (sibling of .rt-panel) */
 @import "panel.css";     /* .rt-panel — workspace slide-out side panels */
+@import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
 @import "sw-update.css"; /* service-worker update banner */
 
 /* ── 3. page-specific sheets — ride on top of the atoms ─────────── */

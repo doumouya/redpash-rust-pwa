@@ -114,12 +114,10 @@
   color: var(--rp-accent-2);
 }
 
-/* Generic create-modal error line — reuses the .rp-cases-modal-hint
-   shape from cases.css for layout; this override paints the warn
-   color when the paragraph is showing an error from the POST. The
-   modal markup itself reuses .rp-cases-modal-* atoms — promoting
-   those to a shared modal.css is a follow-up clean per
-   [[feedback-naming-consistency]]. */
+/* Generic create-modal error line — the paragraph takes its layout
+   from the shared `.rp-modal-hint` atom (modal.css); this class only
+   overrides the color to warn when the paragraph is showing a POST
+   error. */
 .rp-home-create-error {
   color: var(--rp-warn);
 }
@@ -151,107 +149,8 @@
 }
 .rp-home-hidden-host .rt-hidden { margin-top: 0.25rem; }
 
-/* Generic create modal (#rpHomeCreateModal) — opened by LIST_VIEWS
-   tabs whose `kind:"modal"` create action renders a form from
-   spec.fields[]. Own `rp-home-modal-*` family (was borrowing
-   cases.js's rp-cases-modal-*; de-leaked 2026-05-29). The close
-   button's shape/hover comes from `.rt-icon-btn`, so there is no
-   `.rp-home-modal-close` rule — it's a binding hook only. A shared
-   `rp-modal-*` atom is the eventual cross-page consolidation. */
-.rp-home-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.rp-home-modal[hidden] { display: none; }
-.rp-home-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(17, 17, 27, 0.55);
-  backdrop-filter: blur(0.125rem);
-}
-.rp-home-modal-body {
-  position: relative;
-  width: min(35rem, 92vw);
-  max-height: 86vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.625rem;
-  box-shadow: 0 1.5rem 3.75rem rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-.rp-home-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--rp-border);
-  background: var(--rp-surface-2);
-}
-.rp-home-modal-title {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--rp-text);
-}
-.rp-home-modal-content {
-  padding: 0.875rem 1rem 1.125rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-.rp-home-modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3125rem;
-}
-.rp-home-modal-label {
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
-.rp-home-modal-input,
-.rp-home-modal-textarea {
-  width: 100%;
-  padding: 0.5rem 0.625rem;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.4375rem;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.8125rem;
-  outline: 0;
-  resize: vertical;
-}
-.rp-home-modal-input:focus,
-.rp-home-modal-textarea:focus {
-  border-color: var(--rp-accent-2);
-}
-.rp-home-modal-textarea {
-  min-height: 6rem;
-  font-family: inherit;
-  line-height: 1.5;
-}
-.rp-home-modal-hint {
-  margin: 0;
-  font-size: 0.6875rem;
-  color: var(--rp-text-mute);
-}
-.rp-home-modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--rp-border);
-  background: var(--rp-surface-2);
-}
+/* The generic create modal (#rpHomeCreateModal, opened by LIST_VIEWS
+   `kind:"modal"` tabs) renders through the shared rp-modal-* atom
+   (modal.css) — no Home-specific modal CSS. The field-list container
+   (#rpHomeCreateFields) carries `rp-modal-content rp-modal-fields`. */
 

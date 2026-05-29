@@ -440,18 +440,18 @@ export default function monitoring(app, { session }) {
     if (!modal) {
       modal = document.createElement("div");
       modal.id = "rp-mon-modal";
-      modal.className = "rp-mon-modal";
+      modal.className = "rp-modal";
       document.body.appendChild(modal);
     }
     modal.innerHTML = ''
-      + '<div class="rp-mon-modal-backdrop"></div>'
-      + '<div class="rp-mon-modal-body" role="dialog" aria-modal="true" aria-labelledby="rp-mon-modal-title">'
-      +   '<header class="rp-mon-modal-head">'
-      +     '<h3 id="rp-mon-modal-title" class="rp-mon-modal-title">Request <code>' + esc(requestId) + '</code></h3>'
-      +     '<button type="button" class="rt-icon-btn rp-mon-modal-close" aria-label="Close">' +
+      + '<div class="rp-modal-backdrop"></div>'
+      + '<div class="rp-modal-body" role="dialog" aria-modal="true" aria-labelledby="rp-mon-modal-title">'
+      +   '<header class="rp-modal-head">'
+      +     '<h3 id="rp-mon-modal-title" class="rp-modal-title">Request <code class="rp-mon-modal-id">' + esc(requestId) + '</code></h3>'
+      +     '<button type="button" class="rt-icon-btn rp-modal-close" aria-label="Close">' +
                 '<i class="bi bi-x-lg"></i></button>'
       +   '</header>'
-      +   '<div class="rp-mon-modal-content" id="rp-mon-modal-content">'
+      +   '<div class="rp-modal-content" id="rp-mon-modal-content">'
       +     '<p class="rp-mon-modal-loading">Loading…</p>'
       +   '</div>'
       + '</div>';
@@ -466,11 +466,11 @@ export default function monitoring(app, { session }) {
     };
     const onKey = (e) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", onKey);
-    modal.querySelector(".rp-mon-modal-backdrop").addEventListener("click", close);
-    modal.querySelector(".rp-mon-modal-close").addEventListener("click", close);
+    modal.querySelector(".rp-modal-backdrop").addEventListener("click", close);
+    modal.querySelector(".rp-modal-close").addEventListener("click", close);
 
     // Event-row expander inside the modal — same pattern as M-3 + M-4.
-    modal.querySelector(".rp-mon-modal-body").addEventListener("click", (e) => {
+    modal.querySelector(".rp-modal-body").addEventListener("click", (e) => {
       const row = e.target.closest("tr.rp-mon-row-expandable");
       if (!row) return;
       const expansion = row.nextElementSibling;

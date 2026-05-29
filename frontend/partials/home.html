@@ -49,21 +49,21 @@
        Fields render from spec.fields[] into #rpHomeCreateFields.
        Lives outside .rp-shell-body (matching cases.html's modal
        placement) so the overlay covers the full shell. -->
-  <div class="rp-home-modal" id="rpHomeCreateModal" hidden
+  <div class="rp-modal" id="rpHomeCreateModal" hidden
        role="dialog" aria-modal="true" aria-labelledby="rpHomeCreateTitle">
-    <div class="rp-home-modal-backdrop" data-modal-dismiss="1"></div>
-    <div class="rp-home-modal-body">
-      <header class="rp-home-modal-head">
-        <h2 class="rp-home-modal-title" id="rpHomeCreateTitle">New</h2>
-        <button class="rt-icon-btn rp-home-modal-close" type="button"
+    <div class="rp-modal-backdrop" data-modal-dismiss="1"></div>
+    <div class="rp-modal-body">
+      <header class="rp-modal-head">
+        <h2 class="rp-modal-title" id="rpHomeCreateTitle">New</h2>
+        <button class="rt-icon-btn rp-modal-close" type="button"
                 data-modal-dismiss="1" title="Close">
           <i class="bi bi-x-lg"></i>
         </button>
       </header>
       <form id="rpHomeCreateForm">
-        <div class="rp-home-modal-content" id="rpHomeCreateFields"></div>
-        <p class="rp-home-modal-hint rp-home-create-error" id="rpHomeCreateError" hidden></p>
-        <footer class="rp-home-modal-foot">
+        <div class="rp-modal-content rp-modal-fields" id="rpHomeCreateFields"></div>
+        <p class="rp-modal-hint rp-home-create-error" id="rpHomeCreateError" hidden></p>
+        <footer class="rp-modal-foot">
           <button class="rt-btn rt-btn--glass" type="button"
                   data-modal-dismiss="1">Cancel</button>
           <button class="rt-btn rt-btn--accent" type="submit" id="rpHomeCreateSubmit">
