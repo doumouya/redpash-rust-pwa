@@ -35,17 +35,6 @@ struct MeResponse {
     /// Canonical (trim + lowercase) sentinels currently promoted to
     /// the shared vocabulary. Sorted ascending for stable diffs.
     global_sentinels:  Vec<String>,
-    /// The caller's resolved RBAC grant set — `key → widest scope`
-    /// (`own`/`project`/`company`/`all`) or `"yes"` for a held scopeless
-    /// action (`create`). Computed from the catalog matrices
-    /// (`docs/internal/specs/rbac/`) by [`crate::rbac::resolve`].
-    ///
-    /// SPEC ONLY — nothing gates on this yet (the app is dev-permissive);
-    /// the FE reads it for element-gating. Grants come from the caller's
-    /// company memberships + `@own`; the platform tier is `None` today
-    /// (no `users.role` column), and Case is the only object encoded in
-    /// this first slice.
-    permissions:       std::collections::BTreeMap<String, String>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -69,13 +58,7 @@ async fn get_me(
     user.memberships = db::list_memberships_for_user(&state.db, &user_rid)
         .await?;
     let global_sentinels = db::list_global_sentinels(&state.db).await?;
-    // Resolve the caller's RBAC grant set from the catalog matrices.
-    // Platform role is None today (no `users.role` column); grants come
-    // from company-membership roles + @own. SPEC only — see rbac.rs.
-    let company_roles: Vec<&str> =
-        user.memberships.iter().map(|m| m.role.as_str()).collect();
-    let permissions = crate::rbac::resolve(None, &company_roles);
-    Ok(Json(MeResponse { user, global_sentinels, permissions }))
+    Ok(Json(MeResponse { user, global_sentinels }))
 }
 
 /// `PATCH /api/me` — sparse profile update. Every field is optional.
