@@ -1044,7 +1044,7 @@ export default function monitoring(app, { session }) {
     company_member_remove:     { cat: "Member", icon: "person-dash",  label: "Member removed" },
     company_member_leave:      { cat: "Member", icon: "box-arrow-left", label: "Member left" },
     company_member_role_change:{ cat: "Member", icon: "person-gear",  label: "Role changed" },
-    pref_change:          { cat: "Pref",    icon: "sliders",         label: "Preference changed" },
+    me_prefs_update:      { cat: "Pref",    icon: "sliders",         label: "Preferences updated" },
   };
   // Prefix → category for unmapped kinds (graceful fallback).
   function activityKindMeta(kind) {
@@ -1056,7 +1056,7 @@ export default function monitoring(app, { session }) {
               : k.startsWith("step_")         ? "Step"
               : k.startsWith("file_")         ? "File"
               : k.includes("_member_")        ? "Member"
-              : k.startsWith("pref")          ? "Pref"
+              : k.includes("pref")            ? "Pref"
               : "Event";
     const label = k.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
     return { cat, icon: "dot", label };
