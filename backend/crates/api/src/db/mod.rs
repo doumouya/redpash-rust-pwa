@@ -1435,7 +1435,8 @@ impl From<CaseRow> for Case {
 /// NULL).
 const CASE_SELECT: &str =
     "c.redpash_id, c.type, c.title, c.description, c.status, c.priority,
-     c.reporter_id, c.assignee_id, c.project_id, c.company_id,
+     rep.user_redpash_id AS reporter_id, own.user_redpash_id AS assignee_id,
+     c.project_id, c.company_id,
      r.display_name AS reporter_display_name,
      a.display_name AS assignee_display_name,
      c.error_message,
@@ -1445,14 +1446,21 @@ const CASE_SELECT: &str =
      catp.name          AS category_parent_name,
      c.created_at, c.updated_at";
 
-/// LEFT JOINs for reporter + assignee user lookups + the two-level
-/// category hydration (`cat` is the case's tagged category; `catp`
-/// is the parent of that category, NULL when the case is tagged at
-/// the root). Append after a `FROM cases c` clause; partners with
-/// CASE_SELECT.
+/// Reporter + case-owner resolve through memberships now (relationship_attribute
+/// 'Reporter' / 'Case Owner') — the case's people are membership rows, like a
+/// project's owner. `rep`/`own` LATERALs pick the relation, then join `users`
+/// for the display name. Plus the two-level category hydration (`cat` is the
+/// case's tagged category; `catp` its parent, NULL at root). Append after a
+/// `FROM cases c` clause; partners with CASE_SELECT.
 const CASE_USER_JOINS: &str =
-    "LEFT JOIN users r            ON r.redpash_id    = c.reporter_id
-     LEFT JOIN users a            ON a.redpash_id    = c.assignee_id
+    "LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
+                        WHERE m.object_redpash_id = c.redpash_id
+                          AND m.relationship_attribute = 'Reporter' LIMIT 1) rep ON true
+     LEFT JOIN users r            ON r.redpash_id    = rep.user_redpash_id
+     LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
+                        WHERE m.object_redpash_id = c.redpash_id
+                          AND m.relationship_attribute = 'Case Owner' LIMIT 1) own ON true
+     LEFT JOIN users a            ON a.redpash_id    = own.user_redpash_id
      LEFT JOIN case_categories cat ON cat.redpash_id = c.category_id
      LEFT JOIN case_categories catp ON catp.redpash_id = cat.parent_id";
 
@@ -1491,17 +1499,26 @@ pub async fn list_cases(
         "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
          WHERE ($1::text IS NULL OR c.status      = $1)
            AND ($2::text IS NULL
-                OR ($2 = '__unassigned__' AND c.assignee_id IS NULL)
-                OR c.assignee_id = $2)
+                OR ($2 = '__unassigned__' AND NOT EXISTS (SELECT 1 FROM memberships co
+                        WHERE co.object_redpash_id = c.redpash_id
+                          AND co.relationship_attribute = 'Case Owner'))
+                OR EXISTS (SELECT 1 FROM memberships co
+                        WHERE co.object_redpash_id = c.redpash_id
+                          AND co.user_redpash_id = $2
+                          AND co.relationship_attribute = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships cm
-                                                    WHERE cm.user_redpash_id = c.reporter_id
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.relationship_attribute = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
-                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships cm
-                                                    WHERE cm.user_redpash_id = c.reporter_id
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.relationship_attribute = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))
          ORDER BY {sort_col} {sort_dir} NULLS LAST
          LIMIT $7 OFFSET $8"
@@ -1533,17 +1550,26 @@ pub async fn count_cases(
         "SELECT COUNT(*)::BIGINT FROM cases c
          WHERE ($1::text IS NULL OR c.status      = $1)
            AND ($2::text IS NULL
-                OR ($2 = '__unassigned__' AND c.assignee_id IS NULL)
-                OR c.assignee_id = $2)
+                OR ($2 = '__unassigned__' AND NOT EXISTS (SELECT 1 FROM memberships co
+                        WHERE co.object_redpash_id = c.redpash_id
+                          AND co.relationship_attribute = 'Case Owner'))
+                OR EXISTS (SELECT 1 FROM memberships co
+                        WHERE co.object_redpash_id = c.redpash_id
+                          AND co.user_redpash_id = $2
+                          AND co.relationship_attribute = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships cm
-                                                    WHERE cm.user_redpash_id = c.reporter_id
+                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.relationship_attribute = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
-                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships cm
-                                                    WHERE cm.user_redpash_id = c.reporter_id
+                OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.relationship_attribute = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))",
     )
     .bind(status)
@@ -1586,37 +1612,69 @@ pub async fn insert_case(
     error_message: Option<&str>,
     category_id:   Option<&str>,
 ) -> sqlx::Result<Case> {
-    // Register the entity first, then insert the case — both in one tx so
-    // the FK (cases.redpash_id -> entities.id) is satisfied atomically.
+    // One tx: register the entity, insert the case, then seat reporter +
+    // case-owner as memberships (the people live there now). We can't use the
+    // old INSERT…RETURNING + CASE_SELECT CTE because the memberships don't
+    // exist yet at SELECT time, so we re-select via find_case after commit.
     let mut tx = pool.begin().await?;
     register_entity(&mut *tx, rid, "case").await?;
-    let row: CaseRow = sqlx::query_as(&format!(
-        "WITH c AS (
-             INSERT INTO cases
-                 (redpash_id, type, title, description, status, priority,
-                  reporter_id, assignee_id, project_id, company_id,
-                  error_message, category_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             RETURNING *
-         )
-         SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
-    ))
+    sqlx::query(
+        "INSERT INTO cases
+             (redpash_id, type, title, description, status, priority,
+              project_id, company_id, error_message, category_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+    )
     .bind(rid)
     .bind(type_)
     .bind(title)
     .bind(description)
     .bind(status)
     .bind(priority)
-    .bind(reporter_id)
-    .bind(assignee_id)
     .bind(project_id)
     .bind(company_id)
     .bind(error_message)
     .bind(category_id)
-    .fetch_one(&mut *tx)
+    .execute(&mut *tx)
     .await?;
+    set_case_person(&mut tx, rid, "Case Owner", assignee_id).await?;
+    set_case_person(&mut tx, rid, "Reporter", reporter_id).await?;
     tx.commit().await?;
-    Ok(row.into())
+    find_case(pool, rid).await.map(|opt| opt.expect("just inserted"))
+}
+
+/// Set (or clear) the single user holding a given case relationship
+/// ('Reporter' / 'Case Owner') — a membership on the case. `None` clears it
+/// (departure / unassign). Idempotent: replaces any existing holder of that
+/// relation. Runs inside the caller's transaction.
+async fn set_case_person(
+    tx:       &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    case_rid: &str,
+    relation: &str,
+    user:     Option<&str>,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "DELETE FROM memberships
+          WHERE object_redpash_id = $1 AND relationship_attribute = $2",
+    )
+    .bind(case_rid)
+    .bind(relation)
+    .execute(&mut **tx)
+    .await?;
+    if let Some(u) = user {
+        sqlx::query(
+            "INSERT INTO memberships
+                 (object_redpash_id, user_redpash_id, role, relationship_attribute)
+             VALUES ($1, $2, 'member', $3)
+             ON CONFLICT (object_redpash_id, user_redpash_id)
+             DO UPDATE SET relationship_attribute = EXCLUDED.relationship_attribute",
+        )
+        .bind(case_rid)
+        .bind(u)
+        .bind(relation)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Sparse update — `None` leaves the column untouched via COALESCE.
@@ -1636,43 +1694,46 @@ pub async fn update_case(
     error_message: Option<&str>,
     category_id:   Option<&str>,
 ) -> sqlx::Result<Option<Case>> {
-    // For nullable FKs we use the sentinel pattern: pass `Some("")`
-    // to set NULL, omit to skip. Today the handler always passes
-    // Option<&str> with None=skip / Some(value)=set; clearing isn't
-    // wired in v1 (defer until the UI needs an unassign button).
-    let row: Option<CaseRow> = sqlx::query_as(&format!(
-        "WITH c AS (
-             UPDATE cases SET
-                 title         = COALESCE($2,  title),
-                 description   = COALESCE($3,  description),
-                 type          = COALESCE($4,  type),
-                 status        = COALESCE($5,  status),
-                 priority      = COALESCE($6,  priority),
-                 assignee_id   = COALESCE($7,  assignee_id),
-                 project_id    = COALESCE($8,  project_id),
-                 company_id    = COALESCE($9,  company_id),
-                 error_message = COALESCE($10, error_message),
-                 category_id   = COALESCE($11, category_id),
-                 updated_at    = now()
-             WHERE redpash_id = $1
-             RETURNING *
-         )
-         SELECT {CASE_SELECT} FROM c {CASE_USER_JOINS}"
-    ))
+    // Case-owner reassignment writes through to a membership
+    // (set_case_person); the rest is a sparse COALESCE update. None = skip
+    // (clearing the case-owner isn't wired in v1). The membership write means
+    // we re-select via find_case rather than RETURNING through CASE_SELECT.
+    let mut tx = pool.begin().await?;
+    let res = sqlx::query(
+        "UPDATE cases SET
+             title         = COALESCE($2, title),
+             description   = COALESCE($3, description),
+             type          = COALESCE($4, type),
+             status        = COALESCE($5, status),
+             priority      = COALESCE($6, priority),
+             project_id    = COALESCE($7, project_id),
+             company_id    = COALESCE($8, company_id),
+             error_message = COALESCE($9, error_message),
+             category_id   = COALESCE($10, category_id),
+             updated_at    = now()
+         WHERE redpash_id = $1",
+    )
     .bind(rid)
     .bind(title)
     .bind(description)
     .bind(type_)
     .bind(status)
     .bind(priority)
-    .bind(assignee_id)
     .bind(project_id)
     .bind(company_id)
     .bind(error_message)
     .bind(category_id)
-    .fetch_optional(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(row.map(Into::into))
+    if res.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    if assignee_id.is_some() {
+        set_case_person(&mut tx, rid, "Case Owner", assignee_id).await?;
+    }
+    tx.commit().await?;
+    find_case(pool, rid).await
 }
 
 /// Delete a case via the entity registry — cascades to the `cases` row,
