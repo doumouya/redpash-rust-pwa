@@ -729,7 +729,7 @@
   font: inherit;
   font-size: 0.75rem;
   line-height: 1.45;
-  resize: vertical;
+  resize: none;
   outline: 0;
 }
 .rp-cases-side-desc-input:focus { border-color: var(--rp-accent-2); }
@@ -940,7 +940,7 @@
   font: inherit;
   font-size: 0.7812rem;
   line-height: 1.45;
-  resize: vertical;
+  resize: none;
   outline: 0;
 }
 .rp-cases-comment-edit-actions {

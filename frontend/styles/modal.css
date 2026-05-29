@@ -104,7 +104,7 @@
   font: inherit;
   font-size: 0.8125rem;
   outline: 0;
-  resize: vertical;
+  resize: none;
 }
 .rp-modal-input:focus,
 .rp-modal-textarea:focus {
