@@ -2,7 +2,7 @@
 title: RedPash-ID system
 section: DB
 order: 1
-last modified date: 2026-05-21
+last modified date: 2026-05-29
 ---
 
 # RedPash-ID system
@@ -68,13 +68,23 @@ PK column is `TEXT`.
 | `USR` | User | `users` | `bootstrap.rs::run` + `db::upsert_google_user` |
 | `SES` | Session | `sessions` | `db::create_session` |
 | `PRJ` | Project | `projects` | `db::ensure_default_project` + `db::insert_project` |
-| `FIL` | Project file | `project_files` | `routes::files::upload` |
+| `FIL` | Project file (csv) | `project_files` (`file_type='csv'`) | `routes::files::upload` |
+| `CHT` | Chart | `project_files` (`file_type='chart'`) | `routes::charts::create` |
 | `STP` | Project step | `project_steps` | `routes::files::add_step` (via the steps insert) |
-| `RPT` | Report | `reports` | `routes::reports::create` |
-| `DSH` | Dashboard | `dashboards` | `routes::dashboards::create` |
 | `CMP` | Company | `companies` | `db::create_company` |
+| `CAS` | Case | `cases` | `routes::cases::create` |
+| `CMT` | Comment | `comments` | `routes::cases::post_comment` |
 | `EVT` | Event | `events` | `event::record` |
-| `CAS` | Case | `cases` *(reserved — no table yet)* | — |
+| `RPT` | Report — **retired** (mig 016: a Report is now a derived view over a csv-typed `FIL_`; the `reports` table was dropped) | — | — |
+| `DSH` | Dashboard — **rid preserved** through `fold_dashboards` (mig 017) on dashboard-typed `project_files` rows; no new `DSH_…` allocated. | `project_files` (`file_type='dashboard'`) | — |
+
+**The `entities` supertype (mig 022)** — every entity rid above is *also*
+recorded in the `entities` table (`id PK, type CHECK(company/project/case),
+created_at`) at creation, and the matching subtype table's `redpash_id` FKs
+into `entities.id` `ON DELETE CASCADE`. Polymorphic relations (the unified
+`memberships` join, future edges) FK to `entities.id` for strict DB-level
+cascade. `entities` has no prefix of its own — it holds the subtype rid as
+its PK. See [`schema.md → entities`](schema.md#entities).
 
 ## 4. Why a UUID and not Crockford base32?
 
@@ -139,3 +149,12 @@ This means:
 - The RID never changes after insert (no `UPDATE redpash_id` anywhere).
 - `db::insert_*` helpers usually generate the RID themselves
   (`crate::id::new("PFX")`) so callers don't have to.
+
+**Entity-registry handshake (mig 022)** — for the registered subtypes
+(`CMP_…`, `PRJ_…`, `CAS_…`), the create path runs the entity insert *first*
+inside the same transaction as the subtype insert, via the shared
+`db::register_entity(tx, rid, type)` helper. The subtype's `redpash_id → entities.id`
+FK requires the registry row to exist already, so the helper enforces FK
+ordering. Deleting goes the other way — `delete_entity` runs `DELETE FROM
+entities WHERE id = $1` and the subtype row + every edge that FKs into the
+registry cascade out in one statement.

@@ -2,7 +2,7 @@
 title: Database schema
 section: DB
 order: 0
-last modified date: 2026-05-25
+last modified date: 2026-05-29
 ---
 
 # Database schema
@@ -29,16 +29,26 @@ table.
 | `SES`  | Session (`sessions`)                  | `db::create_session` |
 | `PRJ`  | Project (`projects`)                  | `db::insert_project`, `db::ensure_default_project` |
 | `FIL`  | Project file (`project_files`)        | `routes::files::upload`, `routes::files::create_join`, `routes::files::snapshot` |
+| `CHT`  | Chart — chart-typed `project_files` row | `routes::charts::create` |
 | `STP`  | Project step (`project_steps`)        | `routes::files::add_step` |
-| `RPT`  | Report (`reports`)                    | `routes::reports::create` |
-| `DSH`  | Dashboard (`dashboards`)              | `routes::dashboards::create` |
 | `CMP`  | Company (`companies`)                 | `db::create_company` |
+| `CAS`  | Case (`cases`)                        | `routes::cases::create` |
+| `CMT`  | Comment (`comments`)                  | `routes::cases::post_comment` |
 | `EVT`  | Event (`events`)                      | `event::record` (via `id::new`) |
-| `CAS`  | Case — **reserved**, no table yet     | — |
+| `RPT`  | Report — **retired** (mig 016); a Report is now a derived view over a csv-typed `FIL_`. | — |
+| `DSH`  | Dashboard — preserved on dashboard-typed `project_files` rows after mig 017. | (rids kept through `fold_dashboards`) |
 
-The membership join tables (`company_memberships`, `project_memberships`)
-carry no RedPash-ID — they use a composite PK `(parent, user)` and are
-never addressed in a URL.
+Every entity rid above is **also recorded in `entities`** (mig 022) — the
+polymorphic supertype that every domain table's `redpash_id` FKs into with
+`ON DELETE CASCADE`, and that polymorphic relations (`memberships`,
+future edges) point at instead of into N parallel tables. `entities` itself
+has no prefix — it just holds the subtype rid + the discriminator. See the
+`entities` section below.
+
+The unified `memberships` join table (mig 023) carries no RedPash-ID — it
+uses a composite PK `(object_redpash_id, user_redpash_id)` and is never
+addressed in a URL. It replaces the parallel `company_memberships` +
+`project_memberships` tables that mig 007 introduced.
 
 ---
 
@@ -75,6 +85,12 @@ never addressed in a URL.
 | `20260610000001_cases.sql`                 | `cases` + `comments` tables — Jira-flow workstream v1. CAS_ + CMT_ rids. Status flow (`backlog`/`todo`/`in_progress`/`in_review`/`done`); type / priority / assignee / reporter / project / company FKs. Lifecycle changes mirror into `events` (`case_*` kinds via `event::info`). |
 | `20260611000001_cases_error_message.sql`   | `cases.error_message` — raw error payload field for cases auto-triaged from FE crash / panic events. Free-text TEXT column; populated by the auto-triage path, not the user composer. |
 | `20260612000001_case_categories.sql`       | `case_categories` table + `cases.category_id` FK. Two-level taxonomy via self-FK on `parent_id` (NULL = root / parent; non-NULL = child). `company_id NULL` = global category; per-company custom categories land later via the same column. |
+| `20260613000001_relax_audit_tool_check.sql`| Loosens the `audit.run.tool` CHECK to cover the wider audit-tool family (js / rs / crossing / page-structure / observability) that landed since mig 014. |
+| `20260614000001_db_query_log.sql`          | `db_query_log` table — per-DB-query capture (template, duration, rows, status, request_id correlation). Populated by a `tracing` Layer on sqlx's `sqlx::query` events; the DB sibling of `request_log`. |
+| `20260615000001_entity_registry.sql`       | `entities` table — the polymorphic supertype (`id PK, type CHECK(company/project/case)`); backfills the registry from `companies` / `projects` / `cases`; adds the three `redpash_id → entities.id ON DELETE CASCADE` FKs. The class-table-inheritance substrate every polymorphic relation FKs into. |
+| `20260616000001_memberships_consolidation.sql` | **Unified `memberships`** — `(object_redpash_id, user_redpash_id)` PK with `object_redpash_id → entities.id ON DELETE CASCADE`; 4-tier `role` CHECK (`owner/admin/member/viewer`); cosmetic `display_name` + `relationship_attribute` descriptors; reverse `(user, object)` index. Migrates rows from `company_memberships` + `project_memberships` (project `collaborator → member`), then **drops both legacy tables**. |
+| `20260617000001_ownership_to_memberships.sql` | Project ownership becomes a `role='owner'` membership row on the project; default-project flag moves off `projects.is_default` onto `users.default_project_id` (one column = one default per user). **Drops** `projects.owner_id`, `projects.is_default`, and the partial-unique `projects_owner_default_idx`. |
+| `20260618000001_case_people_to_memberships.sql` | Case people (reporter + case-owner) become membership rows on the case (`relationship_attribute = 'Reporter' / 'Case Owner'`, `role = 'member'`). **Drops** `cases.reporter_id` + `cases.assignee_id`. ON CONFLICT skips the rare reporter==assignee case (one membership per (object, user) — Case Owner wins). |
 
 ---
 
@@ -103,10 +119,14 @@ Identity anchor. Two creation paths:
 | `use_case`     | `TEXT`        | YES      | —            | Free-form for now. |
 | `plan`         | `TEXT`        | NO       | `'free'`     | `free` / `trial` / `pro` (planned). |
 | `locale`       | `TEXT`        | NO       | `'en'`       | UI language. |
-| `prefs`        | `JSONB`       | NO       | `'{}'::jsonb`| Per-user UI overrides. |
 | `created_at`   | `TIMESTAMPTZ` | NO       | `now()`      | |
 | `updated_at`   | `TIMESTAMPTZ` | NO       | `now()`      | |
 | `google_sub`   | `TEXT`        | YES      | —            | Added mig 006. OpenID subject. Matched on sign-in. |
+| `default_project_id` | `TEXT` FK | YES    | —            | Mig 024. → `projects.redpash_id` `ON DELETE SET NULL`. The user's default project — one column = one default per user (replaces the old `projects.is_default` partial-unique index). `ensure_default_project` reads + writes through this. |
+
+> The legacy `prefs` JSONB column was dropped in mig 020 (`drop_users_prefs`).
+> Per-user preferences live in the first-class [`user_preferences`](#user_preferences)
+> table since mig 019.
 
 **Indexes:**
 
@@ -118,30 +138,35 @@ Identity anchor. Two creation paths:
 
 ### `projects`
 
-Workspace. Owner FK `ON DELETE CASCADE`. One **default** project per
-user (partial unique index) — used by `POST /api/files/upload` when
-the request doesn't specify a project.
+Workspace. Ownership lives in [`memberships`](#memberships) now — a project's
+owner is a `role='owner'` membership row on the project (mig 024). The user's
+default project moved off the project (`is_default`) onto
+[`users.default_project_id`](#users) — one column = one default per user, no
+partial-unique index required. `POST /api/files/upload` reads the default from
+the user when the request doesn't specify a project.
 
 | Column        | Type          | Nullable | Default | Notes |
 |---------------|---------------|----------|---------|-------|
-| `redpash_id`  | `TEXT` PK     | NO       | —       | `PRJ_…` |
-| `owner_id`    | `TEXT` FK     | NO       | —       | → `users.redpash_id` `ON DELETE CASCADE` |
+| `redpash_id`  | `TEXT` PK     | NO       | —       | `PRJ_…` · FK → `entities.id` `ON DELETE CASCADE` (mig 022). |
 | `company_id`  | `TEXT` FK     | YES      | —       | Mig 007. → `companies.redpash_id` `ON DELETE SET NULL`. `NULL` = personal project. |
 | `name`        | `TEXT`        | NO       | —       | `"Workspace"` for the auto-created default. |
 | `description` | `TEXT`        | YES      | —       | |
-| `is_default`  | `BOOLEAN`     | NO       | `FALSE` | Exactly one TRUE per owner (enforced by partial unique index). |
 | `status`      | `TEXT`        | NO       | `'draft'` | Mig 008. `CHECK (draft / active / archived)` — lifecycle state. The DTO overlays a read-only `published` value when the project has a public dashboard. |
 | `created_at`  | `TIMESTAMPTZ` | NO       | `now()` | |
 | `updated_at`  | `TIMESTAMPTZ` | NO       | `now()` | |
+
+> `projects.owner_id` and `projects.is_default` were **dropped in mig 024**
+> (`ownership_to_memberships`). The `projects_owner_default_idx` partial-unique
+> index went with them. `db::project_owner` resolves the owner through the
+> owner-membership LATERAL (`memberships WHERE role='owner'`); `PROJECT_SELECT`
+> derives `is_default` as `(u.default_project_id = p.redpash_id)`.
 
 **Indexes:**
 
 | Index                          | Columns                                | Notes |
 |--------------------------------|----------------------------------------|-------|
 | `projects_pkey`                | `redpash_id`                           | PK |
-| `projects_owner_idx`           | `owner_id`                             | List query |
 | `projects_status_idx`          | `status`                               | Mig 008. (`projects_stage_idx` dropped in mig 009 with the column) |
-| `projects_owner_default_idx`   | `owner_id` `WHERE is_default`          | Partial unique — one default per owner |
 | `projects_company_idx`         | `company_id`                           | Mig 007. Company-scoped lookups |
 
 ### `project_files`
@@ -151,11 +176,11 @@ shape stays close to the Django `ProjectFile`.
 
 | Column               | Type          | Nullable | Default          | Notes |
 |----------------------|---------------|----------|------------------|-------|
-| `redpash_id`         | `TEXT` PK     | NO       | —                | `FIL_…` |
+| `redpash_id`         | `TEXT` PK     | NO       | —                | `FIL_…` for csv-typed rows; `CHT_…` for charts; legacy `DSH_…` for dashboards (rids preserved through `fold_dashboards`). |
 | `project_redpash_id` | `TEXT` FK     | NO       | —                | → `projects.redpash_id` `ON DELETE CASCADE` |
 | `filename`           | `TEXT`        | NO       | —                | User-facing **stem** — upload extension stripped (mig 011); `file_type` owns the extension. See the contract below. |
 | `display_name`       | `TEXT`        | YES      | —                | Auto-derived; user-overridable. |
-| `file_type`          | `TEXT`        | NO       | `'csv'`          | Phase 4+ may add `png_chart`, `html_report`, `html_dashboard`. |
+| `file_type`          | `TEXT`        | NO       | `'csv'`          | `csv` / `chart` (mig 016) / `dashboard` (mig 017). One polymorphic table — Report/Dashboard are now derived views over typed rows, not their own tables. |
 | `row_count`          | `BIGINT`      | YES      | —                | |
 | `col_count`          | `INTEGER`     | YES      | —                | |
 | `file_size_bytes`    | `BIGINT`      | YES      | —                | |
@@ -164,6 +189,12 @@ shape stays close to the Django `ProjectFile`.
 | `delimiter`          | `TEXT`        | YES      | `','`            | |
 | `storage_path`       | `TEXT`        | NO       | —                | Relative to `REDPASH_DATA_DIR` (e.g. `files/FIL_….bin`). |
 | `columns_meta`       | `JSONB`       | NO       | `'[]'::jsonb`    | Cached `Vec<ColumnMeta>`. Recomputed after each step. |
+| `spec`               | `JSONB`       | NO       | `'{}'::jsonb`    | Mig 016. Type-shaped JSON — chart option+SVG for `chart` rows; widget layout for `dashboard` rows; empty for `csv`. |
+| `source_file_id`     | `TEXT` FK     | YES      | —                | Mig 016. Self-FK → `project_files.redpash_id` `ON DELETE CASCADE`. A chart's source CSV — chart rows cascade-delete when their source goes. |
+| `is_public`          | `BOOLEAN`     | NO       | `FALSE`          | Public-share toggle (dashboard rows surface as published projects). |
+| `is_favorite`        | `BOOLEAN`     | NO       | `FALSE`          | |
+| `folder`             | `TEXT`        | YES      | —                | Display grouping label; no FK. |
+| `description`        | `TEXT`        | YES      | —                | |
 | `created_at`         | `TIMESTAMPTZ` | NO       | `now()`          | |
 | `updated_at`         | `TIMESTAMPTZ` | NO       | `now()`          | |
 
@@ -327,17 +358,34 @@ self-trims under normal traffic.
 | `sessions_user_idx`       | `user_redpash_id` | List a user's sessions / cascade delete |
 | `sessions_expiry_idx`     | `expires_at`      | Pruning candidate scans |
 
+### `user_preferences`
+
+Mig 019. Promotes prefs from the dropped `users.prefs` JSONB column into a
+first-class table — one row per `(user, key)`, JSONB value. Read via
+`db::list_user_prefs`; written sparsely (`UPSERT` per key) by
+`PATCH /api/me/prefs`. Spec: [`internal/specs/user-preferences.md`](../internal/specs/user-preferences.md).
+
+| Column            | Type          | Nullable | Default | Notes |
+|-------------------|---------------|----------|---------|-------|
+| `user_redpash_id` | `TEXT` FK     | NO       | —       | → `users.redpash_id` `ON DELETE CASCADE` |
+| `key`             | `TEXT`        | NO       | —       | Pref name (e.g. `theme`, `density`, `learned_sentinels`). |
+| `value`           | `JSONB`       | NO       | —       | Scalar / array / object — no shape enforced at the DB level. |
+| `updated_at`      | `TIMESTAMPTZ` | NO       | `now()` | |
+
+**PK:** `(user_redpash_id, key)` — one row per user per key.
+
 ### `companies`
 
 Mig 007. The multi-tenancy boundary — a user belongs to zero or more
-companies via `company_memberships`, and a project is either
-company-scoped or personal (`projects.company_id`). `slug` is immutable:
-derived from the name at creation as `{slugified-name}-{6-hex}`, unique
-by construction so no collision retry is needed.
+companies via the unified [`memberships`](#memberships) table (object = the
+company), and a project is either company-scoped or personal
+(`projects.company_id`). `slug` is immutable: derived from the name at
+creation as `{slugified-name}-{6-hex}`, unique by construction so no
+collision retry is needed.
 
 | Column       | Type          | Nullable | Default | Notes |
 |--------------|---------------|----------|---------|-------|
-| `redpash_id` | `TEXT` PK     | NO       | —       | `CMP_…` |
+| `redpash_id` | `TEXT` PK     | NO       | —       | `CMP_…` · FK → `entities.id` `ON DELETE CASCADE` (mig 022). |
 | `name`       | `TEXT`        | NO       | —       | Display name. |
 | `slug`       | `TEXT`        | NO       | —       | `UNIQUE`. Immutable, auto-derived. |
 | `avatar_url` | `TEXT`        | YES      | —       | Company logo URL. |
@@ -351,56 +399,133 @@ by construction so no collision retry is needed.
 | `companies_pkey`     | `redpash_id` | PK |
 | `companies_slug_key` | `slug`       | Implicit `UNIQUE` |
 
-### `company_memberships`
+### `entities`
 
-Mig 007. Pure join table — composite PK, no RedPash-ID. Doubles as the
-access-control check: a user with no row simply can't see the company.
-`db::company_role` returns the role; handlers 404 on `None` so company
-existence isn't leaked.
+Mig 022. **Polymorphic supertype** — the universal object handle. Every
+top-level domain object (`company`, `project`, `case`) has its `redpash_id`
+recorded here and the matching domain row's PK FKs into `entities.id`
+`ON DELETE CASCADE`. That makes any polymorphic relation (memberships, future
+edges) a single FK to `entities.id` with strict DB-level cascade — no
+triggers, no parallel join tables per type.
 
-| Column            | Type          | Nullable | Default     | Notes |
-|-------------------|---------------|----------|-------------|-------|
-| `company_id`      | `TEXT` FK     | NO       | —           | → `companies.redpash_id` `ON DELETE CASCADE` |
-| `user_redpash_id` | `TEXT` FK     | NO       | —           | → `users.redpash_id` `ON DELETE CASCADE` |
-| `role`            | `TEXT`        | NO       | `'member'`  | `CHECK (owner / admin / member)` |
-| `joined_at`       | `TIMESTAMPTZ` | NO       | `now()`     | |
+| Column       | Type          | Nullable | Default | Notes |
+|--------------|---------------|----------|---------|-------|
+| `id`         | `TEXT` PK     | NO       | —       | The subtype's rid (`CMP_…` / `PRJ_…` / `CAS_…`). |
+| `type`       | `TEXT`        | NO       | —       | `CHECK (company / project / case)` — the discriminator. |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()` | |
 
-**PK:** `(company_id, user_redpash_id)`.
+**Create pattern:** every entity insert registers the entity first
+(`db::register_entity`) inside the same transaction as the subtype insert.
+The shared helper enforces FK ordering. **Delete pattern:** `delete_entity`
+(`DELETE FROM entities WHERE id=$1`) cascades to the subtype row + every
+edge that FKs into the registry. One delete path for any registered object.
+
+> `user` and `file` are deliberately *not* registered yet — users are always
+> the membership *subject* side (they FK directly to `users`), and files
+> aren't a polymorphic relation target today. Both are clean additive
+> backfills when that changes.
+
+### `memberships`
+
+Mig 023. **Unified polymorphic membership** — every people-to-object
+relationship lives here, regardless of the parent type. Replaces
+`company_memberships` + `project_memberships` (mig 007, both dropped) and
+the planned `case_memberships`; ownership and case people moved in too
+(migs 024 / 025).
+
+| Column                   | Type          | Nullable | Default     | Notes |
+|--------------------------|---------------|----------|-------------|-------|
+| `object_redpash_id`      | `TEXT` FK     | NO       | —           | → `entities.id` `ON DELETE CASCADE`. The polymorphic parent (CMP_/PRJ_/CAS_). |
+| `user_redpash_id`        | `TEXT` FK     | NO       | —           | → `users.redpash_id` `ON DELETE CASCADE` |
+| `role`                   | `TEXT`        | NO       | `'member'`  | `CHECK (owner / admin / member / viewer)` — the access tier. Meaning of `(object_type, role)` resolves later via the deferred role-grants table (RBAC). |
+| `display_name`           | `TEXT`        | YES      | —           | Cosmetic descriptor *value* — "CEO", "System Administrator". |
+| `relationship_attribute` | `TEXT`        | YES      | —           | Relation label — "Reporter", "Case Owner", "Job Title", "Department". On cases it's queryable (the people resolver); on company/project memberships it's typically NULL. |
+| `joined_at`              | `TIMESTAMPTZ` | NO       | `now()`     | |
+
+**PK:** `(object_redpash_id, user_redpash_id)` — one membership per person
+per object. Same person on the same case as both reporter and case-owner
+collapses to one row (Case Owner wins on backfill; the empty Reporter slot
+is just reality, not a bug).
 
 **Indexes:**
 
-| Index                          | Columns           | Notes |
-|--------------------------------|-------------------|-------|
-| `company_memberships_pkey`     | `(company_id, user_redpash_id)` | PK |
-| `company_memberships_user_idx` | `user_redpash_id` | List a user's companies |
+| Index                  | Columns                                  | Notes |
+|------------------------|------------------------------------------|-------|
+| `memberships_pkey`     | `(object_redpash_id, user_redpash_id)`   | PK — "who is in this object" |
+| `memberships_user_idx` | `(user_redpash_id, object_redpash_id)`   | Reverse — "what objects is this user in" (per-user RBAC resolution / `/api/me` permissions payload). Prefix filters (`LIKE 'CMP\_%'`) range-scan it. |
 
-### `project_memberships`
+**Ownership lives here too** (mig 024) — a project's owner is a `role='owner'`
+membership; a company's owner is too; resolving project / company / file /
+chart / dashboard ownership for `ensure_owner` reads
+`memberships WHERE role='owner'` via a LATERAL. Owner reassignment is a
+membership transfer (`update_project_meta`); the user's default project
+lives on [`users.default_project_id`](#users).
 
-Mig 007. Pure join table — composite PK, no RedPash-ID. Grants a user
-access to a project. The project owner (`projects.owner_id`) needs no
-row — ownership is tracked directly on `projects`.
+**Case people are membership rows** (mig 025) — reporter +
+case-owner (fka assignee) on each case object, with
+`relationship_attribute ∈ {'Reporter', 'Case Owner'}` (and `role='member'`).
+Case-people resolution in `CASE_SELECT` is a pair of LATERALs over
+`memberships` keyed on `relationship_attribute`.
 
-| Column               | Type          | Nullable | Default     | Notes |
-|----------------------|---------------|----------|-------------|-------|
-| `project_redpash_id` | `TEXT` FK     | NO       | —           | → `projects.redpash_id` `ON DELETE CASCADE` |
-| `user_redpash_id`    | `TEXT` FK     | NO       | —           | → `users.redpash_id` `ON DELETE CASCADE` |
-| `role`               | `TEXT`        | NO       | `'viewer'`  | `CHECK (owner / collaborator / viewer)` |
-| `joined_at`          | `TIMESTAMPTZ` | NO       | `now()`     | |
+### `cases`
 
-**PK:** `(project_redpash_id, user_redpash_id)`.
+Mig 018. The Jira-flow ticketing workstream — customer-support / internal
+tasks, with the activity feed mirrored into `events`. People (reporter +
+assignee) live in [`memberships`](#memberships) on the case object since
+mig 025; only the workflow fields stay on the row.
 
-**Indexes:**
+| Column          | Type          | Nullable | Default      | Notes |
+|-----------------|---------------|----------|--------------|-------|
+| `redpash_id`    | `TEXT` PK     | NO       | —            | `CAS_…` · FK → `entities.id` `ON DELETE CASCADE`. |
+| `type`          | `TEXT`        | NO       | `'task'`     | `CHECK (bug / feature / task / epic)` |
+| `title`         | `TEXT`        | NO       | —            | |
+| `description`   | `TEXT`        | YES      | —            | |
+| `status`        | `TEXT`        | NO       | `'backlog'`  | `CHECK (backlog / todo / in_progress / in_review / done)` |
+| `priority`      | `TEXT`        | NO       | `'medium'`   | `CHECK (low / medium / high / critical)` |
+| `project_id`    | `TEXT` FK     | YES      | —            | → `projects.redpash_id` `ON DELETE SET NULL` |
+| `company_id`    | `TEXT` FK     | YES      | —            | → `companies.redpash_id` `ON DELETE SET NULL`. The case's customer/tenant. |
+| `category_id`   | `TEXT` FK     | YES      | —            | Mig 020. → `case_categories.redpash_id` `ON DELETE SET NULL` |
+| `error_message` | `TEXT`        | YES      | —            | Mig 019. Raw error payload for cases auto-triaged from FE crash/panic events. |
+| `created_at`    | `TIMESTAMPTZ` | NO       | `now()`      | |
+| `updated_at`    | `TIMESTAMPTZ` | NO       | `now()`      | |
 
-| Index                          | Columns           | Notes |
-|--------------------------------|-------------------|-------|
-| `project_memberships_pkey`     | `(project_redpash_id, user_redpash_id)` | PK |
-| `project_memberships_user_idx` | `user_redpash_id` | List a user's shared projects |
+> `cases.reporter_id` and `cases.assignee_id` were **dropped in mig 025**
+> (`case_people_to_memberships`). Reporter + case-owner resolve through
+> `memberships` (relation_attribute `'Reporter'` / `'Case Owner'`); the
+> `CASE_SELECT` LATERALs handle the join.
 
-> **Scope note:** mig 007 lands the company *data model* and the
-> `/api/companies` resource. Company-scoped *visibility* of projects /
-> files / reports / dashboards — and any use of `project_memberships`
-> in access checks — is a deliberate follow-up; today every
-> owner-scoped endpoint still gates on `projects.owner_id` alone.
+### `comments`
+
+Mig 018. Threaded under a case — the agent-to-agent and customer-to-org
+discussion surface. Author is a soft FK so a tombstoned user just renders
+as "Deleted User."
+
+| Column        | Type          | Nullable | Default | Notes |
+|---------------|---------------|----------|---------|-------|
+| `redpash_id`  | `TEXT` PK     | NO       | —       | `CMT_…` |
+| `case_id`     | `TEXT` FK     | NO       | —       | → `cases.redpash_id` `ON DELETE CASCADE` |
+| `author_id`   | `TEXT` FK     | YES      | —       | → `users.redpash_id` `ON DELETE SET NULL` |
+| `body`        | `TEXT`        | NO       | —       | Plain text in v1; markdown render lands with v2 polish. |
+| `is_edited`   | `BOOLEAN`     | NO       | `FALSE` | |
+| `created_at`  | `TIMESTAMPTZ` | NO       | `now()` | |
+| `updated_at`  | `TIMESTAMPTZ` | NO       | `now()` | |
+
+### `case_categories`
+
+Mig 020. Two-level taxonomy for `cases.category_id` — self-FK on `parent_id`
+(NULL = root / parent; non-NULL = child). `company_id NULL` = global category
+the whole instance sees; per-company custom categories share the same column.
+
+| Column       | Type          | Nullable | Default | Notes |
+|--------------|---------------|----------|---------|-------|
+| `redpash_id` | `TEXT` PK     | NO       | —       | |
+| `parent_id`  | `TEXT` FK     | YES      | —       | → `case_categories.redpash_id` `ON DELETE CASCADE`. NULL = root. |
+| `name`       | `TEXT`        | NO       | —       | |
+| `company_id` | `TEXT` FK     | YES      | —       | → `companies.redpash_id` `ON DELETE CASCADE`. NULL = global. |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()` | |
+
+**Unique:** `(parent_id, name, company_id)` — no duplicate sibling names in
+the same scope.
 
 ### `sentinel_submissions`
 
@@ -470,9 +595,81 @@ detached task so event logging can never block or fail a real request.
 | `events_user_idx`      | `(user_redpash_id, occurred_at DESC)` | A user's timeline |
 | `events_request_idx`   | `request_id`                       | One request's events |
 
-> A future `cases` table (the reserved `CAS` prefix — user support
-> tickets) will pin a slice of `events` rows as troubleshooting
-> evidence. See `api/events.md` for the full design.
+### `request_log`
+
+Mig 015b. Per-HTTP-request capture — one row per request, written
+fire-and-forget by `capture_mw` after the response. Powers `/api/metrics`
+and the Monitoring Requests tab; correlates with [`events`](#events) and
+[`db_query_log`](#db_query_log) by `request_id`.
+
+| Column            | Type           | Nullable | Default | Notes |
+|-------------------|----------------|----------|---------|-------|
+| `id`              | `BIGSERIAL` PK | NO       | seq     | Plain serial — not a RedPash-ID. |
+| `at`              | `TIMESTAMPTZ`  | NO       | `now()` | |
+| `method`          | `TEXT`         | NO       | —       | |
+| `route`           | `TEXT`         | NO       | —       | Axum-style path pattern. |
+| `status`          | `SMALLINT`     | NO       | —       | HTTP status. |
+| `duration_ms`     | `INTEGER`      | NO       | —       | |
+| `request_id`      | `TEXT`         | YES      | —       | `req_…` — joins to `events` + `db_query_log`. |
+| `user_redpash_id` | `TEXT`         | YES      | —       | Mig 017. Soft ref — sessions expire, no FK. |
+| `session_id`      | `TEXT`         | YES      | —       | |
+
+**Indexes:** `at DESC`, `(route, at DESC)`, `(user_redpash_id, at DESC)`
+WHERE not null, `(session_id, at DESC)` WHERE not null.
+
+### `db_query_log`
+
+Mig 021. The DB sibling of `request_log` — per-DB-query capture (template +
+elapsed + rows + status). Populated by a `tracing` Layer on sqlx's
+`sqlx::query` events; no call-site changes. Verbose mode
+(`REDPASH_DB_TRACE=1`) captures every query; otherwise only slow
+(≥ `REDPASH_DB_SLOW_MS`, default 50ms) + errors. Loop-guarded against the
+log tables themselves.
+
+| Column            | Type           | Nullable | Default | Notes |
+|-------------------|----------------|----------|---------|-------|
+| `id`              | `BIGSERIAL` PK | NO       | seq     | |
+| `at`              | `TIMESTAMPTZ`  | NO       | `now()` | |
+| `query_template`  | `TEXT`         | NO       | —       | Parameterized SQL (`$1, $2 …`); no bound values, no PII. |
+| `duration_ms`     | `INTEGER`      | NO       | —       | |
+| `rows`            | `BIGINT`       | YES      | —       | Rows affected / returned. |
+| `status`          | `SMALLINT`     | NO       | `0`     | 0 = ok, 1 = error. |
+| `error_kind`      | `TEXT`         | YES      | —       | |
+| `request_id`      | `TEXT`         | YES      | —       | Correlation to the HTTP request that issued the query. |
+| `user_redpash_id` | `TEXT`         | YES      | —       | |
+| `route`           | `TEXT`         | YES      | —       | |
+
+**Indexes:** `at DESC`, `(query_template, at DESC)`, `request_id` WHERE not null.
+
+**Retention:** an hourly cleanup job DELETEs rows older than
+`REDPASH_DB_LOG_RETENTION_DAYS` (default 7); partitioning is the natural next
+step at scale.
+
+### `optimization_points`
+
+Mig 018b. The doc-side "optimization map" as a queryable surface — known
+opportunities paired with live measurements. One row per
+`(subsystem, phase)` pair; the Monitoring Optimization tab joins per-row
+measurement against the `ROW_COUNT_TABLES` whitelist in
+`routes/monitoring.rs`.
+
+| Column              | Type             | Nullable | Default | Notes |
+|---------------------|------------------|----------|---------|-------|
+| `id`                | `BIGSERIAL` PK   | NO       | seq     | |
+| `subsystem`         | `TEXT`           | NO       | —       | The lane (FE / API / Data / Audit / …). |
+| `phase`             | `TEXT`           | NO       | —       | The point within the subsystem. |
+| `current_cost`      | `TEXT`           | NO       | —       | Human-readable. |
+| `horizon`           | `TEXT`           | NO       | —       | When it bites (now / scale / launch). |
+| `status`            | `TEXT`           | NO       | `'open'`| `CHECK (open / planned / done / wontfix)` |
+| `measurement_kind`  | `TEXT`           | YES      | —       | `row_count` / `latency_p95` / … |
+| `measurement_key`   | `TEXT`           | YES      | —       | Whitelist key. |
+| `threshold_value`   | `DOUBLE PRECISION` | YES    | —       | Tip-over threshold. |
+| `threshold_unit`    | `TEXT`           | YES      | —       | |
+| `notes`             | `TEXT`           | YES      | —       | |
+| `created_at`        | `TIMESTAMPTZ`    | NO       | `now()` | |
+| `updated_at`        | `TIMESTAMPTZ`    | NO       | `now()` | |
+
+**Unique:** `(subsystem, phase)`.
 
 ### `audit.run` + `audit.finding` (`audit` schema)
 
@@ -508,35 +705,54 @@ stay queryable (design notes: `tools/audit-storage-brainstorming.md`).
 
 **PK:** `(run_id, finding_key)`.
 
+#### `audit.run_diff` (function)
+
+Mig 016. SQL function — *parameterized projection* over `audit.finding`,
+not a stored table. Given two `audit.run.id` values it classifies every
+finding as `new` / `closed` / `unchanged` by `finding_key`, so trend reports
+("what regressed since last run?") come from a single call without a
+separate write path.
+
 ---
 
 ## Permissions model
 
-Phases 4a + 4b + 4c + 4d have shipped:
+Phases 4a + 4b + 4c + 4d have shipped, and the membership-consolidation
+work (migs 022 / 023 / 024 / 025) refactors them onto a single primitive:
 
 - **4a** Google OAuth code flow → `users.google_sub` + `sessions`.
-- **4b** Per-user data scoping — every owner-scoped list endpoint
-  resolves the user via the `rp_session` cookie before querying.
+- **4b** Per-user data scoping — every owner-scoped list endpoint resolves
+  the user via the `rp_session` cookie before querying.
 - **4c** Per-resource ownership checks on every detail endpoint —
-  `db::project_owner` / `report_owner` / `dashboard_owner` /
-  `file_owner` look up the owner via the FK chain to `projects.owner_id`
-  and `routes::ensure_owner` 404s on miss or mismatch (same
-  `kind="not_found"` either way, so existence isn't leaked). Profile +
-  Settings pages backed by `PATCH /api/me` (sparse field update +
-  shallow merge of the `prefs` JSONB).
-- **4d** Multi-tenancy *data model* — `companies` + `company_memberships`
-  (`owner`/`admin`/`member`), `project_memberships`, and
-  `projects.company_id`. The tables and the `/api/companies` resource
-  exist; company-scoped *visibility* of projects/files/reports/dashboards
-  is **not** wired — every owner-scoped endpoint still gates on
-  `projects.owner_id` alone and `project_memberships` is unread.
+  `db::project_owner` / `chart_owner` / `dashboard_owner` / `file_owner`
+  resolve the owner through a `memberships WHERE role='owner'` LATERAL (the
+  owner-membership chain replaced the `projects.owner_id` FK after mig 024).
+  `routes::ensure_owner` 404s on miss or mismatch (same `kind="not_found"`
+  either way, so existence isn't leaked). Profile + Settings pages backed by
+  `PATCH /api/me` (sparse field update) + `PATCH /api/me/prefs` (sparse upsert
+  into [`user_preferences`](#user_preferences)).
+- **4d** Multi-tenancy *data model* — `companies` + the unified
+  [`memberships`](#memberships) (`owner / admin / member / viewer`) +
+  `projects.company_id`. The legacy `company_memberships` +
+  `project_memberships` join tables were retired by mig 023. Company-scoped
+  *visibility* (reading membership in the owner gates) is still pending —
+  the schema is uniform, the call-sites just don't read it yet beyond the
+  owner check.
 
-Still pending:
+Where this is headed (deferred, brainstorm only — does not exist in code):
 
-- Company-scoped resource visibility — reading `company_memberships` /
-  `project_memberships` in the owner gates (the 4d follow-up).
-- Share-link UI for `reports.is_public` / `dashboards.is_public`. The
-  columns exist; no toggle surface yet.
+- **Role-grants** — `(object_type, role) → capability` resolution table.
+  Same role *name* resolves to different capabilities per scope
+  (`(company, owner)` vs `(case, owner)`). Effective access stays an
+  additive union of role ∪ membership; no deny rules. Spec lives in
+  [`internal/specs/rbac/index.md`](../internal/specs/rbac/index.md).
+- **Scrub-Retain-Notify** — on user deletion, tombstone PII in place
+  (`users.is_deleted`, scrub `email`/`google_sub`/`avatar`/names,
+  `display_name = "Deleted User"`), retain history, notify the affected
+  objects' members + admin via the events system. The company reassigns
+  manually by editing the (now reassignable) owner field. The
+  `count(*) memberships` aggregate doubles as the sole-owner blocker source.
+  Spec: see the `scrub-retain-notify` memory + the rbac brainstorm.
 
-The sharing model stays "publish RID, anyone with the link reads" —
-no folder ACLs. Folders are organisational labels only.
+The sharing model stays "publish RID, anyone with the link reads" — no
+folder ACLs. Folders are organisational labels only.
