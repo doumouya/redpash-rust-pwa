@@ -4,7 +4,7 @@ section: Internal
 order: 50
 last modified date: 2026-05-29
 owner: Torv
-status: stable — all 13 object catalogs landed (Case worked example + the sweep). Polymorphic Membership (company/project/case) + Case Team Member model folded in. RBAC enforcement is the next workstream; this catalog is its spec.
+status: design / brainstorm 2026-05-29 — reframed to a view-rooted model (membership-as-sharing, roles-as-bundles); see "Permission model". The lower sections + per-object matrices are the older flat model, pending reconciliation. NO enforcement code exists yet, by design: RBAC is the single post-site pass — one wrong rule compromises the whole system, so it stays a doc brainstorm until the app surface is stable.
 ---
 
 # RBAC permission catalog
@@ -28,6 +28,75 @@ resolves through `resolve_user_rid` to the dev_user and `ensure_owner`
 is the only live gate. The catalog defines what enforcement WILL
 check; nothing here changes runtime behavior until the enforcement
 slices land.
+
+---
+
+## Permission model (the organizing principle)
+
+Reframed by Em 2026-05-29. **This supersedes the flat
+`<entity>.<action>` × separate-scope-qualifier scheme** in the sections
+below — those + the per-object grant matrices are being reconciled to
+this model.
+
+**Axiom — view-rooted, least privilege.** Every operation is gated by
+the ability to *see* the thing. You can't update or delete a record (or
+a field) you can't view. `view` is the foundation; `create` / `update` /
+`delete` derive from it.
+
+**Two composable grant sources.** A caller's effective permissions =
+**role baseline ∪ membership grants**. Atoms are never assigned to a
+user directly — they're bundled into a **role**, and a role is applied
+either globally (the account's role) or scoped (via a membership). Want
+a different permission set ⇒ edit a role or create a new one.
+
+1. **Role** — the atom bundle + the unit of assignment. Standard sets
+   today (`owner` / `admin` / `member`); **custom roles, custom objects,
+   and custom fields arrive in the multi-tenant phase**, once the system
+   is validated on the standard sets.
+2. **Membership** — the polymorphic Membership object (company /
+   project / case-team today; extensible to custom scopes like a "Human
+   Resources" team). A membership is `(user, scope, role)`: it applies
+   its role's bundle to the records in its scope. **Membership acts as
+   ownership / sharing** — it grants access to those specific records
+   *even when the account role doesn't*. This is the sharing engine, and
+   it's how company-hierarchy visibility works.
+
+**View hierarchy — object + field.**
+
+- *Object view:* `case.view` (own / baseline) → `case.view.all` (admin —
+  every record). The middle rungs — `case.view.company`,
+  `case.view.project`, and per-record case-team view — are **granted by
+  membership, not by a direct role grant.** No `case.view.all` ⇒ you see
+  only the cases a membership covers (own / company / project /
+  case-team).
+- *Field view* (field-level security, **allow-list**):
+  `case.view.field.all` (every field) / `case.view.field.<name>` (just
+  that field). A role sees exactly the fields it holds `view.field.*`
+  for; everything else is hidden. Visibility varies by role — a support
+  engineer's role hides customer fields their manager's role sees.
+
+**Writes derive from view.**
+
+- To write field X you must view field X (a field's `*.update` ⇐ the
+  matching `*.view.field.X`).
+- **Delete a record ⇐ `view.field.all`** — you must see the whole record
+  before you can destroy it.
+- **Create ⇐ object-level `view`** — you can create in an area you can
+  see (when your role/membership also grants create).
+
+**UI surface derives from view.** Tabs, pages, and fields render from
+view grants — there is no separate "can see this tab/page" permission.
+Hold `case.view` ⇒ the Cases tab renders; hold only
+`case.view.field.title` ⇒ the record opens showing just the title.
+
+**Worked example (Em — Support Engineer).** Two memberships, unioned:
+
+- *Support Engineering Team* → `case.view` over the team's queue (all
+  cases, assigned or not).
+- *Informatica team* → view assigned cases + comment + see shared logs,
+  but **no delete** (the role lacks `view.field.all`), and some customer
+  fields stay hidden (the role's `view.field.*` subset) that a manager's
+  role sees.
 
 ---
 
