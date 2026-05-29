@@ -98,6 +98,18 @@ Hold `case.view` ⇒ the Cases tab renders; hold only
   fields stay hidden (the role's `view.field.*` subset) that a manager's
   role sees.
 
+**Validation strategy — build up from the atom, never subtract from
+admin.** Today the app runs admin / full-access (everything on) for
+feature testing. RBAC gets validated in the *inverse* direction: start
+from the empty grant set + the single most-granular atom —
+`user.view.name` (view one field of one object) — confirm it grants
+*exactly* that and nothing more, then add the next atom and re-verify,
+building the full set incrementally. You can't prove an access system is
+airtight by removing grants from full-access — leaks are invisible that
+way; you prove it by adding from zero, each grant tested in isolation as
+it lands. That's what makes "one wrong rule" catchable rather than
+catastrophic.
+
 ---
 
 ## What exists today (the baseline this formalizes)
