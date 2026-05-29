@@ -57,6 +57,8 @@ export const MON_STATS_SCHEMA = {
     supportsWindow: true,
     fields: [
       { path: "by_level", label: "By level", shape: "kv" },
+      { path: "last_24h", label: "Active last 24h", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
       // by_kind / by_origin land in EventsStats after a server delta
       // (see the Monitoring 4-charts-per-tab proposal).
     ],
@@ -66,6 +68,8 @@ export const MON_STATS_SCHEMA = {
     supportsWindow: false,
     fields: [
       { path: "by_tool", label: "By tool", shape: "kv" },
+      { path: "last_7d", label: "Runs last 7d", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
       // daily_counts / recent_runs_with_findings → server delta.
     ],
   },
@@ -83,6 +87,8 @@ export const MON_STATS_SCHEMA = {
     supportsWindow: false,
     fields: [
       { path: "by_kind", label: "By kind", shape: "kv" },
+      { path: "last_24h", label: "Active last 24h", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
       // by_applied / daily_counts → server delta.
     ],
   },
@@ -136,6 +142,17 @@ export const MON_DEFAULT_CHARTS = {
                endpoint: "/monitoring/events/stats",
                pointer:  "by_level",
                window:   "24h" },
+    },
+    {
+      id:    "default-active-24h",
+      title: "Active last 24h",
+      cfg:   { kind: "gauge", type: "gauge", theme: "redpash-mocha",
+               legend: false, legendPos: "bottom", tooltip: true,
+               splitLines: true, axisLine: true, smooth: false },
+      source:{ kind: "monitoring-stats",
+               endpoint: "/monitoring/events/stats",
+               pointer:  "last_24h",
+               transform: { kind: "ratio", denominator: "total", scale: 100 } },
     },
   ],
   runs: [
