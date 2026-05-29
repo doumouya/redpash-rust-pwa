@@ -36,6 +36,7 @@ import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
 import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
+import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
 
 // Case-state label vocabulary + done-window filter constants
@@ -310,6 +311,14 @@ export default function cases(app, { session }) {
     }
   });
 
+  // Overview table (row 3) — a row click opens that case's detail, same
+  // destination as a kanban card. Delegated on the host so it survives
+  // paintCasesOverview rebuilds.
+  app.querySelector("#rp-cases-ov-table")?.addEventListener("click", (e) => {
+    const row = e.target.closest(".rp-cases-ov-row");
+    if (row?.dataset.rid) location.hash = "#/cases?id=" + encodeURIComponent(row.dataset.rid);
+  });
+
   // Rail click delegate — handles hide × on rail rows, restore on
   // hidden items, group-head expand/collapse, and the Done-window
   // chip-row. Case tabs are <a> anchors so the browser handles
@@ -477,13 +486,83 @@ export default function cases(app, { session }) {
 
   function paintBoardEmpty(msg) {
     if (!colsHost) return;
+    paintCasesOverview([]);
     colsHost.innerHTML = STATUS_ORDER.map((s) =>
       columnShellHTML(s, s === "backlog" ? msg : "—")
     ).join("");
   }
 
+  // ── overview rows (Em 2026-05-29) — hero strip + contextual table.
+  // The board is a 3-row overview now (a variation of the Home/Monitoring
+  // layout): row 1 = hero (two donuts flanking a 2×2 stats grid), row 2 =
+  // the kanban (paintBoard), row 3 = a cases table. Stats + charts derive
+  // from the same filtered roster the columns render, so everything tracks
+  // the done-window + hidden filters. Stats are cross-cutting (Total /
+  // Urgent / Mine / Unassigned) — not per-status counts, which already
+  // live in the column headers.
+  const CASES_OV_CHARTS = [
+    { id: "rp-cases-ov-status", title: "By status", kind: "donut",
+      data: (s) => (s.items || []).reduce((a, c) => {
+        const k = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
+        const label = STATUS_LABEL[k] || k;
+        a[label] = (a[label] || 0) + 1; return a;
+      }, {}) },
+    { id: "rp-cases-ov-priority", title: "By priority", kind: "donut",
+      data: (s) => (s.items || []).reduce((a, c) => {
+        const k = c.priority || "medium"; a[k] = (a[k] || 0) + 1; return a;
+      }, {}) },
+  ];
+  const boardCharts = createListCharts(boardEl, { logPrefix: "cases-ov" });
+
+  function paintCasesOverview(rows) {
+    const hero = app.querySelector("#rp-cases-ov-hero");
+    const tableHost = app.querySelector("#rp-cases-ov-table");
+    if (hero) {
+      const urgent     = rows.filter((c) => c.priority === "high" || c.priority === "critical").length;
+      const mine       = meRid ? rows.filter((c) => c.assignee_id === meRid).length : 0;
+      const unassigned = rows.filter((c) => !c.assignee_id).length;
+      hero.innerHTML = heroStripHTML(
+        [ { label: "Total",      value: rows.length },
+          { label: "Urgent",     value: urgent      },
+          { label: "Mine",       value: mine        },
+          { label: "Unassigned", value: unassigned  } ],
+        CASES_OV_CHARTS
+      );
+      // Mount from data in hand (no refetch). Only when the board's
+      // visible — echarts sizes to 0 on a display:none container, and
+      // renderRoute re-runs paintBoard when the board re-shows, which
+      // re-mounts them at the right size.
+      boardCharts.dispose();
+      if (boardEl && !boardEl.hidden) {
+        boardCharts.mountData({ charts: CASES_OV_CHARTS }, { items: rows });
+      }
+    }
+    if (tableHost) tableHost.innerHTML = casesTableHTML(rows);
+  }
+
+  function casesTableHTML(rows) {
+    if (!rows.length) return '<p class="rt-empty rp-cases-ov-table-empty">No cases.</p>';
+    const sorted = rows.slice().sort((a, b) =>
+      String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    const body = sorted.map((c) => {
+      const rid = c.redpash_id || c.rid || "";
+      return '<tr class="rp-cases-ov-row" data-rid="' + esc(rid) + '">'
+        + '<td>' + esc(c.title || "(untitled)") + '</td>'
+        + '<td>' + esc(STATUS_LABEL[c.status] || c.status || "—") + '</td>'
+        + '<td>' + priorityDotHTML(c.priority) + ' ' + esc(c.priority || "—") + '</td>'
+        + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
+        + '<td>' + (c.updated_at ? esc(fmtAge(c.updated_at)) : "—") + '</td>'
+        + '</tr>';
+    }).join("");
+    return '<table class="rt-table">'
+      + '<thead><tr><th>Title</th><th>Status</th><th>Priority</th>'
+      +   '<th>Assignee</th><th>Updated</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table>';
+  }
+
   function paintBoard(rows) {
     const filtered = applyHiddenFilter(applyDoneWindow(rows));
+    paintCasesOverview(filtered);
     const byStatus = STATUS_ORDER.reduce((acc, s) => (acc[s] = [], acc), {});
     filtered.forEach((c) => {
       const s = STATUS_ORDER.includes(c.status) ? c.status : "backlog";

@@ -19,6 +19,7 @@ import {
   setKpi as _setKpi,
   renderListPager as _renderListPager,
   createListCharts,
+  wireListColumnsExport,
 } from "/scripts/list-page.js";
 
 // Tab inventory + group partition + window options extracted into
@@ -217,6 +218,35 @@ export default function monitoring(app, { session }) {
   let listShown  = 0;     // rows actually on the current page
   let listWindow = DEFAULT_WINDOW;
   let listSearch = "";    // ?q= text from the toolbar search input
+  let activeTabKey = null; // the rail tab currently rendered in the body
+  // Columns/export wiring (shared list-page helper). lastMonRows caches
+  // the current page's raw rows for export; colsCtrl holds the helper's
+  // re-apply hooks (hidden-column + reorder) called after each repaint.
+  let lastMonRows = [];
+  let colsCtrl    = null;
+
+  // ── rail tab hide/restore — pure display:none-style declutter.
+  //    Em 2026-05-28: hiding a tab is a rail-display concern only; it
+  //    must NOT cut the data source. A hidden tab's endpoint still
+  //    serves wherever else it's referenced (charts, the per-user
+  //    activity feed, etc.) — we only drop its nav entry from the rail.
+  //    Mirrors the workspace/cases/home recovery pattern per
+  //    docs/internal/processes/replicable-feature-pattern.md. Stored as
+  //    [{key, label}] so the recovery surface labels without a lookup.
+  const HIDDEN_TABS_KEY = "monitoring_hidden_tabs";
+  function getHiddenTabs() {
+    const list = getPref(HIDDEN_TABS_KEY);
+    return Array.isArray(list) ? list : [];
+  }
+  function hideTab(entry) {
+    const list = getHiddenTabs();
+    if (list.some((x) => x.key === entry.key)) return;
+    list.push(entry);
+    setPref(HIDDEN_TABS_KEY, list);
+  }
+  function unhideTab(key) {
+    setPref(HIDDEN_TABS_KEY, getHiddenTabs().filter((x) => x.key !== key));
+  }
 
   // List-page bindings — partial-apply view + ID prefixes once so
   // call sites keep their original short-arg signatures. Charts
@@ -241,27 +271,60 @@ export default function monitoring(app, { session }) {
   // ─── rail collapse (shared rail-controls helper) ────────────
   mountRailCollapse(nav, app.querySelector("#rpMonNavCollapse"));
 
-  // ─── render the rail (static groups → tabs) ─────────────────
-  navBody.innerHTML = MON_GROUPS.map(renderGroup).join("");
-  navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
+  // ─── render the rail (static groups → tabs, minus hidden) ───
+  renderRail();
 
-  // Active tab — from hash (?tab=<key>) or default. Only wired keys
-  // activate; an unwired hash coerces to the default tab.
+  // Active tab. An explicit ?tab= deep-link wins even over a user's
+  // declutter (and an unwired key still coerces to default inside
+  // activate). A bare load lands on the first still-visible tab, so we
+  // never render a body whose nav entry the user has hidden.
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
-  const wantTab = params.get("tab") || MON_DEFAULT_TAB;
+  const wantTab = params.get("tab") || firstVisibleTabKey() || MON_DEFAULT_TAB;
   activate(wantTab);
 
   // ─── rail click delegation ───────────────────────────────────
   navBody.addEventListener("click", (e) => {
     const head = e.target.closest(".rt-group-head");
     if (head) { head.closest(".rt-group").classList.toggle("expanded"); return; }
+    // Hide × — declutters the rail (pref write + re-render), never a
+    // data cut. Caught before the tab branch + returns per Invariant 2
+    // so the click doesn't also activate the tab it's removing.
+    const hideBtn = e.target.closest(".rt-tab-close");
+    if (hideBtn) {
+      e.stopPropagation();
+      const tab = hideBtn.closest(".rt-tab");
+      if (tab?.dataset.key) onHideTab(tab.dataset.key);
+      return;
+    }
+    // Recovery item — restore the tab (drop from pref + re-render). The
+    // body view is untouched; reapplyActive re-marks the live tab.
+    const restoreItem = e.target.closest(".rt-hidden-item");
+    if (restoreItem?.dataset.key) {
+      unhideTab(restoreItem.dataset.key);
+      renderRail();
+      reapplyActive();
+      return;
+    }
     const tab = e.target.closest(".rt-tab");
-    if (tab) activate(tab.dataset.key);
+    if (tab && tab.dataset.key) activate(tab.dataset.key);
   });
 
   // ─── rail helpers ────────────────────────────────────────────
-  function renderGroup(g) {
-    const tabs = MON_TABS.filter((t) => t.group === g.name);
+  // Rebuilds the rail body from MON_GROUPS minus the hidden set, plus
+  // the recovery surface. Re-callable on hide/restore — it wipes the
+  // active class (reapplyActive / activate restores it) but never the
+  // body view (#rpMonView), so no data refetch happens.
+  function renderRail() {
+    const hidden = new Set(getHiddenTabs().map((x) => x.key));
+    let html = MON_GROUPS.map((g) => renderGroup(g, hidden)).join("");
+    html += renderHiddenTabsSection();
+    navBody.innerHTML = html;
+    navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
+  }
+  function renderGroup(g, hidden) {
+    const tabs = MON_TABS.filter((t) => t.group === g.name && !hidden.has(t.key));
+    // Whole group hidden → drop the section header too (no empty groups).
+    if (!tabs.length) return "";
     return ''
       + '<div class="rt-group">'
       +   '<button class="rt-group-head" type="button">'
@@ -277,11 +340,54 @@ export default function monitoring(app, { session }) {
     const attrs = t.wired
       ? ' data-key="' + esc(t.key) + '"'
       : ' disabled title="Coming soon — endpoint /api' + esc(t.endpoint) + ' pending"';
+    // Hide × only on wired tabs — disabled tabs swallow child clicks, and
+    // the "coming soon" placeholders are meant to stay visible anyway.
     return ''
       + '<button class="rt-tab" type="button"' + attrs + '>'
       +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
       +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
+      +   (t.wired ? '<span class="rt-tab-close" title="Hide from rail"><i class="bi bi-x"></i></span>' : '')
       + '</button>';
+  }
+  function renderHiddenTabsSection() {
+    const hidden = getHiddenTabs();
+    if (!hidden.length) return "";
+    const items = hidden.map((h) =>
+      '<button class="rt-hidden-item" type="button" data-key="' + esc(h.key) + '">'
+      +   '<span class="rt-hidden-name">' + esc(h.label || h.key) + '</span>'
+      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      + '</button>'
+    ).join("");
+    return '<details class="rt-hidden">'
+      +   '<summary class="rt-hidden-summary">'
+      +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
+      +   '</summary>'
+      +   '<div class="rt-hidden-body">' + items + '</div>'
+      + '</details>';
+  }
+  // First still-visible wired tab, preferring the default — used as the
+  // landing tab when the user hides the one they're currently viewing.
+  function firstVisibleTabKey() {
+    const hidden = new Set(getHiddenTabs().map((x) => x.key));
+    if (!hidden.has(MON_DEFAULT_TAB)) return MON_DEFAULT_TAB;
+    return MON_TABS.find((t) => t.wired && !hidden.has(t.key))?.key || null;
+  }
+  function reapplyActive() {
+    if (!activeTabKey) return;
+    navBody.querySelector('.rt-tab[data-key="' + cssEsc(activeTabKey) + '"]')?.classList.add("active");
+  }
+  function onHideTab(key) {
+    const meta = MON_TABS.find((t) => t.key === key);
+    hideTab({ key, label: meta?.label || key });
+    renderRail();
+    // Hiding the active tab → land on the first survivor (re-renders the
+    // body). Hiding any other tab keeps the current body; just re-mark it.
+    if (activeTabKey === key) {
+      const fallback = firstVisibleTabKey();
+      if (fallback) activate(fallback);
+    } else {
+      reapplyActive();
+    }
   }
 
   // ─── tab activation ──────────────────────────────────────────
@@ -511,7 +617,7 @@ export default function monitoring(app, { session }) {
     //   listToolbarHTML (search / refresh / rows / cols / export / history)
     //   listPanel (the canonical rt-table with sortable headers)
     //   rt-pager
-    // The previous filter panel + rt-surface-body wrapper are gone —
+    // The previous filter panel + rp-surface-body wrapper are gone —
     // Home doesn't have them, so neither does Monitoring. Future
     // per-tab filters land via spec.chipRows (the same path Home
     // already uses), not via a sliding panel.
@@ -648,6 +754,16 @@ export default function monitoring(app, { session }) {
       });
     }
 
+    // Columns picker + export — shared list-page helper (same wiring as
+    // Home). getRows reads the cached current page; the returned hooks
+    // re-apply hidden-column + reorder state after every fetchList paint.
+    colsCtrl = wireListColumnsExport(view, {
+      columns:    viewSpec.columns || [],
+      storageKey: tab.key,
+      getRows:    () => lastMonRows,
+      exportName: tab.key,
+    });
+
     view.querySelector("#rp-mon-list-pager").addEventListener("click", (e) => {
       const btn = e.target.closest(".rt-pg[data-page]");
       if (!btn) return;
@@ -719,6 +835,11 @@ export default function monitoring(app, { session }) {
           ? rows.map(viewSpec.row).join("")
           : '<tr><td colspan="' + colCount + '">No rows.</td></tr>';
       }
+      // Cache for export + re-apply the columns picker / reorder state
+      // so the freshly-rendered rows inherit hidden + ordered columns.
+      lastMonRows = rows;
+      colsCtrl?.applyHiddenColumns();
+      colsCtrl?.applyColumnOrder();
       renderListPager();
     } catch (err) {
       setKpi("rp-mon-list-total", "—");

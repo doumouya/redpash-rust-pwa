@@ -29,12 +29,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* viewer — the rendered article */
-.rp-doc {
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: var(--rp-radius-lg);
+/* The doc body now lives inside the canonical .rp-surface card
+   (#rpDocsView), so the surface owns the card chrome + the reading
+   inset, and scrolls its own content (overriding .rp-surface's
+   overflow:hidden). The article itself is plain — no second card. */
+#rpDocsView {
+  overflow-y: auto;
   padding: var(--rp-sp-6) var(--rp-sp-8);
+}
+
+/* viewer — the rendered article (plain content inside the surface) */
+.rp-doc {
   color: var(--rp-text);
   line-height: 1.65;
 }

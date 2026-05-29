@@ -18,16 +18,10 @@
 /* rail + body horizontal split */
 .rp-shell-body { flex: 1; display: flex; min-height: 0; }
 
-.rp-shell-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: var(--rp-sp-6);
-}
-
-.rp-shell-view { width: 100%; max-width: 68.75rem; margin: 0 auto; }
+/* .rp-shell-main / .rp-shell-view retired 2026-05-29 — every page's main
+   is now the canonical `.rp-main > .rp-surface` chain (docs + cases were
+   the last holdouts). The page main lives in workspace.css (.rp-main);
+   per-page main tweaks compose it (e.g. .rp-main.rp-cases-main). */
 
 /* ── chip row — a horizontal pill-selector ──────────────────────
    Shared atom: window chips on /monitoring (1h/24h/7d/30d), scope
@@ -120,15 +114,10 @@
 .rp-home-row--clickable { cursor: pointer; }
 .rp-home-row--clickable:hover td { background: var(--rp-hover); }
 
-/* ── --wide modifier ────────────────────────────────────────────
-   Opt-in: page wants the body to span the full available width
-   beside the rail (like the Workspace's redtable). Drops the main
-   padding to a tight 0.875rem (matches workspace.css's .rt-main) and
-   releases the inner view from its 68.75rem cap. Used on /monitoring
-   where tables benefit from horizontal real estate; not on /home
-   where the card grid genuinely benefits from a centred cap. */
-.rp-shell--wide .rp-shell-main { padding: 0.875rem; }
-.rp-shell--wide .rp-shell-view { max-width: none; }
+/* `.rp-shell--wide` no longer carries rules (2026-05-29): the wide main
+   padding (0.875rem) + uncapped width are now the default `.rp-main`
+   behaviour, so every shell page is "wide". The class is retained on the
+   sections as an intent marker until a narrow variant is reintroduced. */
 
 .rp-shell-state {
   margin: 0;
@@ -250,11 +239,43 @@
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-4);
 }
-.rp-list-composite__stats {
+.rp-list-composite__stats,
+.rp-hero-strip__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
   gap: var(--rp-sp-2);
+}
+
+/* Hero strip — the overview variant for the Cases/Workspace landings
+   (Em's spec): one chart (40%) · a 2×2 stats grid (20%) · one chart
+   (40%). Reuses .rp-chart-card / .rp-kpi atoms; only the 3-column split
+   differs from the 5-cell .rp-list-composite. Emitted by heroStripHTML
+   in list-page.js. */
+.rp-hero-strip {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  gap: var(--rp-sp-3);
+}
+
+/* ── overview layout — the shared 3-row landing (Cases board +
+   Workspace landing). Row 1 = hero strip (fixed), row 2 = a capped
+   band (kanban for Cases / recent cards for Workspace, scrolls if it
+   overflows), row 3 = a contextual table that flex-fills the rest and
+   scrolls. The page container (#rp-cases-board / #wsLanding) supplies
+   its own padding; this just sets the column flow + per-row sizing. */
+.rp-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-4);
+  min-height: 0;
+}
+.rp-overview__hero { flex-shrink: 0; }
+.rp-overview__mid  { flex-shrink: 0; min-height: 0; }
+.rp-overview__table {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* Empty chart slot — placeholder for tabs that haven't filled all
    4 chart positions yet. Faded so it reads as "this slot exists,

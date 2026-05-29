@@ -9,7 +9,7 @@
 /* ─── rail-page shell adaptation (2026-05-27) ──────────────────
    Settings migrated to the standard `.rp-shell` rail layout used by
    Home / Monitoring / Workspace / Cases — same `.rt-nav` rail
-   atom + `<main class="rt-main"><div class="rt-surface">` content
+   atom + `<main class="rp-main"><div class="rp-surface">` content
    shell + the JS-populated grouped-tab rail body (rt-group +
    rt-tab) from settings.js's mountSettingsRail. The rail visual
    itself lives in rail.css; this file owns the surface treatment
@@ -19,14 +19,14 @@
    Em's framing 2026-05-27: "replace the nav in settings with the
    same rail side-nav as in all the other page." */
 .rp-settings__surface {
-  /* rt-surface is the scrolling container for the active section's
+  /* rp-surface is the scrolling container for the active section's
      content (a single section can still exceed the viewport — the
      chart pickers can hold many rows). Tab-switch UX (Em 2026-05-28):
      only one .rp-page__section is visible at a time (others carry
      [hidden]); the surface fills with that section's content.
 
      **Overflow override.** Workspace/Home/Monitoring keep
-     `.rt-surface { overflow: hidden }` because their content is a
+     `.rp-surface { overflow: hidden }` because their content is a
      redtable that scrolls inside its own panel. Settings doesn't
      have that inner scrolling panel — the section IS the scrolling
      content. */

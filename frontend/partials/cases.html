@@ -93,16 +93,25 @@
          detail panel so you can keep scanning the board, and the
          rail still navigates between cases without losing the
          board context. -->
-    <main class="rp-shell-main rp-cases-main">
+    <main class="rp-main rp-cases-main">
 
-      <!-- board view (always rendered now) -->
-      <div id="rp-cases-board" class="rp-cases-board">
-        <div class="rp-cases-cols" id="rp-cases-cols">
+      <!-- board view (always rendered now) — a 3-row overview
+           (.rp-overview, shell.css), the Home/Monitoring layout adapted
+           to Cases (Em 2026-05-29):
+             row 1: hero strip — chart 40% · 2×2 stats · chart 40%
+             row 2: the kanban, capped to ~3 cards tall (scrolls)
+             row 3: a contextual cases table, fills remaining height
+           Hero + table are filled by cases.js paintCasesOverview(); the
+           kanban by paintBoard(). -->
+      <div id="rp-cases-board" class="rp-cases-board rp-overview rp-surface">
+        <div class="rp-overview__hero" id="rp-cases-ov-hero"></div>
+        <div class="rp-cases-cols rp-overview__mid" id="rp-cases-cols">
           <!-- JS renders 5 .rp-cases-col elements here, one per status
                (backlog / todo / in_progress / in_review / done). Cards
                are anchors → /cases?id=…; the chevron button advances
                status via PATCH. -->
         </div>
+        <div class="rp-overview__table" id="rp-cases-ov-table"></div>
       </div>
 
       <!-- detail panel — slides over the kanban from the right when

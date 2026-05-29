@@ -24,7 +24,7 @@
 // Atom catalog — the foundation classes the design system contract
 // guarantees. Start with the cross-page atoms (rail/topbar/page-shell
 // territory) + the inspo-deck card vocabulary. Page-specific atoms
-// (.rp-workspace, .rp-cases-detail, etc.) get their own captures
+// (.rp-cases-detail, .rp-cases-board, etc.) get their own captures
 // implicitly via the same walker on those routes.
 //
 // v1 is conservative — expand only when a real drift escapes (per
@@ -32,7 +32,7 @@
 // findings, not in anticipation of them). Co-owned with Torv's atom
 // catalog in redtable-unification.md.
 const ATOM_CATALOG = [
-  ".rt-surface",
+  ".rp-surface",
   ".rt-toolbar",
   ".rt-table-wrap",
   ".rt-pager",

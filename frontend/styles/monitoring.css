@@ -9,16 +9,16 @@
    specific atoms: modal chrome, page-content pills inside tables,
    error-chain row expander. */
 
-/* #rpMonView IS the rt-surface, mirroring Home's #rpHomeView.
+/* #rpMonView IS the rp-surface, mirroring Home's #rpHomeView.
    Padding matches Home so the chip-row / composite / toolbar /
    table / pager sit with a symmetric inner gap in the card. The
    flex-fill chain comes entirely from foundation atoms — no
    per-page overrides needed:
-     .rt-surface       (flex: 1, min-height: 0, flex column)
+     .rp-surface       (flex: 1, min-height: 0, flex column)
        → .rt-table-wrap  (flex: 1, min-height: 0, overflow: auto)
                          claims remaining height from table.css:13
      → .rt-pager       (natural height, sits below the wrap)
-   The previous rt-surface-body wrapper rule + the pager
+   The previous rp-surface-body wrapper rule + the pager
    margin-top:auto safety-net are gone — both were workarounds
    for the filter-panel wrapper that's no longer in the render
    (773f409). Em 2026-05-25: "make the tabs take all remaining

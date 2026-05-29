@@ -2,13 +2,13 @@
    Page-specific styles for /home only. The rail-page shell (outer
    layout, rail+body split, per-tab head, KPI strip) lives in
    shell.css and is shared with /monitoring. The body card surface
-   now uses .rt-surface directly (workspace.css), so this file owns
+   now uses .rp-surface directly (workspace.css), so this file owns
    only per-tab row polish + the toolbar 80% separator override.
 
    Shell chain on Home (2026-05-25, mirrors Workspace):
      .rp-shell-body                (flex row)
-       → main.rt-main              (padding 0.875rem, flex column)
-         → .rt-surface#rpHomeView  (the chrome'd card + flex col)
+       → main.rp-main              (padding 0.875rem, flex column)
+         → .rp-surface#rpHomeView  (the chrome'd card + flex col)
            → chip-row              (fixed-height)
            → composite-strip       (fixed-height)
            → .rt-toolbar           (fixed-height)
@@ -16,8 +16,8 @@
            → .rt-pager             (fixed-height) */
 
 /* Inner padding on the surface — Em 2026-05-25 ask. 0.875rem matches
-   the .rt-main padding on the outer side, so the content sits with a
-   symmetric gap inside the .rt-surface card. */
+   the .rp-main padding on the outer side, so the content sits with a
+   symmetric gap inside the .rp-surface card. */
 #rpHomeView { padding: 0.875rem; }
 
 /* The shared .rt-toolbar (toolbar.css:5) carries a full-width
@@ -142,7 +142,7 @@
 #rp-home-list-tbody tr:hover .rt-tab-close,
 #rp-home-list-tbody tr:focus-within .rt-tab-close { opacity: 1; }
 
-/* Recovery host — sits below the pager, inside .rt-surface. Matches
+/* Recovery host — sits below the pager, inside .rp-surface. Matches
    the .rt-hidden atoms' inset so the <details> reads as part of the
    list surface, not a stray block. */
 .rp-home-hidden-host {

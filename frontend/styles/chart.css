@@ -30,7 +30,7 @@
                panels) + pager — the redtable surface.
    - designer: chart-only toolbar + canvas + accordion config — the
                full Designer takeover.
-   workspace.js toggles .is-designer-mode on .rt-surface when a CHT_
+   workspace.js toggles .is-designer-mode on .rp-surface when a CHT_
    file is opened; CSS here swaps which children show. */
 
 /* default (data mode) — show data, hide designer */
@@ -38,14 +38,14 @@
 
 /* designer mode — hide everything data, show the designer toolbar
    and let the designer container own the body. */
-.rt-surface.is-designer-mode .rt-toolbar--data,
-.rt-surface.is-designer-mode .rt-pager,
-.rt-surface.is-designer-mode .rt-panel--filter,
-.rt-surface.is-designer-mode .rt-panel--history,
-.rt-surface.is-designer-mode .rt-panel--tools {
+.rp-surface.is-designer-mode .rt-toolbar--data,
+.rp-surface.is-designer-mode .rt-pager,
+.rp-surface.is-designer-mode .rt-panel--filter,
+.rp-surface.is-designer-mode .rt-panel--history,
+.rp-surface.is-designer-mode .rt-panel--tools {
   display: none !important;
 }
-.rt-surface.is-designer-mode .rt-toolbar--designer {
+.rp-surface.is-designer-mode .rt-toolbar--designer {
   display: flex;
 }
 
@@ -68,7 +68,7 @@
 .rt-designer {
   flex: 1;
   min-width: 0;
-  height: 100%;            /* fill .rt-table-wrap (which fills .rt-surface-body) */
+  height: 100%;            /* fill .rt-table-wrap (which fills .rp-surface-body) */
   display: flex;
   background: var(--rp-bg);
 }

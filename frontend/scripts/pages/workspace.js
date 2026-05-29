@@ -25,6 +25,7 @@ import { invalidateFile as invalidateColumnIndex } from "/scripts/column-index.j
 import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
+import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
@@ -38,6 +39,10 @@ const DEFAULT_PAGE_SIZE = 25;
 export default function workspace(app, { session }) {
   const $  = (s) => app.querySelector(s);
   const $$ = (s) => Array.from(app.querySelectorAll(s));
+
+  // Caller identity — drives the Personal/Shared ownership split in the
+  // rail filter (owner_id === me ⇒ personal, else shared).
+  const meRid = session?.redpash_id || "";
 
   mountTopbar($("#rp-topbar"), { active: "workspace", session });
   mountRailFooterNav($(".rt-nav-foot"), { active: "", session });
@@ -80,6 +85,14 @@ export default function workspace(app, { session }) {
   let searchQ       = "";
   let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
   let searchDebounce = null;
+  // Rail filter state — both ephemeral per visit (no pref): a deep-link
+  // into a project must never be hidden by a stale persisted filter.
+  // ownerFilter ∈ {all, personal, shared, company}; railSearchQ matches
+  // project names. applyRailFilters toggles group visibility on change.
+  let ownerFilter      = "all";
+  let railSearchQ      = "";
+  let railSearchDebounce = null;
+  let cachedProjects   = []; // last /projects roster — feeds the landing surface
   let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
   let joinsCtrl     = null; // mountJoins' control surface — refresh() re-fetches sibling candidates
   let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
@@ -194,6 +207,37 @@ export default function workspace(app, { session }) {
     onChange:    (view) => { nav.dataset.railView = view; },
   });
   const setRailView = (view) => railViewSeg.set(view);
+
+  // ─── rail filter — project-name search + ownership pills ───────
+  // Both are pure visibility filters (applyRailFilters); they never
+  // refetch or touch the data source. Search is debounced; the pills
+  // are single-select with an "All" reset. Mirrors the Cases rail
+  // filter so the two data-item rails align.
+  const railSearchInput = $("#wsRailSearch");
+  railSearchInput?.addEventListener("input", () => {
+    clearTimeout(railSearchDebounce);
+    railSearchDebounce = setTimeout(() => {
+      railSearchQ = railSearchInput.value;
+      applyRailFilters();
+    }, 150);
+  });
+  const ownerFilterEl = $("#wsOwnerFilter");
+  ownerFilterEl?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-owner]");
+    if (!btn || btn.dataset.owner === ownerFilter) return;
+    ownerFilter = btn.dataset.owner;
+    ownerFilterEl.querySelectorAll(".rp-chip").forEach((b) =>
+      b.classList.toggle("is-active", b === btn));
+    applyRailFilters();
+  });
+
+  // Landing click → open that project. Both the recent cards (row 2)
+  // and the projects-table rows (row 3) carry data-rid. Delegated; the
+  // container persists across renderLanding rebuilds.
+  $("#wsLanding")?.addEventListener("click", (e) => {
+    const item = e.target.closest(".ws-landing-card, .ws-landing-row");
+    if (item?.dataset.rid) openProjectFromLanding(item.dataset.rid);
+  });
 
   // ─── upload — POST /api/files/upload (multipart), N at a time ──
   // Files picked from #wsUploadInput → uploaded sequentially into the
@@ -419,7 +463,8 @@ export default function workspace(app, { session }) {
   async function loadProjects() {
     try {
       const data = await api.get("/projects");
-      renderRail(data?.items || []);
+      cachedProjects = data?.items || [];
+      renderRail(cachedProjects);
     } catch (err) {
       navBody.setAttribute("aria-busy", "false");
       navBody.innerHTML = '<div class="rt-nav-state">Couldn’t load projects'
@@ -435,30 +480,36 @@ export default function workspace(app, { session }) {
     const visible        = items.filter((p) => !hiddenProjSet.has(p.redpash_id));
     if (!visible.length && !hiddenProjects.length && !hiddenFiles.length) {
       navBody.innerHTML = '<div class="rt-nav-state">No projects yet.</div>';
+      // No projects + no file open → land on the (empty) overview rather
+      // than the bare "open a file" table prompt, so a brand-new user
+      // gets the upload nudge.
+      if (!activeFileRid) showLanding();
       return;
     }
-    let html = visible.map(projectGroup).join("");
+    let html = landingTabHTML() + visible.map(projectGroup).join("");
     if (hiddenProjects.length || hiddenFiles.length) {
       html += renderHiddenSection(hiddenProjects, hiddenFiles);
     }
     navBody.innerHTML = html;
-    // Deep-link via #/workspace?project=<rid>&file=<rid>. Project
-    // auto-opens that project; file (optional) jumps straight to
-    // that file instead of the project's first tab — used by Home
-    // to land the user on a specific chart or csv. Falls back to
-    // is_default, then first group.
+    // Deep-link via #/workspace?project=<rid>&file=<rid>. A deep-link
+    // (project and/or file) auto-opens into the surface — Home uses it
+    // to land the user on a specific chart/csv. A BARE #/workspace lands
+    // on the overview (showLanding) instead of auto-opening a file, so
+    // the rail expands the default project for context but the main area
+    // shows the landing — the Workspace twin of the Cases board.
     const params   = new URLSearchParams(location.hash.split("?")[1] || "");
     const wantRid  = params.get("project");
     const wantFile = params.get("file");
+    const hasDeepLink = !!(wantRid || wantFile);
     const first = (wantRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(wantRid) + '"]'))
                || navBody.querySelector('.rt-group[data-default="1"]')
                || navBody.querySelector(".rt-group");
     if (first) {
-      // Mark the target group so loadFilesForGroup auto-opens its first
-      // file (the auto-open path is dataset.default === "1"). When a
-      // file deep-link is set, stash it so loadFilesForGroup picks it
-      // instead of the first tab.
-      if (wantRid && first.dataset.rid === wantRid) first.dataset.default = "1";
+      // data-autoopen (deep-link only) is the auto-open trigger now —
+      // distinct from data-default (the is_default project), so a bare
+      // load expands the default group's rail without opening a file.
+      // A file deep-link stashes the wanted rid for loadFilesForGroup.
+      if (hasDeepLink) first.dataset.autoopen = "1";
       if (wantFile) first.dataset.wantFile = wantFile;
       first.classList.add("expanded");
       // Seed project focus with the deep-link / default / first group so
@@ -467,13 +518,218 @@ export default function workspace(app, { session }) {
       if (!focusedProjectRid) focusedProjectRid = first.dataset.rid || null;
       loadFilesForGroup(first);
     }
+    // Bare load (no deep-link, nothing already open) → the landing.
+    if (!hasDeepLink && !activeFileRid) showLanding();
+    // Apply the active rail filters to the freshly-rendered groups —
+    // re-renders (hide/restore, deep-link) re-assert the current search
+    // + ownership selection without a refetch.
+    applyRailFilters();
+  }
+
+  // Render-time visibility filter over the project groups — toggles
+  // each group's `hidden` (cheap, preserves expand + loaded files) by
+  // ANDing the ownership pill against the name search. The hidden
+  // recovery <details> + an injected empty-state are left untouched
+  // (they aren't .rt-group). Never touches the data source.
+  function applyRailFilters() {
+    const q = railSearchQ.trim().toLowerCase();
+    const groups = navBody.querySelectorAll(".rt-group");
+    let anyVisible = false;
+    groups.forEach((g) => {
+      const tokens   = (g.dataset.ownership || "").split(/\s+/).filter(Boolean);
+      const ownerOk  = ownerFilter === "all" || tokens.includes(ownerFilter);
+      const name     = (g.querySelector(".rt-group-name")?.textContent || "").toLowerCase();
+      const searchOk = !q || name.includes(q);
+      const show     = ownerOk && searchOk;
+      g.hidden = !show;
+      if (show) anyVisible = true;
+    });
+    // Empty-state — only when projects exist but the filter hides them all.
+    let empty = navBody.querySelector("#wsRailNoMatch");
+    const needEmpty = groups.length > 0 && !anyVisible;
+    if (needEmpty && !empty) {
+      empty = document.createElement("div");
+      empty.id = "wsRailNoMatch";
+      empty.className = "rt-nav-state";
+      navBody.appendChild(empty);
+    }
+    if (empty) {
+      empty.textContent = q ? "No projects match “" + railSearchQ.trim() + "”."
+                            : "No projects in this filter.";
+      empty.hidden = !needEmpty;
+    }
+  }
+
+  // ─── landing surface — the default overview (no file open) ─────
+  // A third surface mode alongside data + designer: .is-landing-mode on
+  // #wsSurface (workspace.css) hides the toolbars / body / pager and
+  // shows #wsLanding. The Workspace twin of the Cases board — recent
+  // projects + a stats strip. Opening any file (rail click or a landing
+  // card) calls hideLanding() and takes over the surface.
+  // Pinned "Overview" rail entry — the Workspace twin of Cases' Board
+  // pseudo-tab. Active reflects the current surface mode so a rail
+  // rebuild paints it correctly.
+  function landingTabHTML() {
+    const active = $("#wsSurface")?.classList.contains("is-landing-mode") ? " active" : "";
+    return '<button class="rt-tab rt-rail-pinned' + active + '" type="button" data-rail-landing>'
+      +   '<i class="rt-tab-icon bi bi-grid-1x2-fill"></i>'
+      +   '<span class="rt-tab-name">Overview</span>'
+      + '</button>';
+  }
+  function setLandingTabActive(on) {
+    const tab = navBody.querySelector("[data-rail-landing]");
+    if (on) navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+    tab?.classList.toggle("active", on);
+  }
+  // Explicit return-to-overview (the Overview rail click). Drops the
+  // open file so re-clicking its tab re-opens it (loadFile early-returns
+  // on the same rid), then shows the landing.
+  function goToLanding() {
+    activeFileRid = null;
+    showLanding();
+  }
+  function showLanding() {
+    const surface = $("#wsSurface");
+    surface.classList.remove("is-designer-mode");
+    surface.classList.add("is-landing-mode");
+    renderLanding();
+    setLandingTabActive(true);
+  }
+  function hideLanding() {
+    $("#wsSurface").classList.remove("is-landing-mode");
+    setLandingTabActive(false);
+  }
+  // Hero charts (Em 2026-05-29) — by-stage donut + avg-cleanness gauge,
+  // derived client-side from the projects roster already in hand (no
+  // refetch) via the shared createListCharts pipeline.
+  const WS_OV_CHARTS = [
+    { id: "rp-ws-ov-stage", title: "By stage", kind: "donut",
+      data: (s) => (s.items || []).reduce((a, p) => {
+        const k = p.stage || "new"; a[k] = (a[k] || 0) + 1; return a;
+      }, {}) },
+    { id: "rp-ws-ov-clean", title: "Avg cleanness", kind: "gauge",
+      data: (s) => {
+        const xs = (s.items || []).map((p) => p.cleanness_pct).filter((v) => v != null);
+        return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+      }, opts: { max: 100, unit: "%" } },
+  ];
+  const landingCharts = createListCharts($("#wsLanding"), { logPrefix: "ws-ov" });
+
+  // The landing is a 3-row overview (a variation of the Home/Monitoring
+  // layout): row 1 = hero (stage donut + cleanness gauge flanking a 2×2
+  // stats grid), row 2 = recent-projects cards, row 3 = a projects table
+  // that flex-fills + scrolls. Stats span ALL projects — hiding is
+  // cosmetic rail declutter, not a data cut (see hide-is-display-not-
+  // access); the recent grid + table respect the declutter (exclude
+  // hidden projects) since they're nav shortcuts.
+  function renderLanding() {
+    const landing = $("#wsLanding");
+    if (!landing) return;
+    const projects = cachedProjects || [];
+    const totalFiles  = projects.reduce((a, p) => a + (p.file_count || 0), 0);
+    const sharedCount = projects.filter((p) => p.owner_id !== meRid).length;
+    const cleanVals   = projects.map((p) => p.cleanness_pct).filter((v) => v != null);
+    const avgClean    = cleanVals.length
+      ? Math.round(cleanVals.reduce((a, b) => a + b, 0) / cleanVals.length) + "%"
+      : "—";
+    const hiddenSet = new Set(getHidden(HIDDEN_PROJECTS_KEY).map((x) => x.rid));
+    const visible   = projects.filter((p) => !hiddenSet.has(p.redpash_id));
+    const recent = visible.slice()
+      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+      .slice(0, 8);
+    const cards = recent.length
+      ? recent.map(landingCard).join("")
+      : '<p class="rt-empty">No projects yet — upload a file from the rail to get started.</p>';
+    landing.innerHTML = ''
+      + '<div class="rp-overview__hero">'
+      +   heroStripHTML(
+            [ { label: "Projects",      value: projects.length },
+              { label: "Files",         value: totalFiles      },
+              { label: "Shared",        value: sharedCount     },
+              { label: "Avg cleanness", value: avgClean        } ],
+            WS_OV_CHARTS)
+      + '</div>'
+      + '<section class="ws-landing-section rp-overview__mid">'
+      +   '<h3 class="ws-landing-section-title">Recent projects</h3>'
+      +   '<div class="ws-landing-grid">' + cards + '</div>'
+      + '</section>'
+      + '<div class="rp-overview__table">' + wsProjectsTableHTML(visible) + '</div>';
+    // Charts mount from data in hand; rAF resize so they pick up the
+    // real container size after the surface flips to landing mode.
+    landingCharts.dispose();
+    landingCharts.mountData({ charts: WS_OV_CHARTS }, { items: projects });
+    requestAnimationFrame(() => landingCharts.resize());
+  }
+  function wsProjectsTableHTML(projects) {
+    if (!projects.length) return '<p class="rt-empty ws-landing-table-empty">No projects.</p>';
+    const sorted = projects.slice()
+      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    const body = sorted.map((p) => {
+      const clean = p.cleanness_pct != null ? Math.round(p.cleanness_pct) + "%" : "—";
+      return '<tr class="ws-landing-row" data-rid="' + esc(p.redpash_id) + '">'
+        + '<td>' + esc(p.name || "(untitled)") + '</td>'
+        + '<td class="is-num">' + (p.file_count || 0) + '</td>'
+        + '<td>' + esc(p.stage || "new") + '</td>'
+        + '<td class="is-num">' + clean + '</td>'
+        + '<td>' + (p.owner_id === meRid ? "Personal" : "Shared") + '</td>'
+        + '</tr>';
+    }).join("");
+    return '<table class="rt-table">'
+      + '<thead><tr><th>Project</th><th>Files</th><th>Stage</th>'
+      +   '<th>Cleanness</th><th>Owner</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table>';
+  }
+  function landingCard(p, i) {
+    const color = MARK_COLORS[i % MARK_COLORS.length];
+    const initials = ((p.name || "?").trim().split(/\s+/)
+      .map((w) => w[0]).join("") || "?").slice(0, 2).toUpperCase();
+    const stage = p.stage || "new";
+    const dot   = STAGE_DOT[stage] || "is-dirty";
+    const files = p.file_count || 0;
+    return '<button class="ws-landing-card" type="button" data-rid="' + esc(p.redpash_id) + '">'
+      +   '<span class="rt-group-mark" data-c="' + color + '">' + esc(initials) + '</span>'
+      +   '<span class="ws-landing-card-body">'
+      +     '<span class="ws-landing-card-name">' + esc(p.name || "(untitled)") + '</span>'
+      +     '<span class="ws-landing-card-meta">' + files + ' file' + (files === 1 ? "" : "s")
+      +       ' · ' + esc(stage) + '</span>'
+      +   '</span>'
+      +   '<span class="rt-tab-dot ' + dot + '" title="' + esc(stage) + '"></span>'
+      + '</button>';
+  }
+  // Landing card → open the project: expand its rail group, load files,
+  // open the first one (which hides the landing). Empty project keeps the
+  // landing up but reflects the focus + an empty table prompt.
+  async function openProjectFromLanding(rid) {
+    const group = navBody.querySelector('.rt-group[data-rid="' + cssEsc(rid) + '"]');
+    if (!group) return;
+    focusedProjectRid = rid;
+    group.classList.add("expanded");
+    await loadFilesForGroup(group);
+    const firstTab = group.querySelector(".rt-tab");
+    if (firstTab) {
+      navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      firstTab.classList.add("active");
+      loadFile(firstTab.dataset.rid);
+    } else {
+      hideLanding();
+      activeFileRid = null;
+      setTableState("This project has no files yet — upload one from the rail.");
+      rowsInfo.textContent = "No file open.";
+    }
   }
 
   function projectGroup(p) {
     const c = MARK_COLORS[(groupColorIdx++) % MARK_COLORS.length];
     const initials = ((p.name || "?").trim().split(/\s+/)
       .map((w) => w[0]).join("") || "?").slice(0, 2).toUpperCase();
+    // Ownership tokens for the rail filter (space-separated, matched by
+    // applyRailFilters). owner_id === me ⇒ personal, else shared; a
+    // company_id adds the orthogonal "company" token. Baked in at render
+    // so filtering is a pure DOM-visibility toggle (no refetch).
+    const ownership = [p.owner_id === meRid ? "personal" : "shared"];
+    if (p.company_id) ownership.push("company");
     return '<div class="rt-group" data-rid="' + esc(p.redpash_id) + '"'
+      + ' data-ownership="' + ownership.join(" ") + '"'
       + (p.is_default ? ' data-default="1"' : '') + '>'
       +   '<button class="rt-group-head" type="button">'
       +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
@@ -627,10 +883,11 @@ export default function workspace(app, { session }) {
       // requestIdleCallback (with setTimeout fallback) keeps it off
       // the main thread; missed fetches are swallowed (best-effort).
       prewarmGroupFiles(data?.items || []);
-      // Default group — auto-open. If a deep-linked file rid is
-      // stashed on the group (?file=<rid>), pick that tab; otherwise
-      // pick the first.
-      if (!activeFileRid && group.dataset.default === "1") {
+      // Deep-link auto-open. If a deep-linked file rid is stashed on the
+      // group (?file=<rid>), pick that tab; otherwise the first. Gated on
+      // data-autoopen (set only for deep-links) — a bare load expands the
+      // default project here but lands on the overview, not a file.
+      if (!activeFileRid && group.dataset.autoopen === "1") {
         const wantFile = group.dataset.wantFile;
         const tab = (wantFile && body.querySelector('.rt-tab[data-rid="' + cssEsc(wantFile) + '"]'))
                  || body.querySelector(".rt-tab");
@@ -772,6 +1029,12 @@ export default function workspace(app, { session }) {
       }
       return;
     }
+    // Pinned "Overview" entry — return to the landing surface. Caught
+    // before the generic .rt-tab branch (it's a .rt-tab too, minus a rid).
+    if (e.target.closest("[data-rail-landing]")) {
+      goToLanding();
+      return;
+    }
     const head = e.target.closest(".rt-group-head");
     if (head) {
       const group = head.closest(".rt-group");
@@ -891,6 +1154,7 @@ export default function workspace(app, { session }) {
 
   async function loadFile(rid) {
     if (!rid || rid === activeFileRid) return;
+    hideLanding();   // opening any file leaves the overview surface
     activeFileRid = rid;
     // Reset all per-file state — column-indexed knobs only make sense
     // against the columns we're about to fetch.

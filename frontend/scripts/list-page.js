@@ -102,6 +102,34 @@ export function compositeStripHTML(tiles, charts) {
     + '</div>';
 }
 
+// Hero strip — the overview variant of the composite strip, per Em's
+// spec for the Cases/Workspace landings: one chart (40%) · a 2×2 stats
+// grid (20%) · one chart (40%). Tiles carry baked { label, value } (the
+// landing holds the numbers already); charts is [left, right] of
+// { id, title } whose canvases createListCharts mounts into. Same
+// .rp-chart-card / .rp-kpi atoms as the composite strip.
+export function heroStripHTML(tiles, charts) {
+  const chartCard = (c) => c
+    ? '<div class="rp-chart-card">'
+    +   '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+    +   '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
+    + '</div>'
+    : '<div class="rp-chart-card rp-chart-card--empty">'
+    +   '<div class="rp-chart-canvas"></div>'
+    + '</div>';
+  const cells = tiles.map((t) =>
+    '<div class="rp-kpi">'
+    + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
+    + '<span class="rp-kpi-value">' + esc(String(t.value)) + '</span>'
+    + '</div>'
+  ).join("");
+  return '<div class="rp-hero-strip">'
+    +   chartCard(charts[0])
+    +   '<div class="rp-hero-strip__stats">' + cells + '</div>'
+    +   chartCard(charts[1])
+    + '</div>';
+}
+
 // One card per chart in the spec. Each card carries a small title +
 // a 180px-tall canvas; createListCharts().mount initialises ECharts
 // against the canvas after the /stats fetch resolves.
@@ -176,7 +204,7 @@ export function listPanel(columns, tbodyId) {
 
 // Toolbar shell — full Workspace-parity shape. Same button order +
 // indices as workspace.html line 47-102. Em 2026-05-25 (after the
-// rt-surface adoption fixed the cascade): "try to bring back the
+// rp-surface adoption fixed the cascade): "try to bring back the
 // rt-mode buttons and all the buttons we removed". Same boring tab
 // everywhere; controls disable in their natural state where the
 // feature isn't wired yet, matching Workspace's no-file-open look.
@@ -681,6 +709,16 @@ export function createListCharts(view, opts = {}) {
       console.warn("[" + tag + "] stats fetch failed for", statsUrl, err);
       return;
     }
+    mountData(spec, stats);
+  }
+
+  // Render charts from data already in hand — no /stats fetch. The
+  // overview surfaces (Cases board, Workspace landing) hold the cases /
+  // projects roster already, so their hero charts derive client-side via
+  // each chart's data(stats) callback (e.g. reduce the roster by status)
+  // instead of paying a second round-trip on every repaint.
+  function mountData(spec, stats) {
+    if (!spec.charts || !spec.charts.length) return;
     spec.charts.forEach((c) => {
       const el = view.querySelector("#" + c.id);
       if (!el) return;
@@ -699,5 +737,5 @@ export function createListCharts(view, opts = {}) {
     instances.forEach((inst) => { try { inst.resize(); } catch { /* ignore */ } });
   }
 
-  return { mount, dispose, resize };
+  return { mount, mountData, dispose, resize };
 }

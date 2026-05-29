@@ -22,9 +22,13 @@
       <div class="rt-nav-foot"><!-- rail footer nav mounted by docs.js --></div>
     </aside>
 
-    <!-- ════ main — rendered markdown body ════ -->
-    <main class="rp-shell-main" id="rpDocsMain">
-      <div class="rp-shell-view" id="rpDocsView">
+    <!-- ════ main — rendered markdown body ════
+         Canonical shell chain (Em 2026-05-29): rp-main > rp-surface, the
+         same lifted card every page uses. The surface scrolls its own
+         content (doc-viewer.css overrides .rp-surface's overflow:hidden
+         for #rpDocsView) so long docs read inside the card. -->
+    <main class="rp-main" id="rpDocsMain">
+      <div class="rp-surface" id="rpDocsView">
         <p class="rp-shell-state">Loading…</p>
       </div>
     </main>

@@ -8,7 +8,7 @@
      Shell migration (2026-05-27): adopted the standard `.rp-shell`
      rail-page layout used by Home / Monitoring / Workspace / Cases —
      left rail (`.rt-nav` with grouped tabs), main area
-     (`.rt-main > .rt-surface`). Settings is the only page where
+     (`.rp-main > .rp-surface`). Settings is the only page where
      clicking a rail tab DOESN'T switch views — sections stay in a
      scrolling stack and the rail items are anchor links that jump
      within `#rpSetView`. Active tab tracks scroll position via the
@@ -35,12 +35,12 @@
     </aside>
 
     <!-- ════ main — section stack on one scroll surface ════
-         Same `<main class="rt-main"><div class="rt-surface">` shell
-         as Home / Monitoring. #rpSetView IS the rt-surface; the
+         Same `<main class="rp-main"><div class="rp-surface">` shell
+         as Home / Monitoring. #rpSetView IS the rp-surface; the
          IntersectionObserver in settings.js watches sections inside
          it for scroll-spy. -->
-    <main class="rt-main">
-      <div class="rt-surface rp-settings__surface" id="rpSetView">
+    <main class="rp-main">
+      <div class="rp-surface rp-settings__surface" id="rpSetView">
         <header class="rp-page__head">
           <h1 class="rp-page__title">Settings</h1>
           <p class="rp-page__sub">App preferences. Stored on this device.</p>

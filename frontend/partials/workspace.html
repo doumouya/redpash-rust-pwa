@@ -2,10 +2,10 @@
      and files; a file click fetches /api/files/:rid (columns) and
      /page (rows) and renders the table. The toolbar's controls
      operate on whatever's loaded. -->
-<section class="rp-workspace">
+<section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
 
-  <div class="rp-ws-body">
+  <div class="rp-shell-body">
 
     <!-- ════ rail — projects + files, lazy-loaded ════ -->
     <aside class="rt-nav" id="wsNav">
@@ -30,6 +30,24 @@
           <i class="bi bi-grid-1x2"></i> Dashboards
         </button>
       </div>
+      <!-- Rail filter zone — name search + ownership pills. Both are
+           client-side, render-time filters (no refetch): they toggle
+           project-group visibility, never the data source. Mirrors the
+           Cases rail-filter so the two data-item rails align (search +
+           pills); the shared .rt-rail-* atoms supersede cases'
+           .rp-cases-rail-* in the consolidation pass. -->
+      <div class="rt-rail-filter">
+        <div class="rt-search">
+          <i class="bi bi-search"></i>
+          <input type="search" id="wsRailSearch" placeholder="Search projects…" autocomplete="off" />
+        </div>
+        <div class="rt-rail-chips" id="wsOwnerFilter" role="group" aria-label="Project ownership filter">
+          <button type="button" class="rp-chip is-active" data-owner="all">All</button>
+          <button type="button" class="rp-chip" data-owner="personal" title="Projects you own">Personal</button>
+          <button type="button" class="rp-chip" data-owner="shared" title="Projects shared with you by others">Shared</button>
+          <button type="button" class="rp-chip" data-owner="company" title="Company-scoped projects">Company</button>
+        </div>
+      </div>
       <div class="rt-nav-body" id="wsNavBody" aria-busy="true">
         <div class="rt-nav-state">Loading projects…</div>
       </div>
@@ -50,8 +68,16 @@
     </aside>
 
     <!-- ════ main — the redtable surface ════ -->
-    <main class="rt-main">
-      <div class="rt-surface" id="wsSurface">
+    <main class="rp-main">
+      <div class="rp-surface" id="wsSurface">
+
+        <!-- landing — the default surface when no file is open (bare
+             #/workspace, no deep-link). Recent projects + a stats strip,
+             the Workspace twin of the Cases board. A third surface mode
+             alongside data + designer: .is-landing-mode (workspace.css)
+             hides the toolbars / body / pager and shows this. Content is
+             rendered by workspace.js renderLanding(). -->
+        <div class="ws-landing" id="wsLanding"></div>
 
         <!-- toolbar (data mode) — hidden when the surface is in
              designer mode (chart file open) -->
@@ -133,7 +159,7 @@
         </div>
 
         <!-- body — filter panel · table · tools panel -->
-        <div class="rt-surface-body">
+        <div class="rp-surface-body">
 
           <aside class="rt-panel rt-panel--filter" id="wsFilterPanel">
             <div class="rt-panel-inner">

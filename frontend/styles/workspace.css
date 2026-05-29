@@ -1,27 +1,21 @@
 /* ── workspace ──────────────────────────────────────────────────
-   The unified surface — the redtable as a browser. This file is the
-   shell layout; it composes the eight components, each styled in its
-   own file: topbar · rail · toolbar · table · panel · pager, plus the
-   button atom. */
-
-.rp-workspace {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.rp-ws-body { flex: 1; display: flex; min-height: 0; }
+   The unified surface — the redtable as a browser. This file styles
+   the redtable components (toolbar · table · panel · pager) + the
+   shared shell atoms (.rp-main / .rp-surface) used across all pages.
+   The page root + body use the shared .rp-shell / .rp-shell-body
+   (shell.css) — the bespoke .rp-workspace / .rp-ws-body were byte-
+   identical duplicates, retired 2026-05-29 per the page-structure
+   audit. */
 
 /* the redtable column to the right of the rail */
-.rt-main {
+.rp-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   padding: 0.875rem;
 }
-.rt-surface {
+.rp-surface {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -34,4 +28,85 @@
 }
 
 /* filter panel · table · tools panel */
-.rt-surface-body { flex: 1; min-height: 0; display: flex; }
+.rp-surface-body { flex: 1; min-height: 0; display: flex; }
+
+/* ── landing surface — the default overview when no file is open ──
+   A third surface mode alongside data + designer (the designer-mode
+   rules live in chart.css). .is-landing-mode hides the toolbars / body
+   / pager and reveals #wsLanding, which scrolls as one padded column —
+   recent projects + a stats strip, the Workspace twin of the Cases
+   board. Reuses the shared .rp-kpi-* / .rt-group-mark / .rt-tab-dot
+   atoms so it reads like the rest of the app. */
+.ws-landing { display: none; }
+.rp-surface.is-landing-mode .rt-toolbar--data,
+.rp-surface.is-landing-mode .rt-toolbar--designer,
+.rp-surface.is-landing-mode .rp-surface-body,
+.rp-surface.is-landing-mode .rt-pager {
+  display: none !important;
+}
+/* Landing mode → the surface is a 3-row overview (.rp-overview rows,
+   shell.css): hero (fixed) · recent cards (fixed) · projects table
+   (flex-fills + scrolls). The container is the flex column; rows manage
+   their own overflow. */
+.rp-surface.is-landing-mode .ws-landing {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--rp-sp-4);
+  min-height: 0;
+  overflow: hidden;
+  padding: 1.25rem 1.5rem;
+}
+/* Row 2 — recent projects band; the grid sits under its title. */
+.ws-landing-section { display: flex; flex-direction: column; gap: 0.625rem; }
+/* Row 3 — projects table; rows click through to open a project. */
+.ws-landing-row { cursor: pointer; }
+.ws-landing-row:hover { background: var(--rp-hover); }
+.ws-landing-table-empty { padding: 1rem; }
+.ws-landing-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ws-landing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.625rem;
+}
+.ws-landing-card {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.625rem;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.14s var(--rp-ease), background 0.14s var(--rp-ease),
+              transform 0.14s var(--rp-ease);
+}
+.ws-landing-card:hover {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-hover);
+  transform: translateY(-0.0625rem);
+}
+.ws-landing-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.ws-landing-card-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-landing-card-meta { font-size: 0.6875rem; color: var(--rp-text-mute); }

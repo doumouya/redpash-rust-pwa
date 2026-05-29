@@ -6,14 +6,14 @@
    for the comments/activity switcher. */
 
 /* ── main pane override ───────────────────────────────────────
-   The cases page hosts kanban (a fixed-height, internally-scrolling
-   grid) inside .rp-shell-main. Override the shell's default
-   `overflow-y: auto` + .rp-shell--wide's padding so the kanban
-   grid can use the full pane height + width without an outer
-   scroll. Selector specificity matches `.rp-shell--wide .rp-shell-main`
-   (0,0,2,0); source order wins since cases.css imports after
-   shell.css. */
-.rp-shell-main.rp-cases-main {
+   The cases main holds two mutually-exclusive surfaces (the board
+   overview card + the full-bleed detail), unlike the single-surface
+   .rp-main on other pages. Drop .rp-main's padding to 0 so the detail
+   reads edge-to-edge; the board re-insets itself with its own margin
+   (see .rp-cases-board). overflow:hidden keeps the kanban's internal
+   scroll from spawning an outer scrollbar. Higher specificity than the
+   base .rp-main, so these win. */
+.rp-main.rp-cases-main {
   overflow: hidden;
   padding: 0;
 }
@@ -166,12 +166,16 @@
 }
 
 /* ── board ────────────────────────────────────────────────────── */
+/* The board is a lifted .rp-surface card now (same atom Workspace's
+   overview uses) so the two overviews read identically in light + dark
+   — card surface tone + border + shadow, not bare page background.
+   .rp-surface supplies flex/column/bg/border/radius/shadow/overflow;
+   .rp-overview the gap; only the inset margin (Cases' main has padding:0,
+   unlike Workspace's .rp-main) + the inner padding are page-specific,
+   matched to the Workspace landing (1.25rem 1.5rem). */
 .rp-cases-board {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 0.875rem 1rem;
+  margin: 0.875rem;
+  padding: 1.25rem 1.5rem;
 }
 /* Explicit [hidden] override — the `display: flex` above wins over
    the UA stylesheet's `[hidden] { display: none }`, so without
@@ -179,6 +183,22 @@
    block) even when JS toggles `hidden = true` to show the detail
    view. Same gotcha applies to .rp-cases-detail below. */
 .rp-cases-board[hidden] { display: none; }
+
+/* Overview layout (Em 2026-05-29) — the board is now a 3-row overview
+   (.rp-overview, shell.css): hero strip · a height-capped kanban · a
+   cases table. The kanban no longer takes the whole surface — capped to
+   ~3 cards tall, each column scrolls internally (.rp-cases-col-body
+   already does). Overrides .rp-cases-cols' flex:1 in the overview. */
+.rp-cases-cols.rp-overview__mid {
+  flex: 0 0 auto;
+  max-height: 16rem;
+  overflow: hidden;
+}
+/* Row 3 — contextual cases table. Reuses the shared rt-table; the
+   wrapper scrolls (rp-overview__table) so long lists don't push the
+   board taller. */
+.rp-cases-ov-table .rt-table { width: 100%; }
+.rp-cases-ov-table-empty { padding: 1rem; }
 
 /* 5 columns laid out as a horizontal grid; each column scrolls
    vertically inside its own track. The grid itself never scrolls
@@ -397,7 +417,7 @@
 
 /* Ensure .rp-cases-main is the positioning context for the
    absolutely-positioned detail panel. */
-.rp-shell-main.rp-cases-main { position: relative; }
+.rp-main.rp-cases-main { position: relative; }
 .rp-cases-detail-head {
   flex-shrink: 0;
   display: flex;
