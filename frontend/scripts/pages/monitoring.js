@@ -894,6 +894,53 @@ export default function monitoring(app, { session }) {
     }
   }
 
+  // Friendly rendering for known event kinds in the activity feed.
+  // Per epic CAS_9A0C the comment kinds are the headline — they were
+  // rendering as a raw `case_comment_post` mono-pill. Each entry maps
+  // a kind → { cat (the Type-column category), icon, label }. Unmapped
+  // kinds fall back to a prettified snake_case label + their family
+  // category inferred from the prefix, so a new kind reads sensibly
+  // without a map edit. The raw kind stays as a title= tooltip so
+  // it's still greppable/debuggable.
+  const ACTIVITY_KIND_META = {
+    case_create:          { cat: "Case",    icon: "plus-circle",     label: "Case created" },
+    case_delete:          { cat: "Case",    icon: "trash",           label: "Case deleted" },
+    case_status_change:   { cat: "Case",    icon: "arrow-repeat",    label: "Status changed" },
+    case_priority_change: { cat: "Case",    icon: "flag",            label: "Priority changed" },
+    case_assignee_change: { cat: "Case",    icon: "person",          label: "Reassigned" },
+    case_type_change:     { cat: "Case",    icon: "tag",             label: "Type changed" },
+    case_category_change: { cat: "Case",    icon: "tags",            label: "Category changed" },
+    case_metadata_change: { cat: "Case",    icon: "pencil-square",   label: "Case edited" },
+    case_comment_post:    { cat: "Comment", icon: "chat-left-text",  label: "Comment posted" },
+    case_comment_edit:    { cat: "Comment", icon: "pencil",          label: "Comment edited" },
+    case_comment_delete:  { cat: "Comment", icon: "chat-left-dots",  label: "Comment deleted" },
+    step_apply:           { cat: "Step",    icon: "wrench",          label: "Cleaning step" },
+    file_snapshot:        { cat: "File",    icon: "camera",          label: "Snapshot" },
+    file_join_create:     { cat: "File",    icon: "diagram-2",       label: "Join created" },
+    file_re_encode:       { cat: "File",    icon: "type",            label: "Re-encoded" },
+    file_cleanness_recompute: { cat: "File", icon: "stars",          label: "Cleanness recomputed" },
+    company_member_add:        { cat: "Member", icon: "person-plus",  label: "Member added" },
+    company_member_remove:     { cat: "Member", icon: "person-dash",  label: "Member removed" },
+    company_member_leave:      { cat: "Member", icon: "box-arrow-left", label: "Member left" },
+    company_member_role_change:{ cat: "Member", icon: "person-gear",  label: "Role changed" },
+    pref_change:          { cat: "Pref",    icon: "sliders",         label: "Preference changed" },
+  };
+  // Prefix → category for unmapped kinds (graceful fallback).
+  function activityKindMeta(kind) {
+    const hit = ACTIVITY_KIND_META[kind];
+    if (hit) return hit;
+    const k = String(kind || "event");
+    const cat = k.startsWith("case_comment") ? "Comment"
+              : k.startsWith("case_")         ? "Case"
+              : k.startsWith("step_")         ? "Step"
+              : k.startsWith("file_")         ? "File"
+              : k.includes("_member_")        ? "Member"
+              : k.startsWith("pref")          ? "Pref"
+              : "Event";
+    const label = k.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+    return { cat, icon: "dot", label };
+  }
+
   // Render one ActivityRow. Source = 'event' carries level + a context
   // jsonb worth expanding (matches the M-4 expander pattern). Source =
   // 'request' carries status + duration_ms inside context; row is
@@ -922,13 +969,18 @@ export default function monitoring(app, { session }) {
     const hasCtx = ctx && (typeof ctx === "object" ? Object.keys(ctx).length > 0 : String(ctx).length > 0);
     const ctxJson = hasCtx ? JSON.stringify(ctx, null, 2) : "";
     const expandable = hasCtx;
+    // Friendly kind rendering: category mono-pill in the Type column +
+    // icon + human label in the Detail column, with the original
+    // message as secondary text and the raw kind as a tooltip.
+    const meta = activityKindMeta(item.kind);
     const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
       + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
         + fmtTime(item.at) + '</td>'
-      + '<td><span class="rt-mono-pill">EVT</span></td>'
+      + '<td><span class="rt-mono-pill" title="' + esc(item.kind) + '">' + esc(meta.cat) + '</span></td>'
       + '<td>'
-      +   '<span class="rt-mono-pill">' + esc(item.kind) + '</span> '
-      +   esc(item.summary || "")
+      +   '<i class="bi bi-' + esc(meta.icon) + ' rp-mon-act-icon"></i> '
+      +   '<span class="rp-mon-act-label">' + esc(meta.label) + '</span>'
+      +   (item.summary ? ' <span class="rp-mon-modal-meta">' + esc(item.summary) + '</span>' : "")
       + '</td>'
       + '<td class="is-num">' + levelChip(item.level) + '</td>'
       + '</tr>';

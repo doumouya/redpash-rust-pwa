@@ -279,6 +279,15 @@
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
 }
+/* Activity-feed friendly kind rendering (epic CAS_9A0C) — the icon +
+   human label that replace the raw `case_comment_post` mono-pill. */
+.rp-mon-act-icon {
+  color: var(--rp-text-mute);
+  margin-right: 0.25rem;
+}
+.rp-mon-act-label {
+  font-weight: 600;
+}
 .rp-mon-modal-section-title {
   margin: 0 0 0.5rem;
   font-size: 0.6875rem;
