@@ -64,10 +64,38 @@ export async function resolveData(source) {
       ? "?window=" + encodeURIComponent(source.window)
       : "";
     const stats = await api.get(source.endpoint + qs);
+    // Optional transform — computes a derived scalar from two pointers
+    // instead of returning the raw pointer value. Unlocks the gauge
+    // tabs whose stats endpoint exposes a numerator + a total but no
+    // pre-computed percentage (Home companies active_30d/total, charts
+    // last_7d/total, Monitoring events last_24h/total, …). Without a
+    // transform the source returns readPointer(stats, pointer) as
+    // before — fully backward-compatible.
+    if (source.transform) return applyTransform(stats, source);
     return readPointer(stats, source.pointer);
   }
 
   throw new Error("unknown chart source kind: " + source.kind);
+}
+
+// Compute a derived scalar from a stats response per `source.transform`.
+// One transform kind today — `ratio`: (numerator / denominator) * scale.
+//   source.pointer            → numerator pointer
+//   transform.denominator     → denominator pointer
+//   transform.scale           → multiplier (default 100, i.e. a percent)
+// Returns a single Number for the gauge to render, or 0 when the
+// denominator is missing/zero (a 0% gauge beats a NaN / blank tile).
+// New transform kinds (delta, sum, …) extend the switch.
+export function applyTransform(stats, source) {
+  const t = source.transform || {};
+  if (t.kind === "ratio") {
+    const num   = Number(readPointer(stats, source.pointer)) || 0;
+    const denom = Number(readPointer(stats, t.denominator)) || 0;
+    const scale = t.scale == null ? 100 : Number(t.scale);
+    if (!denom) return 0;
+    return Math.round((num / denom) * scale * 10) / 10;  // 1-decimal
+  }
+  throw new Error("unknown transform kind: " + t.kind);
 }
 
 // Read a dotted-path pointer into a JSON object. Missing path
@@ -106,6 +134,14 @@ export function readPointer(obj, pointer) {
 //     works for gauges too — no special-case branch needed)
 export function synthesizeOption(data, kind) {
   if (data == null) return null;
+
+  // Scalar (a transform's ratio output, or any single-number pointer):
+  // stamp it as the sole series value so buildOption's gauge branch
+  // reads values[0]. Cartesian/bar kinds with a lone number render a
+  // one-point series — harmless, but scalars are really for gauges.
+  if (typeof data === "number") {
+    return { series: [{ data: [data] }] };
+  }
 
   // Pie-family expects [{name, value}] OR { label: number }.
   // buildOption's pieData fallback reads `series[0].data[0]` as an

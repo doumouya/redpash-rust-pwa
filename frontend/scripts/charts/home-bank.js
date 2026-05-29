@@ -24,12 +24,21 @@
 //   - companies / charts  — gauge-ratio extractors (active_30d / total)
 //   - cases / projects    — client-derived from items[], no stats endpoint
 
+// `shape` is a hint for the field-picker + the default chart kind:
+//   kv     → categorical breakdown (donut/bar) — a HashMap pointer
+//   gauge  → a derived ratio (numerator/total · scale) rendered as a
+//            gauge. Carries a `transform` the renderChart resolver
+//            applies (see charts/render.js applyTransform). Unlocks the
+//            companies/charts tabs whose stats expose numerator + total
+//            but no pre-computed percentage.
 export const HOME_STATS_SCHEMA = {
   users: {
     endpoint: "/admin/users/stats",
     supportsWindow: false,
     fields: [
       { path: "by_plan", label: "By plan", shape: "kv" },
+      { path: "active_7d", label: "Active last 7d", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
     ],
   },
   memberships: {
@@ -44,6 +53,32 @@ export const HOME_STATS_SCHEMA = {
     supportsWindow: false,
     fields: [
       { path: "by_stage", label: "By stage", shape: "kv" },
+      { path: "avg_cleanness", label: "Avg cleanness", shape: "gauge" },
+    ],
+  },
+  // Gauge-ratio tabs (Em backlog — the deferred Home tabs). Their stats
+  // endpoints expose a numerator + total but no kv breakdown, so they
+  // only carry gauge fields. The picker can build these via the
+  // transform once builder-ui grows ratio support; today they ship as
+  // defaults below.
+  companies: {
+    endpoint: "/admin/companies/stats",
+    supportsWindow: false,
+    fields: [
+      { path: "active_30d", label: "Active last 30d", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
+      { path: "with_projects", label: "With projects", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
+    ],
+  },
+  charts: {
+    endpoint: "/admin/charts/stats",
+    supportsWindow: false,
+    fields: [
+      { path: "last_7d", label: "New last 7d", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
+      { path: "used_in_reports", label: "Used in reports", shape: "gauge",
+        transform: { kind: "ratio", denominator: "total", scale: 100 } },
     ],
   },
 };
@@ -104,6 +139,56 @@ export const HOME_DEFAULT_CHARTS = {
       source:{ kind: "monitoring-stats",
                endpoint: "/admin/files/stats",
                pointer:  "by_stage" },
+    },
+  ],
+  // Gauge-ratio defaults (transform source) — mirror the existing kpiX
+  // gauges on these Home tabs, now in the unified renderChart vocabulary.
+  companies: [
+    {
+      id:    "default-active-30d",
+      title: "Active last 30d",
+      cfg:   { kind: "gauge", type: "gauge", theme: "redpash-mocha",
+               legend: false, legendPos: "bottom", tooltip: true,
+               splitLines: true, axisLine: true, smooth: false },
+      source:{ kind: "monitoring-stats",
+               endpoint: "/admin/companies/stats",
+               pointer:  "active_30d",
+               transform: { kind: "ratio", denominator: "total", scale: 100 } },
+    },
+    {
+      id:    "default-with-projects",
+      title: "With projects",
+      cfg:   { kind: "gauge", type: "gauge", theme: "redpash-mocha",
+               legend: false, legendPos: "bottom", tooltip: true,
+               splitLines: true, axisLine: true, smooth: false },
+      source:{ kind: "monitoring-stats",
+               endpoint: "/admin/companies/stats",
+               pointer:  "with_projects",
+               transform: { kind: "ratio", denominator: "total", scale: 100 } },
+    },
+  ],
+  charts: [
+    {
+      id:    "default-new-7d",
+      title: "New last 7d",
+      cfg:   { kind: "gauge", type: "gauge", theme: "redpash-mocha",
+               legend: false, legendPos: "bottom", tooltip: true,
+               splitLines: true, axisLine: true, smooth: false },
+      source:{ kind: "monitoring-stats",
+               endpoint: "/admin/charts/stats",
+               pointer:  "last_7d",
+               transform: { kind: "ratio", denominator: "total", scale: 100 } },
+    },
+    {
+      id:    "default-used-in-reports",
+      title: "Used in reports",
+      cfg:   { kind: "gauge", type: "gauge", theme: "redpash-mocha",
+               legend: false, legendPos: "bottom", tooltip: true,
+               splitLines: true, axisLine: true, smooth: false },
+      source:{ kind: "monitoring-stats",
+               endpoint: "/admin/charts/stats",
+               pointer:  "used_in_reports",
+               transform: { kind: "ratio", denominator: "total", scale: 100 } },
     },
   ],
 };
