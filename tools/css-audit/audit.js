@@ -657,31 +657,56 @@ Object.keys(byBlock).forEach(function (sig) {
     baseSet[k.split('|')[0] + '|' + pseudoBase(k.split('|')[1] || '')] = 1;
   });
   if (Object.keys(baseSet).length < 2) return;
+  var sels = (function () {
+    var seen = {}, out = [];
+    rs.forEach(function (r) {
+      var k = (r.atContext || '') + '|' + r.selector + '|' + r.file;
+      if (seen[k]) return;
+      seen[k] = 1;
+      out.push({ selector: r.selector, file: r.file, line: r.line,
+                 group: r.group, atContext: r.atContext || '' });
+    });
+    return out.sort(function (x, y) {
+      return x.selector.localeCompare(y.selector) || x.file.localeCompare(y.file);
+    });
+  })();
+  var fileSet = {};
+  sels.forEach(function (s) { fileSet[s.file] = 1; });
   duplicateBlocks.push({
     declCount: rs[0].decls.length,
     distinctSelectors: distinctSels,
+    fileCount: Object.keys(fileSet).length,
+    // redundant declarations this block represents = what consolidating
+    // it to one atom eliminates (every selector past the first is a copy).
+    redundantDecls: rs[0].decls.length * (distinctSels - 1),
     block: rs[0].decls.map(function (d) {
       return d.prop + ': ' + d.value + (d.important ? ' !important' : '');
     }),
-    selectors: (function () {
-      var seen = {}, out = [];
-      rs.forEach(function (r) {
-        var k = (r.atContext || '') + '|' + r.selector + '|' + r.file;
-        if (seen[k]) return;
-        seen[k] = 1;
-        out.push({ selector: r.selector, file: r.file, line: r.line,
-                   group: r.group, atContext: r.atContext || '' });
-      });
-      return out.sort(function (x, y) {
-        return x.selector.localeCompare(y.selector) || x.file.localeCompare(y.file);
-      });
-    })()
+    selectors: sels
   });
 });
+// Consolidation ranking (refined 2026-05-29) — cross-FILE blocks first:
+// "same styling, different name ACROSS pages" is the real consolidation
+// leak; a within-one-file dup is lower priority. Then by redundant-decl
+// weight (what consolidating saves), then breadth, then stable alpha. So
+// the top of the list IS the answer to "what to consolidate first" — no
+// guessing, no remembered figure.
 duplicateBlocks.sort(function (a, b) {
-  return (b.distinctSelectors - a.distinctSelectors)
-      || (b.declCount - a.declCount)
+  return ((b.fileCount >= 2) - (a.fileCount >= 2))
+      || (b.redundantDecls - a.redundantDecls)
+      || (b.distinctSelectors - a.distinctSelectors)
       || a.block.join(';').localeCompare(b.block.join(';'));
+});
+// Each cross-file block's share of total cross-file redundancy — turns a
+// candidate list into a ranking with weights (#1 share = consolidate
+// first). Within-file blocks get 0 (not a cross-page leak).
+var totalCrossFileRedundant = duplicateBlocks.reduce(function (n, b) {
+  return n + (b.fileCount >= 2 ? b.redundantDecls : 0);
+}, 0);
+duplicateBlocks.forEach(function (b) {
+  b.crossFile = b.fileCount >= 2;
+  b.pctOfCrossFileDup = (b.crossFile && totalCrossFileRedundant)
+    ? Math.round(b.redundantDecls / totalCrossFileRedundant * 100) : 0;
 });
 
 /* ── stats ───────────────────────────────────────────────────────────────── */
@@ -1092,9 +1117,23 @@ if (data.stats.danglingImports) {
 }
 if (data.stats.duplicateBlocks) {
   console.log('');
-  console.log('  duplicate declaration blocks (identical body, distinct selectors):');
-  data.duplicateBlocks.slice(0, 15).forEach(function (b) {
-    console.log('    [' + b.declCount + ' decls × ' + b.distinctSelectors + ' selectors] '
+  var xf = data.duplicateBlocks.filter(function (b) { return b.crossFile; });
+  if (xf.length) {
+    var top = xf[0];
+    console.log('  consolidation ranking — ' + xf.length + ' cross-page block(s); '
+      + 'act on #1, not a guess:');
+    console.log('  → #1: ' + top.selectors.map(function (s) { return s.selector; }).join('  ≡  '));
+    console.log('       ' + top.pctOfCrossFileDup + '% of cross-page dup · '
+      + top.redundantDecls + ' redundant decls across ' + top.fileCount + ' files');
+    console.log('');
+  }
+  console.log('  duplicate declaration blocks (ranked — cross-page first):');
+  data.duplicateBlocks.slice(0, 15).forEach(function (b, i) {
+    var tag = b.crossFile
+      ? '[' + b.pctOfCrossFileDup + '% · ' + b.fileCount + ' files]'
+      : '[same-file]';
+    console.log('    ' + (i + 1) + '. ' + tag
+      + ' [' + b.declCount + ' decls × ' + b.distinctSelectors + ' sel] '
       + b.selectors.map(function (s) { return s.selector; }).join('  ≡  '));
   });
   if (data.duplicateBlocks.length > 15) {
