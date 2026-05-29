@@ -68,6 +68,8 @@ export function mountTools(panelBody, ctx) {
   let editingName  = null;        // column name whose Name cell is being edited, or null
   let editingDtype = null;        // column name whose Datatype cell is being edited, or null
   let castConfirm  = null;        // { column, dtype, total, would_null, samples } — open confirm sheet, or null
+  let colFilter    = "";          // toolbar search text — filters the columns table by name
+  let refocusColSearch = false;   // re-focus the search input after a filter-driven re-render
 
   // Target dtypes for cast — pulled from the cast tool's enum field so
   // the toolbar (Slice G cast-preview flow) and any future re-introduced
@@ -136,7 +138,11 @@ export function mountTools(panelBody, ctx) {
     const allSelected  = cols.length > 0 && cols.every((c) => selectedCols.has(c.name));
     const someSelected = !allSelected && cols.some((c) => selectedCols.has(c.name));
 
-    const rows = cols.map((c, i) => {
+    const q = colFilter.trim().toLowerCase();
+    const visible = cols
+      .map((c, i) => [c, i])
+      .filter(([c]) => !q || String(c.name).toLowerCase().includes(q));
+    const rows = visible.map(([c, i]) => {
       const pct       = c.null_pct == null ? null : Math.max(0, Math.min(100, c.null_pct));
       const nullCount = pct != null && total != null ? Math.round(pct * total / 100) : null;
       const band      = pct == null ? "" : pct >= 50 ? "is-warn-high" : pct >= 10 ? "is-warn-mid" : "";
@@ -171,7 +177,7 @@ export function mountTools(panelBody, ctx) {
         : '<td class="is-dtype is-editable" data-col="' + esc(c.name) + '"'
           + ' title="Click to change type">'
           + esc(c.dtype || "—") + sniff + '</td>';
-      return '<tr' + (checked ? ' class="is-selected"' : '') + '>'
+      return '<tr data-name="' + esc(c.name) + '"' + (checked ? ' class="is-selected"' : '') + '>'
         + '<td class="is-check"><input type="checkbox" class="rt-chk rt-col-check"'
         +   ' data-col="' + esc(c.name) + '"' + (checked ? ' checked' : '') + ' /></td>'
         + '<td class="is-num is-muted">' + (i + 1) + '</td>'
@@ -182,7 +188,8 @@ export function mountTools(panelBody, ctx) {
         + '<td class="is-num">' + (uniqPct != null ? uniqPct.toFixed(1) + "%" : "—") + '</td>'
         + '<td class="is-sample" title="' + esc(sample) + '">' + esc(sample) + '</td>'
         + '</tr>';
-    }).join("");
+    }).join("")
+      || '<tr><td colspan="8" class="rt-tool-columns-nomatch">No columns match “' + esc(colFilter) + '”.</td></tr>';
     // Fully-null-rows pill — row-level cleanup that uses cross-column
     // info. Surfaces only when there's something to drop; clicking
     // fires a filter_rows step that KEEPS rows where any column is
@@ -231,52 +238,70 @@ export function mountTools(panelBody, ctx) {
         requestAnimationFrame(() => { input.focus(); input.select(); });
       }
     }
+    // Restore focus + caret to the search after a filter-driven re-render
+    // (synchronous — no originating click to steal focus back).
+    if (refocusColSearch) {
+      refocusColSearch = false;
+      const search = columnsEl.querySelector("[data-col-search]");
+      if (search) {
+        search.focus();
+        const end = search.value.length;
+        try { search.setSelectionRange(end, end); } catch (_) { /* type=search */ }
+      }
+    }
   }
 
   // Toolbar — global actions (Slice B) + select actions (Slice C).
   // Edit mode lands in slices F–G alongside cell-edit affordances.
   function renderColumnsToolbar(summary) {
     const selCount = selectedCols.size;
+    // Each button carries its enabled flag so we can stream enabled
+    // actions onto row 1 and drop the locked ones to row 2 below.
     const globalBtns = GLOBAL_ACTIONS.map((a) => {
       const tool = getTool(a.kind);
-      if (!tool) return '';
+      if (!tool) return null;
       const enabled = a.enabled ? a.enabled(summary) : true;
-      const title   = enabled ? (tool.blurb || tool.label)
-                              : (a.disabledTitle || tool.blurb || tool.label);
-      return '<button class="rt-btn rt-tool-columns-action" type="button"'
-        +    ' data-action-kind="' + esc(a.kind) + '"'
-        +    (enabled ? '' : ' disabled')
-        +    ' title="' + esc(title) + '">'
-        +    '<i class="bi ' + esc(tool.icon) + '"></i> '
-        +    esc(tool.label) + (a.hasSheet ? '…' : '')
-        +    '</button>';
-    }).join('');
+      // Icon-only now, so the tooltip must carry the name: "Label — reason".
+      const reason  = enabled ? tool.blurb : (a.disabledTitle || tool.blurb);
+      const label   = tool.label + (a.hasSheet ? '…' : '');
+      const tip     = reason && reason !== tool.label ? label + ' — ' + reason : label;
+      return { enabled, html:
+        '<button class="rt-btn" type="button"'
+        + ' data-action-kind="' + esc(a.kind) + '"'
+        + (enabled ? '' : ' disabled')
+        + ' title="' + esc(tip) + '">'
+        + '<i class="bi ' + esc(tool.icon) + '"></i></button>' };
+    }).filter(Boolean);
     const selBtns = SELECT_ACTIONS.map((a) => {
       const tool = getTool(a.kind);
-      if (!tool) return '';
+      if (!tool) return null;
       const meetsMin = selCount >= a.min;
       const meetsMax = a.max == null || selCount <= a.max;
       const enabled  = meetsMin && meetsMax;
       // Title spells out the gating reason so the disabled state isn't
       // a mystery — "exactly 1" / "exactly 2" / "≥N" are the three shapes.
+      // Icon-only now: lead the tooltip with the action label, then the
+      // count / gating reason.
       let title;
       if (enabled) {
         title = a.label + ' (' + selCount + ' column' + (selCount === 1 ? '' : 's') + ')';
       } else if (a.min === a.max) {
-        title = 'Select exactly ' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+        title = a.label + ' — select exactly ' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
       } else if (!meetsMin) {
-        title = 'Select ≥' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
+        title = a.label + ' — select ≥' + a.min + ' column' + (a.min === 1 ? '' : 's') + ' first.';
       } else {
-        title = 'Select ≤' + a.max + ' column' + (a.max === 1 ? '' : 's') + ' (currently ' + selCount + ').';
+        title = a.label + ' — select ≤' + a.max + ' column' + (a.max === 1 ? '' : 's') + ' (currently ' + selCount + ').';
       }
-      return '<button class="rt-btn rt-tool-columns-action" type="button"'
-        +    ' data-select-kind="' + esc(a.kind) + '"'
-        +    (enabled ? '' : ' disabled')
-        +    ' title="' + esc(title) + '">'
-        +    '<i class="bi ' + esc(a.icon) + '"></i> '
-        +    esc(a.label)
-        +    '</button>';
-    }).join('');
+      return { enabled, html:
+        '<button class="rt-btn" type="button"'
+        + ' data-select-kind="' + esc(a.kind) + '"'
+        + (enabled ? '' : ' disabled')
+        + ' title="' + esc(title) + '">'
+        + '<i class="bi ' + esc(a.icon) + '"></i></button>' };
+    }).filter(Boolean);
+    const allBtns      = globalBtns.concat(selBtns);
+    const enabledHtml  = allBtns.filter((b) => b.enabled).map((b) => b.html).join('');
+    const disabledHtml = allBtns.filter((b) => !b.enabled).map((b) => b.html).join('');
     // Selection chip — count + clear; click clears the selection.
     // Visually muted when nothing is picked so it doesn't shout
     // "0 selected" at the user constantly.
@@ -288,12 +313,20 @@ export function mountTools(panelBody, ctx) {
       +   (selCount ? '<button class="rt-icon-btn rt-icon-btn--sm rt-tool-columns-selchip-clear" type="button"'
                       + ' title="Clear selection"><i class="bi bi-x"></i></button>' : '')
       + '</span>';
-    return '<div class="rt-tool-columns-toolbar">'
-      +    '<span class="rt-tool-columns-toolbar-grp">Global</span>'
-      +    globalBtns
-      +    '<span class="rt-tool-columns-toolbar-sep"></span>'
-      +    '<span class="rt-tool-columns-toolbar-grp">Selected</span>'
-      +    selBtns
+    // Row 1: a full-width search + every enabled (actionable) button.
+    // Row 2 (after a 100%-basis break): the locked buttons, with the
+    // selection chip pinned to the far end — so "needs a selection" sits
+    // visibly below what you can do now, and the chip anchors the corner.
+    return '<div class="rt-toolbar rt-tool-columns-toolbar">'
+      +    '<div class="rt-search">'
+      +      '<i class="bi bi-search"></i>'
+      +      '<input type="search" data-col-search placeholder="Filter columns…"'
+      +        ' autocomplete="off" spellcheck="false" value="' + esc(colFilter) + '" />'
+      +    '</div>'
+      +    '<span class="rt-toolbar-sep"></span>'
+      +    enabledHtml
+      +    '<span class="rt-tool-columns-toolbar-break"></span>'
+      +    disabledHtml
       +    chip
       +    '</div>';
   }
@@ -358,7 +391,7 @@ export function mountTools(panelBody, ctx) {
   // means re-renders inside that subtree don't lose the handler.
   columnsEl.addEventListener("click", async (e) => {
     // Global action — opens sheet or runs directly.
-    const actBtn = e.target.closest(".rt-tool-columns-action[data-action-kind]");
+    const actBtn = e.target.closest("button[data-action-kind]");
     if (actBtn && !actBtn.disabled) {
       const tool = getTool(actBtn.dataset.actionKind);
       if (!tool) return;
@@ -377,7 +410,7 @@ export function mountTools(panelBody, ctx) {
     //              header shows the picked columns).
     //   else     → fire one step with `{ cols: string[] }` (Slice C
     //              shape: drop_columns / filter_columns / drop_nulls).
-    const selBtn = e.target.closest(".rt-tool-columns-action[data-select-kind]");
+    const selBtn = e.target.closest("button[data-select-kind]");
     if (selBtn && !selBtn.disabled) {
       const kind = selBtn.dataset.selectKind;
       const tool = getTool(kind);
@@ -473,6 +506,17 @@ export function mountTools(panelBody, ctx) {
         await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
       }
     }
+  });
+
+  // Toolbar search — filters the columns table by name. Re-renders so
+  // the row set (and the "no match" fallback) stays consistent with any
+  // action that fires meanwhile; refocusColSearch restores the caret.
+  columnsEl.addEventListener("input", (e) => {
+    const search = e.target.closest("[data-col-search]");
+    if (!search) return;
+    colFilter = search.value;
+    refocusColSearch = true;
+    renderColumnsView();
   });
 
   // Row + header checkboxes — listen on `change` (not click) so keyboard
