@@ -78,10 +78,9 @@ async fn search(
         "SELECT p.redpash_id, p.name,
                 COALESCE(p.description, '') AS description
            FROM projects p
-          WHERE (p.owner_id = $1
-                 OR EXISTS (SELECT 1 FROM memberships m
-                             WHERE m.object_redpash_id = p.redpash_id
-                               AND m.user_redpash_id    = $1))
+          WHERE EXISTS (SELECT 1 FROM memberships m
+                         WHERE m.object_redpash_id = p.redpash_id
+                           AND m.user_redpash_id    = $1)
             AND (p.name                 ILIKE '%' || $2 || '%'
                  OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
           ORDER BY (CASE WHEN p.name ILIKE $2 || '%' THEN 0 ELSE 1 END),
@@ -128,10 +127,9 @@ async fn search(
                    ) AS rn
               FROM project_files f
               JOIN projects p ON p.redpash_id = f.project_redpash_id
-             WHERE (p.owner_id = $1
-                    OR EXISTS (SELECT 1 FROM memberships m
-                                WHERE m.object_redpash_id = p.redpash_id
-                                  AND m.user_redpash_id    = $1))
+             WHERE EXISTS (SELECT 1 FROM memberships m
+                            WHERE m.object_redpash_id = p.redpash_id
+                              AND m.user_redpash_id    = $1)
                AND (f.filename                 ILIKE '%' || $2 || '%'
                     OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
          )

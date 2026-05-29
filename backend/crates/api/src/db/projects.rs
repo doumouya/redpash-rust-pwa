@@ -26,25 +26,40 @@ use shared::project::ProjectSummary;
 use sqlx::{PgPool, Row};
 
 pub async fn find_default_project(pool: &PgPool, owner: &str) -> sqlx::Result<Option<String>> {
-    let row = sqlx::query("SELECT redpash_id FROM projects WHERE owner_id = $1 AND is_default LIMIT 1")
+    // Default project moved off the project (is_default) onto the user.
+    let row = sqlx::query("SELECT default_project_id FROM users WHERE redpash_id = $1")
         .bind(owner)
         .fetch_optional(pool)
         .await?;
-    Ok(row.map(|r| r.get::<String, _>(0)))
+    Ok(row.and_then(|r| r.get::<Option<String>, _>(0)))
 }
 
 pub async fn insert_project(pool: &PgPool, rid: &str, owner: &str, name: &str, is_default: bool) -> sqlx::Result<()> {
-    // Register the entity first, then insert the project — one tx so the
-    // FK (projects.redpash_id -> entities.id) is satisfied atomically.
+    // One tx: register the entity, insert the project, seat the owner as a
+    // membership (ownership lives there now), and — if this is the user's
+    // default — point users.default_project_id at it.
     let mut tx = pool.begin().await?;
     super::register_entity(&mut *tx, rid, "project").await?;
-    sqlx::query("INSERT INTO projects (redpash_id, owner_id, name, is_default) VALUES ($1, $2, $3, $4)")
+    sqlx::query("INSERT INTO projects (redpash_id, name) VALUES ($1, $2)")
         .bind(rid)
-        .bind(owner)
         .bind(name)
-        .bind(is_default)
         .execute(&mut *tx)
         .await?;
+    sqlx::query(
+        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+         VALUES ($1, $2, 'owner')",
+    )
+    .bind(rid)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await?;
+    if is_default {
+        sqlx::query("UPDATE users SET default_project_id = $2 WHERE redpash_id = $1")
+            .bind(owner)
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -66,9 +81,11 @@ pub async fn ensure_default_project(pool: &PgPool, owner: &str) -> sqlx::Result<
 /// partial index later). Case-sensitive match.
 pub async fn find_project_by_name(pool: &PgPool, owner: &str, name: &str) -> sqlx::Result<Option<String>> {
     let row = sqlx::query(
-        "SELECT redpash_id FROM projects \
-         WHERE owner_id = $1 AND name = $2 \
-         ORDER BY created_at ASC LIMIT 1",
+        "SELECT p.redpash_id FROM projects p \
+         JOIN memberships m ON m.object_redpash_id = p.redpash_id \
+                           AND m.role = 'owner' AND m.user_redpash_id = $1 \
+         WHERE p.name = $2 \
+         ORDER BY p.created_at ASC LIMIT 1",
     )
     .bind(owner)
     .bind(name)
@@ -113,6 +130,13 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 // in-use project reads 'active' without a manual edit (matches the
 // original "open project = active" intent the old Objects page had).
 //
+// Owner now resolves through the owner-membership (role='owner') instead of
+// the dropped `p.owner_id` column; `is_default` is derived from the owner's
+// `users.default_project_id`. The owner LATERAL takes the earliest owner
+// membership (deterministic; the app seats exactly one). INNER LATERAL is
+// safe today — every project has an owner membership — until tombstoning can
+// vacate ownership; at that point this becomes LEFT + `owner_id` Option<>.
+//
 // PROJECT-FILES-ACK: type=mixed — three project_files subqueries:
 //   1) EXISTS dashboard rows for the 'published' overlay,
 //   2) EXISTS any non-chart file for the 'active' derivation
@@ -120,7 +144,9 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 //   3) COUNT excluding charts for the user-facing file_count
 //      (charts aren't surfaced as files in the rail).
 const PROJECT_SELECT: &str =
-    "SELECT p.redpash_id, p.name, p.description, p.is_default, p.owner_id, p.company_id,
+    "SELECT p.redpash_id, p.name, p.description,
+            COALESCE(u.default_project_id = p.redpash_id, false) AS is_default,
+            om.user_redpash_id AS owner_id, p.company_id,
             (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
                       WHEN 3 THEN 'publish' WHEN 2 THEN 'design' WHEN 1 THEN 'clean'
                       ELSE 'new' END
@@ -141,7 +167,11 @@ const PROJECT_SELECT: &str =
             u.display_name AS owner_display_name, u.username AS owner_username,
             (SELECT COUNT(*) FROM project_files f
              WHERE f.project_redpash_id = p.redpash_id AND f.file_type <> 'chart') AS file_count
-     FROM projects p JOIN users u ON u.redpash_id = p.owner_id";
+     FROM projects p
+     JOIN LATERAL (SELECT m.user_redpash_id FROM memberships m
+                   WHERE m.object_redpash_id = p.redpash_id AND m.role = 'owner'
+                   ORDER BY m.joined_at LIMIT 1) om ON true
+     JOIN users u ON u.redpash_id = om.user_redpash_id";
 
 fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
     ProjectSummary {
@@ -164,8 +194,9 @@ fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
 
 pub async fn list_projects(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<ProjectSummary>> {
     let rows = sqlx::query(
-        &format!("{PROJECT_SELECT} WHERE p.owner_id = $1
-                  ORDER BY p.is_default DESC, p.created_at ASC"),
+        // `om` (owner membership) + `is_default` (alias) come from PROJECT_SELECT.
+        &format!("{PROJECT_SELECT} WHERE om.user_redpash_id = $1
+                  ORDER BY is_default DESC, p.created_at ASC"),
     )
     .bind(owner)
     .fetch_all(pool)
@@ -201,13 +232,43 @@ pub async fn update_project_meta(
     status:      Option<&str>,
 ) -> sqlx::Result<Option<ProjectSummary>> {
     let mut tx = pool.begin().await?;
-    if is_default == Some(true) {
+    // Default lives on `users.default_project_id` now (one column = one
+    // default per user, so no flip-off of siblings needed). Some(true) sets
+    // it; Some(false) clears it when this project is the current default.
+    match is_default {
+        Some(true) => {
+            sqlx::query("UPDATE users SET default_project_id = $2 WHERE redpash_id = $1")
+                .bind(owner)
+                .bind(rid)
+                .execute(&mut *tx)
+                .await?;
+        }
+        Some(false) => {
+            sqlx::query(
+                "UPDATE users SET default_project_id = NULL
+                 WHERE redpash_id = $1 AND default_project_id = $2",
+            )
+            .bind(owner)
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
+        }
+        None => {}
+    }
+    // Owner transfer -> move the owner membership to the new user (upsert
+    // covers the case where they were already a non-owner member).
+    if let Some(new_owner) = owner_id {
+        sqlx::query("DELETE FROM memberships WHERE object_redpash_id = $1 AND role = 'owner'")
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query(
-            "UPDATE projects SET is_default = false, updated_at = now()
-             WHERE owner_id = $1 AND is_default AND redpash_id <> $2",
+            "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+             VALUES ($1, $2, 'owner')
+             ON CONFLICT (object_redpash_id, user_redpash_id) DO UPDATE SET role = 'owner'",
         )
-        .bind(owner)
         .bind(rid)
+        .bind(new_owner)
         .execute(&mut *tx)
         .await?;
     }
@@ -218,18 +279,14 @@ pub async fn update_project_meta(
         "UPDATE projects
          SET name        = COALESCE($2, name),
              description  = COALESCE($3, description),
-             is_default   = COALESCE($4, is_default),
-             owner_id     = COALESCE($5, owner_id),
-             company_id   = COALESCE($6, company_id),
-             status       = COALESCE($7, status),
+             company_id   = COALESCE($4, company_id),
+             status       = COALESCE($5, status),
              updated_at   = now()
          WHERE redpash_id = $1",
     )
     .bind(rid)
     .bind(name)
     .bind(description)
-    .bind(is_default)
-    .bind(owner_id)
     .bind(company_id)
     .bind(status)
     .execute(&mut *tx)
@@ -271,7 +328,8 @@ pub async fn delete_project(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     let res = sqlx::query(
         "DELETE FROM entities
          WHERE id = $1
-           AND EXISTS (SELECT 1 FROM projects WHERE redpash_id = $1 AND NOT is_default)",
+           AND EXISTS (SELECT 1 FROM projects WHERE redpash_id = $1)
+           AND NOT EXISTS (SELECT 1 FROM users WHERE default_project_id = $1)",
     )
     .bind(rid)
     .execute(pool)
@@ -294,28 +352,32 @@ pub async fn create_project(
     is_default:  bool,
 ) -> sqlx::Result<ProjectSummary> {
     let mut tx = pool.begin().await?;
-    if is_default {
-        sqlx::query(
-            "UPDATE projects SET is_default = false, updated_at = now()
-             WHERE owner_id = $1 AND is_default",
-        )
-        .bind(owner)
-        .execute(&mut *tx)
-        .await?;
-    }
     super::register_entity(&mut *tx, rid, "project").await?;
     sqlx::query(
-        "INSERT INTO projects (redpash_id, owner_id, name, description, company_id, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO projects (redpash_id, name, description, company_id)
+         VALUES ($1, $2, $3, $4)",
     )
     .bind(rid)
-    .bind(owner)
     .bind(name)
     .bind(description)
     .bind(company_id)
-    .bind(is_default)
     .execute(&mut *tx)
     .await?;
+    sqlx::query(
+        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+         VALUES ($1, $2, 'owner')",
+    )
+    .bind(rid)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await?;
+    if is_default {
+        sqlx::query("UPDATE users SET default_project_id = $2 WHERE redpash_id = $1")
+            .bind(owner)
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     // get_project re-selects through PROJECT_SELECT so the returned row
     // carries the joined owner_display_name / stage / file_count.

@@ -159,7 +159,9 @@ pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec
          FROM project_files f
          JOIN projects p ON p.redpash_id = f.project_redpash_id
          JOIN file_stages fs ON fs.file_redpash_id = f.redpash_id
-         WHERE p.owner_id = $1
+         WHERE EXISTS (SELECT 1 FROM memberships om
+                       WHERE om.object_redpash_id = p.redpash_id
+                         AND om.user_redpash_id = $1 AND om.role = 'owner')
          ORDER BY f.updated_at DESC",
     )
     .bind(owner_rid)
@@ -403,7 +405,8 @@ pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>>
         "SELECT {CHART_COLS} FROM project_files
          WHERE file_type = 'chart'
            AND project_redpash_id IN (
-             SELECT redpash_id FROM projects WHERE owner_id = $1)
+             SELECT object_redpash_id FROM memberships
+             WHERE user_redpash_id = $1 AND role = 'owner')
          ORDER BY updated_at DESC"
     ))
     .bind(owner)
@@ -485,9 +488,11 @@ pub async fn chart_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String
     // type-filter ensures a non-chart rid returns None (no auth-leak
     // via cross-type rid collision).
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT p.owner_id FROM project_files pf
-         JOIN projects p ON p.redpash_id = pf.project_redpash_id
-         WHERE pf.redpash_id = $1 AND pf.file_type = 'chart'",
+        "SELECT m.user_redpash_id FROM project_files pf
+         JOIN memberships m ON m.object_redpash_id = pf.project_redpash_id
+                           AND m.role = 'owner'
+         WHERE pf.redpash_id = $1 AND pf.file_type = 'chart'
+         ORDER BY m.joined_at LIMIT 1",
     )
     .bind(rid)
     .fetch_optional(pool)
@@ -550,13 +555,16 @@ pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Das
                 COALESCE(d.display_name, d.filename) AS title,
                 d.description, d.spec,
                 d.is_favorite, d.is_public, d.folder, d.created_at, d.updated_at,
-                p.owner_id AS owner_id,
+                om.user_redpash_id AS owner_id,
                 u.display_name AS owner_display_name,
                 u.username AS owner_username
          FROM project_files d
          JOIN projects p ON p.redpash_id = d.project_redpash_id
-         JOIN users    u ON u.redpash_id = p.owner_id
-         WHERE d.file_type = 'dashboard' AND p.owner_id = $1
+         JOIN LATERAL (SELECT m.user_redpash_id FROM memberships m
+                       WHERE m.object_redpash_id = p.redpash_id AND m.role = 'owner'
+                       ORDER BY m.joined_at LIMIT 1) om ON true
+         JOIN users    u ON u.redpash_id = om.user_redpash_id
+         WHERE d.file_type = 'dashboard' AND om.user_redpash_id = $1
          ORDER BY d.folder ASC NULLS LAST, d.is_favorite DESC, d.updated_at DESC",
     )
     .bind(owner)
@@ -862,8 +870,11 @@ pub async fn redo_next(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
 // isn't leaked.
 
 pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
+    // Ownership is the owner-membership now (role='owner'), not a column.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT owner_id FROM projects WHERE redpash_id = $1",
+        "SELECT user_redpash_id FROM memberships
+         WHERE object_redpash_id = $1 AND role = 'owner'
+         ORDER BY joined_at LIMIT 1",
     )
     .bind(rid)
     .fetch_optional(pool)
@@ -875,9 +886,11 @@ pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<St
     // PROJECT-FILES-ACK: type=dashboard — dashboard ownership lookup;
     // type-filter prevents auth-leak via cross-type rid collision.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT p.owner_id FROM project_files pf
-         JOIN projects p ON p.redpash_id = pf.project_redpash_id
-         WHERE pf.redpash_id = $1 AND pf.file_type = 'dashboard'",
+        "SELECT m.user_redpash_id FROM project_files pf
+         JOIN memberships m ON m.object_redpash_id = pf.project_redpash_id
+                           AND m.role = 'owner'
+         WHERE pf.redpash_id = $1 AND pf.file_type = 'dashboard'
+         ORDER BY m.joined_at LIMIT 1",
     )
     .bind(rid)
     .fetch_optional(pool)
@@ -892,9 +905,11 @@ pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>
     // type-scoped variants used where the CRUD lane needs the
     // type-collision guard.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT p.owner_id FROM project_files f
-         JOIN projects p ON p.redpash_id = f.project_redpash_id
-         WHERE f.redpash_id = $1",
+        "SELECT m.user_redpash_id FROM project_files f
+         JOIN memberships m ON m.object_redpash_id = f.project_redpash_id
+                           AND m.role = 'owner'
+         WHERE f.redpash_id = $1
+         ORDER BY m.joined_at LIMIT 1",
     )
     .bind(rid)
     .fetch_optional(pool)
