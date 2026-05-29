@@ -173,10 +173,152 @@ async fn search(
         });
     }
 
-    // Stable cap at the user's limit. Projects ordered first by the
-    // appending order above; the kind-balance per ROW_NUMBER means a
-    // chatty file_type can't crowd the rest out.
-    results.truncate(total_cap as usize);
+    // ── users ──────────────────────────────────────────────────
+    // Org-wide (admin-view) — matches the Home Users / Companies /
+    // Memberships tabs, which show all of them today. RBAC scoping lands
+    // uniformly in Phase 4 (the module note); these surface in omnisearch
+    // the same way they're already visible on Home.
+    let rows = sqlx::query(
+        "SELECT redpash_id, display_name, username
+           FROM users
+          WHERE display_name        ILIKE '%' || $1 || '%'
+             OR username            ILIKE '%' || $1 || '%'
+             OR COALESCE(email, '') ILIKE '%' || $1 || '%'
+          ORDER BY (CASE WHEN display_name ILIKE $1 || '%'
+                           OR username     ILIKE $1 || '%' THEN 0 ELSE 1 END),
+                   display_name
+          LIMIT $2",
+    )
+    .bind(&q_owned)
+    .bind(PER_KIND_LIMIT)
+    .fetch_all(&state.db)
+    .await?;
+    for r in rows {
+        let rid: String = r.try_get("redpash_id").unwrap_or_default();
+        let display_name: String = r.try_get("display_name").unwrap_or_default();
+        let username: String = r.try_get("username").unwrap_or_default();
+        results.push(SearchResult {
+            kind:  "user".into(),
+            label: if display_name.is_empty() { username.clone() } else { display_name },
+            sub:   if username.is_empty() { String::new() } else { format!("@{username}") },
+            hash:  "#/home?tab=users".into(),
+            rid,
+        });
+    }
+
+    // ── companies ──────────────────────────────────────────────
+    let rows = sqlx::query(
+        "SELECT redpash_id, name, COALESCE(slug, '') AS slug
+           FROM companies
+          WHERE name               ILIKE '%' || $1 || '%'
+             OR COALESCE(slug, '') ILIKE '%' || $1 || '%'
+          ORDER BY (CASE WHEN name ILIKE $1 || '%' THEN 0 ELSE 1 END), name
+          LIMIT $2",
+    )
+    .bind(&q_owned)
+    .bind(PER_KIND_LIMIT)
+    .fetch_all(&state.db)
+    .await?;
+    for r in rows {
+        let rid:  String = r.try_get("redpash_id").unwrap_or_default();
+        let name: String = r.try_get("name").unwrap_or_default();
+        let slug: String = r.try_get("slug").unwrap_or_default();
+        results.push(SearchResult {
+            kind:  "company".into(),
+            label: name,
+            sub:   slug,
+            hash:  "#/home?tab=companies".into(),
+            rid,
+        });
+    }
+
+    // ── memberships ────────────────────────────────────────────
+    // Union of project + company memberships, joined to the member +
+    // scope so a row reads "Alice — owner in ProjectX". Synthetic rid
+    // matches the admin convention `{scope}:{scope_rid}:{user_rid}`.
+    let rows = sqlx::query(
+        "SELECT scope, scope_redpash_id, scope_name, user_redpash_id,
+                user_display_name, role
+           FROM (
+             SELECT 'project' AS scope, m.project_redpash_id AS scope_redpash_id,
+                    p.name AS scope_name, m.user_redpash_id,
+                    u.display_name AS user_display_name, m.role, m.joined_at
+               FROM project_memberships m
+               JOIN projects p ON p.redpash_id = m.project_redpash_id
+               JOIN users    u ON u.redpash_id = m.user_redpash_id
+              WHERE u.display_name ILIKE '%' || $1 || '%'
+                 OR u.username     ILIKE '%' || $1 || '%'
+                 OR p.name         ILIKE '%' || $1 || '%'
+             UNION ALL
+             SELECT 'company' AS scope, m.company_id AS scope_redpash_id,
+                    c.name AS scope_name, m.user_redpash_id,
+                    u.display_name AS user_display_name, m.role, m.joined_at
+               FROM company_memberships m
+               JOIN companies c ON c.redpash_id = m.company_id
+               JOIN users     u ON u.redpash_id = m.user_redpash_id
+              WHERE u.display_name ILIKE '%' || $1 || '%'
+                 OR u.username     ILIKE '%' || $1 || '%'
+                 OR c.name         ILIKE '%' || $1 || '%'
+           ) mm
+          ORDER BY joined_at DESC
+          LIMIT $2",
+    )
+    .bind(&q_owned)
+    .bind(PER_KIND_LIMIT)
+    .fetch_all(&state.db)
+    .await?;
+    for r in rows {
+        let scope:      String = r.try_get("scope").unwrap_or_default();
+        let scope_rid:  String = r.try_get("scope_redpash_id").unwrap_or_default();
+        let scope_name: String = r.try_get("scope_name").unwrap_or_default();
+        let user_rid:   String = r.try_get("user_redpash_id").unwrap_or_default();
+        let user_name:  String = r.try_get("user_display_name").unwrap_or_default();
+        let role:       String = r.try_get("role").unwrap_or_default();
+        results.push(SearchResult {
+            kind:  "membership".into(),
+            rid:   format!("{scope}:{scope_rid}:{user_rid}"),
+            label: user_name,
+            sub:   format!("{role} in {scope_name}"),
+            hash:  "#/home?tab=memberships".into(),
+        });
+    }
+
+    // Kind-balanced cap. The topbar groups results by kind transitions,
+    // so each kind must stay contiguous — but a flat `truncate` drops
+    // whichever kinds are appended LAST, which is exactly how users /
+    // companies / memberships went missing. Round-robin one slot per kind
+    // per round (append order) until the cap fills, then emit contiguous
+    // per kind — every matching kind gets a fair slice.
+    let cap = total_cap as usize;
+    if results.len() > cap {
+        let mut order: Vec<String> = Vec::new();
+        let mut buckets: std::collections::HashMap<String, Vec<SearchResult>> =
+            std::collections::HashMap::new();
+        for r in std::mem::take(&mut results) {
+            if !buckets.contains_key(&r.kind) { order.push(r.kind.clone()); }
+            buckets.entry(r.kind.clone()).or_default().push(r);
+        }
+        let mut alloc: std::collections::HashMap<String, usize> =
+            order.iter().map(|k| (k.clone(), 0usize)).collect();
+        let mut remaining = cap;
+        loop {
+            let mut progressed = false;
+            for k in &order {
+                if remaining == 0 { break; }
+                if alloc[k] < buckets[k].len() {
+                    *alloc.get_mut(k).unwrap() += 1;
+                    remaining -= 1;
+                    progressed = true;
+                }
+            }
+            if remaining == 0 || !progressed { break; }
+        }
+        for k in &order {
+            let take = alloc[k].min(buckets[k].len());
+            let b = buckets.get_mut(k).unwrap();
+            results.extend(b.drain(..take));
+        }
+    }
 
     Ok(Json(SearchResponse {
         q: q_owned,

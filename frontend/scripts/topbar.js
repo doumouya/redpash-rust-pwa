@@ -199,15 +199,21 @@ function mountOmnisearch(omniEl) {
   }
 
   function kindLabel(k) {
-    return ({ project: "Projects", file: "Files", chart: "Charts", dashboard: "Dashboards" })[k]
+    // Explicit labels — the fallback (capitalize + "s") would mangle
+    // "company" → "Companys", so admin entities need real plurals here.
+    return ({ project: "Projects", file: "Files", chart: "Charts", dashboard: "Dashboards",
+              user: "Users", company: "Companies", membership: "Memberships" })[k]
       || (k.charAt(0).toUpperCase() + k.slice(1) + "s");
   }
   function kindIcon(k) {
     return ({
-      project:   "bi bi-folder",
-      file:      "bi bi-file-earmark",
-      chart:     "bi bi-bar-chart",
-      dashboard: "bi bi-grid",
+      project:    "bi bi-folder",
+      file:       "bi bi-file-earmark",
+      chart:      "bi bi-bar-chart",
+      dashboard:  "bi bi-grid",
+      user:       "bi bi-person",
+      company:    "bi bi-building",
+      membership: "bi bi-person-badge",
     })[k] || "bi bi-dot";
   }
 
