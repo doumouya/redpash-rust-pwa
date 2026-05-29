@@ -1191,7 +1191,7 @@ export default function home(app, { session: _session }) {
   function selectHTML(f, state, idAttr) {
     const opts = normalizeOptions(typeof f.optionsFn === "function" ? f.optionsFn(state) : f.options);
     const def  = f.default || (opts[0] && opts[0].value) || "";
-    return '<select class="rp-cases-modal-input" id="' + idAttr + '" name="' + esc(f.key) + '">'
+    return '<select class="rp-home-modal-input" id="' + idAttr + '" name="' + esc(f.key) + '">'
       + opts.map((o) =>
           '<option value="' + esc(o.value) + '"' + (o.value === def ? ' selected' : '') + '>'
           + esc(o.label) + '</option>'
@@ -1222,10 +1222,10 @@ export default function home(app, { session: _session }) {
     const ph    = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : "";
     const type  = f.type || "text";
     if (type === "textarea") {
-      return '<textarea class="rp-cases-modal-textarea" id="' + idAttr + '" '
+      return '<textarea class="rp-home-modal-textarea" id="' + idAttr + '" '
         + 'name="' + esc(f.key) + '" rows="5"' + req + ph + '></textarea>';
     }
-    return '<input class="rp-cases-modal-input" id="' + idAttr + '" '
+    return '<input class="rp-home-modal-input" id="' + idAttr + '" '
       + 'name="' + esc(f.key) + '" type="' + esc(type) + '"' + req + ac + ph + ' />';
   }
 
@@ -1240,8 +1240,8 @@ export default function home(app, { session: _session }) {
       ctrl = inputHTML(f, idAttr);
     }
     return ''
-      + '<div class="rp-cases-modal-field" data-field-key="' + esc(f.key) + '">'
-      +   '<label class="rp-cases-modal-label" for="' + idAttr + '">' + esc(f.label) + '</label>'
+      + '<div class="rp-home-modal-field" data-field-key="' + esc(f.key) + '">'
+      +   '<label class="rp-home-modal-label" for="' + idAttr + '">' + esc(f.label) + '</label>'
       +   ctrl
       + '</div>';
   }
