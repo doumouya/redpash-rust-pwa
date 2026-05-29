@@ -171,6 +171,28 @@ enforcement slice has a target.
 | `collaborator` | read + write project-scoped rows |
 | `viewer` | read project-scoped rows only |
 
+### Case Team Member — membership extends to case instances (Em 2026-05-29)
+
+Case-level collaborators are **Case Team Members** in the UI (modeled on
+Salesforce's
+[CaseTeamMember](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_caseteammember.htm)
+— a member linked to a case with a role whose *AccessLevel* governs
+case access). In the backend they are **not** a separate table: they're
+rows of the **general Membership object** — the same abstraction behind
+`company_memberships` + `project_memberships` — extended with a `case`
+scope (`member · scope_type=case · scope_id=case_rid · role`). So
+membership.md (#8 in the sweep) specs ONE polymorphic Membership object
+spanning company / project / case, not three tables; the UI labels the
+case-scoped variant "Case Team Member."
+
+**Implication (pending Em sign-off):** this introduces an instance-level
+grant — "cases the caller is a team member of" — which the closed scope
+set (`own` / `project` / `company` / `all`) doesn't express. It needs a
+new **`team`** scope (rows where caller ∈ the row's membership), added
+to Scope qualifiers per this doc's own "a new scope needs an index
+update first" rule. `team` generalizes beyond cases to any object that
+grows an explicit member list.
+
 ---
 
 ## Per-object catalog document shape
