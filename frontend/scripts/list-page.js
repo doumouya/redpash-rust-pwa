@@ -51,6 +51,23 @@ export function kpiStripHTML(tiles) {
     + '</div>';
 }
 
+// Baked-value variant of kpiStripHTML — tiles carry their value inline
+// ({ label, value }) instead of an id filled later via setKpi. For
+// surfaces that already hold the numbers at render time (Workspace
+// landing, Cases board overview) so there's no async fill step. Same
+// .rp-kpi-* atoms as kpiStripHTML, so the strip reads identically across
+// every page.
+export function kpiStripValuesHTML(tiles) {
+  return '<div class="rp-kpi-strip">'
+    + tiles.map((t) =>
+        '<div class="rp-kpi">'
+        + '<span class="rp-kpi-label">' + esc(t.label) + '</span>'
+        + '<span class="rp-kpi-value">' + esc(String(t.value)) + '</span>'
+        + '</div>'
+      ).join("")
+    + '</div>';
+}
+
 // 5-cell composite strip — the rich variant of (kpiStrip + chartsStrip).
 // Layout per Em's spec (2026-05-25):
 //   [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]
@@ -318,6 +335,221 @@ export function listToolbarHTML(spec) {
 
   parts.push('</div>');
   return parts.join("");
+}
+
+// Wire the columns picker (show/hide + drag-reorder) and the export
+// menu (CSV / JSON) on a list-page toolbar. Home + Monitoring render
+// the identical listToolbarHTML + listPanel shape, so this wiring is
+// shared here rather than duplicated per page (Em 2026-05-29: "wire
+// columns and export in all the monitoring tables"). The dropdowns
+// themselves open via the global bindDropdown delegate — this only
+// fills + enables them and applies the persisted state.
+//
+// opts:
+//   view        — page root element (scopes every query)
+//   columns     — the spec's column list (string | {label,key,defaultHidden})
+//   storageKey  — unique per tab; namespaces the persisted hidden-set
+//                 (`rp-cols-hidden-<key>`) + order (`rp-cols-order-<key>`)
+//   getRows     — () => rows[] — the current page's raw row objects, for
+//                 export (the caller keeps this fresh on each fetch)
+//   exportName  — base filename for exports (defaults to storageKey)
+//
+// Returns { applyHiddenColumns, applyColumnOrder } — call BOTH after
+// every table repaint so freshly-rendered rows inherit the hide +
+// order state (the caller wires these into its fetchList paint).
+export function wireListColumnsExport(view, opts) {
+  const { columns = [], storageKey, getRows = () => [], exportName } = opts || {};
+  const name = exportName || storageKey;
+  const colKey   = (c) => (typeof c === "string" ? c : (c.key || c.label));
+  const colLabel = (c) => (typeof c === "string" ? c : (c.label || c.key));
+
+  // ── hidden columns ──────────────────────────────────────────────
+  // Per-tab persisted set of hidden col-keys. Untouched storage seeds
+  // from the spec's `defaultHidden` flags; picker clicks override.
+  const hiddenStorageKey = "rp-cols-hidden-" + storageKey;
+  const hiddenRaw = localStorage.getItem(hiddenStorageKey);
+  const hiddenCols = hiddenRaw === null
+    ? new Set(columns.filter((c) => typeof c === "object" && c.defaultHidden).map(colKey))
+    : new Set(JSON.parse(hiddenRaw));
+
+  function applyHiddenColumns() {
+    const table = view.querySelector(".rt-table");
+    if (!table) return;
+    [...table.querySelectorAll("thead th[data-col-key]")].forEach((th) => {
+      const hide = hiddenCols.has(th.dataset.colKey);
+      th.style.display = hide ? "none" : "";
+      // Absolute index from the th's own position (a leading select-mode
+      // checkbox column sits before the data-col-key THs when present).
+      const absIdx = [...th.parentNode.children].indexOf(th) + 1;
+      table.querySelectorAll(`tbody tr > *:nth-child(${absIdx})`).forEach((td) => {
+        td.style.display = hide ? "none" : "";
+      });
+    });
+  }
+
+  function decorateColsPicker() {
+    const dd  = view.querySelector("#rp-list-toolbar-cols-dd");
+    const btn = view.querySelector('[data-dd="rp-list-toolbar-cols-dd"]');
+    if (!dd || !btn) return;
+    if (!columns.length) { btn.setAttribute("disabled", ""); return; }
+    btn.removeAttribute("disabled");
+    btn.title = "Show / hide columns";
+    dd.innerHTML = columns.map((c) => {
+      const visible = !hiddenCols.has(colKey(c));
+      return '<div class="rt-dd-item' + (visible ? " selected" : "") + '" data-col-key="'
+        + esc(colKey(c)) + '">' + esc(colLabel(c))
+        + (visible ? '<i class="bi bi-check2 tick"></i>' : "") + '</div>';
+    }).join("");
+  }
+
+  view.querySelector("#rp-list-toolbar-cols-dd")?.addEventListener("click", (e) => {
+    const item = e.target.closest(".rt-dd-item[data-col-key]");
+    if (!item) return;
+    const key = item.dataset.colKey;
+    if (hiddenCols.has(key)) hiddenCols.delete(key);
+    else                     hiddenCols.add(key);
+    localStorage.setItem(hiddenStorageKey, JSON.stringify([...hiddenCols]));
+    decorateColsPicker();
+    applyHiddenColumns();
+  });
+
+  // ── column reorder (drag) ───────────────────────────────────────
+  // Persisted at `rp-cols-order-<key>` as an ordered col-key list.
+  // Reorders THs + each row's data cells; a leading .rp-list-sel
+  // checkbox cell (select mode) stays anchored first.
+  const orderStorageKey = "rp-cols-order-" + storageKey;
+  function readColOrder() {
+    try { return JSON.parse(localStorage.getItem(orderStorageKey)) || []; }
+    catch { return []; }
+  }
+  function applyColumnOrder() {
+    const table = view.querySelector(".rt-table");
+    if (!table) return;
+    const headRow = table.querySelector("thead tr");
+    if (!headRow) return;
+    const ths = [...headRow.querySelectorAll("th[data-col-key]")];
+    if (ths.length === 0) return;
+    const byKey = new Map(ths.map((th) => [th.dataset.colKey, th]));
+    const targetKeys = readColOrder().filter((k) => byKey.has(k));
+    ths.forEach((th) => {
+      if (!targetKeys.includes(th.dataset.colKey)) targetKeys.push(th.dataset.colKey);
+    });
+    const currentKeys = ths.map((th) => th.dataset.colKey);
+    if (targetKeys.every((k, i) => currentKeys[i] === k)) return;
+    const oldDataIndex = new Map(ths.map((th, i) => [th.dataset.colKey, i]));
+    targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
+    table.querySelectorAll("tbody tr").forEach((tr) => {
+      const selCell   = tr.querySelector(".rp-list-sel");
+      const dataCells = [...tr.children].filter((td) => !td.classList.contains("rp-list-sel"));
+      const reordered = targetKeys.map((k) => dataCells[oldDataIndex.get(k)]);
+      while (tr.firstChild) tr.removeChild(tr.firstChild);
+      if (selCell) tr.appendChild(selCell);
+      reordered.forEach((cell) => cell && tr.appendChild(cell));
+    });
+  }
+
+  const headEl = view.querySelector(".rt-table thead");
+  function clearDropIndicators() {
+    headEl?.querySelectorAll("th.is-drop-before, th.is-drop-after")
+      .forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
+  }
+  headEl?.addEventListener("dragstart", (e) => {
+    const th = e.target.closest("th[data-col-key]");
+    if (!th) return;
+    e.dataTransfer.setData("text/col-key", th.dataset.colKey);
+    e.dataTransfer.effectAllowed = "move";
+    th.classList.add("is-dragging");
+  });
+  headEl?.addEventListener("dragend", (e) => {
+    e.target.closest("th[data-col-key]")?.classList.remove("is-dragging");
+    clearDropIndicators();
+  });
+  headEl?.addEventListener("dragover", (e) => {
+    const th = e.target.closest("th[data-col-key]");
+    if (!th) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = th.getBoundingClientRect();
+    const before = e.clientX < rect.left + rect.width / 2;
+    clearDropIndicators();
+    th.classList.add(before ? "is-drop-before" : "is-drop-after");
+  });
+  headEl?.addEventListener("drop", (e) => {
+    const tgt = e.target.closest("th[data-col-key]");
+    if (!tgt) return;
+    e.preventDefault();
+    const srcKey = e.dataTransfer.getData("text/col-key");
+    const tgtKey = tgt.dataset.colKey;
+    clearDropIndicators();
+    if (!srcKey || srcKey === tgtKey) return;
+    const rect = tgt.getBoundingClientRect();
+    const before = e.clientX < rect.left + rect.width / 2;
+    const order  = [...headEl.querySelectorAll("th[data-col-key]")].map((th) => th.dataset.colKey);
+    const srcIdx = order.indexOf(srcKey);
+    const tgtIdx = order.indexOf(tgtKey);
+    if (srcIdx === -1 || tgtIdx === -1) return;
+    order.splice(srcIdx, 1);
+    const adjTgt = tgtIdx > srcIdx ? tgtIdx - 1 : tgtIdx;
+    order.splice(before ? adjTgt : adjTgt + 1, 0, srcKey);
+    localStorage.setItem(orderStorageKey, JSON.stringify(order));
+    applyColumnOrder();
+  });
+
+  // ── export (CSV / JSON) ─────────────────────────────────────────
+  // Builds client-side from getRows() (the current page). Only visible
+  // columns are exported. XLSX needs a backend round-trip — that menu
+  // item stays a soft "coming soon" alert.
+  const visibleColumns = () => columns.filter((c) => !hiddenCols.has(colKey(c)));
+  const csvEscape = (val) => {
+    if (val == null) return "";
+    const s = String(val);
+    return /[",\r\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s;
+  };
+  const downloadBlob = (text, mime, filename) => {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  function exportCsv() {
+    const cols = visibleColumns();
+    const rows = getRows();
+    if (!cols.length || !rows.length) return;
+    const header = cols.map((c) => csvEscape(colLabel(c))).join(",");
+    const lines  = rows.map((r) => cols.map((c) => csvEscape(r[colKey(c)])).join(","));
+    downloadBlob([header, ...lines].join("\n"), "text/csv;charset=utf-8", name + "-" + stamp() + ".csv");
+  }
+  function exportJson() {
+    const cols = visibleColumns();
+    const rows = getRows();
+    if (!cols.length || !rows.length) return;
+    const keys = cols.map(colKey);
+    const out  = rows.map((r) => { const o = {}; keys.forEach((k) => { o[k] = r[k] ?? null; }); return o; });
+    downloadBlob(JSON.stringify(out, null, 2), "application/json", name + "-" + stamp() + ".json");
+  }
+
+  const exportBtn = view.querySelector('[data-dd="rp-list-toolbar-export-dd"]');
+  if (exportBtn) { exportBtn.removeAttribute("disabled"); exportBtn.title = "Export current page"; }
+  view.querySelector("#rp-list-toolbar-export-dd")?.addEventListener("click", (e) => {
+    const item = e.target.closest(".rt-dd-item[data-fmt]");
+    if (!item) return;
+    switch (item.dataset.fmt) {
+      case "csv":  exportCsv();  break;
+      case "json": exportJson(); break;
+      case "xlsx":
+        alert("XLSX export needs a backend round-trip — coming soon. CSV / JSON work today.");
+        break;
+    }
+  });
+
+  // Initial paint.
+  decorateColsPicker();
+  applyHiddenColumns();
+  applyColumnOrder();
+
+  return { applyHiddenColumns, applyColumnOrder };
 }
 
 // Single pager button. Disabled buttons drop the data-page attr so
