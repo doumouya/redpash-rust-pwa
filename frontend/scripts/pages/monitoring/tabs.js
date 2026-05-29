@@ -48,6 +48,15 @@ export const MON_TABS = [
   // /admin/users (organisational inventory). Combines request_log
   // + events into one time-ordered timeline scoped to a user_rid.
   { group: "USERS",    key: "user_activity", label: "Activity", icon: "bi-person-lines-fill", endpoint: "/monitoring/users",        wired: true },
+  // ── CATALOG — reference / taxonomy data surfaced for visibility ─
+  // Per epic CAS_9A0CBB3A59FF4F75B0C8BB2444C71261 (surface the
+  // remaining DB objects). case_categories is plumbed (table + GET
+  // /cases/categories + cases.category_id) but dormant; this tab
+  // surfaces the taxonomy read-only. Dedicated renderer (not
+  // LIST_VIEWS) — /cases/categories returns a flat `{ items }`, not
+  // a paginated Page<T>. The sentinel-admin global pool joins this
+  // group once Gus's admin reader lands.
+  { group: "CATALOG",  key: "case_categories", label: "Categories", icon: "bi-tags",          endpoint: "/cases/categories",        wired: true },
 ];
 
 export const MON_GROUPS = [
@@ -55,6 +64,7 @@ export const MON_GROUPS = [
   { name: "AUDITS",       mark: "AD", color: "peach" },
   { name: "OPTIMIZATION", mark: "OP", color: "green" },
   { name: "USERS",        mark: "US", color: "sky"   },
+  { name: "CATALOG",      mark: "CT", color: "teal"  },
 ];
 
 export const WINDOWS = ["1h", "24h", "7d", "30d"];

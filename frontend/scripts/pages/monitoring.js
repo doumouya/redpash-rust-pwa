@@ -293,12 +293,14 @@ export default function monitoring(app, { session }) {
     navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
     const btn = navBody.querySelector('.rt-tab[data-key="' + cssEsc(tab.key) + '"]');
     if (btn) btn.classList.add("active");
+    activeTabKey = tab.key;
     renderTabBody(tab);
   }
 
   function renderTabBody(tab) {
-    if (tab.key === "optimization")  return renderOptimizationBody();
-    if (tab.key === "user_activity") return renderUserActivityBody();
+    if (tab.key === "optimization")    return renderOptimizationBody();
+    if (tab.key === "user_activity")   return renderUserActivityBody();
+    if (tab.key === "case_categories") return renderCaseCategoriesBody();
     const view = LIST_VIEWS[tab.key];
     if (view) return renderListBody(tab, view);
   }
@@ -1035,6 +1037,99 @@ export default function monitoring(app, { session }) {
     setKpi("rp-mon-opt-open",   String(open));
     setKpi("rp-mon-opt-tipped", String(tipped));
     setKpi("rp-mon-opt-done",   String(done));
+  }
+
+  // ─── Case categories — dormant taxonomy surfaced read-only ───
+  // Per epic CAS_9A0CBB3A59FF4F75B0C8BB2444C71261 (surface remaining
+  // DB objects). case_categories is plumbed but dormant; this tab
+  // makes the taxonomy visible. Dedicated renderer because
+  // /cases/categories returns a flat `{ items }` (CategoryList), not
+  // the paginated Page<T> the generic LIST_VIEWS runtime expects.
+  // Two-level hierarchy (parent_id self-FK); parent names + scope
+  // (company vs global) resolve client-side from the one flat fetch.
+  function renderCaseCategoriesBody() {
+    charts.dispose();
+    disposeUserInstances();
+    view.innerHTML = ''
+      + headHTML("Case categories", "")
+      + kpiStripHTML([
+          { label: "Total",          id: "rp-mon-cat-total"   },
+          { label: "Parents",        id: "rp-mon-cat-parents" },
+          { label: "Subcategories",  id: "rp-mon-cat-subs"    },
+          { label: "Company-scoped", id: "rp-mon-cat-co"      },
+        ])
+      + catTablePanel();
+    fetchCategories();
+  }
+
+  function catTablePanel() {
+    return '<section class="rt-card">'
+      + '<table class="rt-table">'
+      +   '<thead><tr>'
+      +     '<th>Name</th>'
+      +     '<th>Parent</th>'
+      +     '<th>Scope</th>'
+      +     '<th>ID</th>'
+      +     '<th>Created</th>'
+      +   '</tr></thead>'
+      +   '<tbody id="rp-mon-cat-tbody"></tbody>'
+      + '</table>'
+      + '</section>';
+  }
+
+  async function fetchCategories() {
+    const tbody = view.querySelector("#rp-mon-cat-tbody");
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+    ["total", "parents", "subs", "co"].forEach((k) => setKpi("rp-mon-cat-" + k, "…"));
+    try {
+      const data  = await api.get("/cases/categories");
+      const items = data?.items || [];
+      // rid→name map so the Parent column resolves without a 2nd
+      // lookup. Order: each parent (alpha) immediately followed by its
+      // children (alpha), so the flat table reads as a tree. Orphans
+      // (child whose parent isn't in the set) trail at the end.
+      const nameById   = new Map(items.map((c) => [c.redpash_id, c.name]));
+      const byName     = (a, b) => String(a.name).localeCompare(String(b.name));
+      const parents    = items.filter((c) => !c.parent_id).sort(byName);
+      const childrenOf = (pid) => items.filter((c) => c.parent_id === pid).sort(byName);
+      const orphans    = items.filter((c) => c.parent_id && !nameById.has(c.parent_id)).sort(byName);
+      const ordered = [];
+      for (const p of parents) { ordered.push(p); childrenOf(p.redpash_id).forEach((c) => ordered.push(c)); }
+      ordered.push(...orphans);
+
+      paintCatKpis(items);
+      if (tbody) {
+        tbody.innerHTML = ordered.length
+          ? ordered.map((c) => catRowHTML(c, nameById)).join("")
+          : '<tr><td colspan="5">No categories. The taxonomy is seeded but empty.</td></tr>';
+      }
+      const head = view.querySelector(".rp-shell-head-count");
+      if (head) head.textContent = String(items.length);
+    } catch (err) {
+      ["total", "parents", "subs", "co"].forEach((k) => setKpi("rp-mon-cat-" + k, "—"));
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5">Couldn’t load'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</td></tr>';
+    }
+  }
+
+  function catRowHTML(c, nameById) {
+    const isChild    = !!c.parent_id;
+    const parentName = c.parent_id ? (nameById.get(c.parent_id) || c.parent_id) : "—";
+    const scope      = c.company_id ? "company" : "global";
+    return '<tr>'
+      + '<td>' + (isChild ? "↳ " : "") + esc(c.name) + '</td>'
+      + '<td>' + esc(parentName) + '</td>'
+      + '<td><span class="rt-mono-pill">' + esc(scope) + '</span></td>'
+      + '<td><span class="rt-mono-pill">' + esc(c.redpash_id) + '</span></td>'
+      + '<td>' + fmtTime(c.created_at) + '</td>'
+      + '</tr>';
+  }
+
+  function paintCatKpis(items) {
+    setKpi("rp-mon-cat-total",   String(items.length));
+    setKpi("rp-mon-cat-parents", String(items.filter((c) => !c.parent_id).length));
+    setKpi("rp-mon-cat-subs",    String(items.filter((c) => c.parent_id).length));
+    setKpi("rp-mon-cat-co",      String(items.filter((c) => c.company_id).length));
   }
 
   function optRowHTML(r) {
