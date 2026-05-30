@@ -68,6 +68,11 @@ docs/internal/
 ├── standup/                       per-contributor append-only logs
 │   ├── em.md, gus.md, torv.md, woz.md
 │
+├── code/                          the WHAT IS THIS FILE — one doc per source file
+│   ├── backend/                   80 atomic docs (api, data, shared)
+│   ├── frontend/                  45 atomic docs (scripts, pages, charts, tools)
+│   └── tools/                     32 atomic docs (audit-suite, shell, per-dir, one-off)
+│
 ├── archive/                       snapshots no longer load-bearing
 │   ├── frontend-parity-inventory.md     pre-merge parity gap accounting
 │   ├── frontend-reset-merge-report.md   the rebuild-into-prerelease cut
@@ -100,6 +105,9 @@ docs/internal/
 | Understand how cleaning steps survive a reload | [flows/step-apply-and-replay.md](flows/step-apply-and-replay.md) |
 | Investigate a frontend production issue | [runbooks/](runbooks/index.md) first, then `standup/` for recent context |
 | Find the parity-gap log we used during the merge | [archive/frontend-parity-inventory.md](archive/frontend-parity-inventory.md) |
+| Find the deep-explanation for a specific source file | [code/index.md](code/index.md) — atomic docs mirror the source tree |
+| Author a new atomic doc | [code/_template.md](code/_template.md) — copy and fill the 3 required headings |
+| See current doc coverage / drift | run `sh tools/audit.sh` — `doc-coverage-audit` reports per-pillar % + stubs / staleness |
 
 ---
 

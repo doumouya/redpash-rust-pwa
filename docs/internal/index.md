@@ -7,7 +7,7 @@ last modified date: 2026-05-24
 
 # RedPash internal docs
 
-The team-only counterpart to [public docs](../INDEX.md). Eight sections
+The team-only counterpart to [public docs](../INDEX.md). Nine sections
 plus this index and the [redmap](redmap.md). Each section captures a
 distinct *shape* of document, not a topic. Mixing shapes is the smell
 the old flat layout suffered from.
@@ -23,9 +23,10 @@ the old flat layout suffered from.
 | [processes](processes/index.md) | how the team works | lives as long as the practice does |
 | [runbooks](runbooks/index.md) | operational / incident playbooks | one per incident class |
 | [standup](standup/index.md) | daily logs, one append-only file per contributor | never retired — history |
+| [code](code/index.md) | the **what this file is** — one doc per source file under `tools/`, `frontend/scripts/`, `backend/crates/` | lives as long as the file does; refreshed in the touching commit (touch-policy) |
 | [archive](archive/index.md) | snapshots no longer load-bearing | frozen reference |
 
-The eight categories answer different questions:
+The nine categories answer different questions:
 
 - *Why is it like this?* → architecture
 - *How does X actually work?* → subsystems
@@ -34,6 +35,7 @@ The eight categories answer different questions:
 - *How do we work?* → processes
 - *Something broke, what do I do?* → runbooks
 - *What happened yesterday?* → standup
+- *Where's the deep-explanation for a specific source file?* → code
 - *Where's that old doc?* → archive
 
 ## Lane ownership

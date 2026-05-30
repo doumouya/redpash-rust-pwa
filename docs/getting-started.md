@@ -88,6 +88,75 @@ docs/                    — these docs (served at /docs/<slug>); internal team 
 tools/                   — `*-audit/audit.js` scripts auto-discovered by `tools/audit.sh`. 9 audit tools today.
 ```
 
+## Going deeper — code-level docs
+
+The structure above gives you the lay of the land. To dig into any
+specific source file there's a layer below: **every file under
+`tools/`, `frontend/scripts/`, and `backend/crates/` has a
+corresponding atomic doc** under
+[`docs/internal/code/`](internal/code/index.md). One doc per file —
+the file's *purpose*, its *public surface*, its *drift-prone areas* —
+written at a granularity that lets you onboard or plan a refactor
+without re-reading the source.
+
+### How the mapping works
+
+The doc tree mirrors the source tree, with `crates/` and `src/` dropped
+from backend paths for readability:
+
+```
+backend/crates/api/src/routes/files/joins.rs
+  → docs/internal/code/backend/api/routes/files/joins.md
+
+frontend/scripts/api.js
+  → docs/internal/code/frontend/scripts/api.md
+
+tools/rs-audit/audit.js
+  → docs/internal/code/tools/audit-suite/rs-audit.md
+
+tools/audit.sh
+  → docs/internal/code/tools/shell/audit.md
+```
+
+The full mapping is documented in
+[`docs/internal/code/index.md`](internal/code/index.md).
+
+### The in-source breadcrumb
+
+Every documented source file carries a 2-line pointer to its atomic
+doc in the file's top comment:
+
+```rust
+//! Purpose: short one-liner — what this file is.
+//! Doc: docs/internal/code/backend/api/routes/files/joins.md
+```
+
+```js
+/* Purpose: short one-liner.
+   Doc: docs/internal/code/frontend/scripts/api.md */
+```
+
+So when you're reading source and want the deep explanation, the next
+step is one click away — and when you're reading a doc and want to see
+the source, the front-matter `source:` field points back.
+
+### Coverage and discipline
+
+Coverage is enforced by
+[`tools/doc-coverage-audit/`](../tools/doc-coverage-audit/audit.js) —
+run `sh tools/audit.sh` to see the current per-pillar coverage % and
+any stubbed, stale, or missing docs. The discipline:
+**editing a source file requires updating its atomic doc in the same
+commit** (touch-policy, recorded in root `CLAUDE.md`).
+
+### Your first dive
+
+Once Phase B of the [atomic-doc plan](internal/processes/atomic-doc-plan.md)
+lands the backend atomic docs, the recommended reading order will be:
+
+_pointers added when Phase B lands its first 5 docs_ — the audit's
+`stub_doc` finding will flag this section until then.
+
 ## Cheatsheet
 
 - **Run `sh tools/audit.sh` before every commit.** Auto-discovers every

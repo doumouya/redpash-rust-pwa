@@ -77,6 +77,7 @@ navigation.
 
 - [Internal index](internal/index.md) — the team-only docs root + lane ownership map.
 - [Internal REDMAP](internal/redmap.md) — find anything fast.
+- [Code docs](internal/code/index.md) — atomic docs, one per source file under `tools/`, `frontend/scripts/`, `backend/crates/`. Coverage measured by [`tools/doc-coverage-audit`](../tools/doc-coverage-audit/audit.js); spec at [`internal/processes/atomic-doc-plan.md`](internal/processes/atomic-doc-plan.md).
 - [Specs](internal/specs/index.md) — the **what**: wire contracts, schemas, surface plans. Source of truth for each wire it describes (audit-ingest, filter DTO, monitoring schemas, optimization map, user prefs, datasource trait, MCP memory bridge, FromRow + WASM-phase-C spikes).
 - [Runbooks](internal/runbooks/index.md) — post-mortems of real problems, five parts each: Problem Statement → Troubleshooting steps → RCA → Solution → Post Checking.
 - [UI change process](internal/processes/ui-change-process.md) — the standard checklist for every HTML / CSS / JS change.
