@@ -11,6 +11,11 @@ use shared::user::UserProfile;
 use sqlx::PgPool;
 
 const DEV_USERNAME: &str = "dev";
+// The canonical "internal" company — the org that builds RedPash. A case
+// is "internal" iff its reporter shares membership here; everything else
+// is "external" (customer-reported). Must match the name AppState::init
+// resolves into `internal_company_id` (REDPASH_INTERNAL_COMPANY_NAME).
+const INTERNAL_COMPANY_DEFAULT: &str = "RedPash";
 
 pub struct Bootstrap {
     pub user:    UserProfile,
@@ -46,6 +51,32 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
             rid
         }
     };
+
+    // Ensure the canonical internal company exists + the dev user belongs
+    // to it. This is what `/api/cases?source=` keys off: without a company
+    // of this name, AppState resolves `internal_company_id = None` and the
+    // source filter silently no-ops (internal + external return the same
+    // rows). create_company seats `user` as an owner-member, so the dev
+    // user's cases read as internal; cases by non-members read as external.
+    let internal_name = std::env::var("REDPASH_INTERNAL_COMPANY_NAME")
+        .unwrap_or_else(|_| INTERNAL_COMPANY_DEFAULT.to_string());
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT redpash_id FROM companies WHERE name = $1 LIMIT 1",
+    )
+    .bind(&internal_name)
+    .fetch_optional(pool)
+    .await
+    .context("looking up internal company")?;
+    if existing.is_none() {
+        let rid  = id::new("CMP");
+        let slug = format!("{}-{}",
+            internal_name.to_ascii_lowercase().replace(' ', "-"),
+            &rid[4..10].to_ascii_lowercase());
+        tracing::info!(%rid, name = %internal_name, "creating canonical internal company");
+        db::create_company(pool, &rid, &internal_name, &slug, &user.redpash_id)
+            .await
+            .context("creating internal company")?;
+    }
 
     Ok(Bootstrap { user, project })
 }
