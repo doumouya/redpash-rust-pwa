@@ -9,9 +9,10 @@
 //!                           `rp_session` cookie, never trusted from
 //!                           the request body.
 //!
-//! `list` is the internal monitoring read surface — open today (solo
-//! / localhost); gate behind the company-admin role when RBAC lands.
-//! `get_one` is company-scoped: the caller must share a company with
+//! `list` is the internal monitoring read surface — requires a valid
+//! session (events carry PII: user rids, paths, context blobs); the
+//! company-admin role gate lands with RBAC. `get_one` is company-scoped:
+//! the caller must share a company with
 //! the event's user (system events pass through). The POST is the
 //! frontend capture funnel.
 
@@ -47,8 +48,12 @@ struct EventList {
 /// `GET /api/events` — most-recent-first feed for the monitoring tool.
 async fn list(
     State(state): State<AppState>,
+    headers:      HeaderMap,
     Query(q):     Query<ListQuery>,
 ) -> Result<Json<EventList>, AppError> {
+    // Baseline gate: events expose PII (user rids, request paths, context
+    // blobs), so require a valid session. Role-scoping lands with RBAC.
+    super::resolve_user_rid(&state, &headers).await?;
     let limit = q.limit.unwrap_or(100).clamp(1, 1000);
     let level = q.level.as_deref().filter(|s| !s.is_empty());
     let kind  = q.kind.as_deref().filter(|s| !s.is_empty());

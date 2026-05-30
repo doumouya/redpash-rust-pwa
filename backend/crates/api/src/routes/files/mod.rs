@@ -41,6 +41,37 @@ mod stats;
 
 const MAX_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
 
+/// Best-effort cleanup for a freshly-written blob. The upload / snapshot
+/// / join handlers write the `.bin` to disk *before* the DB row that
+/// references it exists. If a later step fails (parse error, DB error)
+/// and the handler returns early, the blob would be orphaned — no row
+/// points at it, so no later sweep can ever find it, and disk leaks per
+/// failed request. Arm the guard right after the write and `disarm()` it
+/// once the row is committed; if it drops still armed, it removes the
+/// file. Drop is sync (`std::fs`) — fine for best-effort cleanup.
+pub(super) struct BlobGuard {
+    path:  std::path::PathBuf,
+    armed: bool,
+}
+
+impl BlobGuard {
+    pub(super) fn arm(path: std::path::PathBuf) -> Self {
+        Self { path, armed: true }
+    }
+
+    pub(super) fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for BlobGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub(super) struct FileEnvelope {
     pub(super) summary: FileSummary,
@@ -189,6 +220,10 @@ async fn upload(
     let abs_path = state.file_path(&rid);
     tokio::fs::write(&abs_path, &bytes).await
         .map_err(|e| AppError::internal("io", format!("write {}: {e}", abs_path.display())))?;
+    // Past this point the blob exists on disk but no DB row references it
+    // yet. Guard it so any early return (parse / DB failure) removes the
+    // orphan instead of leaking disk; disarmed once the row is committed.
+    let mut blob_guard = BlobGuard::arm(abs_path.clone());
 
     let globals = db::list_global_sentinels(&state.db).await?;
     let tld = tld_hint.clone();
@@ -219,6 +254,7 @@ async fn upload(
         df.height() as u64, df.width() as u32, size, &storage_rel, &columns, cleanness,
     )
     .await?;
+    blob_guard.disarm();
 
     crate::event::info(&state.db, "file_upload", format!("uploaded {filename}"))
         .user(user.clone())

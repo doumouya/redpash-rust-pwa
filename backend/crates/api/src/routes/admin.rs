@@ -393,9 +393,18 @@ async fn list_memberships(
 
     // all_count = total across BOTH scopes (the rail tab's "everything"
     // count). total = scope+role-filtered count.
+    //
+    // Post-consolidation the one table also holds case memberships
+    // (Reporter / Case Owner), which this tab does NOT surface — so a bare
+    // COUNT(*) over-reports. Count project + company memberships explicitly
+    // via the same join-as-filter the scope queries below use: a case-object
+    // membership row joins to neither table and is excluded.
     let all_count: i64 = sqlx::query_scalar(
-        // Post-consolidation: one table holds every scope.
-        "SELECT COUNT(*) FROM memberships",
+        "SELECT
+            (SELECT COUNT(*) FROM memberships m
+                JOIN projects  p ON p.redpash_id = m.object_redpash_id)
+          + (SELECT COUNT(*) FROM memberships m
+                JOIN companies c ON c.redpash_id = m.object_redpash_id)",
     )
     .fetch_one(&state.db)
     .await?;
@@ -1052,9 +1061,17 @@ async fn delete_user(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<StatusCode, AppError> {
-    // AUTH-AUDIT-ACK: admin endpoints are dev-permissive in v1; RBAC
-    // gate (admin-only + can't-delete-self) lands with the RBAC slice.
+    // AUTH-AUDIT-ACK: admin endpoints are dev-permissive in v1; the
+    // admin-only role gate lands with the RBAC slice. The can't-delete-self
+    // guard is enforced here regardless — it's a footgun independent of
+    // RBAC (delete cascades wipe the caller's own projects + sessions).
     let caller = super::resolve_user_rid(&state, &headers).await?;
+    if rid == caller {
+        return Err(AppError::bad_request(
+            "invalid",
+            "cannot delete your own account",
+        ));
+    }
     let removed = db::delete_user(&state.db, &rid).await?;
     if !removed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));

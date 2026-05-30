@@ -380,6 +380,9 @@ pub async fn create_project(
     }
     tx.commit().await?;
     // get_project re-selects through PROJECT_SELECT so the returned row
-    // carries the joined owner_display_name / stage / file_count.
-    get_project(pool, rid).await.map(|opt| opt.expect("just inserted"))
+    // carries the joined owner_display_name / stage / file_count. The row
+    // was just committed, but a concurrent delete or a read-replica lag
+    // can still return None — surface that as an error rather than panic
+    // the task (which axum turns into an opaque 500).
+    get_project(pool, rid).await?.ok_or(sqlx::Error::RowNotFound)
 }

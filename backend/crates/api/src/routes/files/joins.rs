@@ -158,6 +158,10 @@ pub(super) async fn create_join(
     let storage_rel = format!("files/{new_rid}.bin");
     let abs_path    = state.file_path(&new_rid);
     let path_for_blocking = abs_path.clone();
+    // The join output is written to disk inside the blocking task below,
+    // before the DB row exists. Guard it so a failure in the writer,
+    // metadata, or insert removes the orphan; disarmed after the commit.
+    let mut blob_guard = super::BlobGuard::arm(abs_path.clone());
 
     let globals = db::list_global_sentinels(&state.db).await?;
     let (columns, h, w, cleanness, fully_null_rows) = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
@@ -207,6 +211,7 @@ pub(super) async fn create_join(
         h as u64, w as u32, csv_size, &storage_rel, &columns, cleanness,
     )
     .await?;
+    blob_guard.disarm();
 
     let now = chrono::Utc::now();
     let summary = FileSummary {
