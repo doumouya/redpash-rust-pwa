@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/home.md */
 // Home — the org command center.
 //
 // Shell pattern shared with Workspace: a topbar over a greeting,
@@ -475,9 +477,18 @@ export default function home(app, { session: _session }) {
       chipRows: [{
         name: "scope",
         label: "Scope",
+        // Plural labels — entity categories read plural everywhere else
+        // (Home rail tabs, omnisearch sections, kindLabel). values stay
+        // singular: they're the ?scope= wire enum.
         options: [
-          { label: "Project", value: "project" },
-          { label: "Company", value: "company" },
+          { label: "Projects", value: "project" },
+          { label: "Companies", value: "company" },
+          // Case Team Member = case-scope Membership (rbac/membership.md,
+          // v3). Disabled placeholder telegraphing the coming scope — the
+          // backend (case_memberships + /admin/memberships?scope=case)
+          // isn't built yet, so it can't be selected.
+          { label: "Cases", value: "case", disabled: true,
+            title: "Case Team Members — coming soon" },
         ],
         default: "project",
       }],

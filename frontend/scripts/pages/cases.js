@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/cases.md */
 // Cases — rail + (kanban board | case detail) surface.
 //
 // Workstream spec: docs/internal/jira-flow-proposition/proposition.md.

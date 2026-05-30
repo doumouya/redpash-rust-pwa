@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/dom.md */
 // dom.js — DOM utility primitives shared across every page that
 // renders HTML strings. Extracted from 9 duplicate copies (audit
 // 2026-05-24: `esc` x9, `cssEsc` x3, `escHTML` x2) so a bug fix in

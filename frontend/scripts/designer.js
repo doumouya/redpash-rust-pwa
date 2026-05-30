@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/designer.md */
 // Designer — the chart/dashboard authoring surface.
 //
 // Ported from the prototype at red-front/designer.html (commit

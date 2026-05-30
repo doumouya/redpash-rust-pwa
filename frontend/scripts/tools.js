@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/tools.md */
 // Cleaning tools — the workspace's tools panel, parameterised.
 //
 // One factory (defineTool), N tool configs, a single form renderer that

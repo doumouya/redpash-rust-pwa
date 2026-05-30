@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/tools/fields.md */
 // Tools-panel field-type renderers — first slice of the
 // frontend/scripts/tools.js decomposition (Em 2026-05-27 god-object
 // campaign per Internal-Slack/broadcast.md 00:53).

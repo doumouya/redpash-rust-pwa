@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/list-page.md */
 // list-page.js — shared runtime for the rail-page list surfaces
 // (Home + Monitoring). Both pages render the same shape: section
 // head + optional chip strip + KPI tiles + chart cards + paged
@@ -153,7 +155,10 @@ export function chipRowHTML(chipRow, current) {
     + (chipRow.label ? '<span class="rp-chip-row-label">' + esc(chipRow.label) + '</span>' : "")
     + chipRow.options.map((opt) =>
         '<button type="button" class="rp-chip' + (opt.value === current ? ' is-active' : '') + '"'
-        + ' data-value="' + esc(opt.value) + '">' + esc(opt.label) + '</button>'
+        + ' data-value="' + esc(opt.value) + '"'
+        + (opt.disabled ? ' disabled' : '')
+        + (opt.title ? ' title="' + esc(opt.title) + '"' : '')
+        + '>' + esc(opt.label) + '</button>'
       ).join("")
     + '</div>';
 }

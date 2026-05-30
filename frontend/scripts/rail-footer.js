@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/rail-footer.md */
 // Rail footer nav — the shared utility cluster (Docs / Settings /
 // Profile) that lives at the bottom of every railed page's
 // `.rt-nav-foot`. Relocated out of the topbar 2026-05-28 (Em): the

@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/format.md */
 // Format primitives — ISO timestamp / age / clock / day helpers used
 // across the frontend. Extracted from cases.js per the cases-UI review
 // (Em greenlit 2026-05-25). Lives at the root of `scripts/` next to

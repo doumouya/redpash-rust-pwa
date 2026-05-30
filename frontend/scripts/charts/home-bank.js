@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/charts/home-bank.md */
 // charts/home-bank.js — schema + default chart specs per Home tab.
 //
 // Slice D2 of the chart-pipeline unification (Em 2026-05-27 — "do the

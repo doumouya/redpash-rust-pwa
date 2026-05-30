@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/page-row.md */
 // page-row.js — `.rp-page__row` template helpers.
 //
 // Settings + Profile are largely a stack of `.rp-page__row` instances

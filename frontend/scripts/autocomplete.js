@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/autocomplete.md */
 // autocomplete.js — typeahead + chip-picker atom backed by column-index.
 //
 // Two consumer surfaces, one shared internals:

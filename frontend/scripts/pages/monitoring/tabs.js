@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/monitoring/tabs.md */
 // Monitoring page tab definitions — slice 5 of the god-object
 // decomposition (Em 2026-05-27 — broadcast.md 00:53). Mirror of
 // slice 4's pages/home/tabs.js extract; same module-private

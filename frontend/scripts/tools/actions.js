@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/tools/actions.md */
 // Tools-panel toolbar actions — slice 2 of the tools.js
 // decomposition (god-object campaign, Em 2026-05-27 — broadcast.md
 // 00:53). Two action lists used by the columns-view toolbar:

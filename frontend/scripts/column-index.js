@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/column-index.md */
 // column-index.js — per-file distinct-values cache.
 //
 // Backed by GET /api/files/:rid/uniques?col=X&q=Y&limit=N (live since

@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/api.md */
 // ─────────────────────── /api client ───────────────────────
 //
 // Thin fetch wrapper. Responsibilities:

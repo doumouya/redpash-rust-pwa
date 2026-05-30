@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/dropdown.md */
 // dropdown.js — one delegated click handler for the [data-dd] +
 // .rt-dd dropdown atom. Replaces the mount-time $$([data-dd])
 // sweep in workspace.js (only caught statically-rendered buttons)

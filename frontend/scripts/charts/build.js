@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/charts/build.md */
 // charts/build.js — chart-spec → ECharts option translator.
 //
 // Slice A of the chart-pipeline unification (Em 2026-05-27): lift

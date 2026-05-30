@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/monitoring.md */
 // Monitoring — the system telemetry surface.
 //
 // Same shell pattern as Home (rail + body) — see shell.css. Static

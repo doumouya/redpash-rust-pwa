@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/tools/catalog.md */
 // Tools-panel 12-tool catalog — slice 3 of the tools.js decomposition
 // (god-object campaign, Em 2026-05-27 — broadcast.md 00:53).
 //

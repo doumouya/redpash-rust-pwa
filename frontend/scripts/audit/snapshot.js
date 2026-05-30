@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/audit/snapshot.md */
 // UI snapshot — the page audits itself.
 //
 // When the SPA loads with `?audit=1` in the URL, every page mount

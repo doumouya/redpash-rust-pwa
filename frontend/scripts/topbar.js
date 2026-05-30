@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/topbar.md */
 // Topbar — the shared chrome for the authed pages (home, Workspace).
 //
 // One component, one button pattern: brand · omnibox · nav + theme +

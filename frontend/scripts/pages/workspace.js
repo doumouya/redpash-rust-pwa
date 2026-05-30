@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/workspace.md */
 // Workspace page — the redtable as a browser, wired to /api.
 //
 // On mount: load real projects + lazy-load files per group. A file

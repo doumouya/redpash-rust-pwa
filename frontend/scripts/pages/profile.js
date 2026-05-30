@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/profile.md */
 // Profile page — the user's account surface.
 //
 // Loads /api/me, paints the identity card + editable fields, and

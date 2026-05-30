@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/events.md */
 // ─────────────────── frontend event capture ───────────────────
 //
 // Phase 2 of the Events system (see docs/api/events.md). The backend

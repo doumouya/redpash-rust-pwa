@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/charts/render.md */
 // charts/render.js — chart spec → live ECharts instance.
 //
 // Slice B of the chart-pipeline unification (Em 2026-05-27). Sits on

@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/main.md */
 // ─────────────────────── RedPash router ───────────────────────
 //
 // Hash-based SPA router, rebuilt clean for the 2026-05-22 frontend

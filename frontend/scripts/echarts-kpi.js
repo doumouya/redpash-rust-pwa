@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/echarts-kpi.md */
 // echarts-kpi.js — small chart wrappers for KPI cards across Home,
 // Monitoring, Profile. Each function takes a DOM element + the data
 // shape that surface naturally has + an opts bag, inits ECharts

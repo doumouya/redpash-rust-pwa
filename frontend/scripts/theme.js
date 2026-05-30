@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/theme.md */
 // Theme — dark (default) ↔ light.
 //
 // Thin shim over the unified prefs system (prefs.js). `theme` is a

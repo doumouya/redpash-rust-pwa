@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/charts/monitoring-bank.md */
 // charts/monitoring-bank.js — schema + default chart specs per
 // Monitoring tab.
 //

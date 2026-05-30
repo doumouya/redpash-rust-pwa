@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/virtual-rows.md */
 // ─────────────────────── virtual-rows ───────────────────────
 //
 // Windowed <tbody> renderer for the redtable. Mounts only the rows

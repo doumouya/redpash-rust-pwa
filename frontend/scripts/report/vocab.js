@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/report/vocab.md */
 // Report builder vocabulary — slice 7 of the god-object decomposition
 // (Em 2026-05-27 — broadcast.md 00:53). Mirror of slices 4-6's
 // label/tab extracts; pure data, module-private, structural-only.

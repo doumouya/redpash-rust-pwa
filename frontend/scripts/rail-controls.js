@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/rail-controls.md */
 // Rail interaction helpers — the two rail-control patterns that were
 // hand-rolled per page (Em 2026-05-29 consolidation batch). The CSS
 // atoms (.rt-nav / .rt-seg--rail) were already shared; this dedups

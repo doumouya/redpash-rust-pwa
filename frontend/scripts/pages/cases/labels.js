@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/cases/labels.md */
 // Cases page label vocabulary — slice 6 of the god-object
 // decomposition (Em 2026-05-27 — broadcast.md 00:53). Same pattern
 // as slices 4 + 5 (pure data, module-private, structural extract).

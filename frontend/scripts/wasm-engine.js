@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/wasm-engine.md */
 // Lazy loader for the `data` crate's wasm build.
 //
 // The wasm bundle (~3.46 MB gzipped over-the-wire) lazy-loads only

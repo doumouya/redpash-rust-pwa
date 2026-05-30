@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/echarts-theme.md */
 // ECharts theme registration + resolver — shared across designer.js,
 // echarts-kpi.js, and any page that paints a chart.
 //

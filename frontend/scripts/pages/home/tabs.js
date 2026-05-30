@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/home/tabs.md */
 // Home page tab definitions — slice 4 of the god-object decomposition
 // campaign (Em 2026-05-27 — broadcast.md 00:53). First slice on home.js
 // (1938 LOC); same pattern as the tools.js slices 1-3 (pure data,

@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/joins.md */
 // joins.js — sibling-file join picker for the workspace Tools panel
 // (Joins tab — see partials/workspace.html #wsToolsJoinsBody, mounted
 // from pages/workspace.js).

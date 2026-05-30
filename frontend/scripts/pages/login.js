@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/login.md */
 // Login page — the RedPash sign-in surface.
 //
 // Leads with the product: upload a CSV, watch RedPash clean it in the

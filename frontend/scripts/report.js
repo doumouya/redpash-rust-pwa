@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/report.md */
 // Report builder — the second tab in the filter panel. Edits a
 // ReportSpec (shared::report::ReportSpec) against the open file and
 // runs it through POST /api/group/preview (group.rs:25, renamed from

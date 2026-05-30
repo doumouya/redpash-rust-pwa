@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/prefs.md */
 // App-wide preferences — SWR cache over the server `user_preferences`
 // table, with getPref/setPref helpers above it.
 //

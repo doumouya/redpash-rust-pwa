@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/charts/builder-ui.md */
 // charts/builder-ui.js — chart-spec authoring accordion.
 //
 // Slice C of the chart-pipeline unification (Em 2026-05-27). Lifts

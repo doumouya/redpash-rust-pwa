@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/docs.md */
 // Docs page — rail-driven viewer.
 //
 // Rail = section groups, each containing doc tabs. Body = the

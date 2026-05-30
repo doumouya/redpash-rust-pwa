@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/pages/settings.md */
 // Settings page — app preferences.
 //
 // Page is declarative: SETTINGS_ROWS defines what each section

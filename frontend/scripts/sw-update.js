@@ -1,3 +1,5 @@
+/* Purpose: see doc for details.
+ * Doc: docs/internal/code/frontend/scripts/sw-update.md */
 // Service-worker registration.
 //
 // The SW exists for ONE reason: to keep RedPash installable as a desktop
