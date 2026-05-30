@@ -2,7 +2,7 @@
 title: Files
 section: API
 order: 6
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/files/*`
@@ -282,7 +282,7 @@ the table below is the field-by-field summary.
 |----------------|----------|--------|------------|
 | `drop_rows`    | `{ indices: [int] }` | Drop rows by **absolute** index (frontend adds page offset before POSTing). | — |
 | `drop_nulls`   | `{ cols?: [string] }` | Drop rows where ANY column (or any listed column) is null. | — |
-| `filter_rows`  | `{ combinator: "and"\|"or", predicates: [{column, op, value?, case_sensitive?}] }` | Tree-predicate row filter — undoable like every other step. **Ops:** `eq` · `neq` · `in` · `not_in` · `contains` · `starts_with` · `ends_with` · `gt` · `gte` · `lt` · `lte` · `between` · `before` · `after` · `is_null` · `not_null`. See [`POST /:rid/clear-filters`](#post-apifilesridclear-filters) for the eraser. | — |
+| `filter_rows`  | `{ combinator: "and"\|"or", predicates: [{column, op, value?, case_sensitive?}] }` | Tree-predicate row filter — undoable like every other step. **Ops:** `eq` · `neq` · `in` · `not_in` · `contains` · `not_contains` · `starts_with` · `ends_with` · `gt` · `gte` · `lt` · `lte` · `between` · `before` · `after` · `is_null` · `not_null`. See [`POST /:rid/clear-filters`](#post-apifilesridclear-filters) for the eraser. | — |
 
 #### Cell-value
 
@@ -290,11 +290,11 @@ the table below is the field-by-field summary.
 |----------------|----------|--------|------------|
 | `set_cell`     | `{ row: int (global), column, value: string\|number\|null }` | Replace one cell. `null` / empty string → NULL. Non-strict cast (incompatible value → null). | — |
 | `fill_nulls`   | `{ strategy: "fixed"\|"zero"\|"forward", column?, value? (for fixed) }` | Replace nulls. `column?` absent → apply to every column. | yes |
-| `cast`         | `{ column, dtype: "int"\|"float"\|"str"\|"bool"\|"date"\|"datetime"\|"time" }` | Coerce one column. Best-effort: unparseable values become null. Use [`/cast-preview`](#post-apifilesridcast-preview) to see what would null first. Date/datetime/time from `str` use multi-format parsers. | yes |
+| `cast`         | `{ column, dtype: "int"\|"float"\|"str"\|"bool"\|"date"\|"datetime"\|"time" }` | Coerce one column. Best-effort: unparseable values become null. Use [`/cast-preview`](#post-apifilesridcast-preview) to see what would null first. Date/datetime/time from `str` use multi-format parsers. | — |
 | `change_case`  | `{ mode: "lower"\|"upper" }` | Recase every string column. Title-case not yet wired (Polars 0.43 omits the helper). | yes |
 | `replace_text` | `{ column, find, replace?, is_regex? }` | Find/replace inside string values (`is_regex: true` enables regex). | yes |
 | `fix_invalid`  | `{ sentinels: [string], columns?: [string], replacement?: string\|null }` | Replace listed sentinel values with `replacement` (default NULL) across listed columns (or every string column when omitted). Cast-to-string comparison so numeric sentinels (`"999"`) match. **Legacy** `{column, sentinel}` shape still honoured. | yes |
-| `format_dates` | `{ column, fmt?, on_incomplete?: "null"\|"drop"\|"keep" }` | Multi-format parse to Date, then strftime back to `fmt` (default ISO). `on_incomplete` controls unparseable rows. | yes |
+| `format_dates` | `{ column, fmt?, on_incomplete?: "null"\|"drop"\|"keep" }` | Multi-format parse to Date, then strftime back to `fmt` (default ISO). `on_incomplete` controls unparseable rows. | — |
 
 #### Rescue
 
@@ -437,11 +437,12 @@ low-cardinality columns and by the filter panel's value-autocomplete.
 | Param   | Type   | Default | Notes |
 |---------|--------|---------|-------|
 | `col`   | string | —       | Required — column name |
-| `limit` | usize  | 200     | Clamped `[1, 1000]` |
+| `limit` | usize  | 50      | Clamped `[1, 500]` |
+| `q`     | string | —       | Optional substring filter over values |
 
 ```jsonc
 200 OK
-{ "values": ["…", "…", …] }
+{ "values": ["…", "…", …], "total": 0, "truncated": false }
 ```
 
 ---
@@ -469,10 +470,13 @@ sample value sets — see [features/joins.md](../features/joins.md).
       "title":      "temps_log.csv",
       "candidates": [
         {
-          "this_col":   "dossier_id",
-          "other_col":  "case_ref",
-          "overlap":    0.97,
-          /* …more candidate fields… */
+          "this_col":      "dossier_id",
+          "other_col":     "case_ref",
+          "score":         0.97,
+          "matches":       142,
+          "this_uniques":  150,
+          "other_uniques": 148,
+          "samples":       ["…", "…", …]
         }
       ]
     }
@@ -616,7 +620,7 @@ they just typed into the modal.
     {
       "value":     "NA",                 // cell value as-found (original casing)
       "canonical": "na",                 // lowercased-trimmed bucket key
-      "total":     2943,                 // total cells in the file
+      "total":     2943,                 // occurrence count of this sentinel value
       "columns":   [
         ["cause_intervention", 1000],
         ["type_d_energie",      994],

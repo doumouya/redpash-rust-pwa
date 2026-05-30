@@ -2,7 +2,7 @@
 title: Company — object metadata
 section: Internal
 order: 43
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -10,10 +10,12 @@ status: draft — per the object-metadata sweep ([index](index.md))
 # Company (CMP_)
 
 The multi-tenancy boundary. A user belongs to zero or more companies
-via the `company_memberships` join table; projects are either company-
-scoped (`projects.company_id` set) or personal (`company_id = NULL`).
-Memberships hold one of three roles (`owner` / `admin` / `member`)
-with a last-owner guard so a company always has at least one owner.
+via the unified `memberships` table (rows whose `object_redpash_id`
+points at a company entity); projects are either company-scoped
+(`projects.company_id` set) or personal (`company_id = NULL`).
+Company memberships hold one of three roles (`owner` / `admin` /
+`member`) — enforced at the company route layer — with a last-owner
+guard so a company always has at least one owner.
 
 **Backing table:** `companies` (migration `20260521000001_companies.sql`).
 **DTO:** `backend/crates/shared/src/company.rs`
@@ -22,9 +24,10 @@ with a last-owner guard so a company always has at least one owner.
 member sub-routes), `backend/crates/api/src/routes/admin.rs`
 (paginated list for the Home Companies tab).
 
-The `company_memberships` table is documented separately on
-[membership](membership.md) — composite-key join, no `redpash_id`,
-never URL-addressable.
+The unified `memberships` table is documented separately on
+[membership](membership.md) — composite-key join (PK
+`(object_redpash_id, user_redpash_id)`), no `redpash_id`, never
+URL-addressable.
 
 ---
 
@@ -35,9 +38,9 @@ never URL-addressable.
 | `create` | `POST /api/companies` | Server assigns `CMP_<32hex>`. Body: `{ name, slug? }`. Slug auto-derived from name if omitted; always suffixed with 6 hex chars from the RID so it's unique by construction (no collision retry). Creator is seeded as `owner` in the same TX via `create_company`. |
 | `read` | `GET /api/companies/:rid` | Returns the base `Company` shape. Membership-gated: `require_member` rejects non-members with 404 (existence not leaked). |
 | `update` | `PATCH /api/companies/:rid` | Sparse — `name` / `slug` / `avatar_url`. Dev-permissive (no membership / role gate). Slug PATCH passes through `slugify` server-side. Duplicate slug → 409 `slug_taken`. |
-| `delete` | `DELETE /api/companies/:rid` | Dev-permissive. Cascades `company_memberships`; `projects.company_id` is `SET NULL` so company-scoped projects survive as personal. |
+| `delete` | `DELETE /api/companies/:rid` | Dev-permissive. Cascades the company's `memberships` rows (via the entities registry); `projects.company_id` is `SET NULL` so company-scoped projects survive as personal. |
 | `list (self)` | `GET /api/companies` | Returns `CompanyList { items: Vec<CompanySummary> }` — every company in the system; non-member rows surface with `my_role: null`. Hardcoded ordering, no filter / page params today. |
-| `list (admin)` | `GET /api/admin/companies?page=&size=&sort=&dir=&q=` | Paginated `Page<CompanySummary>` for the Home Companies tab. `member_count` + `my_role` both resolved via correlated subqueries — `my_role` joins the caller's own `company_memberships.role` per company (the caller is resolved from the session; NULL when they're not a member). |
+| `list (admin)` | `GET /api/admin/companies?page=&size=&sort=&dir=&q=` | Paginated `Page<CompanySummary>` for the Home Companies tab. `member_count` + `my_role` both resolved via correlated subqueries against `memberships` (keyed on `object_redpash_id = c.redpash_id`) — `my_role` joins the caller's own membership `role` per company (the caller is resolved from the session; NULL when they're not a member). |
 | `search` | `GET /api/admin/companies?q=...` | ILIKE substring on `name` + `slug`. Single `$1` reused. |
 | `list members` | `GET /api/companies/:rid/members` | Returns `Vec<CompanyMember>` — the membership rows joined with the user's profile (display_name / username / avatar_url) so the members list renders without a second lookup. |
 | `add member` | `POST /api/companies/:rid/members` | Body: `{ user_id, role }`. Owner-only for granting `role: 'owner'`. Existing membership UPSERTs to the new role. Emits `company_member_add`. |
@@ -115,8 +118,8 @@ on `companies` — they're computed at SELECT time.
 member_count
   Type:        INT / u32
   Properties:  Sort, Layout
-  Description: `SELECT COUNT(*) FROM company_memberships WHERE
-               company_id = c.redpash_id`. Subquery alias —
+  Description: `SELECT COUNT(*) FROM memberships WHERE
+               object_redpash_id = c.redpash_id`. Subquery alias —
                Postgres allows referring to SELECT aliases in
                ORDER BY, so SORTABLE_COMPANIES["member_count"]
                resolves cleanly. Drives the "Members" column.
@@ -142,11 +145,14 @@ my_role
 
 ## Enum constraints
 
-`role` (on the `company_memberships` join table, not on `companies`
+`role` (on the unified `memberships` join table, not on `companies`
 itself):
 
-`role ∈ { owner, admin, member }` — DB-side CHECK constraint in
-migration 007 line 24. Role hierarchy: `owner > admin > member`.
+The table's `role` CHECK is the 4-value set `owner / admin / member /
+viewer` (default `member`). For company scope the 3-value set
+`{ owner, admin, member }` is enforced at the company route layer
+(`viewer` isn't offered for companies), not by the column CHECK. Role
+hierarchy: `owner > admin > member`.
 
 - **Owner-only operations:** grant `owner` role to another member,
   delete the company (when RBAC tightens — dev-permissive today).
@@ -178,9 +184,11 @@ projects.company_id → Company (CMP_)
 ### Inverse relationships
 
 ```
-Company has many CompanyMembership rows
-  Backing:       company_memberships (composite PK on
-                 (company_id, user_redpash_id))
+Company has many Membership rows
+  Backing:       memberships (the ONE polymorphic table; composite
+                 PK on (object_redpash_id, user_redpash_id), FK
+                 object_redpash_id → entities.id — no company_id
+                 column)
   Cardinality:   1:N
   On delete:     CASCADE (deleting a company removes its
                  memberships; the users themselves stay)

@@ -2,7 +2,7 @@
 title: Project — object metadata
 section: Internal
 order: 44
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -35,10 +35,10 @@ the stored column.
 
 | Verb | Wire | Notes |
 |---|---|---|
-| `create` | `POST /api/projects` | Server assigns `PRJ_<32hex>`. Body: `{ name, description?, company_id?, is_default? }`. `company_id` (when set) gated on caller's membership — non-members get 404. `is_default: true` runs in a TX with `UPDATE projects SET is_default = false WHERE owner_id = $caller AND is_default` so the `projects_owner_default_idx` partial unique index never sees two defaults at once. Returns `201 Created` with the joined `ProjectSummary`. |
+| `create` | `POST /api/projects` | Server assigns `PRJ_<32hex>`. Body: `{ name, description?, company_id?, is_default? }`. The creator is seated as the project's `owner` in the same TX via a `memberships` row (`role='owner'`) — ownership lives there, not in a column. `company_id` (when set) gated on caller's membership — non-members get 404. `is_default: true` writes `UPDATE users SET default_project_id = $rid` in the same TX (one column = one default per user; no sibling flip-off needed). Returns `201 Created` with the joined `ProjectSummary`. |
 | `read` | `GET /api/projects/:rid` | Returns the full `ProjectSummary` (owner-gated). |
 | `read (with files)` | `GET /api/projects/:rid/files` | Returns `{ items: Vec<FileSummary> }` — files in this project, owner-gated. NOT a separate Project endpoint — listed here because it's the canonical "open a project" call from the Workspace rail. |
-| `update` | `PATCH /api/projects/:rid` | Sparse — name / description / is_default / owner_id / company_id / status. Same default-flip TX as create. Owner-gated. `owner_id` reassignment target must exist (404 `not_found` for unknown user). `company_id` reassignment gated on caller's membership in the target company. Empty `name` / `owner_id` / `company_id` are dropped so they can't blank a required field; `company_id` can be re-scoped but not cleared back to personal via this path (a dedicated unset path lands with the company UI). |
+| `update` | `PATCH /api/projects/:rid` | Sparse — name / description / is_default / owner_id / company_id / status. Owner-gated. `is_default` writes `users.default_project_id` (set on `true`, clear on `false` when this is the current default), all in one TX. `owner_id` reassignment transfers the owner-membership (DELETE the existing `role='owner'` row + UPSERT the new user to `owner`); the target must exist (404 `not_found` for unknown user). `company_id` reassignment gated on caller's membership in the target company. Empty `name` / `owner_id` / `company_id` are dropped so they can't blank a required field; `company_id` can be re-scoped but not cleared back to personal via this path (a dedicated unset path lands with the company UI). |
 | `delete` | `DELETE /api/projects/:rid` | Owner-gated. Refuses to delete the owner's default project (return `400 is_default`). Cascades files + steps via FK; on-disk blob cleanup is a follow-up TODO. |
 | `list` | `GET /api/projects` | Returns `{ items: Vec<ProjectSummary> }` — owner-scoped (the session user's projects only). **No pagination today**, no sort param, no `q=` filter. Backend `Page<T>` conversion + `?status=` / `?q=` / `?sort=` queued as a follow-up. Hardcoded `ORDER BY is_default DESC, created_at ASC` (default project first). |
 | `search` | — | **Not supported.** No `q=` param on `/api/projects`. |
@@ -58,13 +58,17 @@ redpash_id
 
 ```
 owner_id
-  Type:        TEXT NOT NULL / String — FK to users.redpash_id
+  Type:        String — DTO / PATCH field, NOT a projects column
   Properties:  Update, Layout
-  Description: Owner. Server-assigned on Create to the caller —
-               clients can't fork creation. Reassignable via
-               PATCH; reassignment target must be a real USR_
-               (404 on unknown). NOT a Create-property (caller
-               wins).
+  Description: Owner. NOT a column on projects — ownership is a
+               `memberships` row with role='owner' (FK
+               object_redpash_id → entities.id). Server-seats the
+               caller as owner on Create (membership INSERT);
+               clients can't fork creation. The PATCH body still
+               accepts `owner_id` as input + the DTO hydrates it
+               as output — a reassignment transfers the
+               owner-membership (target must be a real USR_, 404
+               on unknown). NOT a Create-property (caller wins).
 ```
 
 ```
@@ -87,16 +91,19 @@ description
 
 ```
 is_default
-  Type:        BOOLEAN NOT NULL DEFAULT FALSE / bool
+  Type:        bool — DTO / PATCH field, NOT a projects column
   Properties:  Create, Update, Layout
   Description: Marks the owner's default project — the implicit
                target for uploads when no `project_name` is sent.
-               Partial UNIQUE index `projects_owner_default_idx`
-               WHERE is_default enforces at most one true per
-               owner; the Create/PATCH handlers wrap default-flip
-               in a TX. Default-flag projects can't be deleted
-               (400 `is_default`). Hidden by default in the Home
-               Projects tab.
+               NOT a column on projects: the default lives on
+               `users.default_project_id` (one column = one
+               default per user, so no per-project flag or
+               partial-unique index). The DTO derives this field
+               as `users.default_project_id == redpash_id`; the
+               Create/PATCH handlers write `default_project_id` in
+               a TX (set on true, clear on false). The user's
+               default project can't be deleted (400 `is_default`).
+               Hidden by default in the Home Projects tab.
 ```
 
 ```
@@ -146,10 +153,13 @@ shared `PROJECT_SELECT` in `db/projects.rs`.
 owner_display_name, owner_username
   Type:        TEXT / String
   Properties:  Layout
-  Description: users.display_name + users.username JOINed on
-               owner_id. Hidden by default in the Home Projects
-               tab (the inline owner picker on the Objects page
-               uses owner_display_name to label the chip).
+  Description: users.display_name + users.username resolved via the
+               owner-membership LATERAL (the `memberships` row with
+               role='owner') joined to users — there's no
+               projects.owner_id to join on. Hidden by default in
+               the Home Projects tab (the inline owner picker on the
+               Objects page uses owner_display_name to label the
+               chip).
 ```
 
 ```
@@ -216,11 +226,15 @@ clean=1 > new=0; the project rolls up to the highest-ranked file.
 ## Relationships
 
 ```
-owner_id → User (USR_)
+owner (via memberships role='owner') → User (USR_)
   Cardinality:  N:1 (a User owns many Projects)
-  On delete:    CASCADE (deleting a user drops their owned projects
-                + cascades to files + steps)
-  Hydrated as:  owner_display_name, owner_username
+  Backing:      a `memberships` row (object_redpash_id = the
+                project, role='owner') — NOT a projects.owner_id
+                column. On user delete the membership row CASCADEs
+                (FK user_redpash_id → users), leaving the project
+                ownerless for admin reassignment rather than
+                dropping the project itself.
+  Hydrated as:  owner_id, owner_display_name, owner_username
 ```
 
 ```
@@ -256,15 +270,17 @@ Project has many Steps (via Files)
 ```
 
 ```
-Project has many ProjectMembership rows
-  Backing:       project_memberships (composite PK on
-                 (project_redpash_id, user_redpash_id))
+Project has many Membership rows
+  Backing:       memberships (the ONE polymorphic table; composite
+                 PK on (object_redpash_id, user_redpash_id), FK
+                 object_redpash_id → entities.id)
   Cardinality:   1:N
-  On delete:     CASCADE
-  Status:        Schema exists (mig 007) but not yet enforced —
-                 today's ownership gate keys off projects.owner_id
-                 alone. project_memberships activates when RBAC
-                 lands. See [membership](membership.md).
+  On delete:     CASCADE (via the entities registry row)
+  Status:        Live now — ownership IS membership-backed: a
+                 `role='owner'` row is written on project create and
+                 read by `db::project_owner`. Additional roles
+                 (admin/member/viewer) fill in as project RBAC lands.
+                 See [membership](membership.md).
 ```
 
 ```

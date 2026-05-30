@@ -1,7 +1,7 @@
 ---
 title: Monitoring + step schemas
 section: Internal
-last modified date: 2026-05-23
+last modified date: 2026-05-30
 ---
 
 # Monitoring & step schemas — what each surface reads from
@@ -32,7 +32,7 @@ All list endpoints return `shared::Page<T>` (`rows + total + all_count + page + 
 
 ## 1. `events` — runtime observability log
 
-**Migration:** `backend/migrations/20260529000001_events.sql`. RID prefix `EVT_`.
+**Migration:** `backend/migrations/20260529000000_init.sql`. RID prefix `EVT_`.
 
 **Live schema:**
 
@@ -78,7 +78,7 @@ context         | jsonb                    | NOT NULL | '{}'        — free-for
 
 ## 2. `request_log` — per-request performance capture
 
-**Migration:** `backend/migrations/20260603000001_request_log.sql`. No RID — id is a `BIGSERIAL`; a metrics row is not an addressable entity.
+**Migration:** `backend/migrations/20260529000000_init.sql`. No RID — id is a `BIGSERIAL`; a metrics row is not an addressable entity.
 
 **Live schema:**
 
@@ -92,9 +92,11 @@ route       | text        | NOT NULL |               — normalized: RIDs collap
 status      | smallint    | NOT NULL |
 duration_ms | integer     | NOT NULL |
 request_id  | text        |          |               — correlates to the matching events row
+user_redpash_id | text    |          |               — who made the request (powers the per-user feed); nullable when unauthenticated
+session_id  | text        |          |               — rp_session RID at request time
 ```
 
-**Indexes:** `(at DESC)`, `(route, at DESC)`.
+**Indexes:** `(at DESC)`, `(route, at DESC)`, `(user_redpash_id, at DESC) WHERE user_redpash_id IS NOT NULL`, `(session_id, at DESC) WHERE session_id IS NOT NULL`.
 
 **Route normalization:** `request_log::normalize_route(path)` collapses RedPash-ID segments (`<2-4 uppercase letters>_<32 hex>`) to `:id` so `/files/FIL_…/page` aggregates as one route. Stored values are *post-`/api`-strip* because `capture_mw` layers on the nested router — `/api/projects` lands as `/projects`. This is why monitoring filters use `route NOT LIKE '/monitoring%'` for self-observation exclusion.
 
@@ -116,7 +118,7 @@ request_id  | text        |          |               — correlates to the match
 
 ## 3. `audit.run` — one row per audit-script execution
 
-**Migration:** `backend/migrations/20260528000001_audit_storage.sql`. Lives in the `audit` schema (separate namespace — these are dev-tooling metadata, not app data).
+**Migration:** `backend/migrations/20260529000000_init.sql`. Lives in the `audit` schema (separate namespace — these are dev-tooling metadata, not app data).
 
 **Live schema:**
 
@@ -124,7 +126,7 @@ request_id  | text        |          |               — correlates to the match
 Column     | Type        | Nullable | Default
 -----------|-------------|----------|--------------
 id         | bigint      | NOT NULL | nextval(seq)  (PK)
-tool       | text        | NOT NULL |               CHECK tool IN ('css','html')
+tool       | text        | NOT NULL |               CHECK tool IN ('css','html','parallel','tab-compare','cross-page','ui-snapshot')
 ran_at     | timestamptz | NOT NULL | now()
 git_sha    | text        |          |               — captured by the ingest binary
 git_branch | text        |          |
@@ -152,7 +154,7 @@ payload    | jsonb       | NOT NULL |               — the FULL `data` object t
 
 ## 4. `audit.finding` — exploded per-finding projection
 
-**Migration:** `backend/migrations/20260528000001_audit_storage.sql` (same).
+**Migration:** `backend/migrations/20260529000000_init.sql` (same).
 
 **Live schema:**
 
@@ -192,7 +194,7 @@ detail      | jsonb   | NOT NULL |
 | Path | Use |
 |---|---|
 | `GET /api/monitoring/audit-findings?run=<id>` | Paginated `Page<AuditFindingSummary>`. Defaults to most-recent run when `?run=` is omitted. |
-| `audit.run_diff(cur_id, prev_id)` | Joins findings across two runs by `(kind, finding_key)` and classifies each as `new | fixed | regressed | improved | unchanged`. See migration `20260604000001_audit_run_diff.sql`. |
+| `audit.run_diff(cur_id, prev_id)` | Joins findings across two runs by `(kind, finding_key)` and classifies each as `new | fixed | regressed | improved | unchanged`. See migration `20260529000000_init.sql`. |
 
 **Function signature:**
 
@@ -208,7 +210,7 @@ audit.run_diff(cur_id BIGINT, prev_id BIGINT) RETURNS TABLE (
 
 ## 5. `project_steps` — one row per cleaning operation applied to a file
 
-**Migration:** `backend/migrations/20260512000001_init.sql`. RID prefix `STP_`.
+**Migration:** `backend/migrations/20260529000000_init.sql`. RID prefix `STP_`.
 
 **Live schema:**
 
@@ -291,19 +293,23 @@ is_null, not_null
 
 Every `/api/monitoring/*` and `/api/metrics` query that scans `request_log` excludes its own traffic via `WHERE route NOT LIKE '/monitoring%'` (and `'/metrics'` for metrics). The act of viewing the dashboard doesn't pollute its own data — convention matches `/api/metrics`.
 
-## 8. User preferences — `users.prefs` JSONB (and the client/server split)
+## 8. User preferences — `user_preferences` table (and the client/server split)
 
-There is **no dedicated `user_preferences` table.** User prefs live in
+User prefs live in
 two places that don't sync today:
 
 - **Client** — `localStorage` (one key per pref) + a `data-<attr>`
   reflection on `<html>` so CSS can react without any JS read at
   paint time.
-- **Server** — `users.prefs` `jsonb` column, defaulted to `'{}'`.
-  Shallow-merged into via `prefs = prefs || COALESCE($N, '{}')`.
+- **Server** — the dedicated `user_preferences` table (one row per
+  `(user_redpash_id, key)`, `value` JSONB). There is **no
+  `users.prefs` column** — it was split out into this table (mig 023)
+  and the legacy JSONB column was dropped (mig 024). Readers fold the
+  rows back into a single `prefs` JSONB via a
+  `jsonb_object_agg(key, value)` subquery; writes upsert per key.
 
 The two are intentionally separate — every UI-visible pref ships
-through localStorage today; the server column was provisioned but
+through localStorage today; the server table was provisioned but
 the sync wiring hasn't landed. The comment in
 `frontend/scripts/prefs.js` calls the path out:
 
@@ -332,11 +338,21 @@ predates the consolidation.
 isn't in the allowed list, or storage is unavailable. `setPref` is
 the only write path; CSS-reflected prefs update `<html>` synchronously.
 
-### Server — `users.prefs` JSONB column
+### Server — the `user_preferences` table
 
 ```
-users.prefs  jsonb  NOT NULL DEFAULT '{}'::jsonb
+Column          | Type        | Nullable | Default
+----------------|-------------|----------|--------------
+user_redpash_id | text        | NOT NULL |              FK→users(redpash_id) ON DELETE CASCADE
+key             | text        | NOT NULL |
+value           | jsonb       | NOT NULL |
+updated_at      | timestamptz | NOT NULL | now()
 ```
+
+**Primary key:** `(user_redpash_id, key)`. **Index:**
+`(user_redpash_id)`. Readers reassemble the per-user prefs object with
+`COALESCE((SELECT jsonb_object_agg(p.key, p.value) FROM user_preferences
+p WHERE p.user_redpash_id = users.redpash_id), '{}'::jsonb) AS prefs`.
 
 **Known keys** that the backend actually reads or writes today (not
 the same as the client's PREFS list — these are server-side
@@ -347,15 +363,17 @@ behavioral toggles, not UI prefs):
 | `learned_sentinels` | `string[]` | `GET /api/me` (merges with default `prefs::SENTINELS` for the Cleaner's Fix-invalid modal) | User-added junk-value sentinels |
 | `share_sentinels` | `bool` | `PATCH /api/me` (gated mirror to `sentinel_submissions` when true) | Opt-in to share learned sentinels org-wide |
 
-There is no schema check on what other keys appear under `prefs` —
-the JSONB is intentionally permissive. The current path is:
+There is no schema check on what `key`s appear in `user_preferences` —
+the table is intentionally permissive. The current path is:
 
-1. PATCH writes shallow-merge: `prefs || COALESCE($N, '{}')`. Only
-   keys present in the patch are overwritten; unmentioned keys stay.
+1. `PATCH /api/me/prefs` upserts one row per key:
+   `INSERT … SELECT $1, kv.key, kv.value, now() FROM jsonb_each($2)
+   … ON CONFLICT (user_redpash_id, key) DO UPDATE`. Only keys present
+   in the patch are written; unmentioned keys stay.
 2. The shared DTO `shared::user::PrefsPatch` is just
    `{ prefs: serde_json::Value }` — fully free-form.
 3. Anything the *client* sets (density / fontSize / etc.) is NOT
-   currently propagated to `users.prefs` — those stay in
+   currently propagated to `user_preferences` — those stay in
    localStorage only.
 
 ### Wire DTOs
@@ -363,30 +381,28 @@ the JSONB is intentionally permissive. The current path is:
 | DTO | Shape | Where |
 |---|---|---|
 | `shared::user::UserProfile.prefs` | `serde_json::Value` (full record) | `GET /api/me`, `GET /api/users/:rid` |
-| `shared::user::PrefsPatch` | `{ prefs: serde_json::Value }` | body of `PATCH /api/me` (the `prefs` field is optional alongside the other patchable user fields) |
+| `shared::user::PrefsPatch` | `{ prefs: serde_json::Value }` | body of `PATCH /api/me/prefs` (the dedicated prefs write path; the `prefs` field on `PATCH /api/me` is deprecated and forwarded to the same `patch_user_prefs`) |
 
 ### Write sites
 
 | Path | Trigger |
 |---|---|
-| `PATCH /api/me` | `body.prefs` (optional) shallow-merged into `users.prefs`. Sole write path today. |
+| `PATCH /api/me/prefs` → `patch_user_prefs(…)` | Upserts one `user_preferences` row per key (`ON CONFLICT (user_redpash_id, key) DO UPDATE`). Sole real write path today. |
+| `PATCH /api/me` (`body.prefs`) | **Deprecated.** Forwarded to `patch_user_prefs` with a tracing warning; kept only for legacy callers. |
 
 ### Read sites
 
 | Path | Use |
 |---|---|
-| `GET /api/me` | Returns the full `prefs` JSONB to the signed-in user; the response *augments* `learned_sentinels` with the canonical defaults from `prefs::SENTINELS` so the UI doesn't have to merge. |
+| `GET /api/me` | Returns the full `prefs` JSONB (reassembled via `jsonb_object_agg`) to the signed-in user; the response *augments* `learned_sentinels` with the canonical defaults from `prefs::SENTINELS` so the UI doesn't have to merge. |
 | `GET /api/users/:rid` | Admin view of any user's profile incl. prefs. Same shape as `/api/me` minus the augmentation. |
 | (none for `/api/admin/users`) | The Home → Users redtable's `UserSummary` deliberately omits `prefs` — admin list views don't need the JSONB. |
 
 ### The gap — what's NOT wired yet
 
-- **No `/api/me/prefs` or `/api/users/:rid/prefs` endpoint.** Prefs
-  patches piggyback on `PATCH /api/me`. The dedicated route the
-  prefs.js comment references is unbuilt.
 - **No client→server sync.** Settings page changes update
-  localStorage + the `<html>` data attr; the server's `users.prefs`
-  is untouched by any client UI today.
+  localStorage + the `<html>` data attr; the server's
+  `user_preferences` table is untouched by any client UI today.
 - **No prefs change history.** No table tracks who changed what,
   when. If we ever want "revert to 7-days-ago prefs" or audit-style
   visibility, that's an additional table or events-table entries

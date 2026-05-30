@@ -73,9 +73,8 @@ project_membership:
 ```sql
 SELECT p.redpash_id, p.name, COALESCE(p.description, '')
   FROM projects p
- WHERE (p.owner_id = $1
-        OR EXISTS (SELECT 1 FROM project_memberships m
-                    WHERE m.project_redpash_id = p.redpash_id
+ WHERE (EXISTS (SELECT 1 FROM memberships m
+                    WHERE m.object_redpash_id = p.redpash_id
                       AND m.user_redpash_id    = $1))
    AND (p.name ILIKE '%' || $2 || '%' OR
         COALESCE(p.description, '') ILIKE '%' || $2 || '%')
@@ -104,8 +103,8 @@ WITH ranked AS (
                      f.updated_at DESC) AS rn
      FROM project_files f
      JOIN projects p ON p.redpash_id = f.project_redpash_id
-    WHERE (p.owner_id = $1
-           OR EXISTS (SELECT 1 FROM project_memberships m ...))
+    WHERE (EXISTS (SELECT 1 FROM memberships m
+                   WHERE m.object_redpash_id = p.redpash_id AND m.user_redpash_id = $1))
       AND (f.filename ILIKE '%' || $2 || '%'
            OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
 )
@@ -236,9 +235,8 @@ the dropdown's interaction model.
 ```sql
 SELECT p.redpash_id, p.name, COALESCE(p.description, '')
   FROM projects p
- WHERE (p.owner_id = $1
-        OR EXISTS (SELECT 1 FROM project_memberships m
-                    WHERE m.project_redpash_id = p.redpash_id
+ WHERE (EXISTS (SELECT 1 FROM memberships m
+                    WHERE m.object_redpash_id = p.redpash_id
                       AND m.user_redpash_id    = $1))
    AND (p.name ILIKE '%' || $2 || '%'
         OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
@@ -252,9 +250,9 @@ AND-of-(name OR description). Postgres' planner builds the
 predicate set and chooses a plan:
 
 - Small workspace (today's solo-dev): seq-scan + filter. Fast.
-- Larger: `projects_owner_id_idx` (FK) covers the owner branch;
-  the member EXISTS pushes down to `project_memberships_user_idx`.
-  Both indexes already exist for non-search reasons.
+- Larger: the membership `EXISTS` (ownership + membership are one
+  unified `memberships` table now) pushes down to `memberships_user_idx`.
+  The index already exists for non-search reasons.
 
 **ILIKE on `name`**: no `tsvector` / GIN index today. ILIKE with
 both-side wildcards (`%q%`) can't use a B-tree even on a typed
@@ -283,7 +281,8 @@ WITH ranked AS (
            ) AS rn
       FROM project_files f
       JOIN projects p ON p.redpash_id = f.project_redpash_id
-     WHERE (p.owner_id = $1 OR EXISTS (...))
+     WHERE (EXISTS (SELECT 1 FROM memberships m
+                   WHERE m.object_redpash_id = p.redpash_id AND m.user_redpash_id = $1))
        AND (f.filename ILIKE '%' || $2 || '%'
             OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
 )

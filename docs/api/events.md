@@ -2,7 +2,7 @@
 title: Events
 section: API
 order: 10
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/events`
@@ -14,7 +14,7 @@ Powers the internal monitoring tool.
 **Route file:** [`crates/api/src/routes/events.rs`](../../backend/crates/api/src/routes/events.rs)
 **Capture helper:** [`crates/api/src/event.rs`](../../backend/crates/api/src/event.rs)
 **DTOs:** [`shared::event`](../../backend/crates/shared/src/event.rs) — `Event`, `EventReport`
-**Table:** `events` ([db/schema.md](../db/schema.md#events)) · **Migration:** 013
+**Table:** `events` ([db/schema.md](../db/schema.md#events)) · ships in the baseline `20260529000000_init.sql` (logical mig 013)
 
 ---
 
@@ -35,8 +35,8 @@ Three paths feed the `events` table:
 3. **Frontend — `POST /api/events`.** A capture module
    ([`scripts/events.js`](../../frontend/scripts/events.js)) logs what
    the backend structurally can't see — uncaught JS exceptions,
-   unhandled promise rejections, transport failures (a `fetch` that
-   never reached the server), and page-module load/mount failures. HTTP
+   unhandled promise rejections, and transport failures (a `fetch` that
+   never reached the server). HTTP
    error *responses* are **not** re-reported client-side: path 1 above
    already owns them, and re-logging would double every failure. See
    [`POST /api/events`](#post-apievents) for the body and the kinds.
@@ -140,8 +140,6 @@ instrumentation:
 | `js_error`            | `error` | window `error` — an uncaught exception |
 | `unhandled_rejection` | `error` | window `unhandledrejection` — a promise with no `.catch()` |
 | `network_error`       | `error` | `api.js` — a `fetch` that threw (offline, DNS, connection refused) |
-| `page_script_error`   | `error` | a route's JS module 404s or fails to parse |
-| `page_mount_error`    | `error` | a route's module threw while mounting |
 
 Every event's `context` carries `url` + `route` — the page the user
 was on. Safeguards: a repeat of the same `kind|message` is de-duplicated
@@ -152,11 +150,15 @@ so a render loop that throws every frame can't flood the table.
 
 ## Access
 
-The two `GET` endpoints are the internal monitoring read surface —
-**open today** (solo / localhost). When the company-admin role lands
-(RBAC), gate them behind it; `events` is an admin-facing object.
-`POST /api/events` stays open — the frontend needs it, and it's
-session-cookied.
+The two `GET` endpoints are the internal monitoring read surface, and
+both require a session. `GET /api/events` (list) requires a valid
+session (`resolve_user_rid`) — `events` carries PII (user rids, paths,
+context blobs), so the flat feed isn't open. `GET /api/events/:rid` (get
+one) requires a session **and** company-share scoping: the caller must
+share a company with the event's user (system events pass through). When
+the company-admin role lands (RBAC), gate them behind it; `events` is an
+admin-facing object. `POST /api/events` stays open — the frontend needs
+it, and it's session-cookied.
 
 ---
 

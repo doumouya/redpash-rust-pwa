@@ -2,7 +2,7 @@
 title: Cleanness score
 section: Features
 order: 5
-last modified date: 2026-05-16
+last modified date: 2026-05-30
 ---
 
 # Cleanness score
@@ -19,8 +19,8 @@ Source: [`crates/data/src/stats.rs`](../../backend/crates/data/src/stats.rs).
 Public API:
 
 ```rust
-pub fn cleanness        (df, columns) -> Option<f32>;            // blended score
-pub fn cleanness_report (df, columns) -> Option<CleannessReport>; // + every sub-score
+pub fn cleanness        (df, columns, extras: &[String]) -> Option<f32>;            // blended score
+pub fn cleanness_report (df, columns, extras: &[String]) -> Option<CleannessReport>; // + every sub-score
 ```
 
 ---
@@ -114,7 +114,7 @@ Already-typed columns (Polars classified them as `Int64`, `Float64`,
 field is persisted in `project_files.columns_meta` JSONB (additive —
 `#[serde(default)]` keeps old rows compatible) and surfaced over the
 wire on every `FileSummary` envelope. The cleaner sidebar's
-*Data Types* panel (in `scripts/pages/cleaner.js`) uses it to drive the
+*Data Types* panel (in `scripts/pages/workspace.js`) uses it to drive the
 "this column should be a float — cast it?" suggestion: when `dtype !=
 semantic_dtype`, the row renders as an accent-tinted clickable that
 dispatches a `cast` step.

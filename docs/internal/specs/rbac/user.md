@@ -2,7 +2,7 @@
 title: User — permission catalog
 section: Internal
 order: 52
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 owner: Torv
 status: draft — RBAC catalog sweep ([index](index.md))
 ---
@@ -16,12 +16,15 @@ from [user metadata](../object-metadata/user.md); scheme in the
 **Scope columns User carries:** none of its own — a User row isn't
 company/project-scoped by an FK. `@own` = `redpash_id == caller` (the
 user is themselves). `@company` is resolved indirectly: a company
-admin sees users who share one of their `company_memberships`. `@all`
+admin sees users who share one of their `memberships` (company-typed
+rows in the unified `memberships` table). `@all`
 = platform admin. (No `@project` for User.)
 
-User is also the **platform-role source** (`users.role`) — the tier
-that grants `*@all`. Editing `plan` / `role` is billing/provisioning,
-held above the self tier.
+User is planned to be the **platform-role source** — the tier that
+grants `*@all`. There is **no `users.role` column today** (the closest
+current column is `users.status` = active/suspended/archived); a
+`role` column lands when role management ships. Editing `plan` / `role`
+is billing/provisioning, held above the self tier.
 
 ---
 
@@ -36,7 +39,7 @@ held above the self tier.
 | `user.update` | `PATCH /api/users/:rid` | own · all | Coarse profile-update gate. |
 | `user.delete` | `DELETE /api/users/:rid` | own · all | Self-deactivate (`@own`) or platform admin. |
 | `user.list` | `GET /api/users` | company · all | Org inventory. Company admins see their members; platform admin all. |
-| `user.search` | `GET /api/users?q=…` | company · all | Granted with `list`. |
+| `user.search` | `GET /api/admin/users?q=…` | company · all | Granted with `list`. The `q=` search param lives only on the admin list endpoint — `GET /api/users` has no `q` param. |
 
 ### Field-update keys
 
@@ -99,8 +102,9 @@ users or touches `plan`.
 
 - **`@company` is membership-resolved, not column-scoped.** A company
   admin's `user.read@company` resolves to "users sharing a
-  company_membership with the caller's company." There's no
-  `users.company_id` — the join is through `company_memberships`.
+  company membership with the caller's company." There's no
+  `users.company_id` — the join is through the unified `memberships`
+  table (company-typed rows).
 
 - **`user.create` is mostly system-initiated.** The OAuth upsert
   creates users without any caller grant (the system acts). The

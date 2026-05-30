@@ -119,8 +119,8 @@ into one key scheme:
 
 | Primitive | Where | What it checks |
 |---|---|---|
-| `ensure_owner(lookup, caller, label, rid)` | `routes/mod.rs:60` | `row.owner_id == caller`; 404 on miss/mismatch (never leaks existence) |
-| `company_role(pool, company, user)` | `db/mod.rs:985` | caller's `company_memberships.role` for a company (owner/admin/member) |
+| `ensure_owner(lookup, caller, label, rid)` | `routes/mod.rs:60` | resolved owner (the `role='owner'` membership) `== caller`; 404 on miss/mismatch (never leaks existence) |
+| `company_role(pool, company, user)` | `db/mod.rs:985` | caller's `memberships.role` for a company (owner/admin/member) |
 | `UserProfile.role` | `shared/user.rs:41` | platform-tier role string (dev-permissive today) |
 
 The catalog's job: turn "each handler calls ensure_owner or
@@ -201,8 +201,8 @@ scopes, narrowest-to-widest:
 | Scope | Predicate | Source column |
 |---|---|---|
 | `own` | row belongs to the caller | `owner_id` / `reporter_id` / `user_redpash_id == caller` |
-| `project` | row is in a project the caller is a member of | `project_id ∈ caller's project_memberships` |
-| `company` | row is in a company the caller is a member of | `company_id ∈ caller's company_memberships` |
+| `project` | row is in a project the caller is a member of | caller has a `memberships` row on the project |
+| `company` | row is in a company the caller is a member of | caller has a `memberships` row on the company |
 | `all` | every row | — (platform admin) |
 
 Scope widens monotonically: `all ⊃ company ⊃ project ⊃ own`. A grant at
@@ -230,7 +230,7 @@ App-wide tier. Today dev-permissive (everyone resolves admin-view).
 | `admin` | platform operator — `*@all` on every object (the `/admin/*` + `/monitoring/*` surfaces) |
 | `user` | standard end-user — object grants come from membership tiers + `@own` |
 
-### 2. Company role — `company_memberships.role`
+### 2. Company role — `memberships.role`
 Scopes grants to rows within a company the caller belongs to.
 `owner > admin > member` (CHECK in mig 007).
 
@@ -240,11 +240,11 @@ Scopes grants to rows within a company the caller belongs to.
 | `admin` | manage company-scoped rows; cannot transfer/delete the company |
 | `member` | read company-scoped rows; write only `@own` |
 
-### 3. Project role — `project_memberships.role` (v3, schema-only today)
-Scopes grants to rows within a project. `owner > collaborator >
-viewer` (CHECK in mig 007). Inert until RBAC v3 wires
-`project_memberships`; the catalog declares the grants now so the
-enforcement slice has a target.
+### 3. Project role — `memberships.role` (project-scoped)
+Scopes grants to rows within a project. Project membership lives in the
+unified `memberships` table. Ownership (`role='owner'`) is read today;
+the broader read/write grants below are RBAC v3 — the catalog declares
+them now so the enforcement slice has a target.
 
 | Role | Intent |
 |---|---|
@@ -259,8 +259,8 @@ Salesforce's
 [CaseTeamMember](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_caseteammember.htm)
 — a member linked to a case with a role whose *AccessLevel* governs
 case access). In the backend they are **not** a separate table: they're
-rows of the **general Membership object** — the same abstraction behind
-`company_memberships` + `project_memberships` — extended with a `case`
+rows of the **general Membership object** — the same unified `memberships`
+table — extended with a `case`
 scope (`member · scope_type=case · scope_id=case_rid · role`). So
 membership.md (#8 in the sweep) specs ONE polymorphic Membership object
 spanning company / project / case, not three tables; the UI labels the

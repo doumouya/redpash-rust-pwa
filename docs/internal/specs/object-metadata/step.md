@@ -2,7 +2,7 @@
 title: Step — object metadata
 section: Internal
 order: 46
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -68,7 +68,7 @@ file_redpash_id
 ordinal
   Type:        INTEGER NOT NULL / i32
   Properties:  Layout
-  Description: Position in the file's step history (0-indexed,
+  Description: Position in the file's step history (1-indexed,
                server-assigned). The cleaner replay reads steps in
                ordinal ASC order. Re-using an ordinal (e.g. on
                redo-after-cleared-tail) is allowed because the new
@@ -102,7 +102,8 @@ params
                (see the per-kind docstrings under
                data/src/steps/). Examples: drop_columns →
                { cols: [<name>...] }; cast → { col, dtype };
-               filter_rows → { spec: <FilterNode tree> }.
+               filter_rows → { combinator, predicates: [{column,
+               op, value?, case_sensitive?}] }.
 ```
 
 ```
@@ -144,7 +145,7 @@ column-shape (7) — drop_columns, filter_columns (keep listed),
                    rename_column, snake_case_columns,
                    replace_in_names, join_columns, split_column
 row-shape (3)   — drop_rows (absolute index), drop_nulls,
-                   filter_rows (predicate tree, 16 ops)
+                   filter_rows (predicate tree, 17 ops)
 cell-value (7)  — set_cell, fill_nulls, cast (with /cast-preview
                    dry-run), change_case, replace_text, fix_invalid
                    (sentinel replace), format_dates

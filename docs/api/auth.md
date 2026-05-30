@@ -2,13 +2,14 @@
 title: Auth
 section: API
 order: 3
-last modified date: 2026-05-16
+last modified date: 2026-05-30
 ---
 
 # `/api/auth/*`
 
-Google OAuth 2.0 authorization-code flow. Three endpoints:
-`/google/start`, `/google/callback`, `/logout`.
+Google OAuth 2.0 authorization-code flow. Four endpoints:
+`/google/start`, `/google/callback`, `/logout`, and the dev-only
+`/dev-login` (gated behind `REDPASH_DEV_LOGIN` — see below).
 
 **Route file:** [`crates/api/src/routes/auth.rs`](../../backend/crates/api/src/routes/auth.rs)
 **Full walkthrough:** [auth/google.md](../auth/google.md)
@@ -111,6 +112,29 @@ manually:
 curl -X POST http://localhost:8080/api/auth/logout \
   -b "rp_session=$YOUR_SID" -i
 ```
+
+---
+
+## `POST /api/auth/dev-login`
+
+Dev-only session mint, gated behind the `REDPASH_DEV_LOGIN` env flag
+(off by default — **never enable in production**). Two call shapes:
+
+- **No body** (`fetch('/api/auth/dev-login', { method: 'POST' })`) →
+  mints a session for the bootstrap `state.dev_user`. Powers the login
+  page's "Continue as dev user" button.
+- **`{ "user_id": "USR_…" }`** → mints a session for that user. Powers
+  the Home header's "log in as user" switcher for testing owner-scoped
+  flows. An omitted/`{}` `user_id` also falls back to `dev_user`.
+
+On success sets the same `rp_session` cookie as the OAuth callback and
+returns **204 No Content**.
+
+| Status | `kind`               | When |
+|--------|----------------------|------|
+| 400    | `invalid_json`       | Non-empty body that isn't valid JSON |
+| 403    | `dev_login_disabled` | `REDPASH_DEV_LOGIN` not set |
+| 404    | `not_found`          | Resolved `user_id` doesn't exist |
 
 ---
 

@@ -52,13 +52,13 @@ under the bootstrap dev user the first time you upload.
 | 4a — Google OAuth             | ✅ Shipped | Google OAuth code flow, `rp_session` cookie, dev-user fallback when env vars unset. See [auth/google.md](auth/google.md). |
 | 4b — Per-user data scoping    | ✅ Shipped | `resolve_user_rid` resolver; every owner-scoped endpoint goes through it. |
 | 4c — Per-resource ownership   | ✅ Shipped | `routes::ensure_owner` + `db::*_owner` helpers on every detail handler. `PATCH /api/me`, Profile + Settings pages, logout button. |
-| 4d — Multi-tenancy data model | ✅ Shipped | `companies` + `company_memberships` (`owner` > `admin` > `member`), `projects.company_id` (set/re-scope), dev-permissive `/api/users` + `/api/companies` CRUD, shared-sentinel learning loop. Pending: company-scoped resource visibility (every endpoint still gates on `projects.owner_id` alone). |
+| 4d — Multi-tenancy data model | ✅ Shipped | `companies` + the unified polymorphic `memberships` table (`owner` > `admin` > `member` > `viewer`), `projects.company_id` (set/re-scope), dev-permissive `/api/users` + `/api/companies` CRUD, shared-sentinel learning loop. Pending: company-scoped resource visibility (ownership resolves via the `role='owner'` membership; company-wide reads aren't wired). |
 | Frontend reset                | ✅ Shipped 2026-05-23 | 179 pages → 8 partials, atom catalog rewritten, audit suite. See `redtable-unification.md`. |
 | Workspace milestone           | ✅ Shipped 2026-05-24 | Workspace feature-complete: pagination, joins (4 types + compound keys), filter DTO (17 ops), edit/delete via step engine, server-side filter+sort, designer + chart store. |
 | Audit-everything              | ✅ Shipped 2026-05-25 | 9-tool audit suite (`auth` / `crossing` / `css` / `css-tab-compare` / `html` / `js` / `observability` / `redtable` / `rs`) + `audit.run` / `audit.finding` persistence + trend reading. See [internal/processes/audit-cadence.md](internal/processes/audit-cadence.md). |
 | Cases workstream              | 🚧 In flight | Kanban + comments + activity feed dogfooding ground for customer ticket triage. See [internal/subsystems/cases.md](internal/subsystems/cases.md). Comments composer (Markdown render + small text editor) in flight. |
 | 5 — Bake-binary & deploy      | ⬜ Pending | Bake frontend into the binary (`include_dir!`), brotli pre-compress, systemd unit. |
-| RBAC corporate-ready          | ⬜ Pending | Row-level scoping + route gating + `/api/me` permissions payload. Schema already has `company_memberships` + `project_memberships` roles, no enforcement. |
+| RBAC corporate-ready          | ⬜ Pending | Row-level scoping + route gating + `/api/me` permissions payload. The unified `memberships` table backs ownership today; broader role-based scoping isn't enforced yet. |
 
 ## Project structure
 

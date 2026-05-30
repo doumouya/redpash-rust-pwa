@@ -2,7 +2,7 @@
 title: Joins
 section: Features
 order: 4
-last modified date: 2026-05-24
+last modified date: 2026-05-30
 ---
 
 # Joins
@@ -50,9 +50,10 @@ applying.
 ## Filter-aware
 
 Both endpoints accept a `filters` parameter (as URL-encoded JSON for
-GET; in the request body for POST). When set, both frames are filtered
-before detection / application via `data::parse::apply_filter` — the
-same `FilterNode` tree used by reports and the cleaner.
+GET; in the request body for POST). When set, only the base file's
+frame (the `this` side) is filtered before detection / application via
+`data::parse::apply_filter` — the other frame is never filtered. It's
+the same `FilterNode` tree used by reports and the cleaner.
 
 This was added after the join detector kept returning the
 unfiltered key set even when the user had narrowed the base file with

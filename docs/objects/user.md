@@ -2,7 +2,7 @@
 title: User
 section: Objects
 order: 0
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # User (`UserProfile`)
@@ -17,8 +17,10 @@ last modified date: 2026-05-21
 ## What a User is
 
 The identity anchor for every other row in the schema. Owns projects;
-projects own files, steps, reports, dashboards. The `users.redpash_id`
-is the FK target for `projects.owner_id`.
+projects own files, steps, dashboards. Project ownership is **not** a
+column on `projects` — it's a `memberships` row with `role='owner'`
+pointing at the project entity, resolved back to a user via the
+owner-membership LATERAL.
 
 Today there are two ways a user comes into existence:
 
@@ -41,10 +43,11 @@ in via a different mechanism would create a new RID.
 ## Fields
 
 The `users` table columns. Most map straight to the `UserProfile` DTO;
-three are **not** in it — `created_at` / `updated_at` (timestamps aren't
-surfaced) and `google_sub` (a private auth detail, matched on sign-in).
-The DTO also carries a joined `memberships` array with no `users` column
-behind it — see [Company memberships](#company-memberships).
+several are **not** surfaced — `created_at` / `updated_at` (timestamps),
+`google_sub` (a private auth detail, matched on sign-in), and the
+server-only `default_project_id` / `status` columns. The DTO also carries
+a hydrated `prefs` object (from `user_preferences`, not a `users` column)
+and a joined `memberships` array — see [Company memberships](#company-memberships).
 
 | Field | DB column | Type | Nullable | Default | Description |
 |---|---|---|---|---|---|
@@ -52,16 +55,23 @@ behind it — see [Company memberships](#company-memberships).
 | `username` | `username` | `TEXT` UNIQUE | NO | — | Login handle. For bootstrap = `"dev"`; for OAuth users = `{email-local-part}.{rid-suffix}` to guarantee uniqueness |
 | `email` | `email` | `TEXT` | YES | — | From Google's `email` claim. Refreshed each sign-in |
 | `display_name` | `display_name` | `TEXT` | NO | `"Dev user"` (bootstrap) | From Google's `name` claim, or email local part if missing |
+| `first_name` | `first_name` | `TEXT` | YES | — | Structured given name. Edited via `PATCH /api/me`; backfilled from `display_name` for older rows |
+| `last_name` | `last_name` | `TEXT` | YES | — | Structured family name. Same backfill story as `first_name` |
 | `avatar_url` | `avatar_url` | `TEXT` | YES | — | Google's `picture` claim — full `https://lh3.googleusercontent.com/…` URL |
 | `job_title` | `job_title` | `TEXT` | YES | — | Onboarding field. Edited on the Profile page via `PATCH /api/me`. |
 | `organisation` | `organisation` | `TEXT` | YES | — | Onboarding field |
 | `use_case` | `use_case` | `TEXT` | YES | — | Free-form; may be enum-constrained later |
 | `plan` | `plan` | `TEXT` | NO | `"free"` | Subscription plan (see below) |
 | `locale` | `locale` | `TEXT` | NO | `"en"` | UI language preference |
-| `prefs` | `prefs` | `JSONB` | NO | `'{}'::jsonb` | Per-user UI overrides — accent color override, table density, etc. |
 | `created_at` | `created_at` | `TIMESTAMPTZ` | NO | `now()` | |
 | `updated_at` | `updated_at` | `TIMESTAMPTZ` | NO | `now()` | Touched on every column update |
+| *(server-only)* `default_project_id` | `default_project_id` | `TEXT` | YES | — | The user's default Workspace project; set by `ensure_default_project`. Not on the DTO |
+| *(server-only)* `status` | `status` | `TEXT` | NO | `"active"` | Account lifecycle — `active` / `suspended` / `archived`. Not on the DTO |
 | *(not in DTO)* `google_sub` | `google_sub` | `TEXT` | YES | — | OpenID subject claim. Unique partial index `WHERE google_sub IS NOT NULL` so bootstrap users with NULL don't collide |
+
+There is **no** `users.prefs` column — the DTO's `prefs: {}` object is
+hydrated at SELECT time from the `user_preferences` table (one row per
+key). See [user-preference](../internal/specs/object-metadata/user-preference.md).
 
 ### `plan` values (planned)
 
@@ -91,10 +101,11 @@ pub struct UserMembership {
 
 `memberships` lists the user's company memberships, joined in by
 `GET /api/users` (the Objects → Users tab) so each row shows which
-companies a user belongs to. It is `#[serde(default)]` and left **empty**
-by single-row fetchers that skip the join — `find_user_by_id`,
-`find_user_by_username`, and `GET /api/me` all return `[]`. A user in no
-company also has `[]`.
+companies a user belongs to. `GET /api/me` **also** hydrates it (along
+with `global_sentinels`). It is `#[serde(default)]` and left **empty**
+only by the single-row fetchers that skip the join — `find_user_by_id`,
+`find_user_by_username`, and the `insert_user` path. A user in no company
+also has `[]`.
 
 ---
 
@@ -135,7 +146,7 @@ async fn list(State(state): State<AppState>, headers: HeaderMap)
     -> Result<Json<…>, AppError>
 {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    let items = db::list_reports(&state.db, &user).await?;
+    let items = db::list_projects(&state.db, &user).await?;
     Ok(Json(…))
 }
 ```
@@ -161,7 +172,8 @@ async fn list(State(state): State<AppState>, headers: HeaderMap)
   "use_case":     null,
   "plan":         "free",
   "locale":       "en",
-  "prefs":        {}
+  "prefs":        {},
+  "global_sentinels": ["???", "ndispo"]
 }
 ```
 
@@ -173,14 +185,15 @@ sign-in.
 
 ### `PATCH /api/me`
 
-Sparse update of the session user. Every body field is optional;
-`prefs` is shallow-merged with the existing JSONB. See
+Sparse update of the session user's **profile** columns. Every body
+field is optional. Prefs are **not** written here — they go through
+`PATCH /api/me/prefs` → `patch_user_prefs` (returns 204). See
 [api/me.md](../api/me.md) for the request/response shape and error
 table.
 
 Implemented as `db::update_user` — one SQL statement using
-`COALESCE($n, column)` per field and `prefs = prefs ||
-COALESCE($prefs, '{}'::jsonb)` for the merge.
+`COALESCE($n, column)` per field. There is no prefs-merge SQL in
+`update_user`.
 
 ---
 

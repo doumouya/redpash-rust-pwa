@@ -2,7 +2,7 @@
 title: Monitoring
 section: API
 order: 12
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/monitoring/*`
@@ -13,15 +13,15 @@ redtable on each monitoring tab reuses the existing reader. Window
 parameters mirror [`/api/metrics`](metrics.md): `1h`, `24h`, `7d`,
 `30d`.
 
-> **Access.** Open today (solo / localhost) — same posture as
-> [events.md](events.md). Gate behind the company-admin role when RBAC
-> lands. The data is admin-facing; the read-only nature limits blast
+> **Access.** Open today (solo / localhost). Gate behind the
+> company-admin role when RBAC lands. The data is admin-facing; the
+> read-only nature limits blast
 > radius but the rows include PII (request paths with user RIDs,
 > activity feeds).
 
 **Route file:** [`crates/api/src/routes/monitoring.rs`](../../backend/crates/api/src/routes/monitoring.rs)
 **DTOs:** [`shared::monitoring`](../../backend/crates/shared/src/monitoring.rs) — `EventSummary`, `AuditRunSummary`, `AuditFindingSummary`, `RequestSummary`, `RequestDetail`, `DbQuerySummary`, `ActivityRow`, plus the `*Stats` aggregates
-**Wire contract:** [`docs/internal/admin-monitoring-surfaces.md §6`](../internal/admin-monitoring-surfaces.md)
+**Wire contract:** [`docs/internal/specs/admin-monitoring-surfaces.md §6`](../internal/specs/admin-monitoring-surfaces.md)
 
 ---
 
@@ -132,5 +132,5 @@ user do" across the audit + request planes in one timeline.
 - [admin.md](admin.md) — adjacent admin-facing read surface (users,
   companies, memberships, steps — vs monitoring's audit / request /
   query planes).
-- [`docs/internal/admin-monitoring-surfaces.md`](../internal/admin-monitoring-surfaces.md)
+- [`docs/internal/specs/admin-monitoring-surfaces.md`](../internal/specs/admin-monitoring-surfaces.md)
   — wire contract + per-tab acceptance criteria.

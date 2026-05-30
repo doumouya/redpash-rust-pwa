@@ -2,7 +2,7 @@
 title: Project
 section: Objects
 order: 1
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Project (`ProjectSummary`)
@@ -29,17 +29,16 @@ Phase 4c+.
 
 ## Fields
 
-The DTO exposes the stored project columns plus a `users` join for the
-owner (so the Objects page can show + reassign the owner). The table:
+The DTO exposes the stored project columns plus an owner-membership →
+`users` join for the owner (so the Objects page can show + reassign the
+owner). The table:
 
 | Field | DB column | Type | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `redpash_id` | `redpash_id` | `TEXT` PK | NO | — | `PRJ_…` |
-| `owner_id` | `owner_id` | `TEXT` FK | NO | — | → `users.redpash_id` ON DELETE CASCADE |
+| `redpash_id` | `redpash_id` | `TEXT` PK | NO | — | `PRJ_…` → `entities.id` ON DELETE CASCADE |
 | `company_id` | `company_id` | `TEXT` FK | YES | — | Mig 007. → `companies.redpash_id` ON DELETE SET NULL. `null` = personal project |
 | `name` | `name` | `TEXT` | NO | — | Workspace label. `"Workspace"` for auto-created default. |
 | `description` | `description` | `TEXT` | YES | — | Free-text |
-| `is_default` | `is_default` | `BOOLEAN` | NO | `FALSE` | Exactly one TRUE per owner (enforced by partial unique index `projects_owner_default_idx` `WHERE is_default`) |
 | `status` | `status` | `TEXT` | NO | `'draft'` | Mig 008. `CHECK (draft / active / archived)` — lifecycle state. The DTO overlays a read-only `published` value on top — see below. |
 | `created_at` | `created_at` | `TIMESTAMPTZ` | NO | `now()` | |
 | `updated_at` | `updated_at` | `TIMESTAMPTZ` | NO | `now()` | |
@@ -55,10 +54,10 @@ pub struct ProjectSummary {
     pub cleanness_pct:      Option<f32>, // not yet populated
     pub stage:              String,      // computed — max file stage (import | clean | report | publish)
     pub status:             String,      // stored draft | active | archived, with a read-only 'published' overlay
-    pub is_default:         bool,
-    pub owner_id:           String,      // FK → users.redpash_id
-    pub owner_display_name: String,      // from the users join
-    pub owner_username:     String,      // from the users join
+    pub is_default:         bool,        // derived: users.default_project_id == redpash_id (not a projects column)
+    pub owner_id:           String,      // derived: the owner-membership's user (role='owner') — not a projects column
+    pub owner_display_name: String,      // from the owner-membership → users join
+    pub owner_username:     String,      // from the owner-membership → users join
     pub company_id:         Option<String>, // FK → companies; None = personal
     pub created_at:         DateTime<Utc>,
     pub updated_at:         DateTime<Utc>,
@@ -66,10 +65,13 @@ pub struct ProjectSummary {
 ```
 
 `file_count` is computed at query time via a `COUNT(*)` subquery over
-`project_files`. `owner_display_name` / `owner_username` come from a
-`JOIN users u ON u.redpash_id = p.owner_id` (see `PROJECT_SELECT` in
-`db.rs`). `cleanness_pct` is still a placeholder (`None`) for future
-per-project scoring.
+`project_files`. `owner_id` / `owner_display_name` / `owner_username`
+resolve through an owner-membership LATERAL (`memberships` row with
+`role='owner'`) joined to `users` — there's no `projects.owner_id`
+column (see `PROJECT_SELECT` in `db/projects.rs`). `is_default` is
+likewise derived (`users.default_project_id == p.redpash_id`), not a
+stored column. `cleanness_pct` is still a placeholder (`None`) for
+future per-project scoring.
 
 ### `ProjectDetail` DTO
 
@@ -111,13 +113,16 @@ Neither field is read straight from a stored column:
 
 | Index | Columns | Notes |
 |---|---|---|
-| `projects_pkey` | `redpash_id` | PK |
-| `projects_owner_idx` | `owner_id` | List query lives on this |
-| `projects_owner_default_idx` | `owner_id` `WHERE is_default` | Partial unique — one default per owner |
+| `projects_pkey` | `redpash_id` | PK (`redpash_id → entities.id`) |
+| `projects_company_idx` | `company_id` | Company-scope lookups |
+| `projects_status_idx` | `status` | Status filtering |
 
-`owner_id` is `ON DELETE CASCADE` — deleting a user wipes their
-projects (and transitively all their files, steps, reports,
-dashboards).
+There's no `owner_id` or `is_default` column (so no owner/default
+indexes). Ownership lives in a `memberships` row (`role='owner'`); the
+list query keys off that membership, not a project column. The project
+`redpash_id` is `REFERENCES entities(id) ON DELETE CASCADE` — deleting
+the entity wipes the project (and transitively all its files, steps,
+reports, dashboards, and memberships).
 
 ---
 
@@ -125,18 +130,19 @@ dashboards).
 
 | Helper | SQL | Used by |
 |---|---|---|
-| `list_projects(owner)` | `PROJECT_SELECT` (+ `users` join) `WHERE p.owner_id = $1 ORDER BY p.is_default DESC, p.created_at ASC` | `routes::projects::list` |
+| `list_projects(owner)` | `PROJECT_SELECT` (+ owner-membership LATERAL → `users` join) `WHERE om.user_redpash_id = $1 ORDER BY is_default DESC, p.created_at ASC` | `routes::projects::list` |
 | `get_project(rid)` | `PROJECT_SELECT WHERE p.redpash_id = $1` → `Option<ProjectSummary>` | `update_project_meta` (re-fetch after update) |
-| `update_project_meta(rid, owner, name, description, is_default, owner_id, company_id, status)` | `UPDATE projects SET … = COALESCE($n, …)` then `get_project` | `routes::projects::patch_project` |
-| `delete_project(rid)` | `DELETE FROM projects WHERE redpash_id = $1 AND NOT is_default` → `bool` (`false` = was the default, blocked) | `routes::projects::delete_project` |
+| `update_project_meta(rid, owner, name, description, is_default, owner_id, company_id, status)` | tx: optional `users.default_project_id` write (is_default) + optional owner-membership transfer (DELETE+INSERT `memberships`, owner_id) + `UPDATE projects SET … = COALESCE($n, …)`, then `get_project` | `routes::projects::patch_project` |
+| `delete_project(rid)` | `DELETE FROM entities WHERE id = $1 AND EXISTS(project) AND NOT EXISTS(user WHERE default_project_id=$1)` → `bool` (`false` = was the default, blocked) | `routes::projects::delete_project` |
 | `project_file_rids(project_rid)` | `SELECT redpash_id FROM project_files WHERE project_redpash_id = $1` | `delete_project` handler — blob cleanup + cache eviction |
-| `find_default_project(owner)` | `SELECT redpash_id … WHERE owner_id = $1 AND is_default LIMIT 1` | `bootstrap`, `db::ensure_default_project` |
-| `insert_project(rid, owner, name, is_default)` | Raw INSERT | `bootstrap`, `db::ensure_default_project` |
+| `find_default_project(owner)` | `SELECT default_project_id FROM users WHERE redpash_id = $1` | `bootstrap`, `db::ensure_default_project` |
+| `insert_project(rid, owner, name, is_default)` | tx: register entity + INSERT project + INSERT owner `memberships` row + (if default) write `users.default_project_id` | `bootstrap`, `db::ensure_default_project` |
 | `ensure_default_project(owner)` | `find_default_project` → if missing → `insert_project("Workspace", is_default=true)` | `routes::auth::callback`, `routes::files::upload` |
 
 `PROJECT_SELECT` is a shared `const &str` — the `SELECT … FROM projects p
-JOIN users u …` body; `list_projects` / `get_project` splice their own
-`WHERE`. `row_to_project` is the shared `PgRow → ProjectSummary` mapper.
+JOIN LATERAL (owner membership) … JOIN users u …` body; `list_projects`
+/ `get_project` splice their own `WHERE`. `row_to_project` is the shared
+`PgRow → ProjectSummary` mapper.
 
 `ensure_default_project` is the idempotent helper everyone reaches for
 — call it whenever you need to land a file in *some* project and you
@@ -149,7 +155,8 @@ don't have a specific one yet.
 ```
 Bootstrap (first cargo run)
   └─► users (dev_user)            INSERT
-      └─► projects ("Workspace")  INSERT WITH is_default=TRUE
+      └─► projects ("Workspace")  INSERT + owner membership row
+          └─► users.default_project_id ← the new PRJ (marks default)
 
 Google OAuth first sign-in
   /api/auth/google/callback
@@ -237,14 +244,16 @@ as inline edit cells; `stage` is a read-only badge.
 **Auth:** session required + owner-match (`ensure_owner`).
 
 Deletes the project; `project_files` (→ `project_steps`), `reports`,
-`dashboards` and `project_memberships` cascade via FK. The on-disk
-file blobs are unlinked best-effort afterwards and the hot-frame cache
-entries are evicted.
+`dashboards` and the project's `memberships` cascade via FK (the delete
+runs against the `entities` registry row, so every edge drops in one
+shot). The on-disk file blobs are unlinked best-effort afterwards and
+the hot-frame cache entries are evicted.
 
 **The owner's default project can't be deleted.** `delete_project`
-runs `DELETE … WHERE redpash_id = $1 AND NOT is_default`, so the guard
-is atomic with the delete — a request against the default project is a
-no-op that the handler turns into `400 is_default` ("set another
+runs `DELETE FROM entities WHERE id = $1 AND EXISTS(project) AND NOT
+EXISTS(SELECT 1 FROM users WHERE default_project_id = $1)`, so the
+guard is atomic with the delete — a request against the default project
+is a no-op that the handler turns into `400 is_default` ("set another
 project as default before deleting it"). The user must promote another
 project to default (`PATCH … { "is_default": true }`) first. The
 Objects page disables the trash button on the default project's row to
@@ -280,9 +289,9 @@ needs more than one workspace.
   the frontend.
 - **`is_public` exists on reports + dashboards, not on projects.**
   Sharing happens per-resource, not per-workspace.
-- **No soft-delete.** The `is_default` partial unique index means you
-  can have at most one default per owner — flipping defaults requires
-  toggling the old one to `FALSE` first.
+- **No soft-delete.** The default lives on `users.default_project_id`
+  (one column = one default per user), so flipping the default just
+  repoints that column — no per-project flag to toggle off.
 - **The default project can't be deleted.** `DELETE /api/projects/:rid`
   rejects the owner's default with `400 is_default`; promote another
   project to default first. This keeps the "exactly one default per

@@ -2,7 +2,7 @@
 title: Step
 section: Objects
 order: 3
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Step (`ProjectStep`)
@@ -94,7 +94,7 @@ Grouped by what they mutate:
 `join_columns` · `split_column`
 
 **Row-shape (3):** `drop_rows` (absolute index) · `drop_nulls` ·
-`filter_rows` (predicate tree, 16 ops)
+`filter_rows` (predicate tree, 17 ops)
 
 **Cell-value (7):** `set_cell` · `fill_nulls` · `cast` (with
 `/cast-preview` dry-run) · `change_case` · `replace_text` · `fix_invalid`

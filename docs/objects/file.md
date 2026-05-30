@@ -2,7 +2,7 @@
 title: File
 section: Objects
 order: 2
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # File (`FileSummary`)
@@ -60,6 +60,7 @@ pub struct FileSummary {
     pub file_type:          String,
     pub stage:              String,      // computed — see "Pipeline stage" below
     pub row_count:          Option<u64>,
+    pub fully_null_rows:    Option<u64>,
     pub col_count:          Option<u32>,
     pub file_size_bytes:    Option<u64>,
     pub cleanness_pct:      Option<f32>,
@@ -78,17 +79,17 @@ to the backend.
 `stage` replaced the old stored `status` column in migration 009. It
 isn't a column — it's derived on every read from the `file_stages` SQL
 view, which classifies a file by the furthest point it's reached in
-the **import → clean → report → publish** pipeline:
+the **new → clean → design → publish** pipeline:
 
 | `stage` | When |
 |---|---|
-| `import` | Uploaded — no steps, not used in any report. |
+| `new` | Uploaded — no steps, not used in any report. |
 | `clean` | Has ≥1 row in `project_steps` (touched in the cleaner — applied or undone history both count). |
-| `report` | The file is `source_file_id` of ≥1 `reports` row. |
+| `design` | The file is `source_file_id` of ≥1 `reports` row. |
 | `publish` | A report sourced from this file is referenced by a widget inside a **public** dashboard (`dashboards.is_public`, `spec.widgets[].spec.report_id`). |
 
 Stages are ordered; the highest matching condition wins. A freshly
-uploaded / joined / snapshotted file is always `import`. The view also
+uploaded / joined / snapshotted file is always `new`. The view also
 exposes `stage_rank` (0–3) so the project query can aggregate it —
 see [project.md](project.md).
 
@@ -309,7 +310,7 @@ the same grouped table with the same param shapes.
 `join_columns` · `split_column`
 
 **Row-shape:** `drop_rows` (absolute index) · `drop_nulls` ·
-`filter_rows` (predicate tree, 16 ops including `between` / `before` /
+`filter_rows` (predicate tree, 17 ops including `between` / `before` /
 `after` / `in` / `not_in`)
 
 **Cell-value:** `set_cell` · `fill_nulls` (`fixed` / `zero` /

@@ -2,7 +2,7 @@
 title: Membership — permission catalog
 section: Internal
 order: 59
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 owner: Torv
 status: draft — RBAC catalog sweep ([index](index.md)); polymorphic company/project/case model per Em 2026-05-29
 ---
@@ -15,11 +15,15 @@ case scopes (per Em 2026-05-29, the [index](index.md#case-team-member--membershi
 Case Team Member note). A membership is `(scope_type, scope_id, user,
 role)`:
 
-| scope_type | Backing | UI label | role enum |
+All three scopes are backed by the ONE `memberships` table
+(discriminated by the joined parent type), `role` CHECK =
+`owner · admin · member · viewer`:
+
+| scope_type | Backing | UI label | live roles today |
 |---|---|---|---|
-| `company` | `company_memberships` | Member | owner · admin · member |
-| `project` | `project_memberships` (v3) | Member | owner · collaborator · viewer |
-| `case` | (v3 — case team) | **Case Team Member** | per AccessLevel: read · write |
+| `company` | `memberships` | Member | owner · admin · member |
+| `project` | `memberships` | Member | owner (live) · admin/member/viewer (RBAC) |
+| `case` | `memberships` (case-typed rows) | **Case Team Member** | per AccessLevel: read · write |
 
 Modeled on Salesforce's `CaseTeamMember` (a user linked to a record
 with a role whose *AccessLevel* governs the record access). In RedPash
@@ -114,6 +118,10 @@ owner can't be demoted or removed (guard, see Notes).
   target check picks the branch (emits `*_member_leave` vs
   `*_member_remove` events accordingly).
 
-- **Today: company only.** `project_memberships` is schema-only and
-  case-team is v3 — so the live grants bind `company` scope alone. The
-  project + case rows of this matrix are the RBAC-v3 target.
+- **Today: company member-management + project ownership.** All scopes
+  share the one `memberships` table; project ownership rows live there
+  now (a `role='owner'` row written on project create, read by the
+  owner gate). What's not yet wired is the public member-management
+  routes for project + case scope (add/remove/role-change) — those are
+  the RBAC target. Company scope already has the full member-management
+  surface.

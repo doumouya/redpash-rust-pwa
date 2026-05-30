@@ -2,7 +2,7 @@
 title: Companies
 section: API
 order: 5
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/companies/*`
@@ -93,9 +93,11 @@ POST /api/companies
 }
 ```
 
-`slug` is **immutable**: derived as `{slugified-base}-{6-hex}` (a slice
-of the new RID) so it's unique by construction — no collision retry.
-Returns the created `Company`.
+`slug` is **auto-derived** at create: `{slugified-base}-{6-hex}` (a
+slice of the new RID) so it's unique by construction — no collision
+retry. It's not fixed forever, though — `PATCH /api/companies/:rid`
+can rename it (see below); a collision there returns `409
+slug_taken`. Returns the created `Company`.
 
 ---
 

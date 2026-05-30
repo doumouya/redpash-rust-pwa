@@ -2,7 +2,7 @@
 title: Company — permission catalog
 section: Internal
 order: 53
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 owner: Torv
 status: draft — RBAC catalog sweep ([index](index.md))
 ---
@@ -15,9 +15,10 @@ from [company metadata](../object-metadata/company.md); scheme in the
 
 **Scope columns Company carries:** Company IS the company-scope root —
 its own `redpash_id` is what `@company` resolves against. `@own` here
-means "a company the caller is a member of" (via `company_memberships`);
-`@all` = platform admin. No `@project`. Company is also the
-**company-role source** (`company_memberships.role` — owner/admin/member).
+means "a company the caller is a member of" (via the unified
+`memberships` table); `@all` = platform admin. No `@project`. Company
+is also the **company-role source** (`memberships.role` on company-typed
+rows — owner/admin/member at the company route layer).
 
 Member-management calls (add/remove/role-change) are specced on the
 [Membership](membership.md) object since the membership row is the
@@ -47,7 +48,7 @@ mutated entity; Company's keys cover the company row itself.
 | `company.avatar_url.update` | `avatar_url` | own · all | Owner/admin. |
 
 **No keys for:** `redpash_id`, `owner_id`-equivalent (ownership lives
-in `company_memberships.role = owner`, not a column on companies),
+in a `memberships` row with `role='owner'`, not a column on companies),
 `created_at`.
 
 ---
@@ -90,7 +91,7 @@ reskin it; only the owner changes the slug, transfers, or deletes.
   `company.name.update`.
 
 - **Member management lives on [Membership](membership.md).** Adding,
-  removing, and role-changing members mutate `company_memberships`
+  removing, and role-changing members mutate company-scope `memberships`
   rows — those keys (`membership.create@company`, etc.) are specced
   there, with the last-owner guard + owner-only-for-granting-owner
   rules. Company's keys are only about the company row.

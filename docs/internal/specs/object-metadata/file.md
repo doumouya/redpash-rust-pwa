@@ -2,7 +2,7 @@
 title: File — object metadata
 section: Internal
 order: 45
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -251,7 +251,7 @@ fully_null_rows
 cleanness_pct
   Type:        REAL / Option<f32>
   Properties:  Nillable, Sort, Layout
-  Description: Cleanness score, computed by `data::stats::score`
+  Description: Cleanness score, computed by `data::stats::cleanness`
                against the user's `learned_sentinels` + the global
                vocabulary. NULL until first compute. Hidden by
                default in the Home Files tab.
@@ -394,10 +394,11 @@ File is referenced by Dashboard widgets
 | `file_re_encode` | `POST /api/files/:rid/encoding` | `{ file, encoding }` |
 | `file_snapshot` | `POST /api/files/:rid/snapshot` | `{ file, new_file, rows }` |
 | `step_apply` | `POST /api/files/:rid/steps` | `{ file, kind, step }` |
+| `file_join_create` | `POST /api/files/:rid/joins/apply` | `{ file, new_file, … }` |
+| `file_cleanness_recompute` | Cleanness recompute (`meta.rs`) | `{ file, … }` |
 
 `step_apply` is technically a Step event (not a File event) but the
 context targets a `file` rid for activity-feed scoping. See
-[step](step.md). Join detect / apply / dedup / uniques are
-read-only and emit no events. Cleanness recompute is internal —
-the score lands on the row, no audit emit today (TODO if the
-recompute becomes user-triggered rather than passive).
+[step](step.md). Join detect / dedup / uniques are read-only and emit
+no events, but **join apply** emits `file_join_create` (joins.rs:241).
+Cleanness recompute emits `file_cleanness_recompute` (meta.rs:125).

@@ -2,7 +2,7 @@
 title: API overview
 section: API
 order: 0
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # API overview
@@ -28,14 +28,18 @@ request/response detail.
 | [Projects](projects.md)      | `/api/projects`          | Workspace list + project-scoped file list. Ownership is a `memberships` row now. |
 | [Companies](companies.md)    | `/api/companies/*`       | Company CRUD + member management (multi-tenancy layer; members live in the unified `memberships` table). |
 | [Files](files.md)            | `/api/files/*`           | Upload, paged rows, cleaning steps, undo/redo, joins, snapshots. |
+| Group (no per-page doc)      | `/api/group`             | Stateless grouping engine — `POST /api/group/preview`. The renamed `/api/reports/*` surface; "Report" is a derived view, not an entity. Returns redtable `Row`-shaped sections. |
 | [Charts](charts.md)          | `/api/charts/*`          | Saved-chart CRUD — chart-typed `project_files` rows (`CHT_…`). Replaces the retired Reports surface. |
 | [Dashboards](dashboards.md)  | `/api/dashboards/*`      | Dashboard CRUD; dashboards are now dashboard-typed `project_files` rows (`DSH_…` preserved). |
 | [Cases](cases.md)            | `/api/cases/*`           | Cases + comments (the Jira-flow workstream). Reporter + case-owner live in `memberships`. |
 | [Users](users.md)            | `/api/users/*`           | User directory + dev-permissive CRUD. |
 | [Events](events.md)          | `/api/events/*`          | Runtime observability log — BE 4xx/5xx + lifecycle, FE `POST /api/events`. |
+| Metrics (no per-page doc)    | `/api/metrics`           | `GET /api/metrics?window=…` — performance read surface over `request_log` (count / error-rate / p50-p95-p99, overall + per route). |
 | [Monitoring](monitoring.md)  | `/api/monitoring/*`      | Requests / events / db_query_log / audit-runs / audit-findings / optimization / user-activity / case-categories — the Monitoring page surface. |
 | [Admin](admin.md)            | `/api/admin/*`           | Admin reads — paginated users/companies/memberships/steps lists with stats. |
-| [Reports](reports.md)        | *(retired)*              | The `reports` table was dropped in `drop_reports` (mig 016); reports are now derived views over csv-typed `FIL_…`. Saved charts moved to [Charts](charts.md). The page is kept for historical reference. |
+| [Search](search.md)          | `/api/search`            | Omnisearch backing the topbar — `GET /api/search?q=…`; one flat `kind`-discriminated result list across projects/files/charts/dashboards/users/companies/memberships. |
+| Demo (no per-page doc)       | `/api/demo`              | Public, no-auth `POST /api/demo/parse` — parse + score a CSV in memory; nothing stored. |
+| [Reports](reports.md)        | *(retired)*              | There is no `reports` table — the single baseline migration (`migrations/20260529000000_init.sql`) simply never creates one. "Report" is a derived view over csv-typed `FIL_…`, and the stateless grouping engine that used to live at `/api/reports/*` was renamed to `POST /api/group/preview`. Saved charts moved to [Charts](charts.md). The page is kept for historical reference. |
 | Docs (no per-page doc)       | `/api/docs/*`            | Public — serves the markdown tree under `docs/` as an index (`GET /api/docs`) + rendered HTML per slug (`GET /api/docs/:slug`). Drives the in-app docs viewer at `#/docs`. |
 
 ---
@@ -65,7 +69,7 @@ on. The full set (from `api::error::AppError` + `From<DataError>`):
 | `oauth_disabled`    | 503  | `GOOGLE_OAUTH_*` env vars not all set, but an `/auth/google/*` route was called |
 | `oauth_denied` / `oauth_no_code` / `oauth_no_state` / `oauth_no_state_cookie` / `oauth_state_mismatch` / `oauth_token_rejected` | 400 | Various OAuth callback failures |
 | `oauth_token_request` / `oauth_token_decode` / `oauth_userinfo_*` | 500 | Network/decode failures against Google |
-| `missing_source`    | 400  | Chart preview with no `source_file_id` (legacy — was also raised by `/reports/preview`, which retired with mig 016) |
+| `missing_source`    | 400  | Chart preview with no `source_file_id` (the grouping engine that raised this was renamed from `/reports/preview` to `POST /api/group/preview`) |
 | `missing_file` / `multipart` / `too_large` | 400 | Upload validation |
 | `db`                | 500  | Postgres error |
 | `io`                | 500  | Disk read/write error |

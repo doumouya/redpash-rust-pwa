@@ -2,7 +2,7 @@
 title: Project — permission catalog
 section: Internal
 order: 54
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 owner: Torv
 status: draft — RBAC catalog sweep ([index](index.md))
 ---
@@ -13,15 +13,19 @@ Permission keys + default grant matrix for the Project object. Derived
 from [project metadata](../object-metadata/project.md); scheme in the
 [catalog template](index.md).
 
-**Scope columns Project carries:** `owner_id` → `@own`; `company_id` →
-`@company`; the project's own `redpash_id` is the `@project`-scope root
-for its children (Files, Cases). `@all` = platform admin. Project is
-the **project-role source** (`project_memberships.role`, v3 — schema
-exists, inert until RBAC v3 wires it).
+**Scope qualifiers Project carries:** owner-membership (`memberships`
+`role='owner'`) → `@own`; `company_id` → `@company`; the project's own
+`redpash_id` is the `@project`-scope root for its children (Files,
+Cases). `@all` = platform admin. Project is the **project-role source**
+(`memberships.role` on project-typed rows — the owner row is live now;
+the additive admin/member/viewer grants land with project RBAC).
 
-The `owner_id` column is the live ownership gate today (`ensure_owner`
-keys off it); `project_memberships.role = owner` is its v3 mirror
-(auto-inserted alongside `owner_id` when the table activates).
+Ownership is a `memberships` row (`role='owner'`), live today:
+`ensure_owner` resolves it via `db::project_owner` (which queries
+`memberships`). There is NO `projects.owner_id` column — membership
+ownership is the live gate, not a v3 plan. (The PATCH body still
+accepts an `owner_id` *field* as input, but it transfers the
+owner-membership; it isn't a column.)
 
 ---
 
@@ -31,7 +35,7 @@ keys off it); `project_memberships.role = owner` is its v3 mirror
 
 | Key | Verb | Scopes | Notes |
 |---|---|---|---|
-| `project.create` | `POST /api/projects` (+ ensure_default/named) | — | Any authenticated user; creator is `owner_id`. |
+| `project.create` | `POST /api/projects` (+ ensure_default/named) | — | Any authenticated user; creator is seated as `owner` (a `memberships` row, `role='owner'`). |
 | `project.read` | `GET /api/projects/:rid` | own · project · company · all | |
 | `project.update` | `PATCH /api/projects/:rid` | own · project · company · all | Coarse; fields below. |
 | `project.delete` | `DELETE /api/projects/:rid` | own · company · all | CASCADEs files+steps+reports+dashboards. Default project is 400. NOT grantable to project-viewers. |
@@ -82,12 +86,14 @@ per-account choice.
 
 ## 3. Notes
 
-- **`owner_id` is the live gate.** Today `ensure_owner` checks
-  `projects.owner_id == caller` directly; that's the `@own` predicate.
-  The `project_memberships` tier (collab/viewer columns) is declared
-  here but inert until RBAC v3 wires the table — when it does, an
-  `owner`-role membership row is auto-inserted alongside `owner_id` so
-  there's one code path.
+- **Owner-membership is the live gate.** Today `ensure_owner` resolves
+  the project's owner via `db::project_owner` (a `memberships` row with
+  `role='owner'`) and checks it `== caller`; that's the `@own`
+  predicate. There's no `projects.owner_id` column — membership
+  ownership is live now, not a v3 plan. The additive admin/member/viewer
+  grants (the rows below `owner`) are declared here but not yet wired by
+  any project member route; they fill in as project RBAC lands, reusing
+  the same `memberships` table.
 
 - **`project.delete` excludes viewers + members.** Cascade is
   destructive (files + steps + reports + dashboards). Only the owner,

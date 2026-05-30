@@ -35,8 +35,8 @@ navigates. End-to-end target p95 is <100ms on the wire.
      no DB hit. (Lets the frontend fire on every keystroke
      cheaply.)
    - Run **projects query** — ILIKE on
-     `name` + `description`, user-scoped (`owner_id =
-     caller OR ∃ project_membership`), prefix-match boost via
+     `name` + `description`, user-scoped (caller has a `memberships`
+     row on the project), prefix-match boost via
      `CASE`, `LIMIT 5`.
    - Run **files/charts/dashboards query** — single CTE with
      `ROW_NUMBER() OVER (PARTITION BY file_type)` to cap each

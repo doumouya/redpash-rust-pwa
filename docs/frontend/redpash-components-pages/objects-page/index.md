@@ -588,7 +588,7 @@ shell as the landing page's login / contact modals:
 | Reports tab | `GET /api/reports` | ✅ live |
 | Dashboards tab | `GET /api/dashboards` | ✅ live |
 | Companies tab | `GET /api/companies` (LEFT JOIN — lists all companies, `my_role` is `Option<String>`) | ✅ live |
-| Users tab | `GET /api/users` (extra `company_memberships` query attached per user) | ✅ live |
+| Users tab | `GET /api/users` (extra `memberships` query attached per user) | ✅ live |
 | Row click → cleaner / builder | `#/cleaner?…`, `#/reports?id=…`, `#/dashboards?id=…` | ✅ live |
 | File edit — rename / move to project / encoding / delimiter (edit mode) | `PATCH /api/files/:rid` (`display_name` text, `project_redpash_id` select, `encoding` / `delimiter` text) | ✅ live |
 | Report / dashboard inline edit | `PATCH /api/{reports,dashboards}/:rid` (`title` / `description` / `is_favorite`, sparse COALESCE) | ✅ live |

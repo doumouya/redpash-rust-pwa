@@ -2,7 +2,7 @@
 title: Me
 section: API
 order: 2
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/me`
@@ -23,7 +23,7 @@ Returns the `UserProfile` for whoever owns the request.
 
 ### Resolution order
 
-1. **`rp_session` cookie present** → look up `sessions.session_id` → if
+1. **`rp_session` cookie present** → look up `sessions.redpash_id` → if
    the row is unexpired, return its user.
 2. **No session cookie + OAuth unconfigured** → fall back to the
    bootstrap `dev_user`. This is local-dev mode — there is exactly one

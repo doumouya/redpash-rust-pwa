@@ -2,7 +2,7 @@
 title: UserPreference — object metadata
 section: Internal
 order: 51
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -41,7 +41,7 @@ client sends.
 
 | Verb | Wire | Notes |
 |---|---|---|
-| `upsert` | `PATCH /api/me/prefs` | Body: `PrefsPatch { prefs: { <key>: <value>, … } }`. Sparse — only the keys present overwrite. Empty / non-object input is a no-op (early return). Each top-level key in the body lands as one INSERT … ON CONFLICT DO UPDATE on `user_preferences`. Server-resolved user from the session. Returns 200; no body. |
+| `upsert` | `PATCH /api/me/prefs` | Body: `PrefsPatch { prefs: { <key>: <value>, … } }`. Sparse — only the keys present overwrite. Empty / non-object input is a no-op (early return). Each top-level key in the body lands as one INSERT … ON CONFLICT DO UPDATE on `user_preferences`. Server-resolved user from the session. Returns 204; no body. |
 | `delete (per-key)` | `PATCH /api/me/prefs` with `value: null` | Setting a key to JSON `null` deletes the row (FE convention; server doesn't yet specialise the delete path — the row carries `value: null` literal today). Will be tightened to a DELETE FROM in a follow-up when the FE consumer count justifies a dedicated path. |
 | `read` | `GET /api/me` | Merged into `UserProfile.prefs` via the correlated subquery. No standalone `/api/me/prefs` GET — the wire shape is "always merged into the profile envelope". |
 | `create / update / delete (per-row)` | — | **Not supported as user-facing per-row paths.** The row is the storage unit; the wire is always `(user, prefs_object)`. |
@@ -152,14 +152,15 @@ UserPreference has no sub-rows.
 
 ## Audit events
 
-None today. Pref writes are high-frequency (theme toggle, density
-slider, font-size pick — every UI tweak hits this path) and
-audit-event emit on every write would balloon the events table
-without a corresponding investigative use case. RBAC will likely
-audit **destructive** pref changes (e.g. clearing
-`learned_sentinels`) selectively rather than every key flip.
+Every `PATCH /api/me/prefs` emits one `me_prefs_update` event with
+`context: { user, keys: [<names>] }` — **keys only**, never the values
+(pref values may carry user content like `learned_sentinels`). The
+event is emitted on the `me` lane — see
+[user](user.md#audit-events). Pref writes are high-frequency (theme
+toggle, density slider, font-size pick), so the keys-only shape keeps
+the events stream investigable without ballooning it with user content.
 
-If/when pref auditing ships, the canonical kinds would be
-`pref_update` (with `context: { key, prev, next }`) and
-`pref_delete` (for the null-value path) — naming follows the
-`<object>_<verb>` pattern every other entity uses.
+Finer-grained per-key auditing (e.g. `pref_update` with
+`context: { key, prev, next }` and a `pref_delete` for the null-value
+path) is a possible future split following the `<object>_<verb>`
+pattern, but is not emitted today.

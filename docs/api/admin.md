@@ -2,7 +2,7 @@
 title: Admin
 section: API
 order: 13
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/admin/*`
@@ -65,11 +65,11 @@ Sortable column allowlists (key → SQL column):
 
 | Endpoint | `SORTABLE_*` keys |
 |---|---|
-| `users` | `username` · `display_name` · `email` · `plan` · `created_at` (default) · `updated_at` |
+| `users` | `display_name` · `username` · `email` · `plan` · `job_title` · `organisation` · `org_name` · `org_role` · `created_at` (default) |
 | `companies` | `name` · `slug` · `created_at` (default) · `updated_at` |
-| `memberships` | `object_redpash_id` · `user_display_name` · `role` · `joined_at` (default) |
-| `files` | `display_name` · `project_redpash_id` · `row_count` · `created_at` (default) · `updated_at` |
-| `charts` | `title` · `project_redpash_id` · `created_at` (default) · `updated_at` |
+| `memberships` | `user_display_name` · `user_username` · `scope` · `scope_name` · `role` · `joined_at` (default) |
+| `files` | `filename` · `display_name` · `file_type` · `stage` · `row_count` · `col_count` · `file_size_bytes` · `cleanness_pct` · `updated_at` · `created_at` (default) |
+| `charts` | `display_name` · `filename` · `project_name` · `stage` · `created_at` (default) · `updated_at` |
 | `steps` | `kind` · `applied` · `created_at` (default) |
 
 For the authoritative per-endpoint list, see the `SORTABLE_*` constants

@@ -2,7 +2,7 @@
 title: Comment — object metadata
 section: Internal
 order: 47
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -185,7 +185,7 @@ Comment is referenced by activity-feed Events
 
 All three kinds carry both the `case` rid AND the `comment` rid in
 their context — the case rid drives the activity-feed scoping
-(`events.kind LIKE 'case_%' AND context->>'case' = $1`) while the
+(`context->>'case' = $1`) while the
 comment rid lets the feed link directly to the comment if it's
 still alive (404'd into a tombstone if the comment was deleted —
 the events outlive the row).

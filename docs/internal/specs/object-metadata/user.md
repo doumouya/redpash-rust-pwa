@@ -2,7 +2,7 @@
 title: User — object metadata
 section: Internal
 order: 42
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -12,7 +12,7 @@ status: draft — per the object-metadata sweep ([index](index.md))
 A RedPash account holder. Created either via Google OAuth on first
 sign-in (`upsert_google_user`) or via the dev-permissive admin
 endpoint (`POST /api/users`). One user owns many projects, may belong
-to many companies via `company_memberships`, and authenticates via the
+to many companies via `memberships`, and authenticates via the
 `sessions` table.
 
 **Backing table:** `users` (migration `20260512000001_init.sql`
@@ -42,8 +42,8 @@ with sort/filter for the Home Users tab).
 | `read (other)` | `GET /api/users/:rid` | Dev-permissive; returns the full `UserProfile`. |
 | `update (self)` | `PATCH /api/me` | Sparse update — only declared fields write. `prefs` field is deprecated here; routes through `/api/me/prefs` with a deprecation log. |
 | `update (other)` | `PATCH /api/users/:rid` | Dev-permissive sparse update; same field set as `/api/me` minus the prefs path. Conflicts on duplicate `username` → 409 `username_taken`. |
-| `delete` | `DELETE /api/users/:rid` | Hard delete. Cascades sessions / company_memberships / project_memberships; owned projects CASCADE → their files CASCADE → blobs are NOT cleaned up (TODO). |
-| `list (admin)` | `GET /api/admin/users?page=&size=&sort=&dir=&q=` | Paginated `Page<UserSummary>` for the Home Users tab. LEFT JOIN LATERAL on `company_memberships` adds `org_id` / `org_name` / `org_role` to each row (primary affiliation: owner > admin > member, ties broken by most-recent `joined_at`). |
+| `delete` | `DELETE /api/users/:rid` | Hard delete. Cascades sessions / `memberships` (user-side) / `user_preferences` / `sentinel_submissions`. Owned objects are **not** cascade-deleted — there's no `projects.owner_id`; removing the owner-membership just leaves the project ownerless (admin reassigns). |
+| `list (admin)` | `GET /api/admin/users?page=&size=&sort=&dir=&q=` | Paginated `Page<UserSummary>` for the Home Users tab. LEFT JOIN LATERAL on `memberships` (company-typed) adds `org_id` / `org_name` / `org_role` to each row (primary affiliation: owner > admin > member, ties broken by most-recent `joined_at`). |
 | `list (dev)` | `GET /api/users` | Unpaginated `Vec<UserProfile>` — Objects-page owner-reassignment picker. No sort param, no filter, no search. Hardcoded `ORDER BY display_name ASC`. |
 | `search` | `GET /api/admin/users?q=...` | ILIKE substring on `username` + `display_name` + `email` + `organisation`. Single `$1` reused four times — Postgres caches the compiled pattern. Only on the admin list endpoint, not on `/api/users`. |
 
@@ -129,7 +129,7 @@ organisation
   Type:        TEXT / Option<String>
   Properties:  Update, Nillable, Sort, Search, Layout
   Description: Free-text affiliation. DISTINCT from the typed
-               `company_memberships` relationship — this is a
+               `memberships` relationship — this is a
                profile bio field the user types; `org_name` (a
                hydrated read-only field below) is the canonical
                company affiliation joined from the membership row.
@@ -212,7 +212,7 @@ updated_at
 
 These appear on the admin-list `UserSummary` shape (in the JSON
 response) but aren't columns on `users` — they come from the LEFT
-JOIN LATERAL on `company_memberships` in `routes/admin.rs::list_users`
+JOIN LATERAL on `memberships` (company-typed) in `routes/admin.rs::list_users`
 (only one row per user, primary affiliation: owner > admin > member,
 ties broken by most-recent joined_at). NOT present on the bare
 `UserProfile` returned by `/api/me` or `/api/users` — that DTO
@@ -223,8 +223,9 @@ carries the full `memberships: Vec<UserMembership>` array instead
 org_id
   Type:        TEXT / Option<String>
   Properties:  Nillable
-  Description: company_memberships.company_id of the user's primary
-               affiliation. NULL when the user belongs to no company.
+  Description: memberships.object_redpash_id of the user's primary
+               company affiliation. NULL when the user belongs to no
+               company.
 ```
 
 ```
@@ -241,7 +242,7 @@ org_name
 org_role
   Type:        TEXT / Option<String>
   Properties:  Nillable, Sort, Layout
-  Description: company_memberships.role of the primary affiliation
+  Description: memberships.context_role of the primary affiliation
                ('owner' / 'admin' / 'member'). Drives the role
                chip on the Home Users tab.
 ```
@@ -258,9 +259,9 @@ values surfaced in the UI:
 chip in the Home Users tab (`planChip()` renderer in home.js); chip
 styling falls through to a neutral pill for any unknown value.
 
-`org_role` (hydrated from `company_memberships.role`) carries the
+`org_role` (hydrated from `memberships.context_role`) carries the
 canonical role set: `{ owner, admin, member }`. The CHECK lives on
-the `company_memberships` table — see [membership](membership.md).
+the `memberships` table — see [membership](membership.md).
 
 No CHECK on `username`, `email`, or `locale` (free-text). Email
 format validation is intentionally NOT done server-side today; the
@@ -271,12 +272,14 @@ OAuth provider validates on its end, and dev-create users bypass.
 ## Relationships
 
 ```
-projects.owner_id → User (USR_)
-  Cardinality:  N:1 (a User owns many Projects)
-  On delete:    CASCADE (deleting a user drops their owned projects
-                + cascades to files + steps via the project FK chain)
+memberships(role='owner', object=Project) → User (USR_)
+  Cardinality:  N:1 (a User owns many Projects, via owner-memberships)
+  On delete:    CASCADE on the owner-membership row only — the project
+                is left ownerless (NOT cascade-deleted). There is no
+                `projects.owner_id` column.
   Hydrated as:  — (not joined back onto User; surfaced on Project's
-                owner_display_name + owner_username instead)
+                owner_display_name + owner_username, resolved via the
+                owner-membership LATERAL → users join)
 ```
 
 ```
@@ -290,14 +293,17 @@ sessions.user_redpash_id → User (USR_)
 ### Inverse relationships
 
 ```
-User has many CompanyMembership rows
-  Backing:       company_memberships (composite PK on
-                 (company_id, user_redpash_id))
+User has many Membership rows
+  Backing:       memberships (composite PK on
+                 (object_redpash_id, user_redpash_id); descriptor
+                 column context_role; object_redpash_id → entities.id
+                 ON DELETE CASCADE)
   Cardinality:   1:N
   On delete:     CASCADE (deleting a user removes their memberships)
   Surfaced as:   memberships: Vec<UserMembership> on UserProfile
-                 (only the `/api/users` list endpoint joins them in;
-                 single-row fetchers like /api/me + GET /api/users/:rid
+                 (the `/api/users` list endpoint AND /api/me hydrate
+                 them; the remaining single-row fetchers —
+                 find_user_by_id / find_user_by_username / insert_user —
                  emit the field with `#[serde(default)]` = empty Vec)
                  See [membership](membership.md).
 ```
@@ -319,8 +325,10 @@ Case.reporter_id → User and Case.assignee_id → User
 ```
 
 ```
-Project.owner_id → User
-  See [project](project.md) — N:1, CASCADE on user delete.
+Project ownership (owner-membership) → User
+  See [project](project.md) — N:1 via a memberships row with
+  role='owner'; user delete cascades the owner-membership, leaving the
+  project ownerless (no projects.owner_id column).
 ```
 
 ```
@@ -335,17 +343,18 @@ File-typed project_files rows reachable via owned projects
 | `kind` | Emitted on | Context shape |
 |---|---|---|
 | `user_create` | `POST /api/users` | `{ user, username }` |
-| `user_create` | `GET /api/auth/google/callback` first-sign-in branch | `{ user, username, source: "oauth" }` |
 | `user_update` | `PATCH /api/users/:rid` | `{ user, fields: [<names>] }` — bundled list of fields that changed |
-| `me_update` | `PATCH /api/me` | `{ fields: [<names>] }` — same bundled shape, caller is implicit |
+| `me_update` | `PATCH /api/me` | `{ user, fields: [<names>] }` — same bundled shape |
+| `me_prefs_update` | `PATCH /api/me/prefs` | `{ user, keys: [<names>] }` — keys only (values may carry user content) |
 | `user_delete` | `DELETE /api/users/:rid` | `{ user }` (level=warn) |
-| `auth_login` | `GET /api/auth/google/callback` (returning user) | `{ user, source: "oauth" }` |
+| `auth_login` | `GET /api/auth/google/callback` (both first-sign-in and returning) | `{ user }` — no `source` field; the OAuth callback emits **only** `auth_login` (no first-sign-in `user_create`) |
 | `auth_logout` | `POST /api/auth/logout` | `{ user }` |
 | `unauthenticated` | any 401 path | `{}` |
 | `forbidden` | any 403 path | `{ user }` (caller resolved) |
 | `oauth_disabled` | auth start when env vars unset | `{}` |
 | `dev_login_disabled` | `POST /api/auth/dev-login` when gate off | `{}` |
 
-Pref-mutation events (`pref_update` etc.) live on the
-User-Preference object — see [user-preference](user-preference.md)
-for that lane. Membership-mutation events live on Membership.
+Pref mutations emit `me_prefs_update` from `PATCH /api/me/prefs` (above);
+the per-key write semantics live on the User-Preference object — see
+[user-preference](user-preference.md) for that lane. Membership-mutation
+events live on Membership.

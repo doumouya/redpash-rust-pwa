@@ -2,7 +2,7 @@
 title: CaseCategory — object metadata
 section: Internal
 order: 48
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -53,12 +53,18 @@ name
   Type:        TEXT NOT NULL / String
   Properties:  (none — not currently writable from user-facing
                 routes; seed-script only)
-  Description: Display name. UNIQUE within (parent_id, company_id)
-               — two roots can both be named "Backend" only if one
-               is global and the other is company-scoped. The
-               UNIQUE uses COALESCE on the nullable columns so
-               NULL parent_id / NULL company_id still enforce the
-               constraint.
+  Description: Display name. Uniqueness is enforced by two partial
+               unique indexes split on whether the row is a root or
+               a child:
+                 - `case_categories_root_uq ON (name,
+                   COALESCE(company_id,'')) WHERE parent_id IS NULL`
+                 - `case_categories_child_uq ON (parent_id, name,
+                   COALESCE(company_id,'')) WHERE parent_id IS NOT NULL`
+               COALESCE applies only to the nullable `company_id`;
+               the NULL/non-NULL `parent_id` cases are separated by
+               each index's partial WHERE. So two roots can both be
+               named "Backend" only if one is global and the other
+               is company-scoped.
 ```
 
 ```

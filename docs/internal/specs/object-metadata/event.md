@@ -2,7 +2,7 @@
 title: Event — object metadata
 section: Internal
 order: 50
-last modified date: 2026-05-28
+last modified date: 2026-05-30
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
@@ -17,7 +17,7 @@ Backend emits via `crate::event::record` / `info` / `warn` / `error`
 failures. Activity feeds (Case detail, per-user activity, monitoring
 drill-downs) all query this table.
 
-**Backing table:** `events` (migration `20260529000001_events.sql`).
+**Backing table:** `events` (baseline migration `20260529000000_init.sql`).
 **DTO:** `backend/crates/shared/src/event.rs` (`Event` + `EventReport`).
 **Routes:** `backend/crates/api/src/routes/events.rs` (capture +
 read API), `backend/crates/api/src/routes/monitoring.rs` (paginated
@@ -38,7 +38,7 @@ on every HTTP request that errored.
 | `read (list)` | `GET /api/events?level=&kind=&limit=` | Filter by `level=` (debug / info / warn / error) + `kind=` (exact match on the kind string), capped by `limit=`. Newest first. Lightweight wrapper used by the dev Events panel; the admin paginated list lives at `/api/monitoring/events`. |
 | `update` | — | **Not supported.** Events are immutable post-INSERT. |
 | `delete` | — | **Not supported via the API.** Retention is handled at the DB layer (no automated prune today — the table grows unboundedly until a future ops-rotation task; not user-facing). |
-| `list (admin)` | `GET /api/monitoring/events?page&size&sort&dir&window&level&kind&q` | Paginated `Page<EventSummary>` for the Monitoring Events tab. `window=` is the time-window chip (1h / 24h / 7d / 30d); the rest mirror the dev-list filters. |
+| `list (admin)` | `GET /api/monitoring/events?page&size&window&level&kind&q` | Paginated `Page<EventSummary>` for the Monitoring Events tab. `window=` is the time-window chip (1h / 24h / 7d / 30d); the rest mirror the dev-list filters. |
 | `read (drill-downs)` | `GET /api/monitoring/request/:request_id` | Per-request activity — every event sharing this `request_id`, frontend + backend. Powers the click-to-replay modal on the Monitoring Requests tab. |
 | `read (user feed)` | `GET /api/monitoring/users/:rid/activity` | Per-user activity feed — UNIONs `events` + `request_log` on the server side into a single `Page<ActivityRow>` time-ordered stream. |
 | `search` | `GET /api/monitoring/events?q=…` | ILIKE substring on `message` + `kind` (admin endpoint only). |

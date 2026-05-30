@@ -2,7 +2,7 @@
 title: Cases
 section: API
 order: 11
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/cases/*`
@@ -21,7 +21,7 @@ context->>'case' = $1`.
 projects / companies use. The `Case` DTO surfaces them as
 hydrated `reporter_id` / `assignee_id` + `*_display_name` via LATERAL
 joins on `memberships WHERE object_redpash_id = c.redpash_id AND
-relationship_attribute IN ('Reporter','Case Owner')`. There is no
+context_role IN ('Reporter','Case Owner')`. There is no
 `cases.reporter_id` / `cases.assignee_id` column.
 
 > **Dev relaxation.** v1 is dev-permissive — any authenticated user can
@@ -70,7 +70,7 @@ kanban + the case-list rail.
 Each `Case` row carries:
 - Lifecycle fields: `type`, `status`, `priority`.
 - `reporter_id` / `assignee_id` resolved from the `memberships` LATERAL
-  (`Reporter` and `Case Owner` `relationship_attribute`s).
+  (`Reporter` and `Case Owner` `context_role`s).
 - Hydrated `reporter_display_name` / `assignee_display_name` from the
   `users` join on the membership; `display_name || rid || "—"` is the
   FE rendering rule.
