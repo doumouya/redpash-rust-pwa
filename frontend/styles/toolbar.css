@@ -134,6 +134,14 @@
 .rt-mode:not(:disabled) { color: var(--rp-text-dim); }
 .rt-mode:not(:disabled):hover { color: var(--rp-text); }
 
+/* Mode button toggled-on state — `is-active` lights up while the mode
+   is engaged (e.g. select-mode while future row clicks toggle
+   selection instead of navigating). */
+.rt-mode.is-active {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+}
+
 /* delete-mode button armed against the current selection */
 .rt-mode[data-mode="delete"].armed {
   color: var(--rp-accent);

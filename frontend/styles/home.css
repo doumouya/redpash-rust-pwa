@@ -106,14 +106,6 @@
    (table.css: `.rt-table tbody tr.is-selected { background: accent-soft }`)
    after the 2026-05-25 wrap+table rename. The Home-specific override
    that previously painted at the TD level was redundant — dropped. */
-/* The select toolbar button gets `.is-active` while select mode
-   is on — visual confirmation that future row clicks toggle
-   selection instead of navigating. */
-.rt-mode.is-active {
-  background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
-}
-
 /* Generic create-modal error line — the paragraph takes its layout
    from the shared `.rp-modal-hint` atom (modal.css); this class only
    overrides the color to warn when the paragraph is showing a POST
