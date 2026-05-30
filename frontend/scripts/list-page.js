@@ -463,27 +463,65 @@ export function wireListColumnsExport(view, opts) {
     [...byKey.keys()].forEach((k) => { if (!out.includes(k)) out.push(k); });
     return out;
   }
+  // Classes for non-data sentinel cells the reorder must preserve in
+  // place: `.rp-list-sel` is the LEADING select-mode checkbox column,
+  // `.rp-home-hide-th` / `.rp-home-hide-cell` is the TRAILING hide-from-
+  // list action column (home tabs that declare `spec.hideMeta`). Neither
+  // carries `data-col-key`, neither participates in reorder, and both
+  // must stay at their original ends after the data cells move.
+  const SENTINEL_LEADING_CELL  = "rp-list-sel";
+  const SENTINEL_TRAILING_TH   = "rp-home-hide-th";
+  const SENTINEL_TRAILING_CELL = "rp-home-hide-cell";
   // Reorder THs in `headRow` and each tbody row's data cells from
   // `currentOrder` (the order the data cells are CURRENTLY in) to
   // `targetKeys`. Idempotent — no-ops when both already match target.
-  // The leading `.rp-list-sel` checkbox cell (select mode) stays anchored
-  // first; only data-col-key cells are reordered.
+  // Leading select-mode checkbox and trailing hide-action column stay
+  // anchored at their original positions (see SENTINEL_* above).
+  // 2026-05-31: pre-fix used `headRow.appendChild(byKey.get(k))` per
+  // target key, which pushes each data TH to the very end of headRow —
+  // when a trailing sentinel TH (e.g. `.rp-home-hide-th`) was already
+  // there, every appendChild shoved it one column to the left, so after
+  // N appends the trailing TH ended up at position 0. That made every
+  // subsequent positional indexing in `applyHiddenColumns` off-by-one
+  // and the header→cell mapping shift by one (data showing under the
+  // wrong header). Now anchored via insertBefore the trailing sentinel.
   function reorderColumnDOM(headRow, tbody, currentOrder, targetKeys, byKey) {
     const currentTH = [...headRow.querySelectorAll("th[data-col-key]")]
       .map((th) => th.dataset.colKey);
     const thsAligned   = targetKeys.every((k, i) => currentTH[i] === k);
     const cellsAligned = targetKeys.every((k, i) => currentOrder[i] === k);
     if (thsAligned && cellsAligned) return;
-    if (!thsAligned) targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
+    // Find a trailing sentinel TH (no data-col-key, comes after at least
+    // one data-col-key TH) to anchor data TH insertions BEFORE it.
+    let anchorTH = null;
+    let seenDataKey = false;
+    for (const child of headRow.children) {
+      if (child.dataset.colKey) { seenDataKey = true; continue; }
+      if (seenDataKey) { anchorTH = child; break; }
+    }
+    if (!thsAligned) {
+      if (anchorTH) {
+        targetKeys.forEach((k) => headRow.insertBefore(byKey.get(k), anchorTH));
+      } else {
+        targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
+      }
+    }
     if (!tbody || cellsAligned) return;
     const currentIndex = new Map(currentOrder.map((k, i) => [k, i]));
     tbody.querySelectorAll("tr").forEach((tr) => {
-      const selCell   = tr.querySelector(".rp-list-sel");
-      const dataCells = [...tr.children].filter((td) => !td.classList.contains("rp-list-sel"));
+      const selCell   = tr.querySelector("." + SENTINEL_LEADING_CELL);
+      const hideCell  = tr.querySelector("." + SENTINEL_TRAILING_CELL);
+      // Data cells are the children minus the sentinels — these are the
+      // only ones the reorder touches.
+      const dataCells = [...tr.children].filter((td) =>
+        !td.classList.contains(SENTINEL_LEADING_CELL)
+        && !td.classList.contains(SENTINEL_TRAILING_CELL)
+      );
       const reordered = targetKeys.map((k) => dataCells[currentIndex.get(k)]);
       while (tr.firstChild) tr.removeChild(tr.firstChild);
-      if (selCell) tr.appendChild(selCell);
+      if (selCell)  tr.appendChild(selCell);
       reordered.forEach((cell) => cell && tr.appendChild(cell));
+      if (hideCell) tr.appendChild(hideCell);
     });
   }
   // Post-fetchList hook. fetchList wholesale rewrites `tbody.innerHTML`,
