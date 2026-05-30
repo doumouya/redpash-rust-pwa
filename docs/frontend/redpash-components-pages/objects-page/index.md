@@ -619,6 +619,6 @@ shell as the landing page's login / contact modals:
 
 ## Cache / refresh
 
-Every change to the partial, CSS, JS, or any imported library component
-triggers a `service-worker.js` `CACHE_VERSION` bump. Unregister the SW
-+ hard-refresh (Ctrl+Shift+R) to see edits.
+The service worker is **install-only** and caches nothing, so partial /
+CSS / JS edits show up on a normal refresh — no `CACHE_VERSION` bump, no
+unregister-and-hard-refresh.

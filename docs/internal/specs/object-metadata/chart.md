@@ -157,7 +157,7 @@ stage
 ## Enum constraints
 
 `kind` (on the spec — not a column): see the canonical shape under
-Fields above. 13 chart kinds today. No DB CHECK; the FE chart engine
+Fields above. 7 rendered chart families today (more kinds are defined in the DTO but not rendered). No DB CHECK; the FE chart engine
 rejects unknown kinds with an inline error tile.
 
 `agg_fn` (on the spec — not a column): one of `count / sum / mean /

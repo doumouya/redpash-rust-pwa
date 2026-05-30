@@ -303,11 +303,10 @@ See [`features/reports.md`](../../features/reports.md) and
 
 ## Cache / refresh
 
-Every change to a page partial, the page's JS, or any imported library
-component triggers a `service-worker.js` `CACHE_VERSION` bump.
-Unregister the SW + hard-refresh (Ctrl+Shift+R) to see edits — or open
-the page in Firefox private (the dev server's `ServeDir` sends no
-`Cache-Control` headers, so Chrome heuristic-caches JS aggressively).
+The service worker is **install-only** and caches nothing, so edits show
+up on a normal refresh — no `CACHE_VERSION`, no unregister-and-hard-
+refresh ritual. (In dev the `ServeDir` sends no `Cache-Control` headers,
+so Chrome may heuristic-cache JS briefly; a single refresh clears it.)
 
 ---
 

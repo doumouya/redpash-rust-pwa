@@ -162,10 +162,9 @@ cargo watch -x 'run -p api'
 ```
 
 Backend changes auto-rebuild. **Frontend changes don't need a
-rebuild** — refresh the browser. The service worker may serve the
-old shell from cache: bump `frontend/service-worker.js`
-`CACHE_VERSION` on every frontend-touching commit, or hard-refresh
-(`Ctrl+Shift+R`) during development.
+rebuild** — just refresh the browser. The service worker is install-only
+and caches nothing, so there's no stale-shell problem and no
+`CACHE_VERSION` to bump.
 
 ---
 
@@ -215,11 +214,13 @@ workspace Cargo.lock takes precedence. If it persists,
 **Symptom:** Hard-refreshing the browser doesn't pick up changes to
 JS / CSS files.
 
-**Cause:** The service worker is serving the previous cache.
+**Cause:** A legacy service-worker cache from before the SW went
+install-only.
 
-**Fix:** Bump `CACHE_VERSION` in `frontend/service-worker.js`. In
-DevTools → Application → Service Workers → "Unregister" then
-hard-refresh as a last resort.
+**Fix:** The current `frontend/service-worker.js` caches nothing and
+deletes old caches on activate, so a normal refresh suffices. If a stale
+cache lingers from an old build: DevTools → Application → Service Workers
+→ "Unregister", then refresh once.
 
 ### Google OAuth callback says "redirect_uri_mismatch"
 
@@ -277,7 +278,7 @@ redpash-app/
 │   └── migrations/*.sql                schema (auto-applied at boot)
 ├── frontend/
 │   ├── index.html
-│   ├── service-worker.js               bump CACHE_VERSION on FE changes
+│   ├── service-worker.js               install-only (PWA); caches nothing
 │   ├── partials/                       HTML per route
 │   ├── styles/                         CSS tokens + components + pages
 │   └── scripts/                        modules

@@ -146,10 +146,9 @@ experience. A user with three related CSVs gets the join workflow.
 The complexity surfaces only when the data requires it.
 
 **Server-rendered where it matters.** The frontend is vanilla JS, no
-bundler in dev. Pages load on first paint. The PWA shell caches the
-chrome so subsequent loads are instant. The 13 chart kinds are the
-only piece that pulls in a heavy CDN library (ECharts), and they do
-so lazily on first chart mount.
+bundler in dev. Pages load on first paint. The chart kinds are the only piece
+that pulls in a heavy library (ECharts) — self-hosted at
+`/vendor/echarts/`, not a CDN.
 
 ---
 
@@ -216,7 +215,7 @@ column on `users` is set server-side only.
 |---|---|---|
 | 1 — Foundation | ✅ Shipped | Cargo workspace, /api/health, router, page stubs, design tokens, service worker |
 | 2 — Cleaner | ✅ Shipped | parse / dtype / dedup / joins / steps, redtable, cleaning tools sidebar, undo/redo, encoding detection |
-| 3 — Reports & Dashboards | ✅ Shipped | Reports (group-by + matrix + filter + sort + Top-N + windows + 13 chart kinds), Dashboards (templates + chart-ref widgets) |
+| 3 — Reports & Dashboards | ✅ Shipped | Reports (group-by + matrix + filter + sort + Top-N + windows + chart authoring), Dashboards (chart-ref widgets) |
 | 4a — Auth (OAuth flow) | ✅ Shipped | Google OAuth code flow, `rp_session` cookie |
 | 4b — Auth (data scoping) | ✅ Shipped | Per-user data via `resolve_user_rid` |
 | 4c — Auth (polish) | ✅ Mostly shipped | Per-resource ownership checks (`routes::ensure_owner` + `db::*_owner`), `PATCH /api/me`, Profile + Settings pages, logout button. Share-link UI for `is_public` toggles still pending. |

@@ -297,7 +297,7 @@ flips the `.active` pill and writes through.
   per-file) — the persistence layer is in place for the upcoming
   "use my default" wiring.
 - **Default encoding** — pill group with **9 codecs matching the
-  cleaner sidebar detector** (`scripts/cleaner/tools/encoding.js`):
+  cleaner sidebar detector** (the encoding tool in `scripts/tools/`):
   auto-detect / `utf-8` / `utf-16le` / `utf-16be` / `windows-1252` /
   `iso-8859-1` / `iso-8859-15` / `windows-1250` / `macintosh`.
   Persisted to `localStorage["rp-default-encoding"]`.
@@ -404,6 +404,5 @@ Color treatment:
 
 ## Cache / refresh
 
-Every change to the partial, CSS, JS, or any imported library
-component triggers a `service-worker.js` `CACHE_VERSION` bump. Hard-
-refresh after edits.
+The service worker is **install-only** and caches nothing, so partial /
+CSS / JS edits show up on a normal refresh — no `CACHE_VERSION` bump.

@@ -326,7 +326,7 @@ columns, optional replacement) · `format_dates`
 
 Adding a new kind: arm in `data::steps::apply`, plus a helper in
 `data::*` (or inline if small), plus a frontend tool module under
-`scripts/cleaner/tools/` + sidebar wiring. If the new step is
+`scripts/tools/` + registry wiring in `scripts/tools.js`. If the new step is
 cell-level (preserves row count), add its `kind` string to the
 match-arm in `routes::files::add_step` so `cells_changed` gets
 reported in the response envelope.
@@ -337,12 +337,11 @@ reported in the response envelope.
 
 | Asset | Location |
 |---|---|
-| **Cleaner partial** | `partials/cleaner.html` |
-| **Controller** | `scripts/cleaner/index.js` — owns the uploader, redtable mount, action dispatch |
-| **Upload input** | `<input id="cleaner-file" type="file" accept=".csv,text/csv" hidden />` |
-| **Tools sidebar** | `scripts/cleaner/tools/sidebar.js` — one module per tool kind |
-| **Filter panel** | `scripts/cleaner/filters/panel.js` — also reused by the reports page |
-| **Redtable** | `scripts/redtable/*` (component dir) |
+| **Workspace partial** | `partials/workspace.html` — the cleaner is a mode of the unified workspace |
+| **Controller** | `scripts/pages/workspace.js` — owns the uploader, redtable mount, mode + action dispatch |
+| **Upload input** | hidden `<input type="file" accept=".csv,text/csv">` in the workspace |
+| **Cleaner tools** | `scripts/tools/` (`actions.js` / `catalog.js` / `fields.js`) + `scripts/tools.js` (registry) |
+| **Redtable** | the `rt-table` surface (`styles/table.css`), windowed via `scripts/virtual-rows.js` |
 
 ---
 

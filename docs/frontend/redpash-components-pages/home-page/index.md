@@ -264,7 +264,6 @@ hidden in CSS by id-scoped rules — never branch the template by spec.
 
 ## Cache / refresh
 
-`service-worker.js` `CACHE_VERSION` bumps on every change to a
-partial, atom CSS, page CSS, or page JS. Hard-refresh
-(Ctrl+Shift+R) twice — once to fetch the new worker, again so it
-controls the page — to see edits.
+The service worker is **install-only** and caches nothing, so a
+partial / CSS / JS change shows up on a normal refresh — no
+`CACHE_VERSION`, no double hard-refresh.

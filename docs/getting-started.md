@@ -83,7 +83,7 @@ frontend/
     dom.js / format.js — esc + cssEsc / fmtAge / fmtTime / fmtClock / dayKey / dayLabel
     events.js        — frontend error capture → POST /api/events
   styles/                — flat per-concern sheets (no subdirs). `main.css` is the @import manifest; `tokens.css` holds `--rp-*` design tokens.
-  service-worker.js      — cache-first shell, network-first /api. Bump `CACHE_VERSION` on every frontend-touching commit.
+  service-worker.js      — install-only (PWA installability); caches nothing, so no `CACHE_VERSION` and no hard-refresh dance.
 docs/                    — these docs (served at /docs/<slug>); internal team docs under `docs/internal/`
 tools/                   — `*-audit/audit.js` scripts auto-discovered by `tools/audit.sh`. 9 audit tools today.
 ```
@@ -95,9 +95,9 @@ tools/                   — `*-audit/audit.js` scripts auto-discovered by `tool
   redtable / observability / auth / tab-compare in one shot. `audit.run`
   + `audit.finding` persist findings; `audit.run_diff()` surfaces drift
   between runs. See [internal/processes/audit-cadence.md](internal/processes/audit-cadence.md).
-- **Bump the service-worker cache** on every frontend-touching commit
-  (`frontend/service-worker.js` → `CACHE_VERSION = "v…"`). Otherwise the
-  browser keeps serving the old shell past hard refresh.
+- **No service-worker cache to bump.** `frontend/service-worker.js` is
+  install-only — it registers for PWA installability and caches nothing,
+  so frontend changes show up on a normal refresh (no `CACHE_VERSION`).
 - **DTOs round-trip via `serde`** — every backend change to a wire shape
   needs a matching frontend update. Adding fields with `#[serde(default)]`
   keeps older saved specs deserialising cleanly.

@@ -224,7 +224,7 @@ behaviourally.
    is hidden.
 8. **Verify the filter happens at render-time**, not fetch-time
    (Invariant 1).
-9. **Bump `CACHE_VERSION`** in `frontend/service-worker.js`.
+9. **No `CACHE_VERSION` bump** — the service worker is install-only; a normal refresh shows the change.
 10. **One commit per replication** — `area(page): replicate <feature>
     from <page-A>` — naming the source page makes the diff trivially
     reviewable.
