@@ -9,6 +9,8 @@ status: filled
 
 # Audit storage
 
+> **Design spec**: [`../specs/audit-storage-design.md`](../specs/audit-storage-design.md) — the architectural rationale and the run/finding/diff model. This subsystem doc is the *how-it-works* description; the spec is the *what-it-pins*.
+
 The audit suite tracks codebase health over time. Each
 `tools/<x>-audit/audit.js` Node script scans one slice of the
 repo (CSS conflicts, HTML duplication, JS LOC, …) and produces a
