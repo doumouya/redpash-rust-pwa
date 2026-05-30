@@ -1154,9 +1154,44 @@ export default function cases(app, { session }) {
     await patchCase({ description: next });
   });
 
+  // RID display — CAS_5F3C7A21D8E94B6E92A1C0F4B3D7E0A2 is unreadable
+  // in the head bar (40+ chars, eats the title space). Show the prefix
+  // + 4 chars of the hex; full RID lives in title= for hover and gets
+  // copied to clipboard on click.
+  function shortenRid(rid) {
+    if (!rid || typeof rid !== "string") return rid || "";
+    const us = rid.indexOf("_");
+    if (us < 0 || rid.length - us - 1 <= 5) return rid;
+    return rid.slice(0, us + 5) + "…";
+  }
+
+  if (ridEl) {
+    ridEl.setAttribute("role", "button");
+    ridEl.setAttribute("tabindex", "0");
+    const copyRid = async () => {
+      if (!currentDetailRid) return;
+      try { await navigator.clipboard.writeText(currentDetailRid); }
+      catch { /* no clipboard (no https / blocked) — silent */ }
+      const prev = ridEl.textContent;
+      ridEl.classList.add("is-copied");
+      ridEl.textContent = "Copied";
+      setTimeout(() => {
+        ridEl.classList.remove("is-copied");
+        ridEl.textContent = prev;
+      }, 1200);
+    };
+    ridEl.addEventListener("click", copyRid);
+    ridEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); copyRid(); }
+    });
+  }
+
   async function loadCaseDetail(rid) {
     currentDetailRid = rid;
-    if (ridEl) ridEl.textContent = rid;
+    if (ridEl) {
+      ridEl.textContent = shortenRid(rid);
+      ridEl.title = rid + " — click to copy";
+    }
     if (titleEl) { titleEl.textContent = "Loading…"; titleEl.title = ""; }
     if (commentsList) commentsList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading comments…</p>';
     if (activityList) activityList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading activity…</p>';

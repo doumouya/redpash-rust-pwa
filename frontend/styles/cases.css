@@ -427,11 +427,31 @@
   border-bottom: 1px solid var(--rp-border);
   background: var(--rp-surface-2);
 }
+/* Truncated RID pill — shows CAS_4B7B… (prefix + 4 chars) instead of
+   the full 36-char hex. Click → copies the full RID to clipboard, with
+   a 1.2s "Copied" textContent flash. Full RID kept in title= for hover. */
 .rp-cases-detail-rid {
   flex-shrink: 0;
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
+  cursor: pointer;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 0.3125rem;
+  border: 1px solid transparent;
+  transition: background 0.14s var(--rp-ease),
+              color 0.14s var(--rp-ease),
+              border-color 0.14s var(--rp-ease);
+}
+.rp-cases-detail-rid:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+  border-color: var(--rp-border);
+}
+.rp-cases-detail-rid.is-copied {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+  border-color: var(--rp-accent-2);
 }
 /* Close X — anchors to /cases (no ?id=) so the router clears
    the detail. Plain link, no rt-btn chrome — the head bar
@@ -1238,31 +1258,6 @@
    The dialog shell + form fields come from the shared rp-modal-*
    atom (modal.css) — the "third caller" the old comment predicted
    (cases + home + monitoring) landed, so the shell was lifted out
-   2026-05-29. Only the cases-specific attachments placeholder stays
-   here: page content, not shell. It renders a "backend pending"
-   notice until POST /api/cases/:rid/attachments ships. */
-.rp-cases-modal-attachments-pending {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px dashed var(--rp-border);
-  border-radius: 0.4375rem;
-  background: var(--rp-surface-2);
-  color: var(--rp-text-mute);
-  font-size: 0.7188rem;
-  line-height: 1.45;
-}
-.rp-cases-modal-attachments-pending i {
-  font-size: 0.875rem;
-  color: var(--rp-accent-2);
-  margin-top: 1px;
-}
-.rp-cases-modal-attachments-pending code {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  color: var(--rp-accent-2);
-  background: var(--rp-bg);
-  padding: 1px 0.3125rem;
-  border-radius: 0.25rem;
-}
+   2026-05-29. The attachments placeholder retired 2026-05-30 —
+   the upload affordance will be authored here when POST
+   /api/cases/:rid/attachments ships, not stubbed in advance. */

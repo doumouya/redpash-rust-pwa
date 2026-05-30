@@ -87,12 +87,12 @@
       </div>
     </aside>
 
-    <!-- ════ main — kanban always rendered; detail slides in on top ════
-         Em's call (vs the Salesforce screenshot): no full-page swap
-         when you open a case. The kanban stays visible behind the
-         detail panel so you can keep scanning the board, and the
-         rail still navigates between cases without losing the
-         board context. -->
+    <!-- ════ main — board ⇄ detail, mutually exclusive (Em 2026-05-28) ════
+         Clean two-state swap: opening a case shows ONLY the case
+         (full-bleed detail); closing shows ONLY the board. The rail
+         stays as the constant nav so case-to-case jumps don't lose
+         context. Earlier draft (kanban-behind-detail overlay) was
+         dropped — see cases.js renderRoute() for the toggle. -->
     <main class="rp-main rp-cases-main">
 
       <!-- board view (always rendered now) — a 3-row overview
@@ -312,15 +312,10 @@
                       placeholder="Steps to reproduce, context, expected behavior… (optional)"></textarea>
             <p class="rp-modal-hint">Plain text for v1. Markdown render comes with v2 polish.</p>
           </div>
-          <div class="rp-modal-field">
-            <label class="rp-modal-label">Attachments</label>
-            <div class="rp-cases-modal-attachments-pending">
-              <i class="bi bi-paperclip"></i>
-              <span>Screenshots + log files — backend pending (queued for Gus).
-                    The upload affordance lights up here once <code>POST
-                    /api/cases/:rid/attachments</code> ships.</span>
-            </div>
-          </div>
+          <!-- Attachments — intentionally absent. The upload affordance
+               will land here when POST /api/cases/:rid/attachments ships;
+               showing a disabled stub now teaches users that some
+               affordances lie (anti-pattern, see [[unify-behavior-not-names]]). -->
         </div>
         <footer class="rp-modal-foot">
           <button class="rt-btn rt-btn--glass" type="button"
