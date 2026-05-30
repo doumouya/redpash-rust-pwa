@@ -7,10 +7,10 @@
 
 /* ── main pane override ───────────────────────────────────────
    The cases main holds two mutually-exclusive surfaces (the board
-   overview card + the full-bleed detail), unlike the single-surface
-   .rp-main on other pages. Drop .rp-main's padding to 0 so the detail
-   reads edge-to-edge; the board re-insets itself with its own margin
-   (see .rp-cases-board). overflow:hidden keeps the kanban's internal
+   overview + the open-case detail), unlike the single-surface .rp-main
+   on other pages. Both are now floating `.rp-surface` cards that re-inset
+   with their own 0.875rem margin, so .rp-main's padding drops to 0 to
+   avoid a double inset. overflow:hidden keeps the kanban's internal
    scroll from spawning an outer scrollbar. Higher specificity than the
    base .rp-main, so these win. */
 .rp-main.rp-cases-main {
@@ -282,7 +282,8 @@
   padding: 0.5625rem 0.625rem;
   color: inherit;
   text-decoration: none;
-  cursor: pointer;
+  cursor: grab;                  /* draggable between kanban columns */
+  position: relative;            /* anchors the ::before priority bar */
   transition: border-color 0.12s var(--rp-ease), box-shadow 0.12s var(--rp-ease);
 }
 .rp-cases-card:hover {
@@ -293,9 +294,8 @@
   outline: 0.125rem solid var(--rp-accent-2);
   outline-offset: 1px;
 }
-/* Drag-drop (Em 2026-05-28) — grab cursor hints draggability; the
-   dragged card dims + the target column lifts an accent ring. */
-.rp-cases-card { cursor: grab; }
+/* Drag-drop (Em 2026-05-28) — the dragged card dims + the target
+   column lifts an accent ring. (cursor:grab lives on the base rule.) */
 .rp-cases-card.is-dragging {
   opacity: 0.45;
   cursor: grabbing;
@@ -399,8 +399,8 @@
    The priority bar is a ::before (not a real border-left) so it never
    collides with the card's 1px border or the accent-2 hover border,
    and it follows the card's left corner radius. Color tokens match
-   the priority dot still used in the rail. */
-.rp-cases-card { position: relative; }
+   the priority dot still used in the rail. (position:relative lives on
+   the base rule.) */
 .rp-cases-card::before {
   content: "";
   position: absolute;
@@ -442,19 +442,14 @@
    flex children of .rp-cases-main; the rail stays as the constant
    cross-case nav. Close affordances: X in the head, Esc key, or
    clicking another rail card (swaps the loaded case in-place). */
+/* The open-case view composes `.rp-surface` (in the partial) so it's the
+   same floating, chrome'd card the board is — opening a case no longer
+   drops to a full-bleed slab on the raw bg. `.rp-surface` owns the flex
+   column + card chrome (bg / border / radius / shadow / overflow); only
+   the case-specific deltas live here. (Em 2026-05-31 consistency pass.) */
 .rp-cases-detail {
-  flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 0;
-  background: var(--rp-bg);
-  overflow: hidden;
-  /* Rounded top-left where the surface meets the rail + topbar —
-     the "lifted content surface" chrome pattern ([[chrome-visual-
-     direction]]). overflow:hidden above clips the head to the curve. */
-  border-top-left-radius: 14px;
+  margin: 0.875rem;           /* float like .rp-cases-board */
 }
 .rp-cases-detail[hidden] { display: none; }
 
@@ -610,11 +605,6 @@
     border-left: 0;
     border-bottom: 1px solid var(--rp-border);
   }
-  .rp-cases-detail-side .rp-cases-detail-edit {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 0.5rem 0.75rem;
-  }
 }
 
 /* Title in the head bar — single-line truncated; full title
@@ -649,60 +639,6 @@
   cursor: text;
 }
 
-/* Editable controls — vertical stack of label + control rows in
-   the sidebar. Each row labels the field above the control so a
-   non-tech user sees what they're changing without parsing icons. */
-.rp-cases-detail-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-.rp-cases-detail-side .rp-cases-control {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-}
-.rp-cases-detail-side .rp-cases-control-select,
-.rp-cases-detail-side .rp-cases-side-edit {
-  width: 100%;
-}
-
-/* Meta block — three label/value pairs as a definition list.
-   Values get text emphasis; labels stay muted + uppercase to
-   carry the eye to the value. */
-.rp-cases-detail-side-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--rp-border);
-  border-bottom: 1px solid var(--rp-border);
-}
-.rp-cases-detail-side-meta > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.rp-cases-detail-side-meta dt {
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
-.rp-cases-detail-side-meta dd {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--rp-text);
-  min-width: 0;
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* Collapsible sidebar section — native <details> styling so the
    browser handles the open/close affordance + keyboard nav for
@@ -817,7 +753,10 @@
    Label + inline-editable value rows. Priority / Type / Category open a
    value menu; Assignee opens the user picker. */
 .rp-cases-props { display: flex; flex-direction: column; gap: 0.0625rem; }
-.rp-cases-props--meta { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--rp-border); }
+/* A divided section break — the people/timeline groups + the error/
+   description blocks share the same top-rule + spacing. */
+.rp-cases-props--meta,
+.rp-cases-side-blk { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--rp-border); }
 .rp-cases-prop {
   position: relative;            /* anchors the value menu + assignee picker */
   display: flex;
@@ -913,7 +852,6 @@
 .rp-cases-source-badge.is-external { color: var(--rp-peach); background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
 
 /* sidebar blocks — error payload + description */
-.rp-cases-side-blk { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--rp-border); }
 .rp-cases-side-blk-head {
   display: flex;
   align-items: center;
@@ -973,46 +911,6 @@
   padding: 0.5rem 0 0.25rem;
   gap: 0.25rem;
   flex-wrap: wrap;
-}
-.rp-cases-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-.rp-cases-control-lbl {
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
-.rp-cases-control-select {
-  height: 1.75rem;
-  padding: 0 1.625rem 0 0.625rem;          /* extra right pad for the native chevron */
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.875rem;             /* pill — reads as a chip */
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  outline: 0;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--rp-text-mute) 50%),
-                    linear-gradient(135deg, var(--rp-text-mute) 50%, transparent 50%);
-  background-position: right 0.6875rem center, right 0.4375rem center;
-  background-size: 0.25rem 0.25rem;
-  background-repeat: no-repeat;
-}
-.rp-cases-control-select:focus,
-.rp-cases-control-select:hover {
-  border-color: var(--rp-accent-2);
-}
-/* Assignee chip-control needs positioning context for the picker
-   dropdown to anchor below it. */
-.rp-cases-control--assignee {
-  position: relative;
 }
 
 /* Read-only info row — reporter + create/update timestamps. Sits
@@ -1530,12 +1428,6 @@
   flex-shrink: 0;
 }
 /* Extra-small avatar — fits inline in the centered assignee chip. */
-.rp-cases-user-avatar--xs {
-  width: 1rem;
-  height: 1rem;
-  font-size: 0.5rem;
-  flex-shrink: 0;
-}
 
 /* ── activity ─────────────────────────────────────────────────── */
 .rp-cases-activity-list {
@@ -1576,43 +1468,6 @@
   word-break: break-word;
 }
 
-/* ── assignee chip-button + picker ────────────────────────────
-   Sits inside `.rp-cases-control--assignee` in the inline meta
-   controls. Click → reveals the picker below; outside-click +
-   pick-result close it. Shape mirrors the chip selects so the
-   row reads as one control set. */
-.rp-cases-side-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 1.75rem;
-  padding: 0 0.625rem;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.875rem;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  text-align: left;
-  cursor: pointer;
-}
-.rp-cases-side-edit:hover {
-  border-color: var(--rp-accent-2);
-}
-.rp-cases-side-edit-value {
-  max-width: 10rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rp-cases-side-edit-icon {
-  flex: 0 0 auto;
-  font-size: 0.6875rem;
-  color: var(--rp-text-mute);
-}
-.rp-cases-side-edit:hover .rp-cases-side-edit-icon {
-  color: var(--rp-text);
-}
 .rp-cases-side-picker {
   position: absolute;
   top: calc(100% + 0.375rem);
@@ -1625,10 +1480,6 @@
 /* Centered + muted from `.rt-empty` (shell.css); only the
    detail-page block-padding stays. */
 .rp-cases-empty { padding: 1rem; }
-.rp-cases-empty--inline {
-  padding: 0.25rem 0;
-  text-align: left;
-}
 
 /* ── user avatar badge ──────────────────────────────────────
    Compact avatar+name row for the side-panel Reporter +
@@ -1674,12 +1525,6 @@
   font-size: 0.75rem;
   color: var(--rp-text-mute);
   font-style: italic;
-}
-/* Side-edit (assignee) button hosts a user badge inline — drop
-   its inner-value padding rules so the badge controls layout. */
-.rp-cases-side-edit .rp-cases-user-badge {
-  flex: 1;
-  min-width: 0;
 }
 
 /* ── activity filter pill row ───────────────────────────────
