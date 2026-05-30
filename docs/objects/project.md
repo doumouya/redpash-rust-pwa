@@ -267,9 +267,9 @@ needs more than one workspace.
 |---|---|
 | **Home page** | `partials/home.html` lists projects via `GET /api/projects` |
 | **Mount** | `scripts/pages/home.js` |
-| **Cleaner upload landing** | `scripts/cleaner/index.js` uploads — the backend resolves to the session user's default project, frontend doesn't pick |
-| **Report builder default** | `scripts/reports/index.js` reads `GET /api/projects` to find the project for `currentBody.project_redpash_id` when saving |
-| **Dashboard builder default** | Same pattern in `scripts/dashboards/index.js` |
+| **Workspace upload landing** | Upload in the workspace (`scripts/pages/workspace.js`) — the backend resolves the session user's default project; the frontend doesn't pick |
+| **Chart save default** | `routes::charts::create` derives the project from the chart's `source_file_id` (the source File's project) |
+| **Dashboard create default** | The workspace designer (`scripts/designer.js`) passes the open project's `project_redpash_id` to `POST /api/dashboards` |
 
 ---
 

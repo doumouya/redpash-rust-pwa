@@ -97,7 +97,7 @@ redpash-app/
 ├── frontend/
 │   ├── index.html                          shell (echarts + bootstrap-icons loaded from /vendor/, not a CDN)
 │   ├── service-worker.js                   install-only (PWA installability); NO caching — assets come from the network
-│   ├── vendor/                             self-hosted libs — echarts 5.4.3 + bootstrap-icons 1.11.3 (css + woff2/woff)
+│   ├── vendor/                             self-hosted libs — echarts 5.4.4 + bootstrap-icons 1.11.3 (css + woff2/woff)
 │   ├── partials/                           HTML per route, loaded by router
 │   ├── styles/                          flat per-area sheets (no subdirs) — tokens.css = :root --rp-* design tokens;
 │   │                                   base/shell/topbar/rail/panel/table/card/button/modal/page + per-page
@@ -110,7 +110,7 @@ redpash-app/
 │       ├── designer.js                     dashboard/chart designer canvas (tiles + per-tile config)
 │       ├── report.js                       report builder + inline undo/redo (undoStack/redoStack)
 │       ├── tools.js + tools/               cleaning-step UI dispatch — tools/{catalog,actions,fields}.js, re-exported via tools.js
-│       ├── charts/                         render.js (renderChart/resolveData/synthesizeOption) + builder-ui.js + build.js + home-bank.js + monitoring-bank.js
+│       ├── charts/                         build.js (buildOption — core option builder) + render.js (renderChart fetch-layer for live sources) + builder-ui.js + home-bank.js + monitoring-bank.js
 │       ├── echarts-kpi.js · echarts-theme.js  ECharts KPI helpers + theme registration
 │       ├── audit/                          ?audit=1 SPA capture (snapshot.js) — feeds tools/ui-snapshot-audit
 │       └── pages/                          per-page modules — home, workspace (cleaner+report+chart+dashboard), monitoring, cases, profile, settings, docs, login (+ cases/ home/ monitoring/ sub-folders)
@@ -223,13 +223,12 @@ redpash-app/
 | **Storage** | `project_files.spec` JSONB carries the `ChartSpec`; `source_file_id` self-FK (`ON DELETE CASCADE`) points at the csv-typed File the chart renders against. Deleting the source CSV cascades the chart. |
 | **DB helpers** | `db::charts::list_charts(owner)`, `find_chart`, `insert_chart`, `update_chart`, `delete_chart`, `chart_owner` (ownership gate). |
 | **API** | `GET /api/charts` (list), `POST /api/charts` (create), `GET·PUT·DELETE /api/charts/:rid` (RUD). |
-| **Kinds** | `bar`, `bar_horizontal`, `line`, `area`, `pie`, `funnel`, `gauge`, `pictorial_bar`, `scatter`, `heatmap`, `radar`, `boxplot`, `calendar`, `matrix` |
-| **Modifiers** | `smooth` (line/area), `donut`/`half`/`rose` (pie), `regression` (scatter), `symbol`/`symbol_repeat` (pictorial_bar), `y_group_by` (heatmap/radar/matrix), `rich_labels` (pie/bar) |
-| **Render** | `charts/render.js` — `resolveData(source)` derives the series, `synthesizeOption(data, kind)` builds the ECharts option, `renderChart(el, spec, theme)` mounts (disposing any prior instance) |
-| **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `subtotalsToMatrix`, `detailsToScatterSeries` |
-| **Data source** | charts re-aggregate via `POST /api/group/preview` (`charts/builder-ui.js`); specs persist as `project_files.spec` (the designer holds them) |
-| **Builder** | Workspace page's chart-builder mode — family `<select>` + inline-SVG variant tiles. |
-| **Library** | ECharts 5.4.3, **self-hosted** at `/vendor/echarts/echarts.min.js` (global `window.echarts`, loaded in `index.html`) — no longer a CDN dependency (2026-05-30); ecStat lazy-loaded for regression fits |
+| **Kinds** | **Rendered** (`buildOption` families): `cartesian` (bar/line/area), `barh`, `pie` (pie/donut/half_donut/rose), `scatter`, `radar`, `gauge`, `pictorial`. **Not implemented** (no branch — nominal in the Rust DTO only): `funnel`, `heatmap`, `boxplot`, `calendar`, `matrix`. |
+| **Modifiers** | `smooth` (line/area); pie variants `donut`/`half_donut`/`rose` are `cfg.type` values, not bools; `symbol`/`symbol_repeat` (pictorial). The DTO also carries `regression`/`y_group_by`/`rich_labels`, but `buildOption` does **not** render them. |
+| **Render** | Two layers. `charts/build.js` `buildOption(cfg, theme)` is the core per-kind ECharts-option builder (pie/barh/scatter/radar/gauge/pictorial/… branches); the **designer** (`scripts/designer.js`) calls it directly for workspace chart tiles + dashboard tiles, where data is baked into `cfg.option`. `charts/render.js` `renderChart(el, spec, theme)` wraps `buildOption` and adds render-time fetch for non-baked sources (`resolveData` → `synthesizeOption`); it's the mount path for **Home / Settings / Monitoring** charts (disposing any prior instance). |
+| **Data shaping** | Baked charts: the designer re-aggregates via `POST /api/group/preview` (`charts/builder-ui.js` + `designer.js`) and writes `cfg.option` (`xAxis.data` + `series[].data`), which `buildOption` reads directly — there are **no** `subtotalsTo*` extractors (those were retired with `widgets.js`). Live charts: `render.js` `synthesizeOption(data, kind)` shapes a fetched payload into the same `cfg.option` shape. Specs persist as `project_files.spec`. |
+| **Builder** | The designer's right-hand accordion (`charts/builder-ui.js`): Chart type (a `TYPE_LIST` grid) · Data (source + group-by + measure) · Axes · Legend · Tooltip · Style. Editing group-by/fn/col re-aggregates via `/group/preview`. |
+| **Library** | ECharts 5.4.4, **self-hosted** at `/vendor/echarts/echarts.min.js` (global `window.echarts`, loaded in `index.html`) — no longer a CDN dependency (2026-05-30); ecStat lazy-loaded on demand |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
 
 ### Company (`Company`, `CompanyMember`, `CompanySummary`)
@@ -343,7 +342,7 @@ redpash-app/
 | **Partial** | `partials/workspace.html` — rail-shell host: project/file rail, redtable canvas, mode-switching toolbar |
 | **Page module** | `scripts/pages/workspace.js` — file-by-rid dispatcher routes by prefix (`CHT_…` → chart builder; else by `file_type` → csv viewer / dashboard builder) |
 | **Modes** | csv viewer (cleaner steps), report builder (group-by + sort + top-n + windows), chart builder (family `<select>` + variant tiles), dashboard builder (templates + widgets) — all on one page, mode-switching via the toolbar |
-| **Rail UX** | inline project rename (hover pencil); upload-progress ghost tabs per file with shimmer/done/failed states (see `service-worker.js` `CACHE_VERSION` for cache discipline) |
+| **Rail UX** | inline project rename (hover pencil); upload-progress ghost tabs per file with shimmer/done/failed states |
 | **Endpoints** | `GET /api/files/:rid/page?…` · `POST /api/files/:rid/steps` · `GET·POST·PUT·DELETE /api/charts` · `GET·POST·PATCH /api/dashboards` |
 | **Docs** | [`features/cleaner.md`](features/cleaner.md) · [`features/reports.md`](features/reports.md) · [`features/dashboards.md`](features/dashboards.md) · [`features/charts.md`](features/charts.md) — all four describe modes of the unified Workspace |
 
@@ -396,12 +395,12 @@ redpash-app/
 ### Sessions + ownership
 - **Identity resolver:** `resolve_user_rid(state, headers)` — re-exported from `routes::mod` as `pub(crate)`. Returns the session user (via `rp_session` cookie) or falls back to `state.dev_user` when OAuth is unconfigured.
 - **Owner gate:** `routes::ensure_owner(lookup, expected_user, label, rid)` — re-exported from `routes::mod`. Each detail handler calls a `db::*_owner(rid)` lookup helper (`project_owner` / `chart_owner` / `dashboard_owner` / `file_owner`) and feeds the result through `ensure_owner`. 404s with `kind="not_found"` on miss or mismatch — same message format both ways so existence isn't leaked.
-- **Coverage:** every owner-scoped handler in `routes/{me,projects,files,reports,dashboards}.rs`. The cross-resource handlers (`/reports` create + update, `/reports/preview`, `/files/:rid/joins` POST, `/dashboards` create) also check ownership of every referenced RID.
+- **Coverage:** every owner-scoped handler in `routes/{projects,files,charts,dashboards,group}.rs`. The cross-resource handlers (`/charts` create, `/group/preview`, `/files/:rid/joins` POST, `/dashboards` create) also check ownership of every referenced RID.
 
-### Chart pipeline (`charts/render.js`)
-- `charts/render.js` exposes `resolveData` / `applyTransform` / `synthesizeOption` / `renderChart` (mounts + disposes any prior instance on the element).
-- Charts re-aggregate via `POST /api/group/preview` (`charts/builder-ui.js`); the renderer is theme-aware via `echarts-theme.js`.
-- Scatter + heatmap + radar + boxplot + calendar + gauge have their own `subtotalsTo<Kind>` (or `detailsToScatterSeries`) extractor.
+### Chart pipeline (`charts/build.js` + `charts/render.js`)
+- `charts/build.js` `buildOption(cfg, theme)` is the core per-kind ECharts-option builder; the designer (`scripts/designer.js`) calls it directly for workspace + dashboard chart tiles.
+- `charts/render.js` `renderChart(el, spec, theme)` wraps `buildOption` and adds render-time fetch for non-baked sources (`resolveData` → `applyTransform` → `synthesizeOption`); it mounts Home / Settings / Monitoring charts and is theme-aware via `echarts-theme.js` (disposes any prior instance on the element).
+- Baked charts re-aggregate via `POST /api/group/preview` (`charts/builder-ui.js` + `designer.js`) and bake the result into `cfg.option`; there are no `subtotalsTo*` extractors (retired with `widgets.js`).
 - Adding a new kind: see "Adding a new chart kind" in [`features/charts.md`](features/charts.md).
 
 ### Undo / Redo
@@ -517,7 +516,7 @@ redpash-app/
 
 **"I want to add an API endpoint"** → pick the matching `routes/*.rs` (or `routes/files/<family>.rs` for cleaner sub-handlers), add a handler, wire into the module's `routes()` fn.
 **"I want to add a SQL query"** → `crates/api/src/db/<resource>.rs` (per-resource sub-module post the 2026-05-27 decomp). One helper per task. Take `&PgPool`, return DTOs from `shared::*`. Re-exports at `db::*` mean callers keep working without import changes.
-**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `charts/render.js`, the workspace chart-builder mode in `scripts/pages/workspace.js`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
+**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `charts/build.js` (`buildOption` kind branch + `TYPE_TO_KIND` / `TYPE_LIST`), the chart-builder UI (`charts/builder-ui.js` + `scripts/designer.js`), `shared::report::ChartSpec` (only if new field), maybe `charts/render.js` `synthesizeOption` (live sources) + `data::group_by::AggFn`.
 **"I want to add a cleaning tool"** → backend: a new arm in `data::steps::apply` (the dispatcher, one-line route into the matching `steps/<family>.rs`) plus a helper in `data::steps::<family>`. Frontend: a tool module under `scripts/tools/` (and re-export via `tools.js`).
 **"I want to add a dashboard widget kind"** → widget dispatch lives in `scripts/designer.js` (per-tile) + the chart-kind map `CHART_KINDS` in `scripts/list-page.js`; widget spec lives in `DashboardSpec.widgets[].spec`.
 **"I want to add a wire-format field"** → `crates/shared/src/<obj>.rs`. Use `#[serde(default)]` so older specs deserialise.
@@ -574,7 +573,7 @@ docs: sync REDMAP for the Events system
 ### Phase progress
 - 1 — Foundation ✅
 - 2 — Cleaner ✅ — 18 step kinds shipped: 7 column-shape ops (`drop_columns`, `filter_columns`, `rename_column`, `snake_case_columns`, `replace_in_names`, `join_columns`, `split_column`), 3 row-shape (`drop_rows`, `drop_nulls`, `filter_rows`), 6 cell-value (`set_cell`, `fill_nulls`, `cast`, `change_case`, `replace_text`, `fix_invalid`, `format_dates`), 1 rescue (`unwrap_csv`). Excel→CSV at upload (calamine). Live cleanness scoring.
-- 3 — Reports & Dashboards ✅ (~13 chart kinds + window functions + Top-N + chart-ref widgets)
+- 3 — Reports & Dashboards ✅ (7 rendered chart families + window functions + Top-N + chart-ref widgets)
 - 4a — Google OAuth flow ✅
 - 4b — Per-user data scoping ✅
 - 4c — Per-resource ownership + Profile/Settings + logout button ✅. Share-link UI for `is_public` toggles still pending.

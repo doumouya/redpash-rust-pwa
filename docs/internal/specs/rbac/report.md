@@ -21,7 +21,7 @@ there's nothing Report-specific to gate:
 | What the user does | Key it actually checks |
 |---|---|
 | Open the report's data (the source CSV) | [`file.read`](file.md) on the source File |
-| Run / preview the report spec (`POST /api/reports/preview`) | [`file.read`](file.md) — preview reads the source frame; the ReportSpec isn't stored |
+| Run / preview the report spec (`POST /api/group/preview`) | [`file.read`](file.md) — preview reads the source frame; the ReportSpec isn't stored |
 | Save a chart out of the report (`POST /api/charts`) | [`chart.create`](chart.md) (+ `file.read` on the source) |
 | Edit / delete | **N/A** — edits land on the source CSV ([file](file.md)) or the attached [charts](chart.md); there's no Report row to mutate |
 | "List reports" | derived — the set of Files with `stage=design`; gated by [`file.list`](file.md) |
@@ -46,11 +46,9 @@ modify it exactly when they can `file.update` the source or
 
 ## Note for the enforcement layer
 
-When route-gating ships, the `/api/reports/*` endpoints gate on the
-**source File's** keys, not a Report key:
-- `POST /api/reports/preview` → `file.read` on `source_file_id` (or
-  `source_report_id`'s underlying File).
-- `POST /api/reports/:rid/run` → same.
+When route-gating ships, the grouping endpoint gates on the **source
+File's** keys, not a Report key:
+- `POST /api/group/preview` → `file.read` on `source_file_id`.
 
 If a future product decision makes Report a first-class saved entity
 (its own table + RID), it graduates to a full catalog doc at that

@@ -24,8 +24,8 @@ YAML frontmatter above).
 - [Cleaner workspace](features/cleaner.md) — paginated redtable, cleaning tools, undo/redo.
 - [Joins](features/joins.md) — detect candidate keys via overlap score; apply two-file joins.
 - [Reports](features/reports.md) — group-by, matrix, filter, sort, Top-N, window functions, charts panel.
-- [Dashboards](features/dashboards.md) — templates + chart-ref widgets.
-- [Charts](features/charts.md) — the 13 chart kinds and how they dispatch through `chart-render.js`.
+- [Dashboards](features/dashboards.md) — chart-ref widgets on a 12-column grid.
+- [Charts](features/charts.md) — the chart types and how they render via `charts/build.js`.
 
 ### Objects (DTOs that travel over the wire)
 - [Object model](objects/object-model.md) — **the locked contract.** Two entities (Project, File); Report/Dashboard are derived views; stage is computed.

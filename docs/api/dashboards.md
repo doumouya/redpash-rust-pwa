@@ -2,19 +2,19 @@
 title: Dashboards
 section: API
 order: 8
-last modified date: 2026-05-29
+last modified date: 2026-05-30
 ---
 
 # `/api/dashboards/*`
 
 CRUD + favourite toggle. A dashboard is a **dashboard-typed `project_files`
-row** (`file_type='dashboard'`, RID prefix `DSH_…` preserved for continuity);
-the standalone `dashboards` table was retired with mig 016. The persisted
-spec is a layout of widgets; each widget points at a saved chart
-(`CHT_…` — see [charts.md](charts.md)) and the data fetch happens widget-
-by-widget in the browser via the chart's preview/run endpoint. There is no
-backend dashboard-data endpoint — the API stays out of the chart-rendering
-loop.
+row** (`file_type='dashboard'`; new dashboards mint a `FIL_…` rid, pre-fold
+rows kept their `DSH_…`); the standalone `dashboards` table was retired in
+the object-model fold. The persisted spec is a layout of widgets; each
+widget points at a saved chart (`CHT_…` — see [charts.md](charts.md)) and
+the data fetch happens widget-by-widget in the browser, where each chart
+re-aggregates via `POST /api/group/preview`. There is no backend
+dashboard-data endpoint — the API stays out of the chart-rendering loop.
 
 **Route file:** [`crates/api/src/routes/dashboards.rs`](../../backend/crates/api/src/routes/dashboards.rs)
 **Object reference:** [objects/dashboard.md](../objects/dashboard.md)
@@ -102,7 +102,7 @@ Same body as `POST`. Returns the updated `Dashboard`.
 ## `PATCH /api/dashboards/:rid` — sparse metadata edit
 
 Same shape as charts — `PatchDashboardBody` with `title`,
-`description`, `is_favorite`, `folder`, all optional (`COALESCE`).
+`description`, `is_favorite`, `is_public`, `folder`, all optional (`COALESCE`).
 Drives the Objects-page inline-edit columns and the star toggle;
 keeps the spec out of scope so the Objects page doesn't need to round-
 trip it. Owner mismatch returns `404 not_found` (same shape as miss).
@@ -158,22 +158,22 @@ chart:
 ```
 
 At render time the frontend:
-1. Calls [`POST /api/charts/:chart_id/run`](charts.md) (cached per
-   `chart_id` for the dashboard view).
-2. Routes the resulting `ChartPage` through `chart-render.js` based on
-   the chart's `spec.kind`.
+1. Fetches each chart by id — `GET /api/charts/:chart_id` (in parallel).
+2. Re-aggregates the chart's grouping spec via `POST /api/group/preview`
+   and draws it with `buildOption` (`charts/build.js`).
 
-So a dashboard fetch fan-out is N chart runs, not N widget-specific
-endpoints. There's no `/api/dashboards/:rid/run` — the backend stays
-out of the chart-rendering loop.
+So a dashboard fetch fan-out is N chart fetches + N group-previews, not N
+widget-specific endpoints. There's no `/api/dashboards/:rid/run` and no
+`/api/charts/:rid/run` — the backend stays out of the chart-rendering loop.
 
 `text` widgets carry their markdown inline in `spec.markdown` and need
 no fetch.
 
-> **Legacy migration.** Widgets saved before mig 016 referenced
-> `report_id: "RPT_…"` + `chart_index`. The `report_chart_to_chart`
-> shim in [`spec.rs`](../../backend/crates/api/src/routes/dashboards.rs)
-> rewrites them to `chart_id` on read; the upgrade lands on next save.
+> **Legacy widgets.** Widgets saved before the chart-ref refactor
+> referenced `report_id` + `chart_index`; the designer no longer
+> understands that shape. On load it keeps only `kind === "chart"`
+> widgets and prunes any whose `chart_id` 404s, self-healing the spec
+> with a `PUT` — see [features/dashboards.md](../features/dashboards.md).
 
 ---
 
@@ -182,20 +182,15 @@ no fetch.
 - **Ownership gate.** Every detail endpoint resolves the session user and
   calls `db::dashboard_owner` via `routes::ensure_owner` — 404 on miss
   *or* on owner mismatch (same `kind`/message so existence isn't leaked).
-- **Legacy widgets.** Dashboards saved before the chart-ref refactor
-  used inline source pickers; on open the builder runs
-  `rebuildStaleWidgets()` to migrate them — but the persisted layout
-  is only re-saved when the user hits save.
-- **Inline grid styles use single quotes.** When a widget renders into
-  a CSS grid template area, the inline `style` attribute uses single
-  quotes (`style='grid-template-areas: "a b" "c d"'`) so the inner
-  quoted strings parse. Don't switch them.
+- **No template grid.** Tiles lay out on a fixed 12-column CSS grid
+  (`.ds-grid`); `DashboardSpec.template_id` is persisted but unused.
+  There is no named-template registry or `grid-template-areas` markup.
 
 ---
 
 ## Related
 
 - [objects/dashboard.md](../objects/dashboard.md) — `Dashboard`, `DashboardSpec`, `Widget` DTOs.
-- [features/dashboards.md](../features/dashboards.md) — templates + slot model + chart-ref refactor.
+- [features/dashboards.md](../features/dashboards.md) — chart-ref widgets, the designer + the render path.
 - [charts.md](charts.md) — where widgets actually get their data.
 - [files.md](files.md) — dashboards share the `project_files` row lifecycle (delete cascades via `entities`).

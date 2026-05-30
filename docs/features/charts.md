@@ -2,188 +2,163 @@
 title: Charts
 section: Features
 order: 3
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Charts
 
-Charts attach to a **report** (see [reports.md](reports.md)) and each
-one runs its own `/reports/preview` against the report's source file —
-independent of the report's table-level grouping. Same code renders
-them in the report viewer and embedded in dashboard widgets.
+A **chart** is a saved view of one CSV File: pick a `group_by` column and
+an aggregation, choose a type, and the chart re-runs that grouping every
+time it renders. A chart is a `project_files` row (`file_type='chart'`,
+`CHT_…` rid); its spec is stored opaquely in `project_files.spec`. See
+[objects/chart.md](../objects/chart.md) for the spec fields.
 
-## Architecture
+Charts are authored in the **workspace designer** (a lone chart opens on
+the designer canvas as a one-tile dashboard) and re-used, unchanged, as
+dashboard tiles — see [dashboards.md](dashboards.md).
+
+## Render pipeline
+
+Two layers, both in `scripts/charts/`:
 
 ```
-ReportSpec.charts: Vec<ChartSpec>
-              │
-              ▼
-       chartPreviewBody(source_file_id, cfg, filter)
-              │
-              ▼
-       POST /api/reports/preview  (4 body shapes — see below)
-              │
-              ▼
-       subtotalsTo<Kind>Series(res)  or  detailsToScatterSeries(res)
-              │
-              ▼
-       chartOption(cfg, …) or chartOption<Kind>(cfg, …)
-              │
-              ▼
-       ECharts.init(host).setOption(opt)
+chart cfg  ──► buildOption(cfg, theme)  ──► echarts.init(el).setOption(opt)
+(build.js)         core option builder
+                         ▲
+                         │  renderChart(el, spec, theme)   (render.js)
+                         └─ wraps buildOption; for non-baked sources it
+                            first fetches + synthesizeOption()s the data
 ```
 
-All of `chartOption*`, the extractors, and `chartPreviewBody` live in
-`scripts/dashboards/chart-render.js`. The Reports page
-(`scripts/pages/reports.js`) and the dashboard widget renderer both
-import from there.
+- **`charts/build.js`** — `buildOption(cfg, t)` is the core translator
+  from a chart `cfg` to an ECharts option. It branches on `cfg.kind`
+  (the family) and reads its data from `cfg.option` (the option baked at
+  save time), falling back to a small placeholder dataset on a fresh
+  chart. The **designer** calls `buildOption` directly for workspace +
+  dashboard tiles.
+- **`charts/render.js`** — `renderChart(el, spec, theme)` wraps
+  `buildOption` and adds render-time data fetching for non-baked
+  `spec.source` kinds (`resolveData` → `synthesizeOption`). It is the
+  mount path for **Home, Settings, and Monitoring** charts (live
+  `monitoring-stats` sources); `baked` is the default and skips the
+  fetch.
+
+### Where the data comes from
+
+A baked chart gets its data from the designer's **re-aggregation**: the
+tile builds a minimal grouping spec from the chart's `group_by` +
+`agg_col`/`agg_fn` and POSTs `{ source_file_id, spec }` to
+`POST /api/group/preview`, then writes the result into `cfg.option`
+(`xAxis.data` + `series[].data`) — the shape `buildOption` reads. There
+are **no** `subtotalsTo<Kind>` extractors (those were retired with the old
+`widgets.js`).
 
 ## ECharts loader
 
-`loadECharts()` (in `scripts/dashboards/echarts.js`) lazy-loads
-**ECharts 6** from CDN on first chart mount and registers the `redpash`
-theme (palette + tooltips pulled from CSS variables — works in dark
-mode too). The `matrix` kind needs the v6 `matrix` coordinate system.
+ECharts **5.4.4** is **self-hosted** at `/vendor/echarts/echarts.min.js`
+(global `window.echarts`, loaded in `index.html` — no CDN). Prebuilt
+Apache themes self-register via `echarts.registerTheme`; the in-house
+`redpash-mocha` / `redpash-latte` themes load on demand. `ecStat` is only
+pulled in when a feature needs a regression fit.
 
-`loadECStat()` lazy-loads `echarts-stat` only when a chart needs a
-regression fit. Single-promise shared across concurrent callers.
+## Chart types
 
-## Preview body shapes
+The type vocabulary lives in `TYPES` (`charts/build.js`). A **type** is
+the specific variant the user picks; each maps to a **kind** (the family
+`buildOption` branches on, via `TYPE_TO_KIND`):
 
-`chartPreviewBody` dispatches on `cfg.kind`:
+| Type (`cfg.type`) | Kind (`cfg.kind`) | Visual | Data shape |
+|-------------------|-------------------|--------|------------|
+| `bar`             | `cartesian`       | vertical bars | `(label, value)` from subtotals |
+| `line`            | `cartesian`       | line — `smooth` optional | `(label, value)` |
+| `area`            | `cartesian`       | filled line — `smooth` optional | `(label, value)` |
+| `barh`            | `barh`            | horizontal bars (category on y) | `(label, value)` |
+| `pie`             | `pie`             | pie | `(name, value)` |
+| `donut`           | `pie`             | annular pie | `(name, value)` |
+| `half_donut`      | `pie`             | semi-circle donut | `(name, value)` |
+| `rose`            | `pie`             | Nightingale (radius scales w/ value) | `(name, value)` |
+| `scatter`         | `scatter`         | point cloud — **value vs row index** (no paired x/y yet) | `[i, value]` |
+| `radar`           | `radar`           | single polygon, one indicator per category | `value[]` |
+| `gauge`           | `gauge`           | single-value speedometer | first value (or sum) |
+| `pictorial`       | `pictorial`       | bars drawn from repeated symbols | `(label, value)` |
 
-| Kind family                                                    | `group_by` sent    | `aggregations` sent                              | Reads back from |
-|----------------------------------------------------------------|---------------------|---------------------------------------------------|-----------------|
-| `bar` / `bar_horizontal` / `line` / `area` / `pie` / `funnel` / `pictorial_bar` / `calendar` | `[group_by]`        | `[{col, fn, alias: "value"}]`                     | `res.subtotals` |
-| `heatmap` / `radar` / `matrix`                                 | `[group_by, y_group_by]` | `[{col, fn, alias: "value"}]`                | `res.subtotals` |
-| `boxplot`                                                      | `[group_by]`        | 5 fixed aggs: `min`, `q1`, `median`, `q3`, `max`  | `res.subtotals` |
-| `gauge`                                                        | `[]`                | `[{col, fn, alias: "value"}]`                     | `res.subtotals` (1 row) |
-| `scatter`                                                      | `[]`                | `[]`                                              | `res.details`   |
+The accordion's **Chart type** section flattens `TYPE_LIST` into one grid,
+so any chart can switch to any other type without leaving the picker.
+Unknown kinds fall through to the `cartesian` branch.
 
-## Chart kinds
-
-| Kind             | Visual                          | Data shape                                              | Modifiers (ChartSpec fields)             |
-|------------------|---------------------------------|---------------------------------------------------------|------------------------------------------|
-| `bar`            | vertical bars                   | `[(label, value)]`                                      | —                                        |
-| `bar_horizontal` | horizontal bars                 | `[(label, value)]`, y-axis is the category              | —                                        |
-| `line`           | line chart                      | `[(label, value)]`                                      | `smooth`                                 |
-| `area`           | line with filled area           | `[(label, value)]`                                      | `smooth`                                 |
-| `pie`            | pie / donut / half / rose       | `[(name, value)]`                                       | `donut`, `half`, `rose`                  |
-| `funnel`         | stacked stages, widest on top   | `[(name, value)]`                                       | —                                        |
-| `gauge`          | speedometer-style single value  | scalar                                                  | (auto-scaled max)                        |
-| `pictorial_bar`  | bar with custom symbol          | `[(label, value)]`                                      | `symbol`, `symbol_repeat`                |
-| `scatter`        | x/y point cloud                 | `[[x, y], ...]` from raw filtered rows                  | `regression: linear / exponential / logarithmic / polynomial` |
-| `heatmap`        | 2D coloured grid                | `[[xIdx, yIdx, value]]` + axis labels                   | requires `y_group_by`                    |
-| `radar`          | polygon per series              | `{indicators, series}` (2-dim subtotals)                | requires `y_group_by`                    |
-| `boxplot`        | box+whiskers per group          | `[[min, q1, median, q3, max], ...]`                     | (canned 5-agg pipeline)                  |
-| `calendar`       | year-grid heatmap               | `[[date, value], ...]`; range auto-picked               | —                                        |
-| `matrix`         | ECharts 6 matrix-coord grid     | `[[xIdx, yIdx, value]]` + axis labels                   | requires `y_group_by`; ECharts 6 only    |
-
-Unknown kinds fall back to `bar` via `normalizeKind`.
+> **Not implemented.** Earlier docs listed `funnel`, `calendar`,
+> `heatmap`, `boxplot`, and `matrix`. `buildOption` has **no branch** for
+> these — they don't render. The Rust `ChartSpec` also carries a
+> `regression` field, but the scatter branch plots points only; it does
+> **not** draw a fitted line. Treat all of these as parked (see below),
+> not shipped.
 
 ## Modifiers
 
-### Pie family
+- **`smooth`** (`line` / `area`) → spline interpolation. Gated by the
+  `SMOOTHABLE` set.
+- **Pie variants** — `donut` / `half_donut` / `rose` are *types*, not
+  boolean flags, in the frontend cfg (they set `cfg.type`); `buildOption`
+  reads `cfg.type` to pick radius / `startAngle` / `roseType`.
+- **`symbol`** / **`symbol_repeat`** (`pictorial`) → the ECharts symbol
+  and whether it tiles along the bar (dotted look) vs stretches one.
 
-- `donut: true` → inner radius 45% (annular).
-- `half: true`  → semi-circle (`startAngle: 180, endAngle: 360`).
-- `rose: true`  → Nightingale chart, `roseType: "area"`. Slice radius
-  scales with value in addition to angle.
-- All combine: `half + donut = half donut`; `rose + donut = donut rose`.
+## Chart builder
 
-### Line / area
+The builder is the right-hand accordion in the designer
+(`charts/builder-ui.js` `mountBuilder`), six sections: **Chart type**
+(the `TYPE_LIST` grid), **Data** (source file + group-by + measure: agg
+fn + col), **Axes**, **Legend**, **Tooltip**, **Style** (theme picker).
+Editing group-by / fn / col fires `onDataChange` → the designer
+re-aggregates; changing the source file fires `onSourceChange`. The agg
+functions offered in the chart UI (`AGG_FNS`): `count`, `count_distinct`,
+`sum`, `mean`, `min`, `max`, `median`.
 
-- `smooth: true` → spline interpolation.
+Saving a chart is `POST`/`PUT /api/charts` (a `project_files` row);
+deleting is `DELETE /api/charts/:rid`. The chart's last baked ECharts
+option rides along in `cfg.option` so it re-renders correctly after a
+type/theme switch before the next re-aggregation.
 
-### PictorialBar
+## Themes
 
-- `symbol`: `circle` / `rect` / `roundRect` / `diamond` / `triangle` /
-  `pin` / `arrow` / `path://…`.
-- `symbol_repeat: true` → tile the symbol along the bar (dotted look);
-  otherwise one stretched symbol per bar.
+`THEMES` (`build.js`) carries both **inline** palettes (we emit explicit
+color/text/axis options — `vintage`, `latte`, `mocha`) and **registered**
+themes (`registered: true` — `buildOption` goes pass-through and lets the
+registered theme drive axis/tooltip/gauge bands: `macarons`, `roma`,
+`shine`, `infographic`, `redpash-mocha`, `redpash-latte`, `dark`,
+`tech-blue`, `v5`, `gray`).
 
-### Scatter
+## Parked kinds (not yet implemented)
 
-- `regression: "linear" | "exponential" | "logarithmic" | "polynomial"`
-  → fit line via ecStat, appended as a second series. Renders after
-  the base chart (ecStat loads async).
-
-## Chart builder → ChartSpec
-
-The Reports page builds charts from a left-rail builder
-(`partials/reports/chart-dock.html`) — not a modal. Chart type is a
-family `<select>` (`#nc-family`) plus a row of inline-SVG **variant
-tiles**; every variant is a tile, there are no modifier checkboxes.
-
-`_CHART_FAMILIES` in `scripts/pages/reports.js` is the registry. A
-multi-variant family (bar, line, area, pie, pictorial_bar) carries a
-`variants[]` array — each variant commits a `kind` (+ modifiers) to the
-active chart and ships an inline-SVG glyph for its tile:
-
-```js
-{ key: "pie", label: "Pie", variants: [
-  { id: "pie",        label: "Pie",        spec: { kind: "pie" },                g: `<svg…>` },
-  { id: "donut",      label: "Donut",      spec: { kind: "pie", donut: true },    g: `<svg…>` },
-  { id: "half_donut", label: "Half-donut", spec: { kind: "pie", donut: true, half: true }, g: `<svg…>` },
-  { id: "rose",       label: "Rose",       spec: { kind: "pie", rose: true },     g: `<svg…>` },
-]}
-```
-
-Single-variant families (scatter, heatmap, matrix, radar, boxplot,
-calendar, funnel, gauge) have `variants: []` — picked by the `<select>`
-alone, no tiles. Applying a variant resets all modifiers first, so
-switching never leaves a stale `smooth` / `donut` / `rose` / etc.
-
-## Rollup behaviour (history)
-
-Pre-Phase-A reports rolled up duplicate x labels client-side
-(`group: [formule, ville]` plotted as bar of `formule` had to sum the
-y per formule). That layer is gone — each chart now does its own
-backend aggregation, so duplicate-x cases don't occur. The chart's
-`group_by` *is* the x.
-
-## Remaining kinds (parked)
-
-Each of these needs a new data-shape commitment on `ReportSpec` /
-`chartPreviewBody` — none of them fit the existing aggregated /
-details / two-group-by / scalar pipeline as-is. Pick the one that
-matches the next real use case rather than implementing the whole
+Each needs a new data-shape commitment + a `buildOption` branch — pick the
+one that matches the next real use case rather than building the whole
 list speculatively.
 
-| Kind                       | Needed data shape                                      | Notes |
-|----------------------------|--------------------------------------------------------|-------|
-| **Sankey**                 | `(source, target, value)` flow triples                 | Cleanest of the heavy group. Could reuse the two-group-by pipeline if you allow source ≠ target. |
-| **Chord**                  | `(source, target, value)`                              | Same data as Sankey, circular layout. |
-| **Tree / Treemap / Sunburst** | `(parent, child, value)` hierarchy                  | One data model unlocks all three. Add a `parent_col` field on `ChartSpec` or build the hierarchy client-side from N group_bys. |
-| **Graph (network)**        | Node + link tables (two tables)                        | The current spec has one source frame; this needs two. |
-| **Parallel**               | Multi-axis numeric, N columns per row                  | Modal needs a multi-column picker. |
-| **ThemeRiver**             | `(time, category, value)`                              | Two-group-by + date axis. Could route through the existing heatmap body shape. |
-| **Geo / Map**              | geoJSON region key + value; sometimes pies overlaid    | Needs geoJSON registration + region-name join. `map-iceland-pie` from the official examples is parked here. |
-| **Candlestick**            | OHLC per time bucket                                   | Backend needs windowed pre-aggregation (per-period open/high/low/close). |
-| **Pie-nest**               | Two pie series at different radii                      | Not really a new kind — second series with inner radius. Could ship as a `nest: bool` modifier on pie. |
-| **Bar-rich-text (axis)**   | Per-category icon/image axis labels                    | The current "rich bar" handles data labels; this variant styles the axis category labels (flags / images). |
-| **Scatter timeline**       | Time-indexed bubble (life-expectancy variant)          | Needs timeline animation + bubble-size column + per-frame dataset. |
+| Kind | Needed data shape | Notes |
+|------|-------------------|-------|
+| **funnel** | `(name, value)` | Same data as pie; just a `series.type: "funnel"` branch. |
+| **heatmap / matrix** | `[[xIdx, yIdx, value]]` + axis labels | Needs a 2-dim group-by (`group_by` + a second column) and a re-aggregation that returns `(x, y, value)` rows. |
+| **boxplot** | `[min, q1, median, q3, max]` per group | Re-aggregate with the 5 quantile aggs (the engine already supports `q1`/`median`/`q3`/`min`/`max`). |
+| **calendar** | `[[date, value]]` | A date-bucketed group-by + ECharts `calendar` coord. |
+| **real scatter** | paired `(x, y)` | Today's scatter plots value-vs-index; true x/y needs a second measure column in the spec. |
+| **regression overlay** | base scatter + ecStat fit | The `regression` field exists in the DTO; wire `ecStat` into the scatter branch as a second series. |
+| **Sankey / Chord / Tree / Treemap / Sunburst / Graph / ThemeRiver / Geo / Candlestick** | flow triples / hierarchy / OHLC / geoJSON | Heavier — each needs its own data model; most don't fit the single-group-by-plus-agg pipeline. |
 
-## Adding a new chart kind
+## Adding a new chart type
 
-1. **chart-render.js**: add to `normalizeKind`, add a `chartOption`
-   branch (or a new `chartOption<Kind>` function if the data shape
-   differs), plus a `subtotalsTo<Kind>` extractor and the dispatch in
-   `chartPreviewBody`.
-2. **Backend (only if a new agg fn is needed)**: extend `AggFn` enum in
-   `shared::report` and the matching arms in `data::group_by::build_agg_exprs`
-   and `default_alias`.
-3. **scripts/pages/reports.js**:
-   - Add the kind to `_CHART_FAMILIES` — either a new single-variant
-     family `{ key, label, variants: [] }`, or a `variants[]` entry
-     (with an inline-SVG `g` glyph) under an existing family.
-   - Add an `<option value="<kind>">` to `#nc-family` in
-     `partials/reports/chart-dock.html`.
-   - If the kind needs a new builder field (Y dimension, regression,
-     symbol, …), add a `[data-cond-<name>]` row to `chart-dock.html`,
-     include it in `_builderFields`, and toggle it in
-     `_syncChartConditionals`.
-   - Map the kind in `_familyOf` / `_variantOf` if it carries modifiers.
-4. **widgets.js**: mirror the chart-render kind dispatch (the dashboard
-   widget renderer is a direct copy of the report's chart-mount path).
-5. Bump `service-worker.js` `CACHE_VERSION`.
+1. **`charts/build.js`** — add a `[type, icon, label]` entry to `TYPES`
+   under the right family (a new *variant* of an existing kind), or add a
+   new family key **plus** a `buildOption` branch for it (a new ECharts
+   shape). Add the type to `SMOOTHABLE` if it's line-like. The accordion's
+   Type grid picks up `TYPE_LIST` automatically.
+2. **Data shaping** — if the kind needs more than `group_by` + one agg,
+   extend the designer's `reaggregate` (`scripts/designer.js`) to build
+   the richer grouping spec and bake the right `cfg.option` shape. For
+   live (Home/Settings/Monitoring) charts, also handle it in
+   `charts/render.js` `synthesizeOption`.
+3. **Builder fields** — add any new per-kind controls to the Data section
+   in `charts/builder-ui.js`.
+4. **Backend (only if a new agg fn is needed)** — extend `AggFn` in
+   `shared::report` and the matching arms in `data::group_by`.
+5. **`scripts/list-page.js`** — add the kind to `CHART_KINDS` (the
+   kind→label map used by the file lists).

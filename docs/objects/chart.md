@@ -2,98 +2,100 @@
 title: Chart
 section: Objects
 order: 3
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Chart
 
-Inner DTO inside `ReportSpec.charts: Vec<ChartSpec>`. Defined in
-`shared::report::ChartSpec`. Each chart runs its own
-`/reports/preview` against the parent report's source file — see
-[features/charts.md](../features/charts.md) for the rendering pipeline.
+A saved chart is a `project_files` row (`file_type='chart'`, `CHT_…` rid)
+whose JSON spec is stored **opaquely** in `project_files.spec` — the
+backend never parses it (`routes::charts` treats it as `serde_json::Value`).
+
+`shared::report::ChartSpec` (below) is the **nominal** Rust DTO — it's the
+element type of `ReportSpec.charts: Vec<ChartSpec>` — but the builder
+leaves `ReportSpec.charts` empty, so in practice the persisted shape is the
+**frontend `cfg`** (the `kind`/`type`/`option`/theme vocabulary in
+`scripts/charts/build.js`). Treat the struct below as the field
+*reference*; what actually renders is whatever `buildOption` handles. See
+[features/charts.md](../features/charts.md) for the render pipeline.
+
+> A chart re-runs its grouping against its `source_file_id` via
+> `POST /api/group/preview` (not the retired `/api/reports/preview`).
 
 ## ChartSpec
 
 ```rust
 pub struct ChartSpec {
     pub title:         Option<String>,
-    pub kind:          String,
-    pub group_by:      String,          // x dimension (or series for radar/heatmap)
+    pub kind:          String,          // free-form; doc-comment lists bar|bar_horizontal|line|area|pie, unknown → bar
+    pub group_by:      String,          // x dimension; "" = unconfigured
     pub agg_col:       String,          // metric column; "*" for row count
-    pub agg_fn:        String,          // count | sum | mean | min | max | …
+    pub agg_fn:        String,          // count | count_distinct | sum | mean | min | max
     pub smooth:        bool,            // line / area
     pub donut:         bool,            // pie
     pub half:          bool,            // pie (semi-circle)
     pub rose:          bool,            // pie (Nightingale)
-    pub regression:    Option<String>,  // scatter: linear / exponential / logarithmic / polynomial
-    pub symbol:        Option<String>,  // pictorial_bar: circle / rect / triangle / …
-    pub symbol_repeat: bool,            // pictorial_bar: tile vs stretch
-    pub y_group_by:    Option<String>,  // heatmap / radar: 2nd categorical dim
-    pub rich_labels:   bool,            // pie / bar: multi-line styled data labels
+    pub regression:    Option<String>,  // scatter — DTO field only, NOT rendered (see note)
+    pub symbol:        Option<String>,  // pictorial: circle / rect / triangle / … / path://…
+    pub symbol_repeat: bool,            // pictorial: tile vs stretch
+    pub y_group_by:    Option<String>,  // 2nd categorical dim — DTO field only, NOT rendered
+    pub rich_labels:   bool,            // multi-line styled data labels — DTO field only, NOT rendered
 }
 ```
 
-## Field reference
+> **Nominal vs rendered.** The struct carries fields for kinds and
+> modifiers the current renderer doesn't implement. `regression`,
+> `y_group_by`, and `rich_labels` exist in the DTO but `buildOption`
+> ignores them. Don't assume a field renders just because it's here.
 
-| Field            | Type              | Applies to                              | Meaning |
-|------------------|-------------------|------------------------------------------|---------|
-| `title`          | `Option<String>`  | all                                      | Optional inline title |
-| `kind`           | `String`          | required                                 | See [kinds](#kinds) |
-| `group_by`       | `String`          | aggregated kinds, heatmap/radar (x), scatter (x), calendar (date) | Empty = unconfigured |
-| `agg_col`        | `String`          | aggregated kinds, scatter (y), boxplot (value) | `"*"` for row count |
-| `agg_fn`         | `String`          | aggregated kinds                         | Ignored for scatter / boxplot / gauge-grand-total |
-| `smooth`         | `bool`            | line / area                              | Spline interpolation |
-| `donut`          | `bool`            | pie                                      | Annular ring |
-| `half`           | `bool`            | pie                                      | Semi-circle (`startAngle: 180`) |
-| `rose`           | `bool`            | pie                                      | Nightingale (`roseType: "area"`) |
-| `regression`     | `Option<String>`  | scatter                                  | `linear` / `exponential` / `logarithmic` / `polynomial`; fitted client-side via ecStat |
-| `symbol`         | `Option<String>`  | pictorial_bar                            | ECharts symbol name or `path://…` SVG |
-| `symbol_repeat`  | `bool`            | pictorial_bar                            | `true` tiles the symbol; `false` stretches one |
-| `y_group_by`     | `Option<String>`  | heatmap / radar                          | Y-axis category for heatmap; spokes / indicators for radar |
-| `rich_labels`    | `bool`            | pie / bar                                | Multi-line styled data labels — pie slice shows name / value / percent; bar label splits category + value. No effect on kinds without data labels |
+## Frontend cfg (what's actually persisted)
 
-## Kinds
+The designer edits and saves a `cfg`, not a `ChartSpec`. Key fields
+(`charts/build.js`):
 
-| `kind`           | Family                  | Reads from `/preview`'s | Requires                            |
-|------------------|-------------------------|--------------------------|-------------------------------------|
-| `bar`            | aggregated category     | subtotals                | `group_by`, `agg_col`, `agg_fn`     |
-| `bar_horizontal` | aggregated category     | subtotals                | same                                |
-| `line`           | aggregated category     | subtotals                | same; optional `smooth`             |
-| `area`           | aggregated category     | subtotals                | same; optional `smooth`             |
-| `pie`            | aggregated single-dim   | subtotals                | same; optional `donut`/`half`/`rose`|
-| `funnel`         | aggregated single-dim   | subtotals                | same                                |
-| `pictorial_bar`  | aggregated category     | subtotals                | same + `symbol`, `symbol_repeat`    |
-| `calendar`       | aggregated by date      | subtotals                | `group_by` = date column, `agg_col`, `agg_fn` |
-| `gauge`          | scalar                  | one-row subtotals        | `agg_col`, `agg_fn` (no `group_by`) |
-| `scatter`        | raw rows                | details                  | `group_by` (x), `agg_col` (y); optional `regression` |
-| `heatmap`        | 2-dim aggregated        | subtotals                | `group_by`, `y_group_by`, agg       |
-| `radar`          | 2-dim aggregated        | subtotals                | `group_by` (series), `y_group_by` (indicators), agg |
-| `boxplot`        | 5-stat per group        | subtotals (5 cols)       | `group_by`, `agg_col` numeric (agg_fn ignored — runs canned min/q1/median/q3/max) |
-| `matrix`         | 2-dim aggregated        | subtotals                | `group_by`, `y_group_by`, agg — renders on the ECharts 6 `matrix` coord system |
+- **`type`** — the specific variant the user picked: `bar` · `line` ·
+  `area` · `barh` · `pie` · `donut` · `half_donut` · `rose` · `scatter` ·
+  `radar` · `gauge` · `pictorial`.
+- **`kind`** — the family `buildOption` branches on, derived from `type`
+  via `TYPE_TO_KIND`: `cartesian` · `barh` · `pie` · `scatter` · `radar`
+  · `gauge` · `pictorial`.
+- **`group_by` / `agg_col` / `agg_fn`** — the grouping the tile
+  re-aggregates via `/api/group/preview`.
+- **`option`** — the last baked ECharts option (so re-renders survive a
+  type/theme switch before the next re-aggregation).
+- **`smooth` · `symbol` · `symbol_repeat` · `legend` · `legendPos` ·
+  `tooltip` · `splitLines` · `axisLine` · `theme`** — chrome + modifiers.
 
-Unknown `kind` values fall back to `bar`.
+## Rendered kinds
+
+These are the families `buildOption` actually implements:
+
+| `cfg.kind` | Types | Data shape | Notes |
+|------------|-------|------------|-------|
+| `cartesian` | `bar`, `line`, `area` | `(label, value)` from subtotals | `smooth` on line/area |
+| `barh`      | `barh`                | `(label, value)`, category on y | |
+| `pie`       | `pie`, `donut`, `half_donut`, `rose` | `(name, value)` | variant set by `type` |
+| `scatter`   | `scatter`             | `[index, value]` | value-vs-row-index — no paired x/y yet |
+| `radar`     | `radar`               | `value[]`, one indicator per category | single series |
+| `gauge`     | `gauge`               | first value (or sum) | single-value KPI |
+| `pictorial` | `pictorial`           | `(label, value)` | repeated/stretched `symbol` |
+
+**Not implemented** (no `buildOption` branch — listed in older docs but
+they don't render): `funnel`, `calendar`, `heatmap`, `boxplot`, `matrix`.
+See the "parked kinds" table in [features/charts.md](../features/charts.md).
 
 ## Wire format example
 
 ```jsonc
 {
   "title": "Clients per formule",
-  "kind":  "bar",
+  "type":  "bar",
+  "kind":  "cartesian",
   "group_by": "formule",
   "agg_col":  "client_id",
   "agg_fn":   "count",
   "smooth":   false,
-  "donut":    false,
-  "half":     false,
-  "rose":     false,
-  "regression": null,
-  "symbol":     null,
-  "symbol_repeat": false,
-  "y_group_by": null,
-  "rich_labels": false
+  "theme":    "redpash-mocha",
+  "option":   { /* last baked ECharts option */ }
 }
 ```
-
-Older charts (pre-Phase-A) used `x` / `y` / `agg` (rollup reducer)
-fields. Those deserialise to ChartSpecs with empty `group_by` and need
-re-configuration via the chart modal.
