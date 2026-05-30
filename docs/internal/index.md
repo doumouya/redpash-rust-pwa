@@ -7,7 +7,7 @@ last modified date: 2026-05-24
 
 # RedPash internal docs
 
-The team-only counterpart to [public docs](../INDEX.md). Nine sections
+The team-only counterpart to [public docs](../INDEX.md). Thirteen sections
 plus this index and the [redmap](redmap.md). Each section captures a
 distinct *shape* of document, not a topic. Mixing shapes is the smell
 the old flat layout suffered from.
@@ -24,9 +24,13 @@ the old flat layout suffered from.
 | [runbooks](runbooks/index.md) | operational / incident playbooks | one per incident class |
 | [standup](standup/index.md) | daily logs, one append-only file per contributor | never retired — history |
 | [code](code/index.md) | the **what this file is** — one doc per source file under `tools/`, `frontend/scripts/`, `backend/crates/` | lives as long as the file does; refreshed in the touching commit (touch-policy) |
+| [observability](observability/index.md) | the **runtime visibility** — events / request_log / db_query_log capture + investigation playbooks | lives as long as the runtime stack does |
+| [cases](cases/index.md) | the **active workstream guide** — agent-facing operating playbook for the cases system | lives as long as the workstream is active |
+| [excel-edge-cases](excel-edge-cases/index.md) | the **fixtures** — triage data: 22 dirty `.xlsx` fixtures × 41 edge-case classes | grows when a new edge class is encountered |
+| [jira-flow-proposition](jira-flow-proposition/index.md) | the **design proposition** — one-off proposal that became the cases workstream | frozen reference once the workstream shipped |
 | [archive](archive/index.md) | snapshots no longer load-bearing | frozen reference |
 
-The nine categories answer different questions:
+The thirteen categories answer different questions:
 
 - *Why is it like this?* → architecture
 - *How does X actually work?* → subsystems
@@ -36,6 +40,10 @@ The nine categories answer different questions:
 - *Something broke, what do I do?* → runbooks
 - *What happened yesterday?* → standup
 - *Where's the deep-explanation for a specific source file?* → code
+- *What's the runtime doing right now / what tools do I use to investigate?* → observability
+- *How do I work the cases system as an agent?* → cases
+- *What edge case in this dirty Excel file?* → excel-edge-cases
+- *What was the original design proposition for cases?* → jira-flow-proposition
 - *Where's that old doc?* → archive
 
 ## Lane ownership

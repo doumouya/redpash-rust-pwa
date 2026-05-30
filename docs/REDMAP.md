@@ -126,9 +126,34 @@ redpash-app/
     ├── auth/google.md                      OAuth flow + cookies + dev_user fallback
     ├── db/schema.md                        tables + migrations + RID prefixes
     ├── dev/setup.md                        prereqs, watch loop
-    ├── internal/                           team-only — 8 sections (architecture, subsystems, specs, flows, processes, runbooks, standup, archive). See internal/index.md.
+    ├── internal/                           team-only — 13 sections (architecture, subsystems, specs, flows, processes, runbooks, standup, code, observability, cases, excel-edge-cases, jira-flow-proposition, archive). See internal/index.md.
     └── frontend/design.md                  tokens, dark mode, naming convention vs library
 ```
+
+---
+
+## Atomic docs
+
+Every source file under `tools/`, `frontend/scripts/`, and
+`backend/crates/` has a corresponding atomic doc — *purpose / public
+surface / drift-prone areas* — under
+[`internal/code/`](internal/code/index.md). The mapping mirrors the
+source tree (`crates/` and `src/` are dropped from backend paths):
+
+| Pillar | Atomic-doc landing | Sub-rollups |
+|---|---|---|
+| Backend | [`internal/code/backend/`](internal/code/index.md) | [`api/`](internal/code/backend/api/index.md) (incl. [`routes/`](internal/code/backend/api/routes/index.md) + [`db/`](internal/code/backend/api/db/index.md) + [`bin/`](internal/code/backend/api/bin/index.md)) · [`data/`](internal/code/backend/data/index.md) (incl. [`parse/`](internal/code/backend/data/parse/index.md) + [`steps/`](internal/code/backend/data/steps/index.md)) · [`shared/`](internal/code/backend/shared/index.md) |
+| Frontend | [`internal/code/frontend/`](internal/code/index.md) | [`scripts/pages/`](internal/code/frontend/scripts/pages/index.md) · [`scripts/charts/`](internal/code/frontend/scripts/charts/index.md) · [`scripts/tools/`](internal/code/frontend/scripts/tools/index.md) |
+| Tools | [`internal/code/tools/`](internal/code/index.md) | [`audit-suite/`](internal/code/tools/audit-suite/index.md) · [`shell/`](internal/code/tools/shell/index.md) · [`one-off/`](internal/code/tools/one-off/index.md) |
+
+**Coverage and drift** are tracked by `tools/doc-coverage-audit/` —
+run `sh tools/audit.sh` to see the per-pillar % and any
+stale / stubbed / missing docs. **Touch-policy** (CLAUDE.md): editing a
+source file requires updating its atomic doc in the same commit.
+
+The plan is at
+[`internal/processes/atomic-doc-plan.md`](internal/processes/atomic-doc-plan.md) —
+read it before starting Phase B/C/D.
 
 ---
 
