@@ -24,11 +24,10 @@
 // The hashchange handler in main.js fires the router; this module
 // inspects `location.hash` on mount to pick the right surface.
 //
-// Per the spec lock (proposition.md, v1): NO drag-drop. Click a
-// card to cycle status forward (backlog → todo → in_progress →
-// in_review → done → backlog). The agent-workflow value is
-// "status moves through the lanes", not drag affordance. v2 adds
-// drag-drop if/when interaction data justifies the lift.
+// Two ways to move a card's status: click to cycle forward (backlog →
+// todo → in_progress → in_review → done → backlog), OR kanban drag-drop
+// between columns (added 2026-05-28). The agent-workflow value is
+// "status moves through the lanes"; both routes funnel through setStatus.
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";

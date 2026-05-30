@@ -2,10 +2,18 @@
 title: Reports
 section: Features
 order: 1
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Reports
+
+> **⚠ Pre-refresh content below.** The standalone `reports` table and the
+> `/api/reports/*` endpoints were retired (object-model hard-refresh). A report is now
+> a *derived view* over a csv-typed File; the builder runs the stateless
+> `POST /api/group/preview`, and saved chart outputs are `project_files` rows
+> (`file_type='chart'`, `/api/charts/*`). The grouping/aggregation **concepts** below
+> are current; the **persistence + endpoints** are historical — see
+> [`api/reports.md`](../api/reports.md) + [`REDMAP`](../REDMAP.md).
 
 A **report** is a saved query over a CSV: group rows, aggregate values,
 optionally filter, optionally pivot into a matrix, optionally trim with
@@ -188,14 +196,7 @@ Dashboard page can read it). Drafts stay in-memory only.
 
 | Method | Path                                | Notes |
 |--------|-------------------------------------|-------|
-| GET    | `/api/reports`                      | List all (sorted by folder, favorite, updated_at desc) |
-| POST   | `/api/reports`                      | Create — body = `ReportRequest` |
-| POST   | `/api/reports/preview`              | Run a spec without saving — `{source_file_id, spec}` or `{source_report_id, spec}` |
-| GET    | `/api/reports/:rid`                 | Fetch one |
-| PUT    | `/api/reports/:rid`                 | Update |
-| DELETE | `/api/reports/:rid`                 | Remove |
-| POST   | `/api/reports/:rid/run`             | Run the saved spec — same response shape as `/preview` |
-| POST   | `/api/reports/:rid/favorite`        | `{value: bool}` |
+| POST   | `/api/group/preview` | Run a grouping/agg spec (stateless) — body `{source_file_id, spec}` or `{source_report_id, spec}`. **The only live endpoint.** The `reports` table + the rest of `/api/reports/*` (list / create / `:rid` CRUD / run / favorite) were retired; saved outputs are charts (`/api/charts/*`). |
 
 The `/preview` endpoint accepts a polymorphic source:
 

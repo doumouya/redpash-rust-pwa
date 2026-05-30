@@ -2,7 +2,7 @@
 title: Dashboard
 section: Objects
 order: 2
-last modified date: 2026-05-21
+last modified date: 2026-05-30
 ---
 
 # Dashboard
@@ -57,18 +57,18 @@ pub struct Widget {
   "slot": "a",
   "kind": "chart",
   "spec": {
-    "report_id":      "RPT_…",       // required
-    "chart_index":    0,             // index into report.spec.charts
-    "title_override": "Q3 funnel"    // optional — defaults to the report's chart.title
+    "chart_id":       "CHT_…",       // required — references a saved chart (project_files row)
+    "title_override": "Q3 funnel"    // optional — defaults to the chart's title
   }
 }
 ```
 
-The widget renderer fetches the referenced report once per session
-(`reportCache`), pulls `report.spec.charts[chart_index]`, runs the
-chart's own `/reports/preview` body against `report.source_file_id`
-with `report.spec.filter`, and renders via the shared
-`chart-render.js` path.
+The widget renderer fetches the referenced chart by `chart_id`
+(`GET /api/charts/:rid`), re-aggregates its spec against the chart's
+`source_file_id` via `POST /api/group/preview`, and renders through
+`charts/render.js`. (Reports-as-entities were retired in the object-model
+refresh — a widget references a chart directly, not a `(report_id,
+chart_index)` pair.)
 
 ### `kind: "text"` — markdown block
 
@@ -91,9 +91,9 @@ inline `group_by` / `agg_col` / `agg_fn`. The controller normalises
 on load:
 
 - `kpi` / `table` → converted to `kind: "chart"` with empty spec.
-- `chart` without `report_id` → spec blanked.
+- `chart` without `chart_id` → spec blanked.
 
-Both end up showing "Pick a report" in the slot editor and need a
+Both end up showing "Pick a chart" in the slot editor and need a
 one-time re-config from the user.
 
 ## Request body

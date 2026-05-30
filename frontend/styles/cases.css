@@ -1,7 +1,7 @@
 /* Cases — kanban board + detail page styles.
    Workstream spec: docs/internal/jira-flow-proposition/proposition.md.
-   v1: 5 status columns, click-cycle status (no drag-drop — locked
-   per spec); detail page = main column + metadata sidebar + tabbed
+   v1: 5 status columns, click-cycle status + kanban drag-drop (drag
+   added 2026-05-28); detail page = main column + metadata sidebar + tabbed
    comments/activity. Reuses tab atom from panel.css (.rt-panel-tabs)
    for the comments/activity switcher. */
 

@@ -2,14 +2,21 @@
 title: Dashboards
 section: Features
 order: 2
-last modified date: 2026-05-16
+last modified date: 2026-05-30
 ---
 
 # Dashboards
 
-A **dashboard** is a layout of widgets — each widget references a chart
-authored on a report (or holds a markdown text block). Chart definitions
-*live with the report*; the dashboard only decides where they go.
+> **⚠ Pre-refresh content below.** The object-model hard-refresh changed the widget
+> model: chart widgets now reference a saved chart by **`chart_id`** (`CHT_…`), not a
+> `(report_id, chart_index)` pair, and aggregation runs via `POST /api/group/preview`.
+> The current widget shape is canonical in
+> [`objects/dashboard.md`](../objects/dashboard.md#widget); sections below describing
+> `report_id`/`chart_index`/`reportCache`/`/reports/preview` are stale.
+
+A **dashboard** is a layout of widgets — each widget references a saved chart by
+`chart_id` (or holds a markdown text block). The dashboard only decides where charts
+go; the chart owns its own spec + source file.
 
 ## Layout
 
