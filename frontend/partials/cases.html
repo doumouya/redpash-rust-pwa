@@ -161,27 +161,47 @@
             <div class="rp-cases-comments-list" id="rp-cases-comments-list">
               <!-- JS renders comments here -->
             </div>
+            <!-- Rich composer (Em 2026-05-30 rebuild). A real authoring
+                 surface for support: formatting toolbar (bold / italic /
+                 link / code / lists / quote) over a contentEditable that
+                 grows with content, per-message file attachments shown as
+                 pending chips + drop zone, and a clean footer. The body
+                 is stored as sanitized HTML; the toolbar drives execCommand
+                 so the engineer never types raw markup. Links become real
+                 hyperlinks (text + URL) instead of pasted raw URLs. -->
             <form class="rp-cases-comment-form" id="rp-cases-comment-form">
-              <div class="rp-cases-comment-form-meta" id="rp-cases-comment-form-meta">
-                Sending as <span id="rp-cases-comment-form-as">you</span>
-              </div>
-              <div class="rp-cases-comment-form-row">
-                <!-- Attach a file to this case. v1 records the file's
-                     name/type/size (metadata only — byte upload + preview
-                     is a later slice); the file lands in the case's
-                     Attachments list in the sidebar. -->
-                <button class="rp-cases-comment-attach" id="rp-cases-comment-attach"
-                        type="button" title="Attach a file to this case">
-                  <i class="bi bi-paperclip"></i>
-                </button>
-                <input type="file" id="rp-cases-comment-attach-input" multiple hidden />
-                <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
-                          placeholder="Reply to this case… (Ctrl+Enter to send)"
-                          rows="3"></textarea>
-                <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
-                        type="submit" title="Send (Ctrl+Enter)" disabled>
-                  <i class="bi bi-send-fill"></i>
-                </button>
+              <div class="rp-cases-composer" id="rp-cases-composer">
+                <div class="rp-cases-composer-toolbar" id="rp-cases-composer-toolbar" role="toolbar" aria-label="Formatting">
+                  <button type="button" data-cmd="bold"   title="Bold (⌘B)"><i class="bi bi-type-bold"></i></button>
+                  <button type="button" data-cmd="italic" title="Italic (⌘I)"><i class="bi bi-type-italic"></i></button>
+                  <button type="button" data-cmd="link"   title="Link (⌘K)"><i class="bi bi-link-45deg"></i></button>
+                  <button type="button" data-cmd="code"   title="Inline code"><i class="bi bi-code"></i></button>
+                  <span class="rp-cases-composer-sep" aria-hidden="true"></span>
+                  <button type="button" data-cmd="ul"     title="Bulleted list"><i class="bi bi-list-ul"></i></button>
+                  <button type="button" data-cmd="ol"     title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                  <button type="button" data-cmd="quote"  title="Quote"><i class="bi bi-quote"></i></button>
+                </div>
+                <div class="rp-cases-composer-input" id="rp-cases-comment-input"
+                     contenteditable="true" role="textbox" aria-multiline="true"
+                     data-placeholder="Write a reply…  ⌘↵ to send · drag files here to attach"></div>
+                <!-- pending per-message attachments (chips with remove ×) -->
+                <div class="rp-cases-composer-pending" id="rp-cases-composer-pending" hidden></div>
+                <div class="rp-cases-composer-foot">
+                  <button class="rp-cases-composer-attach" id="rp-cases-comment-attach"
+                          type="button" title="Attach files to this message">
+                    <i class="bi bi-paperclip"></i><span>Attach</span>
+                  </button>
+                  <input type="file" id="rp-cases-comment-attach-input" multiple hidden />
+                  <span class="rp-cases-composer-as">Replying as <strong id="rp-cases-comment-form-as">you</strong></span>
+                  <button class="rp-cases-comment-form-send" id="rp-cases-comment-form-send"
+                          type="submit" title="Send (⌘↵)" disabled>
+                    <i class="bi bi-send-fill"></i><span>Send</span>
+                  </button>
+                </div>
+                <!-- drag-over overlay -->
+                <div class="rp-cases-composer-drop" id="rp-cases-composer-drop" hidden>
+                  <i class="bi bi-paperclip"></i> Drop files to attach
+                </div>
               </div>
               <p class="rp-cases-comment-form-error" id="rp-cases-comment-form-error" hidden></p>
             </form>

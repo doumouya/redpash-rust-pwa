@@ -92,6 +92,10 @@ pub struct Comment {
     #[serde(default)] pub author_display_name: Option<String>,
     pub body:       String,
     pub is_edited:  bool,
+    /// Files shared in this message — a JSON array of
+    /// `{ name, mime, size, uploaded_at }`; `[]` when none. Rendered
+    /// inline in the message bubble. v1 is metadata-only.
+    #[serde(default)] pub attachments: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -156,5 +160,9 @@ pub struct CasePatchRequest {
 /// `PATCH /api/cases/:rid/comments/:cmt_rid` (edit). One field today.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommentRequest {
-    pub body: String,
+    #[serde(default)] pub body: String,
+    /// Files shared with this message ({name, mime, size, uploaded_at}).
+    /// `None`/`[]` for a text-only comment. A comment must have a body
+    /// OR at least one attachment.
+    #[serde(default)] pub attachments: Option<serde_json::Value>,
 }

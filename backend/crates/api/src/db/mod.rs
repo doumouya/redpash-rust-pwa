@@ -1761,6 +1761,7 @@ struct CommentRow {
     author_display_name:  Option<String>,
     body:                 String,
     is_edited:            bool,
+    attachments:          serde_json::Value,
     created_at:           DateTime<Utc>,
     updated_at:           DateTime<Utc>,
 }
@@ -1773,6 +1774,7 @@ impl From<CommentRow> for Comment {
             author_display_name:  r.author_display_name,
             body:                 r.body,
             is_edited:            r.is_edited,
+            attachments:          r.attachments,
             created_at:           r.created_at,
             updated_at:           r.updated_at,
         }
@@ -1785,7 +1787,7 @@ impl From<CommentRow> for Comment {
 const COMMENT_SELECT: &str =
     "cm.redpash_id, cm.case_id, cm.author_id,
      u.display_name AS author_display_name,
-     cm.body, cm.is_edited, cm.created_at, cm.updated_at";
+     cm.body, cm.is_edited, cm.attachments, cm.created_at, cm.updated_at";
 
 const COMMENT_USER_JOIN: &str =
     "LEFT JOIN users u ON u.redpash_id = cm.author_id";
@@ -1817,16 +1819,17 @@ pub async fn find_comment(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Comme
 /// `users` and produce the hydrated Comment shape in one round-trip.
 /// Same pattern as insert_case.
 pub async fn insert_comment(
-    pool:      &PgPool,
-    rid:       &str,
-    case_id:   &str,
-    author_id: Option<&str>,
-    body:      &str,
+    pool:        &PgPool,
+    rid:         &str,
+    case_id:     &str,
+    author_id:   Option<&str>,
+    body:        &str,
+    attachments: serde_json::Value,
 ) -> sqlx::Result<Comment> {
     let row: CommentRow = sqlx::query_as(&format!(
         "WITH cm AS (
-             INSERT INTO comments (redpash_id, case_id, author_id, body)
-             VALUES ($1, $2, $3, $4)
+             INSERT INTO comments (redpash_id, case_id, author_id, body, attachments)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING *
          )
          SELECT {COMMENT_SELECT} FROM cm {COMMENT_USER_JOIN}"
@@ -1835,6 +1838,7 @@ pub async fn insert_comment(
     .bind(case_id)
     .bind(author_id)
     .bind(body)
+    .bind(attachments)
     .fetch_one(pool)
     .await?;
     Ok(row.into())

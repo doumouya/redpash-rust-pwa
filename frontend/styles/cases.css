@@ -904,57 +904,122 @@
   margin-bottom: 0.75rem;
   padding: 0.25rem 0.125rem;
 }
+/* Threaded + left-aligned for everyone (Em 2026-05-30 rebuild). A
+   support thread reads top-to-bottom — author + role + time + body —
+   not as a two-party chat. Own messages get a subtle accent tint only. */
 .rp-cases-comment {
   display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
+  align-items: flex-start;          /* avatar tops the bubble */
+  gap: 0.625rem;
   max-width: 100%;
 }
-.rp-cases-comment--own {
-  flex-direction: row-reverse;
-}
 .rp-cases-comment-bubble {
+  flex: 1 1 auto;
+  min-width: 0;
   background: var(--rp-surface-2);
   border: 1px solid var(--rp-border);
-  border-radius: 0.75rem;
-  border-bottom-left-radius: 0.25rem;        /* "tail" hint pointing at the avatar */
-  padding: 0.4375rem 0.6875rem;
-  max-width: 78%;
-  min-width: 0;
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
 }
 .rp-cases-comment--own .rp-cases-comment-bubble {
-  background: var(--rp-accent-soft);
-  border-color: color-mix(in srgb, var(--rp-accent-2) 28%, transparent);
-  border-bottom-left-radius: 0.75rem;
-  border-bottom-right-radius: 0.25rem;
+  background: color-mix(in srgb, var(--rp-accent-2) 7%, var(--rp-surface-2));
+  border-color: color-mix(in srgb, var(--rp-accent-2) 22%, var(--rp-border));
 }
 .rp-cases-comment-head {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 0.1875rem;
+  align-items: center;
+  gap: 0.4375rem;
+  margin-bottom: 0.3125rem;
   font-size: 0.6562rem;
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
-}
-.rp-cases-comment--own .rp-cases-comment-head {
-  justify-content: flex-end;
 }
 .rp-cases-comment-author {
   color: var(--rp-text);
   font-weight: 600;
   font-size: 0.75rem;
 }
+/* Role tag — Reporter (the customer) vs Assignee (the engineer). */
+.rp-cases-comment-role {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 6.1875rem;
+}
+.rp-cases-comment-role.is-reporter { color: var(--rp-peach);    background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
+.rp-cases-comment-role.is-assignee { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-cases-comment-when { margin-left: auto; }   /* time pins to the head's right edge */
 .rp-cases-comment-edited { font-style: italic; }
-.rp-cases-comment-body pre {
-  margin: 0;
-  font-family: inherit;
-  font-size: 0.7812rem;
-  line-height: 1.45;
+
+/* Formatted body — rendered (sanitized) HTML: bold / italic / links /
+   inline code / code blocks / lists / quotes. */
+.rp-cases-comment-body {
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: var(--rp-text);
-  white-space: pre-wrap;
   word-break: break-word;
 }
+.rp-cases-comment-body:empty { display: none; }
+.rp-cases-comment-body > :first-child { margin-top: 0; }
+.rp-cases-comment-body > :last-child  { margin-bottom: 0; }
+.rp-cases-comment-body p { margin: 0 0 0.5rem; }
+.rp-cases-comment-body strong, .rp-cases-comment-body b { font-weight: 700; color: var(--rp-text); }
+.rp-cases-comment-body a {
+  color: var(--rp-accent-2);
+  text-decoration: underline;
+  text-underline-offset: 0.125rem;
+}
+.rp-cases-comment-body a:hover { color: color-mix(in srgb, var(--rp-accent-2) 80%, white); }
+.rp-cases-comment-body code {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.78em;
+  background: var(--rp-bg);
+  padding: 0.05rem 0.3125rem;
+  border-radius: 0.25rem;
+}
+.rp-cases-comment-body pre {
+  margin: 0.375rem 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--rp-bg);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.75rem;
+}
+.rp-cases-comment-body pre code { background: none; padding: 0; }
+.rp-cases-comment-body ul,
+.rp-cases-comment-body ol { margin: 0.25rem 0; padding-left: 1.25rem; }
+.rp-cases-comment-body li { margin: 0.125rem 0; }
+.rp-cases-comment-body blockquote {
+  margin: 0.375rem 0;
+  padding: 0.125rem 0.75rem;
+  border-left: 0.1875rem solid var(--rp-border);
+  color: var(--rp-text-dim);
+}
+
+/* Files shared in a message — a row of cards under the body. */
+.rp-cases-msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+.rp-cases-msg-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  max-width: 100%;
+  padding: 0.3125rem 0.5rem;
+  background: var(--rp-bg);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  cursor: default;
+}
+.rp-cases-msg-file-icon { color: var(--rp-accent-2); font-size: 0.9375rem; flex: 0 0 auto; }
+.rp-cases-msg-file-name { font-size: 0.75rem; color: var(--rp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-cases-msg-file-size { font-size: 0.6562rem; color: var(--rp-text-mute); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 
 /* Own-comment edit / delete — hover-revealed toolbar floating at the
    bubble's top edge. Bubble is the positioning context. Mirrors the
@@ -996,19 +1061,21 @@
   margin-top: 0.125rem;
 }
 .rp-cases-comment-edit-input {
-  width: 100%;
-  min-width: 14rem;
-  padding: 0.375rem 0.5rem;
+  min-height: 3rem;
+  padding: 0.4375rem 0.5rem;
   background: var(--rp-surface);
   border: 1px solid var(--rp-accent-2);
   border-radius: 0.375rem;
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.7812rem;
-  line-height: 1.45;
-  resize: none;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   outline: 0;
+  word-break: break-word;
 }
+/* inherit the rendered-body formatting inside the edit editor */
+.rp-cases-comment-edit-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-comment-edit-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-cases-comment-edit-actions {
   display: flex;
   justify-content: flex-end;
@@ -1044,70 +1111,193 @@
    "Sending as X" hint above + textarea with a send-icon button
    floating on the right edge. Cleaner than the old labeled
    button; reads as a chat composer. */
-.rp-cases-comment-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
-}
-.rp-cases-comment-form-meta {
-  font-size: 0.6562rem;
-  color: var(--rp-text-mute);
-  padding-left: 0.125rem;
-}
-.rp-cases-comment-form-meta span {
-  color: var(--rp-text);
-  font-weight: 600;
-}
-.rp-cases-comment-form-row {
+.rp-cases-comment-form { margin-top: 0.5rem; }
+
+/* Rich composer (Em 2026-05-30) — a bordered card: formatting toolbar,
+   contentEditable, pending-files tray, footer. focus-within lifts the
+   border like a real input. */
+.rp-cases-composer {
   position: relative;
   display: flex;
-  align-items: stretch;
-}
-.rp-cases-comment-input {
-  flex: 1;
-  width: 100%;
-  padding: 0.75rem 3.25rem 0.75rem 0.875rem;          /* right pad clears the send button */
+  flex-direction: column;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 0.5rem;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  resize: none;
-  outline: 0;
-  /* Compact at rest (~3 lines) so the thread above gets the bulk
-     of the panel. Autosize JS grows the height up to max-height
-     as the user types — Slack / Discord pattern. */
-  min-height: 4.5rem;
-  max-height: 18rem;
-  overflow-y: auto;
+  border-radius: 0.625rem;
 }
-.rp-cases-comment-input:focus { border-color: var(--rp-accent-2); }
-.rp-cases-comment-form-send {
-  position: absolute;
-  right: 0.5rem;
-  bottom: 0.5rem;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: 0.5rem;                    /* matches the textarea's corner radius */
-  border: 0;
-  background: var(--rp-accent-2);
-  color: var(--rp-bg);
-  cursor: pointer;
+.rp-cases-composer:focus-within { border-color: var(--rp-accent-2); }
+.rp-cases-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.0625rem;
+  padding: 0.25rem 0.375rem;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-cases-composer-toolbar button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.3125rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  font-size: 0.875rem;
 }
-.rp-cases-comment-form-send:hover:not([disabled]) {
-  background: color-mix(in srgb, var(--rp-accent-2) 88%, white);
+.rp-cases-composer-toolbar button:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-cases-composer-sep { width: 1px; height: 1.125rem; background: var(--rp-border); margin: 0 0.25rem; }
+.rp-cases-composer-input {
+  padding: 0.625rem 0.75rem;
+  min-height: 4.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  color: var(--rp-text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  outline: 0;
+  word-break: break-word;
 }
-.rp-cases-comment-form-send[disabled] {
-  opacity: 0.4;
-  cursor: not-allowed;
+.rp-cases-composer-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--rp-text-mute);
 }
-.rp-cases-comment-form-send i { font-size: 0.875rem; }
+.rp-cases-composer-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-composer-input code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem;
+}
+.rp-cases-composer-input blockquote { margin: 0.25rem 0; padding-left: 0.625rem; border-left: 0.1875rem solid var(--rp-border); color: var(--rp-text-dim); }
+.rp-cases-composer-input ul, .rp-cases-composer-input ol { margin: 0.25rem 0; padding-left: 1.25rem; }
+
+.rp-cases-composer-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0 0.75rem 0.5rem;
+}
+.rp-cases-composer-pending[hidden] { display: none; }
+.rp-cases-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  font-size: 0.7188rem;
+}
+.rp-cases-pending-chip > i { color: var(--rp-accent-2); }
+.rp-cases-pending-name { color: var(--rp-text); max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-cases-pending-size { color: var(--rp-text-mute); font-size: 0.6562rem; font-variant-numeric: tabular-nums; }
+.rp-cases-pending-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.125rem; height: 1.125rem; padding: 0; border: 0; border-radius: 0.25rem;
+  background: transparent; color: var(--rp-text-mute); cursor: pointer;
+}
+.rp-cases-pending-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
+
+.rp-cases-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.4375rem 0.5rem 0.4375rem 0.625rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-cases-composer-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  cursor: pointer;
+  font-size: 0.7188rem;
+}
+.rp-cases-composer-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-cases-composer-as { font-size: 0.6562rem; color: var(--rp-text-mute); margin-left: auto; }
+.rp-cases-composer-as strong { color: var(--rp-text-dim); font-weight: 600; }
+.rp-cases-comment-form-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.8125rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  font-size: 0.7188rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rp-cases-comment-form-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-accent-2) 88%, white); }
+.rp-cases-comment-form-send[disabled] { opacity: 0.4; cursor: not-allowed; }
+.rp-cases-comment-form-send i { font-size: 0.8125rem; }
+
+/* drag-over overlay */
+.rp-cases-composer-drop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: color-mix(in srgb, var(--rp-accent-2) 12%, var(--rp-surface));
+  border: 0.125rem dashed var(--rp-accent-2);
+  border-radius: 0.625rem;
+  color: var(--rp-accent-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+.rp-cases-composer-drop[hidden] { display: none; }
+
+/* link popover — floats above the composer */
+.rp-cases-link-pop {
+  position: absolute;
+  left: 0.5rem;
+  bottom: calc(100% + 0.375rem);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+}
+.rp-cases-link-pop input {
+  padding: 0.3125rem 0.5rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  outline: 0;
+}
+.rp-cases-link-pop input:focus { border-color: var(--rp-accent-2); }
+.rp-cases-link-text { width: 8rem; }
+.rp-cases-link-url  { width: 13rem; }
+.rp-cases-link-pop button {
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text-dim);
+  font-size: 0.7188rem;
+  cursor: pointer;
+}
+.rp-cases-link-add {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  border-color: var(--rp-accent-2);
+  font-weight: 600;
+}
 
 /* Inline error slot — surfaces a POST /comments failure visibly
    instead of swallowing it in console.warn. Cleared on next
@@ -1195,26 +1385,6 @@
 .rp-cases-attach:hover .rp-cases-attach-remove,
 .rp-cases-attach:focus-within .rp-cases-attach-remove { opacity: 1; }
 .rp-cases-attach-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
-
-/* Composer paperclip — sits left of the textarea, bottom-aligned,
-   mirroring the send button's size + corner radius. */
-.rp-cases-comment-form-row { align-items: flex-end; gap: 0.5rem; }
-.rp-cases-comment-attach {
-  flex: 0 0 auto;
-  width: 2.125rem;
-  height: 2.125rem;
-  border: 1px solid var(--rp-border);
-  border-radius: 0.5rem;
-  background: var(--rp-surface);
-  color: var(--rp-text-mute);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.12s var(--rp-ease), border-color 0.12s var(--rp-ease);
-}
-.rp-cases-comment-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
-.rp-cases-comment-attach i { font-size: 0.9375rem; }
 
 /* Small avatar variant — used inside comment bubbles. The default
    1.5rem is for the side-panel reporter/assignee badge. */

@@ -416,14 +416,18 @@ async fn post_comment(
     // post-gate (case visibility) lands in v3 overlay
     let user = super::resolve_user_rid(&state, &headers).await?;
     let body = req.body.trim();
-    if body.is_empty() {
-        return Err(AppError::bad_request("invalid", "comment body is required"));
+    // A message is valid with text OR at least one attachment (files-only
+    // replies are common in support — "here's the log", no prose needed).
+    let attachments = req.attachments.clone().unwrap_or_else(|| serde_json::json!([]));
+    let has_attachments = attachments.as_array().map(|a| !a.is_empty()).unwrap_or(false);
+    if body.is_empty() && !has_attachments {
+        return Err(AppError::bad_request("invalid", "comment needs a body or an attachment"));
     }
     if db::find_case(&state.db, &rid).await?.is_none() {
         return Err(AppError::not_found("not_found", format!("case {rid}")));
     }
     let cmt_rid = id::new("CMT");
-    let comment = db::insert_comment(&state.db, &cmt_rid, &rid, Some(&user), body).await?;
+    let comment = db::insert_comment(&state.db, &cmt_rid, &rid, Some(&user), body, attachments).await?;
 
     crate::event::info(&state.db, "case_comment_post", format!("case {rid}: new comment {cmt_rid}"))
         .user(user)

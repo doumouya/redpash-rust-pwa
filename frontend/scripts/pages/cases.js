@@ -75,6 +75,9 @@ export default function cases(app, { session }) {
   let activityFilter = "all";                  // sticky per-mount; per-case mem only
   let lastDetailActivity = [];                 // memoized for filter pill re-render
   let currentAttachments = [];                 // last-painted case.attachments — base for attach/remove
+  let pendingAttachments = [];                  // files staged in the composer, sent with the next comment
+  let detailReporterId = null;                  // for the per-message Reporter/Assignee role tag
+  let detailAssigneeId = null;
 
   // ── hide / restore — replicated from workspace `8d070eb` per the
   //    docs/internal/processes/replicable-feature-pattern.md recipe.
@@ -891,19 +894,65 @@ export default function cases(app, { session }) {
   const attachBtn       = app.querySelector("#rp-cases-comment-attach");
   const attachInput     = app.querySelector("#rp-cases-comment-attach-input");
 
-  // Paperclip → file picker. v1 records each file's name/type/size
-  // (metadata only — no byte upload yet) and appends it to the case's
-  // attachment list via the same sparse PATCH the side controls use.
-  attachBtn?.addEventListener("click", () => attachInput?.click());
-  attachInput?.addEventListener("change", () => {
-    if (!attachInput.files?.length) return;
+  // Composer extras — formatting toolbar, pending-files tray, drop zone.
+  const composerEl = app.querySelector("#rp-cases-composer");
+  const toolbarEl  = app.querySelector("#rp-cases-composer-toolbar");
+  const pendingEl  = app.querySelector("#rp-cases-composer-pending");
+  const dropEl     = app.querySelector("#rp-cases-composer-drop");
+
+  // Paperclip + drag-drop STAGE files as pending attachments — they ride
+  // along with the next comment (per-message attachments), not the
+  // case-level list. v1 records name/type/size (no byte upload yet).
+  function stageFiles(fileList) {
+    if (!fileList || !fileList.length) return;
     const now = new Date().toISOString();
-    const added = Array.from(attachInput.files).map((f) => ({
-      name: f.name, mime: f.type || null, size: f.size, uploaded_at: now,
-    }));
-    attachInput.value = "";                    // reset so re-picking the same file re-fires change
-    patchCase({ attachments: currentAttachments.concat(added) });
+    for (const f of fileList) {
+      pendingAttachments.push({ name: f.name, mime: f.type || null, size: f.size, uploaded_at: now });
+    }
+    renderPending();
+    syncComposeState();
+  }
+  function renderPending() {
+    if (!pendingEl) return;
+    pendingEl.hidden = pendingAttachments.length === 0;
+    pendingEl.innerHTML = pendingAttachments.map((a, i) =>
+      '<span class="rp-cases-pending-chip" data-pending-idx="' + i + '">'
+      +   '<i class="bi ' + attachIcon(a.mime, a.name) + '"></i>'
+      +   '<span class="rp-cases-pending-name">' + esc(a.name) + '</span>'
+      +   '<span class="rp-cases-pending-size">' + esc(fmtBytes(a.size)) + '</span>'
+      +   '<button type="button" class="rp-cases-pending-remove" title="Remove"><i class="bi bi-x"></i></button>'
+      + '</span>').join("");
+  }
+  attachBtn?.addEventListener("click", () => attachInput?.click());
+  attachInput?.addEventListener("change", () => { stageFiles(attachInput.files); attachInput.value = ""; });
+  pendingEl?.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-pending-idx]");
+    if (!chip || !e.target.closest(".rp-cases-pending-remove")) return;
+    pendingAttachments.splice(Number(chip.dataset.pendingIdx), 1);
+    renderPending();
+    syncComposeState();
   });
+
+  // Toolbar — mousedown (not click) + preventDefault so the editor's
+  // selection survives (a click would blur it + collapse the range).
+  toolbarEl?.addEventListener("mousedown", (e) => {
+    const btn = e.target.closest("[data-cmd]");
+    if (!btn) return;
+    e.preventDefault();
+    applyFormat(btn.dataset.cmd);
+  });
+
+  // Drag-and-drop files onto the composer.
+  if (composerEl) {
+    let dragDepth = 0;
+    composerEl.addEventListener("dragenter", (e) => { e.preventDefault(); if (dragDepth++ === 0 && dropEl) dropEl.hidden = false; });
+    composerEl.addEventListener("dragover",  (e) => { e.preventDefault(); });
+    composerEl.addEventListener("dragleave", (e) => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; if (dropEl) dropEl.hidden = true; } });
+    composerEl.addEventListener("drop", (e) => {
+      e.preventDefault(); dragDepth = 0; if (dropEl) dropEl.hidden = true;
+      if (e.dataTransfer?.files?.length) stageFiles(e.dataTransfer.files);
+    });
+  }
   // Remove an attachment (event-delegated; PATCHes the filtered list).
   attachList?.addEventListener("click", (e) => {
     const btn = e.target.closest(".rp-cases-attach-remove");
@@ -937,47 +986,32 @@ export default function cases(app, { session }) {
     if (next && next !== pathEl.dataset.current) patchCase({ status: next });
   });
 
-  // "Sending as X" hint — fills once at mount; the session is
-  // constant for the page lifetime.
+  // "Replying as X" — fills once at mount; session is constant per page.
   const commentFormAs = app.querySelector("#rp-cases-comment-form-as");
   if (commentFormAs) commentFormAs.textContent = meName;
 
-  commentForm?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const body = (commentInput?.value || "").trim();
-    if (!body || !currentDetailRid) return;
-    postComment(body);
-  });
+  commentForm?.addEventListener("submit", (e) => { e.preventDefault(); sendComment(); });
 
-  // Ctrl/Cmd + Enter sends from the textarea — keeps users in
-  // the keyboard flow when typing a long comment.
+  // Keyboard: ⌘↵ send · ⌘B bold · ⌘I italic · ⌘K link.
   commentInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      commentForm?.requestSubmit();
-    }
+    const mod = e.ctrlKey || e.metaKey;
+    if (e.key === "Enter" && mod) { e.preventDefault(); sendComment(); return; }
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === "b")      { e.preventDefault(); applyFormat("bold"); }
+    else if (k === "i") { e.preventDefault(); applyFormat("italic"); }
+    else if (k === "k") { e.preventDefault(); applyFormat("link"); }
   });
 
-  // Compose ergonomics — autosize textarea, enable/disable send
-  // based on whether there's a non-blank message, hide stale
-  // error on next keystroke.
+  // Send is live when there's text OR a staged file. The contentEditable
+  // grows on its own — no manual autosize. textContent (not innerHTML)
+  // so an empty editor holding only a stray <br> still reads as blank.
+  function composerHasContent() {
+    return (commentInput?.textContent || "").trim().length > 0 || pendingAttachments.length > 0;
+  }
   function syncComposeState() {
-    if (!commentInput) return;
-    // Autosize: reset height to read scrollHeight accurately,
-    // then set to the natural content height. scrollHeight is
-    // a computed pixel value; convert to rem so the inline
-    // style honors the relative-units principle
-    // (docs/frontend/css-units.md) and scales with root font-size.
-    // CSS max-height: 18rem caps actual rendered growth.
-    commentInput.style.height = "auto";
-    const rootFs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    commentInput.style.height = (commentInput.scrollHeight / rootFs) + "rem";
-    const hasBody = commentInput.value.trim().length > 0;
-    if (commentSend) commentSend.disabled = !hasBody;
-    if (commentError && !commentError.hidden) {
-      commentError.hidden = true;
-      commentError.textContent = "";
-    }
+    if (commentSend) commentSend.disabled = !composerHasContent();
+    if (commentError && !commentError.hidden) { commentError.hidden = true; commentError.textContent = ""; }
   }
   commentInput?.addEventListener("input", syncComposeState);
 
@@ -985,6 +1019,126 @@ export default function cases(app, { session }) {
     if (!commentError) return;
     commentError.textContent = msg;
     commentError.hidden = false;
+  }
+
+  function clearComposer() {
+    if (commentInput) commentInput.innerHTML = "";
+    pendingAttachments = [];
+    renderPending();
+    syncComposeState();
+  }
+
+  // Serialize + sanitize the editor, then post. A files-only message
+  // (no prose) is valid — body sent as "".
+  function sendComment() {
+    if (!currentDetailRid) return;
+    const hasText = (commentInput?.textContent || "").trim().length > 0;
+    if (!hasText && pendingAttachments.length === 0) return;
+    const body = hasText ? sanitizeRichHtml(commentInput?.innerHTML || "") : "";
+    postComment(body, pendingAttachments.slice());
+  }
+
+  // ── rich-text formatting (execCommand-driven WYSIWYG) ──────────
+  function applyFormat(cmd) {
+    if (!commentInput) return;
+    commentInput.focus();
+    switch (cmd) {
+      case "bold":   document.execCommand("bold"); break;
+      case "italic": document.execCommand("italic"); break;
+      case "ul":     document.execCommand("insertUnorderedList"); break;
+      case "ol":     document.execCommand("insertOrderedList"); break;
+      case "quote":  document.execCommand("formatBlock", false, "blockquote"); break;
+      case "code":   wrapInlineCode(); break;
+      case "link":   openLinkPopover(); break;
+    }
+    syncComposeState();
+  }
+  function wrapInlineCode() {
+    const sel = window.getSelection();
+    const text = sel && !sel.isCollapsed ? sel.toString() : "";
+    document.execCommand("insertHTML", false, "<code>" + esc(text || "code") + "</code>");
+  }
+  // Link popover — a small text+URL form anchored in the composer. The
+  // engineer types a label + URL (so customers get "see the docs", not a
+  // raw URL). Restores the editor selection before inserting so the link
+  // lands where the cursor was. Missing scheme defaults to https://.
+  function openLinkPopover() {
+    if (!composerEl || !commentInput) return;
+    composerEl.querySelector(".rp-cases-link-pop")?.remove();
+    const sel = window.getSelection();
+    const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const selText = sel ? sel.toString() : "";
+    const pop = document.createElement("div");
+    pop.className = "rp-cases-link-pop";
+    pop.innerHTML = ''
+      + (selText ? '' : '<input class="rp-cases-link-text" type="text" placeholder="Link text" />')
+      + '<input class="rp-cases-link-url" type="text" placeholder="https://…" />'
+      + '<button type="button" class="rp-cases-link-add">Add</button>'
+      + '<button type="button" class="rp-cases-link-cancel">Cancel</button>';
+    composerEl.appendChild(pop);
+    const urlInput  = pop.querySelector(".rp-cases-link-url");
+    const textInput = pop.querySelector(".rp-cases-link-text");
+    (textInput || urlInput).focus();
+    const close = () => pop.remove();
+    const commit = () => {
+      let url = (urlInput.value || "").trim();
+      if (!url) { close(); return; }
+      if (!/^(https?:|mailto:)/i.test(url)) url = "https://" + url;
+      const text = selText || (textInput && textInput.value.trim()) || url;
+      commentInput.focus();
+      if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
+      if (selText && range) document.execCommand("createLink", false, url);
+      else document.execCommand("insertHTML", false, '<a href="' + esc(url) + '">' + esc(text) + '</a>');
+      close();
+      syncComposeState();
+    };
+    pop.querySelector(".rp-cases-link-add").addEventListener("click", commit);
+    pop.querySelector(".rp-cases-link-cancel").addEventListener("click", close);
+    pop.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); }
+    });
+  }
+
+  // Whitelist-rebuild sanitizer — the comment body is stored + rendered
+  // as HTML, so both the editor output (on send) and the stored value
+  // (on render) pass through here. Rebuilds a clean tree: only allowed
+  // tags survive (disallowed ones are unwrapped, keeping their text);
+  // only <a href> with a safe scheme is kept, forced to open in a new
+  // tab with noopener. No attributes, no script/style/event vectors.
+  function sanitizeRichHtml(html) {
+    const ALLOWED = {
+      B: 1, STRONG: 1, I: 1, EM: 1, U: 1, CODE: 1, PRE: 1,
+      UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, BR: 1, P: 1, DIV: 1, A: 1,
+    };
+    const src = document.createElement("template");
+    src.innerHTML = html || "";
+    const build = (node, dest) => {
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === Node.TEXT_NODE) {
+          dest.appendChild(document.createTextNode(n.nodeValue));
+        } else if (n.nodeType === Node.ELEMENT_NODE) {
+          if (ALLOWED[n.tagName]) {
+            const el = document.createElement(n.tagName);
+            if (n.tagName === "A") {
+              const href = n.getAttribute("href") || "";
+              if (/^(https?:|mailto:)/i.test(href)) {
+                el.setAttribute("href", href);
+                el.setAttribute("target", "_blank");
+                el.setAttribute("rel", "noopener noreferrer nofollow");
+              }
+            }
+            build(n, el);
+            dest.appendChild(el);
+          } else {
+            build(n, dest);     // unwrap disallowed tag, keep its cleaned children
+          }
+        }
+      });
+    };
+    const out = document.createElement("div");
+    build(src.content, out);
+    return out.innerHTML.trim();
   }
 
   // Activity feed filter pills — change the in-memory filter, re-
@@ -1255,6 +1409,10 @@ export default function cases(app, { session }) {
 
   function paintDetail(detail) {
     const c = detail?.case || detail || {};
+    // Stash the case's people for the per-message Reporter/Assignee tag
+    // (present on both the GET-detail and PATCH shapes).
+    detailReporterId = c.reporter_id || null;
+    detailAssigneeId = c.assignee_id || null;
     // PATCH responses are bare Case rows (no comments / activity);
     // GET /cases/:rid returns the full CaseDetail. Detect which shape
     // we got so a field-edit repaint doesn't wipe the comments thread
@@ -1470,18 +1628,39 @@ export default function cases(app, { session }) {
   // bubble carries author + timestamp header + body. The "you"
   // bubble drops the author name in the header since it's redundant
   // when avatar + alignment + color all signal self-authorship.
+  // Role tag for the message header — distinguishes the customer
+  // (Reporter) from the engineer (Assignee). Team members get no tag,
+  // keeping the common case uncluttered.
+  function authorRoleLabel(authorId) {
+    if (!authorId) return "";
+    if (authorId === detailReporterId) return "Reporter";
+    if (authorId === detailAssigneeId) return "Assignee";
+    return "";
+  }
+  // A file shared in a message — type glyph + name + size. Byte download
+  // is a later slice, so it's a non-link card for now.
+  function attachmentCardHTML(att) {
+    const name = att.name || "file";
+    return ''
+      + '<span class="rp-cases-msg-file" title="' + esc(name) + ' · download coming soon">'
+      +   '<i class="bi ' + attachIcon(att.mime, name) + ' rp-cases-msg-file-icon"></i>'
+      +   '<span class="rp-cases-msg-file-name">' + esc(name) + '</span>'
+      +   '<span class="rp-cases-msg-file-size">' + esc(fmtBytes(att.size)) + '</span>'
+      + '</span>';
+  }
   function commentHTML(cm) {
     const rid = cm.redpash_id || cm.rid || "";
     const author = cm.author_display_name || cm.author_id || "—";
     const isOwn = cm.author_id && cm.author_id === meRid;
     const when = cm.created_at ? fmtClock(cm.created_at) : "";
-    const headerParts = [];
-    if (!isOwn) headerParts.push('<span class="rp-cases-comment-author">' + esc(author) + '</span>');
-    if (when)   headerParts.push('<span class="rp-cases-comment-when">' + esc(when) + '</span>');
-    if (cm.is_edited) headerParts.push('<span class="rp-cases-comment-edited">edited</span>');
-    // Own comments get hover-revealed edit + delete affordances. The
-    // raw body is recoverable from the <pre>'s textContent (esc →
-    // render → textContent round-trips), so no data-raw attr needed.
+    const role = authorRoleLabel(cm.author_id);
+    const atts = Array.isArray(cm.attachments) ? cm.attachments : [];
+    const filesHTML = atts.length
+      ? '<div class="rp-cases-msg-files">' + atts.map(attachmentCardHTML).join("") + '</div>'
+      : '';
+    // Body is stored as sanitized HTML; sanitize again on render (defence
+    // in depth) so formatting + links render, never raw markup or script.
+    const bodyHTML = cm.body ? sanitizeRichHtml(cm.body) : '';
     const actions = isOwn
       ? '<div class="rp-cases-comment-actions">'
         +   '<button type="button" class="rp-cases-comment-edit" title="Edit"><i class="bi bi-pencil"></i></button>'
@@ -1493,10 +1672,14 @@ export default function cases(app, { session }) {
       +    'data-cmt-rid="' + esc(rid) + '">'
       +   userAvatarHTML(cm.author_id, author, "sm")
       +   '<div class="rp-cases-comment-bubble">'
-      +     (headerParts.length
-        ? '<header class="rp-cases-comment-head">' + headerParts.join("") + '</header>'
-        : '')
-      +     '<div class="rp-cases-comment-body"><pre>' + esc(cm.body || "") + '</pre></div>'
+      +     '<header class="rp-cases-comment-head">'
+      +       '<span class="rp-cases-comment-author">' + esc(author) + '</span>'
+      +       (role ? '<span class="rp-cases-comment-role is-' + role.toLowerCase() + '">' + role + '</span>' : '')
+      +       (when ? '<span class="rp-cases-comment-when">' + esc(when) + '</span>' : '')
+      +       (cm.is_edited ? '<span class="rp-cases-comment-edited">edited</span>' : '')
+      +     '</header>'
+      +     '<div class="rp-cases-comment-body">' + bodyHTML + '</div>'
+      +     filesHTML
       +     actions
       +   '</div>'
       + '</div>';
@@ -1558,21 +1741,27 @@ export default function cases(app, { session }) {
   function enterCommentEdit(wrap) {
     const bodyEl = wrap.querySelector(".rp-cases-comment-body");
     if (!bodyEl || wrap.querySelector(".rp-cases-comment-edit-form")) return;
-    // Raw body round-trips through the <pre>'s textContent.
-    const raw = wrap.querySelector(".rp-cases-comment-body pre")?.textContent || "";
+    const rawHtml = bodyEl.innerHTML;          // already-sanitized HTML
     bodyEl.hidden = true;
     const form = document.createElement("div");
     form.className = "rp-cases-comment-edit-form";
     form.innerHTML = ''
-      + '<textarea class="rp-cases-comment-edit-input" rows="3"></textarea>'
+      + '<div class="rp-cases-comment-edit-input" contenteditable="true"></div>'
       + '<div class="rp-cases-comment-edit-actions">'
       +   '<button type="button" class="rt-btn rp-cases-comment-edit-cancel">Cancel</button>'
       +   '<button type="button" class="rt-btn rt-btn--accent rp-cases-comment-edit-save">Save</button>'
       + '</div>';
     bodyEl.insertAdjacentElement("afterend", form);
-    const ta = form.querySelector("textarea");
-    ta.value = raw;
-    ta.focus();
+    const ed = form.querySelector(".rp-cases-comment-edit-input");
+    ed.innerHTML = rawHtml;
+    ed.focus();
+    // ⌘↵ saves; ⌘B/I format the focused editor via execCommand.
+    ed.addEventListener("keydown", (ev) => {
+      const mod = ev.ctrlKey || ev.metaKey;
+      if (ev.key === "Enter" && mod) { ev.preventDefault(); form.querySelector(".rp-cases-comment-edit-save").click(); }
+      else if (mod && ev.key.toLowerCase() === "b") { ev.preventDefault(); document.execCommand("bold"); }
+      else if (mod && ev.key.toLowerCase() === "i") { ev.preventDefault(); document.execCommand("italic"); }
+    });
   }
   function exitCommentEdit(wrap) {
     wrap.querySelector(".rp-cases-comment-edit-form")?.remove();
@@ -1596,10 +1785,11 @@ export default function cases(app, { session }) {
       return;
     }
     if (e.target.closest(".rp-cases-comment-edit-save")) {
-      const ta = wrap.querySelector(".rp-cases-comment-edit-input");
-      const next = (ta?.value || "").trim();
-      const prev = wrap.querySelector(".rp-cases-comment-body pre")?.textContent || "";
-      if (!next || next === prev) { exitCommentEdit(wrap); return; }
+      const ed = wrap.querySelector(".rp-cases-comment-edit-input");
+      const next = sanitizeRichHtml(ed?.innerHTML || "");
+      const prev = wrap.querySelector(".rp-cases-comment-body")?.innerHTML || "";
+      const hasText = (ed?.textContent || "").trim().length > 0;
+      if (!hasText || next === prev) { exitCommentEdit(wrap); return; }
       try {
         await api.patch(base, { body: next });
         await loadCaseDetail(currentDetailRid);   // re-render shows the "edited" flag
@@ -1620,27 +1810,22 @@ export default function cases(app, { session }) {
     }
   });
 
-  async function postComment(body) {
+  async function postComment(body, attachments) {
     if (!currentDetailRid) return;
     if (commentSend)  commentSend.disabled = true;
-    if (commentInput) commentInput.disabled = true;
+    if (commentInput) commentInput.setAttribute("contenteditable", "false");
     if (commentError) { commentError.hidden = true; commentError.textContent = ""; }
     try {
-      await api.post("/cases/" + encodeURIComponent(currentDetailRid) + "/comments", { body });
-      if (commentInput) {
-        commentInput.value = "";
-        commentInput.style.height = "auto";    // reset autosize after clear
-      }
+      await api.post("/cases/" + encodeURIComponent(currentDetailRid) + "/comments",
+        { body, attachments: attachments || [] });
+      clearComposer();                          // wipe text + pending files
       await loadCaseDetail(currentDetailRid);   // pulls the new comment + repaints
       scrollCommentsToLatest();                 // auto-scroll so user sees their own message
     } catch (err) {
       const msg = err?.body?.message || err?.body?.error || err?.message || "Couldn't post comment";
       showComposeError(msg + (err?.status ? " (" + err.status + ")" : ""));
     } finally {
-      if (commentInput) commentInput.disabled = false;
-      // Re-evaluate send state from current input contents (form
-      // was cleared on success → disabled; failed → still has body
-      // → enabled so user can retry).
+      if (commentInput) commentInput.setAttribute("contenteditable", "true");
       syncComposeState();
       commentInput?.focus();
     }
