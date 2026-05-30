@@ -55,6 +55,16 @@ export const TYPE_LABEL = {
   task: "Task", bug: "Bug", feature: "Feature", epic: "Epic",
 };
 
+// Bootstrap-icons glyph per case type — the at-a-glance "what kind of
+// work" signal on a kanban card. Colored by `.rp-cases-card-type.is-<type>`
+// in cases.css (one palette with the rest of the page).
+export const TYPE_ICON = {
+  task:    "bi-check2-square",
+  bug:     "bi-bug",
+  feature: "bi-stars",
+  epic:    "bi-collection",
+};
+
 export const RAIL_MARK_COLOR = {
   backlog:     "mute",
   todo:        "blue",

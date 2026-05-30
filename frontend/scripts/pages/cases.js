@@ -47,6 +47,7 @@ import {
   STATUS_LABEL,
   PRIORITY_LABEL,
   TYPE_LABEL,
+  TYPE_ICON,
   DONE_WINDOW_MS,
   DONE_WINDOW_LABEL,
   DONE_WINDOW_ORDER,
@@ -602,7 +603,6 @@ export default function cases(app, { session }) {
 
   function cardHTML(c) {
     const rid = c.redpash_id || c.rid || "";
-    const assignee = c.assignee_display_name || c.assignee_id || "—";
     const age = c.updated_at ? fmtAge(c.updated_at) : "";
     const href = "#/cases?id=" + encodeURIComponent(rid);
     // Tooltip names the destination ("→ Send for review") instead of
@@ -610,19 +610,32 @@ export default function cases(app, { session }) {
     // page's primary advance button uses, so the user sees where the
     // click is taking them. Done cycles back to backlog → "Reopen".
     const cycleLabel = ADVANCE_LABEL[c.status || "backlog"] || "Advance status";
+    // Triage signal, three channels (Em 2026-05-30): priority drives the
+    // left accent bar (data-priority → ::before in cases.css); type shows
+    // as a colored glyph in the head; assignee is an avatar (or a muted
+    // dash when unassigned) instead of a name string that ellipsised away.
+    const priority = c.priority || "medium";
+    const type     = c.type || "task";
+    const typeIcon = TYPE_ICON[type] || TYPE_ICON.task;
+    const assignee = c.assignee_id
+      ? userAvatarHTML(c.assignee_id, c.assignee_display_name, "sm")
+      : '<span class="rp-cases-card-unassigned" title="Unassigned">—</span>';
     return ''
       + '<a class="rp-cases-card" href="' + esc(href) + '" draggable="true" '
       +    'data-rid="' + esc(rid) + '" '
       +    'data-status="' + esc(c.status || "backlog") + '" '
-      +    'data-title="' + esc(c.title || "(untitled)") + '">'
+      +    'data-priority="' + esc(priority) + '" '
+      +    'data-title="' + esc(c.title || "(untitled)") + '" '
+      +    'title="' + esc((PRIORITY_LABEL[priority] || "") + " · " + (TYPE_LABEL[type] || "")) + '">'
       +   '<div class="rp-cases-card-head">'
       +     '<span class="rp-cases-card-rid">' + esc(rid.slice(0, 8)) + '</span>'
-      +     priorityDotHTML(c.priority)
+      +     '<i class="bi ' + typeIcon + ' rp-cases-card-type is-' + esc(type) + '" '
+      +        'title="' + esc(TYPE_LABEL[type] || type) + '"></i>'
       +     '<span class="rt-tab-close rp-cases-card-hide" title="Hide from board"><i class="bi bi-x"></i></span>'
       +   '</div>'
       +   '<div class="rp-cases-card-title">' + esc(c.title || "(untitled)") + '</div>'
       +   '<div class="rp-cases-card-foot">'
-      +     '<span class="rp-cases-card-assignee">' + esc(assignee) + '</span>'
+      +     '<span class="rp-cases-card-assignee">' + assignee + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'
       +     '<button class="rt-icon-btn rt-icon-btn--sm rp-cases-card-cycle" type="button" title="' + esc(cycleLabel) + '">'
       +       '<i class="bi bi-chevron-right"></i>'

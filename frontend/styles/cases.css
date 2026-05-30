@@ -391,6 +391,49 @@
    accent-2 on hover (vs the atom's default text color). */
 .rp-cases-card-cycle:hover { color: var(--rp-accent-2); }
 
+/* ── card triage signal (Em 2026-05-30) ───────────────────────────
+   Three at-a-glance channels so a card is scannable without opening
+   it: priority → a colored left accent bar; type → a colored glyph
+   in the head; assignee → an avatar in the foot.
+
+   The priority bar is a ::before (not a real border-left) so it never
+   collides with the card's 1px border or the accent-2 hover border,
+   and it follows the card's left corner radius. Color tokens match
+   the priority dot still used in the rail. */
+.rp-cases-card { position: relative; }
+.rp-cases-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0.1875rem;
+  border-radius: 0.5rem 0 0 0.5rem;
+  background: var(--rp-text-mute);
+}
+.rp-cases-card[data-priority="low"]::before      { background: var(--rp-ok); }
+.rp-cases-card[data-priority="medium"]::before    { background: var(--rp-accent-2); }
+.rp-cases-card[data-priority="high"]::before       { background: var(--rp-warn); }
+.rp-cases-card[data-priority="critical"]::before  { background: var(--rp-accent); }
+
+/* Type glyph — muted by default; bug/feature/epic get a tint so the
+   work-kind reads at a glance. Task stays neutral (the common case). */
+.rp-cases-card-type { font-size: 0.75rem; color: var(--rp-text-mute); line-height: 1; }
+.rp-cases-card-type.is-bug     { color: var(--rp-accent); }
+.rp-cases-card-type.is-feature { color: var(--rp-mauve); }
+.rp-cases-card-type.is-epic    { color: var(--rp-teal); }
+
+/* Unassigned foot marker — a muted dash that lines up where the
+   assignee avatar sits when the case is owned. */
+.rp-cases-card-unassigned {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--rp-text-mute);
+}
+
 /* ── detail ───────────────────────────────────────────────────── */
 /* Detail panel — full-bleed surface (Em 2026-05-28). Replaces the
    earlier right-side overlay-over-kanban: opening a case hides the
