@@ -7,129 +7,144 @@ last modified date: 2026-05-30
 
 # Dashboards
 
-> **⚠ Pre-refresh content below.** The object-model hard-refresh changed the widget
-> model: chart widgets now reference a saved chart by **`chart_id`** (`CHT_…`), not a
-> `(report_id, chart_index)` pair, and aggregation runs via `POST /api/group/preview`.
-> The current widget shape is canonical in
-> [`objects/dashboard.md`](../objects/dashboard.md#widget); sections below describing
-> `report_id`/`chart_index`/`reportCache`/`/reports/preview` are stale.
+A **dashboard** is a layout of chart tiles. Each tile references a saved
+chart by **`chart_id`** (`CHT_…`); the dashboard only decides *where* the
+charts sit, while each chart owns its own spec + source file.
 
-A **dashboard** is a layout of widgets — each widget references a saved chart by
-`chart_id` (or holds a markdown text block). The dashboard only decides where charts
-go; the chart owns its own spec + source file.
+Like charts, a dashboard is not a table of its own — it is a
+`project_files` row with `file_type='dashboard'` ("everything is a File").
+New dashboards mint a `FIL_` rid (`routes/dashboards.rs` `id::new("FIL")`);
+dashboards that predate the mig-017 fold kept their original `DSH_` rid.
+The `spec` (a `DashboardSpec`) is stored as JSONB. See
+[objects/dashboard.md](../objects/dashboard.md) for the full DTO.
 
 ## Layout
 
-Builder at `#/dashboards?id=DSH_…`:
+The dashboard builder is the **designer canvas** in the workspace
+(`scripts/designer.js` `mountDesigner`), opened when you select a
+chart-typed or dashboard-typed file:
 
 ```
-┌──────────────────────┬───────────────────┐
-│ Preview              │ Dashboard tools   │
-│  CSS-grid template   │  template picker  │
-│  one cell per slot   │  per-slot editor  │
-│  charts mount via    │  (kind + ref)     │
-│  ECharts in cells    │                   │
-└──────────────────────┴───────────────────┘
+┌────────────────────────────────┬──────────────────────┐
+│ .ds-canvas / .ds-grid          │ .ds-config (aside)   │
+│   12-column CSS grid            │  chart-spec accordion│
+│   chart tiles (span-6 / -12)    │  Type / Data / Axes  │
+│   each tile = one ECharts inst, │  / Legend / Tooltip  │
+│   drawn via buildOption()       │  / Style             │
+└────────────────────────────────┴──────────────────────┘
 ```
 
-No source picker. Each chart widget carries its own `report_id +
-chart_index`, so different widgets can pull from different reports.
+There is no source picker and no per-dashboard filter: each tile carries
+its own `chart_id`, so different tiles can pull from different charts (and
+therefore different source files).
 
-## Templates
+## Grid
 
-Pure CSS-grid `template-areas`, registered in
-`scripts/dashboards/templates.js`:
+The canvas is a fixed **12-column CSS grid** (`.ds-grid` in
+`styles/chart.css`). Tiles get span classes (`.span-3/5/6/7/12`); the
+designer mounts dashboard widgets at **`span-6`** (two-up) and a
+lone-chart canvas at **`span-12`**.
 
-| `template_id`         | Grid                                                    | Slots                                  |
-|-----------------------|---------------------------------------------------------|----------------------------------------|
-| `1x1`                 | `"main"`                                                | `main`                                 |
-| `2x2`                 | `"a b" "c d"`                                           | `a`, `b`, `c`, `d`                     |
-| `kpi-row-2x1`         | `"k1 k2 k3" "main-a main-a main-b"`                     | `k1`, `k2`, `k3`, `main-a`, `main-b`   |
-| `chart-side-table`    | `"chart side"`                                          | `chart`, `side`                        |
-| `header-3x2`          | `"hdr hdr hdr" "a b c" "d e f"`                         | `hdr`, `a`…`f`                         |
-
-Adding a template = one entry. The runtime reads `{columns, rows, areas, slots}`.
-
-> The outer grid container's inline style **must use single quotes**
-> (`style='…'`) — `grid-template-areas` contains `"…" "…"` which would
-> terminate a double-quoted attribute mid-string and collapse all
-> cells to the bottom-right. Lesson learned the hard way.
+> There is **no template registry**. `DashboardSpec.template_id` is
+> persisted but currently unused — the designer ignores it for layout and
+> just round-trips it (`""` or `"free"`). Slot/template-aware sizing
+> (named layouts, per-slot spans) is a TODO; don't document the old
+> `1x1`/`2x2`/`kpi-row-2x1`/… templates as if they exist — they never
+> shipped.
 
 ## Widgets
 
-Two kinds:
+A widget is `{ slot, kind, spec }`. Two kinds are defined:
 
 ```jsonc
-// chart — references a saved chart on a report.
-{ "slot": "a", "kind": "chart",
-  "spec": { "report_id": "RPT_…", "chart_index": 0,
-            "title_override": "Q3 funnel" } }
+// chart — references a saved chart by id.
+{ "slot": "w1", "kind": "chart", "spec": { "chart_id": "CHT_…" } }
 
 // text — markdown block.
-{ "slot": "hdr", "kind": "text",
-  "spec": { "markdown": "## Q3 summary\n\nNumbers below." } }
+{ "slot": "hdr", "kind": "text", "spec": { "markdown": "## Q3\n\nNumbers below." } }
 ```
 
-Slot editing UI is a `<details>` per slot in the right panel. Each
-slot's open/closed state is preserved across re-renders (every modal
-input would otherwise collapse the panel — yes, that bug existed once).
+> The canvas currently renders **chart widgets only** — `load()` filters
+> to `kind === "chart"` and drops the rest. `text` widgets (and the
+> `title_override` field on a chart spec) are part of the DTO but not yet
+> rendered by the designer. Legacy `kpi` / `table` / `report` kinds from
+> pre-refresh dashboards are dropped on load, not normalised.
 
-## Chart widget render
+## How a chart tile renders
 
-`renderChart(host, spec)` in `scripts/dashboards/widgets.js`:
+`load(payload)` in `designer.js`:
 
-1. `getReport(spec.report_id)` — fetched once per session (cached in
-   `reportCache`).
-2. `report.spec.charts[spec.chart_index]` → the chart's config.
-3. `api.post("/reports/preview", chartPreviewBody(report.source_file_id,
-   chartCfg, report.spec.filter))` — runs the chart's own group_by + agg
-   against the report's source file with the report's filter. Result
-   cached per `(report_id, chart_index)` in `chartRunCache`.
-4. Extract data with the right helper for the kind (`subtotalsToSeries`
-   for category charts; `subtotalsToHeatmap` / `subtotalsToRadar` /
-   `subtotalsToBoxplot` / `subtotalsToCalendar` / `detailsToScatterSeries`
-   / `subtotalsToScalar` for the rest).
-5. Mount via `chartOption(cfg, …)` or `chartOption<Kind>(cfg, …)` — same
-   functions the report viewer uses, so a chart looks identical
-   embedded vs authored.
+1. Take `dashboard.spec.widgets`, filter to `kind === "chart"`.
+2. **Fetch each chart in parallel** by id — `GET /api/charts/:rid` via
+   `Promise.all`. A `404` means the chart was deleted: the dead widget is
+   pruned from the spec and the dashboard is **self-healed** with a
+   `PUT /api/dashboards/:rid`. Other errors render a recoverable error
+   tile.
+3. Each fetched chart → `mountChartTile(...)`: `mergeCfg(chart)` projects
+   the saved `chart.spec` into a render cfg, then
+   `echarts.init(...).setOption(buildOption(cfg, theme))`. `buildOption`
+   lives in `scripts/charts/build.js` — the same builder the chart editor
+   uses, so a chart looks identical embedded vs. authored.
+4. **Re-aggregation** (`reaggregate`): the tile builds a minimal grouping
+   spec from the chart's own `group_by` + `agg_col`/`agg_fn` and posts
+   `{ source_file_id, spec }` to **`POST /api/group/preview`**, then bakes
+   `subtotals.rows` into the ECharts option (label = first cell, value =
+   last). `count(*)` is mapped to a count over the group-by column to
+   dodge a Polars literal-aggregation bug.
 
-Six widgets pointing at the same chart = **one** network call thanks to
-the `(report_id, chart_index)` cache.
+## Editing flows
+
+- **+ New dashboard** (rail) — `POST /api/dashboards` with
+  `spec: { template_id: "free", widgets: [] }`, then opens it.
+- **Add chart** (designer toolbar) — if the canvas is just a lone chart
+  it is **promoted to a real dashboard first** (see below); then
+  `POST /api/charts` mints an `Untitled chart` against a resolved source
+  file and `addChartWidget(chart)` appends
+  `{ slot, kind:"chart", spec:{ chart_id } }` and **PUTs the whole
+  dashboard**.
+- **Promote-to-dashboard** — a single chart opens as a synthetic
+  one-widget wrapper (read-only). Promoting it does
+  `POST /api/dashboards` with that one `chart_id` as the first widget,
+  turning it into a savable, multi-chart dashboard.
+- **Inline title rename** — the tile-header title is `contentEditable`;
+  Enter/blur commits to the chart's cfg, Esc cancels. It marks the tile
+  dirty, so it persists on the **per-tile chart save**.
+
+### Two distinct saves
+
+| Save | Endpoint | Persists |
+|------|----------|----------|
+| **Per-tile chart save** (tile-head button) | `PUT /api/charts/:rid` | the tile's chart cfg + baked option — chart config, not the dashboard |
+| **Whole-dashboard save** (builder header) | `PUT /api/dashboards/:rid` | `template_id` + the widget `chart_id` refs only. No-op (with a hint) when the canvas is a synthetic lone-chart wrapper |
+
+`delete` removes the chart (`DELETE /api/charts/:rid`) and prunes the
+widget; `close` drops the widget ref without deleting the chart.
 
 ## DashboardSpec
 
 ```jsonc
 {
-  "template_id": "2x2",
+  "template_id": "free",
   "widgets": [
-    { "slot": "a", "kind": "chart", "spec": { "report_id": "RPT_…", "chart_index": 0 } },
-    { "slot": "b", "kind": "chart", "spec": { "report_id": "RPT_…", "chart_index": 2 } },
-    { "slot": "c", "kind": "text",  "spec": { "markdown": "..." } }
+    { "slot": "w1", "kind": "chart", "spec": { "chart_id": "CHT_…" } },
+    { "slot": "w2", "kind": "chart", "spec": { "chart_id": "CHT_…" } }
   ]
 }
 ```
 
 See [objects/dashboard.md](../objects/dashboard.md) for the full DTO.
 
-## Migrating legacy widgets
-
-Dashboards created before the chart-ref refactor (Phase 2 dashboard
-rewrite) had `kpi` / `table` / `chart`-with-inline-spec widgets. On
-load the controller normalises them:
-
-- `kpi` / `table` → converted to `chart` with empty spec.
-- `chart` without `report_id` → spec blanked.
-
-Both end up showing "Pick a report" in the editor and need a one-time
-re-config.
-
 ## Endpoints
 
 | Method | Path                              | Notes |
 |--------|-----------------------------------|-------|
-| GET    | `/api/dashboards`                 | List (sorted by folder, favorite, updated_at desc) |
-| POST   | `/api/dashboards`                 | Create — body = `DashboardRequest` |
+| GET    | `/api/dashboards`                 | List (owner-scoped; sorted folder, favorite, updated_at desc) — `{ items: [...] }` |
+| POST   | `/api/dashboards`                 | Create — body = `DashboardRequest` `{ project_redpash_id, title, spec, description?, folder? }` |
 | GET    | `/api/dashboards/:rid`            | Fetch one |
-| PUT    | `/api/dashboards/:rid`            | Update |
+| PUT    | `/api/dashboards/:rid`            | Full replace of title/spec/folder/description |
+| PATCH  | `/api/dashboards/:rid`            | Sparse update `{ title?, description?, folder?, is_favorite?, is_public? }` (inline Dashboards-tab cells) |
 | DELETE | `/api/dashboards/:rid`            | Remove |
-| POST   | `/api/dashboards/:rid/favorite`   | `{value: bool}` |
+| POST   | `/api/dashboards/:rid/favorite`   | `{ value: bool }` |
+
+All write handlers gate on `ensure_owner` (dashboard/project ownership via
+memberships).

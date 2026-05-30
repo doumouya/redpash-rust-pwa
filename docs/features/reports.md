@@ -7,136 +7,136 @@ last modified date: 2026-05-30
 
 # Reports
 
-> **⚠ Pre-refresh content below.** The standalone `reports` table and the
-> `/api/reports/*` endpoints were retired (object-model hard-refresh). A report is now
-> a *derived view* over a csv-typed File; the builder runs the stateless
-> `POST /api/group/preview`, and saved chart outputs are `project_files` rows
-> (`file_type='chart'`, `/api/charts/*`). The grouping/aggregation **concepts** below
-> are current; the **persistence + endpoints** are historical — see
-> [`api/reports.md`](../api/reports.md) + [`REDMAP`](../REDMAP.md).
+A **report** is *not a stored entity* — there is no `reports` table and no
+`/api/reports/*` routes. A report is a **derived view**: a
+grouping/aggregation spec (`ReportSpec`) run **statelessly** against a CSV
+File through `POST /api/group/preview`. The engine persists nothing; the
+only thing you can *save* out of the builder is a chart, written as a
+chart-typed `project_files` row via `/api/charts/*`.
 
-A **report** is a saved query over a CSV: group rows, aggregate values,
-optionally filter, optionally pivot into a matrix, optionally trim with
-a Top-N filter, optionally enrich with window-function columns,
-optionally plot charts. All authored from one page.
+> Object-model history: the standalone `Report` entity + its CRUD/run
+> endpoints were removed in the hard-refresh. "Report" is now a lens over
+> a File, not a row. See [`api/reports.md`](../api/reports.md) for the
+> retirement note.
 
-## Layout
+## Where it lives
 
-The Reports page (`#/reports?project=PRJ_…&file=FIL_…`,
-`scripts/pages/reports.js`) is a sandbox-ported page — a vertical
-scroll-snap deck of two full-bleed pages, with a page-dots rail to
-jump between them:
+The report builder is a **tab in the workspace filter panel**
+(`scripts/report.js` `mountReport`), not a standalone page — the old
+`#/reports` route and `scripts/pages/reports.js` are gone. You pick a CSV
+file in the workspace, open the **Report** tab, and compose a grouping
+question; the preview renders inline in the same panel.
 
-```
-Page 1 — Data                     Page 2 — Charts
-┌─────────────────────────────┐   ┌──────────┬──────────────────────┐
-│ proj-tabs / header /        │   │ builder  │ chart dock           │
-│ file-tabs / toolbar         │   │ rail     │  one card per chart; │
-│ ┌─────────────────────────┐ │   │ (edits   │  the active card     │
-│ │ source redtable         │ │   │  active  │  redraws live        │
-│ │ (read-only) + pager     │ │   │  chart)  │                      │
-│ └─────────────────────────┘ │   │          │                      │
-└─────────────────────────────┘   └──────────┴──────────────────────┘
-```
-
-- **Page 1 "Data"** — workspace chrome (project tabs, header,
-  source-file tabs, toolbar) over the **read-only** source redtable.
-  Reports never mutate the source; the toolbar's filter can scope the
-  rows a chart sees.
-- **Page 2 "Charts"** — a left **builder rail** + the **chart dock**.
-  The builder edits the *active* chart; its dock card redraws live as
-  fields change.
+The UI frames the spec as a **"Show me _X_ for each _Y_"** question:
+breakdowns are `group_by` chips, measures are aggregations, and an
+advanced `<details>` holds pivot / windows / Top-N / show-toggles.
 
 ## ReportSpec
 
-The saved JSON shape (see `objects/report.md` for the full DTO):
-
 ```jsonc
 {
-  "group_by":      ["formule", "ville"],
-  "group_by_cols": [],                              // matrix pivot dimension
+  "group_by":      ["formule", "ville"],            // row groups (leftmost cols)
+  "group_by_cols": [],                              // column groups → matrix pivot
   "aggregations": [
-    { "col": "client_id", "fn": "count", "alias": "" }
+    { "col": "client_id", "fn": "count", "alias": "" }   // col "*" = count of rows
   ],
-  "filter":  { "op": "and", "children": [...] },    // FilterNode tree
-  "sort":    [{ "col": "client_id_count", "dir": "desc" }],
+  "filter":  { "op": "and", "children": [ /* … */ ] },   // FilterNode tree, pre-group
   "show_details":   true,
   "show_subtotals": true,
   "show_total":     false,
+  "sort":    [{ "col": "client_id_count", "dir": "desc" }],
   "top_n":   { "n": 5, "order_by": "client_id_count", "direction": "desc", "partition_by": [] },
   "windows": [
     { "alias": "pct", "fn": "sum", "col": "client_id_count",
       "partition_by": ["formule"], "as_percent": true }
-  ],
-  "charts":  [ /* ChartSpec */ ]
+  ]
 }
 ```
+
+`ReportSpec` also has a `charts: []` field, but the builder leaves it empty
+— charts are authored + saved separately (see [charts.md](charts.md)).
+
+**Aggregation functions** (`AggFn`): `count`, `count_distinct`, `sum`,
+`mean`, `min`, `max`, `first`, `last`, `median`, `q1`, `q3`. (The chart
+builder offers the common subset; the engine supports all eleven.)
 
 ## Pipeline
 
 `data::group_by::execute(df, spec)` runs in this order:
 
-1. **Filter** — `apply_filter(df, spec.filter)` evaluates the
-   `FilterNode` tree against raw rows.
-2. **Group + aggregate** — combined keys = `group_by + group_by_cols`;
-   if `aggregations` is empty but the user grouped, an implicit
-   `count(*)` is added so the result is never blank.
-3. **Sort** — eager `DataFrame::sort` over the user's sort spec, with
-   `group_by` columns appended as ascending tie-breakers. *Eager,
-   not lazy, because chained `lazy().sort_by_exprs()` after
-   `group_by().agg()` has been observed to silently drop in some
-   Polars 0.43 builds.*
-4. **Windows** — each `WindowSpec` runs as `<fn>(col).over(partition_by)`
-   added with `.with_columns()`. `as_percent: true` divides by the
-   windowed total ×100. Value windows (`lag` / `lead` / `first_value`
-   / `last_value`) sort the lazy frame by `order_by` first.
+1. **Filter** — `apply_filter(df, spec.filter)` evaluates the `FilterNode`
+   tree against the **raw rows**, before any grouping. Skipped when the
+   filter JSON is empty/null.
+2. **Group + aggregate** — combined keys = `group_by ++ group_by_cols`
+   (the matrix split is a frontend concern; Polars sees one group-by). If
+   the user grouped but gave no aggregations, an implicit `count(*)` is
+   added so the result is never blank.
+3. **Windows** — each `WindowSpec` runs as `<fn>(col).over(partition_by)`.
+   `as_percent: true` divides by the windowed total ×100. Value windows
+   (`lag` / `lead` / `first_value` / `last_value`) sort by `order_by`
+   first.
+4. **Sort** — eager `DataFrame::sort` over the user's sort spec, with
+   `group_by` columns appended as ascending tie-breakers. *Eager, not
+   lazy: a `lazy().sort_by_exprs()` chained after `group_by().agg()` has
+   been observed to silently drop in some Polars 0.43 builds.*
 5. **Top-N** — `sort_by_exprs(order_by) → group_by_stable(partition_by)
-   .head(n)`. `partition_by: []` defaults to `group_by[..-1]` so for
-   `[formule, ville]` you get "top-N villes per formule" automatically.
+   .head(n)` on the post-aggregation frame.
 
-The response (`/reports/preview` and `/reports/:rid/run`) carries three
-sections:
+## The engine — `POST /api/group/preview`
 
-| Field         | When populated                                  |
-|---------------|-------------------------------------------------|
-| `details`     | `show_details: true` — raw filtered rows, capped at 1000. Sorted by `group_by` so the frontend can rowspan group cells. |
-| `subtotals`   | Always materialized when grouping is defined. The viewer respects `show_subtotals` to hide it. |
-| `total`       | Always materialized when grouping is defined. The viewer respects `show_total` to hide it. |
+Stateless. Request body is exactly:
 
-> Subtotals + total are *always materialized* even when the viewer
-> hides them, because dashboards and the HTML export read from the
-> same `/reports/:rid/run` response. Display toggles live in the
-> viewer, not in the engine.
+```jsonc
+{ "source_file_id": "FIL_…", "spec": <ReportSpec> }
+```
+
+(There is **no** `source_report_id` — the polymorphic "run a named
+report's spec, then run this on top" source was removed with the Report
+entity.)
+
+The response (`GroupPage`) carries up to three sections plus timing:
+
+| Field        | When populated |
+|--------------|----------------|
+| `details`    | `show_details: true` — raw filtered rows, sorted by `group_by` (group cols promoted to front so the frontend can rowspan them). **Capped at 1000 rows.** |
+| `subtotals`  | Whenever `group_by`, `group_by_cols`, **or** `aggregations` is non-empty. Always *materialized* when grouping is defined; the client decides whether to render it (`show_subtotals`). |
+| `total`      | When `group_by` **or** `group_by_cols` is non-empty (grand-total row, group/sort cleared). Client honors `show_total`. |
+| `ms`         | Elapsed engine time. |
+
+Each `Section` is `{ columns, rows, total }` where `total = rows.len()`
+(no pagination). Rows reuse `shared::file::Row`, so the preview renders
+through the same redtable path as the data grid.
+
+> Subtotals/total are materialized by the engine regardless of the
+> `show_*` flags — the toggles are display-only. A spec with *only*
+> aggregations (no group columns) materializes `subtotals` but **not**
+> `total`.
 
 ## Filter
 
-Filter panel is mounted from the cleaner module — same component, same
-operators (`eq`, `neq`, `contains`, `not_contains`, `starts_with`,
-`ends_with`, `gt`, `gte`, `lt`, `lte`, `between`, `is_null`,
-`not_null`) and the same AND/OR tree.
-
-The filter applies to the **raw rows** before grouping. Charts on the
-report share the same filter — see [charts.md](charts.md).
+The filter panel reuses the cleaner's component — same operators (`eq`,
+`neq`, `contains`, `not_contains`, `starts_with`, `ends_with`, `gt`,
+`gte`, `lt`, `lte`, `between`, `is_null`, `not_null`) and the same AND/OR
+tree. It applies to the **raw rows** before grouping.
 
 ## Group by / matrix mode
 
-- **`group_by`** drives the leftmost columns of the result. Multi-level
-  → hierarchical rowspan'd group cells in the details view.
-- **`group_by_cols`** turns the subtotals into a Salesforce-style
-  matrix: row groups × column groups × first aggregation. Detected
-  client-side when `group_by_cols.length > 0 && group_by.length > 0`.
+- **`group_by`** drives the leftmost result columns. Multi-level →
+  hierarchical rowspan'd group cells in the details view.
+- **`group_by_cols`** turns the subtotals into a Salesforce-style matrix:
+  row groups × column groups × first aggregation. The cross-tab pivot is
+  done **client-side** (`renderMatrix`) when both `group_by` and the
+  pivot dimension are set — the backend still returns long-format rows.
 
 ## Sort
 
-`spec.sort: [{ col, dir }, ...]` — applied in order. Click subtotal
-headers to cycle `none → asc → desc → none`; shift-click adds keys to
-the chain. The frontend strips empty `{ col: "" }` entries before
-sending (cheap defence against stale state).
+`spec.sort: [{ col, dir }, …]` — applied in order, first = primary. Click
+a subtotal header to cycle `none → asc → desc → none`; shift-click chains
+keys. Empty `{ col: "" }` entries are stripped before sending.
 
 ## Top-N per group
 
-Inline filter on the post-aggregation frame. UI is in the Report tools
-panel under **Top N per group**. Compiles to:
+A filter on the **post-aggregation** frame. Compiles to:
 
 ```
 df.lazy()
@@ -145,63 +145,45 @@ df.lazy()
   .head(n)
 ```
 
-`partition_by` empty = global top N. Default = `group_by[0..-1]` so the
-common case ("top N of the deepest group per outer group") needs no
-config.
+`partition_by: []` = global Top-N. When unset and the group depth is > 1,
+it defaults to `group_by[..-1]` — so for `[formule, ville]` you get
+"top-N villes per formule" with no extra config. `n: 0` disables it;
+`direction: "asc"` gives bottom-N.
 
 ## Window functions
 
 Two flavours, both edited in the **Window functions** section:
 
 ### Aggregate windows
-`sum | mean | count | min | max` `OVER (PARTITION BY …)`.
-Broadcasts a single value across the partition. When `as_percent` is
-set the derived column is `col / window_value * 100` — perfect for
-"share of partition" reports.
+`sum | mean | count | min | max` `OVER (PARTITION BY …)`. Broadcasts one
+value across the partition. With `as_percent: true` the derived column is
+`col / window_value * 100` — ideal for "share of partition" reports.
 
 ### Value windows
 `lag | lead | first_value | last_value`. Require an `order_by` column
-(sorts the lazy frame first). `lag` / `lead` take an `offset` (default 1).
+(sorts the lazy frame first); `lag` / `lead` take an `offset` (default 1).
 
-> `count_distinct` and accurate mean roll-ups aren't covered by the
-> Phase B/B.1 windows — both produce wrong results if you sum
-> subtotals. Add an aggregation against the source instead.
+> `count_distinct` and accurate mean roll-ups can't be reconstructed by
+> summing subtotals — add an aggregation against the source instead.
 
-## Charts page
+## Preview, undo/redo
 
-Page 2 is the chart workspace. Each chart runs its **own**
-`/reports/preview` against its source file with its own `group_by` +
-agg — see [charts.md](charts.md).
+The preview is debounced: edits trigger `previewSoon → runPreview`, which
+POSTs `{ source_file_id, spec }` to `/group/preview`. Every preview
+captures a JSON snapshot into an undo history (capped at 200) — Ctrl/Cmd+Z
+undoes, Ctrl/Cmd+Y (or Ctrl/Cmd+Shift+Z) redoes, gated to when the Report
+tab is active and you're not typing in a field.
 
-- **Builder rail** — family `<select>` + variant tiles + the data
-  fields (group-by, metric, aggregator, per-kind conditionals). Edits
-  the active chart; the matching dock card redraws live.
-- **Chart dock** — one card per chart. Each card header has
-  Save / Download / Remove; the builder footer carries the master
-  Save / Download / Delete acting on the active chart.
-- **Save** stamps a title + description (auto-named `chart-NNN` when a
-  card is active and the field is blank) and flags the chart saved.
-- **Download** exports the chart as a standalone HTML report — the
-  rendered ECharts SVG wrapped with its title + description.
+> Engine-bug workaround: when you group without an explicit aggregation,
+> the builder injects `{ col: group_by[0], fn: "count" }` rather than
+> relying on the implicit count — Polars rejects the literal-count
+> expression with "cannot aggregate a literal" in the current build.
 
-### Persistence (current)
+## Saving a report as a chart
 
-Saved charts are written to `localStorage['rp_saved_charts_v1']`, keyed
-per project — they survive a reload and are restored into the dock on
-mount. This is a **stopgap**: the eventual model persists a saved chart
-as a `FIL_` html File (so it surfaces on the Objects page and the
-Dashboard page can read it). Drafts stay in-memory only.
-
-## Endpoints
-
-| Method | Path                                | Notes |
-|--------|-------------------------------------|-------|
-| POST   | `/api/group/preview` | Run a grouping/agg spec (stateless) — body `{source_file_id, spec}` or `{source_report_id, spec}`. **The only live endpoint.** The `reports` table + the rest of `/api/reports/*` (list / create / `:rid` CRUD / run / favorite) were retired; saved outputs are charts (`/api/charts/*`). |
-
-The `/preview` endpoint accepts a polymorphic source:
-
-- `source_file_id: "FIL_…"` → run the widget's spec against the raw
-  source file's frame.
-- `source_report_id: "RPT_…"` → run the **named report's** spec first,
-  then run the widget's spec *on top of* the resulting subtotals.
-  Lets dashboards consume an already-aggregated report.
+The builder produces *table* views; it does not persist anything itself.
+To keep a view, author it as a **chart** — the chart builder
+(`charts/builder-ui.js`) + designer save it via `POST`/`PUT /api/charts`
+as a chart-typed `project_files` row (`file_type='chart'`). A saved chart
+re-runs its own grouping spec through the same `POST /api/group/preview`
+whenever it renders. See [charts.md](charts.md).

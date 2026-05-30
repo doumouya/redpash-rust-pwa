@@ -247,16 +247,16 @@ redpash-app/
 ### Dashboard (`DashboardSpec`, dashboard-as-File)
 | Layer | Location |
 |---|---|
-| **Status** | Object-model hard-refresh (mig 019, 2026-06-02): `dashboards` table dropped, rows folded into `project_files` as `file_type='dashboard'`. The DSH_ rid is preserved (dashboard-typed rows kept their original RIDs through the migration). |
+| **Status** | Object-model hard-refresh (mig 019, 2026-06-02): `dashboards` table dropped, rows folded into `project_files` as `file_type='dashboard'`. Folded rows kept their original `DSH_` rids; dashboards created since mint `FIL_` (`routes::dashboards::create` → `id::new("FIL")`). |
 | **DTO** | `shared::dashboard::DashboardSpec`, `Widget` (spec shape) + `shared::file::FileSummary` (storage envelope). |
 | **Table** | `project_files` with `file_type='dashboard'`; spec lives in `project_files.spec` JSONB. |
-| **RID prefix** | `DSH` |
-| **Templates** | `frontend/scripts/pages/workspace.js` carries the template registry (`1x1`, `2x2`, `kpi-row-2x1`, `chart-side-table`, `header-3x2`) — moved from the retired `scripts/dashboards/templates.js`. |
+| **RID prefix** | `FIL` (new) · `DSH` (preserved on pre-fold rows) |
+| **Layout** | No template registry — `DashboardSpec.template_id` is persisted but unused. The designer (`scripts/designer.js`) lays tiles on a fixed 12-column CSS grid (`.ds-grid`, `styles/chart.css`): dashboard widgets at `span-6`, a lone-chart canvas at `span-12`. Named templates (`1x1`/`2x2`/…) were never implemented. |
 | **Widgets** | `chart` (`{chart_id, title_override?}` — `chart_id` is now a `CHT_…`, no more `report_id+chart_index` pairing since reports aren't entities) · `text` (`{markdown}`). |
 | **DB helpers** | Generic file machinery: `db::insert_file`, `find_file`, `list_files_in_project`, `file_owner`. Dashboard-specific PATCH endpoint at `routes::dashboards::patch_dashboard` handles sparse spec merges. |
 | **API** | `GET·POST /api/dashboards`, `GET·PUT·PATCH·DELETE /api/dashboards/:rid`, `POST /:rid/favorite` (sparse meta PATCH covers title/description/folder/is_favorite/is_public). |
 | **Frontend** | Workspace page (`scripts/pages/workspace.js`, `partials/workspace.html`) — dashboard builder is a mode on the unified surface, not a separate `/dashboards` page. |
-| **Docs** | [`features/dashboards.md`](features/dashboards.md) · [`objects/dashboard.md`](objects/dashboard.md) — both due for a refresh. |
+| **Docs** | [`features/dashboards.md`](features/dashboards.md) · [`objects/dashboard.md`](objects/dashboard.md) (both refreshed 2026-05-30). |
 
 ### Case (`Case`, `Comment`)
 | Layer | Location |
@@ -483,7 +483,7 @@ redpash-app/
 | POST | `/api/files/:rid/snapshot` | save current view as a new file (no step history) |
 | GET | `/api/files/:rid/export` | stream current view as downloadable CSV (no DB write) |
 | POST | `/api/files/:rid/cleanness` · DELETE | recompute (against globals ∪ user `learned_sentinels`) / null-out the score |
-| POST | `/api/group/preview` | run a grouping/agg spec (stateless) — polymorphic `source_file_id` / `source_report_id`. Replaced the retired `/api/reports/*` (CRUD / run / favorite all gone). |
+| POST | `/api/group/preview` | run a grouping/agg spec (stateless) — body `{source_file_id, spec}`. Replaced the retired `/api/reports/*` (CRUD / run / favorite all gone); the old `source_report_id` polymorphic source was removed with the Report entity. |
 | GET | `/api/dashboards` | session user's dashboards |
 | POST · GET · PUT · PATCH · DELETE | `/api/dashboards`, `/:rid` | CRUD + sparse meta PATCH (same shape as reports) |
 | POST | `/api/dashboards/:rid/favorite` | `{value}` |
