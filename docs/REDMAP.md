@@ -2,7 +2,7 @@
 title: REDMAP — find anything fast
 section: Start here
 order: -1
-last modified date: 2026-05-27
+last modified date: 2026-05-30
 ---
 
 # RedPash REDMAP
@@ -83,11 +83,12 @@ redpash-app/
 │   │           ├── user.rs                 UserProfile, UserMembership
 │   │           ├── company.rs              Company, CompanySummary, CompanyMember
 │   │           └── event.rs                Event, EventReport
-│   └── migrations/                         sqlx-managed SQL — one per phase
+│   └── migrations/                         single consolidated baseline (20260529000000_init.sql); new changes land as NNNNNN_*.sql on top
 │
 ├── frontend/
-│   ├── index.html                          shell
-│   ├── service-worker.js                   cache-first shell, network-first /api. Bump CACHE_VERSION on FE changes!
+│   ├── index.html                          shell (echarts + bootstrap-icons loaded from /vendor/, not a CDN)
+│   ├── service-worker.js                   install-only (PWA installability); NO caching — assets come from the network
+│   ├── vendor/                             self-hosted libs — echarts 5.4.3 + bootstrap-icons 1.11.3 (css + woff2/woff)
 │   ├── partials/                           HTML per route, loaded by router
 │   ├── styles/
 │   │   ├── main.css                        :root tokens (--rp-*), reset, shell, dark-mode
@@ -97,6 +98,7 @@ redpash-app/
 │       ├── main.js                         hash router + page bootstrap
 │       ├── api.js                          fetch wrapper; 401 → #/landing
 │       ├── events.js                       frontend error capture → POST /api/events
+│       ├── virtual-rows.js                 windowed <tbody> renderer — mounts only the ~visible rows (bounds DOM for 100k-row grids)
 │       ├── audit/                          ?audit=1 SPA capture mode (`snapshot.js`) — feeds tools/ui-snapshot-audit
 │       ├── ui/
 │       │   ├── toast.js                    success/error/info toasts
@@ -223,7 +225,7 @@ redpash-app/
 | **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `subtotalsToMatrix`, `detailsToScatterSeries` |
 | **Option builders** | `chartOption(cfg, labels, values)` for category kinds; `chartOptionHeatmap`, `chartOptionRadar`, `chartOptionBoxplot`, `chartOptionCalendar`, `chartOptionMatrix` for the rest |
 | **Builder** | Workspace page's chart-builder mode — family `<select>` + inline-SVG variant tiles. |
-| **Library** | ECharts 6 (CDN, lazy-loaded via `echarts.js::loadECharts`); ecStat lazy-loaded via `loadECStat` for regression fits |
+| **Library** | ECharts 5.4.3, **self-hosted** at `/vendor/echarts/echarts.min.js` (global `window.echarts`, loaded in `index.html`) — no longer a CDN dependency (2026-05-30); ecStat lazy-loaded for regression fits |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
 
 ### Company (`Company`, `CompanyMember`, `CompanySummary`)
@@ -415,8 +417,8 @@ redpash-app/
 5. `apply_top_n(df, spec.top_n, fallback_part)` — sort + `group_by_stable.head(n)`.
 
 ### Frontend service worker
-- `frontend/service-worker.js` — shell cache + /api network-first.
-- **Bump `CACHE_VERSION` on every frontend-touching commit.** Otherwise users get stale modules.
+- `frontend/service-worker.js` — **install-only** (2026-05-30): exists solely for PWA installability (the desktop-app effect). Does NO caching — a presence-only `fetch` handler, `skipWaiting` + `clients.claim`, and a one-time old-cache eviction on `activate` (self-heals installs of the old caching SW). `sw-update.js` is now just registration.
+- No `CACHE_VERSION`, no "refresh to apply" banner, no stale-asset / hard-refresh problem — asset freshness is the network's job (the app is server-dependent, so offline was moot anyway).
 
 ### Event capture (observability)
 - Two `/api/*` middlewares: `request_id_mw` mints a per-request id (echoed as the `X-Request-Id` header); `capture_mw` persists every 4xx/5xx response as an `events` row.
@@ -550,7 +552,7 @@ docs: sync REDMAP for the Events system
 - **`with_row_index(IDX_COL, None)`** accepts `&'static str` directly — no `.into()`.
 
 ### Frontend
-- **Bump `CACHE_VERSION` in `frontend/service-worker.js`** on every frontend-touching commit. The browser will keep serving stale JS otherwise.
+- **No `CACHE_VERSION` ritual** — the service worker is install-only and caches nothing (2026-05-30). The browser fetches assets fresh from the network, so there's no stale-JS-needs-a-bump problem anymore.
 - **Inline style attributes need single quotes** when the value contains `"…"` literals (e.g. `grid-template-areas: "a b" "c d"`). Using `style="…"` terminates at the first inner quote and breaks layout.
 - **Modal pattern**: two coexist, both native `<dialog>` + `showModal()` / `close()` (ESC dispatches `cancel` — handle it to reset state).
   - `scripts/ui/modal.js` `openModal({title, body, actions})` — the **preferred** helper. Renders the **glass modal** (`<dialog class="rp-modal--glass">` shell + `.modal` panel, `styles/components/auth-modals.css`) — same look as the landing login/contact modals.
@@ -582,42 +584,18 @@ docs: sync REDMAP for the Events system
 
 ## Migrations
 
-Source-of-truth ordering at `backend/migrations/<YYYYMMDDNNNNNN>_<slug>.sql`. The `api` crate runs `sqlx::migrate!` at boot. Per-table schema breakdown lives in [`db/schema.md`](db/schema.md#migrations); this table is the one-line navigation cheatsheet.
+**Consolidated to a single baseline (2026-05-30).** The 38-file migration
+history was collapsed into one baseline pre-launch (wipeable localhost DB),
+derived from a verified `pg_dump` of the live schema so every view /
+trigger / function / index is preserved — no silent drops. The per-migration
+changelog of *what each prior migration added* (kept for provenance) and the
+per-table breakdown live in [`db/schema.md`](db/schema.md#migrations); the old
+files remain in git history. The `api` crate still runs `sqlx::migrate!` at
+boot; new schema changes land as fresh `NNNNNN_*.sql` files on top of this baseline.
 
-Files are listed in chronological (boot-replay) order. The **Ord** column tracks the in-file `── NNN ──` header ordinal where one exists; that convention started mid-stream at `chart_files` (Ord 016) and isn't applied consistently to every later file (`audit_run_diff` has no ordinal; the stream jumps 025 → 027 — there is no 026). When referring to a migration in commit messages or threads, prefer the **file name** — it's unambiguous.
-
-| Ord | File | Adds |
-|-----|------|------|
-| —   | `20260512000001_init.sql`                  | `users`, `projects`, `project_files`, `project_steps` |
-| —   | `20260513000001_reports.sql`               | `reports` table (dropped in `drop_reports`) |
-| —   | `20260514000001_report_favorite.sql`       | `reports.is_favorite` + partial index (gone with `drop_reports`) |
-| —   | `20260515000001_report_folder.sql`         | `reports.folder` + index (gone with `drop_reports`) |
-| —   | `20260516000001_dashboards.sql`            | `dashboards` table + `reports.description` + both `is_public` (table gone in `fold_dashboards`; flags absorbed by `project_files`) |
-| —   | `20260520000001_auth.sql`                  | `users.google_sub` + partial unique index + `sessions` table |
-| —   | `20260521000001_companies.sql`             | `companies`, `company_memberships`, `project_memberships` + `projects.company_id` |
-| —   | `20260522000001_project_stage_status.sql`  | `projects.stage` + `projects.status` (CHECK-constrained) + indexes |
-| —   | `20260523000001_computed_stages.sql`       | Drops `projects.stage` + `project_files.status`; adds `file_stages` view (stage is computed) |
-| —   | `20260524000001_sentinel_submissions.sql`  | `sentinel_submissions` shared-vocab table + `global_sentinels` view |
-| —   | `20260525000001_filename_stem.sql`         | Strips upload extension off `project_files.filename` / `display_name`; `file_type` owns the extension half |
-| —   | `20260526000001_mtime_cascade.sql`         | Trigger chain — child INSERT/UPDATE/DELETE bumps parent's `updated_at` (steps → files → projects; reports/dashboards → projects) |
-| —   | `20260527000001_dependency_mtime_cascade.sql` | Companion triggers — `project_files` UPDATE bumps reports that source it; `reports` UPDATE bumps dashboards referencing it |
-| —   | `20260528000001_audit_storage.sql`         | `audit.run` + `audit.finding` in separate `audit` schema — dev-meta, persists audit-tool output for trend tracking |
-| —   | `20260529000001_events.sql`                | `events` table — runtime observability log |
-| 016 | `20260530000001_chart_files.sql`           | `project_files.spec` (JSONB) + `project_files.source_file_id` self-FK — saved charts become first-class `project_files` rows with `file_type='chart'` |
-| 017 | `20260531000001_user_names.sql`            | `users.first_name` + `users.last_name` (backfilled from `display_name`) |
-| 018 | `20260601000001_drop_reports.sql`          | **Drops the `reports` table.** Object-model hard-refresh Phase 1 — reports become derived views over a csv-typed File. Locked 2-entity model. |
-| 019 | `20260602000001_fold_dashboards.sql`       | **Drops the `dashboards` table.** Phase 2 — dashboards become `project_files` rows with `file_type='dashboard'`. DSH_ rids preserved through migration. |
-| 020 | `20260603000001_request_log.sql`           | `request_log` table — append-only per-HTTP-request capture (route, status, latency). Powers `/api/metrics` + the Monitoring Requests tab |
-| —   | `20260604000001_audit_run_diff.sql`        | `audit.run_diff` parameterized projection — classifies findings new/closed/unchanged across two runs |
-| 022 | `20260605000001_stage_rename.sql`          | Stage label rename: `import → new`, `report → design`. Matches the locked stage vocabulary |
-| 023 | `20260606000001_user_preferences.sql`      | `user_preferences` table — promotes prefs from a JSONB column to a first-class object (Phase 1 of user-prefs migration) |
-| 024 | `20260607000001_drop_users_prefs.sql`      | Drops the now-dead `users.prefs` JSONB column (Phase 2 of user-prefs migration — completes the cut-over) |
-| 025 | `20260608000001_optimization_points.sql`   | `optimization_points` table — the doc-side "optimization map" becomes a queryable surface that powers the Monitoring Optimization tab |
-| 027 | `20260609000001_request_log_user_session.sql` | `request_log.user_redpash_id` + `session_id` + `(user_redpash_id, at DESC)` partial index. Powers per-user investigation queries (audit-everything slice B) |
-| 028 | `20260610000001_cases.sql`                 | `cases` + `comments` tables — Jira-flow workstream v1. CAS_ + CMT_ rids. Lifecycle changes mirror into `events` (`case_*` kinds) |
-| 029 | `20260611000001_cases_error_message.sql`   | `cases.error_message` — raw error payload field for cases auto-triaged from FE crash / panic events |
-| 030 | `20260612000001_case_categories.sql`       | `case_categories` table + `cases.category_id` FK. Two-level taxonomy via self-FK on `parent_id` |
-| 031 | `20260613000001_relax_audit_tool_check.sql` | Relaxes `audit.run.tool` CHECK to the broader audit family — adds `parallel`, `tab-compare`, `cross-page`, `ui-snapshot` alongside the original `css` + `html`. Gates Layer 1a audit-ingest broadening; see [`internal/specs/audit-ingest-explode.md`](internal/specs/audit-ingest-explode.md) for the per-tool finding contract |
+| File | Adds |
+|------|------|
+| `20260529000000_init.sql` (**baseline**) | The entire current schema in one file. Faithful pg_dump + four deliberate changes: `entities.type` CHECK gains `'team'`; new (unused, RBAC pre-stage) `teams` table; `users.status` (active/suspended/archived); `memberships` `display_name`+`relationship_attribute` collapsed into a single `context_role` descriptor; `case_categories` NULL-safe partial-unique indexes. Preserves the `file_stages` + `global_sentinels` views, the mtime-cascade triggers, and `audit.run_diff`. |
 
 ---
 
