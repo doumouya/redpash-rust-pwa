@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: first-run orchestrator: install-stack → db-setup → wasm build.
+# Doc: docs/internal/code/tools/shell/dev-setup.md
 # Re-exec under bash for arrays + [[ ]].
 if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # ── dev-setup.sh ─────────────────────────────────────────────────────────────

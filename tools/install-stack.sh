@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: installs the runtime stack (Rust + Postgres + Node + wasm tools).
+# Doc: docs/internal/code/tools/shell/install-stack.md
 # Re-exec under bash when invoked via `sh script.sh` (which ignores the
 # shebang). Sibling of stack-version.sh — see that file's comment block
 # for the version-probe catalog this script installs against.

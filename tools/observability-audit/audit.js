@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: cross-stack catalog of observability primitives.
+ * Doc: docs/internal/code/tools/audit-suite/observability-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash observability audit — slice A of the audit-everything workstream
    ---------------------------------------------------------------------------

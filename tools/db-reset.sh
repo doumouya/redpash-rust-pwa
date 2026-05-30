@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: dev-DB lifecycle: drop + recreate redpash_prerelease.
+# Doc: docs/internal/code/tools/shell/db-reset.md
 # Re-exec under bash for [[ ]] + here-strings.
 if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # ── db-reset.sh ──────────────────────────────────────────────────────────────

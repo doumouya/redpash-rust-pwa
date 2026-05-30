@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: JS ↔ Rust /api seam audit (crossings / dangling / unused).
+ * Doc: docs/internal/code/tools/audit-suite/crossing-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash crossing audit — the JS ↔ Rust API seam
    ---------------------------------------------------------------------------

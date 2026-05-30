@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: backend Rust perf candidates (8 rules: collect-then-slice, n+1, etc.).
+ * Doc: docs/internal/code/tools/audit-suite/rs-perf-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash Rust — performance audit
    ---------------------------------------------------------------------------

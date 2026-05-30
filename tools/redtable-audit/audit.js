@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: redtable class-name canonical enforcement.
+ * Doc: docs/internal/code/tools/audit-suite/redtable-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash redtable audit
    ---------------------------------------------------------------------------

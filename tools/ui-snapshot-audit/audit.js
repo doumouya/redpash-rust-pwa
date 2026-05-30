@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: ?audit=1 capture → audit.json bridge.
+ * Doc: docs/internal/code/tools/audit-suite/ui-snapshot-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash UI-snapshot audit
    ---------------------------------------------------------------------------

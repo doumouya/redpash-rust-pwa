@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: per-tab CSS class diff (same role, different name).
+ * Doc: docs/internal/code/tools/audit-suite/css-tab-compare-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash CSS tab-compare audit
    ---------------------------------------------------------------------------

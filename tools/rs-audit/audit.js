@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: backend Rust structural / refactoring health (LOC, repeats, big-matches).
+ * Doc: docs/internal/code/tools/audit-suite/rs-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash Rust — refactoring audit
    ---------------------------------------------------------------------------

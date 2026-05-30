@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: creates the dev DB + runs sqlx migrate run.
+# Doc: docs/internal/code/tools/shell/db-setup.md
 # Re-exec under bash when invoked via `sh script.sh` (which ignores the
 # shebang). Uses `[[ ]]`, array literals, and `<<<` here-strings; dash
 # chokes on all three.

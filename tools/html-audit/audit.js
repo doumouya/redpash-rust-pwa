@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: HTML component-extraction candidates (reusable subtrees).
+ * Doc: docs/internal/code/tools/audit-suite/html-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash HTML component-extraction audit
    ---------------------------------------------------------------------------

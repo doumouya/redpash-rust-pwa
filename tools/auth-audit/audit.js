@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: backend route auth-posture + ownership-hygiene scanner.
+ * Doc: docs/internal/code/tools/audit-suite/auth-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash auth-audit — ownership-hygiene scanner
 

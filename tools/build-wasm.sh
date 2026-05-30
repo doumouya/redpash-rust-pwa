@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# Purpose: builds the data crate as a browser-loadable wasm module.
+# Doc: docs/internal/code/tools/shell/build-wasm.md
 # ─────────────────────────────────────────────────────────────────────────────
 # Build the `data` crate as a browser-loadable wasm module.
 #

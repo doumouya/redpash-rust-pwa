@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: sanity-probe key dev ports across WSL + Windows.
+# Doc: docs/internal/code/tools/shell/port-check.md
 # Re-exec under bash for [[ ]] + arrays.
 if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # ── port-check.sh ────────────────────────────────────────────────────────────

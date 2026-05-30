@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: CSS selector conflicts + duplicate-decl-block detector.
+ * Doc: docs/internal/code/tools/audit-suite/css-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash CSS conflict audit
    ---------------------------------------------------------------------------

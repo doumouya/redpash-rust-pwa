@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: is-the-dev-env-healthy probe (per-section pass/fail).
+# Doc: docs/internal/code/tools/shell/health-check.md
 # Re-exec under bash for [[ ]] + arrays.
 if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 # ── health-check.sh ──────────────────────────────────────────────────────────

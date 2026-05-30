@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: layout-skeleton drift between page partials.
+ * Doc: docs/internal/code/tools/audit-suite/page-structure-audit.md */
 // ─── page-structure-audit ──────────────────────────────────────────
 // Diffs the layout skeleton of every page partial so structural drift
 // between pages surfaces as a finding instead of a "why does this page

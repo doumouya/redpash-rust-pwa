@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: page-prefixed CSS class references outside their owner JS.
+ * Doc: docs/internal/code/tools/audit-suite/css-cross-page-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash CSS cross-page class-leak audit
    ---------------------------------------------------------------------------

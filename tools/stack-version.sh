@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Purpose: prints installed versions of every runtime + dependency.
+# Doc: docs/internal/code/tools/shell/stack-version.md
 # Re-exec under bash when invoked with `sh script.sh` (which ignores the
 # shebang). The script uses `declare -A` + array literals; dash chokes on
 # both. This guard is pure POSIX sh so dash parses it fine.

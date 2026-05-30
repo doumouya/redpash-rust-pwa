@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# Purpose: master audit runner — auto-discovers every tools/*-audit/audit.js.
+# Doc: docs/internal/code/tools/shell/audit.md
 # ─────────────────────────────────────────────────────────────────────────────
 # RedPash audit suite — every tools/*-audit/audit.js + ingest where wired.
 #

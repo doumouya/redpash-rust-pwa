@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: frontend JS refactor audit — LOC / duplicates / unreachable (AST via Acorn).
+ * Doc: docs/internal/code/tools/audit-suite/js-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash JS — refactoring audit (v2.0 AST Edition)
    ---------------------------------------------------------------------------

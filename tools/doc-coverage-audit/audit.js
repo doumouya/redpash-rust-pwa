@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* Purpose: atomic-doc coverage + drift enforcer (atomic-doc-plan).
+ * Doc: docs/internal/code/tools/audit-suite/doc-coverage-audit.md */
 /* ──────────────────────────────────────────────────────────────────────────
    RedPash — doc-coverage audit
    ---------------------------------------------------------------------------
