@@ -45,6 +45,8 @@ docs/internal/
 │
 ├── specs/                         the WHAT — wire contracts
 │   ├── admin-monitoring-surfaces.md  Home + Monitoring IA + endpoint list
+│   ├── audit-storage-design.md    audit-ingest pipeline design (was tools/audit-storage-brainstorming.md, moved 2026-05-30)
+│   ├── dep-audit-design.md        dep & runtime tracking spec (was tools/dep-audit-brainstorming.md, moved 2026-05-30)
 │   ├── filter-dto.md              FilterNode / FilterOp canonical
 │   ├── monitoring-schemas.md      events / request_log / audit.* shapes
 │   └── user-preferences.md        prefs key registry + PATCH protocol
