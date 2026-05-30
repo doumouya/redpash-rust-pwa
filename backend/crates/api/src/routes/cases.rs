@@ -299,6 +299,7 @@ async fn patch(
         company_id.as_deref(),
         error_message.as_deref(),
         category_id.as_deref(),
+        body.attachments,
     ).await?
     .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
 

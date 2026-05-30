@@ -67,6 +67,11 @@ pub struct Case {
     #[serde(default)] pub category_name:        Option<String>,
     #[serde(default)] pub category_parent_id:   Option<String>,
     #[serde(default)] pub category_parent_name: Option<String>,
+    /// File references attached to the case (bug-report evidence:
+    /// logs, error screenshots, repro CSVs). A JSON array of
+    /// `{ name, mime, size, uploaded_at }` objects; `[]` when none.
+    /// v1 is metadata-only — byte upload/preview is a later slice.
+    #[serde(default)] pub attachments: serde_json::Value,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }
@@ -141,6 +146,9 @@ pub struct CasePatchRequest {
     #[serde(default)] pub company_id:    Option<String>,
     #[serde(default)] pub error_message: Option<String>,
     #[serde(default)] pub category_id:   Option<String>,
+    /// Replace the case's attachment list (a JSON array of
+    /// `{ name, mime, size, uploaded_at }`). `None` leaves it untouched.
+    #[serde(default)] pub attachments:   Option<serde_json::Value>,
 }
 
 /// Body of `POST /api/cases/:rid/comments` (create) and

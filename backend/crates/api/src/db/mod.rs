@@ -1398,6 +1398,7 @@ struct CaseRow {
     category_name:          Option<String>,
     category_parent_id:     Option<String>,
     category_parent_name:   Option<String>,
+    attachments:            serde_json::Value,
     created_at:             DateTime<Utc>,
     updated_at:             DateTime<Utc>,
 }
@@ -1421,6 +1422,7 @@ impl From<CaseRow> for Case {
             category_name:          r.category_name,
             category_parent_id:     r.category_parent_id,
             category_parent_name:   r.category_parent_name,
+            attachments:            r.attachments,
             created_at:             r.created_at,
             updated_at:             r.updated_at,
         }
@@ -1444,6 +1446,7 @@ const CASE_SELECT: &str =
      cat.name           AS category_name,
      cat.parent_id      AS category_parent_id,
      catp.name          AS category_parent_name,
+     c.attachments,
      c.created_at, c.updated_at";
 
 /// Reporter + case-owner resolve through memberships now (context_role
@@ -1697,6 +1700,7 @@ pub async fn update_case(
     company_id:    Option<&str>,
     error_message: Option<&str>,
     category_id:   Option<&str>,
+    attachments:   Option<serde_json::Value>,
 ) -> sqlx::Result<Option<Case>> {
     // Case-owner reassignment writes through to a membership
     // (set_case_person); the rest is a sparse COALESCE update. None = skip
@@ -1714,6 +1718,7 @@ pub async fn update_case(
              company_id    = COALESCE($8, company_id),
              error_message = COALESCE($9, error_message),
              category_id   = COALESCE($10, category_id),
+             attachments   = COALESCE($11, attachments),
              updated_at    = now()
          WHERE redpash_id = $1",
     )
@@ -1727,6 +1732,7 @@ pub async fn update_case(
     .bind(company_id)
     .bind(error_message)
     .bind(category_id)
+    .bind(attachments)
     .execute(&mut *tx)
     .await?;
     if res.rows_affected() == 0 {

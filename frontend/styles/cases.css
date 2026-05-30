@@ -782,6 +782,9 @@
   gap: 0.375rem;
   margin-top: 0.5rem;
 }
+/* `display:flex` above beats the `hidden` attribute's UA `display:none`,
+   so the edit form rendered permanently open. Restore the toggle. */
+.rp-cases-side-desc-form[hidden] { display: none; }
 .rp-cases-side-desc-input {
   width: 100%;
   padding: 0.4375rem 0.5rem;
@@ -1121,6 +1124,97 @@
   line-height: 1.4;
 }
 .rp-cases-comment-form-error[hidden] { display: none; }
+
+/* ── case attachments (Em 2026-05-30) ─────────────────────────────
+   Sidebar list of file references + the composer's paperclip. v1 is
+   metadata-only (name / type / size); a chip carries a type-glyph and
+   a hover-revealed remove ×. */
+.rp-cases-detail-side-attachments { margin-top: 0.125rem; }
+.rp-cases-side-attachments-head {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.4375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rp-cases-attach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.rp-cases-attach {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  transition: border-color 0.12s var(--rp-ease);
+}
+.rp-cases-attach:hover { border-color: var(--rp-accent-2); }
+.rp-cases-attach-icon { flex: 0 0 auto; font-size: 0.9375rem; color: var(--rp-accent-2); }
+.rp-cases-attach-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--rp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-cases-attach-size {
+  flex: 0 0 auto;
+  font-size: 0.6562rem;
+  color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.rp-cases-attach-remove {
+  flex: 0 0 auto;
+  opacity: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  transition: opacity 0.12s var(--rp-ease);
+}
+.rp-cases-attach:hover .rp-cases-attach-remove,
+.rp-cases-attach:focus-within .rp-cases-attach-remove { opacity: 1; }
+.rp-cases-attach-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
+
+/* Composer paperclip — sits left of the textarea, bottom-aligned,
+   mirroring the send button's size + corner radius. */
+.rp-cases-comment-form-row { align-items: flex-end; gap: 0.5rem; }
+.rp-cases-comment-attach {
+  flex: 0 0 auto;
+  width: 2.125rem;
+  height: 2.125rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.12s var(--rp-ease), border-color 0.12s var(--rp-ease);
+}
+.rp-cases-comment-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-cases-comment-attach i { font-size: 0.9375rem; }
 
 /* Small avatar variant — used inside comment bubbles. The default
    1.5rem is for the side-panel reporter/assignee badge. */

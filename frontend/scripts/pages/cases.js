@@ -72,6 +72,7 @@ export default function cases(app, { session }) {
   // top-toggle tabs). No groups means no per-group expand state.
   let activityFilter = "all";                  // sticky per-mount; per-case mem only
   let lastDetailActivity = [];                 // memoized for filter pill re-render
+  let currentAttachments = [];                 // last-painted case.attachments — base for attach/remove
 
   // ── hide / restore — replicated from workspace `8d070eb` per the
   //    docs/internal/processes/replicable-feature-pattern.md recipe.
@@ -881,6 +882,35 @@ export default function cases(app, { session }) {
   const activityCountEl = app.querySelector("#rp-cases-side-activity-count");
   const activityFilterEl = app.querySelector("#rp-cases-activity-filter");
 
+  // Attachments — sidebar list + the composer's paperclip affordance.
+  const sideAttachments = app.querySelector("#rp-cases-side-attachments");
+  const attachList      = app.querySelector("#rp-cases-attach-list");
+  const attachCount     = app.querySelector("#rp-cases-side-attachments-count");
+  const attachBtn       = app.querySelector("#rp-cases-comment-attach");
+  const attachInput     = app.querySelector("#rp-cases-comment-attach-input");
+
+  // Paperclip → file picker. v1 records each file's name/type/size
+  // (metadata only — no byte upload yet) and appends it to the case's
+  // attachment list via the same sparse PATCH the side controls use.
+  attachBtn?.addEventListener("click", () => attachInput?.click());
+  attachInput?.addEventListener("change", () => {
+    if (!attachInput.files?.length) return;
+    const now = new Date().toISOString();
+    const added = Array.from(attachInput.files).map((f) => ({
+      name: f.name, mime: f.type || null, size: f.size, uploaded_at: now,
+    }));
+    attachInput.value = "";                    // reset so re-picking the same file re-fires change
+    patchCase({ attachments: currentAttachments.concat(added) });
+  });
+  // Remove an attachment (event-delegated; PATCHes the filtered list).
+  attachList?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".rp-cases-attach-remove");
+    if (!btn) return;
+    const idx = Number(btn.closest("[data-attach-idx]")?.dataset.attachIdx);
+    if (Number.isNaN(idx)) return;
+    patchCase({ attachments: currentAttachments.filter((_, i) => i !== idx) });
+  });
+
   let currentDetailRid = null;
   let assigneePickerTimer = null;
 
@@ -1282,6 +1312,10 @@ export default function cases(app, { session }) {
     }
     if (sideDescDetails) sideDescDetails.open = !!c.description;
 
+    // Attachments — present on both the GET detail and PATCH (bare
+    // Case) shapes, so this repaints correctly after any field edit.
+    renderAttachments(c.attachments);
+
     // Activity count in the summary — gives the user a sense of
     // whether expanding is worthwhile without forcing it open.
     if (hasActivity && activityCountEl) {
@@ -1315,6 +1349,50 @@ export default function cases(app, { session }) {
   // Avatar atom — initials in a deterministically-colored circle.
   // Color hashes the user rid so the same user always reads the
   // same color across the app. Returns the avatar element only;
+  // ── attachments ─────────────────────────────────────────────
+  // Case-level file references (logs, error screenshots, repro CSVs).
+  // v1 is metadata-only: name + mime + size + uploaded_at. The chip
+  // gets a type-glyph (image / csv / json / log / zip) + a hover ×.
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + " B";
+    const u = ["KB", "MB", "GB", "TB"];
+    let i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+    return (n < 10 ? n.toFixed(1) : Math.round(n)) + " " + u[i];
+  }
+  function attachIcon(mime, name) {
+    const m = (mime || "").toLowerCase();
+    const ext = (name || "").split(".").pop().toLowerCase();
+    if (m.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext)) return "bi-file-earmark-image";
+    if (m === "text/csv" || ext === "csv") return "bi-filetype-csv";
+    if (m === "application/json" || ext === "json") return "bi-filetype-json";
+    if (m === "text/plain" || ["log", "txt"].includes(ext)) return "bi-file-earmark-text";
+    if (["zip", "gz", "tar"].includes(ext)) return "bi-file-earmark-zip";
+    return "bi-file-earmark";
+  }
+  function attachItemHTML(att, i) {
+    const name = att.name || "file";
+    return ''
+      + '<li class="rp-cases-attach" data-attach-idx="' + i + '">'
+      +   '<i class="bi ' + attachIcon(att.mime, name) + ' rp-cases-attach-icon"></i>'
+      +   '<span class="rp-cases-attach-name" title="' + esc(name) + '">' + esc(name) + '</span>'
+      +   '<span class="rp-cases-attach-size">' + esc(fmtBytes(att.size)) + '</span>'
+      +   '<button type="button" class="rp-cases-attach-remove" title="Remove attachment">'
+      +     '<i class="bi bi-x"></i></button>'
+      + '</li>';
+  }
+  // Renders the sidebar list + caches the array as the base for
+  // attach/remove PATCHes. Hides the whole section when there are none.
+  function renderAttachments(list) {
+    currentAttachments = Array.isArray(list) ? list : [];
+    if (!sideAttachments) return;
+    const n = currentAttachments.length;
+    sideAttachments.hidden = n === 0;
+    if (attachCount) attachCount.textContent = n ? "(" + n + ")" : "";
+    if (attachList)  attachList.innerHTML = currentAttachments.map(attachItemHTML).join("");
+  }
+
   // composes into userBadgeHTML (avatar + name) and into the
   // comment bubble (avatar standalone, name lives in the bubble
   // header).

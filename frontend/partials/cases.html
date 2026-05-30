@@ -166,6 +166,15 @@
                 Sending as <span id="rp-cases-comment-form-as">you</span>
               </div>
               <div class="rp-cases-comment-form-row">
+                <!-- Attach a file to this case. v1 records the file's
+                     name/type/size (metadata only — byte upload + preview
+                     is a later slice); the file lands in the case's
+                     Attachments list in the sidebar. -->
+                <button class="rp-cases-comment-attach" id="rp-cases-comment-attach"
+                        type="button" title="Attach a file to this case">
+                  <i class="bi bi-paperclip"></i>
+                </button>
+                <input type="file" id="rp-cases-comment-attach-input" multiple hidden />
                 <textarea class="rp-cases-comment-input" id="rp-cases-comment-input"
                           placeholder="Reply to this case… (Ctrl+Enter to send)"
                           rows="3"></textarea>
@@ -243,6 +252,20 @@
                 <dd id="rp-cases-side-updated">—</dd>
               </div>
             </dl>
+
+            <!-- Attachments — file references on the case (logs, error
+                 screenshots, repro CSVs). Always-visible (not collapsed)
+                 because evidence is primary context; the section hides
+                 itself when the case has none. Populated by paintDetail
+                 from case.attachments; the composer's paperclip appends
+                 here. v1 is metadata-only. -->
+            <div class="rp-cases-detail-side-attachments" id="rp-cases-side-attachments" hidden>
+              <div class="rp-cases-side-attachments-head">
+                <span>Attachments</span>
+                <span class="rp-cases-side-section-count" id="rp-cases-side-attachments-count"></span>
+              </div>
+              <ul class="rp-cases-attach-list" id="rp-cases-attach-list"></ul>
+            </div>
 
             <!-- Description — auto-opens when populated, stays
                  closed when empty. JS toggles the `open` attribute.
