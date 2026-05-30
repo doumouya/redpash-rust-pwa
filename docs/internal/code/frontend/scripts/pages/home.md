@@ -21,6 +21,7 @@ Home — the org command center. Shell pattern shared with Workspace: topbar + r
 ## Drift-prone areas
 
 - Pattern is LOCKED per pattern-lock-personalization-within; new tabs join via LIST_VIEWS entry.
+- Post-fetchList hook order: `view._applyColumnOrder()` must fire before `view._applyHiddenColumns()` so the drag-reorder lands before positional hide indexing — see [list-page.js](../list-page.md).
 
 ## Related
 

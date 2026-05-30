@@ -21,6 +21,7 @@ Monitoring — the system telemetry surface. Same shell pattern as Home (rail + 
 ## Drift-prone areas
 
 - Request-detail modal uses the shared rp-modal-* atom + --rp-modal-w width override.
+- Post-fetchList hook order: `colsCtrl.applyColumnOrder()` must fire before `colsCtrl.applyHiddenColumns()` so the drag-reorder lands before positional hide indexing — see [list-page.js](../list-page.md).
 
 ## Related
 

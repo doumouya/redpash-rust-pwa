@@ -863,9 +863,11 @@ export default function monitoring(app, { session }) {
       }
       // Cache for export + re-apply the columns picker / reorder state
       // so the freshly-rendered rows inherit hidden + ordered columns.
+      // Reorder before hide: hide indexes tbody positionally off TH
+      // position, so thead+tbody must be in lockstep first.
       lastMonRows = rows;
-      colsCtrl?.applyHiddenColumns();
       colsCtrl?.applyColumnOrder();
+      colsCtrl?.applyHiddenColumns();
       renderListPager();
     } catch (err) {
       setKpi("rp-mon-list-total", "—");

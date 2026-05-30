@@ -455,6 +455,44 @@ export function wireListColumnsExport(view, opts) {
     try { return JSON.parse(localStorage.getItem(orderStorageKey)) || []; }
     catch { return []; }
   }
+  // Resolve the live target order: persisted keys filtered to keys that
+  // still live in the spec, plus any new keys (not yet persisted) appended
+  // at the end so a spec growth doesn't force a hard reset.
+  function targetColumnOrder(byKey) {
+    const out = readColOrder().filter((k) => byKey.has(k));
+    [...byKey.keys()].forEach((k) => { if (!out.includes(k)) out.push(k); });
+    return out;
+  }
+  // Reorder THs in `headRow` and each tbody row's data cells from
+  // `currentOrder` (the order the data cells are CURRENTLY in) to
+  // `targetKeys`. Idempotent — no-ops when both already match target.
+  // The leading `.rp-list-sel` checkbox cell (select mode) stays anchored
+  // first; only data-col-key cells are reordered.
+  function reorderColumnDOM(headRow, tbody, currentOrder, targetKeys, byKey) {
+    const currentTH = [...headRow.querySelectorAll("th[data-col-key]")]
+      .map((th) => th.dataset.colKey);
+    const thsAligned   = targetKeys.every((k, i) => currentTH[i] === k);
+    const cellsAligned = targetKeys.every((k, i) => currentOrder[i] === k);
+    if (thsAligned && cellsAligned) return;
+    if (!thsAligned) targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
+    if (!tbody || cellsAligned) return;
+    const currentIndex = new Map(currentOrder.map((k, i) => [k, i]));
+    tbody.querySelectorAll("tr").forEach((tr) => {
+      const selCell   = tr.querySelector(".rp-list-sel");
+      const dataCells = [...tr.children].filter((td) => !td.classList.contains("rp-list-sel"));
+      const reordered = targetKeys.map((k) => dataCells[currentIndex.get(k)]);
+      while (tr.firstChild) tr.removeChild(tr.firstChild);
+      if (selCell) tr.appendChild(selCell);
+      reordered.forEach((cell) => cell && tr.appendChild(cell));
+    });
+  }
+  // Post-fetchList hook. fetchList wholesale rewrites `tbody.innerHTML`,
+  // so the freshly-painted data cells are in SPEC order even when THs
+  // were left in a prior target order by an earlier drag-reorder. Pass
+  // spec keys as `currentOrder` so the cell→position mapping is correct
+  // regardless of TH state. (Pre-2026-05-30 bug: function early-returned
+  // when THs matched target, leaving tbody in spec order — every column
+  // showed the wrong data after any fetchList repaint.)
   function applyColumnOrder() {
     const table = view.querySelector(".rt-table");
     if (!table) return;
@@ -462,23 +500,11 @@ export function wireListColumnsExport(view, opts) {
     if (!headRow) return;
     const ths = [...headRow.querySelectorAll("th[data-col-key]")];
     if (ths.length === 0) return;
+    const tbody = table.querySelector("tbody");
     const byKey = new Map(ths.map((th) => [th.dataset.colKey, th]));
-    const targetKeys = readColOrder().filter((k) => byKey.has(k));
-    ths.forEach((th) => {
-      if (!targetKeys.includes(th.dataset.colKey)) targetKeys.push(th.dataset.colKey);
-    });
-    const currentKeys = ths.map((th) => th.dataset.colKey);
-    if (targetKeys.every((k, i) => currentKeys[i] === k)) return;
-    const oldDataIndex = new Map(ths.map((th, i) => [th.dataset.colKey, i]));
-    targetKeys.forEach((k) => headRow.appendChild(byKey.get(k)));
-    table.querySelectorAll("tbody tr").forEach((tr) => {
-      const selCell   = tr.querySelector(".rp-list-sel");
-      const dataCells = [...tr.children].filter((td) => !td.classList.contains("rp-list-sel"));
-      const reordered = targetKeys.map((k) => dataCells[oldDataIndex.get(k)]);
-      while (tr.firstChild) tr.removeChild(tr.firstChild);
-      if (selCell) tr.appendChild(selCell);
-      reordered.forEach((cell) => cell && tr.appendChild(cell));
-    });
+    const specOrder  = columns.map(colKey).filter((k) => byKey.has(k));
+    const targetKeys = targetColumnOrder(byKey);
+    reorderColumnDOM(headRow, tbody, specOrder, targetKeys, byKey);
   }
 
   const headEl = view.querySelector(".rt-table thead");
@@ -517,15 +543,27 @@ export function wireListColumnsExport(view, opts) {
     if (!srcKey || srcKey === tgtKey) return;
     const rect = tgt.getBoundingClientRect();
     const before = e.clientX < rect.left + rect.width / 2;
-    const order  = [...headEl.querySelectorAll("th[data-col-key]")].map((th) => th.dataset.colKey);
-    const srcIdx = order.indexOf(srcKey);
-    const tgtIdx = order.indexOf(tgtKey);
+    // Snapshot the CURRENT DOM order — at drop time tbody data cells and
+    // THs are in lockstep (applyColumnOrder runs as the post-fetchList
+    // hook and re-aligns them to the persisted target before any drag
+    // begins, so `currentOrder` describes both halves).
+    const ths = [...headEl.querySelectorAll("th[data-col-key]")];
+    const currentOrder = ths.map((th) => th.dataset.colKey);
+    const srcIdx = currentOrder.indexOf(srcKey);
+    const tgtIdx = currentOrder.indexOf(tgtKey);
     if (srcIdx === -1 || tgtIdx === -1) return;
-    order.splice(srcIdx, 1);
+    const newOrder = [...currentOrder];
+    newOrder.splice(srcIdx, 1);
     const adjTgt = tgtIdx > srcIdx ? tgtIdx - 1 : tgtIdx;
-    order.splice(before ? adjTgt : adjTgt + 1, 0, srcKey);
-    localStorage.setItem(orderStorageKey, JSON.stringify(order));
-    applyColumnOrder();
+    newOrder.splice(before ? adjTgt : adjTgt + 1, 0, srcKey);
+    localStorage.setItem(orderStorageKey, JSON.stringify(newOrder));
+    // Inline reorder — DOM matches `currentOrder` exactly here, so this
+    // is the one call site where `applyColumnOrder()`'s spec-order
+    // assumption would NOT hold; pass currentOrder explicitly instead.
+    const byKey = new Map(ths.map((th) => [th.dataset.colKey, th]));
+    const tbody = view.querySelector(".rt-table tbody");
+    const headRow = headEl.querySelector("tr");
+    reorderColumnDOM(headRow, tbody, currentOrder, newOrder, byKey);
   });
 
   // ── export (CSV / JSON) ─────────────────────────────────────────

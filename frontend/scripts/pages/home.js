@@ -2299,15 +2299,18 @@ export default function home(app, { session: _session }) {
       if (typeof view._decorateEditMode === "function") {
         view._decorateEditMode();
       }
+      // Re-apply the column-reorder saved order so new rows pick up
+      // the user's preferred column sequence (drag-reorder persists
+      // across refetches + tab switches). Runs BEFORE the hide pass
+      // because applyHiddenColumns positionally indexes tbody by TH
+      // position — they have to be aligned first or the wrong columns
+      // get hidden after a drag-reorder + paginate.
+      if (typeof view._applyColumnOrder === "function") {
+        view._applyColumnOrder();
+      }
       // Re-apply the hidden-columns set so new rows pick up the hide.
       if (typeof view._applyHiddenColumns === "function") {
         view._applyHiddenColumns();
-      }
-      // Re-apply the column-reorder saved order so new rows pick up
-      // the user's preferred column sequence (drag-reorder persists
-      // across refetches + tab switches).
-      if (typeof view._applyColumnOrder === "function") {
-        view._applyColumnOrder();
       }
       renderListPager();
     } catch (err) {
