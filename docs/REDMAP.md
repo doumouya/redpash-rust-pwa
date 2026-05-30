@@ -47,11 +47,20 @@ redpash-app/
 │   │   │           │   ├── output.rs       /snapshot + /export
 │   │   │           │   ├── meta.rs         PATCH /:rid + DELETE /:rid + display-name/move/encoding
 │   │   │           │   └── state_ops.rs    /cast-preview + /clear-filters + cleaner cursor ops
-│   │   │           ├── reports.rs          CRUD + /preview + /run + favorite + PATCH (sparse meta)
-│   │   │           ├── dashboards.rs       CRUD + favorite + PATCH (sparse meta)
-│   │   │           ├── users.rs            dev-permissive directory CRUD
-│   │   │           ├── companies.rs        companies + memberships (owner/admin/member); membership IS the access check
-│   │   │           └── events.rs           runtime observability log — capture + read API
+│   │   │           ├── charts.rs      saved-chart CRUD (CHT_ project_files rows)
+│   │   │           ├── group.rs       stateless grouping engine — POST /group/preview (was /reports/preview; reports retired)
+│   │   │           ├── dashboards.rs  CRUD + favorite + PATCH (sparse meta)
+│   │   │           ├── cases.rs       Jira-flow cases + comments + categories
+│   │   │           ├── monitoring.rs  /api/monitoring/* (requests/events/queries/audits/optimization)
+│   │   │           ├── metrics.rs     /api/metrics aggregates
+│   │   │           ├── search.rs      global search
+│   │   │           ├── admin.rs       dev-permissive admin surface (users/companies/memberships/stats)
+│   │   │           ├── demo.rs        public POST /api/demo/parse (no-auth landing demo)
+│   │   │           ├── docs.rs        markdown→HTML docs viewer
+│   │   │           ├── pagination.rs  shared (page,size)→offset helper
+│   │   │           ├── users.rs       dev-permissive directory CRUD
+│   │   │           ├── companies.rs   companies + memberships (owner/admin/member); membership IS the access check
+│   │   │           └── events.rs      runtime observability log — capture + read API
 │   │   ├── data/                           Polars-backed compute. No HTTP.
 │   │   │   └── src/
 │   │   │       ├── parse/                  CSV → DataFrame (decomposed 2026-05-27)
@@ -70,7 +79,7 @@ redpash-app/
 │   │   │       ├── stats.rs                cleanness scorer + sentinel scan + unique-value extractor + cell-diff counter
 │   │   │       ├── joins.rs                overlap-coefficient detector
 │   │   │       ├── dedup.rs                full-row + per-PK dedup
-│   │   │       ├── render.rs               markdown → HTML (pulldown-cmark + syntect + gray_matter) for `/api/docs`
+│   │   │       ├── render.rs               stub (TODO phase 2-3); markdown→HTML docs path lives in routes/docs.rs
 │   │   │       └── encoding.rs             chardetng wrapper + BOM-first
 │   │   └── shared/                         DTOs travelling over the wire
 │   │       └── src/
@@ -90,26 +99,21 @@ redpash-app/
 │   ├── service-worker.js                   install-only (PWA installability); NO caching — assets come from the network
 │   ├── vendor/                             self-hosted libs — echarts 5.4.3 + bootstrap-icons 1.11.3 (css + woff2/woff)
 │   ├── partials/                           HTML per route, loaded by router
-│   ├── styles/
-│   │   ├── main.css                        :root tokens (--rp-*), reset, shell, dark-mode
-│   │   ├── components/                     buttons / topbar / toast / modal / filters / redtable / forms
-│   │   └── pages/                          per-page sheets (cleaner.css, reports.css, dashboards.css)
+│   ├── styles/                          flat per-area sheets (no subdirs) — tokens.css = :root --rp-* design tokens;
+│   │                                   base/shell/topbar/rail/panel/table/card/button/modal/page + per-page
+│   │                                   (home/workspace/cases/monitoring/profile/settings/login/...)
 │   └── scripts/
 │       ├── main.js                         hash router + page bootstrap
-│       ├── api.js                          fetch wrapper; 401 → #/landing
+│       ├── api.js                          fetch wrapper; 401 → #/login
 │       ├── events.js                       frontend error capture → POST /api/events
-│       ├── virtual-rows.js                 windowed <tbody> renderer — mounts only the ~visible rows (bounds DOM for 100k-row grids)
-│       ├── audit/                          ?audit=1 SPA capture mode (`snapshot.js`) — feeds tools/ui-snapshot-audit
-│       ├── ui/
-│       │   ├── toast.js                    success/error/info toasts
-│       │   └── history.js                  generic undo/redo ring buffer
-│       ├── tools/                          cleaning-step UI dispatch (decomposed 2026-05-27)
-│       │   ├── (catalog.js, action sets)   12-tool catalog + GLOBAL_ACTIONS + SELECT_ACTIONS + per-kind UI modules
-│       │   └── …                           re-exported through tools.js so consumers stay frozen
-│       ├── dashboards/
-│       │   ├── widgets.js                  chart-ref and text widget renderers
-│       │   ├── echarts.js                  lazy loaders (loadECharts + loadECStat)
-│       │   └── chart-render.js             shared chartOption + per-kind extractors. Used by reports AND dashboards.
+│       ├── virtual-rows.js                 windowed <tbody> renderer — mounts only the ~visible rows (bounds DOM at 100k-row grids)
+│       ├── designer.js                     dashboard/chart designer canvas (tiles + per-tile config)
+│       ├── report.js                       report builder + inline undo/redo (undoStack/redoStack)
+│       ├── tools.js + tools/               cleaning-step UI dispatch — tools/{catalog,actions,fields}.js, re-exported via tools.js
+│       ├── charts/                         render.js (renderChart/resolveData/synthesizeOption) + builder-ui.js + build.js + home-bank.js + monitoring-bank.js
+│       ├── echarts-kpi.js · echarts-theme.js  ECharts KPI helpers + theme registration
+│       ├── audit/                          ?audit=1 SPA capture (snapshot.js) — feeds tools/ui-snapshot-audit
+│       └── pages/                          per-page modules — home, workspace (cleaner+report+chart+dashboard), monitoring, cases, profile, settings, docs, login (+ cases/ home/ monitoring/ sub-folders)
 │       └── pages/                          per-page modules — workspace (cleaner+reports+dashboards unified), home, monitoring, cases, profile, settings, docs, landing
 │
 └── docs/                                   served at /docs (this file lives here)
@@ -167,7 +171,7 @@ redpash-app/
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::project::ProjectSummary` |
-| **Table** | `projects` (migration 001). Unique partial index for `is_default`. |
+| **Table** | `projects` (migration 001). `owner_id`/`is_default`/`stage` dropped (migs 023/024): ownership is a `role='owner'` row in `memberships`; default project lives on `users.default_project_id`. |
 | **RID prefix** | `PRJ` |
 | **DB helpers** | `db::list_projects(owner)`, `find_default_project`, `insert_project`, `ensure_default_project`, `project_owner` (ownership gate) |
 | **API** | `GET /api/projects`, `GET /api/projects/:rid/files` (owner-gated) |
@@ -206,7 +210,7 @@ redpash-app/
 | **DTO** | `shared::report::ReportSpec` + descendants (`Aggregation`, `AggFn`, `SortSpec`, `TopNFilter`, `WindowSpec`) retained — they're the group-by spec shape consumed by the engine, not a stored object. |
 | **RID prefix** | `RPT` retired. Reports are addressed via their source `FIL_…`. |
 | **Engine** | `data::group_by::execute(df, spec)` — filter → group → sort → windows → top_n. Unchanged; spec source moved from a `reports` row to the chart-typed File's `spec`. |
-| **API** | `/api/reports` retired in mig 018; runtime grouped queries hit `/api/charts/:rid` (saved charts) or compose the spec inline against `/api/files/:rid/page` (ad-hoc). |
+| **API** | `/api/reports` retired (object-model refresh); the stateless grouping engine is `POST /api/group/preview`. Saved charts read via `/api/charts/:rid`. |
 | **Frontend** | Workspace page (`scripts/pages/workspace.js`) — the report-builder UI is now a mode on the unified Workspace surface, not a separate `/reports` page. |
 | **Docs** | [`docs/internal/architecture/object-model.md`](internal/architecture/object-model.md) — locked 2026-05-22 — explains the 2-entity rewrite. |
 
@@ -221,9 +225,9 @@ redpash-app/
 | **API** | `GET /api/charts` (list), `POST /api/charts` (create), `GET·PUT·DELETE /api/charts/:rid` (RUD). |
 | **Kinds** | `bar`, `bar_horizontal`, `line`, `area`, `pie`, `funnel`, `gauge`, `pictorial_bar`, `scatter`, `heatmap`, `radar`, `boxplot`, `calendar`, `matrix` |
 | **Modifiers** | `smooth` (line/area), `donut`/`half`/`rose` (pie), `regression` (scatter), `symbol`/`symbol_repeat` (pictorial_bar), `y_group_by` (heatmap/radar/matrix), `rich_labels` (pie/bar) |
-| **Preview body** | `chart-render.js::chartPreviewBody` dispatches 4 shapes (subtotals / heatmap-radar-matrix / scatter-details / gauge-scalar / boxplot-5-aggs) |
+| **Render** | `charts/render.js` — `resolveData(source)` derives the series, `synthesizeOption(data, kind)` builds the ECharts option, `renderChart(el, spec, theme)` mounts (disposing any prior instance) |
 | **Extractors** | `subtotalsToSeries`, `subtotalsToScalar`, `subtotalsToHeatmap`, `subtotalsToRadar`, `subtotalsToBoxplot`, `subtotalsToCalendar`, `subtotalsToMatrix`, `detailsToScatterSeries` |
-| **Option builders** | `chartOption(cfg, labels, values)` for category kinds; `chartOptionHeatmap`, `chartOptionRadar`, `chartOptionBoxplot`, `chartOptionCalendar`, `chartOptionMatrix` for the rest |
+| **Data source** | charts re-aggregate via `POST /api/group/preview` (`charts/builder-ui.js`); specs persist as `project_files.spec` (the designer holds them) |
 | **Builder** | Workspace page's chart-builder mode — family `<select>` + inline-SVG variant tiles. |
 | **Library** | ECharts 5.4.3, **self-hosted** at `/vendor/echarts/echarts.min.js` (global `window.echarts`, loaded in `index.html`) — no longer a CDN dependency (2026-05-30); ecStat lazy-loaded for regression fits |
 | **Docs** | [`features/charts.md`](features/charts.md) (incl. "Remaining kinds" table for parked ones) · [`objects/chart.md`](objects/chart.md) |
@@ -232,10 +236,10 @@ redpash-app/
 | Layer | Location |
 |---|---|
 | **DTO** | `shared::company::Company`, `CompanyMember`, `CompanySummary` |
-| **Table** | `companies` + `company_memberships` (migration 007). `projects.company_id` FK is `ON DELETE SET NULL` so company projects survive a company delete as personal projects. |
-| **RID prefix** | `CMP` (companies); membership rows have a composite PK `(company_id, user_redpash_id)`, no RID |
+| **Table** | `companies` + the unified polymorphic `memberships` table (mig 023 replaced `company_memberships`/`project_memberships`). `projects.company_id` FK is `ON DELETE SET NULL` so company projects survive a company delete as personal projects. |
+| **RID prefix** | `CMP` (companies); membership rows have a composite PK `(object_redpash_id, user_redpash_id)` on the polymorphic `memberships` table, no RID |
 | **Roles** | `owner` > `admin` > `member`. owner-only: grant `owner`, delete company, demote/remove last owner. owner+admin: edit metadata, add/remove members. member: read-only. |
-| **DB helpers** | `db::list_companies(user)` (LEFT-JOIN — non-members see the row with `my_role: null`), `get_company`, `company_role` (gate), `company_owner_count` (last-owner guard), `create_company` (TX: company + owner membership in one shot), `update_company`, `delete_company`, `list_company_members`, `add_company_member` (upsert on composite PK), `remove_company_member` |
+| **DB helpers** | `db::list_companies(user)` (LEFT-JOIN — non-members see the row with `my_role: null`), `get_company`, `company_role` (gate), `company_owner_count` (last-owner guard), `create_company` (TX: company + owner membership in one shot), `update_company`, `delete_company`, `list_company_members`, `add_company_member` (upsert on the `(object_redpash_id, user_redpash_id)` PK), `remove_company_member` |
 | **API** | `GET /api/companies`, `POST /api/companies`, `GET·PATCH·DELETE /:rid`, `GET·POST /:rid/members`, `DELETE /:rid/members/:user_id` |
 | **Dev relaxation** | `PATCH` + `DELETE` membership/role gates currently OFF — any signed-in user can edit/delete any company from the Objects-page Companies tab. Target gates documented in [api/companies.md](api/companies.md). |
 | **Docs** | [`api/companies.md`](api/companies.md) |
@@ -257,7 +261,7 @@ redpash-app/
 ### Case (`Case`, `Comment`)
 | Layer | Location |
 |---|---|
-| **DTO** | `shared::case::Case`, `Comment`, `CaseCategory` |
+| **DTO** | `shared::case::Case`, `Comment`, `Category` (+ `CaseDetail`, `CaseCreateRequest`, `CasePatchRequest`, `CommentRequest`) |
 | **Table** | `cases` + `comments` (migration 028) — Jira-flow workstream v1; the team-coordination + customer-ticket layer on top of the audit-everything spine. Extended by `cases.error_message` (mig 029, raw error payload for auto-triaged FE crash cases) and `case_categories` + `cases.category_id` (mig 030, two-level taxonomy via self-FK on `parent_id`). |
 | **RID prefix** | `CAS` (cases), `CMT` (comments), `CAT` (categories). |
 | **Status flow** | `backlog` → `todo` → `in_progress` → `in_review` → `done`. Click-cycle on the kanban advances; reopens (done → todo) allowed. Status mutations emit `events.kind='case_status_change'` via `routes::cases::patch`'s per-field event loop (`format!("case_{field}_change")` covers status / priority / type / assignee / category). |
@@ -311,11 +315,11 @@ redpash-app/
 
 ## Screens
 
-### `#/landing` — pre-auth marketing
+### `#/login` — pre-auth (Google sign-in + no-auth CSV demo)
 | Asset | Location |
 |---|---|
-| **Partial** | `partials/landing.html` — mirrors `redpash-demo/index.html` (hero, float bars, modals, bottom nav) |
-| **CSS** | `styles/pages/landing.css` — imports components from `styles/base/` + `styles/components/` |
+| **Partial** | `partials/login.html` — login + "Upload a CSV" demo card; "Continue as developer" mints a dev session |
+| **CSS** | `styles/login.css` (styles/ is flat — no library import layer) |
 | **JS** | `scripts/pages/landing.js` — modal open/close, social-login dispatch, theme cycle, i18n setLang, eyebrow typewriter |
 | **Shell hook** | `scripts/main.js` — captures `beforeinstallprompt`; owns `installPWA()` |
 | **Auth start** | Google OAuth via `<a href="/api/auth/google/start">` inside `#modal-login` |
@@ -328,7 +332,7 @@ redpash-app/
 | **Partial** | `partials/home.html` — rail-shell host with the locked 6-section template (head / chip / kpi-or-composite / charts / toolbar / panel) inside `#rpHomeMain` |
 | **Tabs** | 7 LIST_VIEWS (Users / Companies / Memberships / Cases / Projects / Files / Charts) — sortable + reorderable + columns picker per tab; the panel flex-fills the remaining height |
 | **Composite strip** | opt-in chart\|kpi\|chart tabs (`Users today`) via per-tab LIST_VIEWS config — new tabs join via a LIST_VIEWS entry, the template auto-applies |
-| **CSS** | `styles/pages/home.css` |
+| **CSS** | `styles/home.css` |
 | **JS** | `scripts/pages/home.js` — LIST_VIEWS-driven tab rendering, columns picker, sort state |
 | **Endpoints** | `GET /api/projects` · `GET /api/users` · `GET /api/companies` · `GET /api/charts` · `GET /api/cases` · `POST /api/files/upload` (XLSX→CSV dispatch) · `POST /api/auth/logout` |
 | **Docs** | [`frontend/redpash-components-pages/home-page/`](frontend/redpash-components-pages/home-page/index.md) |
@@ -349,9 +353,9 @@ redpash-app/
 | **Partial** | `partials/profile.html` — full-bleed (`chrome: "full"`); two `.hs-card` step cards + float bars + step-dots + contact modal |
 | **Step 1 — Profile** | Personal info / Security / Usage / Plan & Billing / Connected accounts / Danger zone |
 | **Step 2 — Settings** | Appearance (theme + language) / Account jump / Data & Export / About |
-| **CSS** | `styles/pages/profile.css` — imports library settings-card + home-screen + page-dots etc.; high-contrast frosted-glass `.rp-card` override matching the corner float buttons |
+| **CSS** | `styles/profile.css` — frosted-glass `.rp-card` override matching the corner float buttons |
 | **JS** | `scripts/pages/profile.js` — load `/me` + counts, populate identity + form + connections, IntersectionObserver for step-dot sync, save via `PATCH /api/me` |
-| **Endpoints** | `GET /api/me` · `PATCH /api/me` · `GET /api/projects` · `GET /api/reports` · `GET /api/dashboards` · `POST /api/auth/logout` |
+| **Endpoints** | `GET /api/me` · `PATCH /api/me` · `GET /api/projects` · `GET /api/dashboards` · `POST /api/auth/logout` |
 | **Docs** | [`frontend/redpash-components-pages/profile-page/`](frontend/redpash-components-pages/profile-page/index.md) |
 
 ### `#/settings` — UI preferences (Phase 4c)
@@ -372,7 +376,7 @@ redpash-app/
 | **Endpoints** | `GET /api/cases` · `GET /api/cases/:rid` (case + comments + activity) · `POST /api/cases` · `PATCH /api/cases/:rid` (sparse status/priority/type/assignee) · `POST /api/cases/:rid/comments` · `GET /api/admin/users?q=…` (assignee picker) |
 | **Docs** | [`internal/subsystems/cases.md`](internal/subsystems/cases.md) (detail-panel structure) · [`internal/cases/agent-cookbook.md`](internal/cases/agent-cookbook.md) (HTTP API recipes) |
 
-### `#/docs` and `#/docs/<slug>` — public docs viewer
+### `#/docs` and `#/docs/<slug>` — docs viewer (auth-gated; `auth: true`)
 | Asset | Location |
 |---|---|
 | **Partial** | `partials/docs.html` |
@@ -391,23 +395,23 @@ redpash-app/
 
 ### Sessions + ownership
 - **Identity resolver:** `resolve_user_rid(state, headers)` — re-exported from `routes::mod` as `pub(crate)`. Returns the session user (via `rp_session` cookie) or falls back to `state.dev_user` when OAuth is unconfigured.
-- **Owner gate:** `routes::ensure_owner(lookup, expected_user, label, rid)` — re-exported from `routes::mod`. Each detail handler calls a `db::*_owner(rid)` lookup helper (`project_owner` / `report_owner` / `dashboard_owner` / `file_owner`) and feeds the result through `ensure_owner`. 404s with `kind="not_found"` on miss or mismatch — same message format both ways so existence isn't leaked.
+- **Owner gate:** `routes::ensure_owner(lookup, expected_user, label, rid)` — re-exported from `routes::mod`. Each detail handler calls a `db::*_owner(rid)` lookup helper (`project_owner` / `chart_owner` / `dashboard_owner` / `file_owner`) and feeds the result through `ensure_owner`. 404s with `kind="not_found"` on miss or mismatch — same message format both ways so existence isn't leaked.
 - **Coverage:** every owner-scoped handler in `routes/{me,projects,files,reports,dashboards}.rs`. The cross-resource handlers (`/reports` create + update, `/reports/preview`, `/files/:rid/joins` POST, `/dashboards` create) also check ownership of every referenced RID.
 
-### Chart pipeline (`chart-render.js`)
-- All charts share `chartOption(cfg, labels, values)` for category families; heatmap/radar/boxplot/calendar use dedicated `chartOption<Kind>`.
-- All charts share `chartPreviewBody(source_file_id, cfg, filter)` for the request body.
+### Chart pipeline (`charts/render.js`)
+- `charts/render.js` exposes `resolveData` / `applyTransform` / `synthesizeOption` / `renderChart` (mounts + disposes any prior instance on the element).
+- Charts re-aggregate via `POST /api/group/preview` (`charts/builder-ui.js`); the renderer is theme-aware via `echarts-theme.js`.
 - Scatter + heatmap + radar + boxplot + calendar + gauge have their own `subtotalsTo<Kind>` (or `detailsToScatterSeries`) extractor.
 - Adding a new kind: see "Adding a new chart kind" in [`features/charts.md`](features/charts.md).
 
 ### Undo / Redo
-- Module: `scripts/ui/history.js` — `createHistory(initial)` → `{push, undo, redo, reset, canUndo, canRedo}`.
-- Wired in `reports/index.js` and `dashboards/index.js` via `captureSnapshot()` hook inside `previewSoon()`.
+- Inline in `scripts/report.js` — `undoStack` / `redoStack` arrays + a `captureSnapshot()` helper (no separate history module).
+- `captureSnapshot()` fires from the preview path (`report.js`), so every spec-mutating handler is covered automatically.
 - Header `[data-undo]` / `[data-redo]` buttons + Ctrl+Z / Ctrl+Y bindings.
 
 ### Cleaner step replay
 - `data::steps::replay(base_df, [(kind, params)])` dispatches per `kind` string.
-- New step kinds: add an arm in `replay`, plus the corresponding `data::*` helper, plus a frontend tool module under `scripts/cleaner/tools/`.
+- New step kinds: add an arm in `replay`, plus the corresponding `data::*` helper, plus a frontend tool module under `scripts/tools/` (re-exported via `tools.js`).
 
 ### Report engine pipeline
 1. `apply_filter(df, spec.filter)` — `data::parse::apply_filter`.
@@ -451,7 +455,9 @@ redpash-app/
 |---|---|---|
 | GET | `/api/health` | liveness |
 | GET | `/api/me` | session user / dev_user / 401 |
-| PATCH | `/api/me` | sparse profile update + shallow `prefs` merge |
+| PATCH | `/api/me` | sparse profile update (prefs go via `/api/me/prefs`) |
+| PATCH | `/api/me/prefs` | sparse pref upsert — `{key: value, …}`; `value: null` deletes the row |
+| GET | `/api/me/avatar` | proxied avatar image |
 | GET | `/api/auth/google/start` | redirect to Google |
 | GET | `/api/auth/google/callback` | exchange code → set rp_session → redirect / |
 | POST | `/api/auth/logout` | delete session + clear cookie |
@@ -477,16 +483,11 @@ redpash-app/
 | POST | `/api/files/:rid/snapshot` | save current view as a new file (no step history) |
 | GET | `/api/files/:rid/export` | stream current view as downloadable CSV (no DB write) |
 | POST | `/api/files/:rid/cleanness` · DELETE | recompute (against globals ∪ user `learned_sentinels`) / null-out the score |
-| GET | `/api/reports` | session user's reports |
-| POST | `/api/reports` | create — gated on source file ownership |
-| POST | `/api/reports/preview` | run a spec — polymorphic `source_file_id` or `source_report_id` |
-| GET·PUT·PATCH·DELETE | `/api/reports/:rid` | CRUD + sparse meta PATCH (`title` / `description` / `folder` / `is_favorite` / `is_public`) |
-| POST | `/api/reports/:rid/run` | run the saved spec |
-| POST | `/api/reports/:rid/favorite` | `{value}` |
+| POST | `/api/group/preview` | run a grouping/agg spec (stateless) — polymorphic `source_file_id` / `source_report_id`. Replaced the retired `/api/reports/*` (CRUD / run / favorite all gone). |
 | GET | `/api/dashboards` | session user's dashboards |
 | POST · GET · PUT · PATCH · DELETE | `/api/dashboards`, `/:rid` | CRUD + sparse meta PATCH (same shape as reports) |
 | POST | `/api/dashboards/:rid/favorite` | `{value}` |
-| GET | `/api/users` | every user (with each user's `company_memberships`) — Objects Users tab + owner-reassignment picker |
+| GET | `/api/users` | every user (with each user's `memberships`) — Objects Users tab + owner-reassignment picker |
 | POST · GET · PATCH · DELETE | `/api/users`, `/:rid` | dev-permissive CRUD; `username` UNIQUE → 409 `username_taken` |
 | GET | `/api/companies` | every company w/ caller's `my_role` (null when not a member) + `member_count` |
 | POST | `/api/companies` | create — creator seated as `owner` in one TX; slug suffixed with RID slice (no collision retry) |
@@ -503,7 +504,9 @@ redpash-app/
 | GET | `/api/cases/:rid` | full case + comments thread + activity feed in one payload |
 | PATCH | `/api/cases/:rid` | sparse: `status` / `priority` / `type` / `assignee_id` / `title` / `description`. Status changes emit `case_status_change` events; assignee changes emit `case_assignee_change`. |
 | DELETE | `/api/cases/:rid` | cascades `comments` (ON DELETE CASCADE per mig 014) |
-| GET·POST | `/api/cases/:rid/comments` | list / append. Body shape is Markdown (`comments.body` annotated as such in mig 014); render layer pending — see [`internal/subsystems/cases.md`](internal/subsystems/cases.md) open lanes |
+| GET·POST | `/api/cases/:rid/comments` | list / append (Markdown body) |
+| PATCH·DELETE | `/api/cases/:rid/comments/:cmt_rid` | edit / delete a comment |
+| GET | `/api/cases/categories` | case category taxonomy (two-level) |
 | GET | `/api/charts` | session user's chart-typed files (`project_files.file_type = 'chart'`) |
 | POST | `/api/charts` | create a chart-typed File row; body `{ project_id, source_file_id, spec: { option, svg } }` |
 | GET·PUT·DELETE | `/api/charts/:rid` | read / update spec / delete. `file_stages` derives `report` stage when ≥1 chart exists in the project |
@@ -514,9 +517,9 @@ redpash-app/
 
 **"I want to add an API endpoint"** → pick the matching `routes/*.rs` (or `routes/files/<family>.rs` for cleaner sub-handlers), add a handler, wire into the module's `routes()` fn.
 **"I want to add a SQL query"** → `crates/api/src/db/<resource>.rs` (per-resource sub-module post the 2026-05-27 decomp). One helper per task. Take `&PgPool`, return DTOs from `shared::*`. Re-exports at `db::*` mean callers keep working without import changes.
-**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `chart-render.js`, the workspace chart-builder mode in `scripts/pages/workspace.js`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
+**"I want to add a chart kind"** → see "Adding a new chart kind" at the bottom of [`features/charts.md`](features/charts.md). Touches: `charts/render.js`, the workspace chart-builder mode in `scripts/pages/workspace.js`, `shared::report::ChartSpec` (only if new field), maybe `data::group_by::AggFn`.
 **"I want to add a cleaning tool"** → backend: a new arm in `data::steps::apply` (the dispatcher, one-line route into the matching `steps/<family>.rs`) plus a helper in `data::steps::<family>`. Frontend: a tool module under `scripts/tools/` (and re-export via `tools.js`).
-**"I want to add a dashboard widget kind"** → extend `widgets.js` dispatch; new entry in `index.js` `KINDS` array; widget spec lives in `DashboardSpec.widgets[].spec`.
+**"I want to add a dashboard widget kind"** → widget dispatch lives in `scripts/designer.js` (per-tile) + the chart-kind map `CHART_KINDS` in `scripts/list-page.js`; widget spec lives in `DashboardSpec.widgets[].spec`.
 **"I want to add a wire-format field"** → `crates/shared/src/<obj>.rs`. Use `#[serde(default)]` so older specs deserialise.
 **"I want to add a migration"** → `backend/migrations/NNNNNN_*.sql`. The api crate runs `sqlx::migrate!` at boot.
 **"I want to add a feature on one page AND replicate it on another"** → read [`internal/processes/replicable-feature-pattern.md`](internal/processes/replicable-feature-pattern.md). Three-piece anatomy (persistence + affordance + recovery) + two invariants (filter-at-render-time + bubble-suppression) + a 10-step replication checklist. Codified from the workspace rail hide/restore + the project→file rename replications.
@@ -554,9 +557,7 @@ docs: sync REDMAP for the Events system
 ### Frontend
 - **No `CACHE_VERSION` ritual** — the service worker is install-only and caches nothing (2026-05-30). The browser fetches assets fresh from the network, so there's no stale-JS-needs-a-bump problem anymore.
 - **Inline style attributes need single quotes** when the value contains `"…"` literals (e.g. `grid-template-areas: "a b" "c d"`). Using `style="…"` terminates at the first inner quote and breaks layout.
-- **Modal pattern**: two coexist, both native `<dialog>` + `showModal()` / `close()` (ESC dispatches `cancel` — handle it to reset state).
-  - `scripts/ui/modal.js` `openModal({title, body, actions})` — the **preferred** helper. Renders the **glass modal** (`<dialog class="rp-modal--glass">` shell + `.modal` panel, `styles/components/auth-modals.css`) — same look as the landing login/contact modals.
-  - `<dialog class="rp-modal">` — the App's older modal (`styles/components/modal.css`, `--rp-*` tokens). Still used by the Cleaner tool modals + the Reports chart modal; not for new modals.
+- **Modal pattern**: native `<dialog class="rp-modal">` styled by `styles/modal.css` (`.rp-modal` + `--rp-*` tokens), opened via `showModal()` / closed via `close()` (ESC fires `cancel` — handle it to reset state). NOTE: there is no `scripts/ui/modal.js` / `openModal()` helper and no glass-modal (`rp-modal--glass` / `auth-modals.css`) variant — those were never built.
 - **History capture hook**: `captureSnapshot()` is called from `previewSoon()`, so every spec-mutating handler that already calls `previewSoon` is automatically covered. Don't push to history from individual handlers.
 
 ### Backend
