@@ -41,13 +41,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap" />
 
-  <!-- Bootstrap Icons — the icon set the redtable components use. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+  <!-- Bootstrap Icons — the icon set the redtable components use.
+       Self-hosted (vendor/) so the UI's icons never depend on a CDN
+       being reachable (firewall / tracking-prevention / outage). -->
+  <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.css" />
 
   <!-- ECharts — the 8th atom; the Workspace body renders chart-typed
        files through this. Loaded globally because chart files can
        appear behind any rail click. -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <script src="/vendor/echarts/echarts.min.js"></script>
   <!-- Prebuilt ECharts themes (Apache 2.0, from apache/echarts).
        Each script self-registers via echarts.registerTheme so the
        Designer's Style picker can pass the name straight to
