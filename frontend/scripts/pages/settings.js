@@ -555,14 +555,21 @@ function openAddChartModal(tabKey, pickerCfg, onAdd) {
   const previewEl = modal.querySelector("#rp-settings-chart-preview");
   const builderEl = modal.querySelector("#rp-settings-chart-builder");
 
-  // Live preview — re-render on every cfg change. Each renderChart
-  // call disposes the prior instance via dispose() before init.
+  // Live preview — re-render on every cfg change. renderChart disposes
+  // any instance already on the slot before init. repaintPreview is async
+  // (monitoring-stats sources fetch), so rapid cfg changes can overlap; a
+  // generation token discards a stale render whose await resolved after a
+  // newer one started, so it can't linger as the live previewInst.
   let previewInst = null;
+  let repaintGen = 0;
   async function repaintPreview() {
+    const gen = ++repaintGen;
     try { previewInst?.dispose(); } catch { /* gone */ }
     previewInst = null;
     try {
-      previewInst = await renderChart(previewEl, spec, spec.cfg.theme);
+      const inst = await renderChart(previewEl, spec, spec.cfg.theme);
+      if (gen !== repaintGen) { try { inst?.dispose(); } catch { /* gone */ } return; }
+      previewInst = inst;
     } catch (err) {
       console.warn("[settings] chart preview failed:", err);
     }

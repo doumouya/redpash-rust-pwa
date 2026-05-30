@@ -219,6 +219,13 @@ export async function renderChart(el, spec, themeName) {
   }
 
   const themeForInit = t.registered ? themeKey : undefined;
+  // A DOM node can host only one ECharts instance. On a re-render (tab
+  // switch, window-chip flip, live preview) one may already be bound to
+  // this slot — init does NOT replace it, it warns and the orphaned
+  // instance keeps its canvas + resize listeners alive (memory leak).
+  // Dispose any existing instance on the element first.
+  const existing = window.echarts.getInstanceByDom(el);
+  if (existing) { try { existing.dispose(); } catch { /* already gone */ } }
   const inst = window.echarts.init(el, themeForInit);
   inst.setOption(buildOption(cfg, t));
   return inst;

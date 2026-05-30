@@ -123,6 +123,10 @@ export function mountTools(panelBody, ctx) {
       columnsEl.innerHTML = '<p class="rt-empty rt-step-state">Open a file to see its columns.</p>';
       return;
     }
+    // The live column set drives both the stale-edit-target guards and
+    // the selection intersection below, so it must be built up front —
+    // referencing it before this point throws a TDZ ReferenceError.
+    const live = new Set(cols.map((c) => c.name));
     // Drop stale edit targets if the column they point at no longer
     // exists (file change, rename via another path, drop_columns step).
     if (editingName  && !live.has(editingName))  editingName  = null;
@@ -132,7 +136,6 @@ export function mountTools(panelBody, ctx) {
     // prior step (drop_columns, rename_column, etc.) may have removed
     // or renamed columns that the user had selected. Stale names get
     // silently dropped so the toolbar's count stays honest.
-    const live = new Set(cols.map((c) => c.name));
     for (const n of selectedCols) if (!live.has(n)) selectedCols.delete(n);
 
     const allSelected  = cols.length > 0 && cols.every((c) => selectedCols.has(c.name));
