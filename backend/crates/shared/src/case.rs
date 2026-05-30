@@ -73,6 +73,12 @@ pub struct Case {
     /// `{ name, mime, size, uploaded_at }` objects; `[]` when none.
     /// v1 is metadata-only — byte upload/preview is a later slice.
     #[serde(default)] pub attachments: serde_json::Value,
+    /// Derived, not a column: true when the reporter shares membership
+    /// with the canonical internal company (the RedPash team) — i.e. an
+    /// internal case vs an external/customer one. Computed + set by the
+    /// detail handler (`GET /api/cases/:rid`); `false` on list rows,
+    /// which don't need it (the rail tab already implies source).
+    #[serde(default)] pub is_internal: bool,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }

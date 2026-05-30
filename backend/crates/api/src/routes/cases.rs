@@ -235,8 +235,12 @@ async fn get_one(
     // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
     // visibility overlay (reporter / assignee / company role) lands in v3
     super::resolve_user_rid(&state, &headers).await?;
-    let case = db::find_case(&state.db, &rid).await?
+    let mut case = db::find_case(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
+    // Derive the internal/external source for the sidebar badge.
+    case.is_internal = db::case_is_internal(
+        &state.db, &rid, state.internal_company_id.as_deref(),
+    ).await?;
     let comments = db::list_comments_for_case(&state.db, &rid).await?;
     let activity = db::list_activity_for_case(&state.db, &rid).await?;
     Ok(Json(CaseDetail { case, comments, activity }))
@@ -288,7 +292,7 @@ async fn patch(
         }
     }
 
-    let updated = db::update_case(
+    let mut updated = db::update_case(
         &state.db, &rid,
         title.as_deref(),
         description.as_deref(),
@@ -359,6 +363,11 @@ async fn patch(
         .send();
     }
 
+    // Keep the derived source in sync so the sidebar's repaint (which
+    // uses this PATCH response) doesn't drop the Internal/External badge.
+    updated.is_internal = db::case_is_internal(
+        &state.db, &rid, state.internal_company_id.as_deref(),
+    ).await?;
     Ok(Json(updated))
 }
 

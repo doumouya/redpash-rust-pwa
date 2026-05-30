@@ -214,71 +214,72 @@
                  • Meta line (Reporter · Created · Updated)
                  • <details> Description (auto-open when populated)
                  • <details> Activity (filter pills + feed) ════ -->
+          <!-- Sidebar rebuild (Em 2026-05-30): a case properties +
+               context panel. Properties (priority/type/category/assignee)
+               are inline-editable via value menus + the user picker;
+               then people+source, timeline, an optional error payload,
+               attachments, a rich-editable description, and the activity
+               feed. paintDetail() fills every value. -->
           <aside class="rp-cases-detail-side">
 
-            <!-- Editable controls — these ARE the mutation surface.
-                 Status moved OUT to the path hero above (2026-05-28);
-                 priority / type / assignee stay here. One row per
-                 field, label inline. -->
-            <div class="rp-cases-detail-edit">
-              <label class="rp-cases-control">
-                <span class="rp-cases-control-lbl">Priority</span>
-                <select class="rp-cases-control-select" id="rp-cases-side-priority">
-                  <option value="low">Low</option>
-                  <option value="medium" selected>Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </label>
-              <label class="rp-cases-control">
-                <span class="rp-cases-control-lbl">Type</span>
-                <select class="rp-cases-control-select" id="rp-cases-side-type">
-                  <option value="task" selected>Task</option>
-                  <option value="bug">Bug</option>
-                  <option value="feature">Feature</option>
-                  <option value="epic">Epic</option>
-                </select>
-              </label>
-              <div class="rp-cases-control rp-cases-control--assignee">
-                <span class="rp-cases-control-lbl">Assignee</span>
-                <button class="rp-cases-side-edit" id="rp-cases-side-assignee-btn"
-                        type="button" title="Change assignee">
-                  <span class="rp-cases-side-edit-value" id="rp-cases-side-assignee">— unassigned —</span>
-                  <i class="bi bi-pencil-square rp-cases-side-edit-icon"></i>
+            <!-- Properties — click a value to change it. -->
+            <div class="rp-cases-props">
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Priority</span>
+                <button class="rp-cases-prop-val" id="rp-cases-side-priority" data-prop="priority" type="button"></button>
+              </div>
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Type</span>
+                <button class="rp-cases-prop-val" id="rp-cases-side-type" data-prop="type" type="button"></button>
+              </div>
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Category</span>
+                <button class="rp-cases-prop-val" id="rp-cases-side-category" data-prop="category" type="button"></button>
+              </div>
+              <div class="rp-cases-prop rp-cases-prop--assignee">
+                <span class="rp-cases-prop-lbl">Assignee</span>
+                <button class="rp-cases-prop-val" id="rp-cases-side-assignee-btn" type="button" title="Change assignee">
+                  <span id="rp-cases-side-assignee">— unassigned —</span>
                 </button>
                 <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
                   <div class="rp-user-picker-wrap">
                     <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
                            placeholder="Search by name, username, email…" />
-                    <div id="rp-cases-side-assignee-results"
-                         class="rp-user-picker-results" hidden></div>
+                    <div id="rp-cases-side-assignee-results" class="rp-user-picker-results" hidden></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Meta — reporter + timestamps. Read-only, thin. -->
-            <dl class="rp-cases-detail-side-meta">
-              <div>
-                <dt>Reporter</dt>
-                <dd id="rp-cases-side-reporter">—</dd>
+            <!-- People + source -->
+            <div class="rp-cases-props rp-cases-props--meta">
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Reporter</span>
+                <span class="rp-cases-prop-static" id="rp-cases-side-reporter">—</span>
               </div>
-              <div>
-                <dt>Opened</dt>
-                <dd id="rp-cases-side-created">—</dd>
-              </div>
-              <div>
-                <dt>Updated</dt>
-                <dd id="rp-cases-side-updated">—</dd>
-              </div>
-            </dl>
+            </div>
 
-            <!-- Attachments — file references on the case (logs, error
-                 screenshots, repro CSVs). Always-visible (not collapsed)
-                 because evidence is primary context; the section hides
-                 itself when the case has none. Populated by paintDetail
-                 from case.attachments; the composer's paperclip appends
-                 here. v1 is metadata-only. -->
+            <!-- Timeline — relative, absolute on hover -->
+            <div class="rp-cases-props rp-cases-props--meta">
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Opened</span>
+                <span class="rp-cases-prop-static" id="rp-cases-side-created">—</span>
+              </div>
+              <div class="rp-cases-prop">
+                <span class="rp-cases-prop-lbl">Updated</span>
+                <span class="rp-cases-prop-static" id="rp-cases-side-updated">—</span>
+              </div>
+            </div>
+
+            <!-- Error payload — only for auto-triaged cases (raw crash
+                 string). Hidden when the case has none. -->
+            <div class="rp-cases-side-blk" id="rp-cases-side-error" hidden>
+              <div class="rp-cases-side-blk-head"><i class="bi bi-exclamation-octagon"></i> Error</div>
+              <pre class="rp-cases-side-error-pre" id="rp-cases-side-error-pre"></pre>
+            </div>
+
+            <!-- Attachments — case evidence (logs, screenshots, CSVs);
+                 hides itself when empty. -->
             <div class="rp-cases-detail-side-attachments" id="rp-cases-side-attachments" hidden>
               <div class="rp-cases-side-attachments-head">
                 <span>Attachments</span>
@@ -287,33 +288,22 @@
               <ul class="rp-cases-attach-list" id="rp-cases-attach-list"></ul>
             </div>
 
-            <!-- Description — auto-opens when populated, stays
-                 closed when empty. JS toggles the `open` attribute.
-                 Edit affordance below the body: click → hides body,
-                 reveals the textarea form; Save PATCHes, Cancel
-                 restores. -->
-            <details class="rp-cases-detail-side-section" id="rp-cases-side-desc">
-              <summary>Description</summary>
+            <!-- Description — the problem statement; prominent + rich-
+                 editable (same WYSIWYG as comments). Edit form injected
+                 by JS on the pencil click. -->
+            <div class="rp-cases-side-blk" id="rp-cases-side-desc">
+              <div class="rp-cases-side-blk-head">
+                <span>Description</span>
+                <button class="rp-cases-side-desc-edit" id="rp-cases-side-desc-edit-btn" type="button" title="Edit description">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+              </div>
               <div class="rp-cases-detail-side-desc-body" id="rp-cases-side-desc-body">
                 <span class="rp-cases-side-unassigned">— no description —</span>
               </div>
-              <button class="rp-cases-side-desc-edit" id="rp-cases-side-desc-edit-btn"
-                      type="button" title="Edit description">
-                <i class="bi bi-pencil-square"></i><span>Edit</span>
-              </button>
-              <form class="rp-cases-side-desc-form" id="rp-cases-side-desc-form" hidden>
-                <textarea class="rp-cases-side-desc-input" id="rp-cases-side-desc-input"
-                          rows="6" placeholder="Steps to reproduce, context, expected behavior…"></textarea>
-                <div class="rp-cases-side-desc-actions">
-                  <button class="rt-btn" type="button" data-act="cancel">Cancel</button>
-                  <button class="rt-btn rt-btn--accent" type="submit">Save</button>
-                </div>
-              </form>
-            </details>
+            </div>
 
-            <!-- Activity — filter pills + scrolling feed. Closed by
-                 default (feed can be long; users come for comments).
-                 Filter pills rendered from ACTIVITY_PILLS in cases.js. -->
+            <!-- Activity — case_* event feed, collapsed by default. -->
             <details class="rp-cases-detail-side-section" id="rp-cases-side-activity">
               <summary>Activity <span class="rp-cases-side-section-count" id="rp-cases-side-activity-count" hidden></span></summary>
               <div class="rp-chip-row rp-cases-activity-filter" id="rp-cases-activity-filter"></div>

@@ -1424,10 +1424,34 @@ impl From<CaseRow> for Case {
             category_parent_id:     r.category_parent_id,
             category_parent_name:   r.category_parent_name,
             attachments:            r.attachments,
+            is_internal:            false,   // derived; set by the detail handler
             created_at:             r.created_at,
             updated_at:             r.updated_at,
         }
     }
+}
+
+/// Is the case "internal" — i.e. does its reporter share membership with
+/// the canonical internal company? Mirrors the `source=internal` clause in
+/// `list_cases`. `false` when `internal_company_id` is None (no internal
+/// company configured) — same graceful degrade as the list filter.
+pub async fn case_is_internal(
+    pool:                &PgPool,
+    case_id:             &str,
+    internal_company_id: Option<&str>,
+) -> sqlx::Result<bool> {
+    let Some(company) = internal_company_id else { return Ok(false) };
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM memberships rep
+                        JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                        WHERE rep.object_redpash_id = $1
+                          AND rep.context_role = 'Reporter'
+                          AND cm.object_redpash_id = $2)",
+    )
+    .bind(case_id)
+    .bind(company)
+    .fetch_one(pool)
+    .await
 }
 
 /// SELECT list for queries that hydrate user display names via LEFT

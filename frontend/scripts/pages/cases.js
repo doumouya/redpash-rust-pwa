@@ -78,6 +78,8 @@ export default function cases(app, { session }) {
   let pendingAttachments = [];                  // files staged in the composer, sent with the next comment
   let detailReporterId = null;                  // for the per-message Reporter/Assignee role tag
   let detailAssigneeId = null;
+  let currentDetailCase = null;                 // last-painted case — feeds the property menus
+  let categoriesCache = null;                   // GET /api/cases/categories, fetched once on demand
 
   // ── hide / restore — replicated from workspace `8d070eb` per the
   //    docs/internal/processes/replicable-feature-pattern.md recipe.
@@ -874,6 +876,9 @@ export default function cases(app, { session }) {
   const pathEl       = app.querySelector("#rp-cases-detail-path");
   const sidePriority = app.querySelector("#rp-cases-side-priority");
   const sideType     = app.querySelector("#rp-cases-side-type");
+  const sideCategory = app.querySelector("#rp-cases-side-category");
+  const sideError    = app.querySelector("#rp-cases-side-error");
+  const sideErrorPre = app.querySelector("#rp-cases-side-error-pre");
   const sideAssignee        = app.querySelector("#rp-cases-side-assignee");
   const sideAssigneeBtn     = app.querySelector("#rp-cases-side-assignee-btn");
   const sideAssigneePicker  = app.querySelector("#rp-cases-side-assignee-picker");
@@ -882,7 +887,6 @@ export default function cases(app, { session }) {
   const sideReporter = app.querySelector("#rp-cases-side-reporter");
   const sideCreated  = app.querySelector("#rp-cases-side-created");
   const sideUpdated  = app.querySelector("#rp-cases-side-updated");
-  const sideDescDetails = app.querySelector("#rp-cases-side-desc");
   const sideDescBody    = app.querySelector("#rp-cases-side-desc-body");
   const activityCountEl = app.querySelector("#rp-cases-side-activity-count");
   const activityFilterEl = app.querySelector("#rp-cases-activity-filter");
@@ -939,7 +943,7 @@ export default function cases(app, { session }) {
     const btn = e.target.closest("[data-cmd]");
     if (!btn) return;
     e.preventDefault();
-    applyFormat(btn.dataset.cmd);
+    applyFormat(btn.dataset.cmd, commentInput, composerEl, syncComposeState);
   });
 
   // Drag-and-drop files onto the composer.
@@ -965,13 +969,20 @@ export default function cases(app, { session }) {
   let currentDetailRid = null;
   let assigneePickerTimer = null;
 
-  // Side-panel selects fire sparse PATCHes — single field per change.
-  // Status moved to the path hero (below); priority + type stay here.
-  [
-    [sidePriority, "priority"],
-    [sideType,     "type"],
-  ].forEach(([el, field]) => {
-    el?.addEventListener("change", () => patchCase({ [field]: el.value }));
+  // Property value menus — Priority / Type / Category open a popover of
+  // choices; picking one fires a sparse PATCH. (Assignee uses the user
+  // picker below; status lives in the path hero.) Delegated click on the
+  // props container; an outside click closes the open menu.
+  const propsEl = app.querySelector(".rp-cases-props");
+  propsEl?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".rp-cases-prop-val[data-prop]");
+    if (!btn) return;
+    e.stopPropagation();
+    if (btn.classList.contains("is-menu-open")) { closePropMenu(); return; }
+    openPropMenu(btn);
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".rp-cases-prop-pop") && !e.target.closest(".rp-cases-prop-val[data-prop]")) closePropMenu();
   });
 
   // Status path hero — click a step → set status directly (not just
@@ -998,9 +1009,9 @@ export default function cases(app, { session }) {
     if (e.key === "Enter" && mod) { e.preventDefault(); sendComment(); return; }
     if (!mod) return;
     const k = e.key.toLowerCase();
-    if (k === "b")      { e.preventDefault(); applyFormat("bold"); }
-    else if (k === "i") { e.preventDefault(); applyFormat("italic"); }
-    else if (k === "k") { e.preventDefault(); applyFormat("link"); }
+    if (k === "b")      { e.preventDefault(); applyFormat("bold", commentInput, composerEl, syncComposeState); }
+    else if (k === "i") { e.preventDefault(); applyFormat("italic", commentInput, composerEl, syncComposeState); }
+    else if (k === "k") { e.preventDefault(); applyFormat("link", commentInput, composerEl, syncComposeState); }
   });
 
   // Send is live when there's text OR a staged file. The contentEditable
@@ -1039,32 +1050,34 @@ export default function cases(app, { session }) {
   }
 
   // ── rich-text formatting (execCommand-driven WYSIWYG) ──────────
-  function applyFormat(cmd) {
-    if (!commentInput) return;
-    commentInput.focus();
+  // Generalized over a target editor + its container so both the comment
+  // composer and the description editor share one toolbar. `after` runs
+  // post-format (e.g. the composer's send-state sync); no-op for desc.
+  function applyFormat(cmd, ed, container, after) {
+    ed = ed || commentInput;
+    container = container || composerEl;
+    if (!ed) return;
+    ed.focus();
     switch (cmd) {
       case "bold":   document.execCommand("bold"); break;
       case "italic": document.execCommand("italic"); break;
       case "ul":     document.execCommand("insertUnorderedList"); break;
       case "ol":     document.execCommand("insertOrderedList"); break;
       case "quote":  document.execCommand("formatBlock", false, "blockquote"); break;
-      case "code":   wrapInlineCode(); break;
-      case "link":   openLinkPopover(); break;
+      case "code":   document.execCommand("insertHTML", false,
+                       "<code>" + esc((window.getSelection()?.toString()) || "code") + "</code>"); break;
+      case "link":   openLinkPopover(ed, container, after); return;  // commits async
     }
-    syncComposeState();
+    if (after) after();
   }
-  function wrapInlineCode() {
-    const sel = window.getSelection();
-    const text = sel && !sel.isCollapsed ? sel.toString() : "";
-    document.execCommand("insertHTML", false, "<code>" + esc(text || "code") + "</code>");
-  }
-  // Link popover — a small text+URL form anchored in the composer. The
-  // engineer types a label + URL (so customers get "see the docs", not a
-  // raw URL). Restores the editor selection before inserting so the link
-  // lands where the cursor was. Missing scheme defaults to https://.
-  function openLinkPopover() {
-    if (!composerEl || !commentInput) return;
-    composerEl.querySelector(".rp-cases-link-pop")?.remove();
+  // Link popover — text + URL form anchored in the editor's container, so
+  // customers get "see the docs", not a raw URL. Restores the selection
+  // before inserting. Missing scheme defaults to https://.
+  function openLinkPopover(ed, container, after) {
+    ed = ed || commentInput;
+    container = container || composerEl;
+    if (!container || !ed) return;
+    container.querySelector(".rp-cases-link-pop")?.remove();
     const sel = window.getSelection();
     const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
     const selText = sel ? sel.toString() : "";
@@ -1075,7 +1088,7 @@ export default function cases(app, { session }) {
       + '<input class="rp-cases-link-url" type="text" placeholder="https://…" />'
       + '<button type="button" class="rp-cases-link-add">Add</button>'
       + '<button type="button" class="rp-cases-link-cancel">Cancel</button>';
-    composerEl.appendChild(pop);
+    container.appendChild(pop);
     const urlInput  = pop.querySelector(".rp-cases-link-url");
     const textInput = pop.querySelector(".rp-cases-link-text");
     (textInput || urlInput).focus();
@@ -1085,12 +1098,12 @@ export default function cases(app, { session }) {
       if (!url) { close(); return; }
       if (!/^(https?:|mailto:)/i.test(url)) url = "https://" + url;
       const text = selText || (textInput && textInput.value.trim()) || url;
-      commentInput.focus();
+      ed.focus();
       if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
       if (selText && range) document.execCommand("createLink", false, url);
       else document.execCommand("insertHTML", false, '<a href="' + esc(url) + '">' + esc(text) + '</a>');
       close();
-      syncComposeState();
+      if (after) after();
     };
     pop.querySelector(".rp-cases-link-add").addEventListener("click", commit);
     pop.querySelector(".rp-cases-link-cancel").addEventListener("click", close);
@@ -1301,56 +1314,69 @@ export default function cases(app, { session }) {
   });
   titleEl?.addEventListener("blur", () => { if (titleEditing) endTitleEdit(true); });
 
-  // ── inline description edit ─────────────────────────────────
-  // Pencil button below the description body → swap to a textarea
-  // form prefilled with the current value. Save PATCHes; Cancel
-  // restores. patchCase's repaint re-renders the body from the
-  // server response so we don't have to optimistically rewrite it.
-  const descEditBtn   = app.querySelector("#rp-cases-side-desc-edit-btn");
-  const descForm      = app.querySelector("#rp-cases-side-desc-form");
-  const descInput     = app.querySelector("#rp-cases-side-desc-input");
+  // ── rich description edit ───────────────────────────────────
+  // Pencil → swap the rendered body for a rich editor (same WYSIWYG as
+  // comments: toolbar + contentEditable + sanitizer + shared link
+  // popover) prefilled with the current HTML. Save sanitizes + PATCHes;
+  // patchCase's repaint re-renders from the server response.
+  const descEditBtn = app.querySelector("#rp-cases-side-desc-edit-btn");
+  let descEditing = false;
+  function descCurrentHtml() {
+    if (!sideDescBody) return "";
+    return sideDescBody.querySelector(".rp-cases-side-unassigned") ? "" : sideDescBody.innerHTML;
+  }
   function openDescEdit() {
-    if (!descForm || !sideDescBody) return;
-    // Prefill from the live case (the rendered span sometimes carries
-    // the unassigned-placeholder; descBody's data-raw stash holds the
-    // real value set in paintDetail).
-    const raw = sideDescBody.dataset.raw || "";
-    if (descInput) descInput.value = raw;
+    if (descEditing || !sideDescBody) return;
+    descEditing = true;
     sideDescBody.hidden = true;
     if (descEditBtn) descEditBtn.hidden = true;
-    descForm.hidden = false;
-    descInput?.focus();
-  }
-  function closeDescEdit() {
-    if (!descForm || !sideDescBody) return;
-    descForm.hidden = true;
-    sideDescBody.hidden = false;
-    if (descEditBtn) descEditBtn.hidden = false;
+    const form = document.createElement("div");
+    form.className = "rp-cases-side-desc-form";
+    form.innerHTML = ''
+      + '<div class="rp-cases-composer-toolbar rp-cases-desc-toolbar">'
+      +   '<button type="button" data-cmd="bold" title="Bold (⌘B)"><i class="bi bi-type-bold"></i></button>'
+      +   '<button type="button" data-cmd="italic" title="Italic (⌘I)"><i class="bi bi-type-italic"></i></button>'
+      +   '<button type="button" data-cmd="link" title="Link (⌘K)"><i class="bi bi-link-45deg"></i></button>'
+      +   '<button type="button" data-cmd="code" title="Inline code"><i class="bi bi-code"></i></button>'
+      +   '<button type="button" data-cmd="ul" title="Bulleted list"><i class="bi bi-list-ul"></i></button>'
+      + '</div>'
+      + '<div class="rp-cases-side-desc-input" contenteditable="true" '
+      +    'data-placeholder="Steps to reproduce, context, expected behavior…"></div>'
+      + '<div class="rp-cases-side-desc-actions">'
+      +   '<button type="button" class="rt-btn" data-act="cancel">Cancel</button>'
+      +   '<button type="button" class="rt-btn rt-btn--accent" data-act="save">Save</button>'
+      + '</div>';
+    sideDescBody.insertAdjacentElement("afterend", form);
+    const ed = form.querySelector(".rp-cases-side-desc-input");
+    ed.innerHTML = descCurrentHtml();
+    ed.focus();
+    const close = () => { form.remove(); sideDescBody.hidden = false; if (descEditBtn) descEditBtn.hidden = false; descEditing = false; };
+    const save = async () => {
+      const next = sanitizeRichHtml(ed.innerHTML || "");
+      const prev = descCurrentHtml();
+      close();
+      if (next !== prev) await patchCase({ description: next });
+    };
+    form.querySelector(".rp-cases-desc-toolbar").addEventListener("mousedown", (e) => {
+      const btn = e.target.closest("[data-cmd]");
+      if (!btn) return;
+      e.preventDefault();
+      applyFormat(btn.dataset.cmd, ed, form);
+    });
+    form.addEventListener("click", (e) => {
+      if (e.target.closest('[data-act="cancel"]')) close();
+      else if (e.target.closest('[data-act="save"]')) save();
+    });
+    ed.addEventListener("keydown", (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === "Enter" && mod) { e.preventDefault(); save(); }
+      else if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold", ed, form); }
+      else if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); applyFormat("italic", ed, form); }
+      else if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); applyFormat("link", ed, form); }
+    });
   }
   descEditBtn?.addEventListener("click", openDescEdit);
-  // Escape inside the textarea cancels the edit without bubbling to
-  // the global handler (which would close the whole detail panel).
-  descInput?.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    e.preventDefault();
-    e.stopPropagation();
-    closeDescEdit();
-  });
-  descForm?.addEventListener("click", (e) => {
-    if (e.target.closest('[data-act="cancel"]')) {
-      e.preventDefault();
-      closeDescEdit();
-    }
-  });
-  descForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const next = (descInput?.value || "").trim();
-    const prev = sideDescBody?.dataset.raw || "";
-    if (next === prev) { closeDescEdit(); return; }
-    closeDescEdit();
-    // Empty string clears the description (backend trims + maps "" → NULL).
-    await patchCase({ description: next });
-  });
 
   // RID display — CAS_5F3C7A21D8E94B6E92A1C0F4B3D7E0A2 is unreadable
   // in the head bar (40+ chars, eats the title space). Show the prefix
@@ -1407,12 +1433,94 @@ export default function cases(app, { session }) {
     }
   }
 
+  // ── property value menus (priority / type / category) ──────────
+  const PRIORITY_OPTS = [
+    { value: "low",      label: "Low",      dot: true },
+    { value: "medium",   label: "Medium",   dot: true },
+    { value: "high",     label: "High",     dot: true },
+    { value: "critical", label: "Critical", dot: true },
+  ];
+  const TYPE_OPTS = ["task", "bug", "feature", "epic"].map((t) =>
+    ({ value: t, label: TYPE_LABEL[t] || t, icon: TYPE_ICON[t] || TYPE_ICON.task }));
+  const CARET = '<i class="bi bi-chevron-down rp-cases-prop-caret"></i>';
+
+  function priorityValHTML(p) {
+    p = p || "medium";
+    return '<span class="rp-cases-priority-dot is-' + esc(p) + '"></span>'
+      + '<span class="rp-cases-prop-val-txt">' + esc(PRIORITY_LABEL[p] || p) + '</span>' + CARET;
+  }
+  function typeValHTML(t) {
+    t = t || "task";
+    return '<i class="bi ' + (TYPE_ICON[t] || TYPE_ICON.task) + ' rp-cases-type-glyph is-' + esc(t) + '"></i>'
+      + '<span class="rp-cases-prop-val-txt">' + esc(TYPE_LABEL[t] || t) + '</span>' + CARET;
+  }
+  function categoryValHTML(c) {
+    if (c && c.category_id) {
+      const parent = c.category_parent_name ? esc(c.category_parent_name) + " › " : "";
+      return '<span class="rp-cases-prop-val-txt">' + parent + esc(c.category_name || c.category_id) + '</span>' + CARET;
+    }
+    return '<span class="rp-cases-prop-val-txt rp-cases-side-unassigned">— none —</span>' + CARET;
+  }
+  // Category list — fetched once, mapped to "parent › child" labels.
+  async function categoryOptions() {
+    if (!categoriesCache) {
+      try { const res = await api.get("/cases/categories"); categoriesCache = res.items || res || []; }
+      catch { categoriesCache = []; }
+    }
+    const byId = {};
+    categoriesCache.forEach((cat) => { byId[cat.redpash_id] = cat; });
+    return categoriesCache.map((cat) => {
+      const parent = cat.parent_id && byId[cat.parent_id] ? byId[cat.parent_id].name + " › " : "";
+      return { value: cat.redpash_id, label: parent + cat.name };
+    });
+  }
+
+  let activePropPop = null;
+  function closePropMenu() {
+    if (activePropPop) { activePropPop.remove(); activePropPop = null; }
+    app.querySelectorAll(".rp-cases-prop-val.is-menu-open").forEach((b) => b.classList.remove("is-menu-open"));
+  }
+  async function openPropMenu(btn) {
+    closePropMenu();
+    const prop = btn.dataset.prop;
+    const c = currentDetailCase || {};
+    const cur = prop === "category" ? (c.category_id || "") : (c[prop] || "");
+    let options;
+    if (prop === "priority")      options = PRIORITY_OPTS;
+    else if (prop === "type")     options = TYPE_OPTS;
+    else if (prop === "category") options = await categoryOptions();
+    else return;
+    if (!options.length) return;
+    const pop = document.createElement("div");
+    pop.className = "rp-cases-prop-pop";
+    pop.innerHTML = options.map((o) =>
+      '<button type="button" class="rp-cases-prop-opt' + ((o.value || "") === (cur || "") ? " is-active" : "") + '" data-val="' + esc(o.value || "") + '">'
+      + (o.dot ? '<span class="rp-cases-priority-dot is-' + esc(o.value) + '"></span>'
+               : (o.icon ? '<i class="bi ' + o.icon + ' rp-cases-type-glyph is-' + esc(o.value || "") + '"></i>' : ''))
+      + '<span class="rp-cases-prop-opt-lbl">' + esc(o.label) + '</span>'
+      + ((o.value || "") === (cur || "") ? '<i class="bi bi-check2 rp-cases-prop-opt-check"></i>' : '')
+      + '</button>').join("");
+    btn.parentNode.appendChild(pop);          // .rp-cases-prop is position:relative
+    btn.classList.add("is-menu-open");
+    activePropPop = pop;
+    pop.addEventListener("click", (e) => {
+      const opt = e.target.closest("[data-val]");
+      if (!opt) return;
+      const val = opt.dataset.val;
+      closePropMenu();
+      if (val === cur) return;                 // no-op on re-pick
+      if (prop === "category") { if (val) patchCase({ category_id: val }); }
+      else patchCase({ [prop]: val });
+    });
+  }
+
   function paintDetail(detail) {
     const c = detail?.case || detail || {};
     // Stash the case's people for the per-message Reporter/Assignee tag
     // (present on both the GET-detail and PATCH shapes).
     detailReporterId = c.reporter_id || null;
     detailAssigneeId = c.assignee_id || null;
+    currentDetailCase = c;                       // feeds the property value menus
     // PATCH responses are bare Case rows (no comments / activity);
     // GET /cases/:rid returns the full CaseDetail. Detect which shape
     // we got so a field-edit repaint doesn't wipe the comments thread
@@ -1445,32 +1553,45 @@ export default function cases(app, { session }) {
         step.classList.toggle("is-active", idx === curIdx);
       });
     }
-    if (sidePriority && c.priority) sidePriority.value = c.priority;
-    if (sideType && c.type)         sideType.value = c.type;
+    // Properties — colored priority pill, type glyph, category path,
+    // assignee avatar. Each button opens its value menu / picker.
+    if (sidePriority) sidePriority.innerHTML = priorityValHTML(c.priority);
+    if (sideType)     sideType.innerHTML     = typeValHTML(c.type);
+    if (sideCategory) sideCategory.innerHTML = categoryValHTML(c);
     if (sideAssignee) {
       sideAssignee.innerHTML = c.assignee_id
         ? userBadgeHTML(c.assignee_id, c.assignee_display_name)
         : '<span class="rp-cases-side-unassigned">— unassigned —</span>';
     }
+    // Reporter + source badge — Internal (RedPash team) vs External (customer).
     if (sideReporter) {
-      sideReporter.innerHTML = c.reporter_id
-        ? userBadgeHTML(c.reporter_id, c.reporter_display_name)
-        : '—';
+      if (!c.reporter_id) {
+        sideReporter.innerHTML = '—';
+      } else {
+        const badge = c.is_internal
+          ? '<span class="rp-cases-source-badge is-internal"><i class="bi bi-people"></i>Internal</span>'
+          : '<span class="rp-cases-source-badge is-external"><i class="bi bi-globe2"></i>External</span>';
+        sideReporter.innerHTML = userBadgeHTML(c.reporter_id, c.reporter_display_name) + badge;
+      }
     }
-    if (sideCreated)  sideCreated.textContent = c.created_at ? fmtTime(c.created_at) : "—";
-    if (sideUpdated)  sideUpdated.textContent = c.updated_at ? fmtTime(c.updated_at) : "—";
+    // Timeline — relative, full timestamp on hover.
+    if (sideCreated) { sideCreated.textContent = c.created_at ? fmtAge(c.created_at) : "—"; sideCreated.title = c.created_at ? fmtTime(c.created_at) : ""; }
+    if (sideUpdated) { sideUpdated.textContent = c.updated_at ? fmtAge(c.updated_at) : "—"; sideUpdated.title = c.updated_at ? fmtTime(c.updated_at) : ""; }
 
-    // Description — auto-open when populated, closed when empty.
-    // Native <details>/<summary> handles the affordance + a11y.
-    // dataset.raw stashes the unrendered value for the inline editor
-    // (the rendered DOM may be escaped HTML or a placeholder span).
+    // Error payload — auto-triaged crashes carry a raw error string;
+    // hidden when the case has none.
+    if (sideError) {
+      const em = (c.error_message || "").trim();
+      sideError.hidden = !em;
+      if (sideErrorPre) sideErrorPre.textContent = em;
+    }
+
+    // Description — rendered as sanitized HTML (rich); placeholder when empty.
     if (sideDescBody) {
-      sideDescBody.dataset.raw = c.description || "";
       sideDescBody.innerHTML = c.description
-        ? esc(c.description)
+        ? sanitizeRichHtml(c.description)
         : '<span class="rp-cases-side-unassigned">— no description —</span>';
     }
-    if (sideDescDetails) sideDescDetails.open = !!c.description;
 
     // Attachments — present on both the GET detail and PATCH (bare
     // Case) shapes, so this repaints correctly after any field edit.

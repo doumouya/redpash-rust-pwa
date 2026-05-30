@@ -743,66 +743,201 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Description body — pre-wrap so newlines render; falls back to
-   the "— no description —" muted span when empty. */
+/* Description body — rendered (sanitized) HTML: bold / links / code /
+   lists / quotes. */
 .rp-cases-detail-side-desc-body {
-  padding: 0.5rem 0 0;
+  padding: 0.375rem 0 0;
   font-size: 0.75rem;
   color: var(--rp-text);
-  white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.45;
+  line-height: 1.5;
 }
+.rp-cases-detail-side-desc-body > :first-child { margin-top: 0; }
+.rp-cases-detail-side-desc-body > :last-child  { margin-bottom: 0; }
+.rp-cases-detail-side-desc-body p { margin: 0 0 0.4375rem; }
+.rp-cases-detail-side-desc-body a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-detail-side-desc-body code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
+.rp-cases-detail-side-desc-body pre { margin: 0.375rem 0; padding: 0.5rem; background: var(--rp-bg); border: 1px solid var(--rp-border); border-radius: 0.375rem; overflow-x: auto; font-size: 0.7188rem; }
+.rp-cases-detail-side-desc-body ul, .rp-cases-detail-side-desc-body ol { margin: 0.25rem 0; padding-left: 1.125rem; }
+.rp-cases-detail-side-desc-body blockquote { margin: 0.375rem 0; padding-left: 0.625rem; border-left: 0.1875rem solid var(--rp-border); color: var(--rp-text-dim); }
 
-/* Inline-edit affordance under the description body — small,
-   unobtrusive text+icon button. Click → hide the body, reveal the
-   form below. The form occupies the same slot as the body so the
-   panel doesn't shift. */
+/* Description pencil — sits top-right in the block head. */
 .rp-cases-side-desc-edit {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  margin: 0.375rem 0 0;
-  padding: 0.1875rem 0.375rem;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
   background: transparent;
   border: 0;
   border-radius: 0.25rem;
   color: var(--rp-text-mute);
-  font: inherit;
-  font-size: 0.6875rem;
   cursor: pointer;
+  font-size: 0.75rem;
 }
-.rp-cases-side-desc-edit:hover {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
+.rp-cases-side-desc-edit:hover { background: var(--rp-hover); color: var(--rp-text); }
+
+/* Rich description editor — bordered card (toolbar + contentEditable),
+   matching the comment composer. */
 .rp-cases-side-desc-form {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
   margin-top: 0.5rem;
-}
-/* `display:flex` above beats the `hidden` attribute's UA `display:none`,
-   so the edit form rendered permanently open. Restore the toggle. */
-.rp-cases-side-desc-form[hidden] { display: none; }
-.rp-cases-side-desc-input {
-  width: 100%;
-  padding: 0.4375rem 0.5rem;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 0.375rem;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  resize: none;
-  outline: 0;
+  border-radius: 0.5rem;
 }
-.rp-cases-side-desc-input:focus { border-color: var(--rp-accent-2); }
+.rp-cases-side-desc-form:focus-within { border-color: var(--rp-accent-2); }
+.rp-cases-desc-toolbar { border-bottom: 1px solid var(--rp-border); }
+.rp-cases-side-desc-input {
+  min-height: 5rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.4375rem 0.5rem;
+  color: var(--rp-text);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  outline: 0;
+  word-break: break-word;
+}
+.rp-cases-side-desc-input:empty::before { content: attr(data-placeholder); color: var(--rp-text-mute); }
+.rp-cases-side-desc-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-side-desc-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-cases-side-desc-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-cases-side-desc-actions .rt-btn { padding: 0.25rem 0.625rem; font-size: 0.6875rem; }
+
+/* ── properties panel (Em 2026-05-30 sidebar rebuild) ──────────────
+   Label + inline-editable value rows. Priority / Type / Category open a
+   value menu; Assignee opens the user picker. */
+.rp-cases-props { display: flex; flex-direction: column; gap: 0.0625rem; }
+.rp-cases-props--meta { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--rp-border); }
+.rp-cases-prop {
+  position: relative;            /* anchors the value menu + assignee picker */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.875rem;
+}
+.rp-cases-prop-lbl { flex: 0 0 4.5rem; font-size: 0.6875rem; color: var(--rp-text-mute); }
+.rp-cases-prop-val {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.4375rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+.rp-cases-prop-val:hover,
+.rp-cases-prop-val.is-menu-open { background: var(--rp-hover); border-color: var(--rp-border); }
+.rp-cases-prop-val-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-cases-prop-caret { margin-left: auto; font-size: 0.5625rem; color: var(--rp-text-mute); flex: 0 0 auto; }
+.rp-cases-prop-static {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--rp-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* type glyph color (mirrors the board card) */
+.rp-cases-type-glyph { font-size: 0.8125rem; color: var(--rp-text-mute); flex: 0 0 auto; }
+.rp-cases-type-glyph.is-bug     { color: var(--rp-accent); }
+.rp-cases-type-glyph.is-feature { color: var(--rp-mauve); }
+.rp-cases-type-glyph.is-epic    { color: var(--rp-teal); }
+
+/* value menu popover (priority / type / category) */
+.rp-cases-prop-pop {
+  position: absolute;
+  top: calc(100% + 0.125rem);
+  left: 4.5rem;
+  right: 0;
+  z-index: 6;
+  padding: 0.25rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.32);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.rp-cases-prop-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  width: 100%;
+  padding: 0.3125rem 0.4375rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0.3125rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+.rp-cases-prop-opt:hover { background: var(--rp-hover); }
+.rp-cases-prop-opt.is-active { background: var(--rp-accent-soft); }
+.rp-cases-prop-opt-lbl { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-cases-prop-opt-check { color: var(--rp-accent-2); font-size: 0.75rem; flex: 0 0 auto; }
+
+/* source badge — Internal (team) vs External (customer) */
+.rp-cases-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.0625rem 0.4375rem;
+  border-radius: 6.1875rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+.rp-cases-source-badge.is-internal { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-cases-source-badge.is-external { color: var(--rp-peach); background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
+
+/* sidebar blocks — error payload + description */
+.rp-cases-side-blk { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--rp-border); }
+.rp-cases-side-blk-head {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rp-cases-side-blk-head .rp-cases-side-desc-edit { margin-left: auto; }
+.rp-cases-side-error-pre {
+  margin: 0.4375rem 0 0;
+  padding: 0.5rem;
+  background: var(--rp-bg);
+  border: 1px solid color-mix(in srgb, var(--rp-accent) 30%, var(--rp-border));
+  border-radius: 0.375rem;
+  color: var(--rp-accent);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 12rem;
+  overflow: auto;
 }
 
 /* Sidebar activity items — the main .rp-cases-activity-item grid
