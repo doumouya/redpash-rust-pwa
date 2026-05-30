@@ -1,3 +1,10 @@
+---
+title: Rust refactor audit
+section: Refactor
+last modified date: 2026-05-22
+superseded-by: tools/rs-audit/ — recurring audit replaces the one-shot review
+---
+
 # Rust refactor audit
 
 A survey of refactors that pay for themselves without changing

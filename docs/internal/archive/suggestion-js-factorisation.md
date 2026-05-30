@@ -1,3 +1,10 @@
+---
+title: JS / frontend refactor audit
+section: Refactor
+last modified date: 2026-05-22
+superseded-by: tools/js-audit/ — recurring audit replaces the one-shot review
+---
+
 # JS / frontend refactor audit
 
 Companion to `backend/suggestion-rust-factorisation.md`. **2026-05-22.**

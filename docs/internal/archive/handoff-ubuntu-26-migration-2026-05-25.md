@@ -4,6 +4,7 @@ section: Internal
 last modified date: 2026-05-25
 owner: Woz · boundary-lock session
 status: handoff (mid-stream)
+superseded-by: none — historical handoff
 ---
 
 # Handoff — Ubuntu 26 migration, 2026-05-25 evening

@@ -1,3 +1,10 @@
+---
+title: Plan — localStorage for PWA speed
+section: Internal
+last modified date: 2026-05-22
+superseded-by: ../subsystems/prefs.md — user-pref persistence shipped (user_preferences table + SWR cache)
+---
+
 # Plan: localStorage for PWA speed
 
 ## What's there today

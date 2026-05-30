@@ -3,6 +3,7 @@ title: Workspace migration — execution plan
 section: Internal — RedPash team only
 order: 90
 last modified date: 2026-05-22
+superseded-by: ../subsystems/workspace-shell.md — migration shipped, live behavior described there
 ---
 
 # Workspace migration — execution plan

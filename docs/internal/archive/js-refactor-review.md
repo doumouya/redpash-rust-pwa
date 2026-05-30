@@ -3,6 +3,7 @@ title: Frontend JS — refactoring review
 section: Refactor
 order: 0
 last modified date: 2026-05-22
+superseded-by: tools/js-audit/ — recurring audit replaces the one-shot review
 ---
 
 # Frontend JS — the refactoring review

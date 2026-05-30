@@ -1,3 +1,10 @@
+---
+title: All CSS in the RedPash project — internalization plan
+section: Internal
+last modified date: 2026-05-20
+superseded-by: shipped in the frontend-reset merge (2026-05-23) — `frontend/styles/` is now self-contained, no `/vendor/` imports
+---
+
 # All CSS in the RedPash project — internalization plan
 
 Move every CSS file the app currently pulls from the external

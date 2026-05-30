@@ -2,6 +2,7 @@
 title: Handoff — frontend datatables (Torv)
 section: Internal
 last modified date: 2026-05-23
+superseded-by: none — historical handoff
 ---
 
 # Handoff — frontend datatables (Torv)

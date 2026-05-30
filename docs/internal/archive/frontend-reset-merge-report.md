@@ -2,6 +2,7 @@
 title: frontend-reset → prerelease merge report
 section: Internal
 last modified date: 2026-05-23
+superseded-by: none — historical merge report
 ---
 
 # frontend-reset → prerelease merge — post-merge cleanup report

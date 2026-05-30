@@ -3,6 +3,7 @@ title: Frontend parity inventory
 section: Refactor
 order: 1
 last modified date: 2026-05-22
+superseded-by: none — historical reference for the frontend-reset merge
 ---
 
 # Frontend parity inventory

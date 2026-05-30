@@ -3,6 +3,7 @@ title: Rust dedup audit — 2026-05-24
 section: Internal
 order: 91
 last modified date: 2026-05-24
+superseded-by: tools/rs-audit/ — recurring audit replaces the one-shot review
 ---
 
 # Rust dedup audit — 2026-05-24

@@ -2,6 +2,7 @@
 title: Woz — 2026-05-25 suspension report
 section: Internal
 last modified date: 2026-05-25
+superseded-by: none — historical (per-agent status report)
 ---
 
 # Suspension report — Woz, 2026-05-23 → 2026-05-25

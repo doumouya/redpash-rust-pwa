@@ -3,6 +3,7 @@ title: Sandbox integration (live wiring playbook)
 section: Frontend
 order: 15
 last modified date: 2026-05-20
+superseded-by: none — historical reference (sandbox retired in the frontend-reset merge)
 ---
 
 # Sandbox integration (live wiring playbook)
