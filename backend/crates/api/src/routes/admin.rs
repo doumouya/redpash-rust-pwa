@@ -1104,9 +1104,10 @@ async fn delete_company(
 /// Per-scope role allow-lists. The SQL CHECK constraint is the
 /// safety net; this is the public contract used to validate the
 /// request body before the INSERT (cleaner 400 than letting the CHECK
-/// surface as a 500). Mirrors the migration at
-/// 20260521000001_companies.sql:23-37.
-const PROJECT_ROLES: &[&str] = &["owner", "collaborator", "viewer"];
+/// surface as a 500). The unified `memberships` table CHECK is
+/// owner/admin/member/viewer; these per-scope allow-lists narrow it.
+/// (Project `collaborator` was migrated to `member` in the consolidation.)
+const PROJECT_ROLES: &[&str] = &["owner", "member", "viewer"];
 const COMPANY_ROLES: &[&str] = &["owner", "admin", "member"];
 
 #[derive(Deserialize)]

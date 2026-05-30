@@ -299,10 +299,11 @@ pub async fn insert_user(
 }
 
 pub async fn delete_user(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    // FKs from sessions / memberships (user side) / projects.owner_id all
-    // cascade — the row going away takes the user's auth + their owned
-    // projects with it. Use with care; the
-    // Users-tab UI in dev mode is intentionally permissive.
+    // FKs from sessions + memberships (user side, ON DELETE CASCADE) take
+    // out the user's auth + their membership rows — including any
+    // role='owner' membership, which leaves those projects ownerless (the
+    // projects are NOT deleted; there is no projects.owner_id column).
+    // Use with care; the Users-tab UI in dev mode is intentionally permissive.
     let n = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
         .bind(rid)
         .execute(pool)

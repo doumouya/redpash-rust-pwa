@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
-    /// `project | file | chart | dashboard` today; the enum widens
-    /// when admin entities + commands land in later slices.
+    /// `project | file | chart | dashboard | user | company | membership`
+    /// (the kinds the search handler currently emits).
     pub kind:  String,
     pub rid:   String,
     pub label: String,
