@@ -103,9 +103,12 @@ export function mountBuilder(el, ctx) {
       '<button type="button" class="ds-type-btn' + (t === cfg.type ? " active" : "") + '"'
       + ' data-type="' + esc(t) + '"><i class="bi ' + esc(icon) + '"></i>' + esc(label)
       + '</button>').join('');
-    return '<div class="ds-type-grid">' + typeBtns + '</div>'
-      + '<span class="ds-lbl">Title</span>'
-      + '<input class="ds-input" data-key="title" value="' + esc(cfg.title || "") + '" />';
+    // Title is edited inline in the tile header (the pencil → editable
+    // header title), so the panel no longer carries an always-on Title
+    // input. cfg.title stays the source of truth; the header edit writes
+    // it directly. (The title input-handler branch below is now dead but
+    // harmless — left in case a title field is reintroduced.)
+    return '<div class="ds-type-grid">' + typeBtns + '</div>';
   }
 
   // Polymorphic per source.kind. Anything not matched falls back to a

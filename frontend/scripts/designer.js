@@ -326,6 +326,49 @@ export function mountDesigner(designerEl, ctx) {
     ensureTileSource(entry).then(() => { if (sel === entry) builder.render(); });
   }
 
+  // Inline title rename — edit the title RIGHT in the tile header where
+  // the pencil is, instead of bouncing the user to the config panel's
+  // Title field. Enter / blur commits, Esc cancels. The value writes
+  // straight to entry.cfg.title (saveChart's source) and marks the tile
+  // dirty; re-rendering the panel keeps its Title field in step. The
+  // reverse sync (panel → header) already lives in the asideEl input
+  // listener, so both directions now agree.
+  function startTitleEdit(entry) {
+    const span = entry?.tileEl?.querySelector(".ds-tile-title");
+    if (!span || span.isContentEditable) return;
+    const original = entry.cfg.title || "Untitled chart";
+    span.contentEditable = "true";
+    span.spellcheck = false;
+    span.focus();
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const selc = window.getSelection();
+    selc.removeAllRanges();
+    selc.addRange(range);
+    let done = false;
+    const commit = (cancel) => {
+      if (done) return;
+      done = true;
+      span.removeEventListener("blur", onBlur);
+      span.removeEventListener("keydown", onKey);
+      span.contentEditable = "false";
+      const val = cancel ? original : ((span.textContent || "").trim() || "Untitled chart");
+      span.textContent = val;
+      if (!cancel && val !== original) {
+        entry.cfg.title = val;
+        markTileDirty(entry, true);
+        if (sel === entry) builder.render();  // keep the panel's Title field in sync
+      }
+    };
+    const onBlur = () => commit(false);
+    const onKey  = (ev) => {
+      if (ev.key === "Enter")       { ev.preventDefault(); span.blur(); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(true); }
+    };
+    span.addEventListener("blur", onBlur);
+    span.addEventListener("keydown", onKey);
+  }
+
   // Fetch + cache a tile's source-file columns (one /files/:rid hit per
   // tile, memoised on the entry). Best-effort — a failed fetch leaves
   // the dropdowns degraded to static lines rather than blocking.
@@ -607,7 +650,7 @@ export function mountDesigner(designerEl, ctx) {
     const entry = tiles.find((x) => x.tileEl === t);
     if (!entry) return;
 
-    if (e.target.closest(".ds-tile-edit"))  { selectTile(entry); return; }
+    if (e.target.closest(".ds-tile-edit"))  { selectTile(entry); startTitleEdit(entry); return; }
     if (e.target.closest(".ds-tile-save"))  { void saveChart(entry); return; }
     if (e.target.closest(".ds-tile-del"))   { void deleteChart(entry); return; }
     if (e.target.closest(".ds-tile-close")) { closeTile(entry); return; }
