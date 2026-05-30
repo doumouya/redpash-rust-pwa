@@ -1,9 +1,9 @@
 /* Cases — kanban board + detail page styles.
    Workstream spec: docs/internal/jira-flow-proposition/proposition.md.
    v1: 5 status columns, click-cycle status + kanban drag-drop (drag
-   added 2026-05-28); detail page = main column + metadata sidebar + tabbed
-   comments/activity. Reuses tab atom from panel.css (.rt-panel-tabs)
-   for the comments/activity switcher. */
+   added 2026-05-28); detail page = comments thread + always-visible
+   sidebar (Description / Activity in <details> blocks; no tabs — see
+   cases.html:122). */
 
 /* ── main pane override ───────────────────────────────────────
    The cases main holds two mutually-exclusive surfaces (the board
