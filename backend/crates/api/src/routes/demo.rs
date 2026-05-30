@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/demo.md
 //! `/api/demo` — the public landing-page "parse any CSV" demo.
 //!
 //! `POST /api/demo/parse` takes a raw CSV body, parses + cleanness-

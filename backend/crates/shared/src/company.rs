@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/company.md
 //! Company resource DTOs.
 //!
 //! A company is the multi-tenancy boundary: a user belongs to zero or

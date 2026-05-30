@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/charts.md
 //! `/api/charts/*` — CRUD for saved charts.
 //!
 //! A saved chart is a self-contained visualisation authored on the

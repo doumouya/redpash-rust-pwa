@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/lib.md
 //! # `data` — Pure-compute layer
 //!
 //! Everything in this crate is HTTP-agnostic. The `api` crate calls

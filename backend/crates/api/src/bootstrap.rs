@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/bootstrap.md
 //! Startup-time idempotent setup.
 //!
 //! Runs after migrations. Ensures the dev user + their default project

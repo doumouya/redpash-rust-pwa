@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/auth.md
 //! `/api/auth/google/*` — full OAuth 2.0 authorization-code flow.
 //!
 //! Sequence:

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/metrics.md
 //! `/api/metrics` — performance read surface over `request_log`.
 //!
 //!   GET /api/metrics?window=1h|24h|7d|30d   (default 1h)

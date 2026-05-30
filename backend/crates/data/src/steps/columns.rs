@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/columns.md
 //! Column-shape + name cleaning steps: drop columns by name, keep a
 //! whitelist, rename one, normalise all headers to snake_case, or
 //! find-and-replace a substring across every header. Pure schema

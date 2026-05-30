@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/request_log.md
 //! Per-request performance capture — fire-and-forget writes to the
 //! `request_log` table.
 //!

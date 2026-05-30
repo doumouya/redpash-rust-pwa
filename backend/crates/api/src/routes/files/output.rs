@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/output.md
 //! File-materialisation endpoints: snapshot (post-replay → new project
 //! file on disk) and export (post-replay → download stream).
 //!

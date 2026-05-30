@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/monitoring.md
 //! `/api/monitoring` — read surface for the `/monitoring` page.
 //!
 //!   GET /api/monitoring/events?page&size&window&level&kind

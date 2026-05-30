@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/util.md
 //! Step-engine helpers: JSON-arg extraction, column-keep projection,
 //! filter-predicate compilation, date / snake-case utilities.
 //!

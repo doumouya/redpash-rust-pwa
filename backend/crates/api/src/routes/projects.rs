@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/projects.md
 //! `/api/projects` — full CRUD on the user's projects + their files.
 //!
 //!   GET    /                 list the caller's projects

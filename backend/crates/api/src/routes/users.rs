@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/users.md
 //! `/api/users` — user directory.
 //!
 //! Powers the Objects page's owner-reassignment picker and the Users

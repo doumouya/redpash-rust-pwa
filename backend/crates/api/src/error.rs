@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/error.md
 //! HTTP-friendly error type — the airlock between rich server-side
 //! diagnostics and a sanitized wire response.
 //!

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/users.md
 //! `users` row CRUD + memberships join + Google-OAuth upsert.
 //!
 //! Slice 3 of the db/mod.rs decomposition. Holds:

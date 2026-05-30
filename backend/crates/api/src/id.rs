@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/id.md
 //! RedPash-ID generation.
 //!
 //! Format: `<PREFIX>_<32-char-uppercase-hex>` — e.g.

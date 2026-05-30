@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/dashboard.md
 //! Dashboard resource DTOs.
 //!
 //! A `Dashboard` is the persisted record (id + title + spec + favorite

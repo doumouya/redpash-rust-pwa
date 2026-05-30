@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/cells.md
 //! Cell-value cleaning steps: single-cell mutation, null-fill,
 //! per-column type coercion, full-column case folding,
 //! find-and-replace, sentinel→replacement.

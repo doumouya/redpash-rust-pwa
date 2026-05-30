@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/wasm.md
 //! `data::wasm` — wasm-bindgen wrappers for the cheap data-engine
 //! entry points.
 //!

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/bin/audit_distincts.md
 //! `redpash-audit-distincts` — measurement walk for the column-index
 //! design (Torv ↔ Gus, Internal-Slack 2026-05-24).
 //!

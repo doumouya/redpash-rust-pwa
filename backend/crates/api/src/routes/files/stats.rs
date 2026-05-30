@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/stats.md
 //! Stats endpoints for a single file: dedup detection, distinct-value
 //! probe for the filter-panel autocomplete, sentinel scan for the
 //! fix-invalid modal.

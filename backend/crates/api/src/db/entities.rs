@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/entities.md
 //! Entity Registry (supertype) helpers — step 1a of the membership
 //! consolidation (case CAS_DC7EDAF82F1E494F846D83FA71C411A2).
 //!

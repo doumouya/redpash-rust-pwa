@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/chart.md
 //! Chart resource DTOs.
 //!
 //! A saved chart is a self-contained visualisation authored on the

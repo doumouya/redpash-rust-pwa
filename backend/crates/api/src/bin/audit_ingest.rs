@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/bin/audit_ingest.md
 //! `redpash-audit-ingest` — persist one tools/<tool>-audit/audit.json
 //! run into audit.run + audit.finding.
 //!

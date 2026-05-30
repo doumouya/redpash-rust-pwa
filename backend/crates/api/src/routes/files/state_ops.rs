@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/state_ops.md
 //! Cleaner-sidebar state operations: cast dry-run (preview lost
 //! rows), undo / redo (walk the step history), clear_filters (eraser
 //! that surgically un-applies every filter_rows step regardless of

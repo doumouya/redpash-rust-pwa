@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/dashboards.md
 //! `/api/dashboards/*` — CRUD + favourite toggle.
 //!
 //! A dashboard is a layout of widgets, persisted as a dashboard-typed

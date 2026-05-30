@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/encoding.md
 //! Byte-buffer → encoding name.
 //!
 //! Uses Mozilla's `chardetng` detector — same algorithm Firefox ships.

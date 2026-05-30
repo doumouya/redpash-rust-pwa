@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/clean.md
 //! Auto-clean — the conservative, always-safe transforms RedPash can
 //! apply to a CSV with no human in the loop. Powers the landing-page
 //! demo's "drop it → get it back clean" path.

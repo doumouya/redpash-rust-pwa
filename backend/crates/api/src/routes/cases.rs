@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/cases.md
 //! `/api/cases/*` — Jira-flow workstream v1: case + comment CRUD.
 //!
 //! Cases are the team's coordination + customer-ticket layer on top

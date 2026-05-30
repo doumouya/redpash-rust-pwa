@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/mod.md
 //! Route assembly.
 //!
 //! Each resource is its own module (`health`, `files`, …) and exposes a

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/health.md
 //! `/api/health` — liveness + (eventually) DB readiness.
 //!
 //! Phase 1: just `{"status": "ok"}` so the frontend router and any uptime

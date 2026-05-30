@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/filter.md
 //! Filter spec — wire format for `PageQuery.filters`.
 //!
 //! Two shapes are accepted; both serialise as JSON in the query string.

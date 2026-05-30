@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/lib.md
 //! # `shared` — DTOs across the wire
 //!
 //! Every struct in this crate is serialised over HTTP and deserialised

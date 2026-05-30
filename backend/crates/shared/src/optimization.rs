@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/optimization.md
 //! Optimization map — the wire DTO for `/api/monitoring/optimization-points`.
 //!
 //! See `docs/internal/specs/optimization-map.md`. One row pairs a

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/companies.md
 //! `/api/companies` — companies + memberships.
 //!
 //! A company is the multi-tenancy boundary: a user belongs to zero or

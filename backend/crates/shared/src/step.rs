@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/step.md
 //! ProjectStep — one cleaning operation applied to a file.
 //!
 //! Wire shape mirrors the `project_steps` table:

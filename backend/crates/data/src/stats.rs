@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/stats.md
 //! Column statistics + the file-level **cleanness score**.
 //!
 //! `unique_values` iterates a single column, collects up to ~3× the

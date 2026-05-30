@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/mod.md
 //! Apply / replay cleaning steps against a Polars DataFrame.
 //!
 //! `apply` is the single switch from `kind` (string) → Polars op. Every

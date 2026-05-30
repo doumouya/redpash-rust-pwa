@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/report.md
 //! Grouping / report-spec DTOs.
 //!
 //! `ReportSpec` is the grouping shape — what columns to group by, what

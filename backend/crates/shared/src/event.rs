@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/event.md
 //! Event DTOs — the runtime observability log.
 //!
 //! `Event` is the persisted record (one `events` row). `EventReport`

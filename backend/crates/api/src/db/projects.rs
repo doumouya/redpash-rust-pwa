@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/projects.md
 //! `projects` table CRUD + the shared ProjectSummary SELECT.
 //!
 //! Slice 4 of the db/mod.rs decomposition. Holds:

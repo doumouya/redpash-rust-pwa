@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/redact.md
 //! Redaction discipline for events.context — the single point where
 //! potentially-sensitive payloads from Channel A (rich tracing log
 //! stream) get sanitized before mirroring into Channel B (events

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/event.md
 //! Runtime event capture — fire-and-forget writes to the `events` table.
 //!
 //! `record(pool, draft)` persists an event WITHOUT blocking the caller:

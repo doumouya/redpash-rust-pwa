@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/distinct.md
 //! Single-column distinct values — drives filter-predicate
 //! autocomplete on the workspace's filter panel.
 //!

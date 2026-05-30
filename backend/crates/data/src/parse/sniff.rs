@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/parse/sniff.md
 //! Preamble / delimiter sniffing + wrapped-CSV rescue.
 //!
 //! Splits off the heuristic head of `parse_text_with_diag` (the two-pass

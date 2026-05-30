@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/rows.md
 //! Row-shape cleaning steps: drop by index, drop by predicate(s),
 //! drop nulls. Each is a function dispatched from `apply()` in
 //! `super`.

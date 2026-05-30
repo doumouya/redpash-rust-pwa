@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/dtype.md
 //! Per-column type inference + light stats.
 //!
 //! Polars already infers a *storage* type when it parses the CSV — this

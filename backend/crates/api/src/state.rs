@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/state.md
 //! Shared application state.
 //!
 //! Cloned into every handler via Axum's `State<AppState>` extractor —

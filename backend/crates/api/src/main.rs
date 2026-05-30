@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/main.md
 //! `redpash-api` — HTTP entrypoint.
 //!
 //! Boots in three steps:

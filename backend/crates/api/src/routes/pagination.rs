@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/pagination.md
 //! Pagination helpers shared by every `Page<T>`-returning handler.
 //!
 //! The same two helpers lived in `admin.rs` and `monitoring.rs` as

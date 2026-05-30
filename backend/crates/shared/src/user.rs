@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/user.md
 //! User + profile + preferences.
 //!
 //! Mirrors `core.UserProfile` from the Django side. The `prefs` JSON

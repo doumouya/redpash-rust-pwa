@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/group_by.md
 //! Group-by + aggregation engine for the Reports page.
 //!
 //! `execute(df, spec)` applies the optional pre-filter, groups by the

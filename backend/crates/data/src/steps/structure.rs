@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/steps/structure.md
 //! Structure-changing cleaning steps: wrapped-CSV rescue,
 //! concat two columns into one, split one column into many,
 //! date column reformat (parse + restringify).

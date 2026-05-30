@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db_query.md
 //! DB-layer observability — fire-and-forget per-query capture into the
 //! `db_query_log` table (the DB sibling of `request_log`). A `tracing`
 //! Layer taps sqlx's own query-log events (target `sqlx::query`), so

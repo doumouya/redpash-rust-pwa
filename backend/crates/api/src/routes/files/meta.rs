@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/meta.md
 //! File-metadata mutation endpoints: set_encoding (override the
 //! chardetng guess; evicts the cache so the next hydrate re-decodes
 //! with the user's choice) and the cleanness compute / clear pair

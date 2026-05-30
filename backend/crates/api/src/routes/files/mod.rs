@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/mod.md
 //! `/api/files/*` — upload, summary, paged rows, steps.
 //!
 //! Persistence model:

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/search.md
 //! `/api/search` — omnisearch backing the topbar input.
 //!
 //!   GET /api/search?q=<text>&limit=<int>

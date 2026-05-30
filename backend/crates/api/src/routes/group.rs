@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/group.md
 //! `/api/group/preview` — the stateless grouping engine.
 //!
 //! Takes a source file id + a grouping spec, runs up to three Polars

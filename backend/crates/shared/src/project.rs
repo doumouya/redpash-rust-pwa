@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/project.md
 //! Project resource DTOs.
 
 use serde::{Deserialize, Serialize};

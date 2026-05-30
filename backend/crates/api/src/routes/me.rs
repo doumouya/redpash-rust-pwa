@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/me.md
 //! `/api/me` — current user profile.
 //!
 //! Resolution order:

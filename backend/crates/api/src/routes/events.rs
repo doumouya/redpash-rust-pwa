@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/events.md
 //! `/api/events` — runtime observability log.
 //!
 //!   GET  /api/events        recent events, newest first

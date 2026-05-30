@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/joins.md
 //! Detect candidate join keys between two DataFrames.
 //!
 //! Algorithm (port of clarna-django's `detect_join_keys`):

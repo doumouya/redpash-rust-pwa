@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/monitoring.md
 //! Monitoring summaries — slim wire shapes for the /api/monitoring
 //! list endpoints.
 //!

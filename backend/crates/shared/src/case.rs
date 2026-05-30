@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/case.md
 //! Case + Comment DTOs — the Jira-flow workstream's wire shapes.
 //!
 //! Case lifecycle changes are NOT modelled as a parallel struct here;

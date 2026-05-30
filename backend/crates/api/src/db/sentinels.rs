@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/sentinels.md
 //! `sentinel_submissions` + `global_sentinels` SQL helpers.
 //!
 //! Two functions for the cleanness-vocabulary plumbing:

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/files/joins.md
 //! `/api/files/:rid/joins` — detect candidates + create the join.
 //!
 //! Split out of `files/mod.rs` so the join detection + materialisation

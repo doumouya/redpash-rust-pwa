@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/search.md
 //! Omnisearch DTOs — wire shape for `GET /api/search`.
 //!
 //! One flat list of results, `kind`-discriminated. Frontend groups by

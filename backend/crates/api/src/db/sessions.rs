@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/sessions.md
 //! Session-row helpers — the `sessions` table holding the cookie
 //! → user-rid mapping. The auth flow creates a row on login,
 //! the request middleware reads it on every authed call, the

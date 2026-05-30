@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/parse/mod.md
 //! Byte buffer → Polars `DataFrame`.
 //!
 //! Single entry point for the upload pipeline: `from_csv_bytes` decodes

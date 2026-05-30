@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/parse/filter.md
 //! Filter expression compilation for `page()` + `apply_filter()`.
 //!
 //! Decoupled from the CSV-parsing core (`super`) so the per-FilterOp

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/admin.md
 //! `/api/admin` — org-wide read surface for the `/home` rail tabs.
 //!
 //!   GET /api/admin/users        ← Users tab

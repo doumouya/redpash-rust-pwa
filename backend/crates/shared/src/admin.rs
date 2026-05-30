@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/admin.md
 //! Admin summaries — slim wire shapes for the `/api/admin/*` list
 //! endpoints powering Home's org/data rail tabs.
 //!

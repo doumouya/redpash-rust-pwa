@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/export.md
 //! Export — render a cleaned `DataFrame` to downloadable bytes.
 //!
 //! Three formats, one signature each (`&DataFrame -> Vec<u8>`), so the

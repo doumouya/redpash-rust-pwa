@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/shared/file.md
 //! File (project_files row) DTOs.
 
 use serde::{Deserialize, Serialize};

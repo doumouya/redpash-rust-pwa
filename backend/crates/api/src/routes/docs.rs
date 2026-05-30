@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/routes/docs.md
 //! `/api/docs` — serves the `docs/` markdown tree as a browsable index
 //! plus rendered HTML. Public (no auth, no DB).
 //!

@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/api/db/mod.md
 //! Thin SQL helpers.
 //!
 //! All queries are non-macro (`sqlx::query` + `query_as::<_, Row>`) so

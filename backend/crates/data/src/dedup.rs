@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/dedup.md
 //! Duplicate-row detection for the cleaner's dedup tool.
 //!
 //! Two modes:

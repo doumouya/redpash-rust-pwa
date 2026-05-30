@@ -1,3 +1,4 @@
+//! Doc: docs/internal/code/backend/data/examples/score_dir.md
 //! Dev eval harness — score every CSV in a directory through the exact
 //! upload path (`from_csv_bytes` → `summarize` → `stats::cleanness_report`).
 //!
