@@ -37,11 +37,13 @@ table.
 | `EVT`  | Event (`events`)                      | `event::record` (via `id::new`) |
 | `RPT`  | Report — **retired** (mig 016); a Report is now a derived view over a csv-typed `FIL_`. | — |
 | `DSH`  | Dashboard — preserved on dashboard-typed `project_files` rows after mig 017. | (rids kept through `fold_dashboards`) |
+| `TEM`  | Team (`teams`) — **reserved**, no allocator in code yet (RBAC pre-stage; the table exists, nothing inserts into it). | — |
 
-Every entity rid above is **also recorded in `entities`** (mig 022) — the
+Every entity rid above is **also recorded in `entities`** — the
 polymorphic supertype that every domain table's `redpash_id` FKs into with
 `ON DELETE CASCADE`, and that polymorphic relations (`memberships`,
-future edges) point at instead of into N parallel tables. `entities` itself
+future edges) point at instead of into N parallel tables. The discriminator
+covers `company` / `project` / `case` / `team`. `entities` itself
 has no prefix — it just holds the subtype rid + the discriminator. See the
 `entities` section below.
 
@@ -54,8 +56,21 @@ addressed in a URL. It replaces the parallel `company_memberships` +
 
 ## Migrations
 
+> **Consolidated 2026-05-29.** The 38-file history below was collapsed into a
+> single baseline, [`20260529000000_init.sql`](../../backend/migrations/20260529000000_init.sql),
+> while pre-launch on localhost. The old files are archived in
+> `backend/.migrations_archive_pre_baseline/` (not on the apply path). The
+> baseline is a verified `pg_dump` of the live schema plus four deliberate
+> changes — the `teams` table, `users.status`, the `entities` `'team'`
+> discriminator, and the `memberships` `display_name`+`relationship_attribute`
+> → `context_role` collapse (see [`update_db/query.md`](update_db/query.md)).
+> The table below is retained as a **changelog** — it explains *why* each
+> column/table exists, and the `mig NNN` references in the table notes point at
+> that history, not at live files.
+
 | File                                       | Adds |
 |--------------------------------------------|------|
+| `20260529000000_init.sql` (**current baseline**) | The entire schema below in one file (consolidation of everything that follows). |
 | `20260512000001_init.sql`                  | `users`, `projects`, `project_files`, `project_steps` |
 | `20260513000001_reports.sql`               | `reports` |
 | `20260514000001_report_favorite.sql`       | `reports.is_favorite` + partial index |
@@ -123,6 +138,7 @@ Identity anchor. Two creation paths:
 | `updated_at`   | `TIMESTAMPTZ` | NO       | `now()`      | |
 | `google_sub`   | `TEXT`        | YES      | —            | Added mig 006. OpenID subject. Matched on sign-in. |
 | `default_project_id` | `TEXT` FK | YES    | —            | Mig 024. → `projects.redpash_id` `ON DELETE SET NULL`. The user's default project — one column = one default per user (replaces the old `projects.is_default` partial-unique index). `ensure_default_project` reads + writes through this. |
+| `status`       | `TEXT`        | NO       | `'active'`   | Baseline. `CHECK (active / suspended / archived)`. Account lifecycle — pre-stages the RBAC / scrub-retain work; not yet read by the request path. |
 
 > The legacy `prefs` JSONB column was dropped in mig 020 (`drop_users_prefs`).
 > Per-user preferences live in the first-class [`user_preferences`](#user_preferences)
@@ -399,10 +415,28 @@ collision retry is needed.
 | `companies_pkey`     | `redpash_id` | PK |
 | `companies_slug_key` | `slug`       | Implicit `UNIQUE` |
 
+### `teams`
+
+Baseline. Company-scoped grouping of users, entity-registered so
+[`memberships`](#memberships) can FK it like any other object. **Pre-stage
+only** — the table exists to anchor the RBAC team-inheritance model
+([`update_db/rbac.md`](update_db/rbac.md)), but no code inserts into it yet and
+no `TEM_` rid is allocated (see [redpash-id.md](redpash-id.md)).
+
+| Column       | Type          | Nullable | Default | Notes |
+|--------------|---------------|----------|---------|-------|
+| `redpash_id` | `TEXT` PK     | NO       | —       | `TEM_…` (reserved) · FK → `entities.id` `ON DELETE CASCADE`. |
+| `company_id` | `TEXT` FK     | NO       | —       | → `companies.redpash_id` `ON DELETE CASCADE`. |
+| `name`       | `TEXT`        | NO       | —       | |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()` | |
+
+**Index:** `teams_company_idx` on `(company_id)`.
+
 ### `entities`
 
 Mig 022. **Polymorphic supertype** — the universal object handle. Every
-top-level domain object (`company`, `project`, `case`) has its `redpash_id`
+top-level domain object (`company`, `project`, `case`, and `team` since the
+baseline) has its `redpash_id`
 recorded here and the matching domain row's PK FKs into `entities.id`
 `ON DELETE CASCADE`. That makes any polymorphic relation (memberships, future
 edges) a single FK to `entities.id` with strict DB-level cascade — no
@@ -410,8 +444,8 @@ triggers, no parallel join tables per type.
 
 | Column       | Type          | Nullable | Default | Notes |
 |--------------|---------------|----------|---------|-------|
-| `id`         | `TEXT` PK     | NO       | —       | The subtype's rid (`CMP_…` / `PRJ_…` / `CAS_…`). |
-| `type`       | `TEXT`        | NO       | —       | `CHECK (company / project / case)` — the discriminator. |
+| `id`         | `TEXT` PK     | NO       | —       | The subtype's rid (`CMP_…` / `PRJ_…` / `CAS_…` / `TEM_…`). |
+| `type`       | `TEXT`        | NO       | —       | `CHECK (company / project / case / team)` — the discriminator (`team` added in the baseline). |
 | `created_at` | `TIMESTAMPTZ` | NO       | `now()` | |
 
 **Create pattern:** every entity insert registers the entity first
@@ -438,8 +472,7 @@ the planned `case_memberships`; ownership and case people moved in too
 | `object_redpash_id`      | `TEXT` FK     | NO       | —           | → `entities.id` `ON DELETE CASCADE`. The polymorphic parent (CMP_/PRJ_/CAS_). |
 | `user_redpash_id`        | `TEXT` FK     | NO       | —           | → `users.redpash_id` `ON DELETE CASCADE` |
 | `role`                   | `TEXT`        | NO       | `'member'`  | `CHECK (owner / admin / member / viewer)` — the access tier. Meaning of `(object_type, role)` resolves later via the deferred role-grants table (RBAC). |
-| `display_name`           | `TEXT`        | YES      | —           | Cosmetic descriptor *value* — "CEO", "System Administrator". |
-| `relationship_attribute` | `TEXT`        | YES      | —           | Relation label — "Reporter", "Case Owner", "Job Title", "Department". On cases it's queryable (the people resolver); on company/project memberships it's typically NULL. |
+| `context_role`           | `TEXT`        | YES      | —           | Baseline: single business descriptor (collapsed from the former `display_name` + `relationship_attribute`). Holds `'Reporter'` / `'Case Owner'` on cases (queryable — the people resolver keys on it); `'CEO'` / `'Department'` etc. on company/project rows; NULL when there's no business label. |
 | `joined_at`              | `TIMESTAMPTZ` | NO       | `now()`     | |
 
 **PK:** `(object_redpash_id, user_redpash_id)` — one membership per person
@@ -463,9 +496,9 @@ lives on [`users.default_project_id`](#users).
 
 **Case people are membership rows** (mig 025) — reporter +
 case-owner (fka assignee) on each case object, with
-`relationship_attribute ∈ {'Reporter', 'Case Owner'}` (and `role='member'`).
+`context_role ∈ {'Reporter', 'Case Owner'}` (and `role='member'`).
 Case-people resolution in `CASE_SELECT` is a pair of LATERALs over
-`memberships` keyed on `relationship_attribute`.
+`memberships` keyed on `context_role`.
 
 ### `cases`
 
@@ -491,7 +524,7 @@ mig 025; only the workflow fields stay on the row.
 
 > `cases.reporter_id` and `cases.assignee_id` were **dropped in mig 025**
 > (`case_people_to_memberships`). Reporter + case-owner resolve through
-> `memberships` (relation_attribute `'Reporter'` / `'Case Owner'`); the
+> `memberships` (`context_role` `'Reporter'` / `'Case Owner'`); the
 > `CASE_SELECT` LATERALs handle the join.
 
 ### `comments`
@@ -524,8 +557,13 @@ the whole instance sees; per-company custom categories share the same column.
 | `company_id` | `TEXT` FK     | YES      | —       | → `companies.redpash_id` `ON DELETE CASCADE`. NULL = global. |
 | `created_at` | `TIMESTAMPTZ` | NO       | `now()` | |
 
-**Unique:** `(parent_id, name, company_id)` — no duplicate sibling names in
-the same scope.
+**Unique (baseline):** two partial indexes that dedup correctly across NULLs —
+`case_categories_root_uq` on `(name, COALESCE(company_id,''))` `WHERE parent_id IS NULL`
+and `case_categories_child_uq` on `(parent_id, name, COALESCE(company_id,''))`
+`WHERE parent_id IS NOT NULL`. Replaces the old single `UNIQUE(parent_id, name,
+company_id)`, which let duplicate roots and duplicate globals through because
+Postgres treats NULLs as distinct. Plus lookup indexes `case_categories_parent_idx`
+and `case_categories_company_idx (WHERE company_id IS NOT NULL)`.
 
 ### `sentinel_submissions`
 

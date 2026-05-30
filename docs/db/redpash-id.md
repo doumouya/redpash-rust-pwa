@@ -77,9 +77,10 @@ PK column is `TEXT`.
 | `EVT` | Event | `events` | `event::record` |
 | `RPT` | Report — **retired** (mig 016: a Report is now a derived view over a csv-typed `FIL_`; the `reports` table was dropped) | — | — |
 | `DSH` | Dashboard — **rid preserved** through `fold_dashboards` (mig 017) on dashboard-typed `project_files` rows; no new `DSH_…` allocated. | `project_files` (`file_type='dashboard'`) | — |
+| `TEM` | Team — **reserved** (baseline). The `teams` table exists as an RBAC pre-stage, but no code allocates a `TEM_…` rid yet; wire up `id::new("TEM")` + `register_entity(tx, rid, "team")` when teams ship. | `teams` | — (reserved) |
 
 **The `entities` supertype (mig 022)** — every entity rid above is *also*
-recorded in the `entities` table (`id PK, type CHECK(company/project/case),
+recorded in the `entities` table (`id PK, type CHECK(company/project/case/team),
 created_at`) at creation, and the matching subtype table's `redpash_id` FKs
 into `entities.id` `ON DELETE CASCADE`. Polymorphic relations (the unified
 `memberships` join, future edges) FK to `entities.id` for strict DB-level

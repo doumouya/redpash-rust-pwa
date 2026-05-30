@@ -1446,7 +1446,7 @@ const CASE_SELECT: &str =
      catp.name          AS category_parent_name,
      c.created_at, c.updated_at";
 
-/// Reporter + case-owner resolve through memberships now (relationship_attribute
+/// Reporter + case-owner resolve through memberships now (context_role
 /// 'Reporter' / 'Case Owner') — the case's people are membership rows, like a
 /// project's owner. `rep`/`own` LATERALs pick the relation, then join `users`
 /// for the display name. Plus the two-level category hydration (`cat` is the
@@ -1455,11 +1455,11 @@ const CASE_SELECT: &str =
 const CASE_USER_JOINS: &str =
     "LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
-                          AND m.relationship_attribute = 'Reporter' LIMIT 1) rep ON true
+                          AND m.context_role = 'Reporter' LIMIT 1) rep ON true
      LEFT JOIN users r            ON r.redpash_id    = rep.user_redpash_id
      LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
-                          AND m.relationship_attribute = 'Case Owner' LIMIT 1) own ON true
+                          AND m.context_role = 'Case Owner' LIMIT 1) own ON true
      LEFT JOIN users a            ON a.redpash_id    = own.user_redpash_id
      LEFT JOIN case_categories cat ON cat.redpash_id = c.category_id
      LEFT JOIN case_categories catp ON catp.redpash_id = cat.parent_id";
@@ -1501,11 +1501,11 @@ pub async fn list_cases(
            AND ($2::text IS NULL
                 OR ($2 = '__unassigned__' AND NOT EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
-                          AND co.relationship_attribute = 'Case Owner'))
+                          AND co.context_role = 'Case Owner'))
                 OR EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
                           AND co.user_redpash_id = $2
-                          AND co.relationship_attribute = 'Case Owner'))
+                          AND co.context_role = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
@@ -1513,12 +1513,12 @@ pub async fn list_cases(
                 OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
-                                                      AND rep.relationship_attribute = 'Reporter'
+                                                      AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
-                                                      AND rep.relationship_attribute = 'Reporter'
+                                                      AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))
          ORDER BY {sort_col} {sort_dir} NULLS LAST
          LIMIT $7 OFFSET $8"
@@ -1552,11 +1552,11 @@ pub async fn count_cases(
            AND ($2::text IS NULL
                 OR ($2 = '__unassigned__' AND NOT EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
-                          AND co.relationship_attribute = 'Case Owner'))
+                          AND co.context_role = 'Case Owner'))
                 OR EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
                           AND co.user_redpash_id = $2
-                          AND co.relationship_attribute = 'Case Owner'))
+                          AND co.context_role = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
@@ -1564,12 +1564,12 @@ pub async fn count_cases(
                 OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
-                                                      AND rep.relationship_attribute = 'Reporter'
+                                                      AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
-                                                      AND rep.relationship_attribute = 'Reporter'
+                                                      AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))",
     )
     .bind(status)
@@ -1639,7 +1639,11 @@ pub async fn insert_case(
     set_case_person(&mut tx, rid, "Case Owner", assignee_id).await?;
     set_case_person(&mut tx, rid, "Reporter", reporter_id).await?;
     tx.commit().await?;
-    find_case(pool, rid).await.map(|opt| opt.expect("just inserted"))
+    // Re-read on the pool (not the tx) to pick up joined columns. The row
+    // was just committed, but a concurrent delete or a read-replica lag
+    // can still return None — surface that as an error rather than panic
+    // the task (which axum turns into an opaque 500).
+    find_case(pool, rid).await?.ok_or(sqlx::Error::RowNotFound)
 }
 
 /// Set (or clear) the single user holding a given case relationship
@@ -1654,7 +1658,7 @@ async fn set_case_person(
 ) -> sqlx::Result<()> {
     sqlx::query(
         "DELETE FROM memberships
-          WHERE object_redpash_id = $1 AND relationship_attribute = $2",
+          WHERE object_redpash_id = $1 AND context_role = $2",
     )
     .bind(case_rid)
     .bind(relation)
@@ -1663,10 +1667,10 @@ async fn set_case_person(
     if let Some(u) = user {
         sqlx::query(
             "INSERT INTO memberships
-                 (object_redpash_id, user_redpash_id, role, relationship_attribute)
+                 (object_redpash_id, user_redpash_id, role, context_role)
              VALUES ($1, $2, 'member', $3)
              ON CONFLICT (object_redpash_id, user_redpash_id)
-             DO UPDATE SET relationship_attribute = EXCLUDED.relationship_attribute",
+             DO UPDATE SET context_role = EXCLUDED.context_role",
         )
         .bind(case_rid)
         .bind(u)
