@@ -22,7 +22,10 @@
 .rt-table td.is-num { text-align: right; }
 .rt-table .col-chk { width: 2.375rem; display: none; }
 .rt-table.mode-select .col-chk { display: table-cell; }
-.rt-table .col-rownum { width: 3.125rem; }
+/* min-width (not just width) so the auto table-layout can't shrink the
+   row-number column as the visible digit-count changes during a virtual
+   scroll (e.g. row 9 → 999) — keeps the column edge from jittering. */
+.rt-table .col-rownum { width: 3.125rem; min-width: 3.5rem; }
 .rt-table.no-rownum .col-rownum { display: none; }
 
 .rt-table thead th {
@@ -53,6 +56,18 @@
   white-space: nowrap;
 }
 .rt-table tbody tr { transition: background 0.1s var(--rp-ease); }
+/* Offscreen rows are layout/paint-skipped by the browser — at the
+   250/500/1000-row page sizes (and the WASM-fed workspace preview)
+   only the ~20 rows near the viewport are rendered; the rest cost
+   nothing until scrolled into view. That keeps the main thread free
+   for the WASM render path instead of laying out 1000 rows up front.
+   `contain-intrinsic-size: auto <h>` gives each skipped row a
+   placeholder height (the `auto` keyword remembers the real height
+   after first render) so the scrollbar length stays honest. */
+.rt-table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.25rem;
+}
 .rt-table tbody tr:hover { background: var(--rp-hover); }
 .rt-table tbody tr.is-selected { background: var(--rp-accent-soft); }
 .rt-table .col-n { color: var(--rp-text-mute); }

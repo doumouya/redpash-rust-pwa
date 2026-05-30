@@ -26,6 +26,7 @@ import { mountDesigner } from "/scripts/designer.js";
 import { getEngine } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
+import { createVirtualRows } from "/scripts/virtual-rows.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 
 // Stage labels mirror backend's file_stages view (migration 022,
@@ -59,6 +60,7 @@ export default function workspace(app, { session }) {
   const table      = $("#wsTable");
   const thead      = table.tHead;
   const tbody      = table.tBodies[0];
+  const tableWrap  = table.closest(".rt-table-wrap");  // scroll container for virtual rows
   const tableState = $("#wsTableState");
   const colsDd     = $("#wsColsDd");
   const rowsInfo   = $("#wsRowsInfo");
@@ -181,6 +183,10 @@ export default function workspace(app, { session }) {
   let pageSize      = pageSizeFromPref();
   let totalPages    = 1;    // last response's Page<T>.pages — drives the pager render
   let rowIndices    = [];   // absolute row idx in the underlying frame, per displayed row
+  let selectedRows  = new Set();  // absolute frame idx of selected rows (current page) — survives row recycling
+  let renderColumns = [];         // columns for the active page — read by renderRow
+  let measuredRowH  = 38;         // redtable row height; re-measured per render (density-aware)
+  let vrows         = null;       // virtual-rows controller for the data grid (created on first renderTable)
   let stepInFlight  = false;
 
   // The wire-level pref ("10" / "25" / "50" / "100" / "all") into the
@@ -1393,7 +1399,30 @@ export default function workspace(app, { session }) {
     return { col: meta.name, op, value: p.val };
   }
 
+  // One row → its <tr> markup. Reads live state (selection Set + the
+  // table's mode class) so recycled rows always paint correctly — the
+  // virtualizer remounts rows on scroll, so per-row state can't live on
+  // the DOM. Byte-identical to the old inline markup otherwise.
+  function renderRow(row, i) {
+    const absIdx  = rowIndices[i];
+    const idxAttr = absIdx != null ? ' data-idx="' + absIdx + '"' : "";
+    const sel     = absIdx != null && selectedRows.has(absIdx);
+    const ce      = table.classList.contains("mode-edit") ? ' contenteditable="true"' : "";
+    return '<tr' + idxAttr + (sel ? ' class="is-selected"' : "") + '>'
+      + '<td class="col-chk"><input type="checkbox" class="rt-chk"' + (sel ? " checked" : "") + ' /></td>'
+      + '<td class="col-n col-rownum">' + (i + 1) + '</td>'
+      + renderColumns.map((c, ci) => {
+          const v = row[ci];
+          const cls = v == null ? 'cell-muted editable' : 'editable';
+          return '<td class="' + cls + '" data-col="' + esc(c.name) + '"' + ce + '>'
+            + esc(v == null ? "—" : v) + '</td>';
+        }).join("")
+      + '</tr>';
+  }
+
   function renderTable(columns, rows) {
+    renderColumns = columns;
+    selectedRows.clear();   // selection is per-page; a fresh render starts clean
     thead.innerHTML = '<tr>'
       + '<th class="col-chk"><input type="checkbox" class="rt-chk" id="wsSelectAll" /></th>'
       + '<th class="col-rownum">#</th>'
@@ -1403,20 +1432,28 @@ export default function workspace(app, { session }) {
           + '>' + esc(c.name) + ' <i class="bi bi-chevron-expand sort"></i></th>'
         ).join("")
       + '</tr>';
-    tbody.innerHTML = rows.map((row, i) => {
-      const absIdx = rowIndices[i];
-      const idxAttr = absIdx != null ? ' data-idx="' + absIdx + '"' : "";
-      return '<tr' + idxAttr + '>'
-        + '<td class="col-chk"><input type="checkbox" class="rt-chk" /></td>'
-        + '<td class="col-n col-rownum">' + (i + 1) + '</td>'
-        + columns.map((c, ci) => {
-            const v = row[ci];
-            const cls = v == null ? 'cell-muted editable' : 'editable';
-            return '<td class="' + cls + '" data-col="' + esc(c.name) + '">'
-              + esc(v == null ? "—" : v) + '</td>';
-          }).join("")
-        + '</tr>';
-    }).join("");
+    // Windowed render: only the rows near the viewport are mounted, so a
+    // 1000-row page (or a 100k-row file) holds ~40 <tr>, not 1000. Created
+    // once, reused across pages/files.
+    if (!vrows) {
+      vrows = createVirtualRows({
+        scroller:   tableWrap,
+        tbody,
+        rowHeight:  measuredRowH,
+        renderRow,
+        // don't recycle while a cell is mid-edit (would drop the edit)
+        pauseWhile: () => tbody.contains(document.activeElement)
+                       && document.activeElement.isContentEditable,
+      });
+    }
+    vrows.setRows(rows);
+    // Correct the row-height estimate from the first real row — adapts to
+    // the active density (compact/cozy/comfortable) without hard-coding.
+    const firstReal = tbody.querySelector("tr:not(.rt-vrow-spacer)");
+    if (firstReal) {
+      const h = firstReal.getBoundingClientRect().height;
+      if (h > 0 && Math.abs(h - vrows.rowHeight) > 0.5) { measuredRowH = h; vrows.remeasure(h); }
+    }
     syncSel();
   }
 
@@ -1776,32 +1813,42 @@ export default function workspace(app, { session }) {
   }
 
   // ─── selection ─────────────────────────────────────────────────
-  const rowChecks = () => Array.from(tbody.querySelectorAll(".rt-chk"));
+  // Selection lives in `selectedRows` (absolute frame indices), not on the
+  // DOM — the virtualizer recycles rows, so only the ~window of checkboxes
+  // is ever mounted. select-all spans the whole current page's rows.
   function syncSel() {
     const selectAll = thead.querySelector("#wsSelectAll");
-    const checked = rowChecks().filter((c) => c.checked);
-    rowChecks().forEach((c) => c.closest("tr").classList.toggle("is-selected", c.checked));
-    selCount.textContent = checked.length;
-    selChip.classList.toggle("show", checked.length > 0);
+    const n = selectedRows.size;
+    const pageCount = rowIndices.filter((x) => x != null).length;
+    selCount.textContent = n;
+    selChip.classList.toggle("show", n > 0);
     if (selectAll) {
-      selectAll.checked = checked.length > 0 && checked.length === rowChecks().length;
-      selectAll.indeterminate = checked.length > 0 && checked.length < rowChecks().length;
+      selectAll.checked = n > 0 && n === pageCount;
+      selectAll.indeterminate = n > 0 && n < pageCount;
     }
-    const armed = table.classList.contains("mode-select") && checked.length > 0;
+    const armed = table.classList.contains("mode-select") && n > 0;
     deleteBtn.classList.toggle("armed", armed);
-    deleteBtn.title = armed ? "Delete " + checked.length + " selected" : "Delete mode";
+    deleteBtn.title = armed ? "Delete " + n + " selected" : "Delete mode";
   }
   thead.addEventListener("change", (e) => {
-    if (e.target.id === "wsSelectAll") {
-      rowChecks().forEach((c) => { c.checked = e.target.checked; });
-      syncSel();
-    }
+    if (e.target.id !== "wsSelectAll") return;
+    selectedRows.clear();
+    if (e.target.checked) for (const idx of rowIndices) if (idx != null) selectedRows.add(idx);
+    vrows?.refresh();   // re-render the window so every visible check reflects the Set
+    syncSel();
   });
   tbody.addEventListener("change", (e) => {
-    if (e.target.classList.contains("rt-chk")) syncSel();
+    if (!e.target.classList.contains("rt-chk")) return;
+    const tr = e.target.closest("tr");
+    const idx = parseInt(tr?.dataset.idx, 10);
+    if (!Number.isFinite(idx)) return;
+    if (e.target.checked) selectedRows.add(idx); else selectedRows.delete(idx);
+    tr.classList.toggle("is-selected", e.target.checked);  // row is on-screen — no full refresh
+    syncSel();
   });
   selChip.addEventListener("click", () => {
-    rowChecks().forEach((c) => { c.checked = false; });
+    selectedRows.clear();
+    vrows?.refresh();
     syncSel();
   });
 
@@ -1816,24 +1863,21 @@ export default function workspace(app, { session }) {
     const turnOn = !btn.classList.contains("is-active");
     modeBtns.forEach((b) => b.classList.remove("is-active"));
     table.classList.remove("mode-edit", "mode-select", "mode-delete");
-    tbody.querySelectorAll("td.editable").forEach((td) => td.removeAttribute("contenteditable"));
-    rowChecks().forEach((c) => { c.checked = false; });
-    syncSel();
+    selectedRows.clear();
     if (turnOn) {
       btn.classList.add("is-active");
       table.classList.add("mode-" + btn.dataset.mode);
-      if (btn.dataset.mode === "edit")
-        tbody.querySelectorAll("td.editable").forEach((td) => td.setAttribute("contenteditable", "true"));
     }
+    // re-render the window: contenteditable (edit mode) + cleared checks
+    // are applied by renderRow against the new mode class.
+    vrows?.refresh();
+    syncSel();
   }
   modeBtns.forEach((b) => b.addEventListener("click", () => {
     if (b.dataset.mode === "delete"
         && table.classList.contains("mode-select")
-        && rowChecks().some((c) => c.checked)) {
-      const indices = rowChecks().filter((c) => c.checked)
-        .map((c) => parseInt(c.closest("tr")?.dataset.idx, 10))
-        .filter((n) => Number.isFinite(n));
-      if (indices.length) applyStep("drop_rows", { indices });
+        && selectedRows.size) {
+      applyStep("drop_rows", { indices: [...selectedRows] });
       return;
     }
     setMode(b);
@@ -2332,58 +2376,86 @@ export default function workspace(app, { session }) {
   // feeds that path (it's set when a data file is opened) — the
   // designer reads it to source the new chart.
 
-  // Designer-toolbar Add chart — appends a new chart as a widget to
-  // the open dashboard canvas (no navigation, new tile mounts in place).
-  //
-  // Context recap after the 2026-05-28 unification (Em: "keep only
-  // the view where Add chart doesn't remove the current chart"):
-  //   - Real dashboard file (DSH_) open → dashRid is the DSH_ rid;
-  //     designer.addChartWidget PUTs the new spec + mounts the tile.
-  //   - Chart file (CHT_) open via the synthetic dashboard wrapper →
-  //     dashRid is null. We surface a soft prompt instead of the old
-  //     "create + navigate away" fallback (which Em flagged as
-  //     removing the current chart). Promoting a chart-file to a real
-  //     dashboard is a follow-up step.
+  // Append a chart widget to the currently-open REAL dashboard. Returns
+  // false when no real dashboard is open (the caller promotes first).
+  // Factored out so the normal click and the promote-then-add path share it.
+  async function addChartToOpenDashboard() {
+    const dashRid = designerCtrl?.getOpenDashboardRid?.();
+    if (!dashRid) return false;
+    // Resolve a source data file. Preference: the most recently opened
+    // data file (sourceCache), else the first non-chart/-dashboard file
+    // in the dashboard's own project (covers "opened the dashboard cold").
+    const dashboard = designerCtrl.getOpenDashboard?.();
+    const projRid   = dashboard?.project_redpash_id;
+    let src = sourceCache;
+    if (!src.rid && projRid) {
+      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
+      const dataFile = (list?.items || []).find((f) =>
+        f.file_type !== "chart" && f.file_type !== "dashboard");
+      if (dataFile) {
+        const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
+        src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
+      }
+    }
+    if (!src.rid) {
+      rowsInfo.textContent = "Add chart: this project has no data file to chart yet — upload one first.";
+      return true;  // handled — nothing to chart, but not a "no dashboard" miss
+    }
+    const firstCol = src.columns[0]?.name || "";
+    const chart = await api.post("/charts", {
+      source_file_id: src.rid,
+      title:          "Untitled chart",
+      spec: { kind: "bar", group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
+    });
+    await designerCtrl?.addChartWidget?.(chart);  // appends widget, PUTs, mounts tile
+    await loadProjects();                          // rail picks up the new CHT_ row
+    return true;
+  }
+
+  // Promote a standalone chart (opened through the synthetic 1-widget
+  // dashboard wrapper, redpash_id=null) into a REAL dashboard that
+  // contains it, then open that dashboard. This is what makes "Add chart"
+  // work from a lone chart instead of silently no-opping: the current
+  // chart becomes the first widget of a fresh dashboard and the canvas
+  // switches to it — matching "the dashboard is the surface where charts
+  // are collected + saved." Returns the new dashboard rid, or null.
+  async function promoteChartToDashboard() {
+    const synthetic = designerCtrl?.getOpenDashboard?.();
+    const chartRid  = synthetic?.spec?.widgets?.[0]?.spec?.chart_id
+                   || (activeFileRid?.startsWith("CHT_") ? activeFileRid : null);
+    const projRid   = synthetic?.project_redpash_id || focusedProjectRid;
+    if (!chartRid || !projRid) {
+      rowsInfo.textContent = "Add chart: couldn't resolve this chart's project to build a dashboard.";
+      return null;
+    }
+    const created = await api.post("/dashboards", {
+      project_redpash_id: projRid,
+      title:              "Untitled dashboard",
+      spec: { template_id: "free", widgets: [{ slot: "w1", kind: "chart", spec: { chart_id: chartRid } }] },
+    });
+    const newRid = created?.redpash_id;
+    if (!newRid) return null;
+    setRailView("dashboards");
+    await loadProjects();
+    activeFileRid = null;    // clear so loadFile doesn't early-return on the same rid
+    await loadFile(newRid);  // canvas switches to the real, persistable dashboard
+    return newRid;
+  }
+
+  // Designer-toolbar Add chart. On a real dashboard it just appends a
+  // widget. On a standalone chart (synthetic wrapper, no dashboard rid)
+  // it first PROMOTES the chart into a real dashboard, then adds — so the
+  // button is never a dead no-op and the chart you were viewing is kept
+  // as the dashboard's first widget.
   $("#wsDesignerAddChart")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
-    const dashRid = designerCtrl?.getOpenDashboardRid?.();
-    if (!dashRid) {
-      rowsInfo.textContent = "Add chart needs a dashboard — open or create one to add more charts on this canvas.";
-      return;
-    }
     btn.disabled = true;
     try {
-      // Resolve a source data file. Preference order:
-      //   1. sourceCache (most recently opened data file).
-      //   2. First non-chart / non-dashboard file in the dashboard's
-      //      own project (covers "user opened the dashboard cold").
-      const dashboard = designerCtrl.getOpenDashboard?.();
-      const projRid   = dashboard?.project_redpash_id;
-      let src = sourceCache;
-      if (!src.rid && projRid) {
-        const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
-        const dataFile = (list?.items || []).find((f) =>
-          f.file_type !== "chart" && f.file_type !== "dashboard");
-        if (dataFile) {
-          const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
-          src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
-        }
+      if (!designerCtrl?.getOpenDashboardRid?.()) {
+        const promoted = await promoteChartToDashboard();
+        if (!promoted) return;  // couldn't promote — message already surfaced
       }
-      if (!src.rid) {
-        rowsInfo.textContent = "Add chart: this project has no data file to chart yet — upload one first.";
-        return;
-      }
-      const firstCol = src.columns[0]?.name || "";
-      const chart = await api.post("/charts", {
-        source_file_id: src.rid,
-        title:          "Untitled chart",
-        spec: { kind: "bar", group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
-      });
-      // Hand off to the designer — it appends a widget to the open
-      // dashboard's spec, PUTs, and mounts the tile.
-      await designerCtrl?.addChartWidget?.(chart);
-      // Refresh the rail so the new CHT_ row appears alongside.
-      await loadProjects();
+      await addChartToOpenDashboard();
     } catch (err) {
       console.warn("[designer] addChart failed:", err);
       rowsInfo.textContent = "Add chart failed: " + (err?.body?.message || err?.message || "see console");
