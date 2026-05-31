@@ -800,13 +800,18 @@ export default function home(app, { session: _session }) {
       // unassigned). Updated_at is the default. The picker exposes
       // every Case field; defaults match the prior curated set.
       columns: [
-        // Title is the editable cell — clean text in the row render.
-        // Type / Status / Priority / Assignee need pickers (chip ↔
-        // dropdown), not contenteditable; deferred.
-        { label: "Title",       key: "title",                 sortable: true, editable: true, editKey: "title" },
-        { label: "Type",        key: "type",                  sortable: true  },
-        { label: "Status",      key: "status",                sortable: true  },
-        { label: "Priority",    key: "priority",              sortable: true  },
+        // Title: plain contenteditable (data-full not needed — full
+        // value is the rendered text). Type / Status / Priority: now
+        // chip-enum editable; backend allowlists at cases.rs:303-313
+        // (drift = 400). Assignee + Reporter still need an entity-
+        // picker editor; deferred.
+        { label: "Title",       key: "title",                 sortable: true,  editable: true, editKey: "title" },
+        { label: "Type",        key: "type",                  sortable: true,  editable: true, editKey: "type",
+          editor: "chip-enum",  options: ["bug", "feature", "task", "epic"], render: "caseTypeChip" },
+        { label: "Status",      key: "status",                sortable: true,  editable: true, editKey: "status",
+          editor: "chip-enum",  options: ["backlog", "todo", "in_progress", "in_review", "done"], render: "caseStatusChip" },
+        { label: "Priority",    key: "priority",              sortable: true,  editable: true, editKey: "priority",
+          editor: "chip-enum",  options: ["low", "medium", "high", "critical"], render: "priorityChip" },
         { label: "Assignee",    key: "assignee_display_name", sortable: true  },
         { label: "Reporter",    key: "reporter_display_name", sortable: true,  defaultHidden: true },
         { label: "Project",     key: "project_id",            sortable: true,  defaultHidden: true },
@@ -829,9 +834,9 @@ export default function home(app, { session: _session }) {
           + ' data-rid="' + esc(c.redpash_id || "") + '"'
           + ' data-href="#/cases?id=' + encodeURIComponent(c.redpash_id) + '">'
           + '<td>' + esc(c.title || "(untitled)") + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(c.type || "task") + '</span></td>'
-          + '<td>' + caseStatusChip(c.status) + '</td>'
-          + '<td>' + priorityChip(c.priority) + '</td>'
+          + '<td data-full="' + esc(c.type || "task") + '">' + caseTypeChip(c.type) + '</td>'
+          + '<td data-full="' + esc(c.status || "backlog") + '">' + caseStatusChip(c.status) + '</td>'
+          + '<td data-full="' + esc(c.priority || "medium") + '">' + priorityChip(c.priority) + '</td>'
           + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
           + '<td>' + esc(c.reporter_display_name || c.reporter_id || "—") + '</td>'
           + '<td><span class="rt-mono-pill">' + esc(c.project_id || "—") + '</span></td>'
@@ -1834,6 +1839,7 @@ export default function home(app, { session: _session }) {
         case "orgChip":        return orgChip;
         case "stageChip":      return stageChip;
         case "priorityChip":   return priorityChip;
+        case "caseTypeChip":   return caseTypeChip;
         case "teamKindChip":   return teamKindChip;
         default:               return (v) => esc(v || "—");
       }
@@ -2711,6 +2717,14 @@ export default function home(app, { session: _session }) {
     const v = String(plan || "").toLowerCase();
     const tone = v === "free" ? "" : "rt-tone--low";
     return '<span class="rt-mono-pill ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+  // caseTypeChip — Cases tab's "Type" column (bug / feature / task / epic).
+  // Matches the backend validator allowlist at cases.rs:303 — any drift
+  // = 400 from the PATCH validator. Plain mono pill (no tone) keeps the
+  // visual budget on status + priority which carry the real state.
+  function caseTypeChip(type) {
+    const v = String(type || "task").toLowerCase();
+    return '<span class="rt-mono-pill">' + esc(v) + '</span>';
   }
   // teamKindChip — Teams tab's "Kind" column. `team` is the default,
   // `department` carries the single-parent + one-direct-dept-per-user
