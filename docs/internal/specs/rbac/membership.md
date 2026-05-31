@@ -133,6 +133,18 @@ Notes).
   (multiple ad-hoc teams are fine). See
   [entity-membership-model](entity-membership-model.md) §1–§2.
 
+- **Nested teams (sub-teams).** Because the `member` can itself be a team,
+  `(object=General Eng team, member=Platform Eng team)` makes Platform Eng a
+  **sub-team** of General Eng. The resolver's recursive principal closure
+  climbs `member → object`, so a Platform Eng member inherits General Eng's
+  grants — and only downward (a General Eng member does *not* get Platform
+  Eng's). Wired 2026-05-31: the generic `POST …/:rid/members` accepts a team
+  as the member (was user-only) with a cycle guard (rejects `A ⊂ B ⊂ A`).
+  `UNION`-deduped closure is cycle-safe regardless. **Open for departments:**
+  the one-department-per-user trigger checks *direct* membership, so nesting
+  `kind='department'` teams could create a transitive second department —
+  decide before allowing department-in-department.
+
 - **Case Team Member = case-object Membership.** Case collaborators
   aren't a new table — they're `(object=CAS_…, member=<user|team>,
   role, context_role)` edges. `context_role` carries the business label

@@ -64,6 +64,13 @@ Nested on **all five** object types: `companies`, `projects`, `cases`,
 - Only an **owner**-tier caller (effective) may grant the `owner` role.
 - The **last owner** can't be demoted or removed (promote/transfer first).
 - An **admin** can't remove an **owner**.
+- A **member (grantee) is a user OR a team** — `add` validates the entity type
+  and 400s a company/project/case (they're objects, not grantees), 404s a
+  missing rid. A team-as-member is a **sub-team** (Platform Eng ⊂ General Eng);
+  the resolver's recursive principal closure flows the parent's grants down to
+  sub-team members. Adding a team runs a **cycle guard** — reject if the new
+  team is already in `principals(object)` (would close A ⊂ B ⊂ A). Users never
+  trip it.
 - **Self-leave**: a member may `DELETE` their own membership without manage.
 - Event kinds stay object-typed via `object_type()` —
   `company_member_add`, `project_member_add`, … (the `entities.type` lookup).

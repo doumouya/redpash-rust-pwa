@@ -133,9 +133,35 @@ async fn add(
     if body.role == "owner" && tier < Role::Owner {
         return Err(forbidden("only an owner can grant the owner role"));
     }
-    // Target must be a real user — clean 404 rather than an FK 500.
-    if db::find_user_by_id(&state.db, &body.user_id).await.map_err(db_err)?.is_none() {
-        return Err(AppError::not_found("not_found", "user not found"));
+    // The member (grantee) must be a real entity that can hold a grant — a
+    // USER or a TEAM. Teams nest: a sub-team is a team that is a member of a
+    // parent team (Platform Eng inside General Eng), and the resolver's
+    // recursive principal closure flows the parent's grants down to sub-team
+    // members. Reject companies/projects/cases as members (they're objects,
+    // not grantees) and a missing rid — clean 404/400 over an FK 500.
+    let member_type: Option<String> =
+        sqlx::query_as::<_, (String,)>("SELECT type FROM entities WHERE id = $1")
+            .bind(&body.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(db_err)?
+            .map(|(t,)| t);
+    match member_type.as_deref() {
+        None                        => return Err(AppError::not_found("not_found", "member not found")),
+        Some("user") | Some("team") => {}
+        Some(_)                     => return Err(AppError::bad_request(
+            "invalid", "a member must be a user or a team")),
+    }
+    // Cycle guard for team-in-team nesting. `principals(object)` climbs the
+    // team graph from the object up through every team it belongs to; if the
+    // new team-member is already in that set (or is the object itself), adding
+    // it as a child would close a cycle (A ⊂ B ⊂ A). Users never appear here.
+    if member_type.as_deref() == Some("team") {
+        let ancestors = crate::rbac::principals(&state.db, &object).await.map_err(db_err)?;
+        if ancestors.iter().any(|p| p == &body.user_id) {
+            return Err(AppError::conflict(
+                "cycle", "that team already contains this object — adding it would create a team cycle"));
+        }
     }
     // Re-adding an existing owner with a lesser role is a demotion — never let
     // it strand the object without an owner.
