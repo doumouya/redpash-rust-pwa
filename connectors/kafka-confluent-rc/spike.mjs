@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /* Purpose: see README.md for details.
- * Doc: tools/kafka-spike/README.md
+ * Doc: connectors/kafka-confluent-rc/README.md
  *
- * CAS_ACAA76AA meta-codec resolver spike against real Confluent
- * Schema Registry. Produces data for the 6 reversal-expensive design
- * calls. Run via: node spike.mjs [phaseN]
+ * kafka-confluent-rc — RedPash Connector for Kafka topics with
+ * Confluent Schema Registry. Currently in spike form: 5 phases that
+ * produce design-call data for CAS_75A0D1FD codec registry v1.1.
+ * Productionization (load step into project_files + offset state +
+ * multi-partition) follows codec registry v1.1.
+ * Run via: node spike.mjs [phaseN]
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
@@ -200,7 +203,7 @@ async function phase5(env, phase1Result) {
     ({ Kafka } = await import("kafkajs"));
     avsc = (await import("avsc")).default;
   } catch (e) {
-    console.log(`✗ deps not installed (npm install in tools/kafka-spike/): ${e.message}`);
+    console.log(`✗ deps not installed (npm install in connectors/kafka-confluent-rc/): ${e.message}`);
     return { error: e.message };
   }
   const registry = new SchemaRegistry({

@@ -1,7 +1,7 @@
 {
-  "name": "kafka-spike",
+  "name": "kafka-confluent-rc",
   "version": "0.0.1",
-  "description": "CAS_ACAA76AA meta-codec resolver spike against real Confluent Schema Registry. Spike-scoped — production codec is a separate v1.1 decision.",
+  "description": "RedPash Connector — Kafka topic + Confluent Schema Registry source. Spike form today (CAS_ACAA76AA design-call data); productionization follows CAS_75A0D1FD codec registry v1.1.",
   "type": "module",
   "private": true,
   "scripts": {
