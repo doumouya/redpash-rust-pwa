@@ -157,8 +157,9 @@ pub(super) fn sort_clause(
 /// Sortable columns for /api/admin/users — wire-keys the Home Users tab
 /// can pass via ?sort=. Mirror's the LIST_VIEWS column spec on the frontend.
 const SORTABLE_USERS: &[&str] = &[
-    "display_name", "username", "email", "plan", "job_title",
-    "organisation", "org_name", "org_role", "created_at",
+    "display_name", "first_name", "last_name", "username", "email",
+    "plan", "job_title", "organisation", "org_name", "org_role",
+    "created_at",
 ];
 
 async fn list_users(
@@ -177,6 +178,8 @@ async fn list_users(
     // sort to the tail regardless of dir.
     let sort_col = match sort_key.as_str() {
         "display_name" => "u.display_name",
+        "first_name"   => "u.first_name",
+        "last_name"    => "u.last_name",
         "username"     => "u.username",
         "email"        => "u.email",
         "plan"         => "u.plan",
@@ -214,7 +217,8 @@ async fn list_users(
     // sort_clause boundary. NULLS LAST keeps users without an org_name /
     // job_title at the tail regardless of dir.
     let sql = format!(
-        "SELECT u.redpash_id, u.username, u.email, u.display_name, u.avatar_url,
+        "SELECT u.redpash_id, u.username, u.email, u.display_name,
+                u.first_name, u.last_name, u.avatar_url,
                 u.job_title, u.organisation, u.plan, u.created_at,
                 m.company_id   AS org_id,
                 m.company_name AS org_name,
@@ -255,6 +259,8 @@ async fn list_users(
             username:     r.try_get("username").unwrap_or_default(),
             email:        r.try_get("email").ok(),
             display_name: r.try_get("display_name").unwrap_or_default(),
+            first_name:   r.try_get("first_name").ok(),
+            last_name:    r.try_get("last_name").ok(),
             avatar_url:   r.try_get("avatar_url").ok(),
             job_title:    r.try_get("job_title").ok(),
             organisation: r.try_get("organisation").ok(),

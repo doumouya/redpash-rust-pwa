@@ -31,6 +31,11 @@ pub struct UserSummary {
     pub username:     String,
     #[serde(default)] pub email:        Option<String>,
     pub display_name: String,
+    /// Split name parts. Editable on Home Users tab alongside display_name.
+    /// Backend PatchUserBody already supported them; surfaced here so the
+    /// list endpoint round-trips correctly with the FE cell-editor.
+    #[serde(default)] pub first_name:   Option<String>,
+    #[serde(default)] pub last_name:    Option<String>,
     #[serde(default)] pub avatar_url:   Option<String>,
     #[serde(default)] pub job_title:    Option<String>,
     #[serde(default)] pub organisation: Option<String>,

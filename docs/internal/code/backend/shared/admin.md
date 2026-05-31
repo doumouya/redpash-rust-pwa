@@ -3,7 +3,7 @@ title: backend/crates/shared/src/admin.rs
 source: ../../../../../backend/crates/shared/src/admin.rs
 owner: Gus
 section: Internal · Code · backend · shared
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # admin.rs

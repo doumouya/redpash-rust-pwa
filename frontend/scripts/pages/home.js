@@ -286,6 +286,8 @@ export default function home(app, { session: _session }) {
       // identical to before; the data is reachable via the picker.
       columns: [
         { label: "Name",        key: "display_name", sortable: true,  editable: true, editKey: "display_name" },
+        { label: "First name",  key: "first_name",   sortable: true,  defaultHidden: true, editable: true, editKey: "first_name" },
+        { label: "Last name",   key: "last_name",    sortable: true,  defaultHidden: true, editable: true, editKey: "last_name" },
         { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true, editable: true, editKey: "username" },
         { label: "Email",       key: "email",        sortable: true,  defaultHidden: true, editable: true, editKey: "email" },
         { label: "Plan",        key: "plan",         sortable: true,  editable: true, editKey: "plan", editor: "chip-enum", options: ["free", "pro", "team", "enterprise"], render: "planChip" },
@@ -310,6 +312,10 @@ export default function home(app, { session: _session }) {
         + '<td class="rp-home-user-name">'
         +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
         + '</td>'
+        // FIRST NAME + LAST NAME — plain rp-meta cells, editable as plaintext
+        // (PatchUserBody supports both directly).
+        + '<td class="rp-meta">' + esc(u.first_name || "—") + '</td>'
+        + '<td class="rp-meta">' + esc(u.last_name  || "—") + '</td>'
         // HANDLE — data-full pattern with data-prefix decoration (CAS_E97414…):
         // textContent shows "@${username}" for visual continuity, dataset.full
         // holds the bare username (source-of-truth), dataset.prefix carries the
