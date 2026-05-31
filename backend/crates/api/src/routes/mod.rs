@@ -54,6 +54,7 @@ mod group;
 mod health;
 mod admin;
 mod me;
+mod members;
 mod metrics;
 mod monitoring;
 mod pagination;

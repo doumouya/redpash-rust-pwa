@@ -18,9 +18,24 @@ the access-control check — every handler resolves the caller's role and
 404s (not 403) when they aren't a member, so company existence is
 never leaked.
 
+Member management (`/:rid/members`) is **no longer company-specific** — it's
+nested from the generic [members.rs](members.md) module
+(`.nest("/:rid/members", super::members::routes())`), so a company is just one
+object type on the polymorphic edge. This file now owns only company CRUD +
+slug logic; the read gate `members::require_member` is reused by `get_one`.
+
 ## Public surface
 
-- `pub fn routes` — function
+- `pub fn routes` — company CRUD (`/`, `/:rid`) + a nest of the generic member
+  router at `/:rid/members`.
+
+## Gates
+
+- `get_one` — any company member (`members::require_member`, platform-admin bypass).
+- `patch` — `company.update`: company admin+ (direct) or platform admin
+  (`require_grant`, 404 on deny).
+- `delete_one` — `company.delete`: company owner only or platform admin.
+- member CRUD — delegated to [members.rs](members.md)'s shared rules.
 
 ## Drift-prone areas
 

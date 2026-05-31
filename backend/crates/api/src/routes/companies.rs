@@ -14,64 +14,31 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     routing::get,
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use shared::company::{Company, CompanyMember, CompanySummary};
+use shared::company::{Company, CompanySummary};
 
 use crate::{db, error::AppError, id, state::AppState};
 
 #[derive(Serialize)]
 struct CompanyList { items: Vec<CompanySummary> }
 
-#[derive(Serialize)]
-struct MemberList { items: Vec<CompanyMember> }
-
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/",                      get(list).post(create))
-        .route("/:rid",                  get(get_one).patch(patch).delete(delete_one))
-        .route("/:rid/members",          get(members).post(add_member))
-        .route("/:rid/members/:user_id",
-            axum::routing::patch(patch_member_role).delete(remove_member))
+        .route("/",     get(list).post(create))
+        .route("/:rid", get(get_one).patch(patch).delete(delete_one))
+        // Membership CRUD is the generic object-member module — companies are
+        // just one object type on the polymorphic edge. Projects/cases/teams
+        // nest the same router. See routes/members.rs.
+        .nest("/:rid/members", super::members::routes())
 }
 
 // ── helpers ────────────────────────────────────────────────────────
 fn db_err(e: sqlx::Error) -> AppError {
     AppError::internal("db", e.to_string())
-}
-fn forbidden(msg: &'static str) -> AppError {
-    AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into(), inner: None }
-}
-
-/// Resolve the caller's role in a company, 404ing when they aren't a
-/// member — same treatment as "company doesn't exist", so existence
-/// isn't leaked. Returns the role for the caller to gate on.
-async fn require_member(
-    state:   &AppState,
-    company: &str,
-    user:    &str,
-) -> Result<String, AppError> {
-    // Platform admins see/manage any company (full access); they resolve as
-    // owner-tier for the require_manage check.
-    if crate::rbac::is_platform_admin(state, user).await.map_err(db_err)? {
-        return Ok("owner".to_string());
-    }
-    db::company_role(&state.db, company, user)
-        .await
-        .map_err(db_err)?
-        .ok_or_else(|| AppError::not_found("not_found", format!("company {company}")))
-}
-
-/// owner / admin gate for membership + metadata management.
-fn require_manage(role: &str) -> Result<(), AppError> {
-    if role == "owner" || role == "admin" {
-        Ok(())
-    } else {
-        Err(forbidden("owner or admin role required"))
-    }
 }
 
 /// Lowercase ASCII-alphanumeric runs joined by single hyphens. Used to
@@ -143,7 +110,7 @@ async fn get_one(
     Path(rid):    Path<String>,
 ) -> Result<Json<Company>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    require_member(&state, &rid, &user).await?;
+    super::members::require_member(&state, &rid, &user).await?;
     let company = db::get_company(&state.db, &rid)
         .await
         .map_err(db_err)?
@@ -219,193 +186,4 @@ async fn delete_one(
         .context(serde_json::json!({ "company": rid }))
         .send();
     Ok(Json(serde_json::json!({ "ok": true })))
-}
-
-async fn members(
-    State(state): State<AppState>,
-    headers:      HeaderMap,
-    Path(rid):    Path<String>,
-) -> Result<Json<MemberList>, AppError> {
-    let user = super::resolve_user_rid(&state, &headers).await?;
-    require_member(&state, &rid, &user).await?;
-    let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
-    Ok(Json(MemberList { items }))
-}
-
-#[derive(Deserialize)]
-struct AddMemberBody {
-    user_id: String,
-    #[serde(default = "default_role")] role: String,
-}
-fn default_role() -> String { "member".into() }
-
-/// `POST /api/companies/:rid/members` — add a member or change an
-/// existing member's role (upsert). Returns the refreshed member list.
-async fn add_member(
-    State(state): State<AppState>,
-    headers:      HeaderMap,
-    Path(rid):    Path<String>,
-    Json(body):   Json<AddMemberBody>,
-) -> Result<Json<MemberList>, AppError> {
-    let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &rid, &user).await?;
-    require_manage(&role)?;
-
-    if !matches!(body.role.as_str(), "owner" | "admin" | "member") {
-        return Err(AppError::bad_request("invalid", "role must be owner, admin or member"));
-    }
-    // Only an owner can mint another owner.
-    if body.role == "owner" && role != "owner" {
-        return Err(forbidden("only an owner can grant the owner role"));
-    }
-    // Target must be a real user — clean 404 rather than an FK 500.
-    if db::find_user_by_id(&state.db, &body.user_id).await.map_err(db_err)?.is_none() {
-        return Err(AppError::not_found("not_found", "user not found"));
-    }
-    // Re-adding an existing owner with a lesser role is a demotion —
-    // never let it strand the company without an owner.
-    if let Some(current) = db::company_role(&state.db, &rid, &body.user_id).await.map_err(db_err)? {
-        if current == "owner"
-            && body.role != "owner"
-            && db::company_owner_count(&state.db, &rid).await.map_err(db_err)? <= 1
-        {
-            return Err(forbidden("can't demote the last owner — promote another first"));
-        }
-    }
-    db::add_company_member(&state.db, &rid, &body.user_id, &body.role)
-        .await
-        .map_err(db_err)?;
-    crate::event::info(
-        &state.db,
-        "company_member_add",
-        format!("added {} to company {rid} as {}", body.user_id, body.role),
-    )
-    .user(user)
-    .context(serde_json::json!({
-        "company": rid,
-        "member":  body.user_id,
-        "role":    body.role,
-    }))
-    .send();
-    let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
-    Ok(Json(MemberList { items }))
-}
-
-/// `DELETE /api/companies/:rid/members/:user_id` — remove a member. A
-/// member may remove themselves (leave); removing anyone else needs
-/// owner/admin. The last owner can't be removed, and an admin can't
-/// remove an owner.
-async fn remove_member(
-    State(state):          State<AppState>,
-    headers:               HeaderMap,
-    Path((rid, user_id)):  Path<(String, String)>,
-) -> Result<Json<MemberList>, AppError> {
-    let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &rid, &user).await?;
-
-    let is_self = user_id == user;
-    if !is_self {
-        require_manage(&role)?;
-    }
-    let target_role = db::company_role(&state.db, &rid, &user_id)
-        .await
-        .map_err(db_err)?
-        .ok_or_else(|| AppError::not_found("not_found", "membership not found"))?;
-
-    if target_role == "owner"
-        && db::company_owner_count(&state.db, &rid).await.map_err(db_err)? <= 1
-    {
-        return Err(forbidden("can't remove the last owner — transfer ownership first"));
-    }
-    if !is_self && role == "admin" && target_role == "owner" {
-        return Err(forbidden("admins can't remove an owner"));
-    }
-    db::remove_company_member(&state.db, &rid, &user_id)
-        .await
-        .map_err(db_err)?;
-    let event_ctx = serde_json::json!({
-        "company":      rid,
-        "member":       user_id,
-        "was_self":     is_self,
-        "target_role":  target_role,
-    });
-    if is_self {
-        crate::event::info(&state.db, "company_member_leave", format!("left company {rid}"))
-            .user(user)
-            .context(event_ctx)
-            .send();
-    } else {
-        crate::event::warn(
-            &state.db,
-            "company_member_remove",
-            format!("removed {user_id} from company {rid}"),
-        )
-        .user(user)
-        .context(event_ctx)
-        .send();
-    }
-    let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
-    Ok(Json(MemberList { items }))
-}
-
-#[derive(Deserialize)]
-struct PatchMemberBody {
-    role: String,
-}
-
-/// `PATCH /api/companies/:rid/members/:user_id` — change a member's
-/// role without the DELETE + re-add round-trip. Strict update: 404
-/// if the target user isn't a member of this company.
-///
-/// Same gates as `add_member`'s upsert path: caller must be
-/// owner/admin; only an owner can grant the owner role; demoting
-/// the last owner is blocked.
-async fn patch_member_role(
-    State(state):          State<AppState>,
-    headers:               HeaderMap,
-    Path((rid, user_id)):  Path<(String, String)>,
-    Json(body):            Json<PatchMemberBody>,
-) -> Result<Json<MemberList>, AppError> {
-    let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &rid, &user).await?;
-    require_manage(&role)?;
-
-    let new_role = body.role.trim();
-    if !matches!(new_role, "owner" | "admin" | "member") {
-        return Err(AppError::bad_request("invalid", "role must be owner, admin or member"));
-    }
-    if new_role == "owner" && role != "owner" {
-        return Err(forbidden("only an owner can grant the owner role"));
-    }
-
-    let current = db::company_role(&state.db, &rid, &user_id)
-        .await
-        .map_err(db_err)?
-        .ok_or_else(|| AppError::not_found("not_found", "membership not found"))?;
-
-    if current == "owner"
-        && new_role != "owner"
-        && db::company_owner_count(&state.db, &rid).await.map_err(db_err)? <= 1
-    {
-        return Err(forbidden("can't demote the last owner — promote another first"));
-    }
-
-    db::update_company_member_role(&state.db, &rid, &user_id, new_role)
-        .await
-        .map_err(db_err)?;
-    crate::event::info(
-        &state.db,
-        "company_member_role_change",
-        format!("{user_id} role in {rid}: {current} -> {new_role}"),
-    )
-    .user(user)
-    .context(serde_json::json!({
-        "company":     rid,
-        "member":      user_id,
-        "prior_role":  current,
-        "new_role":    new_role,
-    }))
-    .send();
-    let items = db::list_company_members(&state.db, &rid).await.map_err(db_err)?;
-    Ok(Json(MemberList { items }))
 }
