@@ -14,12 +14,13 @@ Monitoring page tab definitions — slice 5 of the god-object decomposition. Mir
 
 ## Public surface
 
-- MON_TABS — tab inventory across rail groups (REQUESTS / AUDITS / CATALOG).
+- MON_TABS — tab inventory across rail groups (REQUESTS / AUDITS / ADMIN / OPTIMIZATION / USERS / CATALOG).
 - MON_GROUPS — rail-group definitions.
 
 ## Drift-prone areas
 
-- Endpoint contracts with /api/monitoring/* routes.
+- Endpoint contracts with /api/monitoring/* routes; ADMIN tabs hit /api/admin/* (gated server-side by `is_platform_admin`).
+- **ADMIN group is platform-admin-only (CAS_274EDF3B, 2026-05-31).** Rail render filters out the whole group for non-admins (see [monitoring.md](../monitoring.md)'s "ADMIN group platform-admin gated" drift bullet). Order in MON_GROUPS: REQUESTS → AUDITS → ADMIN → OPTIMIZATION → USERS → CATALOG.
 
 ## Related
 

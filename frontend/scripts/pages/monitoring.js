@@ -53,6 +53,23 @@ export default function monitoring(app, { session }) {
   const navBody = app.querySelector("#rpMonNavBody");
   const view    = app.querySelector("#rpMonView");
 
+  // CAS_274EDF3B — platform-admin gate for the ADMIN group on the
+  // Monitoring rail. Resolved once at mount via /api/me; cached so
+  // every renderRail call reads it without re-fetching. Defaults
+  // false until /me lands — the worst case is the ADMIN group
+  // appears a beat late for an admin (no privilege leak since the
+  // backend /admin/* endpoints enforce the real auth). Non-admins
+  // never see the group; renderGroup filters MON_GROUPS by this.
+  let isPlatformAdmin = false;
+  api.get("/me")
+    .then((me) => {
+      isPlatformAdmin = !!me?.is_platform_admin;
+      // Re-render the rail once /me lands so the ADMIN group
+      // appears (or stays hidden) without requiring an interaction.
+      if (typeof renderRail === "function") renderRail();
+    })
+    .catch(() => { /* leave false; backend is the real gate */ });
+
   // List-view specs for the three non-Requests tabs. Same Page<T>
   // shape across all three endpoints, so the renderer is generic; per
   // tab only the columns + row HTML differ. Declared before any
@@ -171,7 +188,7 @@ export default function monitoring(app, { session }) {
       row: requestRowHTML,
     },
     steps: {
-      title: "Steps",
+      title: "Cleanings",
       endpoint: "/admin/steps",
       useWindow: false,
       charts: [
@@ -197,6 +214,86 @@ export default function monitoring(app, { session }) {
                               : '<span class="rt-mono-pill">no</span>') + '</td>'
         + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
+    },
+    // CAS_274EDF3B — Fields tab. Consumes GET /api/admin/fields
+    // (shipped by the other Torv in 339e413). Each row is a
+    // (object, field) pair with a write|read|none cell per RBAC
+    // tier. Editor wiring waits on slice 2 (PUT) — for now the
+    // tab is read-only; the chip-enum framework + col.editEndpoint
+    // override are ready to drop in when PUT lands.
+    fields: {
+      title: "Fields",
+      endpoint: "/admin/fields",
+      useWindow: false,
+      columns: [
+        { label: "Object",     key: "object",       sortable: true  },
+        { label: "Field",      key: "field",        sortable: true  },
+        { label: "Editable",   key: "is_editable",  sortable: true  },
+        { label: "Sortable",   key: "is_sortable",  sortable: true  },
+        { label: "Owner",      key: "owner",        sortable: false },
+        { label: "Admin",      key: "admin",        sortable: false },
+        { label: "Member",     key: "member",       sortable: false },
+        { label: "Viewer",     key: "viewer",       sortable: false },
+      ],
+      row: (f) =>
+        '<tr>'
+        + '<td>' + esc(f.object || "—") + '</td>'
+        + '<td><span class="rt-mono-pill">' + esc(f.field || "—") + '</span></td>'
+        + '<td>' + (f.is_editable ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
+                                  : '<span class="rt-mono-pill">no</span>') + '</td>'
+        + '<td>' + (f.is_sortable ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
+                                  : '<span class="rt-mono-pill">no</span>') + '</td>'
+        + '<td>' + accessChip(f.owner)  + '</td>'
+        + '<td>' + accessChip(f.admin)  + '</td>'
+        + '<td>' + accessChip(f.member) + '</td>'
+        + '<td>' + accessChip(f.viewer) + '</td>'
+        + '</tr>',
+    },
+    // CAS_274EDF3B — Audit catalog tab. Consumes GET /api/admin/
+    // audit-catalog (shipped by the other Torv in ff00aa6). One row
+    // per audit tool with severity buckets + diff-vs-prev.
+    audit_catalog: {
+      title: "Audit catalog",
+      endpoint: "/admin/audit-catalog",
+      useWindow: false,
+      // Endpoint returns {tools: [...]} not Page<T>, so the runtime
+      // needs to unwrap. The list-page renderer falls back to
+      // `items` then `rows`; we adapt via a custom unwrap hint.
+      itemsKey: "tools",
+      columns: [
+        { label: "Tool",       key: "tool",          sortable: true  },
+        { label: "Last run",   key: "ran_at",        sortable: true  },
+        { label: "Total",      key: "findings_total", sortable: false },
+        { label: "High",       key: "findings_high", sortable: false },
+        { label: "Medium",     key: "findings_med",  sortable: false },
+        { label: "Low",        key: "findings_low",  sortable: false },
+        { label: "Δ new",      key: "diff_new",      sortable: false },
+        { label: "Δ regressed",key: "diff_regressed",sortable: false },
+        { label: "Δ improved", key: "diff_improved", sortable: false },
+        { label: "Δ fixed",    key: "diff_fixed",    sortable: false },
+      ],
+      row: (t) => {
+        const sev = (n, tone) => '<td class="is-num">'
+          + (n > 0 ? '<span class="rt-mono-pill ' + tone + '">' + n + '</span>' : '—')
+          + '</td>';
+        const diff = (n) => '<td class="is-num">'
+          + (typeof n === 'number' ? (n > 0 ? '+' + n : String(n)) : '—')
+          + '</td>';
+        const f = t.findings || {};
+        const d = t.diff || {};
+        return '<tr>'
+          + '<td><span class="rt-mono-pill">' + esc(t.tool || "—") + '</span></td>'
+          + '<td>' + (t.ran_at ? fmtTime(t.ran_at) : '—') + '</td>'
+          + '<td class="is-num">' + (f.total || 0) + '</td>'
+          + sev(f.high || 0, 'rt-tone--high')
+          + sev(f.med  || 0, 'rt-tone--mid')
+          + sev(f.low  || 0, 'rt-tone--low')
+          + diff(d.new)
+          + diff(d.regressed)
+          + diff(d.improved)
+          + diff(d.fixed)
+          + '</tr>';
+      },
     },
     queries: {
       title: "DB Queries",
@@ -342,7 +439,11 @@ export default function monitoring(app, { session }) {
   // body view (#rpMonView), so no data refetch happens.
   function renderRail() {
     const hidden = new Set(getHiddenTabs().map((x) => x.key));
-    let html = MON_GROUPS.map((g) => renderGroup(g, hidden)).join("");
+    // ADMIN group is platform-admin-only (CAS_274EDF3B). Skip it for
+    // callers without is_platform_admin; backend /admin/* endpoints
+    // are the real auth, this is just UX hide.
+    const groups = MON_GROUPS.filter((g) => g.name !== "ADMIN" || isPlatformAdmin);
+    let html = groups.map((g) => renderGroup(g, hidden)).join("");
     html += renderHiddenTabsSection();
     navBody.innerHTML = html;
     navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
@@ -844,10 +945,15 @@ export default function monitoring(app, { session }) {
     const t0 = performance.now();
     try {
       const data = await api.get(viewSpec.endpoint + qs);
-      const rows = data?.rows || [];
+      // viewSpec.itemsKey lets a tab unwrap non-Page<T> responses
+      // (e.g. audit-catalog returns `{tools: [...]}` not `{rows}`).
+      // Falls back to the standard `rows` so existing tabs unchanged.
+      const rows = (viewSpec.itemsKey && Array.isArray(data?.[viewSpec.itemsKey]))
+        ? data[viewSpec.itemsKey]
+        : (data?.rows || []);
       listTotalPages = data?.pages || 1;
       listPage       = data?.page  || listPage;
-      listTotal      = data?.total || 0;
+      listTotal      = data?.total ?? rows.length;
       listShown      = rows.length;
       const elapsed = Math.round(performance.now() - t0);
       setKpi("rp-mon-list-total", fmtCount(data?.total || 0));
@@ -1423,6 +1529,18 @@ export default function monitoring(app, { session }) {
     const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
     return date + ", " + time;
+  }
+  // CAS_274EDF3B — Fields tab access cell. Three states per
+  // (object × field × tier): write / read / none. Tones map to
+  // visibility — write = high (admin-ish weight), read = mid, none
+  // = dim. Matches the backend's GET /api/admin/fields cell shape.
+  function accessChip(value) {
+    const v = String(value || "none").toLowerCase();
+    const tone = v === "write" ? "rt-tone--high"
+               : v === "read"  ? "rt-tone--mid"
+               : "rp-meta";
+    if (v === "none" || v === "" || v === "—") return '<span class="rp-meta">—</span>';
+    return '<span class="rt-mono-pill ' + tone + '">' + esc(v) + '</span>';
   }
   function levelChip(level) {
     const v = String(level || "").toLowerCase();
