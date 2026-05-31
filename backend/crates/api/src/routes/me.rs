@@ -36,6 +36,12 @@ struct MeResponse {
     /// Canonical (trim + lowercase) sentinels currently promoted to
     /// the shared vocabulary. Sorted ascending for stable diffs.
     global_sentinels:  Vec<String>,
+    /// RBAC capabilities for FE element gating — the FE renders admin-only
+    /// surfaces (the `/admin` + `/monitoring` tabs) off this rather than
+    /// guessing. Today `is_platform_admin` is the bootstrap `dev_user`
+    /// (the dev-mode platform-admin stand-in until a real `users.role`
+    /// lands); per-object actions stay server-enforced per request.
+    is_platform_admin: bool,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -59,7 +65,8 @@ async fn get_me(
     user.memberships = db::list_memberships_for_user(&state.db, &user_rid)
         .await?;
     let global_sentinels = db::list_global_sentinels(&state.db).await?;
-    Ok(Json(MeResponse { user, global_sentinels }))
+    let is_platform_admin = user_rid == *state.dev_user;
+    Ok(Json(MeResponse { user, global_sentinels, is_platform_admin }))
 }
 
 /// `PATCH /api/me` — sparse profile update. Every field is optional.
