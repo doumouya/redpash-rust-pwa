@@ -403,7 +403,7 @@ export default function home(app, { session: _session }) {
       // Memberships use a synthetic compound rid (matches row()'s
       // data-rid attr) since the table PK is composite.
       hideMeta: (m) => ({
-        rid:  (m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""),
+        rid:  (m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.member_redpash_id || ""),
         name: m.user_display_name || m.user_username || "—",
         sub:  m.scope_name || m.scope || "",
       }),
@@ -525,14 +525,14 @@ export default function home(app, { session: _session }) {
         { label: "Scope type", key: "scope",             sortable: true,  defaultHidden: true },
         { label: "Scope",      key: "scope_name",        sortable: true  },
         { label: "Scope ID",   key: "scope_redpash_id",  sortable: false, defaultHidden: true },
-        { label: "User ID",    key: "user_redpash_id",   sortable: false, defaultHidden: true },
+        { label: "User ID",    key: "member_redpash_id",   sortable: false, defaultHidden: true },
         { label: "Joined",     key: "joined_at",         sortable: true  },
       ],
       // Synthetic compound rid for DELETE: `{scope}:{scope_id}:{user_id}`.
       // The backend admin.rs delete_membership handler parses this triple.
       row: (m) =>
         '<tr data-rid="'
-        + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.user_redpash_id || ""))
+        + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.member_redpash_id || ""))
         + '">'
         + '<td>' + esc(m.user_display_name) + ' <span class="rt-mono-pill">@' + esc(m.user_username) + '</span></td>'
         + '<td class="rp-meta">@' + esc(m.user_username || "") + '</td>'
@@ -540,7 +540,7 @@ export default function home(app, { session: _session }) {
         + '<td><span class="rt-mono-pill">' + esc(m.scope || "—") + '</span></td>'
         + '<td>' + esc(m.scope_name) + '</td>'
         + '<td><span class="rt-mono-pill">' + esc(m.scope_redpash_id || "—") + '</span></td>'
-        + '<td><span class="rt-mono-pill">' + esc(m.user_redpash_id || "—") + '</span></td>'
+        + '<td><span class="rt-mono-pill">' + esc(m.member_redpash_id || "—") + '</span></td>'
         + '<td>' + fmtTime(m.joined_at) + '</td>'
         + '</tr>',
     },

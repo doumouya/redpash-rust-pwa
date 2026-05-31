@@ -162,7 +162,7 @@ pub async fn list_user_files(pool: &PgPool, owner_rid: &str) -> sqlx::Result<Vec
          JOIN file_stages fs ON fs.file_redpash_id = f.redpash_id
          WHERE EXISTS (SELECT 1 FROM memberships om
                        WHERE om.object_redpash_id = p.redpash_id
-                         AND om.user_redpash_id = $1 AND om.role = 'owner')
+                         AND om.member_redpash_id = $1 AND om.role = 'owner')
          ORDER BY f.updated_at DESC",
     )
     .bind(owner_rid)
@@ -407,7 +407,7 @@ pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>>
          WHERE file_type = 'chart'
            AND project_redpash_id IN (
              SELECT object_redpash_id FROM memberships
-             WHERE user_redpash_id = $1 AND role = 'owner')
+             WHERE member_redpash_id = $1 AND role = 'owner')
          ORDER BY updated_at DESC"
     ))
     .bind(owner)
@@ -489,7 +489,7 @@ pub async fn chart_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String
     // type-filter ensures a non-chart rid returns None (no auth-leak
     // via cross-type rid collision).
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT m.user_redpash_id FROM project_files pf
+        "SELECT m.member_redpash_id FROM project_files pf
          JOIN memberships m ON m.object_redpash_id = pf.project_redpash_id
                            AND m.role = 'owner'
          WHERE pf.redpash_id = $1 AND pf.file_type = 'chart'
@@ -556,16 +556,16 @@ pub async fn list_dashboards(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Das
                 COALESCE(d.display_name, d.filename) AS title,
                 d.description, d.spec,
                 d.is_favorite, d.is_public, d.folder, d.created_at, d.updated_at,
-                om.user_redpash_id AS owner_id,
+                om.member_redpash_id AS owner_id,
                 u.display_name AS owner_display_name,
                 u.username AS owner_username
          FROM project_files d
          JOIN projects p ON p.redpash_id = d.project_redpash_id
-         JOIN LATERAL (SELECT m.user_redpash_id FROM memberships m
+         JOIN LATERAL (SELECT m.member_redpash_id FROM memberships m
                        WHERE m.object_redpash_id = p.redpash_id AND m.role = 'owner'
                        ORDER BY m.joined_at LIMIT 1) om ON true
-         JOIN users    u ON u.redpash_id = om.user_redpash_id
-         WHERE d.file_type = 'dashboard' AND om.user_redpash_id = $1
+         JOIN users    u ON u.redpash_id = om.member_redpash_id
+         WHERE d.file_type = 'dashboard' AND om.member_redpash_id = $1
          ORDER BY d.folder ASC NULLS LAST, d.is_favorite DESC, d.updated_at DESC",
     )
     .bind(owner)
@@ -873,7 +873,7 @@ pub async fn redo_next(pool: &PgPool, file_rid: &str) -> sqlx::Result<bool> {
 pub async fn project_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
     // Ownership is the owner-membership now (role='owner'), not a column.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT user_redpash_id FROM memberships
+        "SELECT member_redpash_id FROM memberships
          WHERE object_redpash_id = $1 AND role = 'owner'
          ORDER BY joined_at LIMIT 1",
     )
@@ -887,7 +887,7 @@ pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<St
     // PROJECT-FILES-ACK: type=dashboard — dashboard ownership lookup;
     // type-filter prevents auth-leak via cross-type rid collision.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT m.user_redpash_id FROM project_files pf
+        "SELECT m.member_redpash_id FROM project_files pf
          JOIN memberships m ON m.object_redpash_id = pf.project_redpash_id
                            AND m.role = 'owner'
          WHERE pf.redpash_id = $1 AND pf.file_type = 'dashboard'
@@ -906,7 +906,7 @@ pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>
     // type-scoped variants used where the CRUD lane needs the
     // type-collision guard.
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT m.user_redpash_id FROM project_files f
+        "SELECT m.member_redpash_id FROM project_files f
          JOIN memberships m ON m.object_redpash_id = f.project_redpash_id
                            AND m.role = 'owner'
          WHERE f.redpash_id = $1
@@ -922,7 +922,7 @@ pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>
 //
 // A company is the multi-tenancy boundary. Membership lives in the
 // unified `memberships` table (composite PK `(object_redpash_id,
-// user_redpash_id)`, no redpash_id) and doubles as the access-control
+// member_redpash_id)`, no redpash_id) and doubles as the access-control
 // check: a user with no membership row simply can't see the company.
 
 #[derive(FromRow)]
@@ -964,7 +964,7 @@ pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<C
                  WHERE cm.object_redpash_id = c.redpash_id) AS member_count
          FROM companies c
          LEFT JOIN memberships m
-                ON m.object_redpash_id = c.redpash_id AND m.user_redpash_id = $1
+                ON m.object_redpash_id = c.redpash_id AND m.member_redpash_id = $1
          ORDER BY c.name ASC",
     )
     .bind(user_rid)
@@ -1007,7 +1007,7 @@ pub async fn company_role(
 ) -> sqlx::Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT role FROM memberships
-         WHERE object_redpash_id = $1 AND user_redpash_id = $2",
+         WHERE object_redpash_id = $1 AND member_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1036,8 +1036,8 @@ pub async fn users_share_company(
            FROM memberships a
            JOIN memberships b
              ON b.object_redpash_id = a.object_redpash_id
-          WHERE a.user_redpash_id = $1
-            AND b.user_redpash_id = $2
+          WHERE a.member_redpash_id = $1
+            AND b.member_redpash_id = $2
             AND a.object_redpash_id LIKE 'CMP\\_%'
           LIMIT 1",
     )
@@ -1083,7 +1083,7 @@ pub async fn create_company(
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
          VALUES ($1, $2, 'owner')",
     )
     .bind(rid)
@@ -1141,7 +1141,7 @@ pub async fn delete_membership(
     let _ = scope;
     let n = sqlx::query(
         "DELETE FROM memberships
-          WHERE object_redpash_id = $1 AND user_redpash_id = $2",
+          WHERE object_redpash_id = $1 AND member_redpash_id = $2",
     )
     .bind(scope_id)
     .bind(user_id)
@@ -1166,7 +1166,7 @@ pub async fn insert_membership(
 ) -> sqlx::Result<()> {
     let _ = scope;
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
          VALUES ($1, $2, $3)",
     )
     .bind(scope_id)
@@ -1182,10 +1182,10 @@ pub async fn list_company_members(
     company_rid: &str,
 ) -> sqlx::Result<Vec<CompanyMember>> {
     let rows = sqlx::query(
-        "SELECT m.user_redpash_id, m.role, m.joined_at,
+        "SELECT m.member_redpash_id, m.role, m.joined_at,
                 u.display_name, u.username, u.avatar_url
          FROM memberships m
-         JOIN users u ON u.redpash_id = m.user_redpash_id
+         JOIN users u ON u.redpash_id = m.member_redpash_id
          WHERE m.object_redpash_id = $1
          ORDER BY m.joined_at ASC",
     )
@@ -1195,7 +1195,7 @@ pub async fn list_company_members(
     Ok(rows
         .iter()
         .map(|r| CompanyMember {
-            user_redpash_id: r.get("user_redpash_id"),
+            member_redpash_id: r.get("member_redpash_id"),
             display_name:    r.get("display_name"),
             username:        r.get("username"),
             avatar_url:      r.get("avatar_url"),
@@ -1220,14 +1220,14 @@ pub async fn add_company_member(
     let mut tx = pool.begin().await?;
     sqlx::query(
         "DELETE FROM memberships
-          WHERE object_redpash_id = $1 AND user_redpash_id = $2 AND context_role = ''",
+          WHERE object_redpash_id = $1 AND member_redpash_id = $2 AND context_role = ''",
     )
     .bind(company_rid)
     .bind(user_rid)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
          VALUES ($1, $2, $3)",
     )
     .bind(company_rid)
@@ -1252,7 +1252,7 @@ pub async fn update_company_member_role(
 ) -> sqlx::Result<bool> {
     let n = sqlx::query(
         "UPDATE memberships SET role = $3
-          WHERE object_redpash_id = $1 AND user_redpash_id = $2",
+          WHERE object_redpash_id = $1 AND member_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1269,7 +1269,7 @@ pub async fn remove_company_member(
 ) -> sqlx::Result<bool> {
     let n = sqlx::query(
         "DELETE FROM memberships
-         WHERE object_redpash_id = $1 AND user_redpash_id = $2",
+         WHERE object_redpash_id = $1 AND member_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
@@ -1455,7 +1455,7 @@ pub async fn case_is_internal(
     let Some(company) = internal_company_id else { return Ok(false) };
     sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM memberships rep
-                        JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                        JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                         WHERE rep.object_redpash_id = $1
                           AND rep.context_role = 'Reporter'
                           AND cm.object_redpash_id = $2)",
@@ -1474,7 +1474,7 @@ pub async fn case_is_internal(
 /// NULL).
 const CASE_SELECT: &str =
     "c.redpash_id, c.type, c.title, c.description, c.status, c.priority,
-     rep.user_redpash_id AS reporter_id, own.user_redpash_id AS assignee_id,
+     rep.member_redpash_id AS reporter_id, own.member_redpash_id AS assignee_id,
      c.project_id, c.company_id,
      r.display_name AS reporter_display_name,
      a.display_name AS assignee_display_name,
@@ -1493,14 +1493,14 @@ const CASE_SELECT: &str =
 /// case's tagged category; `catp` its parent, NULL at root). Append after a
 /// `FROM cases c` clause; partners with CASE_SELECT.
 const CASE_USER_JOINS: &str =
-    "LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
+    "LEFT JOIN LATERAL (SELECT member_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
                           AND m.context_role = 'Reporter' LIMIT 1) rep ON true
-     LEFT JOIN users r            ON r.redpash_id    = rep.user_redpash_id
-     LEFT JOIN LATERAL (SELECT user_redpash_id FROM memberships m
+     LEFT JOIN users r            ON r.redpash_id    = rep.member_redpash_id
+     LEFT JOIN LATERAL (SELECT member_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
                           AND m.context_role = 'Case Owner' LIMIT 1) own ON true
-     LEFT JOIN users a            ON a.redpash_id    = own.user_redpash_id
+     LEFT JOIN users a            ON a.redpash_id    = own.member_redpash_id
      LEFT JOIN case_categories cat ON cat.redpash_id = c.category_id
      LEFT JOIN case_categories catp ON catp.redpash_id = cat.parent_id";
 
@@ -1544,19 +1544,19 @@ pub async fn list_cases(
                           AND co.context_role = 'Case Owner'))
                 OR EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
-                          AND co.user_redpash_id = $2
+                          AND co.member_redpash_id = $2
                           AND co.context_role = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
                 OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
-                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
-                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))
@@ -1595,19 +1595,19 @@ pub async fn count_cases(
                           AND co.context_role = 'Case Owner'))
                 OR EXISTS (SELECT 1 FROM memberships co
                         WHERE co.object_redpash_id = c.redpash_id
-                          AND co.user_redpash_id = $2
+                          AND co.member_redpash_id = $2
                           AND co.context_role = 'Case Owner'))
            AND ($3::text IS NULL OR c.project_id  = $3)
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
                 OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
-                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
-                                                    JOIN memberships cm ON cm.user_redpash_id = rep.user_redpash_id
+                                                    JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))",
@@ -1707,9 +1707,9 @@ async fn set_case_person(
     if let Some(u) = user {
         sqlx::query(
             "INSERT INTO memberships
-                 (object_redpash_id, user_redpash_id, role, context_role)
+                 (object_redpash_id, member_redpash_id, role, context_role)
              VALUES ($1, $2, 'member', $3)
-             ON CONFLICT (object_redpash_id, user_redpash_id, role, context_role)
+             ON CONFLICT (object_redpash_id, member_redpash_id, role, context_role)
              DO NOTHING",
         )
         .bind(case_rid)

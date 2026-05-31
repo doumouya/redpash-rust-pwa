@@ -39,7 +39,7 @@ pub struct CompanySummary {
 /// members list renders without a second lookup.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompanyMember {
-    pub user_redpash_id: String,
+    pub member_redpash_id: String,
     pub display_name:    String,
     pub username:        String,
     pub avatar_url:      Option<String>,

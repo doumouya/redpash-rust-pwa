@@ -56,7 +56,7 @@ pub struct MembershipSummary {
     pub scope:             String,
     pub scope_redpash_id:  String,
     pub scope_name:        String,
-    pub user_redpash_id:   String,
+    pub member_redpash_id:   String,
     pub user_display_name: String,
     pub user_username:     String,
     /// project memberships: `owner | collaborator | viewer`.

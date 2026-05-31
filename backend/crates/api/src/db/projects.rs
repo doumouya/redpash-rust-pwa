@@ -47,7 +47,7 @@ pub async fn insert_project(pool: &PgPool, rid: &str, owner: &str, name: &str, i
         .execute(&mut *tx)
         .await?;
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
          VALUES ($1, $2, 'owner')",
     )
     .bind(rid)
@@ -84,7 +84,7 @@ pub async fn find_project_by_name(pool: &PgPool, owner: &str, name: &str) -> sql
     let row = sqlx::query(
         "SELECT p.redpash_id FROM projects p \
          JOIN memberships m ON m.object_redpash_id = p.redpash_id \
-                           AND m.role = 'owner' AND m.user_redpash_id = $1 \
+                           AND m.role = 'owner' AND m.member_redpash_id = $1 \
          WHERE p.name = $2 \
          ORDER BY p.created_at ASC LIMIT 1",
     )
@@ -147,7 +147,7 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 const PROJECT_SELECT: &str =
     "SELECT p.redpash_id, p.name, p.description,
             COALESCE(u.default_project_id = p.redpash_id, false) AS is_default,
-            om.user_redpash_id AS owner_id, p.company_id,
+            om.member_redpash_id AS owner_id, p.company_id,
             (SELECT CASE COALESCE(MAX(fs.stage_rank), 0)
                       WHEN 3 THEN 'publish' WHEN 2 THEN 'design' WHEN 1 THEN 'clean'
                       ELSE 'new' END
@@ -169,10 +169,10 @@ const PROJECT_SELECT: &str =
             (SELECT COUNT(*) FROM project_files f
              WHERE f.project_redpash_id = p.redpash_id AND f.file_type <> 'chart') AS file_count
      FROM projects p
-     JOIN LATERAL (SELECT m.user_redpash_id FROM memberships m
+     JOIN LATERAL (SELECT m.member_redpash_id FROM memberships m
                    WHERE m.object_redpash_id = p.redpash_id AND m.role = 'owner'
                    ORDER BY m.joined_at LIMIT 1) om ON true
-     JOIN users u ON u.redpash_id = om.user_redpash_id";
+     JOIN users u ON u.redpash_id = om.member_redpash_id";
 
 fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
     ProjectSummary {
@@ -196,7 +196,7 @@ fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
 pub async fn list_projects(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<ProjectSummary>> {
     let rows = sqlx::query(
         // `om` (owner membership) + `is_default` (alias) come from PROJECT_SELECT.
-        &format!("{PROJECT_SELECT} WHERE om.user_redpash_id = $1
+        &format!("{PROJECT_SELECT} WHERE om.member_redpash_id = $1
                   ORDER BY is_default DESC, p.created_at ASC"),
     )
     .bind(owner)
@@ -264,14 +264,14 @@ pub async fn update_project_meta(
         sqlx::query(
             "DELETE FROM memberships
               WHERE object_redpash_id = $1
-                AND (role = 'owner' OR (user_redpash_id = $2 AND context_role = ''))",
+                AND (role = 'owner' OR (member_redpash_id = $2 AND context_role = ''))",
         )
         .bind(rid)
         .bind(new_owner)
         .execute(&mut *tx)
         .await?;
         sqlx::query(
-            "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+            "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
              VALUES ($1, $2, 'owner')",
         )
         .bind(rid)
@@ -371,7 +371,7 @@ pub async fn create_project(
     .execute(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
          VALUES ($1, $2, 'owner')",
     )
     .bind(rid)

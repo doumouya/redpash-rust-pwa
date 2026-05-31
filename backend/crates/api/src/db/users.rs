@@ -111,7 +111,7 @@ pub async fn list_memberships_for_user(
         "SELECT cm.object_redpash_id AS company_id, c.name AS company_name, cm.role
            FROM memberships cm
            JOIN companies c ON c.redpash_id = cm.object_redpash_id
-          WHERE cm.user_redpash_id = $1
+          WHERE cm.member_redpash_id = $1
           ORDER BY CASE cm.role
                      WHEN 'owner'  THEN 0
                      WHEN 'admin'  THEN 1
@@ -153,7 +153,7 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
     // attach. Cheap at directory scale; if/when the users table grows
     // into thousands, switch to a windowed query or paginate.
     let mem_rows = sqlx::query(
-        "SELECT m.user_redpash_id, m.object_redpash_id AS company_id, m.role, c.name AS company_name
+        "SELECT m.member_redpash_id, m.object_redpash_id AS company_id, m.role, c.name AS company_name
          FROM memberships m
          JOIN companies c ON c.redpash_id = m.object_redpash_id",
     )
@@ -162,7 +162,7 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
     let mut by_user: std::collections::HashMap<String, Vec<UserMembership>> =
         std::collections::HashMap::new();
     for r in &mem_rows {
-        by_user.entry(r.get::<String, _>("user_redpash_id")).or_default().push(UserMembership {
+        by_user.entry(r.get::<String, _>("member_redpash_id")).or_default().push(UserMembership {
             company_id:   r.get("company_id"),
             company_name: r.get("company_name"),
             role:         r.get("role"),

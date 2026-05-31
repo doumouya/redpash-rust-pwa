@@ -53,7 +53,7 @@ pub fn routes() -> Router<AppState> {
         .route("/memberships",       get(list_memberships).post(create_membership))
         .route("/memberships/stats", get(stats_memberships))
         // Memberships use a synthetic compound rid in the path —
-        // `{scope}:{scope_redpash_id}:{user_redpash_id}` — since the
+        // `{scope}:{scope_redpash_id}:{member_redpash_id}` — since the
         // table's primary key is composite. delete_membership parses
         // and dispatches to the right table.
         .route("/memberships/:rid",  axum::routing::delete(delete_membership))
@@ -224,7 +224,7 @@ async fn list_users(
              SELECT cm.object_redpash_id AS company_id, c.name AS company_name, cm.role
                FROM memberships cm
                JOIN companies c ON c.redpash_id = cm.object_redpash_id
-              WHERE cm.user_redpash_id = u.redpash_id
+              WHERE cm.member_redpash_id = u.redpash_id
               ORDER BY CASE cm.role
                          WHEN 'owner'  THEN 0
                          WHEN 'admin'  THEN 1
@@ -316,7 +316,7 @@ async fn list_companies(
                 c.created_at, c.updated_at,
                 (SELECT COUNT(*)::INT FROM memberships m WHERE m.object_redpash_id = c.redpash_id) AS member_count,
                 (SELECT m2.role FROM memberships m2
-                  WHERE m2.object_redpash_id = c.redpash_id AND m2.user_redpash_id = $2) AS my_role
+                  WHERE m2.object_redpash_id = c.redpash_id AND m2.member_redpash_id = $2) AS my_role
            FROM companies c
           WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
           ORDER BY {sort_col} {sort_dir} NULLS LAST
@@ -420,7 +420,7 @@ async fn list_memberships(
         "SELECT COUNT(*)::BIGINT
            FROM memberships m
            JOIN projects p ON p.redpash_id = m.object_redpash_id
-           JOIN users    u ON u.redpash_id = m.user_redpash_id
+           JOIN users    u ON u.redpash_id = m.member_redpash_id
           WHERE ($1::text IS NULL OR m.role = $1)
             AND ($2::text IS NULL OR
                  u.display_name ILIKE '%' || $2 || '%' OR
@@ -430,7 +430,7 @@ async fn list_memberships(
         "SELECT COUNT(*)::BIGINT
            FROM memberships m
            JOIN companies c ON c.redpash_id = m.object_redpash_id
-           JOIN users     u ON u.redpash_id = m.user_redpash_id
+           JOIN users     u ON u.redpash_id = m.member_redpash_id
           WHERE ($1::text IS NULL OR m.role = $1)
             AND ($2::text IS NULL OR
                  u.display_name ILIKE '%' || $2 || '%' OR
@@ -442,14 +442,14 @@ async fn list_memberships(
             "SELECT 'project' AS scope,
                     m.object_redpash_id      AS scope_redpash_id,
                     p.name                   AS scope_name,
-                    m.user_redpash_id        AS user_redpash_id,
+                    m.member_redpash_id        AS member_redpash_id,
                     u.display_name           AS user_display_name,
                     u.username               AS user_username,
                     m.role                   AS role,
                     m.joined_at              AS joined_at
                FROM memberships m
                JOIN projects p ON p.redpash_id = m.object_redpash_id
-               JOIN users    u ON u.redpash_id = m.user_redpash_id
+               JOIN users    u ON u.redpash_id = m.member_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
                 AND ($2::text IS NULL OR
                      u.display_name ILIKE '%' || $2 || '%' OR
@@ -463,14 +463,14 @@ async fn list_memberships(
             "SELECT 'company' AS scope,
                     m.object_redpash_id AS scope_redpash_id,
                     c.name           AS scope_name,
-                    m.user_redpash_id AS user_redpash_id,
+                    m.member_redpash_id AS member_redpash_id,
                     u.display_name   AS user_display_name,
                     u.username       AS user_username,
                     m.role           AS role,
                     m.joined_at      AS joined_at
                FROM memberships m
                JOIN companies c ON c.redpash_id = m.object_redpash_id
-               JOIN users     u ON u.redpash_id = m.user_redpash_id
+               JOIN users     u ON u.redpash_id = m.member_redpash_id
               WHERE ($1::text IS NULL OR m.role = $1)
                 AND ($2::text IS NULL OR
                      u.display_name ILIKE '%' || $2 || '%' OR
@@ -501,7 +501,7 @@ async fn list_memberships(
             scope:             r.try_get("scope").unwrap_or_default(),
             scope_redpash_id:  r.try_get("scope_redpash_id").unwrap_or_default(),
             scope_name:        r.try_get("scope_name").unwrap_or_default(),
-            user_redpash_id:   r.try_get("user_redpash_id").unwrap_or_default(),
+            member_redpash_id:   r.try_get("member_redpash_id").unwrap_or_default(),
             user_display_name: r.try_get("user_display_name").unwrap_or_default(),
             user_username:     r.try_get("user_username").unwrap_or_default(),
             role:              r.try_get("role").unwrap_or_default(),

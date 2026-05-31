@@ -13,13 +13,11 @@
 -- and team-as-grantee all follow.
 --
 -- SHIPPED NOTE (2026-05-31): the authoritative schema is the sqlx migrations
--- under backend/migrations/ — the in-place migration is
--- `20260531000000_entity_membership_rbac.sql` (applied + verified on
--- redpash_prerelease). That migration KEEPS the subject column named
--- `user_redpash_id` (and the index `memberships_user_idx`); the cosmetic
--- rename to `member_redpash_id` shown below is the deferred follow-up. So this
--- file depicts the post-rename target — FK/PK/model match the live DB, only
--- the subject-column identifier differs until the rename lands.
+-- under backend/migrations/ — two of them: `20260531000000_entity_membership_rbac`
+-- (the model change) and `20260531000001_rename_membership_subject` (renames
+-- the subject column user_redpash_id → member_redpash_id + index). With both
+-- applied, this file now matches the live DB exactly (column `member_redpash_id`,
+-- index `memberships_member_idx`).
 -- ============================================================================
 BEGIN;
 

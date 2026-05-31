@@ -81,7 +81,7 @@ async fn search(
            FROM projects p
           WHERE EXISTS (SELECT 1 FROM memberships m
                          WHERE m.object_redpash_id = p.redpash_id
-                           AND m.user_redpash_id    = $1)
+                           AND m.member_redpash_id    = $1)
             AND (p.name                 ILIKE '%' || $2 || '%'
                  OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
           ORDER BY (CASE WHEN p.name ILIKE $2 || '%' THEN 0 ELSE 1 END),
@@ -130,7 +130,7 @@ async fn search(
               JOIN projects p ON p.redpash_id = f.project_redpash_id
              WHERE EXISTS (SELECT 1 FROM memberships m
                             WHERE m.object_redpash_id = p.redpash_id
-                              AND m.user_redpash_id    = $1)
+                              AND m.member_redpash_id    = $1)
                AND (f.filename                 ILIKE '%' || $2 || '%'
                     OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
          )
@@ -236,25 +236,25 @@ async fn search(
     // scope so a row reads "Alice — owner in ProjectX". Synthetic rid
     // matches the admin convention `{scope}:{scope_rid}:{user_rid}`.
     let rows = sqlx::query(
-        "SELECT scope, scope_redpash_id, scope_name, user_redpash_id,
+        "SELECT scope, scope_redpash_id, scope_name, member_redpash_id,
                 user_display_name, role
            FROM (
              SELECT 'project' AS scope, m.object_redpash_id AS scope_redpash_id,
-                    p.name AS scope_name, m.user_redpash_id,
+                    p.name AS scope_name, m.member_redpash_id,
                     u.display_name AS user_display_name, m.role, m.joined_at
                FROM memberships m
                JOIN projects p ON p.redpash_id = m.object_redpash_id
-               JOIN users    u ON u.redpash_id = m.user_redpash_id
+               JOIN users    u ON u.redpash_id = m.member_redpash_id
               WHERE u.display_name ILIKE '%' || $1 || '%'
                  OR u.username     ILIKE '%' || $1 || '%'
                  OR p.name         ILIKE '%' || $1 || '%'
              UNION ALL
              SELECT 'company' AS scope, m.object_redpash_id AS scope_redpash_id,
-                    c.name AS scope_name, m.user_redpash_id,
+                    c.name AS scope_name, m.member_redpash_id,
                     u.display_name AS user_display_name, m.role, m.joined_at
                FROM memberships m
                JOIN companies c ON c.redpash_id = m.object_redpash_id
-               JOIN users     u ON u.redpash_id = m.user_redpash_id
+               JOIN users     u ON u.redpash_id = m.member_redpash_id
               WHERE u.display_name ILIKE '%' || $1 || '%'
                  OR u.username     ILIKE '%' || $1 || '%'
                  OR c.name         ILIKE '%' || $1 || '%'
@@ -270,7 +270,7 @@ async fn search(
         let scope:      String = r.try_get("scope").unwrap_or_default();
         let scope_rid:  String = r.try_get("scope_redpash_id").unwrap_or_default();
         let scope_name: String = r.try_get("scope_name").unwrap_or_default();
-        let user_rid:   String = r.try_get("user_redpash_id").unwrap_or_default();
+        let user_rid:   String = r.try_get("member_redpash_id").unwrap_or_default();
         let user_name:  String = r.try_get("user_display_name").unwrap_or_default();
         let role:       String = r.try_get("role").unwrap_or_default();
         results.push(SearchResult {
