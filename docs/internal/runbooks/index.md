@@ -95,3 +95,14 @@ Every entry follows the same five headings:
   (Playwright MCP is the parallel option when chrome-devtools-mcp is
   locked). Filed the cadence this entry follows in
   [processes/bug-case-runbook-cadence.md](../processes/bug-case-runbook-cadence.md).
+- [0008 — MCP cases bridge needs auto-refreshing session](0008-mcp-cases-session-auto-refresh.md) —
+  **Draft / proposal.** The `tools/mcp-server` cases bridge pins
+  `REDPASH_API_SESSION` from `~/.claude.json` env at startup and uses
+  it as the `rp_session` cookie indefinitely. When the cookie expires
+  or is invalidated, every Torv's `case_create` / `case_list` returns
+  HTTP 401 silently until someone notices, mints via `POST /api/auth/
+  dev-login`, edits the JSON by hand, and restarts Claude Code.
+  Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
+  needs a refresh path — lazy init + retry-once-on-401 is the floor.
+  Immediate workaround applied 2026-05-31 (re-minted the env cookie);
+  proper fix (auto-mint on init + self-healing on 401) pending.
