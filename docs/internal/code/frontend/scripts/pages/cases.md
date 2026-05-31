@@ -17,12 +17,14 @@ Cases — rail + (kanban board | case detail) surface. v1 scope: cases + comment
 - Default export: page mount.
 - Rail: case list grouped by status + Internal/External source toggle + Assignee/Status chip rows.
 - Main: board overview (mutually-exclusive with detail) OR case detail.
+- Comment composer + inline edit support **@mention autocomplete**: typing `@name` opens a user menu (`/admin/users?q=`, same as the assignee picker) and inserts a non-editable `<span class="rp-mention" data-uid>` chip. The chip is whitelisted in `sanitizeRichHtml`, so it persists on the stored body and re-renders in the thread. No notifications backend in this slice (chip is presentational + carries the uid).
 - Detail properties panel (`#rp-cases-detail-side`) is a collapsible side panel: a toggle pinned to the right of the status-path band (`#rp-cases-side-toggle`) flips `.open` on the panel + `.is-active` on itself — same mechanism as the workspace Filter/Tools panels (width 0 ⇄ 18rem, fixed-width inner to avoid mid-slide reflow). Open/closed persists via the `casesDetailPanel` pref (default open), reconciled at mount so it survives reloads + case switches.
 
 ## Drift-prone areas
 
 - Multi-source: workstream proposition in jira-flow-proposition/proposition.md; agent guide in cases/agent-cookbook.md.
 - Side-panel toggle mirrors the workspace `bindPanel` pattern (panel.css `.rt-panel`); keep the two in sync if the panel idiom changes.
+- Mention chips depend on `sanitizeRichHtml` whitelisting `span.rp-mention` — if the sanitizer's allow-list is refactored, the chip rebuild branch must survive or mentions get unwrapped to plain text on the next edit/render.
 
 ## Related
 

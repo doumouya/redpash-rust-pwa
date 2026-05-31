@@ -1036,6 +1036,142 @@ export default function cases(app, { session }) {
     else if (k === "k") { e.preventDefault(); applyFormat("link", commentInput, composerEl, syncComposeState); }
   });
 
+  // ── @mention autocomplete ───────────────────────────────────────
+  // Typing "@" + a name in any rich editor (composer or inline edit)
+  // opens a user menu (the same /admin/users?q= search the assignee
+  // picker uses). Picking inserts a non-editable chip
+  // <span class="rp-mention" data-uid="RID">@Name</span> that survives
+  // sanitizeRichHtml, so the mention persists on the body + re-renders
+  // as a chip in the thread. One menu element is reused across editors
+  // and lives under `app` so it's torn down with the page.
+  const mentionMenu = document.createElement("div");
+  mentionMenu.className = "rp-mention-menu";
+  mentionMenu.hidden = true;
+  app.appendChild(mentionMenu);
+  let mentionState = null;   // { editor, range:{node,start,end}, items, sel, after } | null
+  let mentionTimer = null;
+
+  function closeMention() {
+    mentionState = null;
+    mentionMenu.hidden = true;
+    mentionMenu.innerHTML = "";
+  }
+  // Find an active "@token" right before a collapsed caret in `editor`.
+  // The "@" must start a word (preceded by start-of-text or whitespace)
+  // so emails (a@b) don't trigger; the query is [\w.-]* (no spaces).
+  function mentionTokenAtCaret(editor) {
+    const sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || sel.rangeCount === 0) return null;
+    const r = sel.getRangeAt(0);
+    const node = r.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE || !editor.contains(node)) return null;
+    const caret = r.startOffset;
+    const m = /(^|\s)@([\w.\-]*)$/.exec(node.nodeValue.slice(0, caret));
+    if (!m) return null;
+    return { node, start: caret - m[2].length - 1, end: caret, query: m[2] };
+  }
+  function positionMentionMenu(editor) {
+    const sel = window.getSelection();
+    let rect = sel && sel.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+    if (!rect || (!rect.top && !rect.left)) rect = editor.getBoundingClientRect();
+    // Open upward — the composer sits at the bottom, so a downward menu
+    // would overflow the panel.
+    mentionMenu.style.left = Math.round(rect.left) + "px";
+    mentionMenu.style.top = "auto";
+    mentionMenu.style.bottom = Math.round(window.innerHeight - rect.top + 4) + "px";
+  }
+  function renderMentionMenu(rows) {
+    mentionMenu.innerHTML = rows.length
+      ? rows.map((u, i) => {
+          const label = u.display_name || u.username || u.redpash_id;
+          const sub = [u.username, u.email].filter(Boolean).join(" · ");
+          return '<div class="rp-user-picker-result rp-mention-item' + (i === 0 ? ' is-sel' : '') + '" '
+            + 'data-user-rid="' + esc(u.redpash_id) + '" data-name="' + esc(label) + '">'
+            +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
+            +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
+            + '</div>';
+        }).join("")
+      : '<div class="rt-ac-empty">No matches.</div>';
+  }
+  async function queryMentions(editor, token) {
+    try {
+      const data = await api.get("/admin/users?q=" + encodeURIComponent(token.query) + "&size=8");
+      if (!mentionState || mentionState.editor !== editor) return;   // stale
+      mentionState.items = data?.rows || [];
+      mentionState.sel = 0;
+      renderMentionMenu(mentionState.items);
+      positionMentionMenu(editor);
+      mentionMenu.hidden = false;
+    } catch { closeMention(); }
+  }
+  function moveMentionSel(delta) {
+    if (!mentionState || !mentionState.items.length) return;
+    const n = mentionState.items.length;
+    mentionState.sel = (mentionState.sel + delta + n) % n;
+    [...mentionMenu.querySelectorAll(".rp-mention-item")].forEach((el, i) =>
+      el.classList.toggle("is-sel", i === mentionState.sel));
+    mentionMenu.querySelector(".is-sel")?.scrollIntoView({ block: "nearest" });
+  }
+  // Swap the @token range for a chip + trailing nbsp, caret after it.
+  function insertMention(editor, user, after) {
+    if (!mentionState) return;
+    const { node, start, end } = mentionState.range;
+    const r = document.createRange();
+    r.setStart(node, start);
+    r.setEnd(node, end);
+    r.deleteContents();
+    const chip = document.createElement("span");
+    chip.className = "rp-mention";
+    chip.setAttribute("data-uid", user.rid);
+    chip.setAttribute("contenteditable", "false");
+    chip.textContent = "@" + user.name;
+    const space = document.createTextNode(" ");
+    r.insertNode(space);
+    r.insertNode(chip);
+    const sel = window.getSelection();
+    const caret = document.createRange();
+    caret.setStartAfter(space);
+    caret.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(caret);
+    closeMention();
+    if (after) after();
+  }
+  function attachMentionAutocomplete(editor, after) {
+    if (!editor) return;
+    editor.addEventListener("input", () => {
+      const token = mentionTokenAtCaret(editor);
+      if (!token) { if (mentionState && mentionState.editor === editor) closeMention(); return; }
+      mentionState = { editor, range: token, items: [], sel: 0, after };
+      clearTimeout(mentionTimer);
+      mentionTimer = setTimeout(() => queryMentions(editor, token), 160);
+    });
+    // Capture phase → pre-empt the editor's own Enter/⌘ handlers while
+    // the menu is open.
+    editor.addEventListener("keydown", (e) => {
+      if (!mentionState || mentionState.editor !== editor || mentionMenu.hidden) return;
+      if (e.key === "ArrowDown")      { e.preventDefault(); e.stopImmediatePropagation(); moveMentionSel(1); }
+      else if (e.key === "ArrowUp")   { e.preventDefault(); e.stopImmediatePropagation(); moveMentionSel(-1); }
+      else if (e.key === "Escape")    { e.preventDefault(); e.stopImmediatePropagation(); closeMention(); }
+      else if (e.key === "Enter" || e.key === "Tab") {
+        const it = mentionState.items[mentionState.sel];
+        if (!it) { closeMention(); return; }
+        e.preventDefault(); e.stopImmediatePropagation();
+        insertMention(editor, { rid: it.redpash_id, name: it.display_name || it.username || it.redpash_id }, mentionState.after);
+      }
+    }, true);
+    editor.addEventListener("blur", () =>
+      setTimeout(() => { if (mentionState && mentionState.editor === editor) closeMention(); }, 120));
+  }
+  // mousedown (not click) so the editor keeps focus through the pick.
+  mentionMenu.addEventListener("mousedown", (e) => {
+    const item = e.target.closest(".rp-mention-item");
+    if (!item || !mentionState) return;
+    e.preventDefault();
+    insertMention(mentionState.editor, { rid: item.dataset.userRid, name: item.dataset.name }, mentionState.after);
+  });
+  attachMentionAutocomplete(commentInput, syncComposeState);
+
   // Send is live when there's text OR a staged file. The contentEditable
   // grows on its own — no manual autosize. textContent (not innerHTML)
   // so an empty editor holding only a stray <br> still reads as blank.
@@ -1153,7 +1289,18 @@ export default function cases(app, { session }) {
         if (n.nodeType === Node.TEXT_NODE) {
           dest.appendChild(document.createTextNode(n.nodeValue));
         } else if (n.nodeType === Node.ELEMENT_NODE) {
-          if (ALLOWED[n.tagName]) {
+          // Mention chip — span.rp-mention carrying the user rid. Rebuilt
+          // with only safe attrs + its text (no nested markup), so an
+          // @mention persists on the stored body and re-renders as a chip.
+          if (n.tagName === "SPAN" && n.classList.contains("rp-mention")) {
+            const m = document.createElement("span");
+            m.className = "rp-mention";
+            const uid = n.getAttribute("data-uid");
+            if (uid) m.setAttribute("data-uid", uid);
+            m.setAttribute("contenteditable", "false");
+            m.textContent = n.textContent;
+            dest.appendChild(m);
+          } else if (ALLOWED[n.tagName]) {
             const el = document.createElement(n.tagName);
             if (n.tagName === "A") {
               const href = n.getAttribute("href") || "";
@@ -1898,6 +2045,7 @@ export default function cases(app, { session }) {
     const ed = form.querySelector(".rp-cases-comment-edit-input");
     ed.innerHTML = rawHtml;
     ed.focus();
+    attachMentionAutocomplete(ed);
     // ⌘↵ saves; ⌘B/I format the focused editor via execCommand.
     ed.addEventListener("keydown", (ev) => {
       const mod = ev.ctrlKey || ev.metaKey;
