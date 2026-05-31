@@ -4,7 +4,7 @@ section: Internal
 order: 54
 last modified date: 2026-05-31
 owner: Torv
-status: draft — RBAC catalog sweep ([index](index.md))
+status: enforced 2026-05-31 — object-level gate live: patch=require_grant(effective>=Admin) with owner-grade fields (owner_id/company_id/is_default) guarded to the owner; delete=effective>=Owner; member CRUD nested at /:rid/members. The per-field atoms below are the v3 custom-role target. RBAC catalog sweep ([index](index.md))
 ---
 
 # Project (PRJ_) — permissions

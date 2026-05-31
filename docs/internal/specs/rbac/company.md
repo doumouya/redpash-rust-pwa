@@ -4,7 +4,7 @@ section: Internal
 order: 53
 last modified date: 2026-05-31
 owner: Torv
-status: draft — RBAC catalog sweep ([index](index.md))
+status: enforced 2026-05-31 — object-level gate live: read=any member; update=require_grant(effective>=Admin); delete=effective>=Owner; member CRUD via the generic members module at /:rid/members (owner/admin manage, self-leave). RBAC catalog sweep ([index](index.md))
 ---
 
 # Company (CMP_) — permissions

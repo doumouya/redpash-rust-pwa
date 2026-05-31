@@ -4,7 +4,7 @@ section: Internal
 order: 59
 last modified date: 2026-05-31
 owner: Torv
-status: reconciled to the entity-membership model (shipped 2026-05-31, migrations 20260531000000/…001); per-object matrices are the policy layer over the [entity-membership-model](entity-membership-model.md) §2 resolver
+status: enforced 2026-05-31 — reconciled to the entity-membership model (migrations 20260531000000/…001); the generic member-CRUD module (routes/members.rs) is live on all 5 object types (/:rid/members) with a reach-aware manage gate (effective>=Admin); per-object matrices are the policy layer over the [entity-membership-model](entity-membership-model.md) §2 resolver
 ---
 
 # Membership — permissions

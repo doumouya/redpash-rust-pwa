@@ -4,7 +4,7 @@ section: Internal
 order: 50
 last modified date: 2026-05-31
 owner: Torv
-status: design 2026-05-31 — view-rooted model (membership-as-sharing, roles-as-bundles, view-derived writes); see "Permission model". Template + the case.md pattern-lock reconciled to it; the other per-object docs follow. NO enforcement code exists yet, by design: RBAC is the single post-site pass — one wrong rule compromises the whole system, so it stays a spec until the app surface is stable.
+status: ENFORCED 2026-05-31 — view-rooted model (membership-as-sharing, roles-as-bundles, view-derived writes); see "Permission model". The §2 resolver + reach-aware gates are now SHIPPED across all 5 object types (the earlier "spec-only until the app surface is stable" plan is complete — that was the right call: it landed as one focused post-site pass). Coarse object-level enforcement is live (require_grant on effective reach); per-field atoms remain the v3 custom-role layer. Workstream of record: case CAS_913220A003484841BF98250DD0FEF681.
 ---
 
 # RBAC permission catalog

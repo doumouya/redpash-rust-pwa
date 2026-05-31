@@ -4,7 +4,7 @@ section: Internal
 order: 58
 last modified date: 2026-05-31
 owner: Torv
-status: draft — supersedes the (scope,user) single-role assumption in [membership.md](membership.md); design agreed with Em 2026-05-31 (case CAS_A3B5D5F8E2A3483EA44EAA5B437A6A92)
+status: enforced 2026-05-31 — the §2 resolver is shipped in rbac.rs (resolve_grant / require_grant / require_view, Grant{direct,scope}); reach-aware gates live across all 5 object types + mutation gates broadened ensure_owner→require_grant. Supersedes the (scope,user) single-role assumption in [membership.md](membership.md). Design case CAS_A3B5D5F8E2A3483EA44EAA5B437A6A92; delivery/workstream of record case CAS_913220A003484841BF98250DD0FEF681
 ---
 
 # Entity-Membership model — RBAC foundation

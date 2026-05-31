@@ -12,8 +12,11 @@ last modified date: 2026-05-31
 
 The RBAC **effective-access resolver** — the
 [entity-membership-model](../../../specs/rbac/entity-membership-model.md) §2
-query in code. P1 of the enforcement workstream (the resolver only; no gate
-wires it in yet).
+query in code. **Enforced 2026-05-31**: `require_grant` / `require_view` gate
+reads + mutations across every object type (companies, projects, cases,
+files/charts/dashboards, comments) and the generic member-CRUD module; the
+mutation gates were broadened off `ensure_owner` onto this resolver. Workstream
+of record: case CAS_913220A003484841BF98250DD0FEF681.
 
 `effective_role(pool, caller, object)` returns the **highest** permission tier
 (`Role`, ordered `Viewer < Member < Admin < Owner`) the caller holds on the

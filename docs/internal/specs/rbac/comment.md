@@ -4,7 +4,7 @@ section: Internal
 order: 57
 last modified date: 2026-05-31
 owner: Torv
-status: draft — RBAC catalog sweep ([index](index.md))
+status: enforced 2026-05-31 — object-level gate live: create=require_grant(effective>=Member) on the case; update/delete=author (author_id==caller) OR case admin+ (scope>=Admin, moderation). RBAC catalog sweep ([index](index.md))
 ---
 
 # Comment (CMT_) — permissions

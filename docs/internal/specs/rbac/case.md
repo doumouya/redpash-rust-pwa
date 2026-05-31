@@ -4,7 +4,7 @@ section: Internal
 order: 51
 last modified date: 2026-05-31
 owner: Torv
-status: pattern-lock — first worked example of the RBAC catalog template ([index](index.md))
+status: enforced 2026-05-31 (pattern-lock template) — gate live: view=any reach; update=is_member OR scope>=Admin; delete=scope>=Admin (not a mere case member); comments per [comment.md](comment.md); case-team member CRUD nested at /:rid/members (reach-aware manage — case rows are all member-tier, so the project/company admin manages via cascade). First worked example of the RBAC catalog template ([index](index.md))
 ---
 
 # Case (CAS_) — permissions

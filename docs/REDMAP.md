@@ -489,13 +489,15 @@ read it before starting Phase B/C/D.
 | POST | `/api/auth/logout` | delete session + clear cookie |
 | GET | `/api/projects` | session user's projects |
 | GET | `/api/projects/:rid/files` | files in project |
-| PATCH | `/api/projects/:rid` | sparse: `name` / `description` / `is_default` / `owner_id` / `company_id` / `status` |
-| DELETE | `/api/projects/:rid` | cascades files+steps+reports+dashboards; default project is 400 `is_default` |
+| PATCH | `/api/projects/:rid` | sparse: `name` / `description` / `is_default` / `owner_id` / `company_id` / `status`. RBAC: metadata = `effective>=Admin`; owner-grade fields (`owner_id`/`company_id`/`is_default`) owner-only |
+| DELETE | `/api/projects/:rid` | cascades files+steps+reports+dashboards; default project is 400 `is_default`. RBAC: `effective>=Owner` (project owner / company owner / platform) |
+| GET·POST | `/api/projects/:rid/members` | list / add via the shared `routes/members.rs` module — reach-aware manage (project owner **or** company admin via cascade) |
+| PATCH·DELETE | `/api/projects/:rid/members/:user_id` | change role / leave (self) or remove |
 | GET | `/api/files` | every file the session user owns (across all their projects) — powers Home "My Files" |
 | POST | `/api/files/upload` | multipart `file` (+ optional `tld`, `project_name`). Auto-routes into a named or default project; XLSX/XLS/XLSM/XLSB/ODS auto-converted to CSV. |
 | GET | `/api/files/:rid` | summary + columns + steps |
-| PATCH | `/api/files/:rid` | sparse: `display_name` / `project_redpash_id` (move) / `encoding` / `delimiter` |
-| DELETE | `/api/files/:rid` | cascade history + reports; evict cache; unlink blob |
+| PATCH | `/api/files/:rid` | sparse: `display_name` / `project_redpash_id` (move) / `encoding` / `delimiter`. RBAC: `effective>=Admin` (owner via project scope); move double-gated on the destination |
+| DELETE | `/api/files/:rid` | cascade history + reports; evict cache; unlink blob. RBAC: `effective>=Admin` |
 | GET | `/api/files/:rid/page` | paged rows — `?page&size&sorts&filters&q&cols` |
 | POST | `/api/files/:rid/steps` | apply a cleaning step (validates against the cached frame before persisting) |
 | POST | `/api/files/:rid/cast-preview` | dry-run a `cast` step — returns would-null count + sample source values |
@@ -511,15 +513,15 @@ read it before starting Phase B/C/D.
 | POST | `/api/files/:rid/cleanness` · DELETE | recompute (against globals ∪ user `learned_sentinels`) / null-out the score |
 | POST | `/api/group/preview` | run a grouping/agg spec (stateless) — body `{source_file_id, spec}`. Replaced the retired `/api/reports/*` (CRUD / run / favorite all gone); the old `source_report_id` polymorphic source was removed with the Report entity. |
 | GET | `/api/dashboards` | session user's dashboards |
-| POST · GET · PUT · PATCH · DELETE | `/api/dashboards`, `/:rid` | CRUD + sparse meta PATCH (same shape as reports) |
+| POST · GET · PUT · PATCH · DELETE | `/api/dashboards`, `/:rid` | CRUD + sparse meta PATCH (same shape as reports). RBAC: view = `require_view`; update/delete = `effective>=Admin` (owner via project scope); `set_favorite` stays owner-only |
 | POST | `/api/dashboards/:rid/favorite` | `{value}` |
 | GET | `/api/users` | every user (with each user's `memberships`) — Objects Users tab + owner-reassignment picker |
 | POST · GET · PATCH · DELETE | `/api/users`, `/:rid` | dev-permissive CRUD; `username` UNIQUE → 409 `username_taken` |
 | GET | `/api/companies` | every company w/ caller's `my_role` (null when not a member) + `member_count` |
 | POST | `/api/companies` | create — creator seated as `owner` in one TX; slug suffixed with RID slice (no collision retry) |
-| GET·PATCH·DELETE | `/api/companies/:rid` | read needs membership; PATCH/DELETE currently dev-permissive (target: owner-only delete, owner/admin PATCH) |
-| GET·POST | `/api/companies/:rid/members` | list / upsert (owner-only for `role: owner`); last-owner demotion blocked |
-| DELETE | `/api/companies/:rid/members/:user_id` | leave (self) or remove (owner/admin); last-owner removal blocked |
+| GET·PATCH·DELETE | `/api/companies/:rid` | read needs membership; PATCH = `effective>=Admin`, DELETE = `effective>=Owner` (RBAC-enforced 2026-05-31 — was dev-permissive) |
+| GET·POST | `/api/companies/:rid/members` | list / add via the shared `routes/members.rs` module — reach-aware manage (owner/admin); owner-only to grant `owner`; last-owner demotion blocked |
+| PATCH·DELETE | `/api/companies/:rid/members/:user_id` | change role / leave (self) or remove (owner/admin); last-owner removal blocked |
 | GET | `/api/teams` | every team the caller reaches (direct + company-cascade) — `TeamSummary` carries joined `company_name` + `my_role` + `member_count` |
 | POST | `/api/teams` | create — body `{ name, company_id }`. Caller must reach the parent company at member+ (`rbac::require_grant`); seats creator as `owner` in one TX. Bad `company_id` → 404 (FK 23503 surfaced as leak-free 404) |
 | GET·PATCH·DELETE | `/api/teams/:rid` | read needs membership (or company cascade); PATCH = team admin+ (name only); DELETE = team owner only (cascades teams + memberships rows where team is the object) |
@@ -535,10 +537,12 @@ read it before starting Phase B/C/D.
 | GET | `/api/cases` | session user's cases (paginated `Page<CaseSummary>`) |
 | POST | `/api/cases` | create — body `{ title, description?, type?, priority?, project_id? }` |
 | GET | `/api/cases/:rid` | full case + comments thread + activity feed in one payload |
-| PATCH | `/api/cases/:rid` | sparse: `status` / `priority` / `type` / `assignee_id` / `title` / `description`. Status changes emit `case_status_change` events; assignee changes emit `case_assignee_change`. |
-| DELETE | `/api/cases/:rid` | cascades `comments` (ON DELETE CASCADE per mig 014) |
-| GET·POST | `/api/cases/:rid/comments` | list / append (Markdown body) |
-| PATCH·DELETE | `/api/cases/:rid/comments/:cmt_rid` | edit / delete a comment |
+| PATCH | `/api/cases/:rid` | sparse: `status` / `priority` / `type` / `assignee_id` / `title` / `description`. Status changes emit `case_status_change` events; assignee changes emit `case_assignee_change`. RBAC: `is_member` (any case role) **or** `scope>=Admin` |
+| DELETE | `/api/cases/:rid` | cascades `comments` (ON DELETE CASCADE per mig 014). RBAC: `scope>=Admin` (not a mere case member) |
+| GET·POST | `/api/cases/:rid/comments` | list / append (Markdown body). RBAC: view to list; `effective>=Member` to post |
+| PATCH·DELETE | `/api/cases/:rid/comments/:cmt_rid` | edit / delete a comment. RBAC: author **or** case admin+ (moderation) |
+| GET·POST | `/api/cases/:rid/members` | the **case team** (assignee / reporter / watchers) via the shared `routes/members.rs` module — reach-aware manage (project/company admin builds the team; case rows are all member-tier) |
+| PATCH·DELETE | `/api/cases/:rid/members/:user_id` | change role / leave (self) or remove |
 | GET | `/api/cases/categories` | case category taxonomy (two-level) |
 | GET | `/api/charts` | session user's chart-typed files (`project_files.file_type = 'chart'`) |
 | POST | `/api/charts` | create a chart-typed File row; body `{ project_id, source_file_id, spec: { option, svg } }` |
