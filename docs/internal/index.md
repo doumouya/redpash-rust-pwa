@@ -2,15 +2,17 @@
 title: Internal docs — index
 section: Internal
 order: 0
-last modified date: 2026-05-24
+last modified date: 2026-05-31
 ---
 
 # RedPash internal docs
 
 The team-only counterpart to [public docs](../INDEX.md). Thirteen sections
-plus this index and the [redmap](redmap.md). Each section captures a
-distinct *shape* of document, not a topic. Mixing shapes is the smell
-the old flat layout suffered from.
+plus this index, the [redmap](redmap.md), and [team-memory](team-memory.md)
+(shared conventions, project state, and working-with-Em notes that every
+Torv reads before opening a file). Each section captures a distinct
+*shape* of document, not a topic. Mixing shapes is the smell the old
+flat layout suffered from.
 
 ## Sections
 
