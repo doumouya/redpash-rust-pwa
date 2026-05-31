@@ -287,10 +287,10 @@ export default function home(app, { session: _session }) {
       columns: [
         { label: "Name",        key: "display_name", sortable: true  },
         { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true },
-        { label: "Email",       key: "email",        sortable: true,  defaultHidden: true },
+        { label: "Email",       key: "email",        sortable: true,  defaultHidden: true, editable: true, editKey: "email" },
         { label: "Plan",        key: "plan",         sortable: true  },
         { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
-        { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true },
+        { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true, editable: true, editKey: "organisation" },
         { label: "Org",         key: "org_name",     sortable: true  },
         { label: "Role",        key: "org_role",     sortable: true  },
         { label: "Avatar",      key: "avatar_url",   sortable: false, defaultHidden: true },
