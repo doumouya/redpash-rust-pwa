@@ -109,8 +109,8 @@ Every entry follows the same five headings:
   stale-env-warm / stale-env-cold) against the live backend.
   Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
   needs a refresh path — lazy init + retry-once-on-401 is the floor.
-- [0009 — dev frontend edits don't show up (static assets ship no cache-control)](0009-dev-static-assets-no-cache-control.md) —
-  **Resolved 2026-05-31.** The `ServeDir` static fallback emitted
+- [0009 — dev frontend edits don't show up (static assets ship no cache-control)](CAS_35090747FD78414D8CD060A73181A414-dev-static-assets-no-cache-control.md) —
+  **Resolved 2026-05-31** (CAS_35090747FD78414D8CD060A73181A414). The `ServeDir` static fallback emitted
   `last-modified` but no `cache-control`, so browsers applied heuristic
   freshness (~10% of the file's age) and served stale CSS/JS after an
   edit without ever issuing the conditional GET — masquerading as "my

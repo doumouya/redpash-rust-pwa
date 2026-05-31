@@ -3,8 +3,7 @@ title: 0009 — dev frontend edits don't show up (static assets ship no cache-co
 section: Internal
 order: 9
 last modified date: 2026-05-31
-case_id: TBD
-filename_pending_rename: CAS_<rid>-dev-static-assets-no-cache-control.md
+case_id: CAS_35090747FD78414D8CD060A73181A414
 status: resolved
 ---
 
@@ -12,13 +11,12 @@ status: resolved
 
 **Date:** 2026-05-31 · **Area:** `backend/crates/api/src/routes/mod.rs` (`ServeDir` static-asset fallback) · **Status:** resolved — debug-only `cache-control: no-cache` layer landed on the static fallback; verified live (header present, conditional GET → 304, `/api/*` unaffected).
 
-> **Filename note:** This entry uses the legacy `NNNN-<slug>.md` naming
-> because the cases MCP was 401-blocked when it was filed (pre-v2, see
-> [runbook 0008](0008-mcp-cases-session-auto-refresh.md)). Rename to
-> `CAS_<rid>-dev-static-assets-no-cache-control.md` once the MCP is back
-> up and a case is allocated — see the
-> [cadence](../processes/bug-case-runbook-cadence.md). Index entry also
-> pending (added with the case rename).
+> **Filing note:** Originally filed under the legacy `NNNN-<slug>.md`
+> name because the cases MCP was 401-blocked at discovery (pre-v2, see
+> [runbook 0008](CAS_097E36B6F6904E429401F4951A54BA9B-mcp-cases-session-auto-refresh.md)).
+> Once the bridge was restored the case was allocated and this entry was
+> renamed to its `CAS_<rid>-<slug>.md` form per the
+> [cadence](../processes/bug-case-runbook-cadence.md).
 
 ## Problem Statement
 
