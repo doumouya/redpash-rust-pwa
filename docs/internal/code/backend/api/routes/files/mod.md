@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/files/mod.rs
 source: ../../../../../../../backend/crates/api/src/routes/files/mod.rs
 owner: Gus
 section: Internal · Code · backend · api · routes · files
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # mod.rs

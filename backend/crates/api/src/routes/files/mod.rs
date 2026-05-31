@@ -297,7 +297,10 @@ async fn get_summary(
     Path(rid):    Path<String>,
 ) -> Result<Json<FileEnvelope>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    // RBAC: file.view (own / project / company / all) — the resolver cascades
+    // file→project→company, so a project owner/member or company member (or
+    // platform admin) sees it. Broadens the old owner-only read. dev bypasses.
+    crate::rbac::require_view(&state, &user, &rid, "file").await?;
 
     // chart-/dashboard-typed project_files rows have no on-disk blob —
     // their spec lives in the project_files.spec JSON column (see
@@ -448,7 +451,9 @@ async fn get_page(
     Query(q):     Query<PageQuery>,
 ) -> Result<Json<Page<shared::file::Row>>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    // RBAC: file.view (own / project / company / all) — see get_summary. The
+    // page (data rows) is a read; broadened from owner-only. dev bypasses.
+    crate::rbac::require_view(&state, &user, &rid, "file").await?;
     let entry = hydrate(&state, &rid).await?;
     let frame = Arc::clone(&entry.frame);
 
