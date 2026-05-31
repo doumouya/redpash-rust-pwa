@@ -135,7 +135,7 @@ re-discovering the same conventions independently.
 - [Project context](#project-redpash) — redpash-components library structure, sandbox location, canonical token system, cleaner page importance
 - [Redpash stage](#project-redpash-stage) — redpash-app is solo-dev / localhost / pre-prod; don't flag prod-readiness / CORS / cookies / dev-permissive endpoints
 - [Workspace feature-complete](#project-workspace-milestone) — 2026-05-24 milestone; mode = polish + RBAC; Em testing-drives bug reports; new features for workspace need real justification; RBAC is next big workstream
-- [RBAC corporate-ready](#project-rbac-corporate-ready) — SHIPPED 2026-05-31. ONE polymorphic memberships edge (object,member,role,context_role) over entities; reach-aware resolver (direct/scope/team/platform); member CRUD on all 5 object types; mutation gates ensure_owner→require_grant. Key insight: use effective() (project owner=direct, file/chart owner=scope) as the uniform gate primitive. Design-of-record CAS_913; policy docs/internal/specs/rbac/
+- [RBAC corporate-ready](#project-rbac-corporate-ready) — SHIPPED 2026-05-31. ONE polymorphic memberships edge (object,member,role,context_role) over entities; reach-aware resolver (direct/scope/team/platform); member CRUD on all 5 object types; mutation gates ensure_owner→require_grant. Key insight: use effective() (project owner=direct, file/chart owner=scope) as the uniform gate primitive. + nested sub-teams (team-as-member, downward grant inheritance, cycle + cross-tenant guards) and department nesting (single-parent tree, one direct dept/user). Design-of-record CAS_913; policy docs/internal/specs/rbac/
 - [Scrub, Retain, Notify](#project-scrub-retain-notify) — user-deletion policy: tombstone PII in place (is_deleted) + retain all history + notify members/admin via events; company reassigns manually. No hard delete, no blocker, no auto-reassign
 - [Cases workstream](#project-cases-workstream) — BUILT + LIVE (MCP case_create/comment/get/list). Now the active design + coordination system-of-record (Em: "keep all this available in the system"), not just ticket-triage. Open a case per substantial workstream: design in description, coordination + FYIs as comments, close `done`. Worked example: CAS_913
 - [Case reporter = team, assignee = Dev user](#project-case-reporter-team-default) — Em's default 2026-05-31: internally-owned cases have Engineering team as Reporter (team-as-grantee per CAS_913) + Dev user as Assignee. Wire shape COALESCEs user vs team name; commit 93c732c shipped the JOINs. External-user-reported cases keep the user as Reporter
@@ -2899,7 +2899,7 @@ The app is, in Em's words, "practically done at this point" — meaning core sur
 **How to apply:**
 
 - **Default mode for the workspace is now polish + bug-fix.** Em is testing-driven from here: he tests against his real CSV set, reports inaccurate behavior, I fix. Don't propose new features for the workspace unprompted — it's done. (Real bugs found during polish are fair game; "while we're here, let's add X" isn't.)
-- **RBAC is the next big workstream**, per [[rbac-corporate-ready]] — the only remaining named feature lane. Schema has `company_memberships` + `project_memberships` roles already; missing: row-level scoping, route gating, `/api/me` permissions payload, multi-tenant UI hooks.
+- **RBAC SHIPPED 2026-05-31**, per [[rbac-corporate-ready]] (was "the next big workstream"). The polymorphic membership edge + reach-aware resolver + member CRUD on all 5 object types + broadened mutation gates + nested sub-teams + department-nesting are all live on prerelease; `/api/me` exposes `is_platform_admin`. The old "schema has `company_memberships` + `project_memberships`" line is obsolete — it's ONE `memberships` table now. Remaining is v3 custom-role polish (per-field atoms), not a foundation lane.
 - **Active queues at milestone:**
   - Gus: Home toolbar + sort backend + `audit_distincts.rs` measurement → column-index primitive (per [[joins-lane]] continuation).
   - Torv (me): FE consumers of the column-index (filter autocomplete + chip-picker for `in`/`not_in`) once the wire shape is data-locked.
@@ -2976,6 +2976,32 @@ chart/dashboard create-gate broadening (still parent/source-gated);
 already object-agnostic, keyed on `object_redpash_id`). The old "RBAC
 bypass env flag" idea was NOT needed — the dev_user platform-admin
 fast-path covers local dev.
+
+**Nested teams + departments (follow-ups shipped 2026-05-31, same arc).**
+- **Sub-teams** — `members.rs add` accepts a member that is a USER **or a
+  TEAM** (was user-only). A team-as-member is a sub-team (Platform Eng ⊂
+  General Eng); the recursive principal closure flows the parent's grants
+  **down** to sub-team members (downward only — a parent-team member does NOT
+  get the sub-team's grants). Two guards on a team-add: a **cycle** guard
+  (reject if the new team is already in `principals(object)` → no A ⊂ B ⊂ A)
+  and a **cross-tenant** guard (the team's `company_id` must equal the
+  object's resolving company, else leak-free 404 — a foreign-company team
+  carries transitive members, so adding it would be cross-tenant grant
+  injection / IDOR; caught by commit-review). **Users are NOT tenant-scoped** —
+  they're global multi-tenant principals (company invite adds them by id, so a
+  same-company scope would break inviting).
+- **Department nesting — SETTLED.** Departments (`kind='department'`) nest as a
+  **single-parent tree**. "One department per user" = one **direct** department
+  (home unit); a member transitively belongs to its ancestor departments via
+  nesting (intended org hierarchy). Both invariants — one direct dept per user,
+  one *parent* dept per dept (tree, not DAG) — are enforced by the existing
+  `enforce_one_department_per_user` trigger, which keys on the *member*
+  generically so it already covers users AND teams. We do NOT enforce
+  transitive-single-dept across *regular-team* bridges (that's explicit
+  sharing). `members.rs add` mirrors the trigger as a clean 409 (`one_department`,
+  was a raised-exception 500); the trigger stays the race-safe backstop.
+  **Teams-lane follow-up:** `POST /api/teams` has no `kind` field yet, so
+  departments are DB/migration-only until `create` accepts `kind`.
 
 Related: [[object-model]] (the polymorphic-table foundation),
 [[cases-workstream]] (CAS_913 is the design-of-record), [[redpash-stage]]
