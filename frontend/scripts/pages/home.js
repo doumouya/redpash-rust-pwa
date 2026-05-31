@@ -67,6 +67,18 @@ export default function home(app, { session: _session }) {
   const createSubmit   = app.querySelector("#rpHomeCreateSubmit");
   let   activeCreateSpec = null;
 
+  // Platform-admin runtime gate — used to conditionally enable
+  // privilege-escalating actions (today: the Platform column on the
+  // Users tab, which PATCHes /api/admin/users/:rid via the
+  // CAS_D78667D1 promote endpoint). Resolved once at mount; cached so
+  // every tab switch can read it without re-fetching /me. Defaults
+  // false until /me lands — the worst case is the admin sees the
+  // editable hint a beat late, no privilege leak.
+  let isPlatformAdmin = false;
+  api.get("/me")
+    .then((me) => { isPlatformAdmin = !!me?.is_platform_admin; })
+    .catch(() => { /* leave false; the backend gate is the real auth */ });
+
   // ── hide / restore per Home tab — replicates the workspace 8d070eb
   //    pattern per docs/internal/processes/replicable-feature-pattern.md.
   //    Em's call 2026-05-28: per-tab recovery surface, like workspace.
@@ -294,7 +306,17 @@ export default function home(app, { session: _session }) {
         { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true, editable: true, editKey: "username" },
         { label: "Email",       key: "email",        sortable: true,  defaultHidden: true, editable: true, editKey: "email" },
         { label: "Plan",        key: "plan",         sortable: true,  editable: true, editKey: "plan", editor: "chip-enum", options: ["free", "pro", "team", "enterprise"], render: "planChip" },
-        { label: "Platform",    key: "role",         sortable: true,  defaultHidden: false },
+        // Platform-tier role (admin = RBAC bypass per
+        // rbac::is_platform_admin). CAS_D78667D1 option (b) ships a
+        // gated PATCH /api/admin/users/:rid; this column is the FE
+        // entry-point (chip-enum editor flips role admin↔user). Only
+        // platform admins see the editor (requiresAdmin guards the
+        // decorate path); the backend last-admin guard rejects
+        // demoting the only admin with 409 last_admin.
+        { label: "Platform",    key: "role",         sortable: true,  defaultHidden: false,
+          editable: true, editKey: "role", editor: "chip-enum",
+          options: ["user", "admin"], render: "platformRoleChip",
+          editEndpoint: "/admin/users", requiresAdmin: true },
         { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
         { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true, editable: true, editKey: "organisation" },
         { label: "Org",         key: "org_name",     sortable: true  },
@@ -334,7 +356,7 @@ export default function home(app, { session: _session }) {
         + '<td data-full="' + esc(u.plan || "") + '">' + planChip(u.plan) + '</td>'
         // PLATFORM — users.role chip (admin = RBAC bypass). Distinct from
         // org_role below (membership role on top company).
-        + '<td>' + platformRoleChip(u.role) + '</td>'
+        + '<td data-full="' + esc(u.role || "user") + '">' + platformRoleChip(u.role) + '</td>'
         + '<td class="rp-meta">' + esc(u.job_title || "—") + '</td>'
         + '<td class="rp-meta">' + esc(u.organisation || "—") + '</td>'
         + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
@@ -1915,7 +1937,14 @@ export default function home(app, { session: _session }) {
       // selectMode adds a leading .rp-list-sel column; offset accordingly.
       const offset = selectMode ? 1 : 0;
       const editableCols = (spec.columns || []).filter(
-        (col) => typeof col === "object" && col.editable && col.editKey,
+        (col) => typeof col === "object" && col.editable && col.editKey
+          // requiresAdmin gate: privilege-escalating columns (today: the
+          // Platform column on the Users tab, which PATCHes the gated
+          // /admin/users/:rid endpoint) become editable only when the
+          // caller is a platform admin. Backend 404s non-admins anyway
+          // (leak-free per is_platform_admin); this just hides the
+          // affordance so non-admins don't see an editor that 404s.
+          && (!col.requiresAdmin || isPlatformAdmin),
       );
       tbody.querySelectorAll("tr[data-rid]").forEach((tr) => {
         const tds = tr.querySelectorAll("td");
@@ -1978,7 +2007,13 @@ export default function home(app, { session: _session }) {
       // gains focus so we don't need a separate map.
       const original = td.dataset.editOriginal ?? "";
       if (value === original) return; // no-op
-      const patchBase = spec.patchEndpoint || spec.endpoint;
+      // Per-column endpoint override (CAS_D78667D1 promote affordance):
+      // most cols PATCH the tab's default endpoint, but some columns
+      // mutate via a different resource (e.g. Platform role lives at
+      // /admin/users/:rid, not /users/:rid). Spec carries col.editEndpoint
+      // as the override; falls back to spec.patchEndpoint / spec.endpoint.
+      const col = (spec.columns || []).find((c) => c && c.editKey === key);
+      const patchBase = (col && col.editEndpoint) || spec.patchEndpoint || spec.endpoint;
       try {
         await api.patch(patchBase + "/" + encodeURIComponent(rid), { [key]: value });
         // Successful — leave the new value in place. Refetch is optional;
