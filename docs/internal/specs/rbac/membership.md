@@ -140,10 +140,23 @@ Notes).
   grants — and only downward (a General Eng member does *not* get Platform
   Eng's). Wired 2026-05-31: the generic `POST …/:rid/members` accepts a team
   as the member (was user-only) with a cycle guard (rejects `A ⊂ B ⊂ A`).
-  `UNION`-deduped closure is cycle-safe regardless. **Open for departments:**
-  the one-department-per-user trigger checks *direct* membership, so nesting
-  `kind='department'` teams could create a transitive second department —
-  decide before allowing department-in-department.
+  `UNION`-deduped closure is cycle-safe regardless.
+
+- **Department nesting — SETTLED 2026-05-31.** Departments (`kind='department'`)
+  nest as a **single-parent tree**. "One department per user" means one
+  **direct** department (the home unit); a user transitively belongs to its
+  ancestor departments via nesting, which is the intended org hierarchy
+  (Platform Eng ⊂ Engineering → a Platform Eng person inherits Engineering's
+  grants). Two invariants, both enforced by `enforce_one_department_per_user`
+  (it keys on the *member* generically, so it covers users **and** teams):
+  (1) one direct department per user; (2) at most one *parent* department per
+  department (a sub-dept can't have two dept parents → tree, not DAG). We do
+  **not** enforce transitive-single-department across *regular-team* bridges —
+  a cross-functional team that rolls up to another dept is explicit sharing,
+  not a second home dept. `members.rs add` mirrors the trigger as a clean 409
+  (`one_department`); the trigger stays the race-safe (advisory-locked)
+  backstop. **Follow-up (teams lane):** `POST /api/teams` has no `kind` field
+  yet — departments are DB/migration-only until create accepts `kind`.
 
 - **Case Team Member = case-object Membership.** Case collaborators
   aren't a new table — they're `(object=CAS_…, member=<user|team>,

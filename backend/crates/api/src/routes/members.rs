@@ -185,6 +185,35 @@ async fn add(
                 "cycle", "that team already contains this object — adding it would create a team cycle"));
         }
     }
+    // Department invariant — one *direct* department per member per company.
+    // When the object is a department, the member can't already hold a
+    // different department in that company. For a user that's "one home
+    // department"; for a team it keeps the department tree single-parent (a
+    // sub-department has one parent department). Departments nest freely; a
+    // member transitively belongs to its department's ancestors, which is the
+    // intended org hierarchy — we only bar a second *direct* department here.
+    // Mirrors the `enforce_one_department_per_user` DB trigger, surfaced as a
+    // clean 409 instead of the trigger's raised-exception 500; the trigger
+    // stays the race-safe backstop (advisory-locked).
+    if let Some((kind, Some(obj_company))) =
+        sqlx::query_as::<_, (String, Option<String>)>(
+            "SELECT kind, company_id FROM teams WHERE redpash_id = $1")
+            .bind(&object).fetch_optional(&state.db).await.map_err(db_err)?
+    {
+        if kind == "department" {
+            let other_depts = sqlx::query_as::<_, (i64,)>(
+                "SELECT count(*) FROM memberships m
+                   JOIN teams t ON t.redpash_id = m.object_redpash_id
+                  WHERE m.member_redpash_id = $1 AND t.kind = 'department'
+                    AND t.company_id = $2 AND m.object_redpash_id <> $3")
+                .bind(&body.user_id).bind(&obj_company).bind(&object)
+                .fetch_one(&state.db).await.map_err(db_err)?.0;
+            if other_depts > 0 {
+                return Err(AppError::conflict("one_department",
+                    "already in a department in this company — a member belongs to one department per company"));
+            }
+        }
+    }
     // Re-adding an existing owner with a lesser role is a demotion — never let
     // it strand the object without an owner.
     if let Some(current) = db::company_role(&state.db, &object, &body.user_id).await.map_err(db_err)? {
