@@ -48,6 +48,7 @@ re-discovering the same conventions independently.
 
 ### Feedback — process, tooling & code discipline
 
+- [Process leadership = the leverage](#feedback-process-leadership) — **Keystone (2026-05-31).** Em: *"I can't write Rust code, but I should lead the processes creation to orchestrate the job."* Process is the bottleneck-defense for solo-dev + AI, not Rust speed. Process decisions to Em; code decisions to the agents; every fix worth shipping is worth encoding
 - [Build tools proactively](#feedback-build-tools-proactively) — when a tool idea surfaces (audit/check/instrumentation), build it, don't just propose it; read-only analyzers in tools/ need no approval; Em: "this is how we'll survive"
 - [Process-oriented](#feedback-process-oriented) — fix it once by encoding the fix in a script/audit/runbook, never solve the same recurring problem manually; broader philosophy behind proactive tooling. Shaky tool report → refine the algo, don't work around it
 - [Audit everything](#feedback-audit-everything) — every meaningful action available for audit + monitoring in verbose mode; log levels filter the view, never the capture; two axes (static audit catalog + runtime event capture), both required for "tight"
@@ -445,6 +446,53 @@ is done), then one report at the end.
 
 
 ## Feedback — process, tooling & code discipline
+
+### feedback_process_leadership
+
+**Process leadership = the leverage**
+ — _Em's articulated working model — solo dev + AI agents, he leads process design, agents execute code; process leadership IS the leverage, not Rust expertise_
+
+Em 2026-05-31, self-articulated: *"I believe it's the key for sole developer using Claude. I can't write Rust code, but I should lead the processes creation to orchestrate the job."*
+
+This is the META-PRINCIPLE behind every process-y thing he insists on:
+[[bug-case-runbook-cadence]], [[audit-everything]], [[process-oriented]],
+[[no-code-debt]], [[parallel-safe-commits]], [[atomic-doc-plan]],
+[[team-memory]], the shared cases workstream. All of those are
+instruments of the same leverage principle.
+
+**Why:** A solo developer with AI hands has a non-obvious bottleneck.
+The bottleneck isn't writing speed (AI is fast); it's *correctness over
+time* — drift, debt, lost context, duplicated work, undocumented
+conventions. The defense against all of those is process. Em's job
+isn't to write the Rust — it's to design + maintain the processes that
+make sure the AI agents produce code he can still maintain and
+understand in a year. Without process leadership, a solo dev + AI is
+just generating debt at a higher velocity.
+
+**How to apply (operational consequences):**
+- **Surface process-level decisions to him; code-level decisions are
+  the agent's.** When he says "freestyle", that's permission to choose
+  the JOIN shape, the field name, the file layout — within an
+  established process. When he asks "build it now / defer / skip",
+  that's a process decision; serve it back to him with the trade-off,
+  don't decide unilaterally.
+- **Every fix worth shipping is worth encoding.** [[process-oriented]]
+  is the habit; this memory is the WHY. A bug fix without a runbook,
+  a coordination ask without a doc, a script without an audit catalog
+  entry — all leak Em's leverage.
+- **Code reviewability comes from process, not Em's Rust skill.** He
+  can read Rust enough to verify; he can't write it at depth. So
+  atomic docs ([[atomic-doc-plan]]), commit-message-per-file
+  changelogs, named-file commits, audit catalogs — these are how he
+  reviews. They exist so he can lead without being a Rust expert.
+- **Don't slide into one-off mode.** When a problem looks small and
+  the ad-hoc fix is 5 minutes vs the encoded fix being 30, the
+  ENCODED PATH IS THE DEFAULT. Skipping the encoding is opting out of
+  the leverage Em has built — the most reliable way to disappoint him.
+
+This is the keystone memory; [[process-oriented]] is the habit, this
+is the strategic frame behind it. Drift on it = drift on the
+collaboration model itself.
 
 ### feedback_build_tools_proactively
 
