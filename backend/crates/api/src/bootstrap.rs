@@ -47,6 +47,29 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
         .await
         .context("promoting dev user to admin")?;
 
+    // Bootstrap admin allowlist — promote founders / additional admins without
+    // a psql one-liner (CAS_D78667D1). `REDPASH_BOOTSTRAP_ADMINS` is a
+    // comma-separated list of `redpash_id` OR `username` values; each is
+    // promoted idempotently on every boot. Closes the gap where a non-dev
+    // login (Em's real Google account, another Torv) saw empty list pages
+    // because RBAC strips rows for a caller with no platform-admin role.
+    // Unknown tokens are a no-op (0 rows) — safe to leave stale entries.
+    if let Ok(raw) = std::env::var("REDPASH_BOOTSTRAP_ADMINS") {
+        for token in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let promoted = sqlx::query(
+                "UPDATE users SET role = 'admin'
+                 WHERE (redpash_id = $1 OR username = $1) AND role <> 'admin'",
+            )
+            .bind(token)
+            .execute(pool)
+            .await
+            .context("promoting bootstrap admin from allowlist")?;
+            if promoted.rows_affected() > 0 {
+                tracing::info!(%token, "promoted bootstrap admin from REDPASH_BOOTSTRAP_ADMINS");
+            }
+        }
+    }
+
     let project = match db::find_default_project(pool, &user.redpash_id)
         .await
         .context("looking up default project")?
