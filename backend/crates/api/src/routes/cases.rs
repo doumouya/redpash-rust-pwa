@@ -423,9 +423,9 @@ async fn list_comments(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<CommentList>, AppError> {
-    // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
-    // visibility gate lands in v3 alongside the case overlay
-    super::resolve_user_rid(&state, &headers).await?;
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: a case's comments are gated with the case itself (case.view).
+    crate::rbac::require_view(&state, &caller, &rid, "case").await?;
     // Verify the case exists so we 404 cleanly rather than returning
     // an empty list for a typo'd rid.
     if db::find_case(&state.db, &rid).await?.is_none() {
@@ -442,9 +442,11 @@ async fn post_comment(
     Path(rid):    Path<String>,
     Json(req):    Json<CommentRequest>,
 ) -> Result<(StatusCode, Json<Comment>), AppError> {
-    // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
-    // post-gate (case visibility) lands in v3 overlay
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: comment.create — member+ on the case (own = case member, or a
+    // company member via cascade); viewers can't comment. dev_user bypasses.
+    crate::rbac::require_grant(&state, &user, &rid, "case",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Member)).await?;
     let body = req.body.trim();
     // A message is valid with text OR at least one attachment (files-only
     // replies are common in support — "here's the log", no prose needed).
@@ -488,6 +490,12 @@ async fn patch_comment(
     if existing.case_id != rid {
         return Err(AppError::not_found("not_found", format!("comment {cmt_rid}")));
     }
+    // RBAC: comment.update — the author edits their own comment; otherwise a
+    // case admin+ (moderation). dev_user bypasses.
+    if existing.author_id.as_deref() != Some(user.as_str()) {
+        crate::rbac::require_grant(&state, &user, &rid, "comment",
+            |g| g.scope_at_least(crate::rbac::Role::Admin)).await?;
+    }
     let updated = db::update_comment(&state.db, &cmt_rid, body).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("comment {cmt_rid}")))?;
 
@@ -512,6 +520,11 @@ async fn delete_comment(
         .ok_or_else(|| AppError::not_found("not_found", format!("comment {cmt_rid}")))?;
     if existing.case_id != rid {
         return Err(AppError::not_found("not_found", format!("comment {cmt_rid}")));
+    }
+    // RBAC: comment.delete — author OR case admin+ (moderation). dev_user bypasses.
+    if existing.author_id.as_deref() != Some(user.as_str()) {
+        crate::rbac::require_grant(&state, &user, &rid, "comment",
+            |g| g.scope_at_least(crate::rbac::Role::Admin)).await?;
     }
     let removed = db::delete_comment(&state.db, &cmt_rid).await?;
     if !removed {

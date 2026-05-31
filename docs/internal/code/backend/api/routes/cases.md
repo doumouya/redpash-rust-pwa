@@ -31,7 +31,8 @@ literally `SELECT * FROM events WHERE context->>'case' = $1`.
   - `get_one` (detail) + `list`/`count` (scoped via `rbac::principals`) → `case.view` (any reach).
   - `patch` → `case.update`: own (a case membership) **or** company admin+ (`scope_at_least(Admin)`). A bare company member can't general-edit (status-only is a finer atom, deferred).
   - `delete_one` → `case.delete`: company admin+ only, **never @own** (a reporter can't delete their own case).
-  - Still ungated: comments + finer field-level atoms (`case.priority` company-only etc.). See [rbac.rs](../rbac.md) + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
+  - comments: `list_comments` → `case.view`; `post_comment` → `comment.create` (member+ on the case); `patch_comment`/`delete_comment` → **author** (`author_id == caller`) **or** case admin+ (moderation).
+  - The case object is fully gated. Still deferred: finer field-level atoms (`case.priority` company-only etc.) — the coarse `case.update` is enforced. See [rbac.rs](../rbac.md) + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
 
 ## Related
 
