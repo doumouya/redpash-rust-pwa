@@ -947,25 +947,28 @@ async fn stats_memberships(
     Query(q):     Query<MembershipsStatsQuery>,
 ) -> Result<Json<MembershipStats>, AppError> {
     let scope = q.scope.as_deref().unwrap_or("project");
-    if scope != "project" && scope != "company" {
+    if scope != "project" && scope != "company" && scope != "case" {
         return Err(AppError::bad_request(
             "admin",
-            "scope must be one of: project, company",
+            "scope must be one of: project, company, case",
         ));
     }
 
     // One table now; split scopes by the object rid prefix (\\_ escapes the
     // literal underscore so the LIKE matches the prefix, not a wildcard).
-    let (count_sql, group_sql) = if scope == "project" {
-        (
+    let (count_sql, group_sql) = match scope {
+        "project" => (
             "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'PRJ\\_%'",
             "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'PRJ\\_%' GROUP BY role",
-        )
-    } else {
-        (
+        ),
+        "case" => (
+            "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CAS\\_%'",
+            "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CAS\\_%' GROUP BY role",
+        ),
+        _ => (
             "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CMP\\_%'",
             "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CMP\\_%' GROUP BY role",
-        )
+        ),
     };
 
     let total: i64 = sqlx::query_scalar(count_sql)
