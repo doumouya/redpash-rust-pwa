@@ -2,7 +2,7 @@
 title: RBAC permission catalog — template
 section: Internal
 order: 50
-last modified date: 2026-05-29
+last modified date: 2026-05-31
 owner: Torv
 status: design / brainstorm 2026-05-29 — reframed to a view-rooted model (membership-as-sharing, roles-as-bundles); see "Permission model". The lower sections + per-object matrices are the older flat model, pending reconciliation. NO enforcement code exists yet, by design: RBAC is the single post-site pass — one wrong rule compromises the whole system, so it stays a doc brainstorm until the app surface is stable.
 ---
@@ -200,7 +200,7 @@ scopes, narrowest-to-widest:
 
 | Scope | Predicate | Source column |
 |---|---|---|
-| `own` | row belongs to the caller | `owner_id` / `reporter_id` / `user_redpash_id == caller` |
+| `own` | row belongs to the caller | `owner_id` / `reporter_id` / `member_redpash_id == caller` |
 | `project` | row is in a project the caller is a member of | caller has a `memberships` row on the project |
 | `company` | row is in a company the caller is a member of | caller has a `memberships` row on the company |
 | `all` | every row | — (platform admin) |
@@ -261,10 +261,11 @@ Salesforce's
 case access). In the backend they are **not** a separate table: they're
 rows of the **general Membership object** — the same unified `memberships`
 table — extended with a `case`
-scope (`member · scope_type=case · scope_id=case_rid · role`). So
-membership.md (#8 in the sweep) specs ONE polymorphic Membership object
-spanning company / project / case, not three tables; the UI labels the
-case-scoped variant "Case Team Member."
+scope (the edge `(object=case_rid · member · role · context_role)`,
+where `member` is a user or a team). So membership.md specs ONE
+polymorphic Membership object spanning company / project / case / team,
+not separate tables; the UI labels the case-scoped variant "Case Team
+Member."
 
 **Implication (pending Em sign-off):** this introduces an instance-level
 grant — "cases the caller is a team member of" — which the closed scope

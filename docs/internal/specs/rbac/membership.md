@@ -2,45 +2,57 @@
 title: Membership — permission catalog
 section: Internal
 order: 59
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 owner: Torv
-status: draft — RBAC catalog sweep ([index](index.md)); polymorphic company/project/case model per Em 2026-05-29
+status: reconciled to the entity-membership model (shipped 2026-05-31, migrations 20260531000000/…001); per-object matrices are the policy layer over the [entity-membership-model](entity-membership-model.md) §2 resolver
 ---
 
 # Membership — permissions
 
 Permission keys + default grant matrix for the **polymorphic
 Membership object** — one abstraction spanning company / project /
-case scopes (per Em 2026-05-29, the [index](index.md#case-team-member--membership-extends-to-case-instances)
-Case Team Member note). A membership is `(scope_type, scope_id, user,
-role)`:
+case / team scopes. The data-model foundation is
+[entity-membership-model](entity-membership-model.md) (shipped,
+migrations `20260531000000`/`…001`); **this file is the policy layer
+that reads it.**
 
-All three scopes are backed by the ONE `memberships` table
-(discriminated by the joined parent type), `role` CHECK =
-`owner · admin · member · viewer`:
+A membership is a single self-referential **edge**:
+`(object_redpash_id, member_redpash_id, role, context_role)` where
+**both `object` and `member` are entities** — so a grant's subject can
+be a user *or a team*, and one principal holds as many role-edges as
+the org gives it (owner+admin, reporter+assignee). `role` CHECK =
+`owner · admin · member · viewer` (the permission tier); `context_role`
+is the free-text business label ('Reporter', 'Case Owner', 'CEO', …).
+All scopes are the ONE `memberships` table, discriminated by the
+object's entity type:
 
-| scope_type | Backing | UI label | live roles today |
+| object type | Backing | UI label | roles |
 |---|---|---|---|
-| `company` | `memberships` | Member | owner · admin · member |
-| `project` | `memberships` | Member | owner (live) · admin/member/viewer (RBAC) |
-| `case` | `memberships` (case-typed rows) | **Case Team Member** | per AccessLevel: read · write |
+| `company` | `memberships` | Member | owner · admin · member · viewer |
+| `project` | `memberships` | Member | owner (live) · admin/member/viewer |
+| `case` | `memberships` (case-object rows) | **Case Team Member** | tier = access level; `context_role` = Reporter / Case Owner (co-reporters allowed) |
+| `team` | `memberships` (team-object rows) | Team / Department Member | owner · admin · member; a team can also be the **grantee** on another object |
 
-Modeled on Salesforce's `CaseTeamMember` (a user linked to a record
-with a role whose *AccessLevel* governs the record access). In RedPash
-the role's tier IS the access level — a membership's role is what the
-other objects' grant matrices read when they resolve `@company` /
-`@project` / case-team scope. **Membership is the join that makes the
-scope qualifiers real.**
+Modeled on Salesforce's `CaseTeamMember` (a principal linked to a
+record with a role whose *AccessLevel* governs record access), but
+generalized: in RedPash the role's tier IS the access level, the
+principal can be a team, and a caller's **effective** role on an object
+is the *highest* of their direct grant ∪ scope cascade (the object's
+company/project) ∪ team-closure — resolved by the one query in
+[entity-membership-model §2](entity-membership-model.md). The grant
+matrix below reads that resolved role. **Membership is the join that
+makes the scope qualifiers real.**
 
 Derived from [membership metadata](../object-metadata/membership.md);
 scheme in the [catalog template](index.md).
 
-**Scope columns:** `scope_id` (the parent company/project/case) → the
-membership is scoped to that parent; `user_redpash_id` → `@own` (your
-own membership, for self-leave). No `redpash_id` (composite identity);
-never URL-addressable alone — every op routes through the parent
-(`/api/companies/:rid/members`, eventually `/projects/:rid/members` +
-`/cases/:rid/team`).
+**Columns:** `object_redpash_id` (the entity the role is *on* —
+company/project/case/team) scopes the membership to that parent;
+`member_redpash_id` (the holder entity — a user or a team) → `@own`
+when it's the caller (self-leave). No `redpash_id` — the identity is
+the composite key; never URL-addressable alone — every op routes
+through the parent (`/api/companies/:rid/members`, eventually
+`/projects/:rid/members` + `/cases/:rid/team`).
 
 ---
 
@@ -55,9 +67,11 @@ never URL-addressable alone — every op routes through the parent
 | `membership.list` | `GET …/members` + admin cross-scope | (parent-scoped) · all | Per-parent members list; admin `?scope=` cross-scope paginated list. |
 | `membership.role.update` | `role` field | (parent-scoped) | The only mutable field — same grant as `membership.update`; owner-only to set `owner`. |
 
-**No keys for:** `scope_id` / `user_redpash_id` (composite PK, set at
-create, never re-pointed — moving a membership = delete + create),
-`joined_at` (server-set, not bumped on role change).
+**No keys for:** `object_redpash_id` / `member_redpash_id` / `role` /
+`context_role` (the composite PK `(object, member, role, context_role)`,
+set at create — a principal holds many edges, so changing a tier is
+replace-the-tier-row, not re-point), `joined_at` (server-set, not
+bumped on role change).
 
 ---
 
@@ -94,11 +108,22 @@ owner can't be demoted or removed (guard, see Notes).
   So this object's matrix governs who can grant *others* the scopes
   the rest of the catalog leans on — it's the meta-object of RBAC.
 
-- **Case Team Member = case-scope Membership.** Per Em's 2026-05-29
-  call, case collaborators aren't a new table — they're
-  `(scope_type=case, scope_id=CAS_…, user, role)` rows. The role's
-  access level (read vs write) is what Case's matrix resolves when it
-  grants beyond reporter/assignee `@own`. The UI labels them "Case
+- **Teams as grantees + departments.** Because `member` is an entity, a
+  *team* can hold a role on an object — "give the Support team write on
+  every case" is one edge `(object=company, member=TEM_support, role)`,
+  resolved through the same cascade as a company-admin (no policy code).
+  A user's department is a `kind='department'` team they belong to; the
+  `enforce_one_department_per_user` trigger caps that at one per company
+  (multiple ad-hoc teams are fine). See
+  [entity-membership-model](entity-membership-model.md) §1–§2.
+
+- **Case Team Member = case-object Membership.** Case collaborators
+  aren't a new table — they're `(object=CAS_…, member=<user|team>,
+  role, context_role)` edges. `context_role` carries the business label
+  ('Reporter' / 'Case Owner'), and the widened key means one person can
+  hold *both* (reporter + assignee) and a case can have co-reporters.
+  The role tier (viewer=read / member+=write) is what Case's matrix
+  resolves beyond reporter/assignee `@own`. The UI labels them "Case
   Team Members"; the backend treats them as Memberships. v3 wires the
   `/cases/:rid/team` endpoints mirroring the company member routes.
 

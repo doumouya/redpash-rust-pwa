@@ -2,7 +2,7 @@
 title: Case — permission catalog
 section: Internal
 order: 51
-last modified date: 2026-05-29
+last modified date: 2026-05-31
 owner: Torv
 status: pattern-lock — first worked example of the RBAC catalog template ([index](index.md))
 ---
@@ -16,6 +16,14 @@ from [case metadata](../object-metadata/case.md); see the
 **Scope columns Case carries:** `reporter_id` + `assignee_id` →
 `@own`; `project_id` → `@project`; `company_id` → `@company`; platform
 admin → `@all`. All four scope qualifiers apply.
+
+> Post-[entity-membership-model](entity-membership-model.md):
+> `reporter_id`/`assignee_id` are **derived**, not columns — they
+> resolve from `memberships` (`context_role` = 'Reporter' / 'Case
+> Owner', `member_redpash_id` = the holder). The widened key allows a
+> case to have co-reporters and one person to be both; the API exposes
+> a single derived value per slot today (the co-reporter shape is an
+> open decision in the model spec §6).
 
 **`@own` predicate for Case is two-pronged:** a row is "own" when
 `reporter_id == caller` **OR** `assignee_id == caller`. The reporter
