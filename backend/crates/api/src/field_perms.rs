@@ -15,7 +15,10 @@
 //! resolver's `effective()`) maps onto these columns. `user` (a subject) and
 //! `comment` (author-gated) are governed differently and stay out of the grid.
 
+use axum::http::StatusCode;
 use serde::Serialize;
+
+use crate::{error::AppError, state::AppState};
 
 /// Permission for one `(field, role)` cell. `Write` implies `Read`. Ordered so
 /// "at least Read" becomes a `>=` once enforcement lands.
@@ -185,4 +188,73 @@ pub fn default_registry() -> Vec<FieldRow> {
         ro("dashboard", "redpash_id",  false),
         ro("dashboard", "created_at",  true),
     ]
+}
+
+fn db_err(e: sqlx::Error) -> AppError {
+    AppError::internal("db", e.to_string())
+}
+
+/// Field-level write gate (CAS_C4219F2B slice 3). After the coarse object gate
+/// has admitted the caller, this refines per field: each field being written
+/// must be `Write` for the caller's **effective tier** on the object in the
+/// merged matrix (catalog defaults ⊕ `field_permissions` overrides). Platform
+/// admins bypass. 403 naming the first field the tier can't write. The coarse
+/// gate stays the outer guard; this only narrows.
+pub async fn require_fields(
+    state:       &AppState,
+    caller:      &str,
+    object_rid:  &str,
+    object_type: &str,
+    fields:      &[&str],
+) -> Result<(), AppError> {
+    if fields.is_empty() {
+        return Ok(());
+    }
+    if crate::rbac::is_platform_admin(state, caller).await.map_err(db_err)? {
+        return Ok(());
+    }
+    // The caller's effective tier on the object is the matrix column.
+    let role = match crate::rbac::resolve_grant(&state.db, caller, object_rid)
+        .await
+        .map_err(db_err)?
+        .effective()
+    {
+        Some(tier) => tier.as_str(),
+        None => return Err(forbidden("no access")), // coarse gate should've caught this
+    };
+    // Only this role's overrides for this object type matter.
+    let overrides: Vec<(String, String)> = sqlx::query_as(
+        "SELECT field, permission FROM field_permissions WHERE object_type = $1 AND role = $2",
+    )
+    .bind(object_type)
+    .bind(role)
+    .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+    let registry = default_registry();
+    for f in fields {
+        let mut perm = registry
+            .iter()
+            .find(|r| r.object == object_type && r.field == *f)
+            .and_then(|r| r.default_for(role))
+            .unwrap_or(Perm::None);
+        if let Some((_, p)) = overrides.iter().find(|(fld, _)| fld == f) {
+            if let Some(pp) = Perm::from_str(p) {
+                perm = pp;
+            }
+        }
+        if perm != Perm::Write {
+            return Err(AppError {
+                status:  StatusCode::FORBIDDEN,
+                kind:    "field_forbidden",
+                message: format!("your role ({role}) can't edit {object_type}.{f}").into(),
+                inner:   None,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn forbidden(msg: &'static str) -> AppError {
+    AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into(), inner: None }
 }

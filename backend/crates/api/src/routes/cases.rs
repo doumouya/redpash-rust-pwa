@@ -314,6 +314,23 @@ async fn patch(
         }
     }
 
+    // Field-level RBAC (CAS_C4219F2B s3): the coarse case.update gate above
+    // admits the caller; this narrows per field. A bare case member (member
+    // tier) edits case content (title/status/…) but not the scope fields
+    // (project/company); the matrix + any admin overrides decide. dev bypasses.
+    let mut write_fields: Vec<&str> = Vec::new();
+    if title.is_some()         { write_fields.push("title"); }
+    if description.is_some()   { write_fields.push("description"); }
+    if type_.is_some()         { write_fields.push("type"); }
+    if status.is_some()        { write_fields.push("status"); }
+    if priority.is_some()      { write_fields.push("priority"); }
+    if assignee_id.is_some()   { write_fields.push("assignee"); }
+    if project_id.is_some()    { write_fields.push("project"); }
+    if company_id.is_some()    { write_fields.push("company"); }
+    if error_message.is_some() { write_fields.push("error_message"); }
+    if category_id.is_some()   { write_fields.push("category"); }
+    crate::field_perms::require_fields(&state, &user, &rid, "case", &write_fields).await?;
+
     let mut updated = db::update_case(
         &state.db, &rid,
         title.as_deref(),

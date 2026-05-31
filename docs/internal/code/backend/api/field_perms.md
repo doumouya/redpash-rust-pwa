@@ -25,7 +25,13 @@ reaches + the shared DTO shapes.
   `20260531000003`); `GET /api/admin/fields` serves `defaults ⊕ overrides` and
   flags `is_overridden`; `PUT /api/admin/fields` sets a cell (reverting to the
   catalog default deletes the row, keeping the table sparse).
-- **slice 3** (todo): handler enforcement reads the merged matrix on field writes.
+- **slice 3** (in progress): `require_fields(state, caller, object_rid, object_type, &fields)`
+  — the field-level write gate. After the coarse object gate admits the caller,
+  it maps the caller's effective tier to a matrix column and 403s
+  (`field_forbidden`) the first written field that isn't `Write` (defaults ⊕
+  overrides). Platform admins bypass. Wired into `cases.rs::patch`; the other
+  sparse-PATCH handlers (company/file/chart/dashboard, + project owner-grade
+  reconciliation) follow the same pattern.
 
 ## Public surface
 
@@ -39,6 +45,8 @@ reaches + the shared DTO shapes.
   membership-bearing object types).
 - `pub fn find_default(object, field)` — the catalog row for one field, for the
   PUT handler's validation + revert check.
+- `pub async fn require_fields(state, caller, object_rid, object_type, &fields)`
+  — the field-level write gate (slice 3); see above.
 
 ## Default perm rules (overridable in a later slice)
 

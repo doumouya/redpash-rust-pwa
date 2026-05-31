@@ -34,10 +34,10 @@ literally `SELECT * FROM events WHERE context->>'case' = $1`.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
 - **RBAC enforced** (P2/P4) — all gated via the reach-aware `crate::rbac` resolver; `dev_user` bypasses everything (dev-mode admin):
   - `get_one` (detail) + `list`/`count` (scoped via `rbac::principals`) → `case.view` (any reach).
-  - `patch` → `case.update`: own (a case membership) **or** company admin+ (`scope_at_least(Admin)`). A bare company member can't general-edit (status-only is a finer atom, deferred).
+  - `patch` → `case.update`: own (a case membership) **or** company admin+ (`scope_at_least(Admin)`) is the coarse gate; then **field-level** via `field_perms::require_fields` (CAS_C4219F2B s3) — a bare case member (member tier) edits content (title/status/priority/…) but is 403'd on the scope fields (project/company) unless an override grants it. dev bypasses.
   - `delete_one` → `case.delete`: company admin+ only, **never @own** (a reporter can't delete their own case).
   - comments: `list_comments` → `case.view`; `post_comment` → `comment.create` (member+ on the case); `patch_comment`/`delete_comment` → **author** (`author_id == caller`) **or** case admin+ (moderation).
-  - The case object is fully gated. Still deferred: finer field-level atoms (`case.priority` company-only etc.) — the coarse `case.update` is enforced. See [rbac.rs](../rbac.md) + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
+  - The case object is fully gated, incl. the field-level matrix on `patch` (CAS_C4219F2B). See [rbac.rs](../rbac.md), [field_perms.rs](../field_perms.md), + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
 
 ## Related
 
