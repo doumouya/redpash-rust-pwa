@@ -45,7 +45,12 @@ async fn patch_one(
     Json(body):   Json<PatchDashboardBody>,
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
+    // RBAC: dashboard metadata update — admin+ via any reach (owner = scope
+    // Owner via the project; project/company admin via cascade; platform). The
+    // is_public publish flag is owner-tier per catalog; coarse object-level gate
+    // here, per-field atom enforcement is v3. 404 on deny.
+    crate::rbac::require_grant(&state, &user, &rid, "dashboard",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let title_trim = body.title.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let desc_trim  = body.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let folder_trim = body.folder.as_deref().map(str::trim).filter(|s| !s.is_empty());
@@ -141,7 +146,9 @@ async fn update(
     Json(req):    Json<DashboardRequest>,
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
+    // RBAC: dashboard spec/widget update — admin+ via any reach (see patch_one).
+    crate::rbac::require_grant(&state, &user, &rid, "dashboard",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let d = db::update_dashboard(
         &state.db, &rid, &req.title, &req.spec,
         req.folder.as_deref().filter(|s| !s.is_empty()),
@@ -163,7 +170,10 @@ async fn delete_one(
     Path(rid):    Path<String>,
 ) -> Result<axum::http::StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
+    // RBAC: dashboard delete — admin+ via any reach (catalog own·company; not
+    // viewers). Owner = scope Owner via the project; platform bypasses.
+    crate::rbac::require_grant(&state, &user, &rid, "dashboard",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let removed = db::delete_dashboard(&state.db, &rid).await?;
 
     // Heuristic (per Gus's auth-audit pass): only audit-trail an actual

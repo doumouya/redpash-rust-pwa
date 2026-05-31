@@ -29,8 +29,16 @@ GET    /:rid/files       list files in a project (cleaner landing)
 ## Gates
 
 - `get_one` / `list_files` — `project.view` (member, incl. company cascade).
-- `patch_project` / `delete_project` — still `ensure_owner` (owner-only);
-  broadens to `require_grant` once member-management is exercised in the FE.
+- `patch_project` — `require_grant`, `effective() >= Admin` (owner is direct
+  `Owner`; company admin via cascade; platform). The **owner-grade fields**
+  (`owner_id` transfer, `company_id` re-scope, `is_default`) are guarded inside
+  the handler to the project owner / platform admin (catalog reach `own · all`,
+  owner-only) — they ride the same handler but can't be set by a mere admin.
+- `delete_project` — `require_grant`, `effective() >= Owner` (catalog
+  `own · company · all`, **owner-only at company tier**: project owner, company
+  owner, or platform — never a company admin). Default-project guard unchanged.
+- Per-field update atoms (name vs status vs …) are coarsened to one object-level
+  gate; field-level enforcement is the v3 custom-role layer.
 
 ## Drift-prone areas
 

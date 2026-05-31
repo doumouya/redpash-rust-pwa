@@ -166,7 +166,12 @@ async fn patch_project(
     Json(body):   Json<PatchProjectBody>,
 ) -> Result<Json<ProjectSummary>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
+    // RBAC: project metadata update (name/description/status) — admin+ via any
+    // reach (owner is direct Owner on the project; company admin via cascade;
+    // platform). 404 on deny. Owner-grade fields (ownership transfer, company
+    // re-scope, the personal default flag) are guarded to the owner below.
+    crate::rbac::require_grant(&state, &user, &rid, "project",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
 
     let new_owner = body.owner_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
     if let Some(oid) = new_owner {
@@ -192,6 +197,20 @@ async fn patch_project(
         }
     }
 
+    // Owner-grade fields — ownership transfer, company re-scope, and the
+    // personal default flag are owner-only (catalog reach own·all, owner-only).
+    // Admins reach the metadata above, but only the project's owner (or a
+    // platform admin) touches these. Also keeps `update_project_meta(&user)`'s
+    // is_default-clear correct: when is_default flips, `user` IS the owner.
+    if new_owner.is_some() || new_company.is_some() || body.is_default.is_some() {
+        let is_owner = db::project_owner(&state.db, &rid).await?.as_deref() == Some(user.as_str());
+        if !is_owner && !crate::rbac::is_platform_admin(&state, &user).await? {
+            return Err(AppError { status: StatusCode::FORBIDDEN, kind: "forbidden",
+                message: "only the project owner can transfer ownership, re-scope, or set the default".into(),
+                inner: None });
+        }
+    }
+
     // status — validate against the allowed set so a typo is a clean
     // 400 rather than a CHECK-constraint 500.
     let new_status = body.status.as_deref().map(str::trim).filter(|s| !s.is_empty());
@@ -201,9 +220,10 @@ async fn patch_project(
         }
     }
 
-    // `user` is the project's current owner (ensure_owner just confirmed
-    // it) — update_project_meta needs it to clear their existing default
-    // when `is_default` flips on.
+    // When `is_default` is in the body the guard above proved `user` is the
+    // project owner — update_project_meta uses it to clear their existing
+    // default as the new one flips on. (Admin-only metadata edits never set
+    // is_default, so passing the admin's rid here is inert.)
     let name_trim = body.name.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let desc_trim = body.description.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let any_field = name_trim.is_some() || desc_trim.is_some() || body.is_default.is_some()
@@ -253,7 +273,12 @@ async fn delete_project(
     Path(rid):    Path<String>,
 ) -> Result<StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
+    // RBAC: project delete — owner-tier via any reach (catalog own·company·all,
+    // owner-only at company tier): the project owner (direct Owner), a company
+    // owner (scope Owner), or platform admin. Never company-admin/collaborator.
+    // 404 on deny. The default-project guard below is unchanged.
+    crate::rbac::require_grant(&state, &user, &rid, "project",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Owner)).await?;
 
     // Grab the file RIDs before the cascade clears the rows — needed to
     // evict the hot-frame cache and unlink the blobs afterwards.

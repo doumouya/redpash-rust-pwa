@@ -485,23 +485,6 @@ pub async fn delete_chart(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     Ok(n.rows_affected() > 0)
 }
 
-pub async fn chart_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
-    // PROJECT-FILES-ACK: type=chart — chart ownership lookup; the
-    // type-filter ensures a non-chart rid returns None (no auth-leak
-    // via cross-type rid collision).
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT m.member_redpash_id FROM project_files pf
-         JOIN memberships m ON m.object_redpash_id = pf.project_redpash_id
-                           AND m.role = 'owner'
-         WHERE pf.redpash_id = $1 AND pf.file_type = 'chart'
-         ORDER BY m.joined_at LIMIT 1",
-    )
-    .bind(rid)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|(o,)| o))
-}
-
 // ─── dashboards ─────────────────────────────────────────────────
 
 #[derive(FromRow)]
@@ -903,9 +886,10 @@ pub async fn dashboard_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<St
 pub async fn file_owner(pool: &PgPool, rid: &str) -> sqlx::Result<Option<String>> {
     // PROJECT-FILES-ACK: type=any — owner lookup by rid, type-agnostic
     // (charts + dashboards + csvs all share the same ownership chain
-    // through projects.owner_id). chart_owner / dashboard_owner are
-    // type-scoped variants used where the CRUD lane needs the
-    // type-collision guard.
+    // through the project's owner-membership). `dashboard_owner` is a
+    // type-scoped variant used where the CRUD lane needs the
+    // type-collision guard. (Chart writes are gated by the rbac resolver
+    // now, so the old `chart_owner` variant was retired.)
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT m.member_redpash_id FROM project_files f
          JOIN memberships m ON m.object_redpash_id = f.project_redpash_id

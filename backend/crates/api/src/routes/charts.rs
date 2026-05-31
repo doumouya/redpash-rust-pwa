@@ -99,7 +99,11 @@ async fn update_one(
     Json(req):    Json<ChartRequest>,
 ) -> Result<Json<Chart>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
+    // RBAC: chart update (title + spec) — admin+ via any reach. Owner resolves
+    // to scope Owner through the project (charts are project_files); project/
+    // company admin via cascade; platform bypasses. 404 on deny.
+    crate::rbac::require_grant(&state, &user, &rid, "chart",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let chart = db::update_chart(&state.db, &rid, &req.title, &req.spec)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;
@@ -116,7 +120,10 @@ async fn delete_one(
     Path(rid):    Path<String>,
 ) -> Result<axum::http::StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
+    // RBAC: chart delete — admin+ via any reach (catalog chart.delete own·company;
+    // not viewers). Owner = scope Owner via the project; platform bypasses.
+    crate::rbac::require_grant(&state, &user, &rid, "chart",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let removed = db::delete_chart(&state.db, &rid).await?;
     if removed {
         crate::event::info(&state.db, "chart_delete", format!("deleted chart {rid}"))

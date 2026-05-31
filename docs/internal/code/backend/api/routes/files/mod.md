@@ -24,6 +24,17 @@ steps on top of the freshly-parsed base.
 
 - `pub fn routes` — function
 
+## Gates
+
+- `get_summary` / `get_page` — `file.view` (cascade file→project→company).
+- `patch_file` / `delete_file` / `add_step` — `require_grant`,
+  `effective() >= Admin` (owner via project `scope` `Owner`; project/company
+  admin via cascade; platform). A file has no direct membership — ownership
+  flows User→Project→File, so `effective` (not `is_member`) captures the owner.
+  Applying a cleaning step (`add_step`) is a content mutation gated like update.
+  The `patch_file` move (`project` change) stays double-gated on the destination.
+- `upload` (create) — gated on the destination project.
+
 ## Drift-prone areas
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.

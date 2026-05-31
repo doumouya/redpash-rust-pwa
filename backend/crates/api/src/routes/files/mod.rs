@@ -353,7 +353,11 @@ async fn patch_file(
     Json(body):   Json<PatchFileBody>,
 ) -> Result<Json<FileSummary>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    // RBAC: file update — admin+ via any reach (owner resolves to scope Owner
+    // through the project; project/company admin via cascade; platform). 404
+    // on deny (leak-free). The per-field move below stays double-gated.
+    crate::rbac::require_grant(&state, &user, &rid, "file",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
 
     // Move target — must be a project the same user owns. Resolving the
     // owner doubles as the existence check; mismatch / missing → 404.
@@ -429,7 +433,10 @@ async fn delete_file(
     Path(rid):    Path<String>,
 ) -> Result<StatusCode, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    // RBAC: file delete — admin+ via any reach (catalog file.delete own·company;
+    // not viewers). Owner = scope Owner via the project; platform bypasses.
+    crate::rbac::require_grant(&state, &user, &rid, "file",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     state.files.remove(&rid);
     let existed = db::delete_file(&state.db, &rid).await?;
     if !existed {
@@ -479,7 +486,11 @@ async fn add_step(
     Json(req):    Json<StepRequest>,
 ) -> Result<Json<AddStepResponse>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    // RBAC: applying a cleaning step is a file content mutation — same gate as
+    // file.update (admin+ via any reach). "If you can update it you can apply
+    // steps" (file.md). Platform bypasses.
+    crate::rbac::require_grant(&state, &user, &rid, "file",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     // Validate the step by applying it to the real cached frame BEFORE
     // we touch the DB. Replaying a poisoned step would otherwise make
     // the file un-hydratable until the user manually undoes.

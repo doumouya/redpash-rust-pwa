@@ -22,6 +22,18 @@ the render-time data fetch is widget-by-widget on the frontend.
 
 - `pub fn routes` — function
 
+## Gates
+
+- `get_one` — `dashboard.view` (cascade + the `is_public` widen).
+- `patch_one` / `update` / `delete_one` — `require_grant`, `effective() >= Admin`
+  (owner via project `scope` `Owner`; project/company admin via cascade;
+  platform). `is_public` (publish) is owner-tier per catalog — coarsened to the
+  object gate here; per-field atom enforcement is v3.
+- `set_favorite` — stays `ensure_owner`: `is_favorite` is a personal `own`-only
+  pin ("only the owner toggles their own"), so admin reach is intentionally
+  *not* granted.
+- `create` — stays gated on the parent project's owner.
+
 ## Drift-prone areas
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
