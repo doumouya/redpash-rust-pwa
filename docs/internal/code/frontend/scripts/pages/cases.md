@@ -24,6 +24,7 @@ Cases — rail + (kanban board | case detail) surface. v1 scope: cases + comment
 
 - Multi-source: workstream proposition in jira-flow-proposition/proposition.md; agent guide in cases/agent-cookbook.md.
 - Side-panel toggle mirrors the workspace `bindPanel` pattern (panel.css `.rt-panel`); keep the two in sync if the panel idiom changes.
+- **Attachments rendered on TWO surfaces** (2026-05-31 CAS_1E6D3B2E): the per-case sidebar list (`#rp-cases-attach-list`) AND a rail mirror (`#rp-cases-rail-attach` — a `<details>` between `.rt-nav-body` and `.rt-nav-foot`). Mirrors the Workspace Project→Files rail pattern. `renderAttachments` paints both from the shared `currentAttachments` array; both surfaces' remove buttons share the same delegated click handler (`onAttachRemoveClick`) so removing from either fires the same PATCH. Both hide independently when `n === 0`. Open-by-default in the rail when the case has attachments. Attachments stay JSONB on `cases.attachments`; the "first-class FIL_ entity?" question is parked on the case description and deferred.
 - Mention chips depend on `sanitizeRichHtml` whitelisting `span.rp-mention` — if the sanitizer's allow-list is refactored, the chip rebuild branch must survive or mentions get unwrapped to plain text on the next edit/render.
 
 ## Related

@@ -1482,6 +1482,48 @@
 .rp-cases-attach:focus-within .rp-cases-attach-remove { opacity: 1; }
 .rp-cases-attach-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
 
+/* CAS_1E6D3B2E — rail mirror of the case attachments list. Lives
+   in the cases rail between the case list (.rt-nav-body) and the
+   .rt-nav-foot create button. Mirrors the Workspace project→files
+   pattern. Wrapped in a <details> so the user can collapse it; the
+   list inherits the standard .rp-cases-attach-list styles and tones
+   down padding to fit the rail's narrower column. */
+.rp-cases-rail-attach {
+  flex-shrink: 0;
+  border-top: 1px solid var(--rp-border-1);
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--rp-bg-1);
+}
+.rp-cases-rail-attach[hidden] { display: none; }
+.rp-cases-rail-attach-head {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+  font-size: 0.75rem;
+  color: var(--rp-text-2);
+  cursor: pointer;
+  list-style: none;
+}
+.rp-cases-rail-attach-head::-webkit-details-marker { display: none; }
+.rp-cases-rail-attach-head::before {
+  content: "▸";
+  font-size: 0.6875rem;
+  color: var(--rp-text-3);
+  transition: transform 0.12s ease;
+}
+.rp-cases-rail-attach[open] .rp-cases-rail-attach-head::before { transform: rotate(90deg); }
+.rp-cases-rail-attach-head > .bi-paperclip { color: var(--rp-accent-2); }
+.rp-cases-rail-attach-count { color: var(--rp-text-3); font-variant-numeric: tabular-nums; }
+.rp-cases-rail-attach-list {
+  margin: 0.375rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 /* Small avatar variant — used inside comment bubbles. The default
    1.5rem is for the side-panel reporter/assignee badge. */
 .rp-cases-user-avatar--sm {

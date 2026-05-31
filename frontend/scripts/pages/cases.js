@@ -897,6 +897,13 @@ export default function cases(app, { session }) {
   const attachCount     = app.querySelector("#rp-cases-side-attachments-count");
   const attachBtn       = app.querySelector("#rp-cases-comment-attach");
   const attachInput     = app.querySelector("#rp-cases-comment-attach-input");
+  // Rail mirror (CAS_1E6D3B2E) — second surface for the same
+  // attachments, sitting in the cases rail above the foot. Mirrors
+  // the Workspace Project→Files pattern. Shares state with the
+  // sidebar (currentAttachments); renderAttachments paints both.
+  const railAttachWrap  = app.querySelector("#rp-cases-rail-attach");
+  const railAttachList  = app.querySelector("#rp-cases-rail-attach-list");
+  const railAttachCount = app.querySelector("#rp-cases-rail-attach-count");
 
   // Composer extras — formatting toolbar, pending-files tray, drop zone.
   const composerEl = app.querySelector("#rp-cases-composer");
@@ -958,13 +965,17 @@ export default function cases(app, { session }) {
     });
   }
   // Remove an attachment (event-delegated; PATCHes the filtered list).
-  attachList?.addEventListener("click", (e) => {
+  // Attached to BOTH surfaces (sidebar + rail mirror per CAS_1E6D3B2E)
+  // so the user can remove from whichever one they're looking at.
+  const onAttachRemoveClick = (e) => {
     const btn = e.target.closest(".rp-cases-attach-remove");
     if (!btn) return;
     const idx = Number(btn.closest("[data-attach-idx]")?.dataset.attachIdx);
     if (Number.isNaN(idx)) return;
     patchCase({ attachments: currentAttachments.filter((_, i) => i !== idx) });
-  });
+  };
+  attachList?.addEventListener("click",     onAttachRemoveClick);
+  railAttachList?.addEventListener("click", onAttachRemoveClick);
 
   let currentDetailRid = null;
   let assigneePickerTimer = null;
@@ -1832,15 +1843,29 @@ export default function cases(app, { session }) {
       +     '<i class="bi bi-x"></i></button>'
       + '</li>';
   }
-  // Renders the sidebar list + caches the array as the base for
-  // attach/remove PATCHes. Hides the whole section when there are none.
+  // Renders the sidebar list AND the rail mirror (CAS_1E6D3B2E),
+  // caches the array as the base for attach/remove PATCHes. Hides
+  // each surface independently when empty so the rail collapses
+  // cleanly while the sidebar's container in the detail panel stays
+  // a deliberate placeholder.
   function renderAttachments(list) {
     currentAttachments = Array.isArray(list) ? list : [];
-    if (!sideAttachments) return;
     const n = currentAttachments.length;
-    sideAttachments.hidden = n === 0;
-    if (attachCount) attachCount.textContent = n ? "(" + n + ")" : "";
-    if (attachList)  attachList.innerHTML = currentAttachments.map(attachItemHTML).join("");
+    const itemsHTML = currentAttachments.map(attachItemHTML).join("");
+    const countLabel = n ? "(" + n + ")" : "";
+    if (sideAttachments) sideAttachments.hidden = n === 0;
+    if (attachCount)     attachCount.textContent = countLabel;
+    if (attachList)      attachList.innerHTML = itemsHTML;
+    // Rail mirror — same items, same data-attach-idx so the existing
+    // remove-button click delegate at attachList fires from either
+    // surface (delegated below this fn to cover the rail too).
+    if (railAttachWrap)  railAttachWrap.hidden = n === 0;
+    if (railAttachCount) railAttachCount.textContent = countLabel;
+    if (railAttachList)  railAttachList.innerHTML = itemsHTML;
+    // Auto-open the rail <details> when the case has attachments so
+    // the user doesn't have to click to discover them; collapses
+    // naturally on cases with none (the wrap is hidden in that case).
+    if (railAttachWrap && n > 0) railAttachWrap.open = true;
   }
 
   // composes into userBadgeHTML (avatar + name) and into the

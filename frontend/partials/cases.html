@@ -79,6 +79,20 @@
       <div class="rt-nav-body" id="rp-cases-rail-body">
         <p class="rt-nav-state">Loading cases…</p>
       </div>
+      <!-- CAS_1E6D3B2E — current case's attachments, mirroring the
+           Workspace project→files rail pattern. Lives between the
+           case list (rt-nav-body) and the rt-nav-foot so the rail
+           keeps the cases-list scrollable and the attachments stick
+           to the bottom. Hidden until a case detail is open + the
+           case has at least one attachment. -->
+      <details class="rp-cases-rail-attach" id="rp-cases-rail-attach" hidden>
+        <summary class="rp-cases-rail-attach-head">
+          <i class="bi bi-paperclip"></i>
+          <span>Attachments</span>
+          <span class="rp-cases-rail-attach-count" id="rp-cases-rail-attach-count"></span>
+        </summary>
+        <ul class="rp-cases-attach-list rp-cases-rail-attach-list" id="rp-cases-rail-attach-list"></ul>
+      </details>
       <div class="rt-nav-foot">
         <button class="rt-btn rt-btn--glass" id="rp-cases-new" type="button"
                 title="New case">
