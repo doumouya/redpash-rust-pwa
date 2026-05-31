@@ -39,8 +39,9 @@ Every entry follows the same five headings:
   Legacy entries `0001-0006` keep their pre-Case-object `NNNN-<slug>.md`
   numbering for historical continuity; do not renumber them.
 - `order` in the frontmatter is the entry number (sequential, padded);
-  this index is `order: 0`. Add `case_id: CAS_<rid>` to the frontmatter
-  too so it's discoverable via metadata queries.
+  this index is `order: 60` (its slot in the Internal-docs section
+  listing, not an entry number). Add `case_id: CAS_<rid>` to the
+  frontmatter too so it's discoverable via metadata queries.
 - Write the entry when the fix lands, while the context is still fresh.
 - Link the commit(s) and any related Events `kind` so a reader can pivot
   to the live data.
