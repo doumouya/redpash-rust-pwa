@@ -59,7 +59,9 @@ redpash-app/
 │   │   │           ├── docs.rs        markdown→HTML docs viewer
 │   │   │           ├── pagination.rs  shared (page,size)→offset helper
 │   │   │           ├── users.rs       dev-permissive directory CRUD
-│   │   │           ├── companies.rs   companies + memberships (owner/admin/member); membership IS the access check
+│   │   │           ├── companies.rs   companies (owner/admin/member); membership IS the access check; nests /:rid/members → members.rs
+│   │   │           ├── teams.rs       company-scoped teams (owner/admin/member); nests /:rid/members → members.rs; grant-bearing principals
+│   │   │           ├── members.rs     generic object-member CRUD over the polymorphic edge — one impl for every nest
 │   │   │           └── events.rs      runtime observability log — capture + read API
 │   │   ├── data/                           Polars-backed compute. No HTTP.
 │   │   │   └── src/
@@ -518,6 +520,13 @@ read it before starting Phase B/C/D.
 | GET·PATCH·DELETE | `/api/companies/:rid` | read needs membership; PATCH/DELETE currently dev-permissive (target: owner-only delete, owner/admin PATCH) |
 | GET·POST | `/api/companies/:rid/members` | list / upsert (owner-only for `role: owner`); last-owner demotion blocked |
 | DELETE | `/api/companies/:rid/members/:user_id` | leave (self) or remove (owner/admin); last-owner removal blocked |
+| GET | `/api/teams` | every team the caller reaches (direct + company-cascade) — `TeamSummary` carries joined `company_name` + `my_role` + `member_count` |
+| POST | `/api/teams` | create — body `{ name, company_id }`. Caller must reach the parent company at member+ (`rbac::require_grant`); seats creator as `owner` in one TX. Bad `company_id` → 404 (FK 23503 surfaced as leak-free 404) |
+| GET·PATCH·DELETE | `/api/teams/:rid` | read needs membership (or company cascade); PATCH = team admin+ (name only); DELETE = team owner only (cascades teams + memberships rows where team is the object) |
+| GET·POST | `/api/teams/:rid/members` | list / upsert via the shared `routes/members.rs` module — reach-aware manage (a company admin manages all its teams' rosters) |
+| PATCH·DELETE | `/api/teams/:rid/members/:user_id` | change role / leave (self) or remove (owner/admin or company-cascade admin); last-owner removal blocked |
+| GET | `/api/admin/teams` | org-wide team list — same `TeamSummary` shape, supports `?q=` + paging + sort; backs the Home Teams tab + the Memberships modal's team-scope entity-picker |
+| GET | `/api/admin/teams/stats` | `TeamStats`: `total` / `with_members` (≥2 memberships) / `by_company` (distinct parents). Feeds the Teams tab KPI strip |
 | GET | `/api/events` | recent events, newest first — filter `?level=` `?kind=` `?limit=` |
 | GET | `/api/events/:rid` | one event |
 | POST | `/api/events` | frontend-reported event — `origin=frontend`, `user`/`session` stamped server-side |
