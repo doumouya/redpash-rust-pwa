@@ -38,13 +38,14 @@ duplicated helpers. The top pair is the framework to extract first — one share
 module collapses N reinvented helpers. (Baseline run: `home.js ↔ monitoring.js`
 = 14 shared helpers; `cases.js ↔ workspace.js` = the hide/restore cluster.)
 
-## Output
+## Public surface
 
-`./audit.json` — `{ tool, ran_at, stats, findings[], pairs[] }`. `findings` is
-the canonical pre-formatted shape (`kind` / `finding_key` / `severity` /
-`detail`), ingest-ready. Console prints the pair rollup + the ranked per-name table.
+`node tools/fe-framework-audit/audit.js` — no args. Writes `./audit.json`
+(`{ tool, ran_at, stats, findings[], pairs[] }`; `findings` is the canonical
+pre-formatted shape `kind`/`finding_key`/`severity`/`detail`, ingest-ready) and
+prints the file-pair rollup + the ranked per-name table to stdout.
 
-## Drift-prone / caveats
+## Drift-prone areas
 
 - **Generic-name noise**: coincidental same-name helpers (`render`, `close`,
   `activate`, `onKey`, `set`, `mount`) appear with `~~` and divergent bodies —
