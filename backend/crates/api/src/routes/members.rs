@@ -152,11 +152,33 @@ async fn add(
         Some(_)                     => return Err(AppError::bad_request(
             "invalid", "a member must be a user or a team")),
     }
-    // Cycle guard for team-in-team nesting. `principals(object)` climbs the
-    // team graph from the object up through every team it belongs to; if the
-    // new team-member is already in that set (or is the object itself), adding
-    // it as a child would close a cycle (A ⊂ B ⊂ A). Users never appear here.
     if member_type.as_deref() == Some("team") {
+        // Cross-tenant guard. A team is company-scoped, so granting one a role
+        // on an object injects that team's whole (transitive) membership into
+        // this object's org graph. Require the team to belong to the SAME
+        // company as the object — otherwise a company-A admin could hand a
+        // company-B team access to company-A's data (cross-tenant IDOR). Users
+        // are global multi-tenant principals (company invite adds them by id),
+        // so this scoping is team-only. Leak-free 404 — a foreign-tenant team
+        // is indistinguishable from a non-existent one.
+        let object_company: Option<String> = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT COALESCE(
+                 (SELECT redpash_id FROM companies WHERE redpash_id = $1),
+                 (SELECT company_id  FROM projects  WHERE redpash_id = $1),
+                 (SELECT company_id  FROM cases     WHERE redpash_id = $1),
+                 (SELECT company_id  FROM teams     WHERE redpash_id = $1))")
+            .bind(&object).fetch_one(&state.db).await.map_err(db_err)?.0;
+        let member_company: Option<String> = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT company_id FROM teams WHERE redpash_id = $1")
+            .bind(&body.user_id).fetch_one(&state.db).await.map_err(db_err)?.0;
+        if object_company.is_none() || object_company != member_company {
+            return Err(AppError::not_found("not_found", "member not found"));
+        }
+
+        // Cycle guard for team-in-team nesting. `principals(object)` climbs the
+        // team graph from the object up through every team it belongs to; if the
+        // new team-member is already in that set (or is the object itself),
+        // adding it as a child would close a cycle (A ⊂ B ⊂ A).
         let ancestors = crate::rbac::principals(&state.db, &object).await.map_err(db_err)?;
         if ancestors.iter().any(|p| p == &body.user_id) {
             return Err(AppError::conflict(

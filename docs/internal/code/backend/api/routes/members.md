@@ -68,9 +68,14 @@ Nested on **all five** object types: `companies`, `projects`, `cases`,
   and 400s a company/project/case (they're objects, not grantees), 404s a
   missing rid. A team-as-member is a **sub-team** (Platform Eng ⊂ General Eng);
   the resolver's recursive principal closure flows the parent's grants down to
-  sub-team members. Adding a team runs a **cycle guard** — reject if the new
-  team is already in `principals(object)` (would close A ⊂ B ⊂ A). Users never
-  trip it.
+  sub-team members. Adding a team runs two guards:
+  - **cross-tenant** — the team's `company_id` must match the object's
+    resolving company (company / project / case / team), else leak-free 404. A
+    team carries transitive members, so a foreign-company team would inject
+    another tenant into this object's graph (IDOR). Users are **not** scoped —
+    they're global multi-tenant principals (company invite adds them by id).
+  - **cycle** — reject if the new team is already in `principals(object)`
+    (would close A ⊂ B ⊂ A). Users never trip either guard.
 - **Self-leave**: a member may `DELETE` their own membership without manage.
 - Event kinds stay object-typed via `object_type()` —
   `company_member_add`, `project_member_add`, … (the `entities.type` lookup).
