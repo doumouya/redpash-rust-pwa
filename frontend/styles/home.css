@@ -119,11 +119,19 @@
    placement call. The hide × lives in a dedicated last-column cell
    (added per row at fetch-render time, no-label th matching it in
    the thead). Fade-on-row-hover trigger here because rows don't
-   carry the .rt-tab parent class the rail.css base rule scopes to. */
-.rp-home-hide-th {
+   carry the .rt-tab parent class the rail.css base rule scopes to.
+
+   `.rp-list-hide-th` + `.rp-list-hide-cell` are the trailing sentinel
+   classes the list-page.js reorder anchors against (so a drag-reorder
+   never shoves them out of last position). Owned by list-page.js's
+   `SENTINEL_TRAILING_TH/CELL` constants — keep the names in sync.
+   The CSS rules can stay co-located here because Home is the only
+   list-view using `spec.hideMeta` today; move to a future list-page.css
+   if the contract spreads. */
+.rp-list-hide-th {
   width: 2rem;
 }
-.rp-home-hide-cell {
+.rp-list-hide-cell {
   width: 2rem;
   text-align: right;
   padding-right: 0.375rem;

@@ -465,13 +465,13 @@ export function wireListColumnsExport(view, opts) {
   }
   // Classes for non-data sentinel cells the reorder must preserve in
   // place: `.rp-list-sel` is the LEADING select-mode checkbox column,
-  // `.rp-home-hide-th` / `.rp-home-hide-cell` is the TRAILING hide-from-
+  // `.rp-list-hide-th` / `.rp-list-hide-cell` is the TRAILING hide-from-
   // list action column (home tabs that declare `spec.hideMeta`). Neither
   // carries `data-col-key`, neither participates in reorder, and both
   // must stay at their original ends after the data cells move.
   const SENTINEL_LEADING_CELL  = "rp-list-sel";
-  const SENTINEL_TRAILING_TH   = "rp-home-hide-th";
-  const SENTINEL_TRAILING_CELL = "rp-home-hide-cell";
+  const SENTINEL_TRAILING_TH   = "rp-list-hide-th";
+  const SENTINEL_TRAILING_CELL = "rp-list-hide-cell";
   // Reorder THs in `headRow` and each tbody row's data cells from
   // `currentOrder` (the order the data cells are CURRENTLY in) to
   // `targetKeys`. Idempotent — no-ops when both already match target.
@@ -479,7 +479,7 @@ export function wireListColumnsExport(view, opts) {
   // anchored at their original positions (see SENTINEL_* above).
   // 2026-05-31: pre-fix used `headRow.appendChild(byKey.get(k))` per
   // target key, which pushes each data TH to the very end of headRow —
-  // when a trailing sentinel TH (e.g. `.rp-home-hide-th`) was already
+  // when a trailing sentinel TH (e.g. `.rp-list-hide-th`) was already
   // there, every appendChild shoved it one column to the left, so after
   // N appends the trailing TH ended up at position 0. That made every
   // subsequent positional indexing in `applyHiddenColumns` off-by-one

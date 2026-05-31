@@ -97,7 +97,7 @@ export default function home(app, { session: _session }) {
     return rows.filter((r) => !hidden.has(spec.hideMeta(r).rid));
   }
   function hideCellHTML(rid) {
-    return '<td class="rp-home-hide-cell">'
+    return '<td class="rp-list-hide-cell">'
       + '<span class="rt-tab-close rp-home-hide" data-hide-rid="' + esc(rid) + '" title="Hide from list">'
       +   '<i class="bi bi-x"></i>'
       + '</span>'
@@ -2187,7 +2187,7 @@ export default function home(app, { session: _session }) {
       const headRow = view.querySelector(".rt-table thead tr");
       if (headRow) headRow.insertAdjacentHTML(
         "beforeend",
-        '<th class="rp-home-hide-th" aria-hidden="true"></th>',
+        '<th class="rp-list-hide-th" aria-hidden="true"></th>',
       );
     }
     // Refetch hook for the restore branch of the view-level delegator.
@@ -2615,7 +2615,7 @@ export default function home(app, { session: _session }) {
               if (!spec.hideMeta) return html;
               const meta = spec.hideMeta(item);
               if (!meta || !meta.rid) return html;
-              const cell = '<td class="rp-home-hide-cell">'
+              const cell = '<td class="rp-list-hide-cell">'
                 + '<span class="rt-tab-close rp-home-hide" '
                 +   'data-hide-rid="'  + esc(meta.rid)        + '" '
                 +   'data-hide-name="' + esc(meta.name || "") + '" '
@@ -2637,7 +2637,7 @@ export default function home(app, { session: _session }) {
       //      framing-only columns to preserve.
       //   2. _applyColumnOrder    — reorders data THs and data TDs to
       //      the user's persisted target order. Anchors data inserts
-      //      before any trailing sentinel TH (.rp-home-hide-th) so
+      //      before any trailing sentinel TH (.rp-list-hide-th) so
       //      that stays at the right edge.
       //   3. _applyHiddenColumns  — positionally indexes tbody by TH
       //      position, so thead + tbody must be column-aligned first.
