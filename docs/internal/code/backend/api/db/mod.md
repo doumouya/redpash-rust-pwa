@@ -3,7 +3,7 @@ title: backend/crates/api/src/db/mod.rs
 source: ../../../../../../backend/crates/api/src/db/mod.rs
 owner: Gus
 section: Internal · Code · backend · api · db
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # mod.rs
@@ -31,6 +31,7 @@ takes a `&PgPool` and returns a domain DTO from `shared::*`.
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
+- `memberships` is now an entity→entity→role edge with PK `(object, user_redpash_id, role, context_role)` (migration `20260531000000`). Membership helpers (`add_company_member`, `set_case_person`) replace-then-insert instead of `ON CONFLICT (object,user)` — a principal can hold multiple roles per object. See [entity-membership-model](../../../../specs/rbac/entity-membership-model.md).
 
 ## Related
 

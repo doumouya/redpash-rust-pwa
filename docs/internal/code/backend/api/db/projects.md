@@ -3,7 +3,7 @@ title: backend/crates/api/src/db/projects.rs
 source: ../../../../../../backend/crates/api/src/db/projects.rs
 owner: Gus
 section: Internal · Code · backend · api · db
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # projects.rs
@@ -29,6 +29,7 @@ Slice 4 of the db/mod.rs decomposition. Holds:
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
+- Owner transfer (`update_project_meta`) replaces the owner edge by delete-then-insert (no `ON CONFLICT (object,user)`) under the widened membership PK — migration `20260531000000`.
 
 ## Related
 

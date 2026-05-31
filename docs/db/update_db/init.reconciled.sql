@@ -11,6 +11,15 @@
 -- symmetric entity→entity→role edge (subject can be a user OR a team), and the
 -- key widens so one principal holds many roles. Reporter+assignee, owner+admin,
 -- and team-as-grantee all follow.
+--
+-- SHIPPED NOTE (2026-05-31): the authoritative schema is the sqlx migrations
+-- under backend/migrations/ — the in-place migration is
+-- `20260531000000_entity_membership_rbac.sql` (applied + verified on
+-- redpash_prerelease). That migration KEEPS the subject column named
+-- `user_redpash_id` (and the index `memberships_user_idx`); the cosmetic
+-- rename to `member_redpash_id` shown below is the deferred follow-up. So this
+-- file depicts the post-rename target — FK/PK/model match the live DB, only
+-- the subject-column identifier differs until the rename lands.
 -- ============================================================================
 BEGIN;
 

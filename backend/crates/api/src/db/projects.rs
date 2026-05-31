@@ -256,17 +256,23 @@ pub async fn update_project_meta(
         }
         None => {}
     }
-    // Owner transfer -> move the owner membership to the new user (upsert
-    // covers the case where they were already a non-owner member).
+    // Owner transfer -> move the owner membership to the new user. Widened PK:
+    // no ON CONFLICT on (object,user); a user holds one tier row per object
+    // (context_role = ''). Clear the current owner(s) AND the new owner's prior
+    // tier row, then set the new owner.
     if let Some(new_owner) = owner_id {
-        sqlx::query("DELETE FROM memberships WHERE object_redpash_id = $1 AND role = 'owner'")
-            .bind(rid)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "DELETE FROM memberships
+              WHERE object_redpash_id = $1
+                AND (role = 'owner' OR (user_redpash_id = $2 AND context_role = ''))",
+        )
+        .bind(rid)
+        .bind(new_owner)
+        .execute(&mut *tx)
+        .await?;
         sqlx::query(
             "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
-             VALUES ($1, $2, 'owner')
-             ON CONFLICT (object_redpash_id, user_redpash_id) DO UPDATE SET role = 'owner'",
+             VALUES ($1, $2, 'owner')",
         )
         .bind(rid)
         .bind(new_owner)

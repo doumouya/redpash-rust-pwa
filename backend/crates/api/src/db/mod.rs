@@ -1205,25 +1205,37 @@ pub async fn list_company_members(
         .collect())
 }
 
-/// Add a member, or update their role if they're already in the company
-/// — the composite PK makes this an upsert.
+/// Add a member, or change their company role. One RBAC tier per user per
+/// company — the tier row carries no business label (`context_role = ''`).
+/// The widened membership PK `(object, user, role, context_role)` means we
+/// can no longer `ON CONFLICT (object, user)`, so replace the tier explicitly:
+/// clear the user's tier row, then insert the new one (labeled rows, if any,
+/// are left intact). Wrapped in a tx so a member is never left tier-less.
 pub async fn add_company_member(
     pool:        &PgPool,
     company_rid: &str,
     user_rid:    &str,
     role:        &str,
 ) -> sqlx::Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "DELETE FROM memberships
+          WHERE object_redpash_id = $1 AND user_redpash_id = $2 AND context_role = ''",
+    )
+    .bind(company_rid)
+    .bind(user_rid)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "INSERT INTO memberships (object_redpash_id, user_redpash_id, role)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (object_redpash_id, user_redpash_id)
-         DO UPDATE SET role = EXCLUDED.role",
+         VALUES ($1, $2, $3)",
     )
     .bind(company_rid)
     .bind(user_rid)
     .bind(role)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -1697,8 +1709,8 @@ async fn set_case_person(
             "INSERT INTO memberships
                  (object_redpash_id, user_redpash_id, role, context_role)
              VALUES ($1, $2, 'member', $3)
-             ON CONFLICT (object_redpash_id, user_redpash_id)
-             DO UPDATE SET context_role = EXCLUDED.context_role",
+             ON CONFLICT (object_redpash_id, user_redpash_id, role, context_role)
+             DO NOTHING",
         )
         .bind(case_rid)
         .bind(u)
