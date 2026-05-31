@@ -73,6 +73,12 @@ export default function workspace(app, { session }) {
 
   // ─── state ─────────────────────────────────────────────────────
   let activeFileRid = null;
+  // Per-view "last opened" memory — CAS_3BCD6727. When the user toggles
+  // the rail Data ↔ Dashboards view, the surface auto-swaps to the
+  // last-opened file of the new view kind (or the first available, or
+  // landing if none). One slot per view; loadFile updates the slot
+  // matching its file_type so toggling back restores the prior file.
+  const lastFileRidByView = { data: null, dashboards: null };
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let activeSummary = null; // FileSummary — drives per-tool context renderers
@@ -212,7 +218,21 @@ export default function workspace(app, { session }) {
     pref:        "workspaceRailView",
     fallback:    "data",
     fireOnMount: true,
-    onChange:    (view) => { nav.dataset.railView = view; },
+    onChange:    (view) => {
+      nav.dataset.railView = view;
+      // CAS_3BCD6727 — also swap the rp-surface so toggling the rail
+      // brings the corresponding view forward. Restore the last-
+      // opened file of the new view kind if we have one; otherwise
+      // leave the surface as-is (user picks from the rail).
+      // Skip on the initial fireOnMount tick — activeFileRid is still
+      // null and the deep-link / default-open paths haven't run yet,
+      // so there's no surface to swap into.
+      if (!activeFileRid) return;
+      const target = lastFileRidByView[view];
+      if (target && target !== activeFileRid) {
+        loadFile(target);
+      }
+    },
   });
   const setRailView = (view) => railViewSeg.set(view);
 
@@ -1248,6 +1268,9 @@ export default function workspace(app, { session }) {
         rowsInfo.textContent = "Dashboard · " + (dashboard?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
+        // CAS_3BCD6727: record per-view last-opened so toggling Data ↔
+        // Dashboards in the rail restores the right file.
+        lastFileRidByView.dashboards = rid;
       } else {
         rebuildColsDropdown(activeColumns);
         rebuildFilterCols(activeColumns);
@@ -1267,6 +1290,8 @@ export default function workspace(app, { session }) {
         joinsCtrl?.refresh();
         reportCtrl?.refresh();
         await fetchAndRender();
+        // CAS_3BCD6727: data files belong to the "data" view slot.
+        lastFileRidByView.data = rid;
       }
     } catch (err) {
       setTableState("Couldn’t load file" + (err.status ? " (" + err.status + ")" : "") + ".");
