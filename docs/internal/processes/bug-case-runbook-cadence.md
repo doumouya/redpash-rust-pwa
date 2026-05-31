@@ -76,9 +76,15 @@ filesystem the same way it's findable in the cases system.** Em
 Case object yet, at the time — let's use proper IDs just so we can
 find them in the system."*
 
-Legacy entries `0001-0007` keep their pre-Case-object numbering for
-historical continuity; do NOT renumber. The `CAS_<rid>-<slug>.md`
-naming applies to all new entries going forward. Add `case_id:
+Legacy entries `0001-0006` keep their pre-Case-object numbering for
+historical continuity; do NOT renumber. From `0007` onwards entries
+adopt the `CAS_<rid>-<slug>.md` naming — `0007` / `0008` / `0009`
+were filed with the new naming on 2026-05-31, the day the cadence
+landed. When the MCP `case_create` is temporarily unavailable, the
+*holding pattern* is to write the runbook with the next sequential
+`NNNN-<slug>.md` filename, mark `case_id: TBD` and
+`filename_pending_rename: CAS_<rid>-<slug>.md` in frontmatter, then
+rename via `git mv` once the case is filed. Always add `case_id:
 CAS_<rid>` to the frontmatter so it's also discoverable via metadata
 queries.
 

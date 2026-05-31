@@ -81,7 +81,8 @@ Every entry follows the same five headings:
   prefer positive-form `file_type = 'csv'` queries over negative-form
   exclusions — future spec-only types (notebook, saved query) inherit
   the exclusion automatically.
-- [0007 — Column drag-reorder cluster (4 layers)](0007-column-drag-reorder-cluster.md) —
+- [0007 — Column drag-reorder cluster (4 layers)](CAS_2C692011AD2C41E88A7C2541EF30AE1E-column-drag-reorder-cluster.md) —
+  **Resolved 2026-05-31** (CAS_2C692011AD2C41E88A7C2541EF30AE1E).
   Four interrelated bugs in the Home/Monitoring list-page column drag-
   reorder feature, peeled one layer at a time on 2026-05-31:
   applyColumnOrder early-returning on misaligned thead/tbody, the
@@ -95,8 +96,8 @@ Every entry follows the same five headings:
   (Playwright MCP is the parallel option when chrome-devtools-mcp is
   locked). Filed the cadence this entry follows in
   [processes/bug-case-runbook-cadence.md](../processes/bug-case-runbook-cadence.md).
-- [0008 — MCP cases bridge needs auto-refreshing session](0008-mcp-cases-session-auto-refresh.md) —
-  **Resolved 2026-05-31.** The `tools/mcp-server` cases bridge used
+- [0008 — MCP cases bridge needs auto-refreshing session](CAS_097E36B6F6904E429401F4951A54BA9B-mcp-cases-session-auto-refresh.md) —
+  **Resolved 2026-05-31** (CAS_097E36B6F6904E429401F4951A54BA9B). The `tools/mcp-server` cases bridge used
   to pin `REDPASH_API_SESSION` from `~/.claude.json` env at startup
   and use it as the `rp_session` cookie indefinitely; when the cookie
   expired or was invalidated, every Torv's `case_create` /
