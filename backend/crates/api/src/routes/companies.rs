@@ -166,9 +166,11 @@ async fn patch(
     Path(rid):    Path<String>,
     Json(body):   Json<PatchCompanyBody>,
 ) -> Result<Json<Company>, AppError> {
-    // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
-    // (siblings delete_one + patch share the dev-stage policy)
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: company.update — company admin+ (direct role) or platform admin;
+    // a company member can't edit company metadata. 404 on deny (leak-free).
+    crate::rbac::require_grant(&state, &user, &rid, "company",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
     let mut fields: Vec<&str> = Vec::new();
     if body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("name");       }
     if body.slug.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("slug");       }
@@ -198,12 +200,12 @@ async fn delete_one(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Dev-permissive: any authenticated user can delete any company.
-    // Tighten back to owner-only (require_member + role check) before
-    // multi-tenant prod — left open while the app is in active dev so
-    // the Objects-page Companies tab can freely manipulate seed data.
-    // AUTH-AUDIT-ACK: dev-permissive per [[redpash-stage]]; tighten at RBAC
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: company.delete — company owner only (direct owner) or platform
+    // admin; never admin/member (deleting a company is giving it away). 404
+    // on deny (leak-free).
+    crate::rbac::require_grant(&state, &user, &rid, "company",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Owner)).await?;
     if !db::delete_company(&state.db, &rid).await.map_err(db_err)? {
         return Err(AppError::not_found("not_found", format!("company {rid}")));
     }
