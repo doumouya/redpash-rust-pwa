@@ -531,6 +531,7 @@
    completed pills get a subtle done-tint; upcoming stay muted. Click
    a pill → PATCH status to it. */
 .rp-cases-detail-path {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   justify-content: center;
@@ -538,6 +539,16 @@
   background: var(--rp-surface-2);
   border-bottom: 1px solid var(--rp-border);
 }
+/* Properties-panel toggle — pinned to the left edge of the band so the
+   status pills stay optically centered. .is-active (panel open) tints it
+   with the accent, matching the workspace panel toggles. */
+.rp-cases-side-toggle {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.rp-cases-side-toggle.is-active { color: var(--rp-accent-2); }
 /* Drop the chip-row atom's default bottom margin in this context;
    the band owns the spacing. */
 .rp-cases-detail-path .rp-chip-row { margin-bottom: 0; max-width: 100%; flex-wrap: wrap; }
@@ -581,15 +592,30 @@
 .rp-cases-detail-main .rp-cases-comment-form {
   flex-shrink: 0;
 }
+/* Collapsible side panel — mirrors the workspace .rt-panel: width 0 by
+   default, animates to its open width when .open is set. overflow:hidden
+   clips the fixed-width inner while it slides. The toggle in the path
+   band flips .open. */
 .rp-cases-detail-side {
-  flex: 0 0 30%;
+  flex-shrink: 0;
+  width: 0;
   min-height: 0;
+  overflow: hidden;
+  background: var(--rp-surface-2);
+  transition: width 0.18s var(--rp-ease);
+}
+.rp-cases-detail-side.open {
+  width: 18rem;
+  border-left: 1px solid var(--rp-border);
+}
+/* Fixed width → the property rows don't re-wrap during the slide. */
+.rp-cases-detail-side-inner {
+  width: 18rem;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
   padding: 0.875rem 1rem 1rem;
-  background: var(--rp-surface-2);
-  border-left: 1px solid var(--rp-border);
   overflow-y: auto;
   font-size: 0.75rem;
 }
@@ -599,12 +625,18 @@
    eat half the screen on a phone. */
 @media (max-width: 40rem) {
   .rp-cases-detail-body { flex-direction: column; }
+  /* Stacked: the panel can't slide horizontally, so collapse via display
+     and let it span the full width as a short strip above the thread. */
   .rp-cases-detail-side {
+    width: auto;
     flex: 0 0 auto;
     max-height: 50%;
     border-left: 0;
-    border-bottom: 1px solid var(--rp-border);
+    transition: none;
   }
+  .rp-cases-detail-side:not(.open) { display: none; }
+  .rp-cases-detail-side.open { border-bottom: 1px solid var(--rp-border); }
+  .rp-cases-detail-side-inner { width: 100%; }
 }
 
 /* Title in the head bar — single-line truncated; full title

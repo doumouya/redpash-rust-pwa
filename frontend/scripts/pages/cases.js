@@ -997,6 +997,21 @@ export default function cases(app, { session }) {
     if (next && next !== pathEl.dataset.current) patchCase({ status: next });
   });
 
+  // Properties-panel toggle — same mechanism as the workspace panels'
+  // bindPanel: the button flips .open on the side + .is-active on itself.
+  // Defaults open (markup carries .open / is-active); collapse for more
+  // room on the comment thread.
+  const sideToggle = app.querySelector("#rp-cases-side-toggle");
+  const sidePanel  = app.querySelector("#rp-cases-detail-side");
+  if (sideToggle && sidePanel) {
+    sideToggle.addEventListener("click", () => {
+      const open = !sidePanel.classList.contains("open");
+      sidePanel.classList.toggle("open", open);
+      sideToggle.classList.toggle("is-active", open);
+      sideToggle.setAttribute("aria-pressed", String(open));
+    });
+  }
+
   // "Replying as X" — fills once at mount; session is constant per page.
   const commentFormAs = app.querySelector("#rp-cases-comment-form-as");
   if (commentFormAs) commentFormAs.textContent = meName;

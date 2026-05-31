@@ -143,6 +143,14 @@
              to it. paintDetail toggles is-active (current) + is-done
              (completed) per the case's status. -->
         <div class="rp-cases-detail-path" id="rp-cases-detail-path">
+          <!-- Properties-panel toggle — pinned to the left end of the band
+               (the pills stay centered; the button floats over the edge).
+               Mirrors the workspace Filter/Tools panel toggles: flips
+               .open on the side panel + .is-active on itself. -->
+          <button class="rt-icon-btn rp-cases-side-toggle is-active" id="rp-cases-side-toggle"
+                  type="button" aria-pressed="true" title="Toggle properties panel">
+            <i class="bi bi-layout-sidebar-inset-reverse"></i>
+          </button>
           <div class="rp-chip-row" role="group" aria-label="Case status">
             <button type="button" class="rp-chip" data-path-status="backlog">Backlog</button>
             <button type="button" class="rp-chip" data-path-status="todo">Todo</button>
@@ -220,7 +228,11 @@
                then people+source, timeline, an optional error payload,
                attachments, a rich-editable description, and the activity
                feed. paintDetail() fills every value. -->
-          <aside class="rp-cases-detail-side">
+          <aside class="rp-cases-detail-side open" id="rp-cases-detail-side">
+            <!-- Inner holds a fixed width so the content doesn't reflow
+                 while the outer panel animates width 0 ⇄ open (same trick
+                 as the workspace .rt-panel-inner). -->
+            <div class="rp-cases-detail-side-inner">
 
             <!-- Properties — click a value to change it. -->
             <div class="rp-cases-props">
@@ -311,6 +323,7 @@
                 <!-- JS renders activity-feed events (case_* kinds) -->
               </div>
             </details>
+            </div>
           </aside>
         </div>
       </aside>
