@@ -23,6 +23,7 @@ GET /api/admin/charts       ← Charts tab         (project_files where file_typ
 GET /api/admin/steps        ← Steps tab          (every project_step across all files)
 PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see below)
 GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (see below)
+GET /api/admin/audit-catalog ← per-tool latest run + severity counts + diff-vs-prev — GATED
 
 ## Public surface
 
@@ -43,6 +44,18 @@ GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (
   UI-driven path to admin, sibling to the `REDPASH_BOOTSTRAP_ADMINS` env
   allowlist ([bootstrap.md](../bootstrap.md)). The Home Users "promote"
   affordance is the teams-lane FE follow-up.
+- **`GET /api/admin/audit-catalog` (`audit_catalog`) is GATED** — the static-audit
+  half of the Admin Console audit frame (CAS_274EDF3B). One row per tool: latest
+  `audit.run` (id / ran_at / git sha+branch), finding counts bucketed
+  `low ≤5 · med 6-15 · high >15` (same as `/monitoring/audit-findings/stats`),
+  and the **diff vs the previous run** via `audit.run_diff` —
+  `new`/`regressed`/`improved`/`fixed`/`unchanged` counts. The flat run/finding
+  lists are on `/monitoring/audit-*`; this adds the "what changed since last
+  run" axis (nothing else exposes `run_diff`) + the catalog overview. Runtime
+  half of the frame = `/monitoring/events`. Requires `is_platform_admin`
+  (leak-free 404). NOTE: a tool that stores a value-hash in `severity` (e.g.
+  `ui-snapshot`) buckets as `high` — that's the tool's data semantics, mirrored
+  here for consistency, not a bug in this endpoint.
 - **`GET /api/admin/rbac` (`rbac_resolve`) is GATED** — RBAC introspection
   (CAS_274EDF3B Admin Console slice). `?subject=<rid>&object=<rid>` → the
   resolver's reach-split tiers (`direct`/`scope`/`effective`, `effective="all"`

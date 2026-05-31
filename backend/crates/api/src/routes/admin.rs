@@ -26,7 +26,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use shared::{
     admin::{
@@ -67,6 +67,7 @@ pub fn routes() -> Router<AppState> {
         .route("/steps",             get(list_steps))
         .route("/steps/stats",       get(stats_steps))
         .route("/rbac",              get(rbac_resolve))
+        .route("/audit-catalog",     get(audit_catalog))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -1309,6 +1310,86 @@ async fn delete_user(
         .context(serde_json::json!({ "target_user": rid }))
         .send();
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/admin/audit-catalog` — the static-audit half of the Admin Console
+/// audit frame (CAS_274EDF3B). One row per tool: its latest run + finding
+/// counts (severity-bucketed `low ≤5 / med 6-15 / high >15`, mirroring
+/// `/monitoring/audit-findings/stats`) + the **diff vs the previous run**
+/// (`new`/`regressed`/`improved`/`fixed`/`unchanged` counts off `audit.run_diff`).
+/// The flat run/finding lists already live on `/api/monitoring/audit-*`; this
+/// adds the "what changed since last run" dimension nothing exposed yet, plus
+/// the per-tool catalog overview. GATED to platform admins. The runtime-event
+/// axis of the same frame is `/api/monitoring/events`.
+async fn audit_catalog(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "audit"));
+    }
+    // Latest + previous run per tool in one window pass.
+    let runs: Vec<(String, i64, DateTime<Utc>, Option<String>, Option<String>, Option<i64>)> =
+        sqlx::query_as(
+            "WITH ranked AS (
+                 SELECT id, tool, ran_at, git_sha, git_branch,
+                        row_number() OVER (PARTITION BY tool ORDER BY ran_at DESC) AS rn
+                 FROM audit.run)
+             SELECT cur.tool, cur.id, cur.ran_at, cur.git_sha, cur.git_branch, prev.id
+             FROM ranked cur
+             LEFT JOIN ranked prev ON prev.tool = cur.tool AND prev.rn = 2
+             WHERE cur.rn = 1
+             ORDER BY cur.tool",
+        )
+        .fetch_all(&state.db)
+        .await?;
+
+    let mut tools = Vec::with_capacity(runs.len());
+    for (tool, cur_id, ran_at, git_sha, git_branch, prev_id) in runs {
+        let buckets: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT CASE WHEN severity IS NULL OR severity <= 5 THEN 'low'
+                         WHEN severity <= 15 THEN 'med' ELSE 'high' END, count(*)
+             FROM audit.finding WHERE run_id = $1 GROUP BY 1",
+        )
+        .bind(cur_id)
+        .fetch_all(&state.db)
+        .await?;
+        let pick = |k: &str| buckets.iter().find(|(b, _)| b == k).map_or(0, |(_, c)| *c);
+        let (high, med, low) = (pick("high"), pick("med"), pick("low"));
+
+        let diff = if let Some(pid) = prev_id {
+            let statuses: Vec<(String, i64)> = sqlx::query_as(
+                "SELECT status, count(*) FROM audit.run_diff($1, $2) GROUP BY status",
+            )
+            .bind(cur_id)
+            .bind(pid)
+            .fetch_all(&state.db)
+            .await?;
+            let g = |k: &str| statuses.iter().find(|(s, _)| s == k).map_or(0, |(_, c)| *c);
+            serde_json::json!({
+                "prev_run_id": pid,
+                "new":       g("new"),
+                "regressed": g("regressed"),
+                "improved":  g("improved"),
+                "fixed":     g("fixed"),
+                "unchanged": g("unchanged"),
+            })
+        } else {
+            serde_json::Value::Null
+        };
+
+        tools.push(serde_json::json!({
+            "tool":          tool,
+            "latest_run_id": cur_id,
+            "ran_at":        ran_at,
+            "git_sha":       git_sha,
+            "git_branch":    git_branch,
+            "findings":      { "total": high + med + low, "high": high, "med": med, "low": low },
+            "diff":          diff,
+        }));
+    }
+    Ok(Json(serde_json::json!({ "tools": tools })))
 }
 
 #[derive(Deserialize)]
