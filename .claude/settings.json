@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh tools/team/presence-summary.sh"
+            "command": "sh tools/team/presence-summary.sh trim"
           }
         ]
       }

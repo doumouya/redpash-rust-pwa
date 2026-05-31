@@ -1,56 +1,64 @@
 #!/usr/bin/env sh
-# Purpose: surface both Torv presence files as conversation context
+# Purpose: surface Torv presence files as conversation context
 #          (called by the SessionStart + UserPromptSubmit hooks).
-# Doc: docs/internal/code/tools/team/presence-summary.md
+# Doc: docs/internal/code/tools/team.md
 #
-# Hooked by .claude/settings.json. Prints both presence files with a
-# header so the active Torv sees "what's the team doing right now"
-# at session start and again on every user prompt. Both files are
-# expected at $HOME/Internal-Slack/presence/Torv-{FE,BE}.md per
-# CAS_70E63F8D40C2443C926C2D0326A0141C Fix A (the per-Torv presence
-# convention adopted after the 2026-05-31 "we are not surviving"
-# audit-tool double-build incident).
+# Hooked by .claude/settings.json. Two modes (CAS_70E63F8D, Torv-FE
+# ACK'd option 2 — keep cold context rich, keep per-turn refresh cheap):
 #
-# Output goes to stdout; Claude Code surfaces it as injected
-# conversation context. Missing files render as "(file missing)"
-# rather than failing — a fresh checkout on a new host gets a
-# gentle nudge to set the file up, not a hook failure.
+#   (no arg) / full  — SessionStart: print BOTH presence files in full.
+#                      A fresh session needs the whole picture once.
+#   trim             — UserPromptSubmit: per-Torv header + state + the
+#                      "currently claimed" block + mtime-age only
+#                      (~200B vs ~6KB). The age stamp is the cheapest
+#                      "something changed — open the file" signal; if a
+#                      Torv's age resets or state shifts, read the full file.
+#
+# Files expected at $HOME/Internal-Slack/presence/Torv-{FE,BE}.md per
+# Fix A. Missing files render as a gentle "(file missing)" nudge, never
+# a hook failure. Output -> stdout, surfaced as injected context.
 
+MODE="${1:-full}"
 PRES_DIR="${HOME}/Internal-Slack/presence"
 FE="${PRES_DIR}/Torv-FE.md"
 BE="${PRES_DIR}/Torv-BE.md"
 
-# Compact age helper — minutes since last modification. Lets the
-# reader spot stale presence files at a glance.
+# Minutes since last modification — stale-at-a-glance signal.
 age_min() {
     f="$1"
     if [ ! -f "$f" ]; then printf 'n/a'; return; fi
-    # %Y = last-mod epoch on linux stat
     now=$(date +%s)
     mtime=$(stat -c %Y "$f" 2>/dev/null || echo "$now")
-    diff=$(( (now - mtime) / 60 ))
-    printf '%dm' "$diff"
+    printf '%dm' "$(( (now - mtime) / 60 ))"
 }
 
-cat <<HEADER
-## Team presence (live state from Internal-Slack/presence/)
+# Full file with a labelled header (SessionStart).
+emit_full() {
+    f="$1"; label="$2"; lane="$3"
+    printf '### %s  (%s — %s ago)\n\n' "$label" "$lane" "$(age_min "$f")"
+    if [ -f "$f" ]; then cat "$f"; else
+        printf '(file missing — create %s with your current claim + file list + ETA)\n' "$f"
+    fi
+    printf '\n\n'
+}
 
-HEADER
+# Compact summary (UserPromptSubmit): header + state line + the
+# "currently claimed" block (until the next "## "), nothing else.
+emit_trim() {
+    f="$1"; label="$2"; lane="$3"
+    printf '### %s  (%s — %s ago)\n' "$label" "$lane" "$(age_min "$f")"
+    if [ ! -f "$f" ]; then printf '  (file missing)\n\n'; return; fi
+    grep -m1 '^state:' "$f" | sed 's/^/  /'
+    awk '/^## currently claimed/{f=1;next} /^## /{f=0} f && NF {print "  " $0}' "$f" | head -6
+    printf '\n'
+}
 
-printf '### Torv-FE.md  (frontend / architecture lane — %s ago)\n\n' "$(age_min "$FE")"
-if [ -f "$FE" ]; then
-    cat "$FE"
+printf '## Team presence (live state from Internal-Slack/presence/)\n\n'
+
+if [ "$MODE" = "trim" ]; then
+    emit_trim "$FE" "Torv-FE" "frontend / architecture lane"
+    emit_trim "$BE" "Torv-BE" "backend / RBAC lane"
 else
-    printf '(file missing — fresh Torv-FE: create at %s with your current claim + file list + ETA)\n' "$FE"
+    emit_full "$FE" "Torv-FE.md" "frontend / architecture lane"
+    emit_full "$BE" "Torv-BE.md" "backend / RBAC lane"
 fi
-
-printf '\n\n'
-
-printf '### Torv-BE.md  (backend / RBAC lane — %s ago)\n\n' "$(age_min "$BE")"
-if [ -f "$BE" ]; then
-    cat "$BE"
-else
-    printf '(file missing — fresh Torv-BE: create at %s with your current claim + file list + ETA)\n' "$BE"
-fi
-
-printf '\n'
