@@ -1638,6 +1638,11 @@ impl From<CaseRow> for Case {
 /// the canonical internal company? Mirrors the `source=internal` clause in
 /// `list_cases`. `false` when `internal_company_id` is None (no internal
 /// company configured) — same graceful degrade as the list filter.
+///
+/// Reporter may be a user (membership row on the internal company →
+/// internal) OR a team (the team's parent company IS the internal one →
+/// internal). The two-branch EXISTS handles both — CAS_913's design
+/// called for team-as-member explicitly ("HR team as case-reporter").
 pub async fn case_is_internal(
     pool:                &PgPool,
     case_id:             &str,
@@ -1649,7 +1654,12 @@ pub async fn case_is_internal(
                         JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                         WHERE rep.object_redpash_id = $1
                           AND rep.context_role = 'Reporter'
-                          AND cm.object_redpash_id = $2)",
+                          AND cm.object_redpash_id = $2)
+              OR EXISTS (SELECT 1 FROM memberships rep
+                        JOIN teams t ON t.redpash_id = rep.member_redpash_id
+                        WHERE rep.object_redpash_id = $1
+                          AND rep.context_role = 'Reporter'
+                          AND t.company_id = $2)",
     )
     .bind(case_id)
     .bind(company)
@@ -1657,18 +1667,22 @@ pub async fn case_is_internal(
     .await
 }
 
-/// SELECT list for queries that hydrate user display names via LEFT
-/// JOIN. Aliased prefix `c` for the cases row + `r`/`a` for reporter
-/// and assignee user joins. Display names are nullable — null when
-/// the user no longer exists (FK ON DELETE SET NULL on reporter_id /
-/// assignee_id; the case outlives the deletion + the join becomes
-/// NULL).
+/// SELECT list for queries that hydrate reporter + assignee display
+/// names via LEFT JOIN. Aliased prefix `c` for the cases row; `r`/`a`
+/// for user joins; `r_t`/`a_t` for team joins; `cat`/`catp` for the
+/// category two-step. Display names are nullable — null when the
+/// member entity is gone (cascade), the case outlives it.
+///
+/// `reporter_display_name` / `assignee_display_name` COALESCE the
+/// user join with the team join, so a Reporter or Case Owner that's
+/// a team (per CAS_913's "HR team as case-reporter" design) surfaces
+/// the team's `name` instead of NULL.
 const CASE_SELECT: &str =
     "c.redpash_id, c.type, c.title, c.description, c.status, c.priority,
      rep.member_redpash_id AS reporter_id, own.member_redpash_id AS assignee_id,
      c.project_id, c.company_id,
-     r.display_name AS reporter_display_name,
-     a.display_name AS assignee_display_name,
+     COALESCE(r.display_name, r_t.name) AS reporter_display_name,
+     COALESCE(a.display_name, a_t.name) AS assignee_display_name,
      c.error_message,
      c.category_id,
      cat.name           AS category_name,
@@ -1679,19 +1693,24 @@ const CASE_SELECT: &str =
 
 /// Reporter + case-owner resolve through memberships now (context_role
 /// 'Reporter' / 'Case Owner') — the case's people are membership rows, like a
-/// project's owner. `rep`/`own` LATERALs pick the relation, then join `users`
-/// for the display name. Plus the two-level category hydration (`cat` is the
-/// case's tagged category; `catp` its parent, NULL at root). Append after a
+/// project's owner. `rep`/`own` LATERALs pick the relation, then we hydrate
+/// the name from EITHER the users table (a user member) OR the teams table
+/// (a team member, per CAS_913's "team as grantee" design) — both joins are
+/// LEFT so the un-matched side is NULL, and CASE_SELECT's COALESCE picks
+/// whichever hit. Plus the two-level category hydration (`cat` is the case's
+/// tagged category; `catp` its parent, NULL at root). Append after a
 /// `FROM cases c` clause; partners with CASE_SELECT.
 const CASE_USER_JOINS: &str =
     "LEFT JOIN LATERAL (SELECT member_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
                           AND m.context_role = 'Reporter' LIMIT 1) rep ON true
      LEFT JOIN users r            ON r.redpash_id    = rep.member_redpash_id
+     LEFT JOIN teams r_t          ON r_t.redpash_id  = rep.member_redpash_id
      LEFT JOIN LATERAL (SELECT member_redpash_id FROM memberships m
                         WHERE m.object_redpash_id = c.redpash_id
                           AND m.context_role = 'Case Owner' LIMIT 1) own ON true
      LEFT JOIN users a            ON a.redpash_id    = own.member_redpash_id
+     LEFT JOIN teams a_t          ON a_t.redpash_id  = own.member_redpash_id
      LEFT JOIN case_categories cat ON cat.redpash_id = c.category_id
      LEFT JOIN case_categories catp ON catp.redpash_id = cat.parent_id";
 
@@ -1746,16 +1765,26 @@ pub async fn list_cases(
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
+                OR ($5 = 'internal' AND (EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
-                                                      AND cm.object_redpash_id = $6))
+                                                      AND cm.object_redpash_id = $6)
+                                       OR EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN teams t ON t.redpash_id = rep.member_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.context_role = 'Reporter'
+                                                      AND t.company_id = $6)))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
-                                                      AND cm.object_redpash_id = $6)))
+                                                      AND cm.object_redpash_id = $6)
+                                    AND NOT EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN teams t ON t.redpash_id = rep.member_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.context_role = 'Reporter'
+                                                      AND t.company_id = $6)))
            AND ($9::text[] IS NULL OR EXISTS (
                 SELECT 1 FROM memberships mv
                 WHERE mv.member_redpash_id = ANY($9)
@@ -1803,16 +1832,26 @@ pub async fn count_cases(
            AND ($4::text IS NULL OR c.title ILIKE '%' || $4 || '%'
                                 OR  COALESCE(c.description, '') ILIKE '%' || $4 || '%')
            AND ($5::text IS NULL OR $6::text IS NULL
-                OR ($5 = 'internal' AND     EXISTS (SELECT 1 FROM memberships rep
+                OR ($5 = 'internal' AND (EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
-                                                      AND cm.object_redpash_id = $6))
+                                                      AND cm.object_redpash_id = $6)
+                                       OR EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN teams t ON t.redpash_id = rep.member_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.context_role = 'Reporter'
+                                                      AND t.company_id = $6)))
                 OR ($5 = 'external' AND NOT EXISTS (SELECT 1 FROM memberships rep
                                                     JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
-                                                      AND cm.object_redpash_id = $6)))
+                                                      AND cm.object_redpash_id = $6)
+                                    AND NOT EXISTS (SELECT 1 FROM memberships rep
+                                                    JOIN teams t ON t.redpash_id = rep.member_redpash_id
+                                                    WHERE rep.object_redpash_id = c.redpash_id
+                                                      AND rep.context_role = 'Reporter'
+                                                      AND t.company_id = $6)))
            AND ($7::text[] IS NULL OR EXISTS (
                 SELECT 1 FROM memberships mv
                 WHERE mv.member_redpash_id = ANY($7)
