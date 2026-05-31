@@ -539,12 +539,13 @@
   background: var(--rp-surface);
   border-bottom: 1px solid var(--rp-border);
 }
-/* Properties-panel toggle — pinned to the left edge of the band so the
-   status pills stay optically centered. .is-active (panel open) tints it
-   with the accent, matching the workspace panel toggles. */
+/* Properties-panel toggle — pinned to the right edge of the band (same
+   side as the panel it controls) so the status pills stay optically
+   centered. .is-active (panel open) tints it with the accent, matching
+   the workspace panel toggles. */
 .rp-cases-side-toggle {
   position: absolute;
-  left: 0.75rem;
+  right: 0.75rem;
   top: 50%;
   transform: translateY(-50%);
 }
