@@ -24,30 +24,44 @@ team, and a team's roster — and a `member` may itself be a team (team-as-grant
 It relates to the **object-entity membership**, not a separate "team membership"
 concept; a team's roster is simply this edge with `object = a team`.
 
+Nested on **all five** object types: `companies`, `projects`, `cases`,
+`teams` (and itself reusable for any future entity) — each is just
+`.nest("/:rid/members", super::members::routes())` in that object's router.
+
 ## Routes (relative — nested under e.g. `/api/companies/:rid/members`)
 
-| Method · Path        | Gate                              | Action                    |
-|----------------------|-----------------------------------|---------------------------|
-| `GET /`              | any member (or platform admin)    | list the object's members |
-| `POST /`             | owner/admin on the object         | add a member (upsert)     |
-| `PATCH /:member_id`  | owner/admin on the object         | change a member's role    |
-| `DELETE /:member_id` | owner/admin **or** `@own` (leave) | remove a member           |
+| Method · Path        | Gate                                       | Action                    |
+|----------------------|--------------------------------------------|---------------------------|
+| `GET /`              | any effective role (any reach) · platform  | list the object's members |
+| `POST /`             | effective `Admin`+ (direct **or** scope)   | add a member (upsert)     |
+| `PATCH /:member_id`  | effective `Admin`+                         | change a member's role    |
+| `DELETE /:member_id` | effective `Admin`+ **or** `@own` (leave)   | remove a member           |
 
 ## Public surface
 
 - `pub fn routes` — the generic member router; nest it under any object type's
   `/:rid/members`. Axum carries the parent `:rid` into the handlers
   (`Path<String>` for list/add, `Path<(String, String)>` for patch/remove).
-- `pub(crate) async fn require_member` — resolve the caller's **direct** role on
-  the object (platform admin → `owner`), 404ing when they aren't a member
-  (leak-free). Also used by `companies::get_one` as the company read gate.
+  **Signature is parameterless on purpose** — every object shares one manage
+  policy, so adding an object type never edits this module.
+- `pub(crate) async fn require_member` — the **read** gate: `rbac::require_view`
+  (any effective role at any reach, or platform admin; leak-free 404). Also
+  reused by `companies::get_one`.
+- `manage_tier` (private) — the **reach-aware manage** gate. Returns the
+  caller's effective tier when they hold `Admin`+ on the object via *any* reach
+  (direct, or company/project cascade, or team), or are a platform admin;
+  `None` reach → 404, member-but-not-admin → 403.
 
 ## Shared rules (apply to every object type)
 
-- **Roles** `owner > admin > member`; the manage gate is direct owner/admin on
-  the object (not the cascade resolver — managing X's roster means being
-  owner/admin *of X*).
-- Only an **owner** may grant the `owner` role.
+- **Roles** `owner > admin > member > viewer`. The manage gate is **reach-aware**
+  (`resolve_grant().effective() >= Admin`) — *not* direct-only. This is required
+  for correctness across object types: a **case**'s memberships are all
+  `member`-tier (+`context_role`), so a direct-only gate would deny everyone but
+  a platform admin; the cascade lets the project/company admin manage the case
+  team. For `company`/`project`/`team` the behaviour is unchanged for direct
+  owners/admins — scope simply *adds* the correct parent-admin reach.
+- Only an **owner**-tier caller (effective) may grant the `owner` role.
 - The **last owner** can't be demoted or removed (promote/transfer first).
 - An **admin** can't remove an **owner**.
 - **Self-leave**: a member may `DELETE` their own membership without manage.

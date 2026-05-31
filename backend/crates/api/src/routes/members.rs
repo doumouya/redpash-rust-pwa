@@ -25,7 +25,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use shared::company::CompanyMember;
 
-use crate::{db, error::AppError, state::AppState};
+use crate::{db, error::AppError, rbac::Role, state::AppState};
 
 #[derive(Serialize)]
 struct MemberList { items: Vec<CompanyMember> }
@@ -54,30 +54,44 @@ fn forbidden(msg: &'static str) -> AppError {
     AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into(), inner: None }
 }
 
-/// Resolve the caller's **direct** role on the object, 404ing when they aren't
-/// a member (same as "object doesn't exist" — existence isn't leaked). A
-/// platform admin resolves as `owner` (full access). Used as the read gate
-/// (any member) and the base for the manage gate.
+/// Read gate for the roster: the caller must hold an effective role on the
+/// object — a membership ON it, OR a role via its company/project cascade, OR a
+/// team they belong to — or be a platform admin. 404 (leak-free) otherwise.
+/// Reused by `companies::get_one`.
 pub(crate) async fn require_member(
     state:  &AppState,
     object: &str,
     user:   &str,
-) -> Result<String, AppError> {
-    if crate::rbac::is_platform_admin(state, user).await.map_err(db_err)? {
-        return Ok("owner".to_string());
-    }
-    db::company_role(&state.db, object, user)
-        .await
-        .map_err(db_err)?
-        .ok_or_else(|| AppError::not_found("not_found", format!("object {object}")))
+) -> Result<(), AppError> {
+    crate::rbac::require_view(state, user, object, "object").await
 }
 
-/// owner / admin gate for membership management.
-fn require_manage(role: &str) -> Result<(), AppError> {
-    if role == "owner" || role == "admin" {
-        Ok(())
-    } else {
-        Err(forbidden("owner or admin role required"))
+/// Manage gate for the roster — **reach-aware**, so it's correct for every
+/// object type rather than only those with direct owner/admin members. The
+/// caller may manage when they hold effective `Admin`+ on the object (a direct
+/// owner/admin, OR `Admin`+ via the company/project cascade), or are a platform
+/// admin. Returns the caller's effective tier so the owner-grant rule can gate
+/// on it.
+///
+/// This is what lets a company/project admin manage a *case* team: case
+/// memberships are all `member`-tier (+`context_role`), so a direct-only gate
+/// would deny everyone — the cascade supplies the authority. Roster bookkeeping
+/// (the last-owner / demotion guards) stays DIRECT on the object via
+/// `company_role` / `company_owner_count`. Distinguishes 404 (no reach at all —
+/// leak-free) from 403 (a member who lacks the manage tier).
+async fn manage_tier(
+    state:  &AppState,
+    object: &str,
+    user:   &str,
+) -> Result<Role, AppError> {
+    if crate::rbac::is_platform_admin(state, user).await.map_err(db_err)? {
+        return Ok(Role::Owner);
+    }
+    let grant = crate::rbac::resolve_grant(&state.db, user, object).await.map_err(db_err)?;
+    match grant.effective() {
+        None                        => Err(AppError::not_found("not_found", format!("object {object}"))),
+        Some(t) if t >= Role::Admin => Ok(t),
+        Some(_)                     => Err(forbidden("owner or admin role required")),
     }
 }
 
@@ -110,14 +124,13 @@ async fn add(
     Json(body):   Json<AddMemberBody>,
 ) -> Result<Json<MemberList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &object, &user).await?;
-    require_manage(&role)?;
+    let tier = manage_tier(&state, &object, &user).await?;
 
     if !matches!(body.role.as_str(), "owner" | "admin" | "member") {
         return Err(AppError::bad_request("invalid", "role must be owner, admin or member"));
     }
     // Only an owner can mint another owner.
-    if body.role == "owner" && role != "owner" {
+    if body.role == "owner" && tier < Role::Owner {
         return Err(forbidden("only an owner can grant the owner role"));
     }
     // Target must be a real user — clean 404 rather than an FK 500.
@@ -153,14 +166,13 @@ async fn patch_role(
     Json(body):             Json<PatchMemberBody>,
 ) -> Result<Json<MemberList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &object, &user).await?;
-    require_manage(&role)?;
+    let tier = manage_tier(&state, &object, &user).await?;
 
     let new_role = body.role.trim();
     if !matches!(new_role, "owner" | "admin" | "member") {
         return Err(AppError::bad_request("invalid", "role must be owner, admin or member"));
     }
-    if new_role == "owner" && role != "owner" {
+    if new_role == "owner" && tier < Role::Owner {
         return Err(forbidden("only an owner can grant the owner role"));
     }
     let current = db::company_role(&state.db, &object, &member)
@@ -191,12 +203,16 @@ async fn remove(
     Path((object, member)): Path<(String, String)>,
 ) -> Result<Json<MemberList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    let role = require_member(&state, &object, &user).await?;
 
+    // Self-leave needs no manage authority — only a direct membership to drop
+    // (confirmed by the target lookup below). Removing anyone else needs the
+    // reach-aware manage tier.
     let is_self = member == user;
-    if !is_self {
-        require_manage(&role)?;
-    }
+    let caller_tier = if is_self {
+        None
+    } else {
+        Some(manage_tier(&state, &object, &user).await?)
+    };
     let target_role = db::company_role(&state.db, &object, &member)
         .await
         .map_err(db_err)?
@@ -206,7 +222,8 @@ async fn remove(
     {
         return Err(forbidden("can't remove the last owner — transfer ownership first"));
     }
-    if !is_self && role == "admin" && target_role == "owner" {
+    // Only an owner-tier caller can remove an owner (an admin can't).
+    if !is_self && caller_tier.map_or(false, |t| t < Role::Owner) && target_role == "owner" {
         return Err(forbidden("admins can't remove an owner"));
     }
     db::remove_company_member(&state.db, &object, &member)
