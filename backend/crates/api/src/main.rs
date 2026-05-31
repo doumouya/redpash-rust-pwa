@@ -15,6 +15,10 @@ mod db_query;
 mod error;
 mod event;
 mod id;
+// RBAC enforcement P1: the effective-access resolver. Not wired to a gate yet
+// — allow dead_code until P2 (the first gated atom) calls it.
+#[allow(dead_code)]
+mod rbac;
 mod redact;
 mod request_log;
 mod routes;

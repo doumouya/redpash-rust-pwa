@@ -997,23 +997,34 @@ pub async fn get_company(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Compan
     Ok(row.map(Into::into))
 }
 
-/// The caller's role in a company, or `None` when they aren't a member.
-/// Handlers treat `None` the same as "company doesn't exist" (404) so
+/// The caller's *effective* role in a company, or `None` when they aren't a
+/// member. Handlers treat `None` the same as "company doesn't exist" (404) so
 /// existence isn't leaked.
+///
+/// The widened membership PK lets a user hold more than one row on a company
+/// (a tier row + a labeled `context_role` row), so a plain `SELECT role …
+/// fetch_optional` would error on >1 row. Aggregate to the highest tier
+/// instead — that's the effective role, and it's always a single row.
+/// (`rbac::effective_role` is the general cascade/team-aware resolver; this
+/// stays the direct company-tier lookup the existing gates use.)
 pub async fn company_role(
     pool:        &PgPool,
     company_rid: &str,
     user_rid:    &str,
 ) -> sqlx::Result<Option<String>> {
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT role FROM memberships
+    let (role,): (Option<String>,) = sqlx::query_as(
+        "SELECT CASE max(CASE role WHEN 'owner' THEN 4 WHEN 'admin' THEN 3
+                                   WHEN 'member' THEN 2 WHEN 'viewer' THEN 1 ELSE 0 END)
+                  WHEN 4 THEN 'owner' WHEN 3 THEN 'admin'
+                  WHEN 2 THEN 'member' WHEN 1 THEN 'viewer' END
+         FROM memberships
          WHERE object_redpash_id = $1 AND member_redpash_id = $2",
     )
     .bind(company_rid)
     .bind(user_rid)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
-    Ok(row.map(|(r,)| r))
+    Ok(role)
 }
 
 /// Two users share at least one company (i.e. there exists a company
