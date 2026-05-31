@@ -27,6 +27,7 @@ mod redact;
 mod request_log;
 mod routes;
 mod state;
+mod type_registry;
 
 use std::net::SocketAddr;
 use tracing_subscriber::filter::filter_fn;

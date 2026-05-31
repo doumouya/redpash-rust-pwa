@@ -1,0 +1,174 @@
+//! Purpose: assemble the builtin object types as TypeDefinitions — identity +
+//! ui_hints (code-defined here) + fields (from the field_perms registry,
+//! mapped to FieldDef) + relationships (derived from each field's rel). The
+//! source for `GET /api/admin/types`; the handler layers field_permissions
+//! overrides onto the per-role cells. Builtins are "built-in custom objects"
+//! (Em Q5) — a custom type from the future type-registry table will produce the
+//! same TypeDefinition shape through the same serializer.
+//! Doc: docs/internal/code/backend/api/type_registry.md
+
+use shared::type_def::{FieldDef, FieldRel, RelationshipDef, TypeDefinition, UIHints};
+
+use crate::field_perms::{default_registry, FieldRow};
+
+/// Code-defined identity + presentation hints for one builtin type. Fields +
+/// relationships come from the field registry; this is everything that ISN'T a
+/// field. `rid_prefix` is reported as actually minted (live DB) — note that
+/// `dashboard` shares `FIL_` with `file` (both are `project_files` rows; only
+/// `chart` got a distinct `CHT_`).
+struct TypeMeta {
+    type_id:             &'static str,
+    rid_prefix:          &'static str,
+    display_name:        &'static str,
+    display_name_plural: &'static str,
+    rail_icon:           &'static str,
+    default_columns:     &'static [&'static str],
+    default_sort:        &'static str,
+}
+
+/// The 7 membership-bearing builtin types (the ones the field registry grids).
+/// `user` is a subject referenced by `rel` (e.g. case.assignee → user) but is
+/// not itself grid-served in v1 — same boundary `field_perms` draws.
+fn builtin_meta() -> &'static [TypeMeta] {
+    &[
+        TypeMeta {
+            type_id: "company", rid_prefix: "CMP_",
+            display_name: "Company", display_name_plural: "Companies",
+            rail_icon: "bi-building",
+            default_columns: &["name", "slug", "member_count"], default_sort: "name",
+        },
+        TypeMeta {
+            type_id: "project", rid_prefix: "PRJ_",
+            display_name: "Project", display_name_plural: "Projects",
+            rail_icon: "bi-folder",
+            default_columns: &["name", "status", "stage", "file_count"], default_sort: "name",
+        },
+        TypeMeta {
+            type_id: "case", rid_prefix: "CAS_",
+            display_name: "Case", display_name_plural: "Cases",
+            rail_icon: "bi-card-list",
+            default_columns: &["title", "status", "priority", "assignee"], default_sort: "updated_at",
+        },
+        TypeMeta {
+            type_id: "team", rid_prefix: "TEM_",
+            display_name: "Team", display_name_plural: "Teams",
+            rail_icon: "bi-people",
+            default_columns: &["name", "kind", "member_count"], default_sort: "name",
+        },
+        TypeMeta {
+            type_id: "file", rid_prefix: "FIL_",
+            display_name: "File", display_name_plural: "Files",
+            rail_icon: "bi-file-earmark-spreadsheet",
+            default_columns: &["display_name", "stage", "row_count"], default_sort: "display_name",
+        },
+        TypeMeta {
+            type_id: "chart", rid_prefix: "CHT_",
+            display_name: "Chart", display_name_plural: "Charts",
+            rail_icon: "bi-bar-chart",
+            default_columns: &["title", "source_file_id"], default_sort: "title",
+        },
+        TypeMeta {
+            // shares FIL_ with file — reported truthfully, flagged in the doc.
+            type_id: "dashboard", rid_prefix: "FIL_",
+            display_name: "Dashboard", display_name_plural: "Dashboards",
+            rail_icon: "bi-grid-1x2",
+            default_columns: &["title", "folder", "is_public"], default_sort: "title",
+        },
+    ]
+}
+
+/// "display_name" → "Display name", "redpash_id" → "Redpash ID". Sentence-case,
+/// with `id`/`url` tokens upper-cased. A presentation default — a custom type
+/// can carry an explicit label instead.
+fn humanize(key: &str) -> String {
+    let mut s = key
+        .split('_')
+        .map(|w| match w {
+            "id" => "ID".to_string(),
+            "url" => "URL".to_string(),
+            _ => w.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if let Some(first) = s.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    s
+}
+
+/// Map one registry row to a FieldDef. The per-role cells are the perm_class
+/// DEFAULTS; the handler overlays field_permissions overrides on read.
+fn field_to_def(r: &FieldRow) -> FieldDef {
+    FieldDef {
+        key:        r.field.to_string(),
+        label:      humanize(r.field),
+        data_type:  r.data_type.to_string(),
+        required:   None,
+        default:    None,
+        editable:   Some(r.is_editable),
+        editor:     r.editor.map(str::to_string),
+        options:    r.options.iter().map(|s| s.to_string()).collect(),
+        render:     None,
+        data_full:  None,
+        data_trunc: None,
+        data_prefix: None,
+        perm_class: Some(r.perm_class.as_str().to_string()),
+        owner:      Some(r.owner.as_str().to_string()),
+        admin:      Some(r.admin.as_str().to_string()),
+        member:     Some(r.member.as_str().to_string()),
+        viewer:     Some(r.viewer.as_str().to_string()),
+        rel:        r.rel.as_ref().map(|rel| FieldRel { to_type: rel.ty.to_string(), multi: rel.multi }),
+        requires_admin: None,
+    }
+}
+
+/// Assemble one builtin TypeDefinition. Cells carry perm_class defaults only —
+/// the `/admin/types` handler layers `field_permissions` overrides on top.
+fn build_one(m: &TypeMeta, registry: &[FieldRow]) -> TypeDefinition {
+    let fields: Vec<FieldDef> = registry
+        .iter()
+        .filter(|r| r.object == m.type_id)
+        .map(field_to_def)
+        .collect();
+    // Type-level relationships = the rollup of the fields that point elsewhere.
+    let relationships: Vec<RelationshipDef> = fields
+        .iter()
+        .filter_map(|f| {
+            f.rel.as_ref().map(|rel| RelationshipDef {
+                field: f.key.clone(),
+                to:    rel.to_type.clone(),
+                multi: rel.multi,
+                via:   None,
+            })
+        })
+        .collect();
+    TypeDefinition {
+        type_id:             m.type_id.to_string(),
+        rid_prefix:          m.rid_prefix.to_string(),
+        display_name:        m.display_name.to_string(),
+        display_name_plural: m.display_name_plural.to_string(),
+        is_builtin:          true,
+        source_origin:       Some("schema".to_string()),
+        fields,
+        relationships,
+        ui_hints: Some(UIHints {
+            rail_icon:       Some(m.rail_icon.to_string()),
+            default_columns: m.default_columns.iter().map(|s| s.to_string()).collect(),
+            default_sort:    Some(m.default_sort.to_string()),
+            list_filters:    Vec::new(),
+            chip_render:     Default::default(),
+        }),
+    }
+}
+
+/// All builtin TypeDefinitions (perm_class-default cells; no overrides applied).
+pub fn builtin_types() -> Vec<TypeDefinition> {
+    let registry = default_registry();
+    builtin_meta().iter().map(|m| build_one(m, &registry)).collect()
+}
+
+/// One builtin TypeDefinition by `type` id, or `None` if not a builtin type.
+pub fn builtin_type(type_id: &str) -> Option<TypeDefinition> {
+    let registry = default_registry();
+    builtin_meta().iter().find(|m| m.type_id == type_id).map(|m| build_one(m, &registry))
+}

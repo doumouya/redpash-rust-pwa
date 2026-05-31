@@ -25,6 +25,8 @@ PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see be
 GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (see below)
 GET /api/admin/audit-catalog ← per-tool latest run + severity counts + diff-vs-prev — GATED
 GET·PUT /api/admin/fields    ← field registry redtable (props + per-role perms) + set a cell — GATED
+GET /api/admin/types         ← builtin object types as TypeDefinitions (identity+fields+rels+ui_hints) — GATED
+GET /api/admin/types/:type   ← one TypeDefinition by `type` id (404 if unknown) — GATED
 
 ## Public surface
 
@@ -56,6 +58,19 @@ GET·PUT /api/admin/fields    ← field registry redtable (props + per-role perm
   → 400); reverting to the catalog default deletes the override row (keeps the
   table sparse); emits `field_permission_set`. Both require `is_platform_admin`.
   Enforcement of the matrix on field writes is the next slice.
+- **`GET /api/admin/types` + `/types/:type` (`list_types` / `get_type`) are GATED**
+  — the TypeDefinition contract (CAS_0FBF301F, spec [type-definition](../../../specs/type-definition.md)):
+  each builtin object type as a runtime-typed shape (identity + `fields[]` +
+  derived `relationships[]` + `ui_hints`) that the framework layer consumes
+  instead of hardcoding object types. Each `fields[]` entry is a FieldDef
+  carrying storage (`data_type`), presentation (`editor`/`options`/`rel`,
+  FE-opaque), and the resolved per-role cells (`perm_class` default ⊕
+  `field_permissions` overrides — the SAME merge as `/admin/fields`, stamped onto
+  the FieldDef via `overlay_overrides`). Assembled by
+  [type_registry.rs](../type_registry.md) from the [field_perms](../field_perms.md)
+  registry; `:type` 404s on a non-builtin id. Both require `is_platform_admin`.
+  `rid_prefix` is reported as actually minted — `dashboard` shares `FIL_` with
+  `file`. `user` is referenced via `rel` but not itself grid-served in v1.
 - **`GET /api/admin/audit-catalog` (`audit_catalog`) is GATED** — the static-audit
   half of the Admin Console audit frame (CAS_274EDF3B). One row per tool: latest
   `audit.run` (id / ran_at / git sha+branch), finding counts bucketed

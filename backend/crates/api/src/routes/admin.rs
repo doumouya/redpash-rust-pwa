@@ -36,6 +36,7 @@ use shared::{
     },
     company::{Company, CompanySummary},
     team::{Team, TeamSummary},
+    type_def::{TypeDefinition, TypeList},
     Page,
 };
 use std::collections::HashMap;
@@ -69,6 +70,8 @@ pub fn routes() -> Router<AppState> {
         .route("/rbac",              get(rbac_resolve))
         .route("/audit-catalog",     get(audit_catalog))
         .route("/fields",            get(list_fields).put(put_field))
+        .route("/types",             get(list_types))
+        .route("/types/:type",       get(get_type))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -1428,6 +1431,83 @@ async fn put_field(
         }
     }
     Ok(Json(row))
+}
+
+// ── /api/admin/types (TypeDefinition contract, CAS_0FBF301F) ──────────────
+
+/// All `field_permissions` override rows `(object_type, field, role, permission)`.
+async fn fetch_field_overrides(
+    state: &AppState,
+) -> Result<Vec<(String, String, String, String)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT object_type, field, role, permission FROM field_permissions",
+    )
+    .fetch_all(&state.db)
+    .await?)
+}
+
+/// Stamp the `field_permissions` overrides onto one TypeDefinition's per-role
+/// cells — the same `defaults ⊕ overrides` merge as `/admin/fields` (spec §3.2),
+/// but written onto the FieldDef cells the `/types` wire shape carries. The
+/// permission vocabulary stays single-sourced through `field_perms::Perm`.
+fn overlay_overrides(t: &mut TypeDefinition, overrides: &[(String, String, String, String)]) {
+    for (obj, field, role, perm) in overrides {
+        if &t.type_id != obj {
+            continue;
+        }
+        let Some(p) = crate::field_perms::Perm::from_str(perm) else { continue };
+        if let Some(f) = t.fields.iter_mut().find(|f| &f.key == field) {
+            let pv = Some(p.as_str().to_string());
+            match role.as_str() {
+                "owner"  => f.owner = pv,
+                "admin"  => f.admin = pv,
+                "member" => f.member = pv,
+                "viewer" => f.viewer = pv,
+                _ => {}
+            }
+        }
+    }
+}
+
+/// `GET /api/admin/types` — every builtin object type as a TypeDefinition
+/// (identity + fields + relationships + ui_hints), the runtime-typed contract
+/// the framework layer consumes instead of hardcoding object types (spec §4.1,
+/// CAS_0FBF301F). Each `fields[]` entry carries storage (`data_type`) +
+/// presentation (`editor`/`options`/`rel`) + the resolved per-role cells
+/// (perm_class default ⊕ field_permissions overrides). GATED to platform admins,
+/// same posture as `/admin/fields`.
+async fn list_types(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+) -> Result<Json<TypeList>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "types"));
+    }
+    let mut types = crate::type_registry::builtin_types();
+    let overrides = fetch_field_overrides(&state).await?;
+    for t in &mut types {
+        overlay_overrides(t, &overrides);
+    }
+    Ok(Json(TypeList { types }))
+}
+
+/// `GET /api/admin/types/:type` — one builtin TypeDefinition by `type` id
+/// (404 if it isn't a builtin type). Same gating + override merge as the list.
+async fn get_type(
+    State(state):  State<AppState>,
+    headers:       HeaderMap,
+    Path(type_id): Path<String>,
+) -> Result<Json<TypeDefinition>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "types"));
+    }
+    let mut td = crate::type_registry::builtin_type(&type_id)
+        .ok_or_else(|| AppError::not_found("not_found", "unknown type"))?;
+    let overrides = fetch_field_overrides(&state).await?;
+    overlay_overrides(&mut td, &overrides);
+    Ok(Json(td))
 }
 
 /// `GET /api/admin/audit-catalog` — the static-audit half of the Admin Console

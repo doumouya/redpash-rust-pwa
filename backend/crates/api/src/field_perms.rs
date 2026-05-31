@@ -68,6 +68,17 @@ pub enum PermClass {
 }
 
 impl PermClass {
+    /// Wire string (matches the serde snake_case repr); the type registry uses
+    /// it to stamp `perm_class` onto a FieldDef.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PermClass::Standard => "standard",
+            PermClass::Collaborative => "collaborative",
+            PermClass::OwnerGrade => "owner_grade",
+            PermClass::Personal => "personal",
+            PermClass::Readonly => "readonly",
+        }
+    }
     /// `[owner, admin, member, viewer]`.
     fn cells(self) -> [Perm; 4] {
         match self {

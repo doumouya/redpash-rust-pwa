@@ -55,7 +55,8 @@ reaches + the shared DTO shapes.
   `as_str` / `from_str` for the SQL/wire round-trip; serializes lowercase.
 - `pub enum PermClass` — `Standard` (`WWRR`) / `Collaborative` (`WWWR`) /
   `OwnerGrade` (`WRRR`) / `Personal` (`WNNN`) / `Readonly` (`RRRR`); serializes
-  snake_case. The per-role cells derive from it (`cells() -> [owner,admin,member,viewer]`).
+  snake_case (`as_str()` gives the same wire string for the type registry). The
+  per-role cells derive from it (`cells() -> [owner,admin,member,viewer]`).
 - `pub struct Rel` — a relationship field's target: `type` (the related object
   type, serde-renamed from `ty`) + `multi`. Drives pickers + rid write-validation.
 - `pub struct FieldRow` — one registry row (= the spec's FieldDef): `object`,
