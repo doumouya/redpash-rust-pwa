@@ -44,7 +44,10 @@ async fn list_files(
     Path(rid):    Path<String>,
 ) -> Result<Json<ProjectFiles>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
+    // RBAC: project.view (own / company / all) — a project owner, a company
+    // member/admin (cascade), or platform admin sees the project's files.
+    // Broadens the old owner-only gate to the catalog reach. dev_user bypasses.
+    crate::rbac::require_view(&state, &user, &rid, "project").await?;
     let items = db::list_files_in_project(&state.db, &rid)
         .await?;
     Ok(Json(ProjectFiles { items }))
@@ -59,7 +62,12 @@ async fn get_one(
     Path(rid):    Path<String>,
 ) -> Result<Json<ProjectSummary>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::project_owner(&state.db, &rid).await, &user, "project", &rid)?;
+    // RBAC: project.view (own / company / all) — owner, company member/admin
+    // (cascade), or platform admin. Broadens the old owner-only read gate to
+    // the catalog reach. dev_user bypasses. (patch/delete stay owner-gated —
+    // their is_default/default-guard logic assumes caller == owner; admin-edit
+    // broadening is a follow-up that refactors that assumption.)
+    crate::rbac::require_view(&state, &user, &rid, "project").await?;
     db::get_project(&state.db, &rid)
         .await?
         .map(Json)
