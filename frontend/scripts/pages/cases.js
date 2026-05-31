@@ -998,17 +998,24 @@ export default function cases(app, { session }) {
   });
 
   // Properties-panel toggle — same mechanism as the workspace panels'
-  // bindPanel: the button flips .open on the side + .is-active on itself.
-  // Defaults open (markup carries .open / is-active); collapse for more
-  // room on the comment thread.
+  // bindPanel: the button flips .open on the side + .is-active on itself,
+  // and the choice persists via the casesDetailPanel pref so it survives
+  // reloads + case switches. The markup's default .open is just the
+  // pre-JS state; we reconcile to the pref here at mount (the detail is
+  // still hidden at this point, so no collapse animation flashes).
   const sideToggle = app.querySelector("#rp-cases-side-toggle");
   const sidePanel  = app.querySelector("#rp-cases-detail-side");
   if (sideToggle && sidePanel) {
-    sideToggle.addEventListener("click", () => {
-      const open = !sidePanel.classList.contains("open");
+    const setSidePanel = (open) => {
       sidePanel.classList.toggle("open", open);
       sideToggle.classList.toggle("is-active", open);
       sideToggle.setAttribute("aria-pressed", String(open));
+    };
+    setSidePanel(getPref("casesDetailPanel") === "open");
+    sideToggle.addEventListener("click", () => {
+      const open = !sidePanel.classList.contains("open");
+      setSidePanel(open);
+      setPref("casesDetailPanel", open ? "open" : "closed");
     });
   }
 

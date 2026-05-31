@@ -59,6 +59,11 @@ export const PREFS = {
   // `docs/internal/jira-flow-proposition/proposition.md` as a phase
   // 2-3 migration requirement. Live-toggleable from the rail head.
   casesRailGroupBy: { values: ["status", "assignee"],           default: "status", attr: null },
+  // Cases page — whether the case-detail properties side panel is open.
+  // Persisted so the collapse/expand choice survives reloads + case
+  // switches. Two-state like casesRailGroupBy; cases.js applies it as a
+  // class on the panel element (per-surface, not <html>), so attr:null.
+  casesDetailPanel: { values: ["open", "closed"],               default: "open",  attr: null },
   // Workspace rail — which object kind each project group lists.
   // "data" shows CSV/Excel data files (the redtable surface); whereas
   // "dashboards" shows reports (chart files) + dashboards (the designer

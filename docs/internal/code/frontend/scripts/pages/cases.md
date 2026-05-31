@@ -17,7 +17,7 @@ Cases — rail + (kanban board | case detail) surface. v1 scope: cases + comment
 - Default export: page mount.
 - Rail: case list grouped by status + Internal/External source toggle + Assignee/Status chip rows.
 - Main: board overview (mutually-exclusive with detail) OR case detail.
-- Detail properties panel (`#rp-cases-detail-side`) is a collapsible side panel: a toggle pinned to the left of the status-path band (`#rp-cases-side-toggle`) flips `.open` on the panel + `.is-active` on itself — same mechanism as the workspace Filter/Tools panels (width 0 ⇄ 18rem, fixed-width inner to avoid mid-slide reflow). Defaults open.
+- Detail properties panel (`#rp-cases-detail-side`) is a collapsible side panel: a toggle pinned to the right of the status-path band (`#rp-cases-side-toggle`) flips `.open` on the panel + `.is-active` on itself — same mechanism as the workspace Filter/Tools panels (width 0 ⇄ 18rem, fixed-width inner to avoid mid-slide reflow). Open/closed persists via the `casesDetailPanel` pref (default open), reconciled at mount so it survives reloads + case switches.
 
 ## Drift-prone areas
 

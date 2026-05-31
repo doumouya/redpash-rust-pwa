@@ -3,7 +3,7 @@ title: frontend/scripts/prefs.js
 source: ../../../../frontend/scripts/prefs.js
 owner: Torv
 section: Internal · Code · Frontend · scripts
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # prefs.js
@@ -21,6 +21,7 @@ App-wide preferences — SWR cache over the server user_preferences table. Sourc
 ## Drift-prone areas
 
 - Wire: user_preferences table + /api/me/prefs PATCH protocol. See specs/user-preferences.md.
+- Registered prefs (PREFS) are enum-validated with defaults + optional `<html>` attr reflection; unregistered keys pass through untouched. Per-surface Cases UI prefs live here too (casesDoneWindow, casesRailGroupBy, casesDetailPanel).
 
 ## Related
 
