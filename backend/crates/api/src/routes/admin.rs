@@ -47,7 +47,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/users",             get(list_users))
         .route("/users/stats",       get(stats_users))
-        .route("/users/:rid",        axum::routing::delete(delete_user))
+        .route("/users/:rid",        axum::routing::patch(patch_user_role).delete(delete_user))
         .route("/companies",         get(list_companies))
         .route("/companies/stats",   get(stats_companies))
         .route("/companies/:rid",    axum::routing::delete(delete_company))
@@ -1307,6 +1307,65 @@ async fn delete_user(
         .user(caller)
         .context(serde_json::json!({ "target_user": rid }))
         .send();
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct PatchUserRoleBody { role: String }
+
+/// `PATCH /api/admin/users/:rid` — set a user's platform role
+/// (`admin` | `user`). CAS_D78667D1 option (b): the UI-driven path to grant
+/// platform-admin, retiring the psql one-liner + the env allowlist's
+/// restart requirement. **Gated** unlike its dev-permissive siblings here —
+/// granting admin is privilege escalation, so the caller must already BE a
+/// platform admin (leak-free 404 otherwise), and the **last admin can't be
+/// demoted** (never strand the platform with zero admins). The FE "promote"
+/// affordance on the Home Users tab is the teams-lane Torv's follow-up.
+async fn patch_user_role(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+    Json(body):   Json<PatchUserRoleBody>,
+) -> Result<StatusCode, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        // Leak-free: a non-admin can't distinguish "no such endpoint/user".
+        return Err(AppError::not_found("not_found", format!("user {rid}")));
+    }
+    let role = body.role.trim();
+    if !matches!(role, "admin" | "user") {
+        return Err(AppError::bad_request("invalid", "role must be admin or user"));
+    }
+    let current = sqlx::query_as::<_, (String,)>("SELECT role FROM users WHERE redpash_id = $1")
+        .bind(&rid)
+        .fetch_optional(&state.db)
+        .await?
+        .map(|(r,)| r)
+        .ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?;
+
+    // Last-admin guard — demoting the only platform admin would lock everyone
+    // out of every admin-gated surface (including this endpoint).
+    if current == "admin" && role == "user" {
+        let admin_count = sqlx::query_as::<_, (i64,)>("SELECT count(*) FROM users WHERE role = 'admin'")
+            .fetch_one(&state.db)
+            .await?
+            .0;
+        if admin_count <= 1 {
+            return Err(AppError::conflict("last_admin", "cannot demote the last platform admin"));
+        }
+    }
+
+    if role != current {
+        sqlx::query("UPDATE users SET role = $1 WHERE redpash_id = $2")
+            .bind(role)
+            .bind(&rid)
+            .execute(&state.db)
+            .await?;
+        crate::event::warn(&state.db, "user_role_change", format!("{rid} role: {current} -> {role}"))
+            .user(caller)
+            .context(serde_json::json!({ "target_user": rid, "prior_role": current, "new_role": role }))
+            .send();
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
