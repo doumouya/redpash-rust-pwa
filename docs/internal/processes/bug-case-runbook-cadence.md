@@ -69,20 +69,33 @@ prerelease, do the work, push.
 ### 3. Fix → runbook
 
 When the fix lands, write a runbook entry at
-`docs/internal/runbooks/NNNN-short-slug.md` (next available number,
-zero-padded, sequential). Format follows the
-[runbooks index](../runbooks/index.md): five sections (Problem
-Statement / Troubleshooting steps / RCA / Solution / Post Checking)
-plus a "Discipline this updates" close-out and a "Linked" list.
+`docs/internal/runbooks/CAS_<rid>-short-slug.md` — **named after the
+case's `CAS_<rid>` so the runbook is findable by case ID in the
+filesystem the same way it's findable in the cases system.** Em
+2026-05-31: *"we used 0006 0007 because haven't implemented the
+Case object yet, at the time — let's use proper IDs just so we can
+find them in the system."*
+
+Legacy entries `0001-0007` keep their pre-Case-object numbering for
+historical continuity; do NOT renumber. The `CAS_<rid>-<slug>.md`
+naming applies to all new entries going forward. Add `case_id:
+CAS_<rid>` to the frontmatter so it's also discoverable via metadata
+queries.
+
+Format follows the [runbooks index](../runbooks/index.md): five
+sections (Problem Statement / Troubleshooting steps / RCA / Solution /
+Post Checking) plus a "Discipline this updates" close-out and a
+"Linked" list.
 
 **Write the runbook while the context is fresh** — that night, or the
 same day. Memory of "why exactly we ruled out X first" decays fast.
 
-For interrelated bugs surfaced in one diagnostic arc (today's 0007 is
-the worked example: 4 commits, 4 distinct root causes, all in the same
-neighborhood), prefer **one consolidated runbook** with the layers
-called out as numbered subsections, not N separate runbooks. The
-diagnostic arc *is* the lesson; splitting it loses the through-line.
+For interrelated bugs surfaced in one diagnostic arc (the column-drag
+cluster is the worked example: 4 commits, 4 distinct root causes,
+all in the same neighborhood), prefer **one consolidated runbook**
+with the layers called out as numbered subsections, not N separate
+runbooks. The diagnostic arc *is* the lesson; splitting it loses
+the through-line.
 
 ### 4. Case ↔ runbook link
 
@@ -102,14 +115,21 @@ Runbook 0007 was backfilled this way.
 Every fix-level commit body should end with a runbook line:
 
 ```
-Runbook: docs/internal/runbooks/NNNN-short-slug.md
-Case: <MCP case id, when filed>
+Runbook: docs/internal/runbooks/CAS_<rid>-short-slug.md
+Case: CAS_<rid>
+```
+
+When the case isn't filed yet (MCP down, or just discovered) use:
+
+```
+Runbook: docs/internal/runbooks/<tmp-slug>.md   (rename to CAS_<rid>-... once filed)
+Case: TBD
 ```
 
 When a fix is the Nth layer of an existing runbook (e.g. a follow-up
-to 0007), append to the existing runbook and reference it by its
-existing number — don't open a new one for what's the same incident
-class.
+to the column-drag cluster), append to the existing runbook and
+reference it by its existing path — don't open a new one for what's
+the same incident class.
 
 ## Why not just rely on git log
 

@@ -3,7 +3,17 @@ title: 0007 — Column drag-reorder cluster (4 layers)
 section: Internal
 order: 7
 last modified date: 2026-05-31
+case_id: TBD
+filename_pending_rename: CAS_<rid>-column-drag-reorder-cluster.md
 ---
+
+> **Filename note:** The `NNNN-<slug>.md` numbering on 0001-0007 is a
+> pre-Case-object stopgap (the Case workstream landed after 0006).
+> Going forward, runbooks should be named `CAS_<rid>-<slug>.md` once
+> the case is filed via the MCP. This entry will be renamed once
+> the MCP `case_create` auth issue (HTTP 401, `no session cookie`)
+> is resolved and a real `CAS_<rid>` is allocated — see the
+> [cadence](../processes/bug-case-runbook-cadence.md).
 
 # 0007 — Column drag-reorder cluster (4 layers)
 
