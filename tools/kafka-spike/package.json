@@ -1,0 +1,19 @@
+{
+  "name": "kafka-spike",
+  "version": "0.0.1",
+  "description": "CAS_ACAA76AA meta-codec resolver spike against real Confluent Schema Registry. Spike-scoped — production codec is a separate v1.1 decision.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "spike": "node spike.mjs",
+    "spike:phase1": "node spike.mjs phase1",
+    "spike:phase2": "node spike.mjs phase2",
+    "spike:phase3": "node spike.mjs phase3",
+    "spike:phase4": "node spike.mjs phase4",
+    "spike:phase5": "node spike.mjs phase5"
+  },
+  "dependencies": {
+    "@kafkajs/confluent-schema-registry": "^3.3.0",
+    "kafkajs": "^2.2.4"
+  }
+}
