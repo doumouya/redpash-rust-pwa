@@ -1622,6 +1622,20 @@ export default function home(app, { session: _session }) {
     // Apply contenteditable + .editable to the right TDs based on
     // spec.columns. Stripped + re-applied on every fetchList rewrite
     // since tbody.innerHTML rewrites wholesale. Idempotent.
+    //
+    // 2026-05-31: pre-fix iterated `spec.columns.forEach((col, i) =>
+    // tds[i + offset])` which assumes tbody TDs are in spec column
+    // order. That holds at the moment of the post-fetchList paint
+    // (before _applyColumnOrder reorders them) but NOT once a user has
+    // dragged a column to a new position — `tds[i]` is then whichever
+    // column ended up at DOM position i, NOT spec.columns[i]. On Users
+    // that meant any tab with a custom reorder + edit-mode toggled
+    // made the WRONG column editable (e.g. "Joined", a system date,
+    // instead of "Job"). Fix: look up each editable col's CURRENT
+    // position via the live thead's `data-col-key`, then index tbody at
+    // that position. Requires the post-fetchList hook chain to call
+    // _applyColumnOrder BEFORE _decorateEditMode so thead and tbody are
+    // column-aligned when this runs.
     function decorateEditMode() {
       const tbody = view.querySelector("#rp-home-list-tbody");
       if (!tbody) return;
@@ -1632,15 +1646,23 @@ export default function home(app, { session: _session }) {
         td.removeAttribute("data-edit-key");
       });
       if (!editMode) return;
-      // Map column index → editKey (only for columns with editable: true).
-      const cols = spec.columns || [];
+      const thead = view.querySelector(".rt-table thead tr");
+      if (!thead) return;
+      // Resolve each editable spec col's CURRENT position from the
+      // live thead — survives any drag-reorder of the columns.
+      const dataTHs = [...thead.querySelectorAll("th[data-col-key]")];
+      const keyToPos = new Map(dataTHs.map((th, i) => [th.dataset.colKey, i]));
       // selectMode adds a leading .rp-list-sel column; offset accordingly.
       const offset = selectMode ? 1 : 0;
+      const editableCols = (spec.columns || []).filter(
+        (col) => typeof col === "object" && col.editable && col.editKey,
+      );
       tbody.querySelectorAll("tr[data-rid]").forEach((tr) => {
         const tds = tr.querySelectorAll("td");
-        cols.forEach((col, i) => {
-          if (typeof col !== "object" || !col.editable || !col.editKey) return;
-          const td = tds[i + offset];
+        editableCols.forEach((col) => {
+          const pos = keyToPos.get(col.key);
+          if (pos === undefined) return;
+          const td = tds[pos + offset];
           if (!td) return;
           td.classList.add("editable");
           td.setAttribute("contenteditable", "plaintext-only");
@@ -2293,24 +2315,36 @@ export default function home(app, { session: _session }) {
       // rewrite. The hooks are set up in renderListBody when the
       // active tab's spec declares the relevant modes; absent on
       // other tabs (no-op).
+      //
+      // Order matters here:
+      //   1. _decorateSelectMode  — inserts the leading .rp-list-sel
+      //      sentinel cells so subsequent passes see them as
+      //      framing-only columns to preserve.
+      //   2. _applyColumnOrder    — reorders data THs and data TDs to
+      //      the user's persisted target order. Anchors data inserts
+      //      before any trailing sentinel TH (.rp-home-hide-th) so
+      //      that stays at the right edge.
+      //   3. _applyHiddenColumns  — positionally indexes tbody by TH
+      //      position, so thead + tbody must be column-aligned first.
+      //   4. _decorateEditMode    — looks up each editable col's
+      //      current DOM position via the live thead and tags the
+      //      matching tbody TD. Requires thead and tbody to be
+      //      column-aligned (which step 2 ensures), otherwise the
+      //      `.editable` class lands on the wrong column — pre-2026-
+      //      05-31 it tagged whatever column happened to land at the
+      //      spec's editable index after the user's drag-reorder
+      //      (e.g. "Joined" instead of "Job" on Users).
       if (typeof view._decorateSelectMode === "function") {
         view._decorateSelectMode();
       }
-      if (typeof view._decorateEditMode === "function") {
-        view._decorateEditMode();
-      }
-      // Re-apply the column-reorder saved order so new rows pick up
-      // the user's preferred column sequence (drag-reorder persists
-      // across refetches + tab switches). Runs BEFORE the hide pass
-      // because applyHiddenColumns positionally indexes tbody by TH
-      // position — they have to be aligned first or the wrong columns
-      // get hidden after a drag-reorder + paginate.
       if (typeof view._applyColumnOrder === "function") {
         view._applyColumnOrder();
       }
-      // Re-apply the hidden-columns set so new rows pick up the hide.
       if (typeof view._applyHiddenColumns === "function") {
         view._applyHiddenColumns();
+      }
+      if (typeof view._decorateEditMode === "function") {
+        view._decorateEditMode();
       }
       renderListPager();
     } catch (err) {
