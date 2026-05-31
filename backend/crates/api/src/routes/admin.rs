@@ -68,6 +68,7 @@ pub fn routes() -> Router<AppState> {
         .route("/steps/stats",       get(stats_steps))
         .route("/rbac",              get(rbac_resolve))
         .route("/audit-catalog",     get(audit_catalog))
+        .route("/fields",            get(list_fields))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -1310,6 +1311,35 @@ async fn delete_user(
         .context(serde_json::json!({ "target_user": rid }))
         .send();
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/admin/fields` — the **field registry** as a redtable (CAS_C4219F2B):
+/// one row per object field, with its properties (`is_editable`, `is_sortable`)
+/// + the per-role permission state (`owner`/`admin`/`member`/`viewer`) as
+/// columns — "how the fields are actually shaped". Returns a `Page<FieldRow>`
+/// so the Admin Console renders it through the same redtable reader as every
+/// other LIST_VIEWS tab. Slice 1: the static default registry (no overrides
+/// yet). GATED to platform admins.
+async fn list_fields(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+) -> Result<Json<Page<crate::field_perms::FieldRow>>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "fields"));
+    }
+    let rows = crate::field_perms::default_registry();
+    let n = rows.len() as u64;
+    Ok(Json(Page {
+        rows,
+        total: n,
+        all_count: n,
+        page: 1,
+        size: n as u32,
+        pages: 1,
+        ms: 0,
+        row_indices: Vec::new(),
+    }))
 }
 
 /// `GET /api/admin/audit-catalog` — the static-audit half of the Admin Console

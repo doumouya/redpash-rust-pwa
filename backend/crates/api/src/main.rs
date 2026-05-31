@@ -19,6 +19,10 @@ mod id;
 // `case.view`; effective_role / Role expand as more atoms are gated).
 #[allow(dead_code)]
 mod rbac;
+// Field-level permission registry (CAS_C4219F2B). Ord/Perm variants are used
+// by the matrix + reserved for slice-3 enforcement.
+#[allow(dead_code)]
+mod field_perms;
 mod redact;
 mod request_log;
 mod routes;
