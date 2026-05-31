@@ -40,6 +40,11 @@ pub struct UserSummary {
     #[serde(default)] pub job_title:    Option<String>,
     #[serde(default)] pub organisation: Option<String>,
     pub plan:         String,
+    /// Platform-wide role from `users.role` ('user' / 'admin'). Distinct
+    /// from the per-membership `org_role` below — that one's the user's
+    /// role *within* their top company; this one's their platform-wide
+    /// access tier (admin = bypasses RBAC per `rbac::is_platform_admin`).
+    pub role:         String,
     /// User's top company membership, joined from `memberships` (company objects).
     /// "Top" = owner first, then admin, then member; ties broken by
     /// most-recent `joined_at`. NULL when the user has no membership.

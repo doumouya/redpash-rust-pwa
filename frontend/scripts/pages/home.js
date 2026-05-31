@@ -293,6 +293,7 @@ export default function home(app, { session: _session }) {
         { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true, editable: true, editKey: "username" },
         { label: "Email",       key: "email",        sortable: true,  defaultHidden: true, editable: true, editKey: "email" },
         { label: "Plan",        key: "plan",         sortable: true,  editable: true, editKey: "plan", editor: "chip-enum", options: ["free", "pro", "team", "enterprise"], render: "planChip" },
+        { label: "Platform",    key: "role",         sortable: true,  defaultHidden: false },
         { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
         { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true, editable: true, editKey: "organisation" },
         { label: "Org",         key: "org_name",     sortable: true  },
@@ -330,6 +331,9 @@ export default function home(app, { session: _session }) {
         // value so the OFF re-render can rebuild the chip via planChip().
         // decorateEditMode swaps the chip span for a <select> on ON.
         + '<td data-full="' + esc(u.plan || "") + '">' + planChip(u.plan) + '</td>'
+        // PLATFORM — users.role chip (admin = RBAC bypass). Distinct from
+        // org_role below (membership role on top company).
+        + '<td>' + platformRoleChip(u.role) + '</td>'
         + '<td class="rp-meta">' + esc(u.job_title || "—") + '</td>'
         + '<td class="rp-meta">' + esc(u.organisation || "—") + '</td>'
         + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
@@ -500,14 +504,13 @@ export default function home(app, { session: _session }) {
         // (Home rail tabs, omnisearch sections, kindLabel). values stay
         // singular: they're the ?scope= wire enum.
         options: [
-          { label: "Projects", value: "project" },
+          { label: "Projects",  value: "project" },
           { label: "Companies", value: "company" },
-          // Case Team Member = case-scope Membership (rbac/membership.md,
-          // v3). Disabled placeholder telegraphing the coming scope — the
-          // backend (case_memberships + /admin/memberships?scope=case)
-          // isn't built yet, so it can't be selected.
-          { label: "Cases", value: "case", disabled: true,
-            title: "Case Team Members — coming soon" },
+          // Case Team Members — Reporter / Case Owner memberships from
+          // the entity-edge model (mig 20260531000000). Wired
+          // 2026-05-31 once the cases table is in the supertype + the
+          // backend list_memberships handler accepts scope=case.
+          { label: "Cases",     value: "case" },
         ],
         default: "project",
       }],
@@ -2546,6 +2549,19 @@ export default function home(app, { session: _session }) {
     const v = String(plan || "").toLowerCase();
     const tone = v === "free" ? "" : "rt-tone--low";
     return '<span class="rt-mono-pill ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+  // platformRoleChip — surfaces `users.role` (platform-wide tier; admin =
+  // RBAC bypass per rbac::is_platform_admin). Distinct from org_role
+  // (membership role on a specific scope). Empty cell for the default
+  // 'user' tier so platform admins POP visually in the Users tab.
+  function platformRoleChip(role) {
+    const v = String(role || "user").toLowerCase();
+    if (v === "user" || v === "" || v === "—") {
+      return '<span class="rp-meta">—</span>';
+    }
+    // admin gets the "high" tone — admin / owner-tier visual weight
+    const tone = v === "admin" ? "rt-tone--high" : "rt-tone--mid";
+    return '<span class="rt-mono-pill ' + tone + '">' + esc(role) + '</span>';
   }
   // Cases status — flow: backlog → todo → in_progress → in_review → done.
   // Mid-flow states (in_progress / in_review) get the warmer tone; the

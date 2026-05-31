@@ -158,7 +158,7 @@ pub(super) fn sort_clause(
 /// can pass via ?sort=. Mirror's the LIST_VIEWS column spec on the frontend.
 const SORTABLE_USERS: &[&str] = &[
     "display_name", "first_name", "last_name", "username", "email",
-    "plan", "job_title", "organisation", "org_name", "org_role",
+    "plan", "role", "job_title", "organisation", "org_name", "org_role",
     "created_at",
 ];
 
@@ -183,6 +183,7 @@ async fn list_users(
         "username"     => "u.username",
         "email"        => "u.email",
         "plan"         => "u.plan",
+        "role"         => "u.role",
         "job_title"    => "u.job_title",
         "organisation" => "u.organisation",
         "org_name"     => "m.company_name",
@@ -219,7 +220,7 @@ async fn list_users(
     let sql = format!(
         "SELECT u.redpash_id, u.username, u.email, u.display_name,
                 u.first_name, u.last_name, u.avatar_url,
-                u.job_title, u.organisation, u.plan, u.created_at,
+                u.job_title, u.organisation, u.plan, u.role, u.created_at,
                 m.company_id   AS org_id,
                 m.company_name AS org_name,
                 m.role         AS org_role
@@ -265,6 +266,7 @@ async fn list_users(
             job_title:    r.try_get("job_title").ok(),
             organisation: r.try_get("organisation").ok(),
             plan:         r.try_get("plan").unwrap_or_default(),
+            role:         r.try_get("role").unwrap_or_else(|_| "user".into()),
             org_id:       r.try_get("org_id").ok(),
             org_name:     r.try_get("org_name").ok(),
             org_role:     r.try_get("org_role").ok(),
@@ -371,23 +373,27 @@ async fn list_memberships(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
     let scope = q.scope.as_deref().unwrap_or("project");
-    if scope != "project" && scope != "company" {
+    if scope != "project" && scope != "company" && scope != "case" {
         return Err(AppError::bad_request(
             "admin",
-            "scope must be one of: project, company",
+            "scope must be one of: project, company, case",
         ));
     }
 
     let (sort_key, sort_dir) = sort_clause(
         q.sort.as_deref(), q.dir.as_deref(), SORTABLE_MEMBERSHIPS, "joined_at",
     );
-    // The two scope-specific queries share aliases (user_display_name,
+    // The three scope-specific queries share aliases (user_display_name,
     // scope_name, role, joined_at) so the same sort_col resolves against
-    // either branch.
+    // every branch.
     let sort_col = match sort_key.as_str() {
         "user_display_name" => "u.display_name",
         "user_username"     => "u.username",
-        "scope_name"        => match scope { "project" => "p.name", _ => "c.name" },
+        "scope_name"        => match scope {
+            "project" => "p.name",
+            "case"    => "ca.title",
+            _         => "c.name",
+        },
         // "scope" is a literal column emitted by the SELECT — a
         // single string per response since the WHERE filters by it.
         // Sorting by it is a no-op within a single result set; keep
@@ -398,20 +404,19 @@ async fn list_memberships(
         _                   => "m.joined_at",
     };
 
-    // all_count = total across BOTH scopes (the rail tab's "everything"
-    // count). total = scope+role-filtered count.
-    //
-    // Post-consolidation the one table also holds case memberships
-    // (Reporter / Case Owner), which this tab does NOT surface — so a bare
-    // COUNT(*) over-reports. Count project + company memberships explicitly
-    // via the same join-as-filter the scope queries below use: a case-object
-    // membership row joins to neither table and is excluded.
+    // all_count = total across all three scopes (project + company + case),
+    // the rail tab's "everything" count. total = scope+role-filtered count.
+    // Per-scope COUNT(*) via JOIN-as-filter so rows whose object isn't one
+    // of the registered scopes (none today, but cheap insurance) don't
+    // inflate the count.
     let all_count: i64 = sqlx::query_scalar(
         "SELECT
             (SELECT COUNT(*) FROM memberships m
                 JOIN projects  p ON p.redpash_id = m.object_redpash_id)
           + (SELECT COUNT(*) FROM memberships m
-                JOIN companies c ON c.redpash_id = m.object_redpash_id)",
+                JOIN companies c ON c.redpash_id = m.object_redpash_id)
+          + (SELECT COUNT(*) FROM memberships m
+                JOIN cases     ca ON ca.redpash_id = m.object_redpash_id)",
     )
     .fetch_one(&state.db)
     .await?;
@@ -422,33 +427,47 @@ async fn list_memberships(
     // second lookup. ORDER BY built via format! with sort_col sourced
     // from SORTABLE_MEMBERSHIPS allowlist. ?q= searches user_display_name
     // / user_username / scope_name (project or company name) via ILIKE.
-    let count_sql = if scope == "project" {
-        "SELECT COUNT(*)::BIGINT
-           FROM memberships m
-           JOIN projects p ON p.redpash_id = m.object_redpash_id
-           JOIN users    u ON u.redpash_id = m.member_redpash_id
-          WHERE ($1::text IS NULL OR m.role = $1)
-            AND ($2::text IS NULL OR
-                 u.display_name ILIKE '%' || $2 || '%' OR
-                 u.username     ILIKE '%' || $2 || '%' OR
-                 p.name         ILIKE '%' || $2 || '%')"
-    } else {
-        "SELECT COUNT(*)::BIGINT
-           FROM memberships m
-           JOIN companies c ON c.redpash_id = m.object_redpash_id
-           JOIN users     u ON u.redpash_id = m.member_redpash_id
-          WHERE ($1::text IS NULL OR m.role = $1)
-            AND ($2::text IS NULL OR
-                 u.display_name ILIKE '%' || $2 || '%' OR
-                 u.username     ILIKE '%' || $2 || '%' OR
-                 c.name         ILIKE '%' || $2 || '%')"
+    let count_sql = match scope {
+        "project" => {
+            "SELECT COUNT(*)::BIGINT
+               FROM memberships m
+               JOIN projects p ON p.redpash_id = m.object_redpash_id
+               JOIN users    u ON u.redpash_id = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     p.name         ILIKE '%' || $2 || '%')"
+        }
+        "case" => {
+            "SELECT COUNT(*)::BIGINT
+               FROM memberships m
+               JOIN cases ca ON ca.redpash_id = m.object_redpash_id
+               JOIN users u  ON u.redpash_id  = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     ca.title       ILIKE '%' || $2 || '%')"
+        }
+        _ => {
+            "SELECT COUNT(*)::BIGINT
+               FROM memberships m
+               JOIN companies c ON c.redpash_id = m.object_redpash_id
+               JOIN users     u ON u.redpash_id = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     c.name         ILIKE '%' || $2 || '%')"
+        }
     };
-    let rows_sql = if scope == "project" {
-        format!(
+    let rows_sql = match scope {
+        "project" => format!(
             "SELECT 'project' AS scope,
                     m.object_redpash_id      AS scope_redpash_id,
                     p.name                   AS scope_name,
-                    m.member_redpash_id        AS member_redpash_id,
+                    m.member_redpash_id      AS member_redpash_id,
                     u.display_name           AS user_display_name,
                     u.username               AS user_username,
                     m.role                   AS role,
@@ -463,9 +482,28 @@ async fn list_memberships(
                      p.name         ILIKE '%' || $2 || '%')
               ORDER BY {sort_col} {sort_dir} NULLS LAST
               LIMIT $3 OFFSET $4"
-        )
-    } else {
-        format!(
+        ),
+        "case" => format!(
+            "SELECT 'case' AS scope,
+                    m.object_redpash_id      AS scope_redpash_id,
+                    ca.title                 AS scope_name,
+                    m.member_redpash_id      AS member_redpash_id,
+                    u.display_name           AS user_display_name,
+                    u.username               AS user_username,
+                    m.role                   AS role,
+                    m.joined_at              AS joined_at
+               FROM memberships m
+               JOIN cases ca ON ca.redpash_id = m.object_redpash_id
+               JOIN users u  ON u.redpash_id  = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     ca.title       ILIKE '%' || $2 || '%')
+              ORDER BY {sort_col} {sort_dir} NULLS LAST
+              LIMIT $3 OFFSET $4"
+        ),
+        _ => format!(
             "SELECT 'company' AS scope,
                     m.object_redpash_id AS scope_redpash_id,
                     c.name           AS scope_name,
@@ -484,7 +522,7 @@ async fn list_memberships(
                      c.name         ILIKE '%' || $2 || '%')
               ORDER BY {sort_col} {sort_dir} NULLS LAST
               LIMIT $3 OFFSET $4"
-        )
+        ),
     };
 
     let total: i64 = sqlx::query_scalar(count_sql)
