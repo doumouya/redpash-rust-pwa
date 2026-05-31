@@ -26,6 +26,9 @@ pub fn routes() -> Router<AppState> {
         .route("/",             get(list).post(create_project))
         .route("/:rid",         get(get_one).patch(patch_project).delete(delete_project))
         .route("/:rid/files",   get(list_files))
+        // Generic object-member CRUD — same edge as companies/cases/teams.
+        // See routes/members.rs (reach-aware manage gate).
+        .nest("/:rid/members", super::members::routes())
 }
 
 async fn list(

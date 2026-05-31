@@ -18,10 +18,19 @@ GET    /:rid             fetch one project summary
 PATCH  /:rid             sparse metadata update (inline edits)
 DELETE /:rid             delete (cascades to files / steps / dashboards)
 GET    /:rid/files       list files in a project (cleaner landing)
+*      /:rid/members      generic object-member CRUD (nested members.rs)
 
 ## Public surface
 
-- `pub fn routes` — function
+- `pub fn routes` — project CRUD + a nest of the generic member router at
+  `/:rid/members` (see [members.rs](members.md)). Reach-aware: a project owner
+  *or* a company admin (cascade) manages project members.
+
+## Gates
+
+- `get_one` / `list_files` — `project.view` (member, incl. company cascade).
+- `patch_project` / `delete_project` — still `ensure_owner` (owner-only);
+  broadens to `require_grant` once member-management is exercised in the FE.
 
 ## Drift-prone areas
 
