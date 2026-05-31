@@ -1171,15 +1171,40 @@ async fn delete_company(
 /// (Project `collaborator` was migrated to `member` in the consolidation.)
 const PROJECT_ROLES: &[&str] = &["owner", "member", "viewer"];
 const COMPANY_ROLES: &[&str] = &["owner", "admin", "member"];
+const CASE_ROLES:    &[&str] = &["owner", "member", "viewer"];
+const TEAM_ROLES:    &[&str] = &["owner", "admin", "member"];
+
+// context_role is free-text in schema but bounded at the API boundary
+// per scope so a typo doesn't silently create a new "category" (e.g.
+// 'reporter' vs 'Reporter') — same discipline as PROJECT_ROLES.
+// Empty/None is always allowed (the field is optional).
+const PROJECT_CONTEXT_ROLES: &[&str] = &[
+    "Project Owner", "Project Manager", "Data Analyst", "Reviewer",
+];
+const COMPANY_CONTEXT_ROLES: &[&str] = &[
+    "CEO", "CTO", "Operations Lead", "HR Generalist", "Support Engineer",
+    "Engineer", "Manager", "Founder", "Investor",
+];
+const CASE_CONTEXT_ROLES:    &[&str] = &[
+    "Reporter", "Case Owner", "Watcher", "Assignee",
+];
+const TEAM_CONTEXT_ROLES:    &[&str] = &[
+    "Team Manager", "Team Lead", "Team Member",
+];
 
 #[derive(Deserialize)]
 struct CreateMembershipBody {
-    scope:    String,        // "project" | "company"
-    scope_id: String,        // PRJ_… or CMP_…
+    scope:    String,        // "project" | "company" | "case" | "team"
+    scope_id: String,        // PRJ_ / CMP_ / CAS_ / TEM_
     user_id:  String,        // USR_…
-    /// Optional — defaults per scope (viewer / member) to match the
-    /// SQL column default. Validated against the per-scope allow-list.
+    /// Optional system role. Defaults per scope (viewer / member) to
+    /// match the SQL column default. Validated against the per-scope
+    /// allow-list.
     #[serde(default)] role: Option<String>,
+    /// Optional free-text business label ("Reporter", "CEO", etc.).
+    /// Bounded at the API boundary by *_CONTEXT_ROLES so typos don't
+    /// silently fragment the category. Stored NULL when omitted.
+    #[serde(default)] context_role: Option<String>,
 }
 
 /// Create a membership row in the unified `memberships` table (the
@@ -1207,12 +1232,14 @@ async fn create_membership(
     if scope_id.is_empty() || user_id.is_empty() {
         return Err(AppError::bad_request("invalid", "scope_id and user_id are required"));
     }
-    let allow = match scope {
-        "project" => PROJECT_ROLES,
-        "company" => COMPANY_ROLES,
+    let (role_allow, ctx_allow, role_default) = match scope {
+        "project" => (PROJECT_ROLES, PROJECT_CONTEXT_ROLES, "viewer"),
+        "company" => (COMPANY_ROLES, COMPANY_CONTEXT_ROLES, "member"),
+        "case"    => (CASE_ROLES,    CASE_CONTEXT_ROLES,    "member"),
+        "team"    => (TEAM_ROLES,    TEAM_CONTEXT_ROLES,    "member"),
         _ => return Err(AppError::bad_request(
             "invalid",
-            "scope must be one of: project, company",
+            "scope must be one of: project, company, case, team",
         )),
     };
     // Default per migration column-default (viewer / member). The SQL
@@ -1222,15 +1249,41 @@ async fn create_membership(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or(if scope == "project" { "viewer" } else { "member" })
+        .unwrap_or(role_default)
         .to_string();
-    if !allow.contains(&role_owned.as_str()) {
+    if !role_allow.contains(&role_owned.as_str()) {
         return Err(AppError::bad_request(
             "invalid",
-            format!("role for {scope} must be one of: {}", allow.join(", ")),
+            format!("role for {scope} must be one of: {}", role_allow.join(", ")),
         ));
     }
-    match db::insert_membership(&state.db, scope, scope_id, user_id, &role_owned).await {
+    // Optional context_role: trim, drop-on-blank, then bound by the
+    // per-scope allow-list. None / empty is valid (most project +
+    // company memberships don't carry one).
+    let context_role_owned: Option<String> = body.context_role
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if let Some(ref ctx) = context_role_owned {
+        if !ctx_allow.contains(&ctx.as_str()) {
+            return Err(AppError::bad_request(
+                "invalid",
+                format!(
+                    "context_role for {scope} must be one of: {} (or empty)",
+                    ctx_allow.join(", "),
+                ),
+            ));
+        }
+    }
+    // Mirror the db::insert_membership None→"" coercion so the response
+    // echoes the actual persisted row (empty string, not null) — keeps
+    // wire shape consistent with /api/admin/memberships list output.
+    let stored_context_role: &str = context_role_owned.as_deref().unwrap_or("");
+    match db::insert_membership(
+        &state.db, scope, scope_id, user_id, &role_owned,
+        context_role_owned.as_deref(),
+    ).await {
         Ok(()) => {
             crate::event::info(
                 &state.db,
@@ -1239,19 +1292,21 @@ async fn create_membership(
             )
             .user(caller)
             .context(serde_json::json!({
-                "scope":    scope,
-                "scope_id": scope_id,
-                "user_id":  user_id,
-                "role":     role_owned,
+                "scope":        scope,
+                "scope_id":     scope_id,
+                "user_id":      user_id,
+                "role":         role_owned,
+                "context_role": stored_context_role,
             }))
             .send();
             Ok((
                 StatusCode::CREATED,
                 Json(serde_json::json!({
-                    "scope":    scope,
-                    "scope_id": scope_id,
-                    "user_id":  user_id,
-                    "role":     role_owned,
+                    "scope":        scope,
+                    "scope_id":     scope_id,
+                    "user_id":      user_id,
+                    "role":         role_owned,
+                    "context_role": stored_context_role,
                 })),
             ))
         }

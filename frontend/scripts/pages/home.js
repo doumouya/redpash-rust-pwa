@@ -453,15 +453,26 @@ export default function home(app, { session: _session }) {
             options: [
               { value: "project", label: "Project" },
               { value: "company", label: "Company" },
+              // Case scope shipped 2026-05-31 once the entity-edge migration
+              // had cases in entities + the route validator accepted it.
+              { value: "case",    label: "Case"    },
+              // Team — deferred to the teams-CRUD slice (no team entities
+              // exist yet + no /api/admin/teams endpoint). Keep this list
+              // honest: don't add a disabled stub here per
+              // [[unify-behavior-not-names]]. Team scope re-appears once
+              // teams CRUD ships.
             ],
             default: "project",
           },
-          { key: "scope_id", label: "Project / company", type: "entity-picker",
+          { key: "scope_id", label: "Project / company / case", type: "entity-picker",
             required: true,
             placeholder: "Search by name…",
             dependsOn: ["scope"],
-            endpointFn: (s) => s.scope === "company" ? "/admin/companies" : "/projects",
-            labelKey: "name",
+            endpointFn: (s) => s.scope === "company" ? "/admin/companies"
+                            : s.scope === "case"    ? "/cases"
+                            : "/projects",
+            // Cases use `title`; projects + companies use `name`.
+            labelKeyFn: (s) => s.scope === "case" ? "title" : "name",
             ridKey:   "redpash_id",
           },
           { key: "user_id", label: "User", type: "entity-picker",
@@ -474,23 +485,74 @@ export default function home(app, { session: _session }) {
           },
           { key: "role", label: "Role", type: "select",
             dependsOn: ["scope"],
-            optionsFn: (s) => s.scope === "company"
-              ? [
-                  { value: "member", label: "Member" },
-                  { value: "admin",  label: "Admin"  },
-                  { value: "owner",  label: "Owner"  },
-                ]
-              : [
-                  { value: "viewer",       label: "Viewer"       },
-                  { value: "collaborator", label: "Collaborator" },
-                  { value: "owner",        label: "Owner"        },
-                ],
+            optionsFn: (s) => {
+              if (s.scope === "company") return [
+                { value: "member", label: "Member" },
+                { value: "admin",  label: "Admin"  },
+                { value: "owner",  label: "Owner"  },
+              ];
+              if (s.scope === "case") return [
+                { value: "viewer", label: "Viewer" },
+                { value: "member", label: "Member" },
+                { value: "owner",  label: "Owner"  },
+              ];
+              // project
+              return [
+                { value: "viewer", label: "Viewer" },
+                { value: "member", label: "Member" },
+                { value: "owner",  label: "Owner"  },
+              ];
+            },
             // Default mirrors the migration column-default per scope
             // (project=viewer, company=member). selectHTML falls back
             // to the first option when default doesn't match — for
             // memberships the first option IS the per-scope default,
             // so the fall-back happens to be correct.
             default: "viewer",
+          },
+          // `context_role` = the entity-context job title (Reporter on a
+          // case, CEO on a company, Team Lead on a team). Distinct from
+          // `role` (the RBAC-tier grant — viewer/member/owner). Both
+          // live on the same memberships row per migration
+          // 20260531000001; relaxed PK = (object,member,role,context_role)
+          // so one user can hold many context_roles in the same scope.
+          //
+          // Each per-scope option list is open-ended — we ship a
+          // common-job-title starter set; admins can grow it via the
+          // backend allowlist (CASE_CONTEXT_ROLES etc. in
+          // routes/admin.rs). FE stays in sync with the BE allowlist
+          // — drift = 400 from the validator.
+          { key: "context_role", label: "Context role", type: "select",
+            dependsOn: ["scope"],
+            optional: true,
+            optionsFn: (s) => {
+              const blank = [{ value: "", label: "— none —" }];
+              if (s.scope === "company") return blank.concat([
+                { value: "CEO",              label: "CEO"              },
+                { value: "CTO",              label: "CTO"              },
+                { value: "Operations Lead",  label: "Operations Lead"  },
+                { value: "HR Generalist",    label: "HR Generalist"    },
+                { value: "Support Engineer", label: "Support Engineer" },
+                { value: "Engineer",         label: "Engineer"         },
+                { value: "Manager",          label: "Manager"          },
+                { value: "Founder",          label: "Founder"          },
+                { value: "Investor",         label: "Investor"         },
+              ]);
+              if (s.scope === "case") return blank.concat([
+                { value: "Reporter",   label: "Reporter"   },
+                { value: "Case Owner", label: "Case Owner" },
+                { value: "Watcher",    label: "Watcher"    },
+                { value: "Assignee",   label: "Assignee"   },
+              ]);
+              // project
+              return blank.concat([
+                { value: "Project Owner",   label: "Project Owner"   },
+                { value: "Project Manager", label: "Project Manager" },
+                { value: "Data Analyst",    label: "Data Analyst"    },
+                { value: "Reviewer",        label: "Reviewer"        },
+              ]);
+            },
+            default: "",
           },
         ],
       },
@@ -1328,7 +1390,6 @@ export default function home(app, { session: _session }) {
     const hiddenEl  = wrap.querySelector('input[type="hidden"]');
     if (!searchEl || !resultsEl || !hiddenEl) return;
 
-    const labelKey = f.labelKey || "name";
     const subKey   = f.subKey;
     const ridKey   = f.ridKey   || "redpash_id";
     const searchKey = f.searchKey || "q";
@@ -1338,6 +1399,14 @@ export default function home(app, { session: _session }) {
       const endpoint = typeof f.endpointFn === "function"
         ? f.endpointFn(state)
         : f.endpoint;
+      // `labelKey` resolves the same way as `endpoint`: callers can pass
+      // a static `labelKey` OR a `labelKeyFn(state)` that picks per-scope
+      // (e.g. cases → `title`, projects/companies → `name`). Resolved
+      // each search so re-typing after a scope flip lands on the right
+      // field.
+      const labelKey = typeof f.labelKeyFn === "function"
+        ? (f.labelKeyFn(state) || "name")
+        : (f.labelKey || "name");
       if (!endpoint) { resultsEl.hidden = true; return; }
       try {
         const data = await api.get(endpoint + "?" + searchKey + "=" + encodeURIComponent(q) + "&size=10");

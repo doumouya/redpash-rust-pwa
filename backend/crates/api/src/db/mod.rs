@@ -1200,20 +1200,27 @@ pub async fn delete_membership(
 /// Bubbles 23503 (FK violation → object/user gone) and 23505 (duplicate
 /// PK) up so the route maps them to 404 / 409.
 pub async fn insert_membership(
-    pool:     &PgPool,
-    scope:    &str,
-    scope_id: &str,
-    user_id:  &str,
-    role:     &str,
+    pool:         &PgPool,
+    scope:        &str,
+    scope_id:     &str,
+    user_id:      &str,
+    role:         &str,
+    context_role: Option<&str>,
 ) -> sqlx::Result<()> {
     let _ = scope;
+    // `context_role` is NOT NULL with DB default ''; sqlx sends Rust
+    // None as a SQL NULL (bypassing the default) → constraint trip.
+    // Normalize here so callers can pass None to mean "no specific
+    // context role" without each route having to coalesce.
+    let context_role = context_role.unwrap_or("");
     sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
-         VALUES ($1, $2, $3)",
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role, context_role)
+         VALUES ($1, $2, $3, $4)",
     )
     .bind(scope_id)
     .bind(user_id)
     .bind(role)
+    .bind(context_role)
     .execute(pool)
     .await?;
     Ok(())
