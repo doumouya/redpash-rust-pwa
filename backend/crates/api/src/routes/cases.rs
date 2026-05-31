@@ -117,7 +117,7 @@ async fn list(
     // atom as a filter). dev_user (dev-mode admin) sees all — no filter; any
     // other caller sees only cases reachable via a membership (direct, or via
     // the case's company/project), matching the detail-read gate.
-    let viewer: Option<Vec<String>> = if caller == *state.dev_user {
+    let viewer: Option<Vec<String>> = if crate::rbac::is_platform_admin(&state, &caller).await? {
         None
     } else {
         Some(crate::rbac::principals(&state.db, &caller).await?)

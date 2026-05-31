@@ -40,10 +40,13 @@ object, unioned across three sources, or `None` (default-deny):
   recursive); resolve once, then a list query scopes rows with
   `member_redpash_id = ANY($principals)` instead of per-row recursion (P4
   list-scoping uses this).
-- `pub async fn require_grant(…, rule)` — generic gate: `dev_user` bypasses
-  (dev-mode platform-admin stand-in until `users.role` lands); else the
-  closure decides on the resolved `Grant`; else 404 (leak-free). Handlers
-  express each atom's rule, e.g. `case.update` →
+- `pub async fn is_platform_admin` — full-access check (the catalog's
+  `*.view.all`): the bootstrap `dev_user` (fast-path, no query) **or** any
+  `users.role = 'admin'` (mig 20260531000002 — retires the old dev_user-only
+  stopgap). Platform admins bypass every gate.
+- `pub async fn require_grant(…, rule)` — generic gate: `is_platform_admin`
+  bypasses; else the closure decides on the resolved `Grant`; else 404
+  (leak-free). Handlers express each atom's rule, e.g. `case.update` →
   `|g| g.is_member() || g.scope_at_least(Role::Admin)`.
 - `pub async fn require_view` — `require_grant` with `|g| g.effective().is_some()`.
 

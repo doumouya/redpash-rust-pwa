@@ -38,6 +38,15 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
         }
     };
 
+    // The bootstrap/dev user is the platform admin (users.role = 'admin', mig
+    // 20260531000002). Idempotent — keeps the dev-mode RBAC bypass working
+    // (rbac::is_platform_admin) regardless of how the row was created.
+    sqlx::query("UPDATE users SET role = 'admin' WHERE redpash_id = $1 AND role <> 'admin'")
+        .bind(&user.redpash_id)
+        .execute(pool)
+        .await
+        .context("promoting dev user to admin")?;
+
     let project = match db::find_default_project(pool, &user.redpash_id)
         .await
         .context("looking up default project")?

@@ -145,11 +145,26 @@ pub async fn effective_role(
     Ok(resolve_grant(pool, caller, object).await?.effective())
 }
 
-/// Generic gate. Allow when the caller is the bootstrap `dev_user` (dev-mode
-/// platform-admin stand-in until a real `users.role` lands) OR when `rule`
-/// accepts their resolved `Grant`. Otherwise 404 — a denied caller can't tell
-/// "exists but not yours" from "doesn't exist" (matches `ensure_owner`'s
-/// leak-free contract). `label` is the object kind for the message.
+/// Is `caller` a platform admin (full access — the catalog's `*.view.all`)?
+/// The bootstrap `dev_user` always is (fast-path, no query — keeps dev mode
+/// working), plus any user with `users.role = 'admin'` (mig 20260531000002).
+/// Platform admins bypass every gate.
+pub async fn is_platform_admin(state: &AppState, caller: &str) -> sqlx::Result<bool> {
+    if caller == state.dev_user.as_ref() {
+        return Ok(true);
+    }
+    let row: Option<(String,)> = sqlx::query_as("SELECT role FROM users WHERE redpash_id = $1")
+        .bind(caller)
+        .fetch_optional(&state.db)
+        .await?;
+    Ok(row.map_or(false, |(r,)| r == "admin"))
+}
+
+/// Generic gate. Allow when the caller is a platform admin (`is_platform_admin`
+/// — bootstrap dev_user or `users.role='admin'`) OR when `rule` accepts their
+/// resolved `Grant`. Otherwise 404 — a denied caller can't tell "exists but not
+/// yours" from "doesn't exist" (matches `ensure_owner`'s leak-free contract).
+/// `label` is the object kind for the message.
 ///
 /// Handlers express each atom's rule as the closure, e.g.
 ///   case.update → `|g| g.is_member() || g.scope_at_least(Role::Admin)`
@@ -161,7 +176,7 @@ pub async fn require_grant(
     label:  &str,
     rule:   impl Fn(Grant) -> bool,
 ) -> Result<(), AppError> {
-    if caller == state.dev_user.as_ref() {
+    if is_platform_admin(state, caller).await? {
         return Ok(());
     }
     let grant = resolve_grant(&state.db, caller, object).await?;
