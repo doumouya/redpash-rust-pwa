@@ -81,7 +81,10 @@ async fn get_one(
     Path(rid):    Path<String>,
 ) -> Result<Json<Chart>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::chart_owner(&state.db, &rid).await, &user, "chart", &rid)?;
+    // RBAC: chart.view — derived-view (project_files row); the resolver
+    // cascades chart→project→company, so a project/company member or platform
+    // admin sees it. Writes stay owner-gated (with file mutations). dev bypasses.
+    crate::rbac::require_view(&state, &user, &rid, "chart").await?;
     let chart = db::find_chart(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;
     Ok(Json(chart))

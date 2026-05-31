@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/dashboards.rs
 source: ../../../../../../backend/crates/api/src/routes/dashboards.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # dashboards.rs

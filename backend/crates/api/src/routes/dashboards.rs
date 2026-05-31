@@ -125,7 +125,10 @@ async fn get_one(
     Path(rid):    Path<String>,
 ) -> Result<Json<Dashboard>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    super::ensure_owner(db::dashboard_owner(&state.db, &rid).await, &user, "dashboard", &rid)?;
+    // RBAC: dashboard.view — derived-view (project_files row); resolver
+    // cascades dashboard→project→company. Project/company member or platform
+    // admin sees it. Writes stay owner-gated. dev bypasses.
+    crate::rbac::require_view(&state, &user, &rid, "dashboard").await?;
     let d = db::find_dashboard(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("dashboard {rid}")))?;
     Ok(Json(d))

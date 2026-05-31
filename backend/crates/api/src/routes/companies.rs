@@ -54,6 +54,11 @@ async fn require_member(
     company: &str,
     user:    &str,
 ) -> Result<String, AppError> {
+    // Platform admins see/manage any company (full access); they resolve as
+    // owner-tier for the require_manage check.
+    if crate::rbac::is_platform_admin(state, user).await.map_err(db_err)? {
+        return Ok("owner".to_string());
+    }
     db::company_role(&state.db, company, user)
         .await
         .map_err(db_err)?
