@@ -2,7 +2,7 @@
 title: Specs — index
 section: Internal
 order: 30
-last modified date: 2026-05-27
+last modified date: 2026-05-31
 ---
 
 # Specs
@@ -25,5 +25,6 @@ Rewritten when the contract changes; superseded versions move to
 | [user-preferences](user-preferences.md) | Gus | `user_preferences` table + PATCH protocol + key registry |
 | [wasm-phase-c-spike](wasm-phase-c-spike.md) | Woz | Phase C parse-on-wasm: honest perf + size delta against the `roadmap-webassembly.md` §5 gate (10 MB bundle / 4 s first-parse parks Phase C; 2 MB / 200 ms unlocks Phase D). **Verdict: gate cleared** — ~45 ms/MB clean-dense plateau on 13–21 MB corpora, ~3.45 MB gzipped bundle, parse algorithm bakes in `unwrap_csv` rescue per the spike's correctness finding. Phase D unlocked. Addendum tracks two verdict-refining sub-cliffs (sparse-wide allocator pressure on rescue path past 100k rows; legacy-encoded windows-1252 + malformed-wrap handling). |
 | [datasource-trait](datasource-trait.md) | Gus | DataSource / Entity / Reader trait sketch for the ETL-ELT workstream. **Status: sketch, no code lands from this doc** — alignment surface before the [[etl-elt-roadmap]] workstream picks it up. |
+| [type-definition](type-definition.md) | Torv | Runtime-typed object contract — TypeDefinition / FieldDef / RelationshipDef shapes; perm_class derivation (standard / owner_grade / personal / readonly) → per-role permission matrix; data_type backend-owned write-validation; editor opaque + FE editor-registry pattern. Spec v1 co-authored 2026-05-31 (Torv-FE writes; Torv-BE provides §3 + §4 tables; Em approves Q1/Q4/Q5). Blocks every framework-layer child case (cell-editor, chip-render, list-page, ...) so they parameterize against TypeDefinition from day one instead of baking in the 5 built-in object types. Acceptance criterion: a fake `RealEstateListing` TypeDefinition flows end-to-end with zero source changes. Pre-work for user-defined custom objects per [[disposability-design-principle]]. |
 | [object-metadata/](object-metadata/index.md) | Torv | Per-object metadata specs in Salesforce-SObject format — field types, properties (Create / Update / Nillable / Sort / Search / Layout), enum constraints, relationships, audit-event emissions. Pre-work for RBAC's permission catalog (Em 2026-05-28: "define object properties" before permissions ship). Pattern locked via the [case](object-metadata/case.md) worked example; Torv sweeps the remaining ~12 objects per the template. |
 | [rbac/](rbac/index.md) | Torv | Permission catalog derived from object-metadata — key scheme (`<entity>.<action>[.<field>]`), 4 scope qualifiers (own / project / company / all), 3 role tiers (platform / company / project), per-object key list + default role→grant matrix. The spec the `/api/me` permissions payload + route-gating + FE element-gating generate against once RBAC enforcement ships. All 13 object catalogs landed (Case worked example + sweep); polymorphic Membership (company/project/case) + Case Team Member model folded in. RBAC enforcement is the next workstream — this catalog is its spec. |
