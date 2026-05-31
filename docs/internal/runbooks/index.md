@@ -81,3 +81,17 @@ Every entry follows the same five headings:
   prefer positive-form `file_type = 'csv'` queries over negative-form
   exclusions — future spec-only types (notebook, saved query) inherit
   the exclusion automatically.
+- [0007 — Column drag-reorder cluster (4 layers)](0007-column-drag-reorder-cluster.md) —
+  Four interrelated bugs in the Home/Monitoring list-page column drag-
+  reorder feature, peeled one layer at a time on 2026-05-31:
+  applyColumnOrder early-returning on misaligned thead/tbody, the
+  drop-indicator visually collapsing at the first/last column edge,
+  appendChild shoving the trailing sentinel TH to position 0, and
+  decorateEditMode tagging cells by spec position instead of live DOM
+  position. Discipline rules: read positional state from the DOM not
+  from the spec; never `appendChild` in a loop when the parent has
+  framing children; drop indicators need overhang at row edges; for
+  drag-and-drop column features, *always* verify live in a browser
+  (Playwright MCP is the parallel option when chrome-devtools-mcp is
+  locked). Filed the cadence this entry follows in
+  [processes/bug-case-runbook-cadence.md](../processes/bug-case-runbook-cadence.md).

@@ -52,6 +52,12 @@ Every documented source file carries a 2-line header:
 - **Audit-everything.** Run `sh tools/audit.sh` before commit. New
   static checks live as `tools/<name>-audit/audit.js` (auto-discovered).
   See [`docs/internal/processes/audit-cadence.md`](docs/internal/processes/audit-cadence.md).
+- **Bug → case → runbook.** Non-trivial bugs get a case at discovery
+  and a runbook when fixed; the case closes with a backlink to the
+  runbook. Reasoning survives in `docs/internal/runbooks/NNNN-*.md`,
+  not in `git log`. Commit body of any fix-level commit ends with a
+  `Runbook:` line. See
+  [`docs/internal/processes/bug-case-runbook-cadence.md`](docs/internal/processes/bug-case-runbook-cadence.md).
 - **Parallel-Torv commits.** Three Torv instances share the
   `prerelease` branch; commit named files with
   `git commit -o <pathspecs>` so parallel-staged WIP doesn't sweep into
