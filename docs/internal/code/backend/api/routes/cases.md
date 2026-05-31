@@ -21,7 +21,12 @@ literally `SELECT * FROM events WHERE context->>'case' = $1`.
 
 ## Public surface
 
-- `pub fn routes` — function
+- `pub fn routes` — case + comment CRUD, plus a nest of the generic member
+  router at `/:rid/members` — the **case team** (assignee / reporter / watchers
+  as members). See [members.rs](members.md). The reach-aware manage gate is what
+  makes this work: case memberships are all `member`-tier (+`context_role`), so
+  the project/company admin manages the team via cascade (a direct-only gate
+  would deny everyone).
 
 ## Drift-prone areas
 

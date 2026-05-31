@@ -45,6 +45,10 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid",                      get(get_one).patch(patch).delete(delete_one))
         .route("/:rid/comments",             get(list_comments).post(post_comment))
         .route("/:rid/comments/:cmt_rid",    axum::routing::patch(patch_comment).delete(delete_comment))
+        // Case team — the generic object-member CRUD edge (assignee / reporter
+        // / watchers as members). Reach-aware manage gate (members.rs) means a
+        // project/company admin manages the team; case rows are all member-tier.
+        .nest("/:rid/members",               super::members::routes())
 }
 
 // ── handlers ───────────────────────────────────────────────────────
