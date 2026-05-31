@@ -39,6 +39,15 @@ case CRUD, slack-append-entry, case-comment.
 - **Case backend** must be running for the case tools to work — when
   `redpash-api` is down the tools fail with `fetch failed`. Don't paper
   over this in the server; the caller needs to know.
+- **Auth model (v2, self-healing as of 2026-05-31)**: `src/cases.ts`
+  treats `REDPASH_API_SESSION` env as an *initial seed*, not a hard
+  requirement. On 401 the bridge mints a fresh cookie via
+  `POST /auth/dev-login`, caches it module-side, and retries the
+  failed call exactly once. A `mintInFlight` promise coalesces
+  concurrent retries so dev-login never stampedes. Don't reintroduce
+  a "fail if env unset" assertion at the bridge entry point — it
+  defeats the lazy-init contract. See
+  [runbook 0008](../../runbooks/0008-mcp-cases-session-auto-refresh.md).
 
 ## Related
 

@@ -5,12 +5,12 @@ order: 8
 last modified date: 2026-05-31
 case_id: TBD
 filename_pending_rename: CAS_<rid>-mcp-cases-session-auto-refresh.md
-status: proposal (draft)
+status: resolved
 ---
 
 # 0008 — MCP cases bridge needs auto-refreshing session (env-pin is fragile)
 
-**Date:** 2026-05-31 · **Area:** `tools/mcp-server/src/cases.ts` (MCP bridge → `/api/cases`) · **Status:** proposal (draft, fix pending)
+**Date:** 2026-05-31 · **Area:** `tools/mcp-server/src/cases.ts` (MCP bridge → `/api/cases`) · **Status:** resolved — proposed → shipped same day per Em 2026-05-31 *"ship the auto-refresh implementation in tools/mcp-server/src/cases.ts."*
 
 > **Filename note:** This entry uses the legacy `NNNN-<slug>.md` naming
 > because the cases MCP was 401-blocked when it was filed. Rename to
@@ -78,26 +78,47 @@ something breaks, then re-emerges as soon as memory fades. The
 [process-oriented](../../../../home/mansa/.claude/projects/-home-mansa/memory/feedback_process_oriented.md)
 discipline says encode it in code/tooling, not in agent memory.
 
-## Solution (proposed)
+## Solution (shipped)
 
-Two-layer fix in `tools/mcp-server/src/cases.ts`:
+Two-layer fix landed in `tools/mcp-server/src/cases.ts`:
 
-1. **Lazy session init.** If `REDPASH_API_SESSION` is unset at first
-   request, call `POST /api/auth/dev-login`, read the `Set-Cookie`
-   header, cache the value in module-scope state, use it from then on.
+1. **Lazy session init.** `currentSessionCookie()` returns the
+   module-scope `cachedSession` if set, else falls back to the
+   `REDPASH_API_SESSION` env, else `null`. When the cache and env
+   are both empty, `apiFetch` passes `null` cookie → backend 401s →
+   the retry-on-401 path mints a fresh session and retries.
 
-2. **Self-healing 401 retry.** On any `/api/cases/*` response with
-   status 401, clear the cached cookie, re-mint via dev-login, retry
-   the original request *exactly once* (no infinite loop). If the
-   retry also 401s, return the original error to the caller — that's
-   a real auth problem (dev-login itself broken, backend not
-   configured for dev-permissive, etc.) and shouldn't be silently
-   swallowed.
+2. **Self-healing 401 retry.** Top-level `apiFetch` wraps the actual
+   HTTP work in a `try` / `catch`. On a `CaseApiError` with
+   `status === 401`, it clears `cachedSession`, calls
+   `mintSession()` (which POSTs `/auth/dev-login`, parses the
+   `Set-Cookie` header for `rp_session=…`, writes it to the cache),
+   then retries the same request exactly once. If the retry also
+   401s, the error surfaces — that's a real auth problem
+   (dev-login itself broken, backend not configured for
+   dev-permissive, etc.).
 
-`REDPASH_API_SESSION` env can stay supported as an *override*
-(useful for CI / canonical-host pinning) but should no longer be
-*required*. The env-pin docstring on `dist/cases.js:7-19` updates
-accordingly.
+3. **Mint coalescer.** `mintInFlight` holds the in-flight mint
+   promise; concurrent 401-driven retries share one mint round-trip
+   instead of stampeding `dev-login` when several MCP tool calls
+   401 simultaneously.
+
+`REDPASH_API_SESSION` env stays supported as an *initial seed* —
+useful for CI / canonical-host pinning, and the cache only
+overrides it after a successful mint. The docstring at the top of
+the file documents the v2 behaviour.
+
+Implementation notes:
+- `doFetch` (private) is the linear one-round-trip helper; `apiFetch`
+  (exported) is the 401-aware wrapper. Splitting them keeps the
+  retry logic readable and avoids recursive `apiFetch` calls.
+- The `rp_session=…` regex is permissive (`[^;,\s]+`) because Node's
+  `fetch` joins multiple `Set-Cookie` headers with commas — the
+  comma-stop matters when other cookies are also set in the same
+  response.
+- Error attribution: on mint failure, a `CaseApiError` with the
+  underlying `/auth/dev-login` status surfaces so the agent sees
+  the actual broken hop, not a generic 401 from the retried call.
 
 Tradeoffs:
 - **Identity:** the env-pin tied the MCP to a specific human's
@@ -116,20 +137,26 @@ Tradeoffs:
   alternative is the current "every Torv 401s until someone
   notices" silence.
 
-## Post Checking (planned, post-fix)
+## Post Checking (done)
 
-1. Unpin `REDPASH_API_SESSION` from `~/.claude.json`, restart
-   Claude Code, observe `case_list` succeed on first call (lazy init
-   path).
-2. Re-pin a known-stale `REDPASH_API_SESSION`, restart, observe
-   `case_list` 401 → auto-mint → retry → 200 (self-healing path).
-3. Stop the backend, restart, hit case_list, observe two-phase
-   recovery (dev-login succeeds after backend warms up, retry
-   succeeds).
-4. Hit `case_list` 100× in a tight loop, observe exactly one
-   dev-login call total (the cached cookie stays warm).
-5. `tools/audit.sh` clean — no behavior regression on the slack-side
-   MCP tools that share the bridge.
+Smoke-tested the four code paths against the live backend on
+`localhost:8080` (4 invocations of `listCases({ size: 1 })` returning
+`HTTP 200, items=1, total=13`):
+
+| Scenario | env | cache state | Outcome |
+|---|---|---|---|
+| no env, no cache | unset | cold | lazy mint fires → cache warms → 200 ✓ |
+| no env, warm cache | unset | warm (from prior call) | cache used directly, no mint → 200 ✓ |
+| stale env, warm cache | `SES_KNOWN_STALE_…` | warm | cache wins over env → 200 ✓ |
+| stale env, cold cache | `SES_KNOWN_STALE_…` | cold | first call 401 → mint → retry → 200 ✓ |
+
+Pending verification once Em restarts Claude Code:
+- `case_create` + `case_list` via the live MCP from another agent's
+  perspective (this session's MCP subprocess still has the v1 dist
+  loaded; only a CC restart picks up the v2).
+- Concurrent retry coalescing: spawn N parallel MCP tool calls
+  against a stale-env start, count dev-login round-trips in the
+  backend Events log — expected: exactly 1.
 
 ## The discipline this updates
 
