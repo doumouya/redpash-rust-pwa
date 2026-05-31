@@ -29,15 +29,23 @@ object, unioned across three sources, or `None` (default-deny):
 
 - `pub enum Role` — `Viewer · Member · Admin · Owner`, `Ord` so "highest role
   wins" is a `max`.
-- `pub async fn effective_role` — the resolver.
+- `pub struct Grant { direct, scope }` — access split by **reach**: `direct` =
+  tier from a membership ON the object (own); `scope` = tier via the
+  company/project cascade. Accessors: `effective()` (max of both),
+  `is_member()` (own?), `scope_at_least(Role)`.
+- `pub async fn resolve_grant` — the reach-aware resolver (one query, two
+  reach columns). The keystone.
+- `pub async fn effective_role` — `resolve_grant(...).effective()` (thin view).
 - `pub async fn principals` — the caller's principal set (self + teams,
   recursive); resolve once, then a list query scopes rows with
   `member_redpash_id = ANY($principals)` instead of per-row recursion (P4
   list-scoping uses this).
-- `pub async fn require_view` — the `*.view` gate (P2): bootstrap `dev_user`
-  bypasses (dev-mode platform-admin stand-in until `users.role` lands); any
-  other caller needs an effective role on the object, else 404 (leak-free).
-  Wired into the case-detail read (`routes/cases.rs::get_one`).
+- `pub async fn require_grant(…, rule)` — generic gate: `dev_user` bypasses
+  (dev-mode platform-admin stand-in until `users.role` lands); else the
+  closure decides on the resolved `Grant`; else 404 (leak-free). Handlers
+  express each atom's rule, e.g. `case.update` →
+  `|g| g.is_member() || g.scope_at_least(Role::Admin)`.
+- `pub async fn require_view` — `require_grant` with `|g| g.effective().is_some()`.
 
 ## Drift-prone areas
 

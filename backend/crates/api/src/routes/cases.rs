@@ -268,9 +268,12 @@ async fn patch(
     Path(rid):    Path<String>,
     Json(body):   Json<CasePatchRequest>,
 ) -> Result<Json<Case>, AppError> {
-    // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
-    // mutate-gate (reporter / assignee / admin) lands in v3 overlay
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: case.update — own reach (a case membership: reporter/assignee) OR
+    // company admin+. A bare company member can't general-edit (status-only is
+    // a finer atom, deferred). dev_user bypasses. 404 on deny (leak-free).
+    crate::rbac::require_grant(&state, &user, &rid, "case",
+        |g| g.is_member() || g.scope_at_least(crate::rbac::Role::Admin)).await?;
 
     // Fetch the existing case so each changed field's event carries
     // both the old + new value. One DB read; cheap.
@@ -392,9 +395,12 @@ async fn delete_one(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<StatusCode, AppError> {
-    // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
-    // delete-gate (reporter / admin) lands in v3 overlay
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC: case.delete — company admin+ only (scope reach), never @own: a
+    // reporter can't delete their own case (closing it is a status change).
+    // dev_user bypasses. Gate before the delete; 404 on deny (leak-free).
+    crate::rbac::require_grant(&state, &user, &rid, "case",
+        |g| g.scope_at_least(crate::rbac::Role::Admin)).await?;
     let removed = db::delete_case(&state.db, &rid).await?;
     if !removed {
         return Err(AppError::not_found("not_found", format!("case {rid}")));
