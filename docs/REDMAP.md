@@ -145,7 +145,7 @@ source tree (`crates/` and `src/` are dropped from backend paths):
 | Pillar | Atomic-doc landing | Sub-rollups |
 |---|---|---|
 | Backend | [`internal/code/backend/`](internal/code/index.md) | [`api/`](internal/code/backend/api/index.md) (incl. [`routes/`](internal/code/backend/api/routes/index.md) + [`db/`](internal/code/backend/api/db/index.md) + [`bin/`](internal/code/backend/api/bin/index.md)) · [`data/`](internal/code/backend/data/index.md) (incl. [`parse/`](internal/code/backend/data/parse/index.md) + [`steps/`](internal/code/backend/data/steps/index.md)) · [`shared/`](internal/code/backend/shared/index.md) |
-| Frontend | [`internal/code/frontend/`](internal/code/index.md) | [`scripts/pages/`](internal/code/frontend/scripts/pages/index.md) · [`scripts/charts/`](internal/code/frontend/scripts/charts/index.md) · [`scripts/tools/`](internal/code/frontend/scripts/tools/index.md) |
+| Frontend | [`internal/code/frontend/`](internal/code/index.md) | [`scripts/framework/`](internal/code/frontend/scripts/framework/index.md) · [`scripts/pages/`](internal/code/frontend/scripts/pages/index.md) · [`scripts/charts/`](internal/code/frontend/scripts/charts/index.md) · [`scripts/tools/`](internal/code/frontend/scripts/tools/index.md) |
 | Tools | [`internal/code/tools/`](internal/code/index.md) | [`audit-suite/`](internal/code/tools/audit-suite/index.md) · [`shell/`](internal/code/tools/shell/index.md) · [`one-off/`](internal/code/tools/one-off/index.md) |
 
 **Coverage and drift** are tracked by `tools/doc-coverage-audit/` —
