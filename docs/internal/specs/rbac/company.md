@@ -2,7 +2,7 @@
 title: Company — permission catalog
 section: Internal
 order: 53
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 owner: Torv
 status: draft — RBAC catalog sweep ([index](index.md))
 ---
@@ -10,92 +10,112 @@ status: draft — RBAC catalog sweep ([index](index.md))
 # Company (CMP_) — permissions
 
 Permission keys + default grant matrix for the Company object. Derived
-from [company metadata](../object-metadata/company.md); scheme in the
-[catalog template](index.md).
+from [company metadata](../object-metadata/company.md); see the
+[catalog template](index.md) for the key scheme + role tiers.
 
-**Scope columns Company carries:** Company IS the company-scope root —
-its own `redpash_id` is what `@company` resolves against. `@own` here
-means "a company the caller is a member of" (via the unified
-`memberships` table); `@all` = platform admin. No `@project`. Company
-is also the **company-role source** (`memberships.role` on company-typed
-rows — owner/admin/member at the company route layer).
+**View reaches Company supports:** Company IS the company-scope root —
+its own `redpash_id` is what the `company` reach resolves against.
+`own` here means "a company the caller holds a membership on" (via the
+unified `memberships` table, `member_redpash_id` = the holder); `all` =
+platform admin. No `project` reach (Company has no `project_id`).
+Company is also the **company-role source** (`memberships.role` on
+company-typed rows — owner/admin/member at the company route layer).
 
 Member-management calls (add/remove/role-change) are specced on the
 [Membership](membership.md) object since the membership row is the
-mutated entity; Company's keys cover the company row itself.
+mutated entity; Company's atoms cover the company row itself.
 
 ---
 
-## 1. Keys
+## 1. Atoms
 
-### Object-action keys
+View-rooted (per [index](index.md#key-scheme)): `view` is the root,
+writes derive from it. `read`/`list`/`search` are all `company.view` —
+the reach decides *which* companies the list returns (and `view.all`
+returns the global directory).
 
-| Key | Verb | Scopes | Notes |
+### View atoms
+
+| Atom | Covers | Reach | Notes |
 |---|---|---|---|
-| `company.create` | `POST /api/companies` | — | Creator seated as `owner` in one TX. Any authenticated user. |
-| `company.read` | `GET /api/companies/:rid` | own · all | Members read their company; platform admin all. |
-| `company.update` | `PATCH /api/companies/:rid` | own · all | Coarse update; owner/admin per field below. |
-| `company.delete` | `DELETE /api/companies/:rid` | own · all | Owner-only at the company tier (projects SET NULL, memberships CASCADE). |
-| `company.list` | `GET /api/companies` | all | Returns every company with the caller's `my_role` (null when not a member). The list is global; membership decides what's actionable, not what's listed. |
-| `company.search` | `GET /api/companies?q=…` | all | Granted with `list`. |
+| `company.view` | the company (detail / list / search) | own · all | `own` = the caller holds a membership on the company; the list returns the caller's companies with `my_role` |
+| `company.view.all` | every company | all | platform admin — and the global directory listing (every company, `my_role` null when not a member) |
+| `company.view.field.<name>` | one field | inherits the row reach | **allow-list**, one per readable field: `name` · `slug` · `avatar_url` (+ read-only `created_at`). Standard bundles hold `view.field.all`; *subsetting fields is a custom-role (v3) feature* |
+| `company.view.field.all` | every field | own · all | the "see the whole record" atom; **required to delete** |
 
-### Field-update keys
+### Write atoms (derive from a view atom)
 
-| Key | Field | Scopes | Notes |
+| Atom | Derives from | Reach | Notes |
 |---|---|---|---|
-| `company.name.update` | `name` | own · all | Owner/admin rename. |
-| `company.slug.update` | `slug` | own · all | URL slug; owner-only (changing it breaks links). |
-| `company.avatar_url.update` | `avatar_url` | own · all | Owner/admin. |
+| `company.create` | object `company.view` | — (no row yet) | Creator seated as `owner` in one TX. Any authenticated user. |
+| `company.name.update` | `company.view.field.name` | own · all | owner/admin rename |
+| `company.slug.update` | `company.view.field.slug` | own · all (**owner-only**) | URL slug; owner-only (changing it breaks links) — see Notes |
+| `company.avatar_url.update` | `…field.avatar_url` | own · all | owner/admin reskin |
+| `company.delete` | `company.view.field.all` | own · all (**owner-only**) | owner-only at the company tier (projects SET NULL, memberships CASCADE) — see Notes |
 
-**No keys for:** `redpash_id`, `owner_id`-equivalent (ownership lives
+**No atoms for:** `redpash_id`, `owner_id`-equivalent (ownership lives
 in a `memberships` row with `role='owner'`, not a column on companies),
-`created_at`.
+`created_at` — auto / server-assigned.
 
 ---
 
 ## 2. Grant matrix
 
-| Key | plat:admin | co:owner | co:admin | co:member |
-|---|---|---|---|---|
-| `company.create` | ✓ | ✓ | ✓ | ✓ |
-| `company.read` | all | own | own | own |
-| `company.list` | all | all | all | all |
-| `company.search` | all | all | all | all |
-| `company.update` | all | own | own | — |
-| `company.delete` | all | own | — | — |
-| `company.name.update` | all | own | own | — |
-| `company.slug.update` | all | own | — | — |
-| `company.avatar_url.update` | all | own | own | — |
+Default role-bundle → atom mapping. Cell = the **reach** the bundle
+grants (or `—`). Columns: platform `admin`; the membership bundles
+`owner`/`admin`/`member`/`viewer` — here "the caller's role *in the
+company being acted on*" — and `co-mem`, a bare company membership.
+Wider reach wins on union.
 
-`co:owner`/`co:admin`/`co:member` columns here mean "the caller's role
-*in the company being acted on*" — `own` scope is implicit (you act on
-a company you belong to). Reading it: any user can create a company
-(and is seated owner); members read their own company; admins rename +
-reskin it; only the owner changes the slug, transfers, or deletes.
+| Atom | plat:admin | co:owner | co:admin | co:member | co:viewer | co-mem |
+|---|---|---|---|---|---|---|
+| `company.view` | all | own | own | own | own | own |
+| `company.view.field.all` | all | own | own | own | own | own |
+| `company.create` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `company.name.update` | all | own | own | — | — | — |
+| `company.slug.update` | all | own | — | — | — | — |
+| `company.avatar_url.update` | all | own | own | — | — | — |
+| `company.delete` | all | own | — | — | — | — |
+
+Reading the matrix: any authenticated user can create a company (and is
+seated `owner`). A **company member** views their own company (whole
+record) but mutates nothing. A **company admin** renames + reskins it. A
+**company owner** also changes the slug, transfers, and deletes.
+`company.view.all` (the global directory) is platform-admin reach; the
+membership bundles see only the companies they hold a membership on —
+the directory listing itself is served to everyone via `view.all`'s
+list projection (see Notes).
 
 ---
 
 ## 3. Notes
 
-- **`company.list` is global, not scoped.** Everyone can list every
-  company (the directory) — the response carries `my_role` (null when
-  not a member) so the FE knows which are actionable. This is
-  deliberate: company discovery is open; *mutation* is membership-gated.
+- **The company list/directory is global, not scoped.** Everyone can
+  list every company — the response carries `my_role` (null when not a
+  member) so the FE knows which are actionable. In view-rooted terms the
+  directory listing rides `company.view.all`'s list projection (breadth
+  = every row, fields = directory-public only), while `company.view` at
+  `own` reach gates the full record. Company discovery is open;
+  *mutation* is membership-gated.
 
 - **`company.delete` is owner-only.** Deleting CASCADEs memberships and
   SET NULLs `projects.company_id` (company projects survive as
-  personal). Admins can't delete — only the owner or platform admin.
+  personal). It derives from `company.view.field.all`, but the bundle
+  narrows it to `co:owner` + `plat:admin` — admins can't delete.
 
 - **`company.slug.update` is owner-only.** The slug is in URLs; changing
   it is a higher-trust action than a rename, so it's narrower than
-  `company.name.update`.
+  `company.name.update` — `co:owner` + `plat:admin` only.
+
+- **Company transfer + delete are owner-only.** Both are
+  give-away-the-company actions, gated to `co:owner` + `plat:admin`.
 
 - **Member management lives on [Membership](membership.md).** Adding,
   removing, and role-changing members mutate company-scope `memberships`
-  rows — those keys (`membership.create@company`, etc.) are specced
+  rows — those atoms (`membership.create@company`, etc.) are specced
   there, with the last-owner guard + owner-only-for-granting-owner
-  rules. Company's keys are only about the company row.
+  rules. Company's atoms are only about the company row.
 
 - **Last-owner guard** (cross-ref): the company can't be left
   owner-less — enforced on the Membership side (`db::company_owner_count`),
-  not via a Company key.
+  not via a Company atom.

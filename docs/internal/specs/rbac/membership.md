@@ -56,18 +56,31 @@ through the parent (`/api/companies/:rid/members`, eventually
 
 ---
 
-## 1. Keys
+## 1. Atoms
 
-| Key | Verb | Scopes | Notes |
+View-rooted (per [index](index.md#key-scheme)): `view` is the root,
+writes derive from it. A membership isn't individually addressable —
+its view is the *parent's roster*, so `membership.view` reaches the
+parent scope; `read`/`list` are both this one `view` (the reach decides
+*which* memberships the roster returns). Membership has no per-field
+allow-list to speak of — the only mutable field is `role` — so
+`membership.role.update` **is** the field-update atom.
+
+### View atom
+
+| Atom | Covers | Reach | Notes |
 |---|---|---|---|
-| `membership.create` | `POST /api/{companies\|projects\|cases}/:rid/members` | (parent-scoped) | Add a member to a company/project/case. Owner-only for granting the `owner` role. |
-| `membership.read` | (via parent's members list) | (parent-scoped) | Not individually addressable; surfaces on the parent's members list + `UserProfile.memberships[]`. |
-| `membership.update` | `PATCH …/members/:user_id` | (parent-scoped) | Role change. Owner-only for promoting to `owner`. Last-owner demotion blocked. |
-| `membership.delete` | `DELETE …/members/:user_id` | own · (parent-scoped) | **Self-leave** (`@own`) OR **admin-remove** (parent owner/admin). Last-owner removal blocked. |
-| `membership.list` | `GET …/members` + admin cross-scope | (parent-scoped) · all | Per-parent members list; admin `?scope=` cross-scope paginated list. |
-| `membership.role.update` | `role` field | (parent-scoped) | The only mutable field — same grant as `membership.update`; owner-only to set `owner`. |
+| `membership.view` | the members of a scope (the parent's roster + `UserProfile.memberships[]`) | (parent scope) · all | `read`/`list` both gate on this; not individually addressable — surfaces only via `GET …/members` + the admin `?scope=` cross-scope list. Reach = the parent the membership is *on*. |
 
-**No keys for:** `object_redpash_id` / `member_redpash_id` / `role` /
+### Write atoms (derive from `membership.view`)
+
+| Atom | Derives from | Reach | Notes |
+|---|---|---|---|
+| `membership.create` | `membership.view` (+ a manage grant) | (parent scope) | `POST /api/{companies\|projects\|cases}/:rid/members` — add a member to a company/project/case. Owner-only for granting the `owner` role (see Notes). |
+| `membership.role.update` | `membership.view` | (parent scope) | `PATCH …/members/:user_id` — `role` is the only mutable field, so this **is** the field-update atom. Owner-only for promoting to `owner`; last-owner demotion blocked. |
+| `membership.delete` | `membership.view` | own · (parent scope) | `DELETE …/members/:user_id` — **self-leave** (`@own`) OR **admin-remove** (parent owner/admin). Last-owner removal blocked. |
+
+**No atoms for:** `object_redpash_id` / `member_redpash_id` / `role` /
 `context_role` (the composite PK `(object, member, role, context_role)`,
 set at create — a principal holds many edges, so changing a tier is
 replace-the-tier-row, not re-point), `joined_at` (server-set, not
@@ -77,25 +90,28 @@ bumped on role change).
 
 ## 2. Grant matrix
 
-Columns are the caller's role **in the parent scope** being acted on.
-`@own` = the membership is the caller's own (self-leave). For
-`project`/`case` scopes the owner/admin columns map to
-collaborator/write-tier equivalents (v3).
+Default role-bundle → atom mapping. Cell = the **reach** the bundle
+grants (or `—`). Columns are the caller's role bundle **in the parent
+scope** being acted on: platform `admin`; the parent bundles
+`owner`/`admin`/`member`; and `@own` — the membership is the caller's
+own (self-leave). Membership ops are parent-scoped — `scope` = the
+parent company/project/case the caller manages. For `project`/`case`
+scopes the owner/admin columns map to collaborator/write-tier
+equivalents (v3). Wider reach wins on union.
 
-| Key | plat:admin | parent:owner | parent:admin | parent:member | @own |
+| Atom | plat:admin | parent:owner | parent:admin | parent:member | @own |
 |---|---|---|---|---|---|
+| `membership.view` | all | scope | scope | scope | own |
 | `membership.create` | all | scope | scope | — | — |
-| `membership.read` | all | scope | scope | scope | own |
-| `membership.list` | all | scope | scope | scope | own |
-| `membership.update` | all | scope | scope | — | — |
-| `membership.delete` | all | scope | scope | — | own |
 | `membership.role.update` | all | scope | scope | — | — |
+| `membership.delete` | all | scope | scope | — | own |
 
-Reading it: a parent owner/admin manages its members (add / list /
-role-change / remove); any member can read the roster + leave on their
+Reading it: a parent owner/admin manages its members (add / view roster
+/ role-change / remove); any member can view the roster + leave on their
 own (`@own` delete); promoting someone to `owner` is owner-only (a
-narrower rule inside `membership.role.update` — see Notes); the last
-owner can't be demoted or removed (guard, see Notes).
+narrower rule inside `membership.create` + `membership.role.update` —
+see Notes); the last owner can't be demoted or removed (guard, see
+Notes).
 
 ---
 
@@ -103,7 +119,7 @@ owner can't be demoted or removed (guard, see Notes).
 
 - **Membership is the scope resolver.** Every other object's
   `@company` / `@project` / case-team grant is *defined by* a
-  Membership row: "`case.read@company`" means "there's a
+  Membership row: "`case.view@company`" means "there's a
   `company`-scope Membership linking the caller to the case's company."
   So this object's matrix governs who can grant *others* the scopes
   the rest of the catalog leans on — it's the meta-object of RBAC.
