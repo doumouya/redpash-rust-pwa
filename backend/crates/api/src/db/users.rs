@@ -276,10 +276,18 @@ pub async fn insert_user(
     username:     &str,
     display_name: &str,
     email:        Option<&str>,
+    first_name:   Option<&str>,
+    last_name:    Option<&str>,
 ) -> sqlx::Result<UserProfile> {
+    // Register the user as an entity FIRST per the entity-edge model
+    // (migration 20260531000000). Without this the users INSERT trips
+    // the `users_entity_fk` constraint with HTTP 500. Single tx so the
+    // entities row is rolled back on a duplicate-username conflict.
+    let mut tx = pool.begin().await?;
+    crate::db::register_entity(&mut *tx, rid, "user").await?;
     let row: UserRow = sqlx::query_as(
-        "INSERT INTO users (redpash_id, username, display_name, email)
-         VALUES ($1, $2, $3, $4)
+        "INSERT INTO users (redpash_id, username, display_name, email, first_name, last_name)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING redpash_id, username, email, display_name, avatar_url,
                    job_title, organisation, use_case, plan, locale,
                    COALESCE(
@@ -294,8 +302,11 @@ pub async fn insert_user(
     .bind(username)
     .bind(display_name)
     .bind(email)
-    .fetch_one(pool)
+    .bind(first_name)
+    .bind(last_name)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(row.into())
 }
 

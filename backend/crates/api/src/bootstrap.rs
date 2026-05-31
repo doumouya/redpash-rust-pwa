@@ -32,7 +32,7 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
         None => {
             let rid = id::new("USR");
             tracing::info!(%rid, "creating dev user");
-            db::insert_user(pool, &rid, DEV_USERNAME, "Dev user", None)
+            db::insert_user(pool, &rid, DEV_USERNAME, "Dev user", None, None, None)
                 .await
                 .context("creating dev user")?
         }

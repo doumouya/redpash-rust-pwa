@@ -48,7 +48,9 @@ async fn list(
 struct CreateUserBody {
     username:     String,
     display_name: String,
-    #[serde(default)] email: Option<String>,
+    #[serde(default)] email:      Option<String>,
+    #[serde(default)] first_name: Option<String>,
+    #[serde(default)] last_name:  Option<String>,
 }
 
 async fn create(
@@ -62,9 +64,11 @@ async fn create(
     if username.is_empty() || display_name.is_empty() {
         return Err(AppError::bad_request("invalid", "username and display_name are required"));
     }
-    let email = body.email.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let email      = body.email.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let first_name = body.first_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let last_name  = body.last_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let rid   = id::new("USR");
-    let res   = db::insert_user(&state.db, &rid, username, display_name, email).await;
+    let res   = db::insert_user(&state.db, &rid, username, display_name, email, first_name, last_name).await;
     match res {
         Ok(u) => {
             crate::event::info(&state.db, "user_create", format!("created user {username}"))

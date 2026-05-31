@@ -3,7 +3,7 @@ title: backend/crates/api/src/bootstrap.rs
 source: ../../../../../backend/crates/api/src/bootstrap.rs
 owner: Gus
 section: Internal · Code · backend · api
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # bootstrap.rs

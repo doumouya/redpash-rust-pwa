@@ -227,8 +227,10 @@ export default function home(app, { session: _session }) {
         endpoint: "/users",
         title:    "New user",
         fields: [
-          { key: "display_name", label: "Display name", required: true, placeholder: "Full name" },
-          { key: "username",     label: "Handle",       required: true, placeholder: "e.g. mansa", autocomplete: "off" },
+          { key: "display_name", label: "Display name", required: true,  placeholder: "Full name" },
+          { key: "username",     label: "Handle",       required: true,  placeholder: "e.g. mansa", autocomplete: "off" },
+          { key: "first_name",   label: "First name",   required: false, placeholder: "optional" },
+          { key: "last_name",    label: "Last name",    required: false, placeholder: "optional" },
           { key: "email",        label: "Email",        required: false, type: "email", placeholder: "optional" },
         ],
       },
