@@ -30,6 +30,7 @@ Local, not git-tracked — purely an in-WSL coordination layer.
 - `post-commit.sh` — appended to `.git/hooks/post-commit`; writes to commits.log.
 - `pre-commit.sh` — runs the audit suite (optional, opt-in).
 - `ping-hook.sh` — notifies other agents via MCP server.
+- `presence-summary.sh` — prints both Torv presence files (`Torv-FE.md` + `Torv-BE.md`) from `$HOME/Internal-Slack/presence/` with a header + mtime-age stamp per file. Called by the **SessionStart + UserPromptSubmit hooks** in `.claude/settings.json` so every Torv session lands with the team's live state in context, and refreshes on every user message. Missing files render as `(file missing)` rather than failing — fresh checkouts on new hosts get a gentle nudge to create their presence file, not a hook error. Added 2026-05-31 per [CAS_70E63F8D…](../../../runbooks/) Fix A — adopted live after the "we are not surviving" audit-tool double-build incident.
 
 ## Drift-prone areas
 

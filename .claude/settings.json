@@ -1,0 +1,26 @@
+{
+  "_doc": "Project-committed Claude Code settings — every Torv working in this repo inherits these hooks. The hooks surface Internal-Slack/presence/Torv-{FE,BE}.md as conversation context so each Torv sees what the other is doing without having to remember to check. CAS_70E63F8D40C2443C926C2D0326A0141C Fix A — adopted live after the 2026-05-31 'we are not surviving' audit-tool double-build incident.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh tools/team/presence-summary.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh tools/team/presence-summary.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
