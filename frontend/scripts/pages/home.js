@@ -44,6 +44,14 @@ import { HOME_TABS, HOME_GROUPS, HOME_DEFAULT_TAB } from "/scripts/pages/home/ta
 // path unchanged. Builder lives on the Settings page.
 import { renderChart } from "/scripts/charts/render.js";
 
+// CAS_8A210C7A — cell-editor extracted from home.js closures into the
+// framework primitives. cellEditor.decorate replaces decorateEditMode;
+// cellEditor.save replaces saveCellEdit. Page-specific state (editHistory
+// / editFuture / actionLog / updateUndoRedoButtons) stays here as
+// caller-side callbacks. chipRender bridges home.js's chipRenderFor
+// into the framework until chip-registry lands (CAS_BF208AA8).
+import { cellEditor } from "/scripts/framework/cell-editor.js";
+
 export default function home(app, { session: _session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
   mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session: _session });
@@ -1881,161 +1889,45 @@ export default function home(app, { session: _session }) {
         default:               return (v) => esc(v || "—");
       }
     }
+    // CAS_8A210C7A: closure-form decorateEditMode replaced by
+    // cellEditor.decorate from /scripts/framework/cell-editor.js. The
+    // strip + activate logic moved into the framework; chipRenderFor
+    // bridges as a callback until chip-registry lands (CAS_BF208AA8).
     function decorateEditMode() {
-      const tbody = view.querySelector("#rp-home-list-tbody");
-      if (!tbody) return;
-      // Look up the col spec by editKey — needed in both the strip path
-      // (to know if a TD was chip-enum or had a data-prefix render rule)
-      // and the activate path.
-      const colByKey = new Map(
-        (spec.columns || []).filter((c) => c.editKey).map((c) => [c.editKey, c]),
-      );
-      // Strip first — clean slate.
-      tbody.querySelectorAll("td.editable").forEach((td) => {
-        const editKey = td.dataset.editKey;
-        const col = editKey ? colByKey.get(editKey) : null;
-        td.classList.remove("editable");
-        td.removeAttribute("contenteditable");
-        td.removeAttribute("data-edit-key");
-        // chip-enum cleanup (CAS_E97414…): the ON path replaced the chip
-        // span with a <select>; on strip we re-render the chip from
-        // data-full + spec.render.
-        if (col && col.editor === "chip-enum") {
-          const renderer = chipRenderFor(col.render);
-          td.innerHTML = renderer(td.dataset.full || "");
-          return;
-        }
-        // data-full pattern: when the row template stored the source-of-
-        // truth value separately, snap textContent back to the display
-        // form so exiting edit-mode without saving doesn't leave the
-        // user staring at the expanded full text. Two render rules
-        // supported today:
-        //   data-trunc="<N>"  — slice(0, N) truncation (CAS_A5A4…)
-        //   data-prefix="<s>" — decoration prefix on display
-        //                       (CAS_E97414…, e.g. "@" for handle)
-        // Both default to '—' when data-full is empty so the cell
-        // doesn't render an orphaned prefix.
-        if (td.dataset.full !== undefined) {
-          const trunc  = parseInt(td.dataset.trunc || "0", 10) || 0;
-          const prefix = td.dataset.prefix || "";
-          const full   = td.dataset.full;
-          const display = trunc > 0
-            ? (full.slice(0, trunc) || "")
-            : full;
-          td.textContent = display
-            ? (prefix + display)
-            : "—";
-        }
-      });
-      if (!editMode) return;
-      const thead = view.querySelector(".rt-table thead tr");
-      if (!thead) return;
-      // Resolve each editable spec col's CURRENT position from the
-      // live thead — survives any drag-reorder of the columns.
-      const dataTHs = [...thead.querySelectorAll("th[data-col-key]")];
-      const keyToPos = new Map(dataTHs.map((th, i) => [th.dataset.colKey, i]));
-      // selectMode adds a leading .rp-list-sel column; offset accordingly.
-      const offset = selectMode ? 1 : 0;
-      const editableCols = (spec.columns || []).filter(
-        (col) => typeof col === "object" && col.editable && col.editKey
-          // requiresAdmin gate: privilege-escalating columns (today: the
-          // Platform column on the Users tab, which PATCHes the gated
-          // /admin/users/:rid endpoint) become editable only when the
-          // caller is a platform admin. Backend 404s non-admins anyway
-          // (leak-free per is_platform_admin); this just hides the
-          // affordance so non-admins don't see an editor that 404s.
-          && (!col.requiresAdmin || isPlatformAdmin),
-      );
-      tbody.querySelectorAll("tr[data-rid]").forEach((tr) => {
-        const tds = tr.querySelectorAll("td");
-        editableCols.forEach((col) => {
-          const pos = keyToPos.get(col.key);
-          if (pos === undefined) return;
-          const td = tds[pos + offset];
-          if (!td) return;
-          // chip-enum editor (CAS_E97414…): swap the chip span for a
-          // <select> populated with col.options, with the current
-          // data-full value pre-selected. saveCellEdit detects the
-          // <select> child and PATCHes its value. The change event
-          // (wired below) triggers save immediately on selection.
-          // Built via createElement/appendChild rather than innerHTML —
-          // col.options is dev-controlled (spec) but defense-in-depth
-          // is cheap, and Option.text/value handle escaping correctly.
-          if (col.editor === "chip-enum") {
-            const current = td.dataset.full || "";
-            const select = document.createElement("select");
-            select.className = "rp-cell-edit-select";
-            (col.options || []).forEach((opt) => {
-              const option = document.createElement("option");
-              option.value = opt;
-              option.textContent = opt;
-              if (opt === current) option.selected = true;
-              select.appendChild(option);
-            });
-            // Replace existing chip span(s) with the select.
-            while (td.firstChild) td.removeChild(td.firstChild);
-            td.appendChild(select);
-            td.classList.add("editable");
-            td.setAttribute("data-edit-key", col.editKey);
-            return;
-          }
-          // Default contenteditable path (CAS_A5A4… data-full pattern):
-          td.classList.add("editable");
-          td.setAttribute("contenteditable", "plaintext-only");
-          td.setAttribute("data-edit-key", col.editKey);
-          // Expand to the source-of-truth value so the user edits the
-          // bare string (no truncation, no prefix decoration).
-          if (td.dataset.full !== undefined) {
-            td.textContent = td.dataset.full;
-          }
-        });
+      cellEditor.decorate({
+        view,
+        spec,
+        editMode,
+        selectMode,
+        isPlatformAdmin,
+        chipRender: chipRenderFor,
       });
     }
 
+    // CAS_8A210C7A: closure-form saveCellEdit replaced by cellEditor.save
+    // from /scripts/framework/cell-editor.js. The framework owns the
+    // editor-registry dispatch + PATCH + data-full maintenance; this
+    // wrapper owns the page-specific side effects (editHistory push,
+    // editFuture clear, undo/redo buttons, action log, error UI).
     async function saveCellEdit(td, rid) {
-      const key = td.dataset.editKey;
-      if (!key) return;
-      // chip-enum editor (CAS_E97414…): when the cell has been swapped to
-      // a <select>, the value lives in the select node — not in
-      // td.textContent (which would be the option label string, often
-      // identical but not guaranteed). Read from the select directly.
-      const selectEl = td.querySelector("select.rp-cell-edit-select");
-      const value = selectEl
-        ? selectEl.value
-        : td.textContent.trim();
-      // Capture original for revert-on-fail; stored on the cell when it
-      // gains focus so we don't need a separate map.
-      const original = td.dataset.editOriginal ?? "";
-      if (value === original) return; // no-op
-      // Per-column endpoint override (CAS_D78667D1 promote affordance):
-      // most cols PATCH the tab's default endpoint, but some columns
-      // mutate via a different resource (e.g. Platform role lives at
-      // /admin/users/:rid, not /users/:rid). Spec carries col.editEndpoint
-      // as the override; falls back to spec.patchEndpoint / spec.endpoint.
-      const col = (spec.columns || []).find((c) => c && c.editKey === key);
-      const patchBase = (col && col.editEndpoint) || spec.patchEndpoint || spec.endpoint;
       try {
-        await api.patch(patchBase + "/" + encodeURIComponent(rid), { [key]: value });
-        // Successful — leave the new value in place. Refetch is optional;
-        // skipping it preserves the user's edit-mode position + cursor.
-        td.dataset.editOriginal = value;
-        // data-full pattern: keep the source-of-truth in sync so
-        // subsequent edits in the same session read the updated value,
-        // and so the exit-edit-mode re-truncate path snaps to the
-        // truncated form of the just-PATCHed value (not the stale one).
-        if (td.dataset.full !== undefined) {
-          td.dataset.full = value;
-        }
+        const result = await cellEditor.save({ td, rid, spec, api });
+        if (!result) return; // no-op (value unchanged or no editKey)
         // Record for undo. Any new edit invalidates the redo stack —
         // standard linear-history behavior.
-        editHistory.push({ rid, key, oldValue: original, newValue: value });
+        editHistory.push({
+          rid,
+          key:      result.key,
+          oldValue: result.oldValue,
+          newValue: result.value,
+        });
         editFuture.length = 0;
         updateUndoRedoButtons();
-        logAction("Edited " + key + " of " + rid + " → \"" + value + "\"");
+        logAction("Edited " + result.key + " of " + rid + " → \"" + result.value + "\"");
       } catch (err) {
         console.warn("[home] cell-edit failed:", err);
         alert("Edit failed — reverting.");
-        td.textContent = original;
+        td.textContent = td.dataset.editOriginal ?? "";
       }
     }
 
