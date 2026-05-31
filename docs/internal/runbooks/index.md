@@ -118,6 +118,24 @@ Every entry follows the same five headings:
   stale-env-warm / stale-env-cold) against the live backend.
   Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
   needs a refresh path — lazy init + retry-once-on-401 is the floor.
+- [0012 — Cell-editor extensions — data-prefix render rule + chip-enum select-overlay editor](CAS_E97414C482AB431FA28D43392501F47B-cell-editor-data-prefix-and-chip-enum.md) —
+  **Resolved 2026-05-31** (CAS_E97414C482AB431FA28D43392501F47B).
+  Two coordinated extensions to the cell-editor contract that landed
+  in CAS_A5A4 (the `data-full` pattern). (1) `data-prefix` render rule
+  layers alongside `data-trunc` — Users `username` ships as
+  `data-full="sam-rivera" data-prefix="@"`, display shows
+  `@sam-rivera`, edit-on strips the prefix so the user edits the bare
+  username, edit-off re-applies it. (2) `editor: "chip-enum"` is the
+  first non-contenteditable editor type — Users `plan` swaps its chip
+  span for a `<select>` populated from `col.options`, change events
+  fire save immediately so the PATCH lands without blur. Both
+  contracts share the model-view split: `data-full` is the model,
+  display is composed via render rules / chip renderer. Discipline
+  rule: any derived display (truncation, prefix, formatting, chip
+  styling) needs an explicit `data-full` on the TD before being
+  flagged editable. Net Users editable surface 3 → 6 cols (gains
+  handle, name, plan). Smoke-tested end-to-end on a live user with
+  PATCH echo-back verification.
 - [0011 — Scrub-retain user deletion (scrub_user_tx + sole-owner blocker + case-membership retention)](CAS_46BA67713EC84871991D3E7475598B47-scrub-retain-user-deletion.md) —
   **Resolved 2026-05-31** (CAS_46BA67713EC84871991D3E7475598B47).
   The pre-fix `db::delete_user` was a hard `DELETE FROM users` that

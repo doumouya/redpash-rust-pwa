@@ -285,10 +285,10 @@ export default function home(app, { session: _session }) {
       // are flagged `defaultHidden: true` so the initial render stays
       // identical to before; the data is reachable via the picker.
       columns: [
-        { label: "Name",        key: "display_name", sortable: true  },
-        { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true },
+        { label: "Name",        key: "display_name", sortable: true,  editable: true, editKey: "display_name" },
+        { label: "Handle",      key: "username",     sortable: true,  defaultHidden: true, editable: true, editKey: "username" },
         { label: "Email",       key: "email",        sortable: true,  defaultHidden: true, editable: true, editKey: "email" },
-        { label: "Plan",        key: "plan",         sortable: true  },
+        { label: "Plan",        key: "plan",         sortable: true,  editable: true, editKey: "plan", editor: "chip-enum", options: ["free", "pro", "team", "enterprise"], render: "planChip" },
         { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
         { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true, editable: true, editKey: "organisation" },
         { label: "Org",         key: "org_name",     sortable: true  },
@@ -304,13 +304,24 @@ export default function home(app, { session: _session }) {
       // cell-editor render path which is its own slice.
       row: (u) =>
         '<tr data-rid="' + esc(u.redpash_id || "") + '">'
+        // NAME — plain display_name only; handle suffix removed so the cell
+        // is editable via contenteditable=plaintext-only (CAS_E97414…).
+        // The HANDLE column carries the @username surface independently.
         + '<td class="rp-home-user-name">'
         +   '<span class="rp-home-user-display">' + esc(u.display_name) + '</span>'
-        +   ' <span class="rp-home-handle">@' + esc(u.username) + '</span>'
         + '</td>'
-        + '<td class="rp-meta">@' + esc(u.username || "") + '</td>'
+        // HANDLE — data-full pattern with data-prefix decoration (CAS_E97414…):
+        // textContent shows "@${username}" for visual continuity, dataset.full
+        // holds the bare username (source-of-truth), dataset.prefix carries the
+        // "@" render rule. decorateEditMode strips the prefix on edit-on so
+        // the user edits the username directly; OFF re-renders with prefix.
+        + '<td class="rp-meta" data-full="' + esc(u.username || "") + '" data-prefix="@">'
+        +   '@' + esc(u.username || "") + '</td>'
         + '<td class="rp-meta">' + esc(u.email || "—") + '</td>'
-        + '<td>' + planChip(u.plan) + '</td>'
+        // PLAN — chip-enum editor (CAS_E97414…): data-full holds the source
+        // value so the OFF re-render can rebuild the chip via planChip().
+        // decorateEditMode swaps the chip span for a <select> on ON.
+        + '<td data-full="' + esc(u.plan || "") + '">' + planChip(u.plan) + '</td>'
         + '<td class="rp-meta">' + esc(u.job_title || "—") + '</td>'
         + '<td class="rp-meta">' + esc(u.organisation || "—") + '</td>'
         + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
@@ -1639,27 +1650,65 @@ export default function home(app, { session: _session }) {
     // that position. Requires the post-fetchList hook chain to call
     // _applyColumnOrder BEFORE _decorateEditMode so thead and tbody are
     // column-aligned when this runs.
+    // Map a spec.render name to the chip-render function. Used by the
+    // chip-enum editor type (CAS_E97414…) to restore the chip display
+    // when edit-mode toggles off, and by the inline post-save re-render
+    // in saveCellEdit. New chip families add their renderer here.
+    function chipRenderFor(name) {
+      switch (name) {
+        case "planChip":       return planChip;
+        case "caseStatusChip": return caseStatusChip;
+        case "roleChip":       return roleChip;
+        case "orgChip":        return orgChip;
+        case "stageChip":      return stageChip;
+        case "priorityChip":   return priorityChip;
+        default:               return (v) => esc(v || "—");
+      }
+    }
     function decorateEditMode() {
       const tbody = view.querySelector("#rp-home-list-tbody");
       if (!tbody) return;
+      // Look up the col spec by editKey — needed in both the strip path
+      // (to know if a TD was chip-enum or had a data-prefix render rule)
+      // and the activate path.
+      const colByKey = new Map(
+        (spec.columns || []).filter((c) => c.editKey).map((c) => [c.editKey, c]),
+      );
       // Strip first — clean slate.
       tbody.querySelectorAll("td.editable").forEach((td) => {
+        const editKey = td.dataset.editKey;
+        const col = editKey ? colByKey.get(editKey) : null;
         td.classList.remove("editable");
         td.removeAttribute("contenteditable");
         td.removeAttribute("data-edit-key");
+        // chip-enum cleanup (CAS_E97414…): the ON path replaced the chip
+        // span with a <select>; on strip we re-render the chip from
+        // data-full + spec.render.
+        if (col && col.editor === "chip-enum") {
+          const renderer = chipRenderFor(col.render);
+          td.innerHTML = renderer(td.dataset.full || "");
+          return;
+        }
         // data-full pattern: when the row template stored the source-of-
-        // truth value separately (long-text cols with .slice() display
-        // truncation), snap textContent back to the truncated form so
-        // exiting edit-mode without saving doesn't leave the user
-        // staring at the expanded full text until the next fetchList
-        // paint. data-trunc carries the truncation length (0 = no
-        // truncation, just display the full value).
+        // truth value separately, snap textContent back to the display
+        // form so exiting edit-mode without saving doesn't leave the
+        // user staring at the expanded full text. Two render rules
+        // supported today:
+        //   data-trunc="<N>"  — slice(0, N) truncation (CAS_A5A4…)
+        //   data-prefix="<s>" — decoration prefix on display
+        //                       (CAS_E97414…, e.g. "@" for handle)
+        // Both default to '—' when data-full is empty so the cell
+        // doesn't render an orphaned prefix.
         if (td.dataset.full !== undefined) {
-          const trunc = parseInt(td.dataset.trunc || "0", 10) || 0;
-          const full  = td.dataset.full;
-          td.textContent = trunc > 0
-            ? (full.slice(0, trunc) || "—")
-            : (full || "—");
+          const trunc  = parseInt(td.dataset.trunc || "0", 10) || 0;
+          const prefix = td.dataset.prefix || "";
+          const full   = td.dataset.full;
+          const display = trunc > 0
+            ? (full.slice(0, trunc) || "")
+            : full;
+          td.textContent = display
+            ? (prefix + display)
+            : "—";
         }
       });
       if (!editMode) return;
@@ -1681,16 +1730,38 @@ export default function home(app, { session: _session }) {
           if (pos === undefined) return;
           const td = tds[pos + offset];
           if (!td) return;
+          // chip-enum editor (CAS_E97414…): swap the chip span for a
+          // <select> populated with col.options, with the current
+          // data-full value pre-selected. saveCellEdit detects the
+          // <select> child and PATCHes its value. The change event
+          // (wired below) triggers save immediately on selection.
+          // Built via createElement/appendChild rather than innerHTML —
+          // col.options is dev-controlled (spec) but defense-in-depth
+          // is cheap, and Option.text/value handle escaping correctly.
+          if (col.editor === "chip-enum") {
+            const current = td.dataset.full || "";
+            const select = document.createElement("select");
+            select.className = "rp-cell-edit-select";
+            (col.options || []).forEach((opt) => {
+              const option = document.createElement("option");
+              option.value = opt;
+              option.textContent = opt;
+              if (opt === current) option.selected = true;
+              select.appendChild(option);
+            });
+            // Replace existing chip span(s) with the select.
+            while (td.firstChild) td.removeChild(td.firstChild);
+            td.appendChild(select);
+            td.classList.add("editable");
+            td.setAttribute("data-edit-key", col.editKey);
+            return;
+          }
+          // Default contenteditable path (CAS_A5A4… data-full pattern):
           td.classList.add("editable");
           td.setAttribute("contenteditable", "plaintext-only");
           td.setAttribute("data-edit-key", col.editKey);
-          // data-full pattern: expand the cell from its truncated
-          // display to the full source-of-truth value so the user
-          // edits the entire string, not the `.slice(0, N)`-truncated
-          // display. saveCellEdit will PATCH the edited full value
-          // back AND update data-full to match. Without this, editing
-          // a truncated description PATCHes the truncated string and
-          // silently loses the tail (CAS_A5A432F1A82A4A4DB0B62C0085C4428C).
+          // Expand to the source-of-truth value so the user edits the
+          // bare string (no truncation, no prefix decoration).
           if (td.dataset.full !== undefined) {
             td.textContent = td.dataset.full;
           }
@@ -1701,7 +1772,14 @@ export default function home(app, { session: _session }) {
     async function saveCellEdit(td, rid) {
       const key = td.dataset.editKey;
       if (!key) return;
-      const value = td.textContent.trim();
+      // chip-enum editor (CAS_E97414…): when the cell has been swapped to
+      // a <select>, the value lives in the select node — not in
+      // td.textContent (which would be the option label string, often
+      // identical but not guaranteed). Read from the select directly.
+      const selectEl = td.querySelector("select.rp-cell-edit-select");
+      const value = selectEl
+        ? selectEl.value
+        : td.textContent.trim();
       // Capture original for revert-on-fail; stored on the cell when it
       // gains focus so we don't need a separate map.
       const original = td.dataset.editOriginal ?? "";
@@ -2245,22 +2323,52 @@ export default function home(app, { session: _session }) {
     tbodyForEdit?.addEventListener("focusin", (e) => {
       const td = e.target.closest("td.editable[data-edit-key]");
       if (!td) return;
-      td.dataset.editOriginal = td.textContent.trim();
+      // chip-enum (CAS_E97414…): the source-of-truth value lives in the
+      // <select>, not in textContent. Capture original from the select
+      // so an Escape-revert restores the right option.
+      const selectEl = td.querySelector("select.rp-cell-edit-select");
+      td.dataset.editOriginal = selectEl
+        ? selectEl.value
+        : td.textContent.trim();
     });
     tbodyForEdit?.addEventListener("keydown", (e) => {
       const td = e.target.closest("td.editable[data-edit-key]");
       if (!td) return;
       if (e.key === "Enter") {
         e.preventDefault();
-        td.blur();   // triggers focusout → blur → saveCellEdit
+        // contenteditable cells blur to save; <select>s blur naturally
+        // when focus moves so a Tab/click suffices, but explicit blur
+        // here keeps Enter behavior consistent across editor types.
+        const target = td.querySelector("select.rp-cell-edit-select") || td;
+        target.blur();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        td.textContent = td.dataset.editOriginal ?? "";
-        td.blur();
+        const selectEl = td.querySelector("select.rp-cell-edit-select");
+        if (selectEl) {
+          selectEl.value = td.dataset.editOriginal ?? "";
+        } else {
+          td.textContent = td.dataset.editOriginal ?? "";
+        }
+        const target = selectEl || td;
+        target.blur();
       }
     });
     tbodyForEdit?.addEventListener("focusout", (e) => {
       const td = e.target.closest("td.editable[data-edit-key]");
+      if (!td) return;
+      const tr = td.closest("tr[data-rid]");
+      if (!tr) return;
+      saveCellEdit(td, tr.dataset.rid);
+    });
+    // chip-enum: <select> change fires immediately on user pick, so
+    // save right away without waiting for blur. Without this, the user
+    // picks "pro" but the cell stays on "free" until they click out —
+    // confusing. focusout still fires after, but saveCellEdit's
+    // no-op-on-unchanged guard prevents a duplicate PATCH.
+    tbodyForEdit?.addEventListener("change", (e) => {
+      const selectEl = e.target.closest("select.rp-cell-edit-select");
+      if (!selectEl) return;
+      const td = selectEl.closest("td.editable[data-edit-key]");
       if (!td) return;
       const tr = td.closest("tr[data-rid]");
       if (!tr) return;
