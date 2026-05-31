@@ -62,7 +62,7 @@ Per spec §5.2, each editor consumes a `ctx` shaped to its needs. `decorate` bui
 |------------------|-----------------------------------------------------------|
 | `text` (default) | `{}` — text editor reads `td.dataset.full / .trunc / .prefix` directly. |
 | `chip-enum`      | `{ options: col.options, renderChip: chipRender(col.render) || undefined }` |
-| `entity-picker`  | `{ relType: col.rel?.type, placeholder: col.placeholder }` — `renderRid` wires when the first real consumer lands per [[build-ready-dont-wire]]. |
+| `entity-picker`  | `{ relType: col.rel?.type, placeholder: col.placeholder, renderChip: chipRender(col.render) || undefined }` — `renderChip` (like chip-enum's) rebuilds the display chip on the OFF re-render, applied to the cell's `data-label`. Wired 2026-06-01 with the first real consumer (Users-tab Org, `relType: "company"`). |
 
 Unknown `col.editor` IDs fall back to `text` via the editor-registry's universal fallback (spec §5.1).
 

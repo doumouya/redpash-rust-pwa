@@ -21,7 +21,7 @@ GET /api/admin/teams/stats  ← Teams KPI strip
 GET /api/admin/files        ← Files tab          (org-wide, not per-project)
 GET /api/admin/charts       ← Charts tab         (project_files where file_type='chart')
 GET /api/admin/steps        ← Steps tab          (every project_step across all files)
-PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see below)
+PATCH /api/admin/users/:rid ← platform role {admin|user} + org_role + org_id (set/swap company) — GATED (see below)
 GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (see below)
 GET /api/admin/audit-catalog ← per-tool latest run + severity counts + diff-vs-prev — GATED
 GET·PUT /api/admin/fields    ← field registry redtable (props + per-role perms) + set a cell — GATED
@@ -39,14 +39,30 @@ GET /api/admin/types/:type   ← one TypeDefinition by `type` id (404 if unknown
 - **`DELETE /api/admin/users/:rid` is scrub-retain**, not hard delete. Self-delete guard (`rid == caller`) remains; sole-owner blocker enforced via `db::user_sole_owner_objects` → 409; otherwise scrub_user_tx runs and returns 204. Mirrors `routes/users.rs::delete_one`. See [runbook CAS_46BA…](../../../../runbooks/CAS_46BA67713EC84871991D3E7475598B47-scrub-retain-user-deletion.md).
 - **`list_companies` + `list_teams_admin` my_role subqueries are precedence-ordered (LIMIT 1)** — after the migration 20260531000001 widened the membership PK to `(object, member, role, context_role)`, a plain `(SELECT m.role …)` returns >1 row when the caller holds multiple roles on one object → 500. Both endpoints rank `owner > admin > member > viewer` and `LIMIT 1`. Apply the same shape to any new admin-list endpoint that exposes `my_role`.
 - **`PATCH /api/admin/users/:rid` (`patch_user_role`) is GATED** — unlike the
-  dev-permissive read/delete siblings, it's privilege escalation (grants
-  `users.role='admin'`), so it requires `rbac::is_platform_admin(caller)`
-  (leak-free 404 otherwise), validates `role ∈ {admin,user}` (400), and refuses
-  to demote the **last** platform admin (`SELECT count(*) … role='admin' <= 1`
-  → 409 `last_admin`). Emits `user_role_change`. CAS_D78667D1 option (b) — the
-  UI-driven path to admin, sibling to the `REDPASH_BOOTSTRAP_ADMINS` env
-  allowlist ([bootstrap.md](../bootstrap.md)). The Home Users "promote"
-  affordance is the teams-lane FE follow-up.
+  dev-permissive read/delete siblings, every field here is an org-management
+  mutation, so it requires `rbac::is_platform_admin(caller)` (leak-free 404
+  otherwise). Body `PatchUserBody {role?, org_role?, org_id?}` — all optional,
+  each present field applied independently (the Users tab edits one cell at a
+  time):
+  - **`role`** → platform role; validates `role ∈ {admin,user}` (400), refuses
+    to demote the **last** platform admin (→ 409 `last_admin`), emits
+    `user_role_change`. CAS_D78667D1 option (b), the UI path to admin (sibling to
+    the `REDPASH_BOOTSTRAP_ADMINS` env allowlist, [bootstrap.md](../bootstrap.md)).
+  - **`org_role`** → the user's role in their PRIMARY company membership
+    (`COMPANY_ROLES` = owner/admin/member; 400 otherwise). Targets the top
+    membership via the SAME precedence pick as `list_users` (owner>admin>member,
+    then most-recent). role is part of the membership PK, so the UPDATE can 409
+    (`conflict`) on a collision; 404 if the user has no company membership.
+    Emits `user_org_role_change`.
+  - **`org_id`** → set / swap the user's primary company (`CMP_…`; 400 on a
+    non-CMP prefix, 404 if the company doesn't exist). No membership → INSERT
+    (role `member`); existing → re-point in a tx (DELETE old + INSERT new, role
+    preserved), 409 on collision; same company → no-op. Emits `user_org_set` /
+    `user_org_change`. Backs the Users-tab Org entity-picker.
+
+  The editable Role + Org cells on the Home Users tab PATCH here via the
+  cell-editor's per-column `editEndpoint`. Helpers: `top_company_membership`
+  (the shared precedence pick), `is_unique_violation` (PK collision → 409).
 - **`GET /api/admin/fields` (`list_fields`) is GATED** — the field registry as
   a redtable (CAS_C4219F2B): one `Page<FieldRow>` row per object field with
   `is_editable` / `is_sortable` + per-role permission cells

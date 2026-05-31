@@ -327,8 +327,20 @@ export default function home(app, { session: _session }) {
           editEndpoint: "/admin/users", requiresAdmin: true },
         { label: "Job",         key: "job_title",    sortable: true, editable: true, editKey: "job_title" },
         { label: "Profile org", key: "organisation", sortable: true,  defaultHidden: true, editable: true, editKey: "organisation" },
-        { label: "Org",         key: "org_name",     sortable: true  },
-        { label: "Role",        key: "org_role",     sortable: true  },
+        // Org — entity-picker over companies (editKey org_id → the user's
+        // PRIMARY company membership is set/swapped server-side). data-full
+        // holds the company rid (what we PATCH); data-label the name (display).
+        { label: "Org",         key: "org_name",     sortable: true,
+          editable: true, editKey: "org_id", editor: "entity-picker",
+          rel: { type: "company" }, placeholder: "Search company…",
+          render: "orgChip", editEndpoint: "/admin/users", requiresAdmin: true },
+        // Role — the user's role in their PRIMARY company membership
+        // (COMPANY_ROLES: owner/admin/member; no viewer). PATCHes org_role →
+        // updates that membership. Distinct from the "Platform" col (users.role).
+        { label: "Role",        key: "org_role",     sortable: true,
+          editable: true, editKey: "org_role", editor: "chip-enum",
+          options: ["owner", "admin", "member"], render: "roleChip",
+          editEndpoint: "/admin/users", requiresAdmin: true },
         { label: "Avatar",      key: "avatar_url",   sortable: false, defaultHidden: true },
         { label: "Joined",      key: "created_at",   sortable: true  },
         { label: "ID",          key: "redpash_id",   sortable: false, defaultHidden: true },
@@ -367,8 +379,14 @@ export default function home(app, { session: _session }) {
         + '<td data-full="' + esc(u.role || "user") + '">' + platformRoleChip(u.role) + '</td>'
         + '<td class="rp-meta">' + esc(u.job_title || "—") + '</td>'
         + '<td class="rp-meta">' + esc(u.organisation || "—") + '</td>'
-        + '<td>' + (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
-        + '<td>' + (u.org_role ? roleChip(u.org_role) : '<span class="rp-meta">—</span>') + '</td>'
+        // ORG — entity-picker editor: data-full = company rid (the PATCH
+        // value), data-label = company name (display + picker pre-fill).
+        + '<td data-full="' + esc(u.org_id || "") + '" data-label="' + esc(u.org_name || "") + '">'
+        +   (u.org_name ? orgChip(u.org_name) : '<span class="rp-meta">—</span>') + '</td>'
+        // ORG ROLE — chip-enum editor: data-full holds the source role so the
+        // OFF re-render rebuilds the chip via roleChip().
+        + '<td data-full="' + esc(u.org_role || "") + '">'
+        +   (u.org_role ? roleChip(u.org_role) : '<span class="rp-meta">—</span>') + '</td>'
         + '<td class="rp-meta">' + esc(u.avatar_url || "—") + '</td>'
         + '<td class="rp-meta">' + fmtTime(u.created_at) + '</td>'
         + '<td><span class="rt-mono-pill">' + esc(u.redpash_id || "—") + '</span></td>'

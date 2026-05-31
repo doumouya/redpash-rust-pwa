@@ -1639,61 +1639,196 @@ async fn rbac_resolve(
 }
 
 #[derive(Deserialize)]
-struct PatchUserRoleBody { role: String }
+struct PatchUserBody {
+    /// Platform role (`admin` | `user`) → `users.role`.
+    #[serde(default)] role:     Option<String>,
+    /// Role in the user's PRIMARY company (`owner` | `admin` | `member`) →
+    /// updates the top company membership.
+    #[serde(default)] org_role: Option<String>,
+    /// The user's primary company (`CMP_…`) → sets / swaps the top company
+    /// membership.
+    #[serde(default)] org_id:   Option<String>,
+}
 
-/// `PATCH /api/admin/users/:rid` — set a user's platform role
-/// (`admin` | `user`). CAS_D78667D1 option (b): the UI-driven path to grant
-/// platform-admin, retiring the psql one-liner + the env allowlist's
-/// restart requirement. **Gated** unlike its dev-permissive siblings here —
-/// granting admin is privilege escalation, so the caller must already BE a
-/// platform admin (leak-free 404 otherwise), and the **last admin can't be
-/// demoted** (never strand the platform with zero admins). The FE "promote"
-/// affordance on the Home Users tab is the teams-lane Torv's follow-up.
+/// The user's TOP company membership as `(company_rid, role, context_role)`, or
+/// None. Mirrors the precedence + LATERAL pick in `list_users` (owner > admin >
+/// member, then most-recent) so `org_role` / `org` edits target the SAME
+/// membership the Users tab shows.
+async fn top_company_membership(
+    pool:     &sqlx::PgPool,
+    user_rid: &str,
+) -> Result<Option<(String, String, String)>, AppError> {
+    Ok(sqlx::query_as::<_, (String, String, String)>(
+        "SELECT object_redpash_id, role, context_role
+           FROM memberships
+          WHERE member_redpash_id = $1 AND object_redpash_id LIKE 'CMP\\_%'
+          ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,
+                   joined_at DESC
+          LIMIT 1",
+    )
+    .bind(user_rid)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// True if a sqlx error is a Postgres unique-violation (SQLSTATE 23505) — used
+/// to turn a membership PK collision into a clean 409 instead of a 500.
+fn is_unique_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .map_or(false, |c| c == "23505")
+}
+
+/// `PATCH /api/admin/users/:rid` — mutate a user's platform role and/or their
+/// primary-company affiliation. All body fields optional; each present field is
+/// applied independently (the Home Users tab edits one cell at a time):
+///   - `role`     → platform role (`admin`|`user`); CAS_D78667D1 option (b),
+///                  the UI path to grant platform-admin, with a **last-admin
+///                  guard** (never strand the platform with zero admins).
+///   - `org_role` → role in the user's top company membership (owner/admin/member).
+///   - `org_id`   → set (if none) or swap the user's primary company (`CMP_…`),
+///                  keeping the existing role on a swap.
+/// **Gated** to platform admins (leak-free 404) — every field is an
+/// org-management mutation. Backs the editable Role + Org cells on the Users tab.
 async fn patch_user_role(
     State(state): State<AppState>,
     headers:      HeaderMap,
     Path(rid):    Path<String>,
-    Json(body):   Json<PatchUserRoleBody>,
+    Json(body):   Json<PatchUserBody>,
 ) -> Result<StatusCode, AppError> {
     let caller = super::resolve_user_rid(&state, &headers).await?;
     if !crate::rbac::is_platform_admin(&state, &caller).await? {
         // Leak-free: a non-admin can't distinguish "no such endpoint/user".
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
-    let role = body.role.trim();
-    if !matches!(role, "admin" | "user") {
-        return Err(AppError::bad_request("invalid", "role must be admin or user"));
-    }
-    let current = sqlx::query_as::<_, (String,)>("SELECT role FROM users WHERE redpash_id = $1")
+    // Confirm the target exists once (404 otherwise); grab the current platform
+    // role for the last-admin guard.
+    let current_role = sqlx::query_as::<_, (String,)>("SELECT role FROM users WHERE redpash_id = $1")
         .bind(&rid)
         .fetch_optional(&state.db)
         .await?
         .map(|(r,)| r)
         .ok_or_else(|| AppError::not_found("not_found", format!("user {rid}")))?;
 
-    // Last-admin guard — demoting the only platform admin would lock everyone
-    // out of every admin-gated surface (including this endpoint).
-    if current == "admin" && role == "user" {
-        let admin_count = sqlx::query_as::<_, (i64,)>("SELECT count(*) FROM users WHERE role = 'admin'")
-            .fetch_one(&state.db)
-            .await?
-            .0;
-        if admin_count <= 1 {
-            return Err(AppError::conflict("last_admin", "cannot demote the last platform admin"));
+    // ── platform role ──────────────────────────────────────────────────────
+    if let Some(role) = body.role.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !matches!(role, "admin" | "user") {
+            return Err(AppError::bad_request("invalid", "role must be admin or user"));
+        }
+        // Last-admin guard — demoting the only platform admin locks everyone out.
+        if current_role == "admin" && role == "user" {
+            let admin_count = sqlx::query_as::<_, (i64,)>("SELECT count(*) FROM users WHERE role = 'admin'")
+                .fetch_one(&state.db).await?.0;
+            if admin_count <= 1 {
+                return Err(AppError::conflict("last_admin", "cannot demote the last platform admin"));
+            }
+        }
+        if role != current_role {
+            sqlx::query("UPDATE users SET role = $1 WHERE redpash_id = $2")
+                .bind(role).bind(&rid).execute(&state.db).await?;
+            crate::event::warn(&state.db, "user_role_change", format!("{rid} role: {current_role} -> {role}"))
+                .user(caller.clone())
+                .context(serde_json::json!({ "target_user": rid, "prior_role": current_role, "new_role": role }))
+                .send();
         }
     }
 
-    if role != current {
-        sqlx::query("UPDATE users SET role = $1 WHERE redpash_id = $2")
-            .bind(role)
-            .bind(&rid)
-            .execute(&state.db)
-            .await?;
-        crate::event::warn(&state.db, "user_role_change", format!("{rid} role: {current} -> {role}"))
-            .user(caller)
-            .context(serde_json::json!({ "target_user": rid, "prior_role": current, "new_role": role }))
-            .send();
+    // ── org_role: role in the user's primary company membership ──────────────
+    if let Some(new_role) = body.org_role.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !COMPANY_ROLES.contains(&new_role) {
+            return Err(AppError::bad_request("invalid", "org_role must be one of: owner, admin, member"));
+        }
+        let (company, cur, ctx) = top_company_membership(&state.db, &rid)
+            .await?
+            .ok_or_else(|| AppError::not_found("not_found", "user has no company membership — set an org first"))?;
+        if cur != new_role {
+            // role is part of the membership PK → the UPDATE can collide with an
+            // existing (company, user, new_role, ctx) row.
+            let res = sqlx::query(
+                "UPDATE memberships SET role = $1
+                  WHERE object_redpash_id = $2 AND member_redpash_id = $3
+                    AND role = $4 AND context_role = $5",
+            )
+            .bind(new_role).bind(&company).bind(&rid).bind(&cur).bind(&ctx)
+            .execute(&state.db).await;
+            match res {
+                Ok(_) => {}
+                Err(e) if is_unique_violation(&e) => {
+                    return Err(AppError::conflict("conflict", "user already holds that role in this company"));
+                }
+                Err(e) => return Err(e.into()),
+            }
+            crate::event::info(&state.db, "user_org_role_change",
+                format!("{rid} org_role @ {company}: {cur} -> {new_role}"))
+                .user(caller.clone())
+                .context(serde_json::json!({ "target_user": rid, "company": company, "prior_role": cur, "new_role": new_role }))
+                .send();
+        }
     }
+
+    // ── org_id: set / swap the user's primary company ────────────────────────
+    if let Some(org_id) = body.org_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !org_id.starts_with("CMP_") {
+            return Err(AppError::bad_request("invalid", "org_id must be a company id (CMP_…)"));
+        }
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM companies WHERE redpash_id = $1)")
+            .bind(org_id).fetch_one(&state.db).await?;
+        if !exists {
+            return Err(AppError::not_found("not_found", format!("company {org_id}")));
+        }
+        match top_company_membership(&state.db, &rid).await? {
+            // No current company → assign one (default 'member').
+            None => {
+                sqlx::query(
+                    "INSERT INTO memberships (object_redpash_id, member_redpash_id, role, context_role)
+                     VALUES ($1, $2, 'member', '')",
+                )
+                .bind(org_id).bind(&rid).execute(&state.db).await
+                .map_err(|e| if is_unique_violation(&e) {
+                    AppError::conflict("conflict", "user already a member of that company")
+                } else { e.into() })?;
+                crate::event::info(&state.db, "user_org_set", format!("{rid} org set -> {org_id}"))
+                    .user(caller.clone())
+                    .context(serde_json::json!({ "target_user": rid, "company": org_id }))
+                    .send();
+            }
+            // Different company → re-point the membership (keep role + context).
+            Some((cur_co, cur_role, ctx)) if cur_co != org_id => {
+                let mut tx = state.db.begin().await?;
+                sqlx::query(
+                    "DELETE FROM memberships
+                      WHERE object_redpash_id = $1 AND member_redpash_id = $2
+                        AND role = $3 AND context_role = $4",
+                )
+                .bind(&cur_co).bind(&rid).bind(&cur_role).bind(&ctx)
+                .execute(&mut *tx).await?;
+                let ins = sqlx::query(
+                    "INSERT INTO memberships (object_redpash_id, member_redpash_id, role, context_role)
+                     VALUES ($1, $2, $3, $4)",
+                )
+                .bind(org_id).bind(&rid).bind(&cur_role).bind(&ctx)
+                .execute(&mut *tx).await;
+                match ins {
+                    Ok(_) => tx.commit().await?,
+                    Err(e) if is_unique_violation(&e) => {
+                        tx.rollback().await.ok();
+                        return Err(AppError::conflict("conflict", "user already a member of that company"));
+                    }
+                    Err(e) => {
+                        tx.rollback().await.ok();
+                        return Err(e.into());
+                    }
+                }
+                crate::event::info(&state.db, "user_org_change", format!("{rid} org: {cur_co} -> {org_id}"))
+                    .user(caller.clone())
+                    .context(serde_json::json!({ "target_user": rid, "prior_company": cur_co, "new_company": org_id, "role": cur_role }))
+                    .send();
+            }
+            // Same company → no-op.
+            Some(_) => {}
+        }
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 

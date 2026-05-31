@@ -37,8 +37,10 @@ function buildCtx(col, chipRender) {
     return {
       relType: col.rel && col.rel.type,
       placeholder: col.placeholder,
-      // renderRid wires when a real entity-picker consumer lands
-      // (build-ready-don't-wire; CAS_8A210C7A child).
+      // Chip renderer for the OFF re-render (no-save exit). Resolved like
+      // chip-enum's, from the caller's chipRenderFor + col.render. Applied
+      // to the cell's data-label (display name), not the rid.
+      renderChip: (chipRender && col.render) ? chipRender(col.render) : undefined,
     };
   }
   return {};
