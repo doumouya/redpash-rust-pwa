@@ -447,6 +447,19 @@ export default function home(app, { session: _session }) {
             labelKey: "name",
             ridKey:   "redpash_id",
           },
+          // Kind — team (default) vs department. Department carries
+          // the single-direct-dept-per-user + single-parent invariants
+          // enforced downstream (members.rs + enforce_one_department
+          // _per_user trigger; CAS_913 019cd4a settled-dept context).
+          // Backend validator rejects anything outside {team,department}
+          // with a clean 400 — keep this list in sync.
+          { key: "kind", label: "Kind", type: "select",
+            options: [
+              { value: "team",       label: "Team"       },
+              { value: "department", label: "Department" },
+            ],
+            default: "team",
+          },
         ],
       },
       itemNoun: "team",
@@ -479,6 +492,7 @@ export default function home(app, { session: _session }) {
       },
       columns: [
         { label: "Name",    key: "name",         sortable: true  },
+        { label: "Kind",    key: "kind",         sortable: true, render: "teamKindChip" },
         { label: "Company", key: "company_name", sortable: true  },
         { label: "Members", key: "member_count", sortable: true  },
         { label: "My role", key: "my_role",      sortable: false },
@@ -488,6 +502,7 @@ export default function home(app, { session: _session }) {
       row: (t) =>
         '<tr data-rid="' + esc(t.redpash_id || "") + '">'
         + '<td>' + esc(t.name) + '</td>'
+        + '<td>' + teamKindChip(t.kind) + '</td>'
         + '<td>' + esc(t.company_name || "—") + '</td>'
         + '<td class="is-num">' + (t.member_count || 0) + '</td>'
         + '<td>' + (t.my_role ? roleChip(t.my_role) : "—") + '</td>'
@@ -1819,6 +1834,7 @@ export default function home(app, { session: _session }) {
         case "orgChip":        return orgChip;
         case "stageChip":      return stageChip;
         case "priorityChip":   return priorityChip;
+        case "teamKindChip":   return teamKindChip;
         default:               return (v) => esc(v || "—");
       }
     }
@@ -2695,6 +2711,15 @@ export default function home(app, { session: _session }) {
     const v = String(plan || "").toLowerCase();
     const tone = v === "free" ? "" : "rt-tone--low";
     return '<span class="rt-mono-pill ' + tone + '">' + esc(plan || "—") + '</span>';
+  }
+  // teamKindChip — Teams tab's "Kind" column. `team` is the default,
+  // `department` carries the single-parent + one-direct-dept-per-user
+  // invariants enforced downstream (members.rs + enforce_one_dept
+  // trigger). Visual weight on department so it pops vs regular teams.
+  function teamKindChip(kind) {
+    const v = String(kind || "team").toLowerCase();
+    const tone = v === "department" ? "rt-tone--mid" : "";
+    return '<span class="rt-mono-pill ' + tone + '">' + esc(v) + '</span>';
   }
   // platformRoleChip — surfaces `users.role` (platform-wide tier; admin =
   // RBAC bypass per rbac::is_platform_admin). Distinct from org_role

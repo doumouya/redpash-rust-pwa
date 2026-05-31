@@ -1175,13 +1175,14 @@ pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
 // name, created_at)` — no slug, no avatar, no updated_at (pre-staged
 // in 20260529000000 init.sql; the team-CRUD slice ships first cut).
 
-const TEAM_COLS: &str = "redpash_id, company_id, name, created_at";
+const TEAM_COLS: &str = "redpash_id, company_id, name, kind, created_at";
 
 #[derive(FromRow)]
 struct TeamRow {
     redpash_id: String,
     company_id: String,
     name:       String,
+    kind:       String,
     created_at: DateTime<Utc>,
 }
 impl From<TeamRow> for Team {
@@ -1190,6 +1191,7 @@ impl From<TeamRow> for Team {
             redpash_id: r.redpash_id,
             company_id: r.company_id,
             name:       r.name,
+            kind:       r.kind,
             created_at: r.created_at,
         }
     }
@@ -1204,7 +1206,7 @@ pub async fn list_teams(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<TeamS
     // my_role: precedence-ordered LIMIT 1 subquery — see
     // list_companies for the same shape + the rationale.
     let rows = sqlx::query(
-        "SELECT t.redpash_id, t.company_id, t.name, t.created_at,
+        "SELECT t.redpash_id, t.company_id, t.name, t.kind, t.created_at,
                 c.name AS company_name,
                 (SELECT m.role FROM memberships m
                   WHERE m.object_redpash_id = t.redpash_id AND m.member_redpash_id = $1
@@ -1231,6 +1233,7 @@ pub async fn list_teams(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<TeamS
                 redpash_id: r.get("redpash_id"),
                 company_id: r.get("company_id"),
                 name:       r.get("name"),
+                kind:       r.get("kind"),
                 created_at: r.get("created_at"),
             },
             company_name: r.try_get("company_name").unwrap_or_default(),
@@ -1259,18 +1262,25 @@ pub async fn create_team(
     rid:        &str,
     name:       &str,
     company_id: &str,
+    kind:       &str,
     owner_rid:  &str,
 ) -> sqlx::Result<Team> {
     let mut tx = pool.begin().await?;
+    // entities.type stays "team" for both kinds — the entity-edge model
+    // is one polymorphic table per registered kind, not per discriminator
+    // value within a kind. `kind` is a teams-table column, not an entities
+    // column. (Confirmed by the schema: entities.type CHECK adds 'team'
+    // in the init migration; departments share that entity type.)
     register_entity(&mut *tx, rid, "team").await?;
     let row: TeamRow = sqlx::query_as(&format!(
-        "INSERT INTO teams (redpash_id, company_id, name)
-         VALUES ($1, $2, $3)
+        "INSERT INTO teams (redpash_id, company_id, name, kind)
+         VALUES ($1, $2, $3, $4)
          RETURNING {TEAM_COLS}"
     ))
     .bind(rid)
     .bind(company_id)
     .bind(name)
+    .bind(kind)
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(

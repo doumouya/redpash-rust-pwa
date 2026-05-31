@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/teams.rs
 source: ../../../../../../backend/crates/api/src/routes/teams.rs
 owner: Torv
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31
+last modified date: 2026-05-31 (kind field)
 ---
 
 # teams.rs
@@ -38,6 +38,15 @@ DELETE /:rid          delete (team owner only or platform admin)
   (`rbac::require_grant(… company, |g| g.effective().is_some())`) so
   an outsider can't plant a team inside a company they don't belong
   to. Platform-admin bypasses via the resolver.
+- **`kind` field on `CreateTeamBody`** — `team` (default) or
+  `department`. Validated at the API edge with a 400 (clean error)
+  instead of letting the schema CHECK 23514 surface as a 500.
+  Departments carry single-direct-dept-per-user + single-parent
+  invariants enforced downstream by the
+  `enforce_one_department_per_user` trigger + `routes/members.rs`
+  add 409. The `entities.type` stays `'team'` for both kinds —
+  `kind` is a teams-table discriminator, not an entity type (see
+  CAS_913 019cd4a settled-dept context).
 - Create binds the FK-violation 23503 to a 404 — bad `company_id` →
   "company not found", not a 500.
 - PATCH only edits `name` today; `company_id` is intentionally

@@ -12,11 +12,22 @@ use serde::{Deserialize, Serialize};
 /// A team record as stored. Slimmer than `Company` — no slug, no
 /// avatar, no `updated_at` (the migration omits it; can be added
 /// later when the UI surfaces it).
+///
+/// `kind` discriminates regular teams (`"team"`) from departments
+/// (`"department"`). Departments carry extra invariants enforced
+/// downstream by the `enforce_one_department_per_user` trigger +
+/// `routes/members.rs` (one-direct-department-per-user,
+/// single-parent-on-the-nesting-edge). See CAS_913 settled-dept
+/// context (commit 019cd4a).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Team {
     pub redpash_id: String,
     pub company_id: String,
     pub name:       String,
+    /// `"team"` (default) or `"department"`. Schema CHECK keeps this
+    /// invariant at the DB layer; `routes/teams.rs::CreateTeamBody`
+    /// validates at the API edge for a clean 400.
+    pub kind:       String,
     pub created_at: DateTime<Utc>,
 }
 

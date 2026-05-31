@@ -55,7 +55,16 @@ struct CreateTeamBody {
     /// at least a member of that company so a non-member can't seed a
     /// team into it.
     company_id: String,
+    /// `team` (default) or `department`. Departments carry the
+    /// single-parent / one-direct-dept-per-user invariants enforced
+    /// downstream by `enforce_one_department_per_user` + members.rs
+    /// (see CAS_913 019cd4a settled-dept context). The schema CHECK
+    /// already restricts to {team, department}; this validator gives
+    /// the FE a clean 400 instead of a 500-from-23514.
+    #[serde(default = "default_team_kind")] kind: String,
 }
+
+fn default_team_kind() -> String { "team".to_string() }
 
 async fn create(
     State(state): State<AppState>,
@@ -70,6 +79,13 @@ async fn create(
     if body.company_id.trim().is_empty() {
         return Err(AppError::bad_request("invalid", "company_id is required"));
     }
+    let kind = body.kind.trim();
+    if !matches!(kind, "team" | "department") {
+        return Err(AppError::bad_request(
+            "invalid",
+            "kind must be 'team' or 'department'",
+        ));
+    }
     // Caller must reach the parent company at member+ — anything less
     // would let an outsider plant a team inside someone else's company.
     // Platform admins bypass via the resolver.
@@ -77,7 +93,7 @@ async fn create(
         |g| g.effective().is_some()).await?;
 
     let rid = id::new("TEM");
-    let team = match db::create_team(&state.db, &rid, name, &body.company_id, &user).await {
+    let team = match db::create_team(&state.db, &rid, name, &body.company_id, kind, &user).await {
         Ok(t) => t,
         // 23503 = FK violation — usually the company_id doesn't exist.
         // Surface as 404 so the route doesn't 500 on a bad rid.
@@ -86,9 +102,9 @@ async fn create(
         }
         Err(e) => return Err(AppError::internal("db", e.to_string())),
     };
-    crate::event::info(&state.db, "team_create", format!("created team {name}"))
+    crate::event::info(&state.db, "team_create", format!("created {kind} {name}"))
         .user(user.clone())
-        .context(serde_json::json!({ "team": rid, "company": body.company_id }))
+        .context(serde_json::json!({ "team": rid, "company": body.company_id, "kind": kind }))
         .send();
     Ok(Json(team))
 }

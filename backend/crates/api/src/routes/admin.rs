@@ -378,7 +378,7 @@ async fn list_companies(
 // ── /api/admin/teams ────────────────────────────────────────────────────
 
 const SORTABLE_TEAMS: &[&str] = &[
-    "name", "company_name", "member_count", "created_at",
+    "name", "kind", "company_name", "member_count", "created_at",
 ];
 
 async fn list_teams_admin(
@@ -397,6 +397,7 @@ async fn list_teams_admin(
     );
     let sort_col = match sort_key.as_str() {
         "name"         => "t.name",
+        "kind"         => "t.kind",
         "company_name" => "company_name",
         "member_count" => "member_count",
         _              => "t.created_at",
@@ -418,7 +419,7 @@ async fn list_teams_admin(
     // plain `(SELECT m2.role …)` would return >1 row and 500 — order +
     // LIMIT 1 collapses it to the most authoritative tier.
     let sql = format!(
-        "SELECT t.redpash_id, t.company_id, t.name, t.created_at,
+        "SELECT t.redpash_id, t.company_id, t.name, t.kind, t.created_at,
                 COALESCE(c.name, '') AS company_name,
                 (SELECT COUNT(*)::INT FROM memberships m
                   WHERE m.object_redpash_id = t.redpash_id) AS member_count,
@@ -452,6 +453,7 @@ async fn list_teams_admin(
                 redpash_id: r.try_get("redpash_id").unwrap_or_default(),
                 company_id: r.try_get("company_id").unwrap_or_default(),
                 name:       r.try_get("name").unwrap_or_default(),
+                kind:       r.try_get("kind").unwrap_or_else(|_| "team".to_string()),
                 created_at: r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
             },
             company_name: r.try_get("company_name").unwrap_or_default(),
