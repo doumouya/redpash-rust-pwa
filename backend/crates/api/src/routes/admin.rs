@@ -66,6 +66,7 @@ pub fn routes() -> Router<AppState> {
         .route("/charts/stats",      get(stats_charts))
         .route("/steps",             get(list_steps))
         .route("/steps/stats",       get(stats_steps))
+        .route("/rbac",              get(rbac_resolve))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -1308,6 +1309,54 @@ async fn delete_user(
         .context(serde_json::json!({ "target_user": rid }))
         .send();
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct RbacQuery { subject: String, object: String }
+
+/// `GET /api/admin/rbac?subject=<rid>&object=<rid>` — RBAC introspection
+/// (CAS_274EDF3B, the Admin Console slice). Answers "what reach does this
+/// subject have on this object, and *why*" straight off the resolver: the
+/// reach-split tiers (`direct` / `scope` / `effective`), the platform-admin
+/// bypass flag, the subject's principal closure (self + teams), and the
+/// contributing membership edges. GATED to platform admins (leak-free 404 —
+/// it exposes the org membership graph). The Admin Console FE (co-owned,
+/// teams-lane) renders this; shape stays JSON until that tab locks it.
+async fn rbac_resolve(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Query(q):     Query<RbacQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "rbac"));
+    }
+    let subject = q.subject.trim();
+    let object = q.object.trim();
+    if subject.is_empty() || object.is_empty() {
+        return Err(AppError::bad_request("invalid", "subject and object are required"));
+    }
+    let grant = crate::rbac::resolve_grant(&state.db, subject, object).await?;
+    let principals = crate::rbac::principals(&state.db, subject).await?;
+    let edges = crate::rbac::grant_edges(&state.db, subject, object).await?;
+    let subject_is_admin = crate::rbac::is_platform_admin(&state, subject).await?;
+    // Platform admin bypasses every gate → effective reach is "all" regardless
+    // of the membership edges (which may be empty).
+    let effective = if subject_is_admin {
+        Some("all")
+    } else {
+        grant.effective().map(|r| r.as_str())
+    };
+    Ok(Json(serde_json::json!({
+        "subject":                   subject,
+        "object":                    object,
+        "subject_is_platform_admin": subject_is_admin,
+        "direct":                    grant.direct.map(|r| r.as_str()),
+        "scope":                     grant.scope.map(|r| r.as_str()),
+        "effective":                 effective,
+        "principals":                principals,
+        "edges":                     edges,
+    })))
 }
 
 #[derive(Deserialize)]

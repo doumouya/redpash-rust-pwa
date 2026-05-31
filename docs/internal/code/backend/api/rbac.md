@@ -52,12 +52,25 @@ object, unioned across three sources, or `None` (default-deny):
   (leak-free). Handlers express each atom's rule, e.g. `case.update` →
   `|g| g.is_member() || g.scope_at_least(Role::Admin)`.
 - `pub async fn require_view` — `require_grant` with `|g| g.effective().is_some()`.
+- `pub fn Role::as_str` — lowercase wire label (`owner`/`admin`/`member`/`viewer`),
+  matches the `memberships.role` CHECK; used to serialize a tier for introspection.
+- `pub struct GrantEdge { object, member, role, context_role, reach }` +
+  `pub async fn grant_edges` — admin **introspection** (CAS_274EDF3B): the
+  membership edges across the subject's principal closure that grant any reach
+  on an object — the "why" behind a `Grant`. `reach` = `direct` (on the object)
+  or `scope` (on a parent). Backs `GET /api/admin/rbac` (platform-admin gated in
+  [routes/admin.rs](routes/admin.md)). Read-only; pairs with `resolve_grant`
+  (tiers) for "who has reach on X, and why".
 
 ## Drift-prone areas
 
 - The `scopes` CTE encodes object→scope containment per object type. When a new
   scoped object type lands (or a containment FK changes), extend the CTE's
   `UNION` arms or the resolver silently under-reaches.
+- **`EDGES_SQL` (introspection) duplicates GRANT_SQL's principal-closure +
+  cascade-scope CTEs** — keep them in sync. Where `GRANT_SQL` collapses to
+  max-rank-per-reach, `EDGES_SQL` returns the underlying rows; a containment
+  change must be made in both.
 - Mirrors the SQL validated in
   [entity-membership-model §2](../../../specs/rbac/entity-membership-model.md);
   keep the `role` rank mapping (`owner=4 … viewer=1`) in sync with the

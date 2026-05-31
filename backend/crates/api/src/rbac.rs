@@ -40,6 +40,16 @@ impl Role {
             _ => None,
         }
     }
+    /// Lowercase wire label — matches the `memberships.role` CHECK values.
+    /// Used by the admin introspection endpoint to serialize a tier.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Role::Owner => "owner",
+            Role::Admin => "admin",
+            Role::Member => "member",
+            Role::Viewer => "viewer",
+        }
+    }
 }
 
 /// A caller's resolved access on an object, split by REACH. Write atoms need
@@ -113,6 +123,65 @@ pub async fn resolve_grant(pool: &PgPool, caller: &str, object: &str) -> sqlx::R
         direct: direct.and_then(Role::from_rank),
         scope:  scope.and_then(Role::from_rank),
     })
+}
+
+/// One membership edge contributing to a resolved grant — the "why" behind a
+/// `Grant`, for admin introspection. `reach` is `"direct"` (the edge is ON the
+/// object) or `"scope"` (it's on a parent company/project the object cascades
+/// to). `member` is the principal that holds it — the subject themselves or a
+/// team in their closure.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GrantEdge {
+    pub object:       String,
+    pub member:       String,
+    pub role:         String,
+    pub context_role: String,
+    pub reach:        String,
+}
+
+// Same principal-closure + cascade-scope shape as GRANT_SQL — keep the two in
+// sync (see "Drift-prone areas" in rbac.md). Where GRANT_SQL collapses to
+// max-rank-per-reach, this returns the underlying rows so an admin can see
+// exactly which memberships (and via which principal) grant the access.
+const EDGES_SQL: &str = "
+WITH RECURSIVE principals(pid) AS (
+        SELECT $1::text
+    UNION
+        SELECT m.object_redpash_id
+        FROM memberships m
+        JOIN principals p ON p.pid = m.member_redpash_id
+        JOIN entities  e ON e.id  = m.object_redpash_id AND e.type = 'team'
+),
+cascade_scopes(oid) AS (
+        SELECT company_id          FROM cases         WHERE redpash_id = $2
+    UNION SELECT project_id          FROM cases         WHERE redpash_id = $2
+    UNION SELECT company_id          FROM projects      WHERE redpash_id = $2
+    UNION SELECT project_redpash_id  FROM project_files WHERE redpash_id = $2
+    UNION SELECT p.company_id
+            FROM project_files f JOIN projects p ON p.redpash_id = f.project_redpash_id
+           WHERE f.redpash_id = $2
+)
+SELECT m.object_redpash_id, m.member_redpash_id, m.role, m.context_role,
+       CASE WHEN m.object_redpash_id = $2 THEN 'direct' ELSE 'scope' END AS reach
+FROM memberships m
+WHERE m.member_redpash_id IN (SELECT pid FROM principals)
+  AND (m.object_redpash_id = $2 OR m.object_redpash_id IN (SELECT oid FROM cascade_scopes))
+ORDER BY reach, m.role
+";
+
+/// Admin introspection — the membership edges (across the subject's principal
+/// closure) that grant any reach on `object`. Read-only; the route applies the
+/// platform-admin gate. Pairs with `resolve_grant` (tiers) to answer "who has
+/// reach on X, and why".
+pub async fn grant_edges(pool: &PgPool, subject: &str, object: &str) -> sqlx::Result<Vec<GrantEdge>> {
+    let rows: Vec<(String, String, String, String, String)> =
+        sqlx::query_as(EDGES_SQL).bind(subject).bind(object).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(object, member, role, context_role, reach)| GrantEdge {
+            object, member, role, context_role, reach,
+        })
+        .collect())
 }
 
 /// The caller's **principal set** — themselves plus every team they belong to

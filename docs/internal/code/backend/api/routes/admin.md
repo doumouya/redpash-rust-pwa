@@ -22,6 +22,7 @@ GET /api/admin/files        ← Files tab          (org-wide, not per-project)
 GET /api/admin/charts       ← Charts tab         (project_files where file_type='chart')
 GET /api/admin/steps        ← Steps tab          (every project_step across all files)
 PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see below)
+GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (see below)
 
 ## Public surface
 
@@ -42,6 +43,17 @@ PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see be
   UI-driven path to admin, sibling to the `REDPASH_BOOTSTRAP_ADMINS` env
   allowlist ([bootstrap.md](../bootstrap.md)). The Home Users "promote"
   affordance is the teams-lane FE follow-up.
+- **`GET /api/admin/rbac` (`rbac_resolve`) is GATED** — RBAC introspection
+  (CAS_274EDF3B Admin Console slice). `?subject=<rid>&object=<rid>` → the
+  resolver's reach-split tiers (`direct`/`scope`/`effective`, `effective="all"`
+  when the subject is a platform admin), `subject_is_platform_admin`, the
+  subject's `principals` closure, and the contributing `edges` (each
+  `{object, member, role, context_role, reach}` where reach is `direct`|`scope`)
+  — the "why" behind the access. Requires `rbac::is_platform_admin(caller)`
+  (leak-free 404; it exposes the org membership graph); 400 on missing params.
+  Built on `rbac::resolve_grant` + `rbac::principals` + `rbac::grant_edges`
+  ([rbac.md](../rbac.md)). Response is raw JSON until the Admin Console FE
+  (co-owned, teams-lane) locks the shape.
 - **`POST /api/admin/memberships` validator is double-keyed**: `(scope ⇒ role_allow, ctx_allow, role_default)` and `context_role` is checked against the per-scope `*_CONTEXT_ROLES` allow-list (Reporter/Case Owner/Watcher/Assignee for cases, CEO/CTO/… for companies, Project Owner/Data Analyst/… for projects, Team Manager/Lead/Member for teams). Empty context_role is allowed at every scope — it normalizes to `""` at the DB layer (`memberships.context_role` is NOT NULL with default `''`). FE allow-lists in [home.js memberships createSpec](../../../frontend/scripts/pages/home.md) are kept in sync — drift = 400 from this validator.
 
 ## Related
