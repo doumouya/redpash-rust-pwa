@@ -168,6 +168,20 @@ const SETTINGS_ROWS = {
       { kind: "button", id: "rp-settings-signout", label: "Sign out", icon: "box-arrow-right" },
     ]}),
   ],
+  // Cases page settings — CAS_3FC70F56 stub group (Em 2026-05-31).
+  // No pref rows yet; the section ships with a placeholder telling
+  // the user this lives here so they can find it. Rows land as
+  // Cases-page surfaces identify them (kanban behavior, attachment
+  // rail default state, default status filter, etc. — coupled to
+  // CAS_1E6D3B2E + future cases-page work).
+  cases: [
+    '<div class="rp-page__row rp-page__row--placeholder">'
+      + '<span class="rp-page__row-label">'
+        + '<span>No Cases preferences yet.</span> '
+        + '<small class="rp-settings__hint">Settings for the Cases page will land here as they\'re identified (kanban defaults, attachment rail open-state, etc.).</small>'
+      + '</span>'
+    + '</div>',
+  ],
   // About row is structurally unique (branded label + version mount);
   // inlined here rather than parameterised — no second site exists.
   about: [
@@ -200,22 +214,38 @@ function render(app) {
 // with the full surface available for that section's content.
 // URL hash `#/settings?tab=<key>` drives the initial active tab
 // so a refresh / deep-link lands the user back where they were.
+// CAS_3FC70F56 — Settings rail regrouped from ability-bucketed
+// (UI/DATA/CHARTS/ACCOUNT) to page-bucketed (GENERAL/HOME/WORKSPACE/
+// CASES/MONITORING). The tab-switch UX is unchanged — each click
+// shows one section, hides the others. Section IDs (set-*) are
+// preserved so prefs / deep-links stay intact; only the rail layout
+// changes. Cases group is new (set-cases stub section in settings.html);
+// case-page prefs land there as they're identified.
 const SET_GROUPS = [
-  { name: "UI",      mark: "UI", color: "blue"  },
-  { name: "DATA",    mark: "DA", color: "teal"  },
-  { name: "CHARTS",  mark: "CH", color: "peach" },
-  { name: "ACCOUNT", mark: "AC", color: "mauve" },
+  { name: "GENERAL",    mark: "GN", color: "mauve" },
+  { name: "HOME",       mark: "HM", color: "blue"  },
+  { name: "WORKSPACE",  mark: "WS", color: "teal"  },
+  { name: "CASES",      mark: "CA", color: "peach" },
+  { name: "MONITORING", mark: "MN", color: "green" },
 ];
 const SET_TABS = [
-  { group: "UI",      key: "set-appearance",        label: "Appearance",        icon: "bi-palette"         },
-  { group: "UI",      key: "set-tables",            label: "Tables",            icon: "bi-table"           },
-  { group: "UI",      key: "set-workspace",         label: "Workspace",         icon: "bi-grid-3x3"        },
-  { group: "DATA",    key: "set-data",              label: "Data & Export",     icon: "bi-database"        },
-  { group: "DATA",    key: "set-cleaner",           label: "Cleaner",           icon: "bi-tools"           },
-  { group: "CHARTS",  key: "set-monitoring-charts", label: "Monitoring charts", icon: "bi-bar-chart-line"  },
-  { group: "CHARTS",  key: "set-home-charts",       label: "Home charts",       icon: "bi-bar-chart-fill"  },
-  { group: "ACCOUNT", key: "set-account",           label: "Account",           icon: "bi-person-circle"   },
-  { group: "ACCOUNT", key: "set-about",             label: "About",             icon: "bi-info-circle"     },
+  // GENERAL — global UI + identity + diagnostics
+  { group: "GENERAL",    key: "set-appearance",        label: "Appearance",        icon: "bi-palette"         },
+  { group: "GENERAL",    key: "set-account",           label: "Account",           icon: "bi-person-circle"   },
+  { group: "GENERAL",    key: "set-about",             label: "About",             icon: "bi-info-circle"     },
+  // HOME — Home page-specific prefs (today: just chart toggles).
+  { group: "HOME",       key: "set-home-charts",       label: "Home charts",       icon: "bi-bar-chart-fill"  },
+  // WORKSPACE — Workspace + the data-handling prefs that drive it
+  { group: "WORKSPACE",  key: "set-workspace",         label: "Workspace",         icon: "bi-grid-3x3"        },
+  { group: "WORKSPACE",  key: "set-tables",            label: "Tables",            icon: "bi-table"           },
+  { group: "WORKSPACE",  key: "set-cleaner",           label: "Cleaner",           icon: "bi-tools"           },
+  { group: "WORKSPACE",  key: "set-data",              label: "Data & Export",     icon: "bi-database"        },
+  // CASES — Cases page settings (Em 2026-05-31 ask). Stub section
+  // ships empty; pref rows land here as the Cases page surfaces
+  // need them (kanban behavior, attachment rail default state, etc.)
+  { group: "CASES",      key: "set-cases",             label: "Cases page",        icon: "bi-card-list"       },
+  // MONITORING — monitoring chart toggles
+  { group: "MONITORING", key: "set-monitoring-charts", label: "Monitoring charts", icon: "bi-bar-chart-line"  },
 ];
 
 // Standard rail population — mirrors monitoring.js / home.js
