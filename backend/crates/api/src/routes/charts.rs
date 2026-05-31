@@ -104,6 +104,8 @@ async fn update_one(
     // company admin via cascade; platform bypasses. 404 on deny.
     crate::rbac::require_grant(&state, &user, &rid, "chart",
         |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
+    // Field-level RBAC (CAS_C4219F2B s3) — a re-save writes title + spec.
+    crate::field_perms::require_fields(&state, &user, &rid, "chart", &["title", "spec"]).await?;
     let chart = db::update_chart(&state.db, &rid, &req.title, &req.spec)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("chart {rid}")))?;

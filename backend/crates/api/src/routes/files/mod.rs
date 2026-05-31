@@ -391,6 +391,13 @@ async fn patch_file(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| data::parse::strip_upload_ext(s).to_string());
+    // Field-level RBAC (CAS_C4219F2B s3) — narrows the coarse file gate per field.
+    let mut wf: Vec<&str> = Vec::new();
+    if display_owned.is_some() { wf.push("display_name"); }
+    if new_project.is_some()   { wf.push("project"); }
+    if new_encoding.is_some()  { wf.push("encoding"); }
+    if body.delimiter.as_deref().filter(|s| !s.is_empty()).is_some() { wf.push("delimiter"); }
+    crate::field_perms::require_fields(&state, &user, &rid, "file", &wf).await?;
     let updated = db::update_file_meta(
         &state.db, &rid,
         display_owned.as_deref(),

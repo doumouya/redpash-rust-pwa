@@ -36,6 +36,7 @@ slug logic; the read gate `members::require_member` is reused by `get_one`.
   (`require_grant`, 404 on deny).
 - `delete_one` — `company.delete`: company owner only or platform admin.
 - member CRUD — delegated to [members.rs](members.md)'s shared rules.
+- **Field-level** (CAS_C4219F2B s3): `patch` then calls `field_perms::require_fields(.., "company", ..)` — narrows the coarse gate per field via the matrix (defaults ⊕ overrides).
 
 ## Drift-prone areas
 

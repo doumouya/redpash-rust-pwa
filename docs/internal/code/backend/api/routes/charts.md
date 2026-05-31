@@ -27,7 +27,8 @@ backend stores the chart's JSON `spec` (ECharts option + SVG snapshot
 - `update_one` / `delete_one` — `require_grant`, `effective() >= Admin`. A chart
   is a `project_files` row with no direct membership, so the owner resolves to
   `scope` `Owner` via the project; project/company admins reach it via cascade;
-  platform bypasses. Members/viewers can view but not mutate.
+  platform bypasses. Members/viewers can view but not mutate. Then **field-gated**
+  via `field_perms::require_fields(.., "chart", &["title","spec"])` (CAS_C4219F2B s3).
 - `create` — stays gated on viewing the **source file** (the data dependency),
   not on the chart row (which doesn't exist yet).
 

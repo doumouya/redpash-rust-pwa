@@ -56,6 +56,15 @@ async fn patch_one(
     let folder_trim = body.folder.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let any_field = title_trim.is_some() || desc_trim.is_some() || folder_trim.is_some()
         || body.is_favorite.is_some() || body.is_public.is_some();
+    // Field-level RBAC (CAS_C4219F2B s3) — narrows the coarse gate per field.
+    // Notably is_favorite is owner-only (W N N N), so an admin is 403'd on it.
+    let mut wf: Vec<&str> = Vec::new();
+    if title_trim.is_some()       { wf.push("title"); }
+    if desc_trim.is_some()        { wf.push("description"); }
+    if folder_trim.is_some()      { wf.push("folder"); }
+    if body.is_favorite.is_some() { wf.push("is_favorite"); }
+    if body.is_public.is_some()   { wf.push("is_public"); }
+    crate::field_perms::require_fields(&state, &user, &rid, "dashboard", &wf).await?;
     let d = db::patch_dashboard_meta(
         &state.db, &rid,
         title_trim, desc_trim, folder_trim,
@@ -149,6 +158,11 @@ async fn update(
     // RBAC: dashboard spec/widget update — admin+ via any reach (see patch_one).
     crate::rbac::require_grant(&state, &user, &rid, "dashboard",
         |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
+    // Field-level RBAC (CAS_C4219F2B s3) — a re-save writes title + spec (+ optional folder/description).
+    let mut wf: Vec<&str> = vec!["title", "spec"];
+    if req.folder.as_deref().filter(|s| !s.is_empty()).is_some()      { wf.push("folder"); }
+    if req.description.as_deref().filter(|s| !s.is_empty()).is_some() { wf.push("description"); }
+    crate::field_perms::require_fields(&state, &user, &rid, "dashboard", &wf).await?;
     let d = db::update_dashboard(
         &state.db, &rid, &req.title, &req.spec,
         req.folder.as_deref().filter(|s| !s.is_empty()),

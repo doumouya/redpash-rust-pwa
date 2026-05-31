@@ -153,6 +153,9 @@ async fn patch(
     if body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("name");       }
     if body.slug.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()       { fields.push("slug");       }
     if body.avatar_url.as_deref().map(str::trim).is_some()                            { fields.push("avatar_url"); }
+    // Field-level RBAC (CAS_C4219F2B s3) — narrows the coarse company.update gate
+    // per field via the matrix (defaults ⊕ overrides). dev bypasses.
+    crate::field_perms::require_fields(&state, &user, &rid, "company", &fields).await?;
     let res = db::update_company(
         &state.db, &rid,
         body.name.as_deref().map(str::trim).filter(|s| !s.is_empty()),

@@ -29,9 +29,12 @@ reaches + the shared DTO shapes.
   — the field-level write gate. After the coarse object gate admits the caller,
   it maps the caller's effective tier to a matrix column and 403s
   (`field_forbidden`) the first written field that isn't `Write` (defaults ⊕
-  overrides). Platform admins bypass. Wired into `cases.rs::patch`; the other
-  sparse-PATCH handlers (company/file/chart/dashboard, + project owner-grade
-  reconciliation) follow the same pattern.
+  overrides). Platform admins bypass. Wired into the patch handlers for
+  **case · company · file · chart · dashboard**. **Project stays on its bespoke
+  owner-grade guard**: that guard is *direct*-owner (`db::project_owner ==
+  caller`), correct for `is_default` (a per-user personal flag) — the matrix's
+  `owner` column is *effective* owner (incl. a company owner via scope), too
+  broad for it. So the matrix doesn't govern project's owner-grade fields.
 
 ## Public surface
 

@@ -33,6 +33,8 @@ steps on top of the freshly-parsed base.
   flows User→Project→File, so `effective` (not `is_member`) captures the owner.
   Applying a cleaning step (`add_step`) is a content mutation gated like update.
   The `patch_file` move (`project` change) stays double-gated on the destination.
+  `patch_file` then **field-gates** via `field_perms::require_fields(.., "file", ..)`
+  (CAS_C4219F2B s3) — narrows per field via the matrix.
 - `upload` (create) — gated on the destination project.
 
 ## Drift-prone areas

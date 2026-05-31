@@ -27,8 +27,10 @@ the render-time data fetch is widget-by-widget on the frontend.
 - `get_one` — `dashboard.view` (cascade + the `is_public` widen).
 - `patch_one` / `update` / `delete_one` — `require_grant`, `effective() >= Admin`
   (owner via project `scope` `Owner`; project/company admin via cascade;
-  platform). `is_public` (publish) is owner-tier per catalog — coarsened to the
-  object gate here; per-field atom enforcement is v3.
+  platform) is the coarse gate. `patch_one` + `update` then **field-gate** via
+  `field_perms::require_fields(.., "dashboard", ..)` (CAS_C4219F2B s3): notably
+  `is_favorite` is owner-only (`W N N N`), so an admin is 403'd on it even
+  through the sparse PATCH (consistent with the dedicated `set_favorite`).
 - `set_favorite` — stays `ensure_owner`: `is_favorite` is a personal `own`-only
   pin ("only the owner toggles their own"), so admin reach is intentionally
   *not* granted.
