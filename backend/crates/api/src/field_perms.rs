@@ -1,19 +1,19 @@
-//! Purpose: the **field registry** — every object field as a row, its
-//! properties (`is_editable`, `is_sortable`) + the per-role permission state
-//! (`owner`/`admin`/`member`/`viewer`) as columns. A redtable of fields, the
-//! same way the cleaner is a redtable of columns (CAS_C4219F2B).
+//! Purpose: the **field registry** — every object field as a `FieldRow`
+//! (= the spec's FieldDef): identity + storage (`data_type`) + presentation
+//! (`editor`/`options`/`rel`) + permission (`perm_class` → per-role cells) +
+//! `is_editable`/`is_sortable`. The redtable of fields (CAS_C4219F2B) AND the
+//! per-type field catalog the TypeDefinition contract serves (CAS_0FBF301F §3/§4).
 //! Doc: docs/internal/code/backend/api/field_perms.md
 //!
-//! Slice 1: the static catalog, authored from the `docs/internal/specs/rbac/`
-//! per-field atoms + reaches + the shared DTO shapes. Read-only here; the
-//! `field_permissions` override table + handler enforcement + the FE redtable
-//! are later slices. The 4 membership tiers are fixed columns; the configurable
-//! axis is the per-field permission.
+//! Per-role permissions DERIVE from `perm_class` (not hand-authored per field),
+//! so a custom object's fields resolve without source-code defaults — the
+//! disposability requirement (spec §3.3). The `field_permissions` override
+//! table layers on top (the existing /admin/fields merge); `require_fields`
+//! enforces on write.
 //!
-//! Scope: the **membership-bearing** object types (company / project / case /
-//! team / file / chart / dashboard) — where a caller's tier on the object (the
-//! resolver's `effective()`) maps onto these columns. `user` (a subject) and
-//! `comment` (author-gated) are governed differently and stay out of the grid.
+//! Scope: the membership-bearing object types (company / project / case / team /
+//! file / chart / dashboard) — where the resolver's `effective()` tier maps onto
+//! these columns. `user` (a subject) and `comment` (author-gated) stay out.
 
 use axum::http::StatusCode;
 use serde::Serialize;
@@ -50,30 +50,75 @@ impl Perm {
     }
 }
 
-/// One field row in the registry — the redtable row. `is_editable` = the field
-/// has an update path (a write atom); read-only / computed fields are `false`
-/// and read-only for every role. `is_sortable` = the list views allow ordering
-/// on it. `owner/admin/member/viewer` = the per-role permission state.
+/// The permission class of a field — the per-role default matrix DERIVES from
+/// it (spec §3.1), so custom objects resolve without hand-authored defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermClass {
+    /// `W W R R` — default editable field (owner/admin write, below read).
+    Standard,
+    /// `W W W R` — member-writable content (case fields; participants edit).
+    Collaborative,
+    /// `W R R R` — ownership transfer / re-parent / personal-default flag.
+    OwnerGrade,
+    /// `W N N N` — owner-only personal pin (e.g. dashboard.is_favorite).
+    Personal,
+    /// `R R R R` — computed / system-managed (is_editable=false).
+    Readonly,
+}
+
+impl PermClass {
+    /// `[owner, admin, member, viewer]`.
+    fn cells(self) -> [Perm; 4] {
+        match self {
+            PermClass::Standard      => [W, W, R, R],
+            PermClass::Collaborative => [W, W, W, R],
+            PermClass::OwnerGrade    => [W, R, R, R],
+            PermClass::Personal      => [W, N, N, N],
+            PermClass::Readonly      => [R, R, R, R],
+        }
+    }
+}
+
+/// A relationship field → another type (e.g. `case.assignee_id` → `user`).
+/// Lets pickers + rid write-validation work without hardcoding (spec §2).
+#[derive(Debug, Clone, Serialize)]
+pub struct Rel {
+    #[serde(rename = "type")]
+    pub ty:    &'static str,
+    pub multi: bool,
+}
+
+/// One field row in the registry = the spec's FieldDef. The per-role cells
+/// (`owner`/`admin`/`member`/`viewer`) are derived from `perm_class` at
+/// construction; `field_permissions` overrides layer on at serve time.
 #[derive(Debug, Clone, Serialize)]
 pub struct FieldRow {
     pub object:      &'static str,
     pub field:       &'static str,
     pub is_editable: bool,
     pub is_sortable: bool,
+    /// Storage type — backend-owned, write-validated (spec §4.2).
+    pub data_type:   &'static str,
+    /// Presentation editor id — opaque to the backend, FE-resolved (spec §5).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editor:      Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub options:     Vec<&'static str>,
+    pub perm_class:  PermClass,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel:         Option<Rel>,
     pub owner:       Perm,
     pub admin:       Perm,
     pub member:      Perm,
     pub viewer:      Perm,
-    /// True once any of this row's cells has been overridden away from the
-    /// catalog default (set during the GET merge). Lets the FE highlight
-    /// customized rows.
+    /// Set during the GET merge when a cell is overridden away from the default.
     #[serde(default)]
     pub is_overridden: bool,
 }
 
 impl FieldRow {
-    /// Set the cell for `role` and mark the row overridden. No-op for an
-    /// unknown role. Used by the GET merge to overlay `field_permissions` rows.
+    /// Set the cell for `role` and mark the row overridden (the GET merge).
     pub fn apply_override(&mut self, role: &str, perm: Perm) {
         match role {
             "owner" => self.owner = perm,
@@ -84,8 +129,7 @@ impl FieldRow {
         }
         self.is_overridden = true;
     }
-    /// The catalog-default perm for `role` (pre-override), for the PUT handler's
-    /// "reverting to default deletes the override row" logic.
+    /// The catalog-default perm for `role` (pre-override) — the PUT revert check.
     pub fn default_for(&self, role: &str) -> Option<Perm> {
         match role {
             "owner" => Some(self.owner),
@@ -95,98 +139,127 @@ impl FieldRow {
             _ => None,
         }
     }
+    // ── builder modifiers (default_registry authoring) ──
+    fn nosort(mut self) -> Self { self.is_sortable = false; self }
+    fn opts(mut self, o: &[&'static str]) -> Self { self.options = o.to_vec(); self }
+    fn rel(mut self, ty: &'static str, multi: bool) -> Self { self.rel = Some(Rel { ty, multi }); self }
 }
 
-/// Look up the catalog row (defaults) for an `(object, field)` — the PUT
-/// handler validates against this and reads the default for the revert check.
+/// Default editor id for a `data_type` (readonly fields get none). Opaque to the
+/// backend — the FE editor-registry resolves it, falling back to "text".
+fn default_editor(data_type: &str, pc: PermClass) -> Option<&'static str> {
+    if matches!(pc, PermClass::Readonly) {
+        return None;
+    }
+    Some(match data_type {
+        "enum"    => "chip-enum",
+        "rid"     => "entity-picker",
+        "boolean" => "toggle",
+        _         => "text", // string / markdown / int / float / datetime / json
+    })
+}
+
+/// Field builder — derives the per-role cells + is_editable + default editor.
+/// Sortable by default; chain `.nosort()` / `.opts()` / `.rel()`.
+fn fld(object: &'static str, field: &'static str, data_type: &'static str, pc: PermClass) -> FieldRow {
+    let [owner, admin, member, viewer] = pc.cells();
+    FieldRow {
+        object,
+        field,
+        is_editable: !matches!(pc, PermClass::Readonly),
+        is_sortable: true,
+        data_type,
+        editor: default_editor(data_type, pc),
+        options: Vec::new(),
+        perm_class: pc,
+        rel: None,
+        owner,
+        admin,
+        member,
+        viewer,
+        is_overridden: false,
+    }
+}
+
+/// Look up the catalog row (defaults) for an `(object, field)`.
 pub fn find_default(object: &str, field: &str) -> Option<FieldRow> {
     default_registry().into_iter().find(|r| r.object == object && r.field == field)
 }
 
-/// Editable field — carries the per-role permission tuple.
-const fn ed(object: &'static str, field: &'static str, is_sortable: bool,
-            owner: Perm, admin: Perm, member: Perm, viewer: Perm) -> FieldRow {
-    FieldRow { object, field, is_editable: true, is_sortable, owner, admin, member, viewer, is_overridden: false }
-}
-/// Read-only / computed field — readable by everyone, writable by none.
-const fn ro(object: &'static str, field: &'static str, is_sortable: bool) -> FieldRow {
-    FieldRow { object, field, is_editable: false, is_sortable,
-               owner: R, admin: R, member: R, viewer: R, is_overridden: false }
-}
-
-/// The default field registry. Default perm rules (overridable later):
-/// standard updatable `W W R R`; owner-grade (ownership/re-parent/default)
-/// `W R R R`; case content (participant-editable) `W W W R`; personal pin
-/// (`dashboard.is_favorite`) `W N N N`; read-only/computed `R R R R`.
+/// The default field registry — the 5 builtin membership-object types' fields.
+/// Per-role perms derive from `perm_class`; the existing /admin/fields perms are
+/// preserved exactly (Standard=WWRR, Collaborative=WWWR, OwnerGrade=WRRR,
+/// Personal=WNNN, Readonly=RRRR). Builtin = "built-in custom objects" (spec Q5).
 pub fn default_registry() -> Vec<FieldRow> {
+    use PermClass::{Collaborative, OwnerGrade, Personal, Readonly, Standard};
     vec![
         // ── company ──────────────────────────────────────────────────────
-        ed("company", "name",        true,  W, W, R, R),
-        ed("company", "slug",        true,  W, W, R, R),
-        ed("company", "avatar_url",  false, W, W, R, R),
-        ro("company", "redpash_id",  false),
-        ro("company", "member_count",true),
-        ro("company", "created_at",  true),
+        fld("company", "name", "string", Standard),
+        fld("company", "slug", "string", Standard),
+        fld("company", "avatar_url", "string", Standard).nosort(),
+        fld("company", "redpash_id", "rid", Readonly).nosort(),
+        fld("company", "member_count", "int", Readonly),
+        fld("company", "created_at", "datetime", Readonly),
         // ── project ──────────────────────────────────────────────────────
-        ed("project", "name",        true,  W, W, R, R),
-        ed("project", "description", false, W, W, R, R),
-        ed("project", "status",      true,  W, W, R, R),
-        ed("project", "is_default",  true,  W, R, R, R), // owner-grade — personal default
-        ed("project", "owner",       true,  W, R, R, R), // owner-grade — ownership transfer
-        ed("project", "company",     true,  W, R, R, R), // owner-grade — re-scope to a company
-        ro("project", "redpash_id",  false),
-        ro("project", "stage",       true),              // computed from files
-        ro("project", "file_count",  true),
-        ro("project", "created_at",  true),
-        ro("project", "updated_at",  true),
+        fld("project", "name", "string", Standard),
+        fld("project", "description", "markdown", Standard).nosort(),
+        fld("project", "status", "enum", Standard).opts(&["draft", "active", "archived"]),
+        fld("project", "is_default", "boolean", OwnerGrade),
+        fld("project", "owner", "rid", OwnerGrade).rel("user", false),
+        fld("project", "company", "rid", OwnerGrade).rel("company", false),
+        fld("project", "redpash_id", "rid", Readonly).nosort(),
+        fld("project", "stage", "string", Readonly),
+        fld("project", "file_count", "int", Readonly),
+        fld("project", "created_at", "datetime", Readonly),
+        fld("project", "updated_at", "datetime", Readonly),
         // ── case ─────────────────────────────────────────────────────────
-        ed("case", "title",         true,  W, W, W, R), // case content — participants edit
-        ed("case", "description",   false, W, W, W, R),
-        ed("case", "status",        true,  W, W, W, R),
-        ed("case", "priority",      true,  W, W, W, R),
-        ed("case", "type",          true,  W, W, W, R),
-        ed("case", "assignee",      true,  W, W, W, R),
-        ed("case", "category",      true,  W, W, W, R),
-        ed("case", "error_message", false, W, W, R, R),
-        ed("case", "project",       true,  W, W, R, R), // re-scope — admin+
-        ed("case", "company",       true,  W, W, R, R),
-        ro("case", "redpash_id",    false),
-        ro("case", "reporter_id",   true),
-        ro("case", "created_at",    true),
-        ro("case", "updated_at",    true),
+        fld("case", "title", "string", Collaborative),
+        fld("case", "description", "markdown", Collaborative).nosort(),
+        fld("case", "status", "enum", Collaborative).opts(&["backlog", "todo", "in_progress", "in_review", "done"]),
+        fld("case", "priority", "enum", Collaborative).opts(&["low", "medium", "high", "critical"]),
+        fld("case", "type", "enum", Collaborative).opts(&["bug", "feature", "task", "epic"]),
+        fld("case", "assignee", "rid", Collaborative).rel("user", false),
+        fld("case", "category", "rid", Collaborative).rel("case_category", false),
+        fld("case", "error_message", "string", Standard).nosort(),
+        fld("case", "project", "rid", Standard).rel("project", false),
+        fld("case", "company", "rid", Standard).rel("company", false),
+        fld("case", "redpash_id", "rid", Readonly).nosort(),
+        fld("case", "reporter_id", "rid", Readonly).rel("user", false),
+        fld("case", "created_at", "datetime", Readonly),
+        fld("case", "updated_at", "datetime", Readonly),
         // ── team ─────────────────────────────────────────────────────────
-        ed("team", "name",        true,  W, W, R, R),
-        ed("team", "company_id",  true,  W, R, R, R), // owner-grade — re-parent
-        ed("team", "kind",        true,  W, R, R, R), // team|department — owner-grade
-        ro("team", "redpash_id",  false),
-        ro("team", "member_count",true),
-        ro("team", "created_at",  true),
+        fld("team", "name", "string", Standard),
+        fld("team", "company_id", "rid", OwnerGrade).rel("company", false),
+        fld("team", "kind", "enum", OwnerGrade).opts(&["team", "department"]),
+        fld("team", "redpash_id", "rid", Readonly).nosort(),
+        fld("team", "member_count", "int", Readonly),
+        fld("team", "created_at", "datetime", Readonly),
         // ── file ─────────────────────────────────────────────────────────
-        ed("file", "display_name", true,  W, W, R, R),
-        ed("file", "encoding",     false, W, W, R, R),
-        ed("file", "delimiter",    false, W, W, R, R),
-        ed("file", "project",      true,  W, W, R, R), // move (double-gated on destination)
-        ro("file", "redpash_id",   false),
-        ro("file", "filename",     true),
-        ro("file", "stage",        true),
-        ro("file", "row_count",    true),
-        ro("file", "created_at",   true),
+        fld("file", "display_name", "string", Standard),
+        fld("file", "encoding", "string", Standard).nosort(),
+        fld("file", "delimiter", "string", Standard).nosort(),
+        fld("file", "project", "rid", Standard).rel("project", false),
+        fld("file", "redpash_id", "rid", Readonly).nosort(),
+        fld("file", "filename", "string", Readonly),
+        fld("file", "stage", "string", Readonly),
+        fld("file", "row_count", "int", Readonly),
+        fld("file", "created_at", "datetime", Readonly),
         // ── chart ────────────────────────────────────────────────────────
-        ed("chart", "title",          true,  W, W, R, R),
-        ed("chart", "spec",           false, W, W, R, R), // blob — not sortable
-        ed("chart", "source_file_id", true,  W, W, R, R),
-        ed("chart", "project",        true,  W, W, R, R),
-        ro("chart", "redpash_id",     false),
-        ro("chart", "created_at",     true),
+        fld("chart", "title", "string", Standard),
+        fld("chart", "spec", "json", Standard).nosort(),
+        fld("chart", "source_file_id", "rid", Standard).rel("file", false),
+        fld("chart", "project", "rid", Standard).rel("project", false),
+        fld("chart", "redpash_id", "rid", Readonly).nosort(),
+        fld("chart", "created_at", "datetime", Readonly),
         // ── dashboard ────────────────────────────────────────────────────
-        ed("dashboard", "title",       true,  W, W, R, R),
-        ed("dashboard", "description", false, W, W, R, R),
-        ed("dashboard", "spec",        false, W, W, R, R), // blob
-        ed("dashboard", "folder",      true,  W, W, R, R),
-        ed("dashboard", "is_public",   true,  W, W, R, R), // publish — owner/company-admin
-        ed("dashboard", "is_favorite", true,  W, N, N, N), // personal pin — owner only
-        ro("dashboard", "redpash_id",  false),
-        ro("dashboard", "created_at",  true),
+        fld("dashboard", "title", "string", Standard),
+        fld("dashboard", "description", "markdown", Standard).nosort(),
+        fld("dashboard", "spec", "json", Standard).nosort(),
+        fld("dashboard", "folder", "string", Standard),
+        fld("dashboard", "is_public", "boolean", Standard),
+        fld("dashboard", "is_favorite", "boolean", Personal),
+        fld("dashboard", "redpash_id", "rid", Readonly).nosort(),
+        fld("dashboard", "created_at", "datetime", Readonly),
     ]
 }
 
@@ -198,8 +271,7 @@ fn db_err(e: sqlx::Error) -> AppError {
 /// has admitted the caller, this refines per field: each field being written
 /// must be `Write` for the caller's **effective tier** on the object in the
 /// merged matrix (catalog defaults ⊕ `field_permissions` overrides). Platform
-/// admins bypass. 403 naming the first field the tier can't write. The coarse
-/// gate stays the outer guard; this only narrows.
+/// admins bypass. 403 naming the first field the tier can't write.
 pub async fn require_fields(
     state:       &AppState,
     caller:      &str,
@@ -213,16 +285,14 @@ pub async fn require_fields(
     if crate::rbac::is_platform_admin(state, caller).await.map_err(db_err)? {
         return Ok(());
     }
-    // The caller's effective tier on the object is the matrix column.
     let role = match crate::rbac::resolve_grant(&state.db, caller, object_rid)
         .await
         .map_err(db_err)?
         .effective()
     {
         Some(tier) => tier.as_str(),
-        None => return Err(forbidden("no access")), // coarse gate should've caught this
+        None => return Err(forbidden("no access")),
     };
-    // Only this role's overrides for this object type matter.
     let overrides: Vec<(String, String)> = sqlx::query_as(
         "SELECT field, permission FROM field_permissions WHERE object_type = $1 AND role = $2",
     )
