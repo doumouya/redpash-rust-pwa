@@ -27,7 +27,7 @@ literally `SELECT * FROM events WHERE context->>'case' = $1`.
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
-- **RBAC P2:** `get_one` (case detail) now gates the `case.view` atom via `crate::rbac::require_view` — first enforced atom. `dev_user` bypasses (dev admin); others need an effective role on the case or 404. Other case handlers (list/patch/delete/comments) are still ungated — P4 sweep. See [rbac.rs](../rbac.md) + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
+- **RBAC P2/P4:** `get_one` (case detail) gates the `case.view` atom via `crate::rbac::require_view`; `list` is **scoped** — it passes the caller's principal set (`rbac::principals`) to `db::list_cases`/`count_cases`, which filter to cases reachable via a membership (direct / company / project). `dev_user` bypasses both (sees all). Still ungated: `patch`/`delete`/comments — and precise *write* gates need a reach-aware resolver (a company *member* vs a case reporter are both "member"-tier; the current resolver can't tell which reach granted it). See [rbac.rs](../rbac.md) + [entity-membership-model §2](../../../../specs/rbac/entity-membership-model.md).
 
 ## Related
 

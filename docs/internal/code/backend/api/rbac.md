@@ -30,6 +30,10 @@ object, unioned across three sources, or `None` (default-deny):
 - `pub enum Role` — `Viewer · Member · Admin · Owner`, `Ord` so "highest role
   wins" is a `max`.
 - `pub async fn effective_role` — the resolver.
+- `pub async fn principals` — the caller's principal set (self + teams,
+  recursive); resolve once, then a list query scopes rows with
+  `member_redpash_id = ANY($principals)` instead of per-row recursion (P4
+  list-scoping uses this).
 - `pub async fn require_view` — the `*.view` gate (P2): bootstrap `dev_user`
   bypasses (dev-mode platform-admin stand-in until `users.role` lands); any
   other caller needs an effective role on the object, else 404 (leak-free).

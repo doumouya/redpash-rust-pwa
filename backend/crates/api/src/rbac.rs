@@ -69,6 +69,26 @@ WHERE m.member_redpash_id IN (SELECT pid FROM principals)
   AND m.object_redpash_id IN (SELECT oid FROM scopes)
 ";
 
+/// The caller's **principal set** — themselves plus every team they belong to
+/// (recursive, so nested teams close). Resolve once, then a list query can
+/// scope rows with `member_redpash_id = ANY($principals)` instead of running
+/// the recursive closure per row.
+pub async fn principals(pool: &PgPool, caller: &str) -> sqlx::Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "WITH RECURSIVE p(pid) AS (
+                SELECT $1::text
+            UNION
+                SELECT m.object_redpash_id FROM memberships m
+                JOIN p        ON p.pid = m.member_redpash_id
+                JOIN entities e ON e.id = m.object_redpash_id AND e.type = 'team')
+         SELECT pid FROM p",
+    )
+    .bind(caller)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(p,)| p).collect())
+}
+
 /// Highest role `caller` effectively holds on `object` (any entity rid), or
 /// `None` for no access (default-deny).
 pub async fn effective_role(

@@ -1576,6 +1576,11 @@ pub async fn list_cases(
     sort_dir:            &str,   // "ASC" | "DESC" — sourced from sort_clause
     limit:               i64,
     offset:              i64,
+    // Viewability scope (RBAC): the caller's principal set (self + teams).
+    // `None` = no filter (platform admin / dev_user). When `Some`, only cases
+    // a principal holds a membership on — directly or via the case's
+    // company/project — are returned (mirrors the detail-read `case.view` gate).
+    viewer:              Option<&[String]>,
 ) -> sqlx::Result<Vec<Case>> {
     let rows: Vec<CaseRow> = sqlx::query_as(&format!(
         "SELECT {CASE_SELECT} FROM cases c {CASE_USER_JOINS}
@@ -1602,6 +1607,10 @@ pub async fn list_cases(
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
                                                       AND cm.object_redpash_id = $6)))
+           AND ($9::text[] IS NULL OR EXISTS (
+                SELECT 1 FROM memberships mv
+                WHERE mv.member_redpash_id = ANY($9)
+                  AND mv.object_redpash_id IN (c.redpash_id, c.company_id, c.project_id)))
          ORDER BY {sort_col} {sort_dir} NULLS LAST
          LIMIT $7 OFFSET $8"
     ))
@@ -1613,6 +1622,7 @@ pub async fn list_cases(
     .bind(internal_company_id)
     .bind(limit)
     .bind(offset)
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(Into::into).collect())
@@ -1627,6 +1637,7 @@ pub async fn count_cases(
     q:                   Option<&str>,
     source:              Option<&str>,
     internal_company_id: Option<&str>,
+    viewer:              Option<&[String]>,  // RBAC viewability scope — see list_cases
 ) -> sqlx::Result<i64> {
     let (n,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*)::BIGINT FROM cases c
@@ -1652,7 +1663,11 @@ pub async fn count_cases(
                                                     JOIN memberships cm ON cm.member_redpash_id = rep.member_redpash_id
                                                     WHERE rep.object_redpash_id = c.redpash_id
                                                       AND rep.context_role = 'Reporter'
-                                                      AND cm.object_redpash_id = $6)))",
+                                                      AND cm.object_redpash_id = $6)))
+           AND ($7::text[] IS NULL OR EXISTS (
+                SELECT 1 FROM memberships mv
+                WHERE mv.member_redpash_id = ANY($7)
+                  AND mv.object_redpash_id IN (c.redpash_id, c.company_id, c.project_id)))",
     )
     .bind(status)
     .bind(assignee_id)
@@ -1660,6 +1675,7 @@ pub async fn count_cases(
     .bind(q)
     .bind(source)
     .bind(internal_company_id)
+    .bind(viewer)
     .fetch_one(pool)
     .await?;
     Ok(n)

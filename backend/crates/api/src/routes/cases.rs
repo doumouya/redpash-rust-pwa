@@ -112,7 +112,16 @@ async fn list(
     headers:      HeaderMap,
     Query(q):     Query<ListQuery>,
 ) -> Result<Json<CaseList>, AppError> {
-    super::resolve_user_rid(&state, &headers).await?;
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    // RBAC P4: scope the list to cases the caller can view (the `case.view`
+    // atom as a filter). dev_user (dev-mode admin) sees all — no filter; any
+    // other caller sees only cases reachable via a membership (direct, or via
+    // the case's company/project), matching the detail-read gate.
+    let viewer: Option<Vec<String>> = if caller == *state.dev_user {
+        None
+    } else {
+        Some(crate::rbac::principals(&state.db, &caller).await?)
+    };
     let page = q.page.unwrap_or(1).max(1);
     let size = q.size.unwrap_or(50).clamp(1, 500);
     let offset = ((page - 1) as i64) * (size as i64);
@@ -165,12 +174,14 @@ async fn list(
         internal_company_id,
         sort_col, sort_dir,
         size as i64, offset,
+        viewer.as_deref(),
     ).await?;
 
     let total = db::count_cases(
         &state.db,
         status.as_deref(), assignee.as_deref(), project.as_deref(), qtext.as_deref(),
         source.as_deref(), internal_company_id,
+        viewer.as_deref(),
     ).await? as u64;
 
     Ok(Json(CaseList { items, total, page, size }))
