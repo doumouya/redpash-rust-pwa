@@ -32,7 +32,7 @@ license  = "Proprietary"
 axum            = { version = "0.7", features = ["macros", "multipart"] }
 tokio           = { version = "1", features = ["full"] }
 tower           = "0.5"
-tower-http      = { version = "0.6", features = ["cors", "trace", "fs", "compression-br", "limit"] }
+tower-http      = { version = "0.6", features = ["cors", "trace", "fs", "compression-br", "limit", "set-header"] }
 bytes           = "1"
 dashmap         = "6"
 

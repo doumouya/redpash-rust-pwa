@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/mod.rs
 source: ../../../../../../backend/crates/api/src/routes/mod.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-30
+last modified date: 2026-05-31
 ---
 
 # mod.rs
@@ -25,6 +25,7 @@ surface easy to audit.
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
+- The static `ServeDir` fallback carries `cache-control: no-cache` under `#[cfg(debug_assertions)]` so dev frontend edits revalidate on a normal reload ([runbook 0009](../../../../runbooks/0009-dev-static-assets-no-cache-control.md)). The layer wraps the *service*, not the router, to keep `/api/*` uncached — don't move it onto the outer router.
 
 ## Related
 

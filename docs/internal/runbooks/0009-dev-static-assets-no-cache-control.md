@@ -5,12 +5,12 @@ order: 9
 last modified date: 2026-05-31
 case_id: TBD
 filename_pending_rename: CAS_<rid>-dev-static-assets-no-cache-control.md
-status: proposed
+status: resolved
 ---
 
 # 0009 — dev frontend edits don't show up (static assets ship no cache-control)
 
-**Date:** 2026-05-31 · **Area:** `backend/crates/api/src/routes/mod.rs:221` (`ServeDir` static-asset fallback) · **Status:** proposed — diagnosed, fix not yet landed (backend lane).
+**Date:** 2026-05-31 · **Area:** `backend/crates/api/src/routes/mod.rs` (`ServeDir` static-asset fallback) · **Status:** resolved — debug-only `cache-control: no-cache` layer landed on the static fallback; verified live (header present, conditional GET → 304, `/api/*` unaffected).
 
 > **Filename note:** This entry uses the legacy `NNNN-<slug>.md` naming
 > because the cases MCP was 401-blocked when it was filed (pre-v2, see
@@ -76,9 +76,11 @@ save" more than once.
 
 ## Solution
 
-**Proposed (not yet landed — backend lane):** attach a
-`Cache-Control` header to the static-asset responses so the browser
-always revalidates.
+**Landed** ([`mod.rs`](../code/backend/api/routes/mod.md)): a
+`Cache-Control` header is attached to the static-asset responses so the
+browser always revalidates. Implemented as a debug-gated
+`SetResponseHeaderLayer` wrapping the `ServeDir` fallback (added the
+`set-header` tower-http feature). `no-cache` was chosen over `no-store`:
 
 - `cache-control: no-cache` — *allows* caching but forces a conditional
   GET every time; `ServeDir`'s existing `last-modified`/`304` path then
@@ -86,27 +88,38 @@ always revalidates.
 - `cache-control: no-store` — never cache; simplest, slightly chattier.
   Acceptable dev-only.
 
-Implementation surface is small — wrap the fallback with a
-`tower_http::set_header::SetResponseHeaderLayer` (or a tiny
-`map_response` middleware) on the static routes:
+The layer wraps the `ServeDir` **service** (built before
+`.fallback_service()`), not the outer router — this is what scopes it to
+static assets and keeps `/api/*` untouched. Applying `.layer()` to the
+router after `.fallback_service()` would have leaked the header onto the
+API responses too.
 
 ```rust
+#[cfg(debug_assertions)]
+use tower::ServiceBuilder;
+#[cfg(debug_assertions)]
 use tower_http::set_header::SetResponseHeaderLayer;
-use http::header::CACHE_CONTROL;
+#[cfg(debug_assertions)]
+use axum::http::header::CACHE_CONTROL;
 
 let frontend = ServeDir::new("../frontend").append_index_html_on_directories(true);
-// …
-.fallback_service(frontend)
-.layer(SetResponseHeaderLayer::overriding(
-    CACHE_CONTROL, HeaderValue::from_static("no-cache"),
-))
+
+#[cfg(debug_assertions)]
+let frontend = ServiceBuilder::new()
+    .layer(SetResponseHeaderLayer::overriding(
+        CACHE_CONTROL,
+        HeaderValue::from_static("no-cache"),
+    ))
+    .service(frontend);
+
+Router::new().nest("/api", api).fallback_service(frontend)
 ```
 
-**Production-safe gate:** only set the header when **not** running a
-release build (`#[cfg(debug_assertions)]`) or behind a `DEV`/env flag,
-so a prod deployment that ever falls back to `ServeDir` doesn't disable
-caching. Don't blanket-apply to `/api/*` — scope it to the static
-fallback.
+**Production-safe gate:** the whole thing is behind
+`#[cfg(debug_assertions)]` (imports included, so release builds don't
+warn on unused imports), so a release binary that ever falls back to
+`ServeDir` keeps normal caching. Scoped to the static fallback, never
+`/api/*`.
 
 *Deferred:* a fuller story (asset fingerprinting / `etag` + long
 `max-age` for prod) is out of scope; this is purely the dev-loop fix.

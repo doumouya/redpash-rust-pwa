@@ -13,7 +13,9 @@
 //! Outer-router layers: TraceLayer, CorsLayer, CompressionLayer.
 //!
 //! Static frontend assets are served from `../frontend/` so `cargo run`
-//! alone is enough to bring the whole app up in dev.
+//! alone is enough to bring the whole app up in dev. In debug builds the
+//! static fallback carries `cache-control: no-cache` so edits show up on a
+//! normal reload (runbook 0009); release builds leave caching untouched.
 
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
@@ -22,13 +24,19 @@ use axum::{
     response::Response,
     Router,
 };
+#[cfg(debug_assertions)]
+use axum::http::header::CACHE_CONTROL;
 use std::time::Instant;
+#[cfg(debug_assertions)]
+use tower::ServiceBuilder;
 use tower_http::{
     compression::CompressionLayer,
     cors::CorsLayer,
     services::ServeDir,
     trace::TraceLayer,
 };
+#[cfg(debug_assertions)]
+use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::Instrument;
 
 use crate::state::AppState;
@@ -219,6 +227,20 @@ pub fn router(state: AppState) -> Router {
     // Dev: serve frontend from the repo. In prod the static files are
     // baked into the binary via `include_dir!` (Phase 5).
     let frontend = ServeDir::new("../frontend").append_index_html_on_directories(true);
+
+    // Runbook 0009: ServeDir ships `last-modified` but no `cache-control`,
+    // so browsers apply heuristic freshness and keep serving stale CSS/JS
+    // after an edit. `no-cache` lets them keep the copy but forces a
+    // conditional GET every time, so ServeDir's existing last-modified/304
+    // path makes revalidation cheap while killing the staleness. Debug-only:
+    // release builds serve fingerprinted assets and must keep caching them.
+    #[cfg(debug_assertions)]
+    let frontend = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
+        .service(frontend);
 
     Router::new()
         .nest("/api", api)
