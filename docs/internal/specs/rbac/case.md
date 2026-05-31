@@ -34,82 +34,77 @@ not the usual single-column equality.)
 
 ---
 
-## 1. Keys
+## 1. Atoms
 
-### Object-action keys (from [Supported calls](../object-metadata/case.md#supported-calls))
+View-rooted (per [index](index.md#key-scheme)): `view` is the root,
+writes derive from it. `read`/`list`/`search` are all `case.view` — the
+reach decides *which* cases the list returns.
 
-| Key | Verb | Scopes | Notes |
+### View atoms
+
+| Atom | Covers | Reach | Notes |
 |---|---|---|---|
-| `case.create` | `POST /api/cases` | — | All-or-nothing over the create body. `reporter_id` forced to caller; `status` seeded `backlog` server-side. No scope: creating a row you don't own yet. |
-| `case.read` | `GET /api/cases/:rid` | own · project · company · all | Returns the `CaseDetail` envelope (case + comments + activity). |
-| `case.update` | `PATCH /api/cases/:rid` | own · project · company · all | Coarse update gate. A holder of this implicitly holds every field-update key below. |
-| `case.delete` | `DELETE /api/cases/:rid` | company · all | Destructive; comments CASCADE. Deliberately NOT grantable `@own` — see Notes. |
-| `case.list` | `GET /api/cases?…` | own · project · company · all | Paginated. The scope bounds *which* rows the list returns. |
-| `case.search` | `GET /api/cases?q=…` | own · project · company · all | ILIKE on title + description. Granted with `list`. |
+| `case.view` | the case (detail / list / search + the `activity[]` feed) | own · project · company · all | `own` = the caller holds a case membership (reporter / assignee / case-team) |
+| `case.view.all` | every case | all | platform admin |
+| `case.view.field.<name>` | one field | inherits the row reach | **allow-list**, one per readable field: `type` · `title` · `description` · `status` · `priority` · `assignee` · `project` · `company` · `error_message` · `category` (+ read-only `reporter`/`assignee` names, `created_at`, …). Standard bundles hold `view.field.all`; *subsetting fields is a custom-role (v3) feature* |
+| `case.view.field.all` | every field | own · project · company · all | the "see the whole record" atom; **required to delete** |
 
-### Field-update keys (from `Update`-property fields)
+### Write atoms (derive from a view atom)
 
-Every Case field carrying the `Update` property → one fine-grained key.
-A role with the coarse `case.update` holds all of these; a role can
-instead be granted a subset.
-
-| Key | Field | Scopes | Notes |
+| Atom | Derives from | Reach | Notes |
 |---|---|---|---|
-| `case.type.update` | `type` | company · all | Triage classification (bug/feature/task/epic). |
-| `case.title.update` | `title` | own · company · all | Reporter can retitle their own case. |
-| `case.description.update` | `description` | own · company · all | Reporter edits their own body. |
-| `case.status.update` | `status` | own · project · company · all | The workflow verb — assignee advances their own case; members advance company cases. |
-| `case.priority.update` | `priority` | company · all | Triage decision — narrower than status. |
-| `case.assignee.update` | `assignee_id` | own · company · all | Reassign. `@own` lets the assignee hand off; `@company` lets admins assign. |
-| `case.project.update` | `project_id` | company · all | Re-scoping a case to a project. |
-| `case.company.update` | `company_id` | company · all | Re-scoping a case to a company — admin-level. |
-| `case.error_message.update` | `error_message` | own · company · all | Raw error payload (auto-triaged cases); reporter/admin only. |
-| `case.category.update` | `category_id` | company · all | Taxonomy tag — triage decision. |
+| `case.create` | object `case.view` | — (no row yet) | all-or-nothing body; `reporter_id` forced to caller, `status` seeded `backlog` |
+| `case.title.update` | `case.view.field.title` | own · company · all | reporter retitles own case |
+| `case.description.update` | `…field.description` | own · company · all | reporter edits own body |
+| `case.status.update` | `…field.status` | own · project · company · all | kanban workflow — assignee advances own; members advance company cases |
+| `case.assignee.update` | `…field.assignee` | own · company · all | `own` = hand-off; `company` = admin assign |
+| `case.priority.update` | `…field.priority` | company · all | triage |
+| `case.type.update` | `…field.type` | company · all | triage classification |
+| `case.project.update` | `…field.project` | company · all | re-scope to a project |
+| `case.company.update` | `…field.company` | company · all (**owner-only**) | re-scope to a company — see Notes |
+| `case.error_message.update` | `…field.error_message` | own · company · all | raw auto-triage payload |
+| `case.category.update` | `…field.category` | company · all | taxonomy tag |
+| `case.delete` | `case.view.field.all` | company · all | never `@own` — see Notes |
 
-**No keys for:** `redpash_id`, `reporter_id` (server-forced to caller),
-`status`-on-create (seeded server-side), `created_at`, `updated_at`,
-and the hydrated read-only fields (`reporter_display_name`,
-`assignee_display_name`, `category_name`, …) — they carry no
-Create/Update property in the metadata.
+**No atoms for:** `redpash_id`, `reporter_id` (server-forced),
+`created_at`, `updated_at` — auto / server-assigned.
 
 ---
 
 ## 2. Grant matrix
 
-Default policy. Cell = the **widest scope** that role holds for the
-key, or `—` for no grant. Columns: platform `admin`; company
-`owner`/`admin`/`member`; project `collab`/`viewer` (v3, inert today);
-`@own` (reporter-or-assignee, independent of membership). Anonymous
-callers hold nothing (omitted — see Notes).
+Default role-bundle → atom mapping. Cell = the **reach** the bundle
+grants (or `—`). Columns: platform `admin`; the membership bundles
+`owner`/`admin`/`member`/`viewer` at company reach; and `case-mem` —
+a bare case membership (reporter/assignee/case-team, no company role),
+which resolves at `own`. Wider reach wins on union.
 
-| Key | plat:admin | co:owner | co:admin | co:member | proj:collab | proj:viewer | @own |
-|---|---|---|---|---|---|---|---|
-| `case.create` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| `case.read` | all | company | company | company | project | project | own |
-| `case.list` | all | company | company | company | project | project | own |
-| `case.search` | all | company | company | company | project | project | own |
-| `case.update` | all | company | company | — | project | — | own |
-| `case.delete` | all | company | company | — | — | — | — |
-| `case.type.update` | all | company | company | — | project | — | — |
-| `case.title.update` | all | company | company | — | project | — | own |
-| `case.description.update` | all | company | company | — | project | — | own |
-| `case.status.update` | all | company | company | company | project | — | own |
-| `case.priority.update` | all | company | company | — | project | — | — |
-| `case.assignee.update` | all | company | company | — | project | — | own |
-| `case.project.update` | all | company | company | — | — | — | — |
-| `case.company.update` | all | company | — | — | — | — | — |
-| `case.error_message.update` | all | company | company | — | — | — | own |
-| `case.category.update` | all | company | company | — | project | — | — |
+| Atom | plat:admin | co:owner | co:admin | co:member | co:viewer | case-mem |
+|---|---|---|---|---|---|---|
+| `case.view` | all | company | company | company | company | own |
+| `case.view.field.all` | all | company | company | company | company | own |
+| `case.create` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| `case.title.update` | all | company | company | — | — | own |
+| `case.description.update` | all | company | company | — | — | own |
+| `case.status.update` | all | company | company | company | — | own |
+| `case.assignee.update` | all | company | company | — | — | own |
+| `case.priority.update` | all | company | company | — | — | — |
+| `case.type.update` | all | company | company | — | — | — |
+| `case.project.update` | all | company | company | — | — | — |
+| `case.company.update` | all | company | — | — | — | — |
+| `case.error_message.update` | all | company | company | — | — | own |
+| `case.category.update` | all | company | company | — | — | — |
+| `case.delete` | all | company | company | — | — | — |
 
-Reading the matrix: a **company member** can create cases, read/list/
-search every case in their company, and advance the `status` of any
-company case (the collaborative kanban flow) — but can't reassign,
-reprioritize, re-scope, or delete. A **reporter/assignee** (`@own`)
-can read + edit their own case's title/description/status/assignee/
-error_message even with no company membership. A **company admin** has
-full field control over company cases except transferring the case to
-another company (`case.company.update` — owner-only). **Delete** is
-admin-and-up only, never `@own`.
+Reading the matrix: a **company member** views every case in their
+company (whole records) and advances `status` on the collaborative
+kanban — but can't reassign / reprioritize / re-scope / delete. A bare
+**case member** (reporter or assignee, no company role) views *their*
+case fully and edits its title/description/status/assignee/error — the
+`own` reach, granted by the case membership itself. A **company admin**
+has full field control over company cases except transferring to
+another company (`case.company.update` — owner-only). **Delete** needs
+`view.field.all` + the delete atom: admin-and-up, never `case-mem`.
 
 ---
 
@@ -121,11 +116,14 @@ admin-and-up only, never `@own`.
   delete. Delete is an admin janitorial action (`co:admin+` /
   `plat:admin`).
 
-- **Two-column `@own`.** Enforcement's `@own` check for Case is
-  `reporter_id == caller OR assignee_id == caller`. The widest-scope
-  resolution still applies: a company admin who is also the assignee
-  resolves at `@company` (wider), so the `@own`-only field restrictions
-  don't bind them.
+- **`own` = a case membership (reporter *or* assignee).** The `own`
+  reach resolves when the caller holds *any* membership edge on the case
+  — `context_role` 'Reporter' or 'Case Owner' (the derived
+  `reporter_id`/`assignee_id`). Both are case memberships, so the check
+  is "∃ a `memberships` row `(object=case, member=caller)`", and the
+  widened key means one caller can be both, or there can be co-reporters.
+  Widest reach still wins: a company admin who is also the assignee
+  resolves at `company`, so the `own`-only field limits don't bind them.
 
 - **`case.company.update` is owner-only at the company tier.** Moving a
   case *out* of a company is effectively giving it away — gated to
@@ -140,11 +138,11 @@ admin-and-up only, never `@own`.
   field-create keys (per the [index](index.md#field-update-keys)
   all-or-nothing-create rule).
 
-- **Activity events are read-gated with the case.** The `activity[]`
+- **Activity events are view-gated with the case.** The `activity[]`
   feed in the `CaseDetail` response is the `events.kind=case_*` rows
-  for that case; seeing them is covered by `case.read` (no separate
-  `case.activity.read` key). Cross-case event browsing on the
-  Monitoring surface is gated by the Event object's keys, not Case's.
+  for that case; seeing them is covered by `case.view` (no separate
+  activity atom). Cross-case event browsing on the Monitoring surface
+  is gated by the Event object's atoms, not Case's.
 
 - **Today everything resolves `@all`.** Dev-permissive: `resolve_user_rid`
   yields the dev_user, which the enforcement layer will treat as
