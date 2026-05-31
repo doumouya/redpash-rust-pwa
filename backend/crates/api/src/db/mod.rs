@@ -1061,6 +1061,37 @@ pub async fn company_owner_count(pool: &PgPool, company_rid: &str) -> sqlx::Resu
     Ok(n)
 }
 
+/// List object rids where this user is the SOLE owner — used by the
+/// scrub-retain user-delete flow (CAS_46BA67713EC84871991D3E7475598B47)
+/// to BLOCK with a "transfer these first" payload instead of stranding
+/// objects unowned. Empty Vec = safe to scrub.
+///
+/// `DISTINCT` against the post-2026-05-31 widened memberships PK
+/// (object, member_redpash_id, role, context_role) — a user can hold
+/// multiple 'owner' rows on the same object (different context_role),
+/// and the blocker should fire once per object regardless.
+pub async fn user_sole_owner_objects(
+    pool: &PgPool,
+    user_rid: &str,
+) -> sqlx::Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT m1.object_redpash_id
+         FROM memberships m1
+         WHERE m1.member_redpash_id = $1
+           AND m1.role = 'owner'
+           AND NOT EXISTS (
+             SELECT 1 FROM memberships m2
+             WHERE m2.object_redpash_id = m1.object_redpash_id
+               AND m2.member_redpash_id != $1
+               AND m2.role = 'owner'
+           )",
+    )
+    .bind(user_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(rid,)| rid).collect())
+}
+
 /// Create a company and seat the creator as its owner — both writes in
 /// one transaction so a company never exists without an owner.
 pub async fn create_company(

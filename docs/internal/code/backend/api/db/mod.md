@@ -31,7 +31,8 @@ takes a `&PgPool` and returns a domain DTO from `shared::*`.
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
-- `memberships` is now an entity→entity→role edge with PK `(object, user_redpash_id, role, context_role)` (migration `20260531000000`). Membership helpers (`add_company_member`, `set_case_person`) replace-then-insert instead of `ON CONFLICT (object,user)` — a principal can hold multiple roles per object. See [entity-membership-model](../../../../specs/rbac/entity-membership-model.md).
+- `memberships` is now an entity→entity→role edge with PK `(object, member_redpash_id, role, context_role)` (migration `20260531000000` + column rename `20260531000001`). Membership helpers (`add_company_member`, `set_case_person`) replace-then-insert instead of `ON CONFLICT (object,user)` — a principal can hold multiple roles per object. See [entity-membership-model](../../../../specs/rbac/entity-membership-model.md).
+- **Sole-owner blocker** lives at `db::user_sole_owner_objects` next to `db::company_owner_count`. Used by the scrub-retain user-deletion flow (CAS_46BA67713EC84871991D3E7475598B47) to 409 with the blocking object rids before the scrub transaction starts. `DISTINCT` against the widened PK because the same user can hold multiple `role='owner'` rows on the same object (different `context_role`); the blocker fires once per object.
 
 ## Related
 

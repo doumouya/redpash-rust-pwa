@@ -299,16 +299,75 @@ pub async fn insert_user(
     Ok(row.into())
 }
 
-pub async fn delete_user(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
-    // FKs from sessions + memberships (user side, ON DELETE CASCADE) take
-    // out the user's auth + their membership rows — including any
-    // role='owner' membership, which leaves those projects ownerless (the
-    // projects are NOT deleted; there is no projects.owner_id column).
-    // Use with care; the Users-tab UI in dev mode is intentionally permissive.
-    let n = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
+/// Scrub-retain user deletion — the lifecycle replacement for the
+/// pre-2026-05-31 hard `DELETE FROM users` (which CASCADEd every
+/// membership and broke the audit-retention contract,
+/// CAS_46BA67713EC84871991D3E7475598B47).
+///
+/// Single transaction, all-or-nothing:
+///   STEP 2 — DELETE memberships LIKE 'TEM_%'. Teams aren't a display
+///            surface so dropping the row is fine. CASE memberships are
+///            KEPT — Reporter / Case Owner rows are load-bearing for
+///            the "reported by X" / "assigned to Y" rendering via
+///            CASE_USER_JOINS, which JOINs through to `users.display_name`
+///            (= 'Deleted User' after step 4). Per workflow `wik561ah7`
+///            synthesis: deleting case memberships makes those JOINs
+///            return NULL and the frontend renders '—' instead of
+///            'Deleted User', silently breaking the most-rendered surface.
+///   STEP 3 — DELETE sessions + user_preferences. Auth must be destroyed.
+///   STEP 4 — UPDATE users SET PII = NULL, display_name = 'Deleted User',
+///            status = 'archived'. The users row + identity rid REMAIN
+///            so historical JOINs resolve via `users.display_name`.
+///
+/// Returns Ok(true) if the scrub applied; Ok(false) if the user wasn't
+/// found (caller renders 404). The sole-owner blocker (STEP 1 of Em's
+/// transaction spec) is enforced caller-side via
+/// `db::user_sole_owner_objects` so the route returns a structured 409
+/// with the list of blocking object rids instead of a flat rollback.
+///
+/// Runbook (post-ship): docs/internal/runbooks/CAS_46BA67713EC84871991D3E7475598B47-scrub-retain-user-deletion.md
+pub async fn scrub_user_tx(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    // STEP 2 — Teams memberships out, Cases retained (display contract).
+    sqlx::query(
+        "DELETE FROM memberships
+         WHERE member_redpash_id = $1
+           AND object_redpash_id LIKE 'TEM_%'",
+    )
+    .bind(rid)
+    .execute(&mut *tx)
+    .await?;
+
+    // STEP 3 — Destroy auth + per-user prefs.
+    sqlx::query("DELETE FROM sessions WHERE user_redpash_id = $1")
         .bind(rid)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    sqlx::query("DELETE FROM user_preferences WHERE user_redpash_id = $1")
+        .bind(rid)
+        .execute(&mut *tx)
+        .await?;
+
+    // STEP 4 — Scrub PII, retain identity row.
+    let n = sqlx::query(
+        "UPDATE users SET
+           email        = NULL,
+           google_sub   = NULL,
+           first_name   = NULL,
+           last_name    = NULL,
+           job_title    = NULL,
+           avatar_url   = NULL,
+           display_name = 'Deleted User',
+           status       = 'archived',
+           updated_at   = now()
+         WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
     Ok(n.rows_affected() > 0)
 }
 

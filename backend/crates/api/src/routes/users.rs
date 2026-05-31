@@ -180,14 +180,31 @@ async fn delete_one(
     // AUTH-AUDIT-ACK: admin surface dev-permissive per [[redpash-stage]];
     // gate at RBAC (admin-role check + self-delete protection)
     let caller = super::resolve_user_rid(&state, &headers).await?;
-    let removed = db::delete_user(&state.db, &rid)
-        .await?;
-    if !removed {
+
+    // Scrub-retain (CAS_46BA67713EC84871991D3E7475598B47): hard DELETE was
+    // CASCADEing every membership and silently erasing audit history.
+    // Step 1 — block if user is sole owner of any object so we don't
+    // strand companies/projects without an owner. Returns 409 with the
+    // blocking rid list so the UI can surface "transfer these first".
+    let blocking = db::user_sole_owner_objects(&state.db, &rid).await?;
+    if !blocking.is_empty() {
+        return Err(AppError::conflict(
+            "sole_owner_blocker",
+            format!(
+                "cannot scrub: user is sole owner of {} object(s); transfer ownership first",
+                blocking.len()
+            ),
+        ));
+    }
+    // Steps 2-4: teams memberships out, sessions + prefs out, PII null +
+    // display_name='Deleted User' + status='archived'. Single tx.
+    let scrubbed = db::scrub_user_tx(&state.db, &rid).await?;
+    if !scrubbed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
-    crate::event::warn(&state.db, "user_delete", format!("deleted user {rid}"))
+    crate::event::warn(&state.db, "user_scrub", format!("scrubbed user {rid}"))
         .user(caller)
         .context(serde_json::json!({ "user": rid }))
         .send();
-    Ok(Json(serde_json::json!({ "ok": true })))
+    Ok(Json(serde_json::json!({ "ok": true, "scrubbed": true })))
 }

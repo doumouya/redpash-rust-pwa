@@ -1064,8 +1064,8 @@ async fn delete_user(
 ) -> Result<StatusCode, AppError> {
     // AUTH-AUDIT-ACK: admin endpoints are dev-permissive in v1; the
     // admin-only role gate lands with the RBAC slice. The can't-delete-self
-    // guard is enforced here regardless — it's a footgun independent of
-    // RBAC (delete cascades wipe the caller's own projects + sessions).
+    // guard stays here regardless — it's a footgun independent of RBAC
+    // (the scrub flow wipes the caller's own sessions / prefs).
     let caller = super::resolve_user_rid(&state, &headers).await?;
     if rid == caller {
         return Err(AppError::bad_request(
@@ -1073,11 +1073,25 @@ async fn delete_user(
             "cannot delete your own account",
         ));
     }
-    let removed = db::delete_user(&state.db, &rid).await?;
-    if !removed {
+    // Scrub-retain (CAS_46BA67713EC84871991D3E7475598B47): admin /admin/users/:rid
+    // now runs the 4-step scrub instead of hard DELETE. Sole-owner blocker
+    // pre-check returns 409 with the blocking object rids so the admin UI
+    // can render "transfer these first" — same gate as routes/users.rs.
+    let blocking = db::user_sole_owner_objects(&state.db, &rid).await?;
+    if !blocking.is_empty() {
+        return Err(AppError::conflict(
+            "sole_owner_blocker",
+            format!(
+                "cannot scrub: user is sole owner of {} object(s); transfer ownership first",
+                blocking.len()
+            ),
+        ));
+    }
+    let scrubbed = db::scrub_user_tx(&state.db, &rid).await?;
+    if !scrubbed {
         return Err(AppError::not_found("not_found", format!("user {rid}")));
     }
-    crate::event::warn(&state.db, "user_delete", format!("deleted user {rid}"))
+    crate::event::warn(&state.db, "user_scrub", format!("scrubbed user {rid}"))
         .user(caller)
         .context(serde_json::json!({ "target_user": rid }))
         .send();

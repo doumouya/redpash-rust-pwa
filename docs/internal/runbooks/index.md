@@ -118,6 +118,23 @@ Every entry follows the same five headings:
   stale-env-warm / stale-env-cold) against the live backend.
   Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
   needs a refresh path — lazy init + retry-once-on-401 is the floor.
+- [0011 — Scrub-retain user deletion (scrub_user_tx + sole-owner blocker + case-membership retention)](CAS_46BA67713EC84871991D3E7475598B47-scrub-retain-user-deletion.md) —
+  **Resolved 2026-05-31** (CAS_46BA67713EC84871991D3E7475598B47).
+  The pre-fix `db::delete_user` was a hard `DELETE FROM users` that
+  CASCADEd every membership (including reporter / case-owner /
+  project-owner rows) and broke the audit-retention contract on the
+  most-rendered surface — cases. Em's 4-step transaction (sole-owner
+  blocker → strip team memberships → destroy auth + prefs → scrub PII +
+  `status='archived'`) shipped with one workflow-flagged refinement:
+  step 2 skips CAS_% memberships (deleting them makes `CASE_USER_JOINS`
+  return NULL and the case detail renders '—' instead of 'Deleted
+  User'). Discipline rule: a user's identity rid is a long-lived audit
+  handle — `DELETE FROM users` is not a valid path. `ON DELETE CASCADE`
+  is correct for structural FKs (project → files) but WRONG for FKs
+  that carry historical-reference semantics (case → reporter
+  membership). Smoke-tested all 3 paths green: happy 200/204, blocker
+  409 + state untouched, retention (`reporter_display_name` flips
+  'Will Be Scrubbed' → 'Deleted User').
 - [0010 — Cell-editor data-full pattern for truncated long-text columns](CAS_A5A432F1A82A4A4DB0B62C0085C4428C-cell-editor-data-full-pattern.md) —
   **Resolved 2026-05-31** (CAS_A5A432F1A82A4A4DB0B62C0085C4428C).
   Long-text columns on Home tabs (Cases `description` / `error_message`,
