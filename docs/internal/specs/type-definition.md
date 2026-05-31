@@ -109,6 +109,7 @@ interface FieldDef {
 
   // ── PERMISSIONS (§3) ─────────────────────────────────
   perm_class?:   "standard"         // W·W·R·R (default)
+              | "collaborative"     // W·W·W·R — member-writable content (e.g. case title/description, where participants edit)
               | "owner_grade"       // W·R·R·R — ownership transfer / re-scope
               | "personal"          // W·N·N·N — owner-only personal pin
               | "readonly";         // R·R·R·R — system / computed
@@ -150,12 +151,15 @@ since there's no source code to author them in).
 
 ### 3.1 perm_class → default permission matrix
 
-| perm_class   | owner | admin | member | viewer | meaning |
-|--------------|-------|-------|--------|--------|---------|
-| standard     | write | write | read   | read   | default editable field |
-| owner_grade  | write | read  | read   | read   | ownership transfer / re-scope / personal default |
-| personal     | write | none  | none   | none   | owner-only personal pin (e.g. dashboard.is_favorite) |
-| readonly     | read  | read  | read   | read   | computed / system-managed (is_editable=false) |
+| perm_class    | owner | admin | member | viewer | meaning |
+|---------------|-------|-------|--------|--------|---------|
+| standard      | write | write | read   | read   | default editable field |
+| collaborative | write | write | write  | read   | member-writable content (case title / description / comments; participants edit) |
+| owner_grade   | write | read  | read   | read   | ownership transfer / re-scope / personal default |
+| personal      | write | none  | none   | none   | owner-only personal pin (e.g. dashboard.is_favorite) |
+| readonly      | read  | read  | read   | read   | computed / system-managed (is_editable=false) |
+
+The `collaborative` class was added during v1 backend implementation (commit fbbb7cf, 2026-05-31) to cover member-writable case content that the original 4 classes couldn't represent without regressing case-member editing — surfaced by Torv-BE during slice 1 shipment, accepted as-named.
 
 ### 3.2 Override layering
 
