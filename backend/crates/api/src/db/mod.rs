@@ -38,6 +38,7 @@ use chrono::{DateTime, Utc};
 use shared::case::{Case, Category, Comment};
 use shared::chart::Chart;
 use shared::company::{Company, CompanyMember, CompanySummary};
+use shared::team::{Team, TeamSummary};
 use shared::dashboard::{Dashboard, DashboardSpec};
 use shared::event::Event;
 use shared::file::{ColumnMeta, FileSummary};
@@ -957,14 +958,25 @@ const COMPANY_COLS: &str = "redpash_id, name, slug, avatar_url, created_at, upda
 /// request to join. Caller-scoped writes (member CRUD, company edits)
 /// still enforce `company_role()` checks at the route layer.
 pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<CompanySummary>> {
+    // LEFT JOIN here would emit one row per (object × member-role) edge
+    // after the PK widening — same company appearing 2× when the user
+    // holds two roles. Replace with a precedence-ordered subquery that
+    // collapses the user's roles to the highest tier (matches the
+    // admin list endpoints' contract).
     let rows = sqlx::query(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url, c.created_at, c.updated_at,
-                m.role AS my_role,
+                (SELECT m.role FROM memberships m
+                  WHERE m.object_redpash_id = c.redpash_id AND m.member_redpash_id = $1
+                  ORDER BY CASE m.role
+                    WHEN 'owner'  THEN 0
+                    WHEN 'admin'  THEN 1
+                    WHEN 'member' THEN 2
+                    WHEN 'viewer' THEN 3
+                    ELSE 4 END
+                  LIMIT 1) AS my_role,
                 (SELECT COUNT(*) FROM memberships cm
                  WHERE cm.object_redpash_id = c.redpash_id) AS member_count
          FROM companies c
-         LEFT JOIN memberships m
-                ON m.object_redpash_id = c.redpash_id AND m.member_redpash_id = $1
          ORDER BY c.name ASC",
     )
     .bind(user_rid)
@@ -1167,6 +1179,152 @@ pub async fn update_company(
 /// row, then onward: `memberships` cascade (object = the company),
 /// `projects.company_id` is `SET NULL` so company projects survive as personal.
 pub async fn delete_company(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    delete_entity(pool, rid).await
+}
+
+// ─── teams ──────────────────────────────────────────────────────
+//
+// A team is a company-scoped subgroup. Same polymorphic membership
+// model as companies (the edge keys on the team's redpash_id), and
+// the same routes/members.rs shared CRUD layer is mounted under
+// `/api/teams/:rid/members`. Schema: `teams (redpash_id, company_id,
+// name, created_at)` — no slug, no avatar, no updated_at (pre-staged
+// in 20260529000000 init.sql; the team-CRUD slice ships first cut).
+
+const TEAM_COLS: &str = "redpash_id, company_id, name, created_at";
+
+#[derive(FromRow)]
+struct TeamRow {
+    redpash_id: String,
+    company_id: String,
+    name:       String,
+    created_at: DateTime<Utc>,
+}
+impl From<TeamRow> for Team {
+    fn from(r: TeamRow) -> Self {
+        Self {
+            redpash_id: r.redpash_id,
+            company_id: r.company_id,
+            name:       r.name,
+            created_at: r.created_at,
+        }
+    }
+}
+
+/// Every team in the org, each carrying caller's role + member count +
+/// the joined company name. Same broader-than-membership shape as
+/// `list_companies` — non-member teams surface for discoverability and
+/// the Home Teams tab. Caller-scoped writes still go through the
+/// routes/members.rs gate.
+pub async fn list_teams(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<TeamSummary>> {
+    // my_role: precedence-ordered LIMIT 1 subquery — see
+    // list_companies for the same shape + the rationale.
+    let rows = sqlx::query(
+        "SELECT t.redpash_id, t.company_id, t.name, t.created_at,
+                c.name AS company_name,
+                (SELECT m.role FROM memberships m
+                  WHERE m.object_redpash_id = t.redpash_id AND m.member_redpash_id = $1
+                  ORDER BY CASE m.role
+                    WHEN 'owner'  THEN 0
+                    WHEN 'admin'  THEN 1
+                    WHEN 'member' THEN 2
+                    WHEN 'viewer' THEN 3
+                    ELSE 4 END
+                  LIMIT 1) AS my_role,
+                (SELECT COUNT(*) FROM memberships tm
+                 WHERE tm.object_redpash_id = t.redpash_id) AS member_count
+         FROM teams t
+         LEFT JOIN companies c ON c.redpash_id = t.company_id
+         ORDER BY t.name ASC",
+    )
+    .bind(user_rid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| TeamSummary {
+            team: Team {
+                redpash_id: r.get("redpash_id"),
+                company_id: r.get("company_id"),
+                name:       r.get("name"),
+                created_at: r.get("created_at"),
+            },
+            company_name: r.try_get("company_name").unwrap_or_default(),
+            member_count: r.try_get::<i64, _>("member_count").unwrap_or(0) as u32,
+            my_role:      r.try_get("my_role").ok(),
+        })
+        .collect())
+}
+
+pub async fn get_team(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Team>> {
+    let row: Option<TeamRow> = sqlx::query_as(&format!(
+        "SELECT {TEAM_COLS} FROM teams WHERE redpash_id = $1"
+    ))
+    .bind(rid)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Create a team and seat the creator as owner — both writes in one
+/// transaction so a team never exists ownerless. Mirrors
+/// `create_company`. The company_id FK enforces that the team has a
+/// real parent; sqlx surfaces the 23503 to the route as a 404.
+pub async fn create_team(
+    pool:       &PgPool,
+    rid:        &str,
+    name:       &str,
+    company_id: &str,
+    owner_rid:  &str,
+) -> sqlx::Result<Team> {
+    let mut tx = pool.begin().await?;
+    register_entity(&mut *tx, rid, "team").await?;
+    let row: TeamRow = sqlx::query_as(&format!(
+        "INSERT INTO teams (redpash_id, company_id, name)
+         VALUES ($1, $2, $3)
+         RETURNING {TEAM_COLS}"
+    ))
+    .bind(rid)
+    .bind(company_id)
+    .bind(name)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
+         VALUES ($1, $2, 'owner')",
+    )
+    .bind(rid)
+    .bind(owner_rid)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row.into())
+}
+
+/// Sparse update — `name` only today; `company_id` is intentionally
+/// not editable yet (moving a team across companies changes its
+/// inherited grants, deserves its own audit-eventful path).
+pub async fn update_team(
+    pool: &PgPool,
+    rid:  &str,
+    name: Option<&str>,
+) -> sqlx::Result<Option<Team>> {
+    let row: Option<TeamRow> = sqlx::query_as(&format!(
+        "UPDATE teams
+         SET name = COALESCE($2, name)
+         WHERE redpash_id = $1
+         RETURNING {TEAM_COLS}"
+    ))
+    .bind(rid)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Delete via the entity registry — cascades to the `teams` row +
+/// `memberships` rows where this team is the object.
+pub async fn delete_team(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     delete_entity(pool, rid).await
 }
 

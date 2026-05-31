@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod project;
 pub mod company;
+pub mod team;
 pub mod file;
 pub mod filter;
 pub mod report;

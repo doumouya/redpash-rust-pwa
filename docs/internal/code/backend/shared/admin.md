@@ -29,6 +29,7 @@ detail page.
 - `pub struct StepSummary` — struct
 - `pub struct UserStats` — struct
 - `pub struct CompanyStats` — struct
+- `pub struct TeamStats` — struct (Teams tab KPI: total / with_members / by_company)
 - `pub struct MembershipStats` — struct
 
 ## Drift-prone areas

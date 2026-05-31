@@ -199,6 +199,16 @@ pub struct ChartStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamStats {
+    pub total:        u64,
+    /// Teams that have ≥1 non-creator member. A team-of-one isn't very
+    /// useful yet; this is the "actually adopted" proxy.
+    pub with_members: u64,
+    /// Distinct parent companies the existing teams belong to.
+    pub by_company:   u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepStats {
     pub total:    u64,
     /// Step kind distribution (`filter_rows | drop_rows | set_cell | …`).

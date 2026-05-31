@@ -26,6 +26,7 @@ surface easy to audit.
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
 - The static `ServeDir` fallback carries `cache-control: no-cache` under `#[cfg(debug_assertions)]` so dev frontend edits revalidate on a normal reload ([runbook 0009](../../../../runbooks/CAS_35090747FD78414D8CD060A73181A414-dev-static-assets-no-cache-control.md)). The layer wraps the *service*, not the router, to keep `/api/*` uncached — don't move it onto the outer router.
+- 2026-05-31: `teams` module mounted under `/api/teams` next to `/api/companies` for the teams CRUD slice — see [teams](teams.md).
 
 ## Related
 

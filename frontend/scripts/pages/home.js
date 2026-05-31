@@ -420,6 +420,81 @@ export default function home(app, { session: _session }) {
         + '<td><span class="rt-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
+
+    teams: {
+      title: "Teams",
+      endpoint: "/admin/teams",
+      hideMeta: (t) => ({
+        rid:  t.redpash_id,
+        name: t.name,
+        sub:  t.company_name || "",
+      }),
+      createSpec: {
+        kind:     "modal",
+        label:    "New team",
+        icon:     "bi-people-fill",
+        endpoint: "/teams",
+        title:    "New team",
+        fields: [
+          { key: "name", label: "Name", required: true, placeholder: "Team name" },
+          // The parent company is mandatory — `teams.company_id` is
+          // NOT NULL at the schema layer. Entity-picker rather than a
+          // free-text field so the row carries a real CMP_ rid.
+          { key: "company_id", label: "Company", type: "entity-picker",
+            required: true,
+            placeholder: "Search company by name…",
+            endpoint: "/admin/companies",
+            labelKey: "name",
+            ridKey:   "redpash_id",
+          },
+        ],
+      },
+      itemNoun: "team",
+      itemNounPlural: "teams",
+      modes: { select: true, delete: true },
+      compositeStrip: true,
+      chipRows: [{
+        name: "view",
+        label: "View",
+        options: [
+          { label: "All",          value: "all"      },
+          { label: "With members", value: "adopted"  },
+        ],
+        default: "all",
+      }],
+      // 2 gauges to feed the composite strip (member-adoption % + the
+      // raw distinct-companies count, normalized against total teams).
+      charts: [
+        { id: "rp-home-team-adopted", title: "With members", kind: "gauge",
+          data: (s) => s.total ? Math.round((s.with_members / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+        { id: "rp-home-team-by-co",   title: "Distinct companies", kind: "gauge",
+          data: (s) => s.total ? Math.round((s.by_company / s.total) * 100) : 0,
+          opts: { max: 100, unit: "%" } },
+      ],
+      toolbar: {
+        searchPlaceholder: "Search team name…",
+        modes: { select: true, delete: true },
+        refresh: true,
+      },
+      columns: [
+        { label: "Name",    key: "name",         sortable: true  },
+        { label: "Company", key: "company_name", sortable: true  },
+        { label: "Members", key: "member_count", sortable: true  },
+        { label: "My role", key: "my_role",      sortable: false },
+        { label: "Created", key: "created_at",   sortable: true  },
+        { label: "ID",      key: "redpash_id",   sortable: false, defaultHidden: true },
+      ],
+      row: (t) =>
+        '<tr data-rid="' + esc(t.redpash_id || "") + '">'
+        + '<td>' + esc(t.name) + '</td>'
+        + '<td>' + esc(t.company_name || "—") + '</td>'
+        + '<td class="is-num">' + (t.member_count || 0) + '</td>'
+        + '<td>' + (t.my_role ? roleChip(t.my_role) : "—") + '</td>'
+        + '<td>' + fmtTime(t.created_at) + '</td>'
+        + '<td><span class="rt-mono-pill">' + esc(t.redpash_id || "—") + '</span></td>'
+        + '</tr>',
+    },
     memberships: {
       title: "Memberships",
       endpoint: "/admin/memberships",
@@ -453,25 +528,24 @@ export default function home(app, { session: _session }) {
             options: [
               { value: "project", label: "Project" },
               { value: "company", label: "Company" },
-              // Case scope shipped 2026-05-31 once the entity-edge migration
-              // had cases in entities + the route validator accepted it.
+              // Case + Team shipped 2026-05-31 alongside the entity-edge
+              // migration: case scope first (CAS_ in entities + the
+              // validator accepting it), team scope second after the
+              // /api/admin/teams CRUD slice landed.
               { value: "case",    label: "Case"    },
-              // Team — deferred to the teams-CRUD slice (no team entities
-              // exist yet + no /api/admin/teams endpoint). Keep this list
-              // honest: don't add a disabled stub here per
-              // [[unify-behavior-not-names]]. Team scope re-appears once
-              // teams CRUD ships.
+              { value: "team",    label: "Team"    },
             ],
             default: "project",
           },
-          { key: "scope_id", label: "Project / company / case", type: "entity-picker",
+          { key: "scope_id", label: "Project / company / case / team", type: "entity-picker",
             required: true,
             placeholder: "Search by name…",
             dependsOn: ["scope"],
             endpointFn: (s) => s.scope === "company" ? "/admin/companies"
                             : s.scope === "case"    ? "/cases"
+                            : s.scope === "team"    ? "/admin/teams"
                             : "/projects",
-            // Cases use `title`; projects + companies use `name`.
+            // Cases use `title`; projects + companies + teams use `name`.
             labelKeyFn: (s) => s.scope === "case" ? "title" : "name",
             ridKey:   "redpash_id",
           },
@@ -486,17 +560,12 @@ export default function home(app, { session: _session }) {
           { key: "role", label: "Role", type: "select",
             dependsOn: ["scope"],
             optionsFn: (s) => {
-              if (s.scope === "company") return [
+              if (s.scope === "company" || s.scope === "team") return [
                 { value: "member", label: "Member" },
                 { value: "admin",  label: "Admin"  },
                 { value: "owner",  label: "Owner"  },
               ];
-              if (s.scope === "case") return [
-                { value: "viewer", label: "Viewer" },
-                { value: "member", label: "Member" },
-                { value: "owner",  label: "Owner"  },
-              ];
-              // project
+              // project + case — viewer/member/owner
               return [
                 { value: "viewer", label: "Viewer" },
                 { value: "member", label: "Member" },
@@ -544,6 +613,11 @@ export default function home(app, { session: _session }) {
                 { value: "Watcher",    label: "Watcher"    },
                 { value: "Assignee",   label: "Assignee"   },
               ]);
+              if (s.scope === "team") return blank.concat([
+                { value: "Team Manager", label: "Team Manager" },
+                { value: "Team Lead",    label: "Team Lead"    },
+                { value: "Team Member",  label: "Team Member"  },
+              ]);
               // project
               return blank.concat([
                 { value: "Project Owner",   label: "Project Owner"   },
@@ -573,6 +647,9 @@ export default function home(app, { session: _session }) {
           // 2026-05-31 once the cases table is in the supertype + the
           // backend list_memberships handler accepts scope=case.
           { label: "Cases",     value: "case" },
+          // Teams — same membership PK widening; team scope wired
+          // 2026-05-31 once the routes/teams.rs CRUD slice landed.
+          { label: "Teams",     value: "team" },
         ],
         default: "project",
       }],

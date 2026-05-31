@@ -31,10 +31,11 @@ use serde::Deserialize;
 use shared::{
     admin::{
         AdminFileSummary, ChartStats, ChartSummary, CompanyStats, FileStats,
-        MembershipStats, MembershipSummary, StepStats, StepSummary, UserStats,
-        UserSummary,
+        MembershipStats, MembershipSummary, StepStats, StepSummary, TeamStats,
+        UserStats, UserSummary,
     },
     company::{Company, CompanySummary},
+    team::{Team, TeamSummary},
     Page,
 };
 use std::collections::HashMap;
@@ -50,6 +51,8 @@ pub fn routes() -> Router<AppState> {
         .route("/companies",         get(list_companies))
         .route("/companies/stats",   get(stats_companies))
         .route("/companies/:rid",    axum::routing::delete(delete_company))
+        .route("/teams",             get(list_teams_admin))
+        .route("/teams/stats",       get(stats_teams))
         .route("/memberships",       get(list_memberships).post(create_membership))
         .route("/memberships/stats", get(stats_memberships))
         // Memberships use a synthetic compound rid in the path —
@@ -319,12 +322,24 @@ async fn list_companies(
     .fetch_one(&state.db)
     .await?;
 
+    // `my_role` picks the caller's HIGHEST-precedence role on the
+    // company (owner > admin > member). Post-PK-widening a user can
+    // hold multiple (role, context_role) rows on the same object, so
+    // a plain `(SELECT m2.role …)` would return >1 row and 500. See
+    // the matching team list for the same pattern.
     let sql = format!(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url,
                 c.created_at, c.updated_at,
                 (SELECT COUNT(*)::INT FROM memberships m WHERE m.object_redpash_id = c.redpash_id) AS member_count,
                 (SELECT m2.role FROM memberships m2
-                  WHERE m2.object_redpash_id = c.redpash_id AND m2.member_redpash_id = $2) AS my_role
+                  WHERE m2.object_redpash_id = c.redpash_id AND m2.member_redpash_id = $2
+                  ORDER BY CASE m2.role
+                    WHEN 'owner'  THEN 0
+                    WHEN 'admin'  THEN 1
+                    WHEN 'member' THEN 2
+                    WHEN 'viewer' THEN 3
+                    ELSE 4 END
+                  LIMIT 1) AS my_role
            FROM companies c
           WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
           ORDER BY {sort_col} {sort_dir} NULLS LAST
@@ -360,6 +375,116 @@ async fn list_companies(
     Ok(Json(build_page(rows, total as u64, all_count as u64, page, size, started)))
 }
 
+// ── /api/admin/teams ────────────────────────────────────────────────────
+
+const SORTABLE_TEAMS: &[&str] = &[
+    "name", "company_name", "member_count", "created_at",
+];
+
+async fn list_teams_admin(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Query(q):     Query<AdminQuery>,
+) -> Result<Json<Page<TeamSummary>>, AppError> {
+    let started = Instant::now();
+    // my_role projection — same shape as list_companies. Endpoint is
+    // dev-permissive (RBAC tightening lives at the team CRUD route).
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let (offset, size, page) = paginate(q.page, q.size);
+
+    let (sort_key, sort_dir) = sort_clause(
+        q.sort.as_deref(), q.dir.as_deref(), SORTABLE_TEAMS, "created_at",
+    );
+    let sort_col = match sort_key.as_str() {
+        "name"         => "t.name",
+        "company_name" => "company_name",
+        "member_count" => "member_count",
+        _              => "t.created_at",
+    };
+
+    let all_count: i64 = db::count_total(&state.db, "teams").await?;
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM teams
+         WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')",
+    )
+    .bind(q.q.as_deref())
+    .fetch_one(&state.db)
+    .await?;
+
+    // `my_role` picks the caller's HIGHEST-precedence role on the team
+    // (owner > admin > member > viewer). Post-PK-widening a user can
+    // hold multiple (role, context_role) rows on the same object, so a
+    // plain `(SELECT m2.role …)` would return >1 row and 500 — order +
+    // LIMIT 1 collapses it to the most authoritative tier.
+    let sql = format!(
+        "SELECT t.redpash_id, t.company_id, t.name, t.created_at,
+                COALESCE(c.name, '') AS company_name,
+                (SELECT COUNT(*)::INT FROM memberships m
+                  WHERE m.object_redpash_id = t.redpash_id) AS member_count,
+                (SELECT m2.role FROM memberships m2
+                  WHERE m2.object_redpash_id = t.redpash_id AND m2.member_redpash_id = $2
+                  ORDER BY CASE m2.role
+                    WHEN 'owner'  THEN 0
+                    WHEN 'admin'  THEN 1
+                    WHEN 'member' THEN 2
+                    WHEN 'viewer' THEN 3
+                    ELSE 4 END
+                  LIMIT 1) AS my_role
+           FROM teams t
+           LEFT JOIN companies c ON c.redpash_id = t.company_id
+          WHERE ($1::text IS NULL OR t.name ILIKE '%' || $1 || '%')
+          ORDER BY {sort_col} {sort_dir} NULLS LAST
+          LIMIT $3 OFFSET $4"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(q.q.as_deref())
+        .bind(&caller)
+        .bind(size as i64)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await?;
+
+    let rows: Vec<TeamSummary> = rows
+        .into_iter()
+        .map(|r| TeamSummary {
+            team: Team {
+                redpash_id: r.try_get("redpash_id").unwrap_or_default(),
+                company_id: r.try_get("company_id").unwrap_or_default(),
+                name:       r.try_get("name").unwrap_or_default(),
+                created_at: r.try_get("created_at").unwrap_or_else(|_| Utc::now()),
+            },
+            company_name: r.try_get("company_name").unwrap_or_default(),
+            member_count: r.try_get::<i32, _>("member_count").unwrap_or(0) as u32,
+            my_role:      r.try_get::<String, _>("my_role").ok(),
+        })
+        .collect();
+
+    Ok(Json(build_page(rows, total as u64, all_count as u64, page, size, started)))
+}
+
+async fn stats_teams(
+    State(state): State<AppState>,
+) -> Result<Json<TeamStats>, AppError> {
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM teams")
+        .fetch_one(&state.db).await?;
+    // "with_members" — teams whose membership count is ≥2 (creator +
+    // at least one other). Single-owner teams haven't been adopted yet.
+    let with_members: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM teams t
+          WHERE (SELECT COUNT(*) FROM memberships m
+                  WHERE m.object_redpash_id = t.redpash_id) >= 2"
+    ).fetch_one(&state.db).await?;
+    let by_company: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT company_id)::BIGINT FROM teams"
+    ).fetch_one(&state.db).await?;
+    Ok(Json(TeamStats {
+        total:        total        as u64,
+        with_members: with_members as u64,
+        by_company:   by_company   as u64,
+    }))
+}
+
 // ── /api/admin/memberships ──────────────────────────────────────────────
 
 const SORTABLE_MEMBERSHIPS: &[&str] = &[
@@ -373,17 +498,17 @@ async fn list_memberships(
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
     let scope = q.scope.as_deref().unwrap_or("project");
-    if scope != "project" && scope != "company" && scope != "case" {
+    if scope != "project" && scope != "company" && scope != "case" && scope != "team" {
         return Err(AppError::bad_request(
             "admin",
-            "scope must be one of: project, company, case",
+            "scope must be one of: project, company, case, team",
         ));
     }
 
     let (sort_key, sort_dir) = sort_clause(
         q.sort.as_deref(), q.dir.as_deref(), SORTABLE_MEMBERSHIPS, "joined_at",
     );
-    // The three scope-specific queries share aliases (user_display_name,
+    // The four scope-specific queries share aliases (user_display_name,
     // scope_name, role, joined_at) so the same sort_col resolves against
     // every branch.
     let sort_col = match sort_key.as_str() {
@@ -392,6 +517,7 @@ async fn list_memberships(
         "scope_name"        => match scope {
             "project" => "p.name",
             "case"    => "ca.title",
+            "team"    => "t.name",
             _         => "c.name",
         },
         // "scope" is a literal column emitted by the SELECT — a
@@ -404,11 +530,11 @@ async fn list_memberships(
         _                   => "m.joined_at",
     };
 
-    // all_count = total across all three scopes (project + company + case),
-    // the rail tab's "everything" count. total = scope+role-filtered count.
-    // Per-scope COUNT(*) via JOIN-as-filter so rows whose object isn't one
-    // of the registered scopes (none today, but cheap insurance) don't
-    // inflate the count.
+    // all_count = total across all four scopes (project + company + case +
+    // team), the rail tab's "everything" count. total = scope+role-filtered
+    // count. Per-scope COUNT(*) via JOIN-as-filter so rows whose object
+    // isn't one of the registered scopes (none today, but cheap insurance)
+    // don't inflate the count.
     let all_count: i64 = sqlx::query_scalar(
         "SELECT
             (SELECT COUNT(*) FROM memberships m
@@ -416,7 +542,9 @@ async fn list_memberships(
           + (SELECT COUNT(*) FROM memberships m
                 JOIN companies c ON c.redpash_id = m.object_redpash_id)
           + (SELECT COUNT(*) FROM memberships m
-                JOIN cases     ca ON ca.redpash_id = m.object_redpash_id)",
+                JOIN cases     ca ON ca.redpash_id = m.object_redpash_id)
+          + (SELECT COUNT(*) FROM memberships m
+                JOIN teams     t  ON t.redpash_id  = m.object_redpash_id)",
     )
     .fetch_one(&state.db)
     .await?;
@@ -449,6 +577,17 @@ async fn list_memberships(
                      u.display_name ILIKE '%' || $2 || '%' OR
                      u.username     ILIKE '%' || $2 || '%' OR
                      ca.title       ILIKE '%' || $2 || '%')"
+        }
+        "team" => {
+            "SELECT COUNT(*)::BIGINT
+               FROM memberships m
+               JOIN teams t ON t.redpash_id  = m.object_redpash_id
+               JOIN users u ON u.redpash_id  = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     t.name         ILIKE '%' || $2 || '%')"
         }
         _ => {
             "SELECT COUNT(*)::BIGINT
@@ -500,6 +639,26 @@ async fn list_memberships(
                      u.display_name ILIKE '%' || $2 || '%' OR
                      u.username     ILIKE '%' || $2 || '%' OR
                      ca.title       ILIKE '%' || $2 || '%')
+              ORDER BY {sort_col} {sort_dir} NULLS LAST
+              LIMIT $3 OFFSET $4"
+        ),
+        "team" => format!(
+            "SELECT 'team' AS scope,
+                    m.object_redpash_id      AS scope_redpash_id,
+                    t.name                   AS scope_name,
+                    m.member_redpash_id      AS member_redpash_id,
+                    u.display_name           AS user_display_name,
+                    u.username               AS user_username,
+                    m.role                   AS role,
+                    m.joined_at              AS joined_at
+               FROM memberships m
+               JOIN teams t ON t.redpash_id  = m.object_redpash_id
+               JOIN users u ON u.redpash_id  = m.member_redpash_id
+              WHERE ($1::text IS NULL OR m.role = $1)
+                AND ($2::text IS NULL OR
+                     u.display_name ILIKE '%' || $2 || '%' OR
+                     u.username     ILIKE '%' || $2 || '%' OR
+                     t.name         ILIKE '%' || $2 || '%')
               ORDER BY {sort_col} {sort_dir} NULLS LAST
               LIMIT $3 OFFSET $4"
         ),
@@ -947,10 +1106,10 @@ async fn stats_memberships(
     Query(q):     Query<MembershipsStatsQuery>,
 ) -> Result<Json<MembershipStats>, AppError> {
     let scope = q.scope.as_deref().unwrap_or("project");
-    if scope != "project" && scope != "company" && scope != "case" {
+    if scope != "project" && scope != "company" && scope != "case" && scope != "team" {
         return Err(AppError::bad_request(
             "admin",
-            "scope must be one of: project, company, case",
+            "scope must be one of: project, company, case, team",
         ));
     }
 
@@ -964,6 +1123,10 @@ async fn stats_memberships(
         "case" => (
             "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CAS\\_%'",
             "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CAS\\_%' GROUP BY role",
+        ),
+        "team" => (
+            "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'TEM\\_%'",
+            "SELECT role, COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'TEM\\_%' GROUP BY role",
         ),
         _ => (
             "SELECT COUNT(*)::BIGINT FROM memberships WHERE object_redpash_id LIKE 'CMP\\_%'",
@@ -1343,10 +1506,10 @@ async fn delete_membership(
         ));
     }
     let (scope, scope_id, user_id) = (parts[0], parts[1], parts[2]);
-    if scope != "project" && scope != "company" {
+    if scope != "project" && scope != "company" && scope != "case" && scope != "team" {
         return Err(AppError::bad_request(
             "invalid",
-            "scope must be one of: project, company",
+            "scope must be one of: project, company, case, team",
         ));
     }
     let removed = db::delete_membership(&state.db, scope, scope_id, user_id).await?;

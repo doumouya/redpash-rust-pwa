@@ -60,6 +60,7 @@ mod monitoring;
 mod pagination;
 mod projects;
 mod search;
+mod teams;
 mod users;
 
 pub(crate) use auth::read_cookie;
@@ -205,6 +206,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/auth",     auth::routes())
         .nest("/projects", projects::routes())
         .nest("/companies",  companies::routes())
+        .nest("/teams",      teams::routes())
         .nest("/files",      files::routes())
         .nest("/group",      group::routes())
         .nest("/cases",      cases::routes())
