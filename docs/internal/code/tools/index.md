@@ -41,13 +41,14 @@ fill.
 - [`ui-snapshot-audit.md`](audit-suite/)
 - [`doc-coverage-audit.md`](audit-suite/) — this audit (the one that enforces the atomic-doc plan)
 
-## Shell scripts — `shell/` (9 units)
+## Shell scripts — `shell/` (10 units)
 
 - [`audit.md`](shell/) — `tools/audit.sh`, the master runner: auto-discovers every `tools/*-audit/audit.js`
 - [`build-wasm.md`](shell/) — `tools/build-wasm.sh`
 - [`db-reset.md`](shell/), [`db-setup.md`](shell/)
 - [`dev-setup.md`](shell/), [`health-check.md`](shell/), [`install-stack.md`](shell/)
 - [`port-check.md`](shell/), [`stack-version.md`](shell/)
+- [`seed-rbac-coverage.md`](shell/) — `tools/seed-rbac-coverage/seed.sh`, idempotent users + teams + memberships seeder covering every Owner/Admin/Member/Viewer slot
 
 ## Per-dir tools (5 units)
 
