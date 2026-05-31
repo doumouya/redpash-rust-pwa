@@ -68,7 +68,7 @@ pub fn routes() -> Router<AppState> {
         .route("/steps/stats",       get(stats_steps))
         .route("/rbac",              get(rbac_resolve))
         .route("/audit-catalog",     get(audit_catalog))
-        .route("/fields",            get(list_fields))
+        .route("/fields",            get(list_fields).put(put_field))
 }
 
 // ── shared query plumbing (private to this module) ──────────────────────
@@ -1328,7 +1328,21 @@ async fn list_fields(
     if !crate::rbac::is_platform_admin(&state, &caller).await? {
         return Err(AppError::not_found("not_found", "fields"));
     }
-    let rows = crate::field_perms::default_registry();
+    let mut rows = crate::field_perms::default_registry();
+    // Overlay the sparse field_permissions overrides → served matrix is
+    // defaults ⊕ overrides (CAS_C4219F2B slice 2).
+    let overrides: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT object_type, field, role, permission FROM field_permissions",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for (obj, field, role, perm) in &overrides {
+        if let Some(p) = crate::field_perms::Perm::from_str(perm) {
+            if let Some(row) = rows.iter_mut().find(|r| r.object == obj && r.field == field) {
+                row.apply_override(role, p);
+            }
+        }
+    }
     let n = rows.len() as u64;
     Ok(Json(Page {
         rows,
@@ -1340,6 +1354,80 @@ async fn list_fields(
         ms: 0,
         row_indices: Vec::new(),
     }))
+}
+
+#[derive(Deserialize)]
+struct FieldPermBody {
+    object:     String,
+    field:      String,
+    role:       String,
+    permission: String,
+}
+
+/// `PUT /api/admin/fields` — set one `(object, field, role)` cell of the field
+/// registry (CAS_C4219F2B slice 2). Body `{object, field, role, permission}`.
+/// Validates against the catalog (unknown field → 404; a read-only/computed
+/// field can't be granted `write` → 400). Setting a cell back to its catalog
+/// default deletes the override row (keeps `field_permissions` sparse).
+/// GATED to platform admins. Returns the merged `FieldRow`.
+async fn put_field(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Json(body):   Json<FieldPermBody>,
+) -> Result<Json<crate::field_perms::FieldRow>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "fields"));
+    }
+    if !matches!(body.role.as_str(), "owner" | "admin" | "member" | "viewer") {
+        return Err(AppError::bad_request("invalid", "role must be owner, admin, member or viewer"));
+    }
+    let perm = crate::field_perms::Perm::from_str(&body.permission)
+        .ok_or_else(|| AppError::bad_request("invalid", "permission must be write, read or none"))?;
+    let def = crate::field_perms::find_default(&body.object, &body.field)
+        .ok_or_else(|| AppError::not_found("not_found", "unknown object/field"))?;
+    if !def.is_editable && perm == crate::field_perms::Perm::Write {
+        return Err(AppError::bad_request("read_only", "this field is read-only — it can't be granted write"));
+    }
+
+    // Reverting to the catalog default removes the override (keeps it sparse).
+    let is_default = def.default_for(&body.role) == Some(perm);
+    if is_default {
+        sqlx::query("DELETE FROM field_permissions WHERE object_type = $1 AND field = $2 AND role = $3")
+            .bind(&body.object).bind(&body.field).bind(&body.role)
+            .execute(&state.db).await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO field_permissions (object_type, field, role, permission, updated_by)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (object_type, field, role)
+             DO UPDATE SET permission = EXCLUDED.permission, updated_at = now(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(&body.object).bind(&body.field).bind(&body.role).bind(perm.as_str()).bind(&caller)
+        .execute(&state.db).await?;
+    }
+    crate::event::info(&state.db, "field_permission_set",
+        format!("{}.{} [{}] -> {}", body.object, body.field, body.role, perm.as_str()))
+        .user(caller)
+        .context(serde_json::json!({
+            "object": body.object, "field": body.field, "role": body.role,
+            "permission": perm.as_str(), "reverted_to_default": is_default,
+        }))
+        .send();
+
+    // Return the merged row (all current overrides for this object/field applied).
+    let mut row = def;
+    let ovs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT role, permission FROM field_permissions WHERE object_type = $1 AND field = $2",
+    )
+    .bind(&body.object).bind(&body.field)
+    .fetch_all(&state.db).await?;
+    for (role, p) in &ovs {
+        if let Some(pp) = crate::field_perms::Perm::from_str(p) {
+            row.apply_override(role, pp);
+        }
+    }
+    Ok(Json(row))
 }
 
 /// `GET /api/admin/audit-catalog` — the static-audit half of the Admin Console

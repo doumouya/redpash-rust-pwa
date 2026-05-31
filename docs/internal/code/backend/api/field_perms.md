@@ -17,19 +17,28 @@ same shape the cleaner gives columns (Em's framing, CAS_C4219F2B). Backs
 `GET /api/admin/fields` ([routes/admin.md](routes/admin.md)), which the Admin
 Console renders through the standard redtable reader (`Page<FieldRow>`).
 
-This is **slice 1**: the static default registry, authored from the
-[specs/rbac](../../specs/rbac/index.md) per-field atoms + reaches + the shared
-DTO shapes. Read-only — the configurable axis (a `field_permissions` override
-table) + handler enforcement are later slices.
+Authored from the [specs/rbac](../../specs/rbac/index.md) per-field atoms +
+reaches + the shared DTO shapes.
+
+- **slice 1** (done): the static `default_registry`.
+- **slice 2** (done): the sparse `field_permissions` override table (migration
+  `20260531000003`); `GET /api/admin/fields` serves `defaults ⊕ overrides` and
+  flags `is_overridden`; `PUT /api/admin/fields` sets a cell (reverting to the
+  catalog default deletes the row, keeping the table sparse).
+- **slice 3** (todo): handler enforcement reads the merged matrix on field writes.
 
 ## Public surface
 
 - `pub enum Perm` — `None < Read < Write` (Ord; `Write` implies `Read`).
-  Serializes lowercase.
+  `as_str` / `from_str` for the SQL/wire round-trip; serializes lowercase.
 - `pub struct FieldRow` — one registry row: `object`, `field`, `is_editable`,
-  `is_sortable`, and the four per-role cells.
+  `is_sortable`, the four per-role cells, and `is_overridden` (set during the
+  GET merge). `apply_override(role, perm)` overlays a cell; `default_for(role)`
+  reads the pre-override default (for the PUT revert check).
 - `pub fn default_registry` — the full static catalog (60 rows across the 7
   membership-bearing object types).
+- `pub fn find_default(object, field)` — the catalog row for one field, for the
+  PUT handler's validation + revert check.
 
 ## Default perm rules (overridable in a later slice)
 

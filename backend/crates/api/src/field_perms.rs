@@ -29,6 +29,24 @@ pub enum Perm {
 
 use Perm::{None as N, Read as R, Write as W};
 
+impl Perm {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Perm::None => "none",
+            Perm::Read => "read",
+            Perm::Write => "write",
+        }
+    }
+    pub fn from_str(s: &str) -> Option<Perm> {
+        match s {
+            "none" => Some(Perm::None),
+            "read" => Some(Perm::Read),
+            "write" => Some(Perm::Write),
+            _ => None,
+        }
+    }
+}
+
 /// One field row in the registry — the redtable row. `is_editable` = the field
 /// has an update path (a write atom); read-only / computed fields are `false`
 /// and read-only for every role. `is_sortable` = the list views allow ordering
@@ -43,16 +61,54 @@ pub struct FieldRow {
     pub admin:       Perm,
     pub member:      Perm,
     pub viewer:      Perm,
+    /// True once any of this row's cells has been overridden away from the
+    /// catalog default (set during the GET merge). Lets the FE highlight
+    /// customized rows.
+    #[serde(default)]
+    pub is_overridden: bool,
+}
+
+impl FieldRow {
+    /// Set the cell for `role` and mark the row overridden. No-op for an
+    /// unknown role. Used by the GET merge to overlay `field_permissions` rows.
+    pub fn apply_override(&mut self, role: &str, perm: Perm) {
+        match role {
+            "owner" => self.owner = perm,
+            "admin" => self.admin = perm,
+            "member" => self.member = perm,
+            "viewer" => self.viewer = perm,
+            _ => return,
+        }
+        self.is_overridden = true;
+    }
+    /// The catalog-default perm for `role` (pre-override), for the PUT handler's
+    /// "reverting to default deletes the override row" logic.
+    pub fn default_for(&self, role: &str) -> Option<Perm> {
+        match role {
+            "owner" => Some(self.owner),
+            "admin" => Some(self.admin),
+            "member" => Some(self.member),
+            "viewer" => Some(self.viewer),
+            _ => None,
+        }
+    }
+}
+
+/// Look up the catalog row (defaults) for an `(object, field)` — the PUT
+/// handler validates against this and reads the default for the revert check.
+pub fn find_default(object: &str, field: &str) -> Option<FieldRow> {
+    default_registry().into_iter().find(|r| r.object == object && r.field == field)
 }
 
 /// Editable field — carries the per-role permission tuple.
 const fn ed(object: &'static str, field: &'static str, is_sortable: bool,
             owner: Perm, admin: Perm, member: Perm, viewer: Perm) -> FieldRow {
-    FieldRow { object, field, is_editable: true, is_sortable, owner, admin, member, viewer }
+    FieldRow { object, field, is_editable: true, is_sortable, owner, admin, member, viewer, is_overridden: false }
 }
 /// Read-only / computed field — readable by everyone, writable by none.
 const fn ro(object: &'static str, field: &'static str, is_sortable: bool) -> FieldRow {
-    FieldRow { object, field, is_editable: false, is_sortable, owner: R, admin: R, member: R, viewer: R }
+    FieldRow { object, field, is_editable: false, is_sortable,
+               owner: R, admin: R, member: R, viewer: R, is_overridden: false }
 }
 
 /// The default field registry. Default perm rules (overridable later):

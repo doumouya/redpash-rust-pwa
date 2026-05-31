@@ -24,7 +24,7 @@ GET /api/admin/steps        ← Steps tab          (every project_step across al
 PATCH /api/admin/users/:rid ← set platform role {admin|user} — GATED (see below)
 GET /api/admin/rbac         ← RBAC introspection ?subject=&object= — GATED (see below)
 GET /api/admin/audit-catalog ← per-tool latest run + severity counts + diff-vs-prev — GATED
-GET /api/admin/fields        ← field registry redtable (props + per-role perms) — GATED
+GET·PUT /api/admin/fields    ← field registry redtable (props + per-role perms) + set a cell — GATED
 
 ## Public surface
 
@@ -48,9 +48,14 @@ GET /api/admin/fields        ← field registry redtable (props + per-role perms
 - **`GET /api/admin/fields` (`list_fields`) is GATED** — the field registry as
   a redtable (CAS_C4219F2B): one `Page<FieldRow>` row per object field with
   `is_editable` / `is_sortable` + per-role permission cells
-  (`owner`/`admin`/`member`/`viewer`). Static default registry from
-  [field_perms.rs](../field_perms.md) (slice 1; overrides + enforcement later).
-  Renders through the standard redtable reader. Requires `is_platform_admin`.
+  (`owner`/`admin`/`member`/`viewer`). Served as `defaults ⊕ overrides` from
+  [field_perms.rs](../field_perms.md) + the `field_permissions` table; merged
+  rows flag `is_overridden`. Renders through the standard redtable reader.
+  **`PUT`** sets one `{object, field, role, permission}` cell — validates against
+  the catalog (unknown field → 404; a read-only field can't be granted `write`
+  → 400); reverting to the catalog default deletes the override row (keeps the
+  table sparse); emits `field_permission_set`. Both require `is_platform_admin`.
+  Enforcement of the matrix on field writes is the next slice.
 - **`GET /api/admin/audit-catalog` (`audit_catalog`) is GATED** — the static-audit
   half of the Admin Console audit frame (CAS_274EDF3B). One row per tool: latest
   `audit.run` (id / ran_at / git sha+branch), finding counts bucketed
