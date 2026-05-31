@@ -232,9 +232,13 @@ async fn get_one(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
 ) -> Result<Json<CaseDetail>, AppError> {
-    // AUTH-AUDIT-ACK: cases dev-permissive in v1 per [[redpash-stage]];
-    // visibility overlay (reporter / assignee / company role) lands in v3
-    super::resolve_user_rid(&state, &headers).await?;
+    // RBAC P2 — gate the `case.view` atom. The bootstrap dev_user (dev-mode
+    // platform admin) bypasses; any other caller must hold an effective role
+    // on the case (own / company-cascade / team-closure) or get 404 — so a
+    // denied caller can't distinguish "not yours" from "doesn't exist".
+    // Deny-early, before the row is loaded. (Replaces the v1 dev-permissive ACK.)
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    crate::rbac::require_view(&state, &caller, &rid, "case").await?;
     let mut case = db::find_case(&state.db, &rid).await?
         .ok_or_else(|| AppError::not_found("not_found", format!("case {rid}")))?;
     // Derive the internal/external source for the sidebar badge.

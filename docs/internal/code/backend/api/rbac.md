@@ -30,6 +30,10 @@ object, unioned across three sources, or `None` (default-deny):
 - `pub enum Role` — `Viewer · Member · Admin · Owner`, `Ord` so "highest role
   wins" is a `max`.
 - `pub async fn effective_role` — the resolver.
+- `pub async fn require_view` — the `*.view` gate (P2): bootstrap `dev_user`
+  bypasses (dev-mode platform-admin stand-in until `users.role` lands); any
+  other caller needs an effective role on the object, else 404 (leak-free).
+  Wired into the case-detail read (`routes/cases.rs::get_one`).
 
 ## Drift-prone areas
 

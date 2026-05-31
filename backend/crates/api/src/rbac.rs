@@ -13,6 +13,8 @@
 
 use sqlx::PgPool;
 
+use crate::{error::AppError, state::AppState};
+
 /// RBAC permission tier. Ordered `Viewer < Member < Admin < Owner` so the
 /// derived `Ord` makes "highest role wins" a plain `max`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,4 +82,27 @@ pub async fn effective_role(
         .fetch_one(pool)
         .await?;
     Ok(rank.and_then(Role::from_rank))
+}
+
+/// View gate (the `*.view` atom). Allow when the caller is the bootstrap
+/// `dev_user` — the dev-mode super-user that stands in for platform-admin
+/// until a real `users.role` lands — OR when they hold ANY effective role on
+/// the object. Otherwise 404, so a denied caller can't tell "exists but not
+/// yours" from "doesn't exist" (matches `ensure_owner`'s leak-free contract).
+///
+/// P2 of enforcement: the `case.view` atom is the first gated. `label` is the
+/// object kind for the 404 message ("case", "project", …).
+pub async fn require_view(
+    state:  &AppState,
+    caller: &str,
+    object: &str,
+    label:  &str,
+) -> Result<(), AppError> {
+    if caller == state.dev_user.as_ref() {
+        return Ok(());
+    }
+    match effective_role(&state.db, caller, object).await? {
+        Some(_) => Ok(()),
+        None => Err(AppError::not_found("not_found", format!("{label} {object}"))),
+    }
 }
