@@ -278,6 +278,7 @@ pub async fn insert_user(
     email:        Option<&str>,
     first_name:   Option<&str>,
     last_name:    Option<&str>,
+    avatar_url:   Option<&str>,
 ) -> sqlx::Result<UserProfile> {
     // Register the user as an entity FIRST per the entity-edge model
     // (migration 20260531000000). Without this the users INSERT trips
@@ -286,8 +287,8 @@ pub async fn insert_user(
     let mut tx = pool.begin().await?;
     crate::db::register_entity(&mut *tx, rid, "user").await?;
     let row: UserRow = sqlx::query_as(
-        "INSERT INTO users (redpash_id, username, display_name, email, first_name, last_name)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        "INSERT INTO users (redpash_id, username, display_name, email, first_name, last_name, avatar_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING redpash_id, username, email, display_name, avatar_url,
                    job_title, organisation, use_case, plan, locale,
                    COALESCE(
@@ -304,6 +305,7 @@ pub async fn insert_user(
     .bind(email)
     .bind(first_name)
     .bind(last_name)
+    .bind(avatar_url)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;

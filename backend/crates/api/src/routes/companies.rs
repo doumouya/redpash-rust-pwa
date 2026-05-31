@@ -77,6 +77,11 @@ struct CreateCompanyBody {
     /// it's suffixed with a short rid slice so it's unique by
     /// construction (no collision retry needed).
     #[serde(default)] slug: Option<String>,
+    /// Optional avatar URL at create. Mirrors the `PatchCompanyBody.avatar_url`
+    /// field; setting it here avoids a follow-up PATCH after a fresh
+    /// org spins up. The FE Companies modal exposes this so an admin
+    /// can paste a URL when filing a new company.
+    #[serde(default)] avatar_url: Option<String>,
 }
 
 async fn create(
@@ -94,7 +99,8 @@ async fn create(
         .map(slugify)
         .unwrap_or_else(|| slugify(name));
     let slug = format!("{base}-{}", &rid[4..10].to_ascii_lowercase());
-    let company = db::create_company(&state.db, &rid, name, &slug, &user)
+    let avatar_url = body.avatar_url.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let company = db::create_company(&state.db, &rid, name, &slug, avatar_url, &user)
         .await
         .map_err(db_err)?;
     crate::event::info(&state.db, "company_create", format!("created company {name}"))

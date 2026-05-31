@@ -51,6 +51,11 @@ struct CreateUserBody {
     #[serde(default)] email:      Option<String>,
     #[serde(default)] first_name: Option<String>,
     #[serde(default)] last_name:  Option<String>,
+    /// Optional avatar URL at create. Same field as `PatchUserBody`
+    /// at L109; pre-seating it saves a follow-up PATCH right after
+    /// signup. The FE Users modal exposes this so admins can paste a
+    /// URL when filing a fresh user.
+    #[serde(default)] avatar_url: Option<String>,
 }
 
 async fn create(
@@ -67,8 +72,9 @@ async fn create(
     let email      = body.email.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let first_name = body.first_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let last_name  = body.last_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let avatar_url = body.avatar_url.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let rid   = id::new("USR");
-    let res   = db::insert_user(&state.db, &rid, username, display_name, email, first_name, last_name).await;
+    let res   = db::insert_user(&state.db, &rid, username, display_name, email, first_name, last_name, avatar_url).await;
     match res {
         Ok(u) => {
             crate::event::info(&state.db, "user_create", format!("created user {username}"))

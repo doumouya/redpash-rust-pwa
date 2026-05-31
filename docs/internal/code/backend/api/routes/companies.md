@@ -41,6 +41,7 @@ slug logic; the read gate `members::require_member` is reused by `get_one`.
 
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
+- **`POST /api/companies` accepts `avatar_url`** (added 2026-05-31, strand 2 of CAS_B846F28C). Optional at create — mirrors the existing `PatchCompanyBody.avatar_url` field so an admin can seat an avatar at company-create-time without a follow-up PATCH. `db::create_company` signature widened with `avatar_url: Option<&str>`; bootstrap canonical-internal-company creation passes `None`.
 
 ## Related
 

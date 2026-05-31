@@ -232,6 +232,7 @@ export default function home(app, { session: _session }) {
           { key: "first_name",   label: "First name",   required: false, placeholder: "optional" },
           { key: "last_name",    label: "Last name",    required: false, placeholder: "optional" },
           { key: "email",        label: "Email",        required: false, type: "email", placeholder: "optional" },
+          { key: "avatar_url",   label: "Avatar URL",   required: false, type: "url", placeholder: "optional — paste a public URL" },
         ],
       },
       // DELETE /api/admin/users/:rid — added 2026-05-25. Cascades to
@@ -358,8 +359,9 @@ export default function home(app, { session: _session }) {
         endpoint: "/companies",
         title:    "New company",
         fields: [
-          { key: "name", label: "Name", required: true, placeholder: "Company name" },
-          { key: "slug", label: "Slug", required: false, placeholder: "optional — auto-derived from name" },
+          { key: "name",       label: "Name",       required: true,  placeholder: "Company name" },
+          { key: "slug",       label: "Slug",       required: false, placeholder: "optional — auto-derived from name" },
+          { key: "avatar_url", label: "Avatar URL", required: false, type: "url", placeholder: "optional — paste a public URL" },
         ],
       },
       // DELETE /api/admin/companies/:rid — added 2026-05-25. Cascades
@@ -1062,6 +1064,19 @@ export default function home(app, { session: _session }) {
           { key: "name",        label: "Name",        required: true, placeholder: "Project name" },
           { key: "description", label: "Description", required: false, type: "textarea",
             placeholder: "Optional — what's this project for?" },
+          // Optional company scope. Empty → personal project (default).
+          // Backend `CreateProjectBody.company_id` is `Option<String>`;
+          // empty-trimmed → personal at the route layer (the field is
+          // already omitted from the POST body when empty per the form's
+          // sparse-body rule). Caller must belong to the picked company
+          // (backend rbac::require_grant on company); leak-free 404 on
+          // a foreign company so the picker doesn't leak existence.
+          { key: "company_id", label: "Company (optional)", type: "entity-picker",
+            placeholder: "Search company by name… (leave empty for personal)",
+            endpoint: "/admin/companies",
+            labelKey: "name",
+            ridKey:   "redpash_id",
+          },
         ],
       },
       // Note: the owner's DEFAULT project can't be deleted (backend

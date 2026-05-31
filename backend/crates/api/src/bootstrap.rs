@@ -32,7 +32,7 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
         None => {
             let rid = id::new("USR");
             tracing::info!(%rid, "creating dev user");
-            db::insert_user(pool, &rid, DEV_USERNAME, "Dev user", None, None, None)
+            db::insert_user(pool, &rid, DEV_USERNAME, "Dev user", None, None, None, None)
                 .await
                 .context("creating dev user")?
         }
@@ -106,7 +106,7 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
             internal_name.to_ascii_lowercase().replace(' ', "-"),
             &rid[4..10].to_ascii_lowercase());
         tracing::info!(%rid, name = %internal_name, "creating canonical internal company");
-        db::create_company(pool, &rid, &internal_name, &slug, &user.redpash_id)
+        db::create_company(pool, &rid, &internal_name, &slug, None, &user.redpash_id)
             .await
             .context("creating internal company")?;
     }

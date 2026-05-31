@@ -1103,21 +1103,23 @@ pub async fn user_sole_owner_objects(
 /// one transaction so a company never exists without an owner.
 pub async fn create_company(
     pool:      &PgPool,
-    rid:       &str,
-    name:      &str,
-    slug:      &str,
-    owner_rid: &str,
+    rid:        &str,
+    name:       &str,
+    slug:       &str,
+    avatar_url: Option<&str>,
+    owner_rid:  &str,
 ) -> sqlx::Result<Company> {
     let mut tx = pool.begin().await?;
     register_entity(&mut *tx, rid, "company").await?;
     let row: CompanyRow = sqlx::query_as(&format!(
-        "INSERT INTO companies (redpash_id, name, slug)
-         VALUES ($1, $2, $3)
+        "INSERT INTO companies (redpash_id, name, slug, avatar_url)
+         VALUES ($1, $2, $3, $4)
          RETURNING {COMPANY_COLS}"
     ))
     .bind(rid)
     .bind(name)
     .bind(slug)
+    .bind(avatar_url)
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
