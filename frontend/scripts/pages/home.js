@@ -636,8 +636,8 @@ export default function home(app, { session: _session }) {
         { label: "Project",     key: "project_id",            sortable: true,  defaultHidden: true },
         { label: "Company",     key: "company_id",            sortable: true,  defaultHidden: true },
         { label: "Category",    key: "category_name",         sortable: true,  defaultHidden: true },
-        { label: "Description", key: "description",           sortable: false, defaultHidden: true },
-        { label: "Error",       key: "error_message",         sortable: false, defaultHidden: true },
+        { label: "Description", key: "description",           sortable: false, defaultHidden: true, editable: true, editKey: "description" },
+        { label: "Error",       key: "error_message",         sortable: false, defaultHidden: true, editable: true, editKey: "error_message" },
         { label: "Created",     key: "created_at",            sortable: true,  defaultHidden: true },
         { label: "Updated",     key: "updated_at",            sortable: true  },
         { label: "ID",          key: "redpash_id",            sortable: false, defaultHidden: true },
@@ -661,8 +661,10 @@ export default function home(app, { session: _session }) {
           + '<td><span class="rt-mono-pill">' + esc(c.project_id || "—") + '</span></td>'
           + '<td><span class="rt-mono-pill">' + esc(c.company_id || "—") + '</span></td>'
           + '<td>' + categoryLabel + '</td>'
-          + '<td class="rp-meta">' + esc((c.description || "").slice(0, 120) || "—") + '</td>'
-          + '<td class="rp-meta">' + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
+          + '<td class="rp-meta" data-full="' + esc(c.description || "") + '" data-trunc="120">'
+            + esc((c.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td class="rp-meta" data-full="' + esc(c.error_message || "") + '" data-trunc="80">'
+            + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
           + '<td>' + fmtTime(c.created_at) + '</td>'
           + '<td>' + fmtTime(c.updated_at) + '</td>'
           + '<td><span class="rt-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
@@ -955,7 +957,7 @@ export default function home(app, { session: _session }) {
         { label: "Owner",       key: "owner_display_name", sortable: false, defaultHidden: true },
         { label: "Company",     key: "company_id",         sortable: false, defaultHidden: true },
         { label: "Cleanness",   key: "cleanness_pct",      sortable: false, defaultHidden: true },
-        { label: "Description", key: "description",        sortable: false, defaultHidden: true },
+        { label: "Description", key: "description",        sortable: false, defaultHidden: true, editable: true, editKey: "description" },
         { label: "Created",     key: "created_at",         sortable: false, defaultHidden: true },
         { label: "Updated",     key: "updated_at",         sortable: false },
         { label: "ID",          key: "redpash_id",         sortable: false, defaultHidden: true },
@@ -976,7 +978,8 @@ export default function home(app, { session: _session }) {
           + '<td>' + esc(p.owner_display_name || p.owner_id || "—") + '</td>'
           + '<td><span class="rt-mono-pill">' + esc(p.company_id || "—") + '</span></td>'
           + '<td class="is-num">' + clean + '</td>'
-          + '<td class="rp-meta">' + esc((p.description || "").slice(0, 120) || "—") + '</td>'
+          + '<td class="rp-meta" data-full="' + esc(p.description || "") + '" data-trunc="120">'
+            + esc((p.description || "").slice(0, 120) || "—") + '</td>'
           + '<td>' + fmtTime(p.created_at) + '</td>'
           + '<td>' + fmtTime(p.updated_at) + '</td>'
           + '<td><span class="rt-mono-pill">' + esc(p.redpash_id || "—") + '</span></td>'
@@ -1644,6 +1647,20 @@ export default function home(app, { session: _session }) {
         td.classList.remove("editable");
         td.removeAttribute("contenteditable");
         td.removeAttribute("data-edit-key");
+        // data-full pattern: when the row template stored the source-of-
+        // truth value separately (long-text cols with .slice() display
+        // truncation), snap textContent back to the truncated form so
+        // exiting edit-mode without saving doesn't leave the user
+        // staring at the expanded full text until the next fetchList
+        // paint. data-trunc carries the truncation length (0 = no
+        // truncation, just display the full value).
+        if (td.dataset.full !== undefined) {
+          const trunc = parseInt(td.dataset.trunc || "0", 10) || 0;
+          const full  = td.dataset.full;
+          td.textContent = trunc > 0
+            ? (full.slice(0, trunc) || "—")
+            : (full || "—");
+        }
       });
       if (!editMode) return;
       const thead = view.querySelector(".rt-table thead tr");
@@ -1667,6 +1684,16 @@ export default function home(app, { session: _session }) {
           td.classList.add("editable");
           td.setAttribute("contenteditable", "plaintext-only");
           td.setAttribute("data-edit-key", col.editKey);
+          // data-full pattern: expand the cell from its truncated
+          // display to the full source-of-truth value so the user
+          // edits the entire string, not the `.slice(0, N)`-truncated
+          // display. saveCellEdit will PATCH the edited full value
+          // back AND update data-full to match. Without this, editing
+          // a truncated description PATCHes the truncated string and
+          // silently loses the tail (CAS_A5A432F1A82A4A4DB0B62C0085C4428C).
+          if (td.dataset.full !== undefined) {
+            td.textContent = td.dataset.full;
+          }
         });
       });
     }
@@ -1685,6 +1712,13 @@ export default function home(app, { session: _session }) {
         // Successful — leave the new value in place. Refetch is optional;
         // skipping it preserves the user's edit-mode position + cursor.
         td.dataset.editOriginal = value;
+        // data-full pattern: keep the source-of-truth in sync so
+        // subsequent edits in the same session read the updated value,
+        // and so the exit-edit-mode re-truncate path snaps to the
+        // truncated form of the just-PATCHed value (not the stale one).
+        if (td.dataset.full !== undefined) {
+          td.dataset.full = value;
+        }
         // Record for undo. Any new edit invalidates the redo stack —
         // standard linear-history behavior.
         editHistory.push({ rid, key, oldValue: original, newValue: value });

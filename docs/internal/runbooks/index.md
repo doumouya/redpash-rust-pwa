@@ -118,6 +118,25 @@ Every entry follows the same five headings:
   stale-env-warm / stale-env-cold) against the live backend.
   Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
   needs a refresh path — lazy init + retry-once-on-401 is the floor.
+- [0010 — Cell-editor data-full pattern for truncated long-text columns](CAS_A5A432F1A82A4A4DB0B62C0085C4428C-cell-editor-data-full-pattern.md) —
+  **Resolved 2026-05-31** (CAS_A5A432F1A82A4A4DB0B62C0085C4428C).
+  Long-text columns on Home tabs (Cases `description` / `error_message`,
+  Projects `description`) render via `(value || "").slice(0, N)` and
+  put the truncated string directly into `td.textContent`. Flagging
+  any of them `editable: true` naively would let the cell-editor's
+  PATCH path write the *truncated* display string back to the backend —
+  silently overwriting the original 2,000-char description with its
+  own first 120 chars. Fix landed: row templates carry
+  `data-full="<source-of-truth>"` + `data-trunc="<N>"` on the TD;
+  `decorateEditMode` swaps `textContent` to `data-full` on edit-mode
+  ON and re-truncates from `data-full.slice(0, data-trunc)` on
+  edit-mode OFF; `saveCellEdit` keeps `data-full` in sync after a
+  successful PATCH. Discipline rule: any TD whose display value is
+  *derived* (truncated / formatted / computed) from the source-of-
+  truth MUST carry `data-full` before being flagged `editable: true`.
+  Net surface: Cases 1 → 3 editable cols, Projects 1 → 2, Home
+  total 5 → 8 across 5 tabs. Smoke-tested end-to-end (the case
+  documenting this very fix got live-edited via the new pattern).
 - [0009 — dev frontend edits don't show up (static assets ship no cache-control)](CAS_35090747FD78414D8CD060A73181A414-dev-static-assets-no-cache-control.md) —
   **Resolved 2026-05-31** (CAS_35090747FD78414D8CD060A73181A414). The `ServeDir` static fallback emitted
   `last-modified` but no `cache-control`, so browsers applied heuristic
