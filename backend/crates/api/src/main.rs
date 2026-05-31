@@ -23,6 +23,7 @@ mod rbac;
 // by the matrix + reserved for slice-3 enforcement.
 #[allow(dead_code)]
 mod field_perms;
+mod field_validate;
 mod redact;
 mod request_log;
 mod routes;

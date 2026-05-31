@@ -1,6 +1,6 @@
 ---
 title: backend/crates/api/src/type_registry.rs
-source: ../../../../backend/crates/api/src/type_registry.rs
+source: ../../../../../backend/crates/api/src/type_registry.rs
 owner: Torv
 section: Internal · Code · backend · api
 last modified date: 2026-05-31
