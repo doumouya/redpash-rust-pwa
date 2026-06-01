@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/demo.rs
 source: ../../../../../../backend/crates/api/src/routes/demo.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-30
+last modified date: 2026-06-01
 ---
 
 # demo.rs
@@ -20,10 +20,16 @@ body cap → 413 over-limit):
   registry's Avro meta-codec (CAS_75A0D1FD, Gemini Suite #2). Decodes an Avro
   payload against a supplied schema in memory, returns the decoded JSON — fires
   schemas+payloads straight at [codec_avro](../codec_avro.md), no Kafka needed.
+- `POST /api/demo/validate` — the field-validation adversarial surface (the
+  TypeDefinition §v2 two-tier validator, CAS_C7AEBE83). Runs
+  [validate_rules::validate_value](../validate_rules.md) on a single
+  field+value+rules+row and returns the `FieldOutcome`. The target for
+  `tools/wasm-bench/validate-calibration.py` + a Copilot/Gemini field-validation
+  challenge surface.
 
 ## Public surface
 
-- `pub fn routes` — the `/parse` + `/avro-decode` router with the 4 MiB cap.
+- `pub fn routes` — the `/parse` + `/avro-decode` + `/validate` router with the 4 MiB cap.
 - `POST /parse` — body = raw CSV bytes; 200 → `{rows, columns, score, score_raw,
   structure, type_mismatches, empty_pct, parse_ms}`; 400 on empty. `score` is the
   cleanness score AFTER the structure-suspicion penalty
@@ -35,6 +41,12 @@ body cap → 413 over-limit):
   (not `raw`/`confluent`) / invalid base64 / unparseable Avro schema
   (`codec_avro::validate_schema`); **422** = schema parses but bytes don't decode
   against it (`decode_failed`, a domain error not a 500); **413** = over 4 MiB.
+- `POST /validate` — body = JSON `{data_type, options?, field?, rules?, value,
+  row?}`; **200** with `{errors:[], warnings:[{field,detector,reason,weight}],
+  confidence}` when Tier-1 passes (warnings + confidence ride the 200 — the
+  parse-endpoint pattern); **400** with `{errors:[{field,rule_code,message}], …}`
+  on any Tier-1 violation. The handler always inserts `field → value` into `row`
+  so an `expression` rule sees the value under test.
 
 ## Drift-prone areas
 

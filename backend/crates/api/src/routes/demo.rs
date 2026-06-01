@@ -43,6 +43,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/parse", post(parse))
         .route("/avro-decode", post(avro_decode))
+        .route("/validate", post(validate_demo))
         // 4 MiB cap on the whole router → over-limit bodies become 413.
         .layer(DefaultBodyLimit::max(DEMO_MAX_BYTES))
 }
@@ -170,4 +171,57 @@ async fn parse(body: Bytes) -> Result<Json<DemoResult>, AppError> {
     .map_err(|e| AppError::internal("join", e.to_string()))??;
 
     Ok(Json(result))
+}
+
+// ── POST /api/demo/validate — the field-validation adversarial surface ──
+// The twin of `/parse`: the open target for `tools/wasm-bench/validate-calibration.py`
+// and a Copilot/Gemini field-validation challenge surface. Stateless, no auth,
+// nothing stored. Runs the §v2 two-tier pipeline (validate_rules::validate_value)
+// and returns the FieldOutcome — 400 when Tier-1 errors exist, else 200 with
+// Tier-2 warnings + confidence.
+
+/// Default field key when the caller doesn't name one.
+fn default_field() -> String {
+    "field".to_string()
+}
+
+#[derive(Deserialize)]
+struct ValidateBody {
+    /// The field's codec id (e.g. "int", "string", "decimal").
+    data_type: String,
+    /// Enum options (for the `enum` codec).
+    #[serde(default)]
+    options:   Vec<String>,
+    /// The field key (used in error/warning messages + as the row slot for
+    /// cross-field expressions).
+    #[serde(default = "default_field")]
+    field:     String,
+    /// The §v2 validate rules to apply.
+    #[serde(default)]
+    rules:     Vec<shared::type_def::ValidateRule>,
+    /// The proposed value under test.
+    value:     serde_json::Value,
+    /// Sibling field values for cross-field (`expression`) rules. The handler
+    /// always inserts `field -> value` so an expression sees the value under
+    /// test, even if the caller omits it here.
+    #[serde(default)]
+    row:       std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+async fn validate_demo(
+    Json(body): Json<ValidateBody>,
+) -> (StatusCode, Json<crate::validate_rules::FieldOutcome>) {
+    let mut row = body.row;
+    row.insert(body.field.clone(), body.value.clone());
+    let opts: Vec<&str> = body.options.iter().map(String::as_str).collect();
+    let outcome = crate::validate_rules::validate_value(
+        &body.data_type,
+        &opts,
+        &body.field,
+        &body.rules,
+        &body.value,
+        &row,
+    );
+    let status = if outcome.is_ok() { StatusCode::OK } else { StatusCode::BAD_REQUEST };
+    (status, Json(outcome))
 }
