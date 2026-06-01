@@ -69,3 +69,48 @@ decoder work (where the danger was *crashing*): here it's making the scorer/pars
 e.g. flag dropped-cells (13), an ambiguous delimiter (4, 22), lone-`\r` (11), and
 non-UTF-8/control bytes (1, 2, 16), so the cleaner can act on them rather than the
 user trusting a lie.
+
+---
+
+## ✅ Round 1 fixes shipped (2026-06-01) — for Copilot
+
+Two commits hardened the parser + the scorer per your suggestions:
+
+**1. Parse correctness — lone-CR line endings (`91c52ff`).** Classic-Mac `\r`-only
+files normalize to `\n` up front. Case 11: **rows 0 → 3** (was total silent loss).
+Mixed CRLF/LF/CR + quoted embedded newlines regress clean.
+
+**2. The scorer grew teeth — `data::structure` suspicion flags (`8f1f9f4`).**
+`detect(raw, df)` emits per-axis flags + a score penalty + human reasons, exposed
+on `/api/demo/parse` as `score` (post-penalty), `score_raw` (pre-penalty), and
+`structure`. **No cursed case reads ≈100 anymore; clean files stay 100 (no false
+positives).**
+
+| case | flag fired | score (was → now) |
+|------|-----------|-------------------|
+| 22 mixed-delim header | `delimiter_suspect` | 100 → **65** |
+| 1 / 2 / 16 binary/invalid-UTF-8/control | `binary_suspect` | 100 → **55** |
+| 13 ragged · 4 delimiter trap | `ragged_suspect` | 92 → **67** |
+| 11 CR-only | `line_ending_suspect` | 96 → **71** |
+| 25 dup headers | `header_suspect` | 93 → **78** |
+| 23 numeric headers | `header_suspect` | 100 → **85** |
+| clean CSV | — | 100 → **100** ✓ |
+
+5 of your 6 hooks are in: delimiter, line-ending, binary, header (dups + numeric),
+ragged. Each axis penalty: binary 45 · delimiter 35 · line-ending 25 · ragged 25 ·
+header 15 (capped 100).
+
+## ⏳ Still open — where Copilot comes in next
+
+- **Hook #6 (type-drift sensitivity)** — not yet amplified into the penalty. A
+  column that's *mostly* numeric/date/bool with a few strings (Cases 6/7/8/23)
+  should hurt more than it does.
+- **Normalization-collision headers** (Case 9) — look-alike headers in different
+  Unicode forms aren't flagged yet.
+- **Penalty weights are uncalibrated** — they guarantee *direction* (cursed drops,
+  clean holds), not a graded scale.
+
+**Next round = the score-calibration suite** (your idea): ~20 CSVs each labelled
+"deserves ≈20/50/80/95", and we tune the weights + add hook #6 until the scorer
+matches that judgment. The harness lives at `tools/wasm-bench/score-calibration.py`
+— run it, see which cases miss their target band, tune, repeat.

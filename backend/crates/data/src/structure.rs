@@ -34,11 +34,11 @@ impl StructureFlags {
     /// grade (that's the score-calibration follow-up).
     pub fn penalty(&self) -> f32 {
         let mut p: f32 = 0.0;
-        if self.binary_suspect      { p += 45.0; }
-        if self.delimiter_suspect   { p += 35.0; }
+        if self.binary_suspect      { p += 70.0; } // corrupt bytes → unusable
+        if self.delimiter_suspect   { p += 45.0; } // wrong shape
         if self.line_ending_suspect { p += 25.0; }
         if self.ragged_suspect      { p += 25.0; }
-        if self.header_suspect      { p += 15.0; }
+        if self.header_suspect      { p += 20.0; }
         p.min(100.0)
     }
 
@@ -99,10 +99,23 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
                 .copied()
                 .max_by_key(|&d| count_unquoted(header, d))
                 .unwrap_or(b',');
+            // A quoted field can span physical lines, so per-physical-line field
+            // counts are meaningless when one does — skip ragged detection then,
+            // or a clean multiline-quoted file false-flags as ragged.
+            let mut inq = false;
+            let mut multiline_quoted = false;
+            for l in &sample {
+                if l.bytes().filter(|&b| b == b'"').count() % 2 == 1 {
+                    inq = !inq;
+                }
+                if inq {
+                    multiline_quoted = true;
+                }
+            }
             let widths: Vec<usize> = sample.iter().map(|l| count_unquoted(l, dom) + 1).collect();
             let mn = widths.iter().copied().min().unwrap_or(0);
             let mx = widths.iter().copied().max().unwrap_or(0);
-            if mx > mn && (mx >= mn.saturating_mul(2) || mx - mn >= 3) {
+            if !multiline_quoted && mx > mn && (mx >= mn.saturating_mul(2) || mx - mn >= 3) {
                 f.ragged_suspect = true;
                 f.reasons.push(format!("ragged rows: field count ranges {mn}..{mx} (truncation/wrong delimiter)"));
             }

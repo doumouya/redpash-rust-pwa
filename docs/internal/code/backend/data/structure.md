@@ -26,10 +26,11 @@ reasons. Consumed today by `POST /api/demo/parse`
 - `pub struct StructureFlags` — five booleans (`line_ending_suspect`,
   `binary_suspect`, `delimiter_suspect`, `ragged_suspect`, `header_suspect`) +
   `reasons: Vec<String>`. `Serialize`d straight into the demo response.
-  - `penalty() -> f32` — 0..=100 to subtract from a clean score. Byte/shape lies
-    hurt most (45/35), endings + raggedness mid (25), header weirdness least (15);
-    capped at 100. Rough by design — the goal is "cursed never reads ≈100", not a
-    precise grade (the score-calibration suite is the follow-up).
+  - `penalty() -> f32` — 0..=100 to subtract from a clean score. Weights (tuned
+    against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt bytes →
+    unusable), delimiter 45 (wrong shape), line-ending 25, ragged 25, header 20;
+    capped at 100. Calibration is approximate — direction is guaranteed, the
+    graded scale is still being tuned (type-drift, hook #6, is the open axis).
   - `any() -> bool`.
 - `pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags` — the detector.
 
@@ -41,7 +42,9 @@ reasons. Consumed today by `POST /api/demo/parse`
 - **delimiter** — the header line carries ≥2 distinct delimiter candidates
   (`, ; \t |`), so the split is ambiguous (Case 22).
 - **ragged** — quote-aware field counts vary across sample rows (max ≥ 2× min, or
-  a spread ≥ 3) → truncation / wrong delimiter (Cases 4, 13).
+  a spread ≥ 3) → truncation / wrong delimiter (Cases 4, 13). **Skipped when a
+  quoted field spans physical lines** (tracked via cumulative quote balance) —
+  otherwise a clean multiline-quoted file false-flags as ragged.
 - **header** — duplicate header names (incl. Polars' `_duplicated_` rename) or
   all-numeric headers (a data row used as the header) (Cases 23, 25).
 
