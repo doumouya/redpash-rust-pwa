@@ -169,6 +169,11 @@ fn value_as_f64(v: &Value) -> Option<f64> {
 /// Fail (the codec gate should have caught it; defensive here).
 fn r_range(v: &Value, p: &Params, _: &Row) -> RuleCheck {
     let Some(n) = value_as_f64(v) else { return RuleCheck::Fail };
+    // NaN / ±Inf sit outside ANY finite range, and `NaN < x` / `NaN > x` are both
+    // false — so without this guard a "NaN" float slips every bound. Reject it.
+    if !n.is_finite() {
+        return RuleCheck::Fail;
+    }
     if let Some(min) = p.get("min").and_then(Value::as_f64) {
         if n < min {
             return RuleCheck::Fail;
@@ -244,9 +249,11 @@ fn r_decimal(v: &Value, p: &Params, _: &Row) -> RuleCheck {
             return RuleCheck::Malformed(format!("currency must be an ISO-4217 code (got \"{cur}\")"));
         }
     }
-    // scale: reject more fractional digits than declared (loss of precision).
+    // scale: reject more *significant* fractional digits than declared. Trailing
+    // zeros are cosmetic, not precision (`10.500` == `10.50` == scale 2), so
+    // strip them before counting — else a clean value false-rejects.
     if let Some(scale) = p.get("scale").and_then(Value::as_u64) {
-        let frac = s.split_once('.').map_or(0, |(_, f)| f.len());
+        let frac = s.split_once('.').map_or(0, |(_, f)| f.trim_end_matches('0').len());
         if frac as u64 > scale {
             return RuleCheck::Fail;
         }
@@ -312,14 +319,18 @@ pub fn validate_value(
         return out.finalize();
     }
 
-    // null clears — no value to constrain.
-    if value.is_null() {
-        return out.finalize();
-    }
-
     // ── Gate 1b — rules (collect-all) ──
+    // A JSON null CLEARS the field (nullability is `required`'s job), so the
+    // value-shape rules (range/length/pattern/decimal/enum_subset) are skipped
+    // on null. But `expression` rules are cross-field and null-AWARE (the spec's
+    // own `sold_at == null || …`), so they run even on null — a rule that
+    // evaluates false on a null value still rejects.
+    let is_null = value.is_null();
     let reg = registry();
     for rule in rules {
+        if is_null && rule.kind != "expression" {
+            continue;
+        }
         match reg.get(&rule.kind) {
             Some(r) => match (r.check)(value, &rule.params, row) {
                 RuleCheck::Pass => {}
@@ -347,10 +358,12 @@ pub fn validate_value(
     // can satisfy the contract and still smell wrong. This tier is what catches
     // UNKNOWN edge cases by general detectors (raw-vs-parsed, drift), not named
     // rules.
-    let ctx = DetectCtx { field_key, data_type, value };
-    for d in detectors() {
-        if let Some(s) = d.inspect(&ctx) {
-            out.warnings.push(s);
+    if !is_null {
+        let ctx = DetectCtx { field_key, data_type, value };
+        for d in detectors() {
+            if let Some(s) = d.inspect(&ctx) {
+                out.warnings.push(s);
+            }
         }
     }
     out.finalize()
@@ -387,14 +400,17 @@ impl FieldDetector for CoercionLoss {
         if ctx.data_type != "int" {
             return None;
         }
-        let raw = ctx.value.as_str()?.trim();
-        let n: i64 = raw.parse().ok()?; // only when it cleanly parses (codec passed)
+        let raw = ctx.value.as_str()?; // UNTRIMMED — surrounding whitespace is loss too
+        let n: i64 = raw.trim().parse().ok()?; // parse trims; only when it cleanly parses
+        // Compare the canonical int form to the RAW wire string (not the trimmed
+        // one): a difference means the store dropped a leading zero, a `+` sign,
+        // OR surrounding whitespace — all silent identity/format loss.
         if n.to_string() != raw {
             return Some(Suspicion {
                 field:    ctx.field_key.to_string(),
                 detector: "coercion_loss".to_string(),
                 reason:   format!(
-                    "raw \"{raw}\" stored as int {n} — leading zero / sign lost; use data_type \"string\" to preserve identity"
+                    "raw {raw:?} stored as int {n} — leading zero / sign / surrounding whitespace lost; use data_type \"string\" to preserve it"
                 ),
                 weight:   0.3,
             });
@@ -574,6 +590,43 @@ mod tests {
         assert!(out.is_ok());
         // ordinary text → no drift.
         assert!(validate_value("string", &[], "note", &[], &json!("hello world"), &no_row()).warnings.is_empty());
+    }
+
+    // ── redteam batch #1 (Gemini/Copilot 2026-06-01): the 4 real bugs found ──
+    #[test]
+    fn redteam_whitespace_coercion_warns() {
+        // " \n 42 \t" passes int but loses its whitespace on store → Tier-2 warn.
+        let out = validate_value("int", &[], "id", &[], &json!(" \n 42 \t"), &no_row());
+        assert!(out.is_ok());
+        assert!(out.warnings.iter().any(|w| w.detector == "coercion_loss"), "whitespace loss must warn");
+    }
+
+    #[test]
+    fn redteam_decimal_trailing_zeros_not_loss() {
+        // "10.500" is mathematically scale-2 (trailing zeros are cosmetic) → no false reject.
+        let r = vec![rule("decimal", json!({ "scale": 2 }), "scale2")];
+        assert!(validate_value("decimal", &[], "price", &r, &json!("10.500"), &no_row()).is_ok());
+        // "10.001" is genuinely scale-3 → still rejects.
+        assert!(!validate_value("decimal", &[], "price", &r, &json!("10.001"), &no_row()).is_ok());
+    }
+
+    #[test]
+    fn redteam_expression_runs_on_null() {
+        // a null value still evaluates a (null-aware) expression rule.
+        let r = vec![rule("expression", json!({ "expr": "val == 'null'" }), "is_null_str")];
+        // null == 'null' (string) → false → reject (the expression runs despite null).
+        let out = validate_value("string", &[], "val", &r, &Value::Null, &no_row());
+        assert_eq!(out.errors.iter().filter(|e| e.rule_code == "is_null_str").count(), 1);
+        // but a SHAPE rule (range) is still skipped on null.
+        let r2 = vec![rule("range", json!({ "min": 1 }), "min1")];
+        assert!(validate_value("int", &[], "x", &r2, &Value::Null, &no_row()).is_ok());
+    }
+
+    #[test]
+    fn redteam_nan_rejected_by_range() {
+        let r = vec![rule("range", json!({ "min": 0, "max": 100 }), "ratio")];
+        assert!(!validate_value("float", &[], "ratio", &r, &json!("NaN"), &no_row()).is_ok(),
+            "NaN must not slip a finite range");
     }
 
     #[test]
