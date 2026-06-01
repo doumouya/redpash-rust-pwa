@@ -991,7 +991,15 @@ export default function home(app, { session: _session }) {
           ? Math.round(f.file_size_bytes / 1024) + " KB"
           : "—";
         const clean = f.cleanness_pct != null ? Math.round(f.cleanness_pct) + "%" : "—";
-        return '<tr data-rid="' + esc(f.redpash_id || "") + '">'
+        // Rows are clickable — navigate to the Workspace with the
+        // file's project + file rid as deep-link params so workspace
+        // opens directly on this file. workspace's loadFile handles
+        // CHT_ (chart), dashboard, and FIL_ (data) rid prefixes.
+        // Matches the Charts + Projects tabs' clickable-row pattern.
+        return '<tr class="rp-home-row--clickable"'
+          + ' data-rid="' + esc(f.redpash_id || "") + '"'
+          + ' data-href="#/workspace?project=' + encodeURIComponent(f.project_redpash_id || "")
+          + '&file=' + encodeURIComponent(f.redpash_id || "") + '">'
           + '<td>' + esc(f.display_name || f.filename) + '</td>'
           + '<td>' + esc(f.project_name) + '</td>'
           + '<td><span class="rt-mono-pill">' + esc(f.file_type) + '</span></td>'
