@@ -21,7 +21,12 @@ Slice 4 of the db/mod.rs decomposition. Holds:
 - `pub fn ensure_default_project` — function
 - `pub fn find_project_by_name` — function
 - `pub fn ensure_named_project` — function
-- `pub fn list_projects` — function
+- `pub fn list_projects(pool, caller)` — **reach-aware** (CAS_3B0DAD92): returns
+  projects the caller reaches via platform-admin (`users.role='admin'`), direct
+  membership (any role), OR company owner/admin cascade — mirroring
+  `rbac::require_view`. (Was strict direct-ownership; a cascade-reachable project
+  showed in Home/Files via `/admin/files` but vanished from Workspace's
+  `/api/projects` list.) The `om` join still resolves the OWNER for display.
 - `pub fn get_project` — function
 - `pub fn update_project_meta` — function
 

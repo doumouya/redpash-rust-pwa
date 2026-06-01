@@ -199,13 +199,32 @@ fn row_to_project(r: &sqlx::postgres::PgRow) -> ProjectSummary {
     }
 }
 
-pub async fn list_projects(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<ProjectSummary>> {
+pub async fn list_projects(pool: &PgPool, caller: &str) -> sqlx::Result<Vec<ProjectSummary>> {
+    // Reach-aware (CAS_3B0DAD92): the old `WHERE om.member_redpash_id = $1` was
+    // strict direct-OWNERSHIP — a company owner / platform admin / direct member
+    // saw only projects they personally owned, so a Kafka file in a
+    // cascade-reachable project showed in Home/Files (admin endpoint) but
+    // vanished from Workspace (this list). Mirror `rbac::require_view`'s reach:
+    //   • platform admin (`users.role='admin'`) → all projects;
+    //   • direct membership on the project (any role) → that project;
+    //   • company owner/admin cascade → all projects in that company.
+    // `om` still resolves the OWNER for display regardless of who's viewing.
     let rows = sqlx::query(
-        // `om` (owner membership) + `is_default` (alias) come from PROJECT_SELECT.
-        &format!("{PROJECT_SELECT} WHERE om.member_redpash_id = $1
-                  ORDER BY is_default DESC, p.created_at ASC"),
+        &format!(
+            "{PROJECT_SELECT}
+             WHERE EXISTS (SELECT 1 FROM users au
+                           WHERE au.redpash_id = $1 AND au.role = 'admin')
+                OR EXISTS (SELECT 1 FROM memberships pm
+                           WHERE pm.object_redpash_id = p.redpash_id
+                             AND pm.member_redpash_id = $1)
+                OR EXISTS (SELECT 1 FROM memberships cm
+                           WHERE cm.object_redpash_id = p.company_id
+                             AND cm.member_redpash_id = $1
+                             AND cm.role IN ('owner', 'admin'))
+             ORDER BY is_default DESC, p.created_at ASC"
+        ),
     )
-    .bind(owner)
+    .bind(caller)
     .fetch_all(pool)
     .await?;
     Ok(rows.iter().map(row_to_project).collect())

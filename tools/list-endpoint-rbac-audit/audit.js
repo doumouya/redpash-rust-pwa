@@ -276,6 +276,12 @@ function classify(fn, constants) {
   if (/principals?\s*:/.test(params))           hints.push('principals param');
   if (/viewer\s*:\s*Option<&\[String\]>/.test(params)) hints.push('viewer: Option<&[String]>');
   if (/\bprincipals\(/.test(fn.body))           hints.push('principals(');
+  // Inline-SQL reach (CAS_3B0DAD92 fix shape): a platform-admin bypass and/or a
+  // company-cascade in the access WHERE are reach-aware too — and they keep this
+  // from FALSE-flagging a query whose owner-DISPLAY join uses `role = 'owner'`
+  // (e.g. projects.rs PROJECT_SELECT) as strict-owner.
+  if (/role\s*=\s*'admin'/.test(sql))           hints.push("platform-admin bypass (role='admin')");
+  if (/object_redpash_id\s*=\s*\w+\.company_id/.test(sql)) hints.push('company cascade (object = company_id)');
   if (hints.length) {
     return { class: CLASS.REACH_AWARE, hints: hints };
   }

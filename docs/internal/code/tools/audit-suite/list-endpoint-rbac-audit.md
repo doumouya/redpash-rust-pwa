@@ -34,7 +34,7 @@ suites: build the detector so one finding becomes N.
 
 | Class | Health | Meaning | Exemplar |
 |-------|--------|---------|----------|
-| `reach-aware` | green | uses `principals()`, `= ANY($1)`, `GRANT_SQL`, `resolve_grant`, `require_view`, or accepts a `viewer: Option<&[String]>`. **CORRECT.** | `db::list_cases` |
+| `reach-aware` | green | uses `principals()`, `= ANY($1)`, `GRANT_SQL`, `resolve_grant`, `require_view`, a `viewer: Option<&[String]>` param, **OR an inline platform-admin bypass (`role='admin'`) / company cascade (`object_redpash_id = …company_id`)** — the last two added 2026-06-01 so a reach-aware inline-SQL fix (CAS_3B0DAD92 `list_projects`) isn't mis-flagged strict-owner by its owner-*display* join's `role='owner'`. **CORRECT.** | `db::list_cases` |
 | `scope-filtered` | yellow | filters by a parent-scope rid (project_redpash_id, file_redpash_id, case_id, object_redpash_id, company_id). The route must `require_view(scope)` before calling — v2 cross-ref will verify. | `db::list_files_in_project` |
 | `caller-blind` | yellow | no `$n` bind site at all. Acceptable for admin endpoints + public taxonomies IF the route gates. | `db::list_users` |
 | `ambiguous` | yellow | `member_redpash_id = $n` without `role='owner'` pin, OR no matched pattern at all. Needs a human read. | `db::list_companies` (intentional: surfaces non-member companies) |
