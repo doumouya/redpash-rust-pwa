@@ -79,6 +79,18 @@ gates do NOT consult it yet** (wired in step 2), so enforcement is unchanged.
 - `pub async fn load_contract(pool, company_id) -> Option<Contract>` — the active
   (max-version) contract, or `None` = unconfigured → evaluator stays tier-only
   (non-breaking).
+- `pub enum Action { View, Create, Edit, Delete }` — `crud()` (→ r/c/u/d, the
+  grant alphabet) + `min_tier()` (the vertical floor: View→Viewer, Create/Edit→
+  Member, Delete→Admin).
+- `pub fn object_kind(rid) -> &str` — rid prefix → canonical object TYPE
+  (`CAS_`→`case`, `USR_`→`user`, …; unknown → `"unknown"`, default-denied).
+- `pub async fn require_action(state, caller, object, Action)` — **the
+  contract-aware gate (epic step 2)**: platform-admin bypass, else tier
+  (`resolve_grant`) **∩** the company's contract (`object_kind` × `Action.crud`)
+  via the private pure `evaluate(grant, contract, principals, caller, type,
+  action)`. 404-on-deny. Non-breaking (tier-only when no contract). The target
+  single gate the rollout converges every endpoint onto — **not yet wired to any
+  endpoint** (storage + evaluator land before the cutover).
 
 ## Drift-prone areas
 

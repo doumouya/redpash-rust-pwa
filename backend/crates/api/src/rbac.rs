@@ -341,34 +341,148 @@ pub async fn load_contract(pool: &PgPool, company_id: &str) -> sqlx::Result<Opti
     Ok(row.map(|j| j.0))
 }
 
+// ─── contract-aware evaluator (epic step 2) ────────────────────────────────
+// The single gate, now reading both axes: the TIER (vertical, via resolve_grant)
+// AND the contract's per-(team, object-TYPE) grant (horizontal). Non-breaking:
+// a company with no registered contract evaluates tier-only (today's behaviour).
+
+/// The action being attempted, mapped to its CRUD letter (the contract's grant
+/// alphabet) and its framework-default minimum tier (the vertical axis). The
+/// contract's object-type grant is the *additional* horizontal gate on top.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action { View, Create, Edit, Delete }
+
+impl Action {
+    pub fn crud(self) -> &'static str {
+        match self { Action::View => "r", Action::Create => "c", Action::Edit => "u", Action::Delete => "d" }
+    }
+    /// Default minimum tier for the action. (Per-company contracts tighten the
+    /// horizontal axis; this is the universal vertical floor.)
+    pub fn min_tier(self) -> Role {
+        match self {
+            Action::View                 => Role::Viewer,
+            Action::Create | Action::Edit => Role::Member,
+            Action::Delete               => Role::Admin,
+        }
+    }
+}
+
+/// Canonical object TYPE from a redpash_id prefix (the contract's grant keys use
+/// these). PK-anchored — never a name. Unknown prefix → `"unknown"` (fails the
+/// grant check, so a new type is default-denied until the contract grants it).
+pub fn object_kind(rid: &str) -> &'static str {
+    match rid.split('_').next().unwrap_or("") {
+        "CAS"  => "case",
+        "PRJ"  => "project",
+        "FIL"  => "file",
+        "CHT"  => "chart",
+        "DSH"  => "dashboard",
+        "USR"  => "user",
+        "CMP"  => "company",
+        "TEAM" => "team",
+        _      => "unknown",
+    }
+}
+
+/// The object's company (to load that company's contract) — itself if it IS a
+/// company, else the cascade scope (case/project/file → company).
+async fn company_of(pool: &PgPool, object: &str) -> sqlx::Result<Option<String>> {
+    if object_kind(object) == "company" {
+        return Ok(Some(object.to_string()));
+    }
+    sqlx::query_scalar(
+        "SELECT company_id FROM cases    WHERE redpash_id = $1
+         UNION SELECT company_id FROM projects WHERE redpash_id = $1
+         UNION SELECT p.company_id FROM project_files f
+               JOIN projects p ON p.redpash_id = f.project_redpash_id
+               WHERE f.redpash_id = $1
+         LIMIT 1",
+    )
+    .bind(object)
+    .fetch_optional(pool)
+    .await
+}
+
+/// PURE decision: combine the resolved `tier` (vertical) with the company's
+/// `contract` (horizontal) for `action` on `object_type`. Platform-admin bypass
+/// is the caller's job. INVARIANT: `contract == None` → tier-only (non-breaking);
+/// `company_owner` → full subtree; `company_admin` is NOT auto-content (fail-closed —
+/// it gets only what `grants` give it, org-management lives on the management routes).
+fn evaluate(
+    grant:       Grant,
+    contract:    Option<&Contract>,
+    principals:  &[String],
+    caller:      &str,
+    object_type: &str,
+    action:      Action,
+) -> bool {
+    let tier_ok = grant.effective().map_or(false, |r| r >= action.min_tier());
+    match contract {
+        None                                    => tier_ok,                 // unconfigured
+        Some(c) if c.is_company_owner(caller)   => true,                     // root of this company
+        Some(c)                                 => tier_ok && c.allows(principals, object_type, action.crud()),
+    }
+}
+
+/// Contract-aware gate: `is_platform_admin` bypasses (RedPash root); else the
+/// tier (resolve_grant) ∩ the company's contract decide. 404-on-deny (leak-free,
+/// same contract as `require_grant`). Non-breaking until a company registers a
+/// contract. The target single gate the epic converges every endpoint onto.
+pub async fn require_action(
+    state:  &AppState,
+    caller: &str,
+    object: &str,
+    action: Action,
+) -> Result<(), AppError> {
+    if is_platform_admin(state, caller).await? {
+        return Ok(());
+    }
+    let object_type = object_kind(object);
+    let grant   = resolve_grant(&state.db, caller, object).await?;
+    let company = company_of(&state.db, object).await?;
+    let contract = match &company {
+        Some(c) => load_contract(&state.db, c).await?,
+        None    => None,
+    };
+    // principals (the recursive team closure) only needed when a contract exists.
+    let princ = if contract.is_some() { principals(&state.db, caller).await? } else { Vec::new() };
+    if evaluate(grant, contract.as_ref(), &princ, caller, object_type, action) {
+        Ok(())
+    } else {
+        Err(AppError::not_found("not_found", format!("{object_type} {object}")))
+    }
+}
+
 #[cfg(test)]
 mod contract_tests {
     use super::*;
 
+    // Contract object-TYPE keys are the canonical lowercase types `object_kind`
+    // produces ("case"/"user"/…), never display names.
     #[test]
     fn deserializes_the_sketch_and_enforces_object_type_grants() {
         let json = r#"{
           "company":"CMP_x","owner":"USR_o","admins":["USR_a"],
           "labels":{"Manager":"owner"},
-          "grants":{"TEAM_eng":{"Case":["c","r","u","d"],"Monitoring":["r"]},
-                    "TEAM_hr":{"User":["c","r","u","d"],"Payslip":["r"],"Case":["c"]}}
+          "grants":{"TEAM_eng":{"case":["c","r","u","d"],"monitoring":["r"]},
+                    "TEAM_hr":{"user":["c","r","u","d"],"payslip":["r"],"case":["c"]}}
         }"#;
         let c: Contract = serde_json::from_str(json).unwrap();
         assert!(c.is_company_owner("USR_o"));
         assert!(c.is_company_admin("USR_a"));
-        // Engineering owns Cases + Monitoring, NOT Users
-        assert!( c.allows(&["TEAM_eng".into()], "Case", "u"));
-        assert!(!c.allows(&["TEAM_eng".into()], "User", "u"));
-        assert!( c.allows(&["TEAM_eng".into()], "Monitoring", "r"));
-        assert!(!c.allows(&["TEAM_eng".into()], "Monitoring", "u"));
-        // HR owns Users + payslips; only CREATE on Cases
-        assert!( c.allows(&["TEAM_hr".into()], "User", "d"));
-        assert!( c.allows(&["TEAM_hr".into()], "Case", "c"));
-        assert!(!c.allows(&["TEAM_hr".into()], "Case", "u"));
+        // Engineering owns cases + monitoring, NOT users
+        assert!( c.allows(&["TEAM_eng".into()], "case", "u"));
+        assert!(!c.allows(&["TEAM_eng".into()], "user", "u"));
+        assert!( c.allows(&["TEAM_eng".into()], "monitoring", "r"));
+        assert!(!c.allows(&["TEAM_eng".into()], "monitoring", "u"));
+        // HR owns users + payslips; only CREATE on cases
+        assert!( c.allows(&["TEAM_hr".into()], "user", "d"));
+        assert!( c.allows(&["TEAM_hr".into()], "case", "c"));
+        assert!(!c.allows(&["TEAM_hr".into()], "case", "u"));
         // multi-team membership = union of grants
-        assert!( c.allows(&["TEAM_eng".into(), "TEAM_hr".into()], "User", "u"));
+        assert!( c.allows(&["TEAM_eng".into(), "TEAM_hr".into()], "user", "u"));
         // a non-team principal (the user themselves) grants nothing
-        assert!(!c.allows(&["USR_o".into()], "Case", "u"));
+        assert!(!c.allows(&["USR_o".into()], "case", "u"));
     }
 
     #[test]
@@ -376,6 +490,45 @@ mod contract_tests {
         let c = Contract::default_for("CMP_x", "USR_o");
         assert!(c.is_company_owner("USR_o"));
         assert!(c.grants.is_empty());
-        assert!(!c.allows(&["TEAM_eng".into()], "Case", "r"));
+        assert!(!c.allows(&["TEAM_eng".into()], "case", "r"));
+    }
+
+    #[test]
+    fn object_kind_maps_rid_prefixes() {
+        assert_eq!(object_kind("CAS_x"), "case");
+        assert_eq!(object_kind("USR_x"), "user");
+        assert_eq!(object_kind("TEAM_x"), "team");
+        assert_eq!(object_kind("FIL_x"), "file");
+        assert_eq!(object_kind("ZZZ_x"), "unknown");
+    }
+
+    #[test]
+    fn action_crud_and_min_tier() {
+        assert_eq!(Action::View.crud(), "r");
+        assert_eq!(Action::Edit.crud(), "u");
+        assert_eq!(Action::View.min_tier(), Role::Viewer);
+        assert_eq!(Action::Delete.min_tier(), Role::Admin);
+    }
+
+    #[test]
+    fn evaluate_combines_tier_and_contract() {
+        let member = Grant { direct: Some(Role::Member), scope: None };
+        let viewer = Grant { direct: Some(Role::Viewer), scope: None };
+        let none   = Grant { direct: None, scope: None };
+
+        // No contract → tier-only (today's behaviour, non-breaking).
+        assert!( evaluate(member, None, &[], "USR_u", "case", Action::Edit));
+        assert!(!evaluate(viewer, None, &[], "USR_u", "case", Action::Edit)); // viewer < member-min
+        assert!(!evaluate(none,   None, &[], "USR_u", "case", Action::View));
+
+        // With a contract: Eng owns case, not user.
+        let c: Contract = serde_json::from_str(
+            r#"{"owner":"USR_o","grants":{"TEAM_eng":{"case":["c","r","u","d"]}}}"#).unwrap();
+        let eng = vec!["USR_u".to_string(), "TEAM_eng".to_string()];
+        assert!( evaluate(member, Some(&c), &eng, "USR_u", "case", Action::Edit));   // granted + tier ok
+        assert!(!evaluate(member, Some(&c), &eng, "USR_u", "user", Action::Edit));   // no user grant → deny
+        assert!(!evaluate(viewer, Some(&c), &eng, "USR_u", "case", Action::Delete)); // tier too low for delete
+        // company_owner bypasses the horizontal axis on its whole subtree.
+        assert!( evaluate(none,   Some(&c), &[],  "USR_o", "user", Action::Delete));
     }
 }
