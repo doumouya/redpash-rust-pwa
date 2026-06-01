@@ -58,9 +58,16 @@ not a redesign.
 - `length { min?, max? }` — Unicode char count of the string form.
 - `enum_subset { values: [..] }` — value ∈ values (narrows an already-typed
   field per vertical).
+- `expression { expr }` — cross-field boolean DSL ([validate_expr](validate_expr.md)).
+- `decimal { scale?, currency? }` — the money contract (reborn `CAS_AE8F3F2D` as
+  an OPEN param, not a fixed type). Enforces **scale**: more fractional digits
+  than `scale` is a hard Fail (XOF `scale:0` rejects `1.5`; USD `scale:2` rejects
+  `1.999`) — loss-of-precision rejected, never silently truncated. `currency` is
+  an opaque ISO-4217 string (3 uppercase letters — never an enum, so any currency
+  works); it rides for FE formatting + messages. Reuses
+  `codec_registry::is_decimal_str` for the shape check.
 
-Registered later: `expression` (phase 3, [validate_expr](validate_expr.md)),
-`decimal` (phase 4, scale/currency). **`pattern` is deferred** pending sign-off
+**`pattern` is deferred** pending sign-off
 to promote `regex` to a direct dep of `api` (it's already in the build tree
 transitively; its guaranteed-linear matching is *safer* than a hand-rolled
 backtracker, so it's the recommended path — but it's a dep decision).

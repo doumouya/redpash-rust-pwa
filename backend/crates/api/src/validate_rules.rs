@@ -152,8 +152,8 @@ fn builtin_rules() -> Vec<Rule> {
         Rule { kind: "length",      check: r_length },
         Rule { kind: "enum_subset", check: r_enum_subset },
         Rule { kind: "expression",  check: crate::validate_expr::r_expression },
+        Rule { kind: "decimal",     check: r_decimal },
         // "pattern"     — pending the regex direct-dep sign-off (regex is in-tree).
-        // "decimal"     — registered in phase 4 (scale/currency).
     ]
 }
 
@@ -218,6 +218,40 @@ fn r_enum_subset(v: &Value, p: &Params, _: &Row) -> RuleCheck {
         }
         None => RuleCheck::Malformed("enum_subset rule needs params.values: [..]".into()),
     }
+}
+
+/// `decimal { scale?, currency? }` — the money contract (reborn `CAS_AE8F3F2D`,
+/// as an OPEN rule param, never a fixed type). Enforces **scale**: a value with
+/// more fractional digits than `scale` is a hard Fail (XOF `scale:0` rejects
+/// `1.5`; USD `scale:2` rejects `1.999`) — loss-of-precision is rejected, never
+/// silently truncated (the codec_avro "prevent, don't recover" lesson, applied
+/// to money). `currency` is an opaque ISO-4217 string (3 uppercase letters) —
+/// never a Rust enum, so XOF / JPY / BHD all work without a source change; it
+/// rides for FE formatting + messages. With no `scale`, the rule is pure shape.
+fn r_decimal(v: &Value, p: &Params, _: &Row) -> RuleCheck {
+    let s = match v {
+        Value::String(s) => s.trim().to_string(),
+        Value::Number(n) => n.to_string(),
+        _ => return RuleCheck::Fail,
+    };
+    if !crate::codec_registry::is_decimal_str(&s) {
+        return RuleCheck::Fail;
+    }
+    // currency: opaque shape check only (3 ASCII uppercase letters) when present.
+    if let Some(cur) = p.get("currency").and_then(Value::as_str) {
+        let ok = cur.len() == 3 && cur.bytes().all(|b| b.is_ascii_uppercase());
+        if !ok {
+            return RuleCheck::Malformed(format!("currency must be an ISO-4217 code (got \"{cur}\")"));
+        }
+    }
+    // scale: reject more fractional digits than declared (loss of precision).
+    if let Some(scale) = p.get("scale").and_then(Value::as_u64) {
+        let frac = s.split_once('.').map_or(0, |(_, f)| f.len());
+        if frac as u64 > scale {
+            return RuleCheck::Fail;
+        }
+    }
+    RuleCheck::Pass
 }
 
 // ── the pipeline ──────────────────────────────────────────────────────────────
@@ -372,6 +406,26 @@ mod tests {
         let r = vec![rule("teleport", json!({}), "whatever")];
         let out = validate_value("string", &[], "x", &r, &json!("hi"), &no_row());
         assert_eq!(out.errors[0].rule_code, "unknown_rule");
+    }
+
+    #[test]
+    fn decimal_scale_rejects_loss_of_precision() {
+        // USD scale 2: 10.00 ok, 10.001 rejected.
+        let usd = vec![rule("decimal", json!({ "scale": 2, "currency": "USD" }), "bad_money")];
+        assert!(validate_value("decimal", &[], "balance", &usd, &json!("10.00"), &no_row()).is_ok());
+        assert!(validate_value("decimal", &[], "balance", &usd, &json!("10"), &no_row()).is_ok());
+        assert!(!validate_value("decimal", &[], "balance", &usd, &json!("10.001"), &no_row()).is_ok());
+        // XOF scale 0 (CFA franc, no subunit): 1.5 rejected, 2 ok.
+        let xof = vec![rule("decimal", json!({ "scale": 0, "currency": "XOF" }), "bad_money")];
+        assert!(!validate_value("decimal", &[], "balance", &xof, &json!("1.5"), &no_row()).is_ok());
+        assert!(validate_value("decimal", &[], "balance", &xof, &json!("2"), &no_row()).is_ok());
+    }
+
+    #[test]
+    fn decimal_currency_must_be_iso4217_shaped() {
+        let bad = vec![rule("decimal", json!({ "scale": 2, "currency": "dollars" }), "x")];
+        let out = validate_value("decimal", &[], "balance", &bad, &json!("1.00"), &no_row());
+        assert_eq!(out.errors[0].rule_code, "invalid_rule");
     }
 
     #[test]

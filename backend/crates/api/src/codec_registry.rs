@@ -119,7 +119,10 @@ fn c_avro(v: &Value, _: &[&str]) -> Result<(), FieldError> {
     }
 }
 
-fn is_decimal_str(s: &str) -> bool {
+/// Shape-check a wire decimal string (`[+-]?digits[.digits]`). `pub(crate)` so
+/// the `decimal` ValidateRule (scale enforcement) reuses it instead of a second
+/// copy.
+pub(crate) fn is_decimal_str(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
