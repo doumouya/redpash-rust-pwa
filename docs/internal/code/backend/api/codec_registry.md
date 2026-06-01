@@ -51,8 +51,10 @@ referential layer (`validate_ref`).
 
 - **Concrete vs meta.** Builtin codecs validate from the id alone (pure, sync,
   no DB). Meta-codecs (`is_meta: true`) decode a wire payload against an external
-  schema — their parse/serialize + the avro codec land in the avro slice; keep
-  the `is_meta` split honest.
+  schema. `avro` is registered (is_meta) — its `validate` runs POST-decode (a
+  decoded record is an object); the bytes→Value decode lives in
+  [codec_avro.rs](codec_avro.md). Keep the `is_meta` split honest: a meta-codec's
+  decode is a sibling concern, not the registry's `validate` fn.
 - **`rid` is shape-only here.** `c_rid` checks "is a string"; cross-type
   existence is `validate_ref` (async, DB) — don't fold existence into the codec.
 - **String-or-native acceptance.** numeric/bool codecs accept a JSON number/bool

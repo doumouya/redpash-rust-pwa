@@ -48,6 +48,7 @@ uuid               = { workspace = true }
 polars             = { workspace = true }
 encoding_rs        = { workspace = true }
 pulldown-cmark     = { workspace = true }
+apache-avro        = "0.21"   # avro meta-codec decode (codec_registry, Rust-central per js-rust-boundary)
 
 dotenvy            = { workspace = true }
 tracing            = { workspace = true }

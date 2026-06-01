@@ -107,6 +107,18 @@ fn c_decimal(v: &Value, _: &[&str]) -> Result<(), FieldError> {
     }
 }
 
+// `avro` is a META-codec: its bytes→Value decode lives in
+// [codec_avro](crate::codec_avro) (schema resolved from the connector's saved
+// contract). The registry's `validate` runs POST-decode — a decoded Avro record
+// is a JSON object.
+fn c_avro(v: &Value, _: &[&str]) -> Result<(), FieldError> {
+    if v.is_object() {
+        Ok(())
+    } else {
+        Err(bad("expected a decoded avro record (object)"))
+    }
+}
+
 fn is_decimal_str(s: &str) -> bool {
     if s.is_empty() {
         return false;
@@ -203,6 +215,8 @@ fn builtin_codecs() -> Vec<Codec> {
         Codec { id: "json",     validate: c_json,     is_meta: false },
         Codec { id: "rid",      validate: c_rid,      is_meta: false },
         Codec { id: "decimal",  validate: c_decimal,  is_meta: false },
+        // meta-codec: decode in codec_avro; validate runs post-decode.
+        Codec { id: "avro",     validate: c_avro,     is_meta: true  },
     ]
 }
 
