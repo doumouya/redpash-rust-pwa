@@ -1516,9 +1516,13 @@ export default function workspace(app, { session }) {
 
   // clientRender: sort the buffer via the wasm engine (stacked single-
   // column sorts, least-significant key first — the wrapper sorts one
-  // column at a time; multi-key relies on a stable sort), slice the page,
-  // render. No server round-trip. Engine failure falls back to buffer
-  // order so a sort gesture never blanks the grid.
+  // column at a time; multi-key relies on a stable sort), then render the
+  // WHOLE buffer through the row-virtualizer. No server round-trip, and —
+  // crucially — NO pagination: the buffer holds the entire file (≤ cap),
+  // and createVirtualRows windows the DOM (~40 <tr>, not N), so the user
+  // scrolls the full file smoothly, "everything loaded" (Em's Ubuntu-22
+  // snappiness; the 25-row page window was the regression). Engine failure
+  // falls back to buffer order so a sort gesture never blanks the grid.
   async function clientRender() {
     if (!clientBuffer) return;
     const { cells, idxs, typed } = clientBuffer;
@@ -1536,17 +1540,13 @@ export default function workspace(app, { session }) {
       } catch (_err) { /* keep buffer order — never blank the grid on a sort */ }
     }
     const total = order.length;
-    totalPages = Math.max(1, Math.ceil(total / pageSize));
-    if (currentPage > totalPages) currentPage = totalPages;
-    const start = (currentPage - 1) * pageSize;
-    const pageOrder = order.slice(start, start + pageSize);
-    rowIndices = pageOrder.map((p) => idxs[p]);
-    renderTable(activeColumns, pageOrder.map((p) => cells[p]));
+    // Render every row — the virtualizer windows it. No page slice.
+    currentPage = 1; totalPages = 1;
+    rowIndices = order.map((p) => idxs[p]);
+    renderTable(activeColumns, order.map((p) => cells[p]));
     syncSortHeaders();
-    const from = total === 0 ? 0 : start + 1;
-    const to   = start + pageOrder.length;
-    rowsInfo.textContent = (total === 0 ? "0 rows" : from + "–" + to + " of " + total + " rows")
-      + " · wasm" + (clientBuffer.ms != null ? " · " + clientBuffer.ms + " ms load" : "");
+    rowsInfo.textContent = (total === 0 ? "0 rows" : total.toLocaleString() + " rows (all loaded)")
+      + " · wasm" + (clientBuffer.ms != null ? " · " + clientBuffer.ms + " ms" : "");
     renderPager();
     setTableState(null);
   }
