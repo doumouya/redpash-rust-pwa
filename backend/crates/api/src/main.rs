@@ -30,6 +30,7 @@ mod field_validate;
 mod kafka_loader;
 mod pipeline;
 mod redact;
+mod validate_expr;
 mod validate_rules;
 mod request_log;
 mod routes;

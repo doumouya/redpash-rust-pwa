@@ -151,8 +151,8 @@ fn builtin_rules() -> Vec<Rule> {
         Rule { kind: "range",       check: r_range },
         Rule { kind: "length",      check: r_length },
         Rule { kind: "enum_subset", check: r_enum_subset },
+        Rule { kind: "expression",  check: crate::validate_expr::r_expression },
         // "pattern"     — pending the regex direct-dep sign-off (regex is in-tree).
-        // "expression"  — registered in phase 3 (validate_expr.rs).
         // "decimal"     — registered in phase 4 (scale/currency).
     ]
 }
