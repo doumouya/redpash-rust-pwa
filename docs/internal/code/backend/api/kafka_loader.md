@@ -79,7 +79,16 @@ Private: `consume_raw` (rskafka SASL_SSL fetch from one partition).
   `KAFKA_START_OFFSET`. Resume-across-runs (persisted checkpoint) + multi-partition
   + consumer-group rebalancing are deferred (rskafka's simple consume fits v1;
   revisit at streaming scale).
+- **TLS is mandatory + fail-closed.** SASL PLAIN sends credentials in cleartext,
+  so the client MUST ride TLS (Confluent Cloud = SASL_SSL). `consume_raw` builds a
+  rustls `ClientConfig` (ring provider, webpki-roots CA store) and passes it via
+  `.tls_config(...)` BEFORE `.sasl_config(...)`; there is **no plaintext fallback**
+  — if TLS setup fails the run errors out rather than leaking creds. Needs
+  rskafka's `transport-tls` feature + a `rustls 0.23` dep mirroring rskafka's
+  (default-features off, `ring`). (Flagged by the commit security review — the
+  first cut omitted TLS.)
 - **rskafka 0.6 API**: `SaslConfig::Plain(Credentials::new(...))`,
+  `tls_config(Arc<rustls::ClientConfig>)` (transport-tls feature),
   `fetch_records(offset, bytes_range, max_wait_ms) -> (Vec<RecordAndOffset>, hwm)`,
   `record.value: Option<Vec<u8>>`. Pin checks here if the crate bumps.
 - **Mode-of-main**, not a bin — because the loader needs `codec_avro`/`db`. If a

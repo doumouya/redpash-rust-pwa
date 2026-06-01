@@ -152,8 +152,24 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
     use rskafka::client::{
         partition::UnknownTopicHandling, ClientBuilder, Credentials, SaslConfig,
     };
+    use std::sync::Arc;
+
+    // TLS is MANDATORY here: SASL PLAIN sends the credentials in cleartext, so it
+    // must ride TLS (Confluent Cloud = SASL_SSL). Fail-closed — there is NO
+    // plaintext fallback; if the TLS config can't be built, the run errors out
+    // rather than leaking creds over the wire.
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .context("tls protocol versions")?
+    .with_root_certificates(roots)
+    .with_no_client_auth();
 
     let client = ClientBuilder::new(vec![cfg.bootstrap.clone()])
+        .tls_config(Arc::new(tls))
         .sasl_config(SaslConfig::Plain(Credentials::new(
             cfg.sasl_user.clone(),
             cfg.sasl_password.clone(),

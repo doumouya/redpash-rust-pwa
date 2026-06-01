@@ -49,7 +49,9 @@ polars             = { workspace = true }
 encoding_rs        = { workspace = true }
 pulldown-cmark     = { workspace = true }
 apache-avro        = "0.21"   # avro meta-codec decode (codec_registry, Rust-central per js-rust-boundary)
-rskafka            = "0.6"    # pure-Rust Kafka consumer for the loader (no native deps; Confluent SASL_SSL)
+rskafka            = { version = "0.6", features = ["transport-tls"] }  # pure-Rust Kafka consumer (Confluent SASL_SSL)
+rustls             = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }  # TLS for SASL_SSL (mirror rskafka's rustls)
+webpki-roots       = "1"      # CA roots for the Kafka TLS config
 
 dotenvy            = { workspace = true }
 tracing            = { workspace = true }
