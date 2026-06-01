@@ -10,18 +10,24 @@ last modified date: 2026-05-30
 
 ## Purpose
 
-Cleaner-sidebar state operations: cast dry-run (preview lost
-rows), undo / redo (walk the step history), clear_filters (eraser
-that surgically un-applies every filter_rows step regardless of
-position in history).
+Cleaner-sidebar state operations: `step_preview` (generic dry-run —
+diff ANY step before applying), `cast_preview` (cast-only lost-rows
+dry-run, the original `step_preview` generalizes), undo / redo (walk
+the step history), clear_filters (eraser that surgically un-applies
+every filter_rows step regardless of position in history).
 
-All four are pure state-machine ops on `project_steps` + the cached
-frame eviction. None mutate the canonical CSV bytes on disk and none
-query data — they're the "what step is applied" toggles.
+All are pure state-machine ops on `project_steps` + the cached frame
+eviction. None mutate the canonical CSV bytes on disk. The two preview
+handlers persist nothing at all — they run the step on a clone, diff
+it, and throw the result away.
 
 ## Public surface
 
-- Module-private helpers (no `pub` items at the top level).
+- Module-private handlers (`pub(super)`); no top-level `pub` items.
+- `step_preview` → `POST /api/files/:rid/steps/preview` `{kind,params}`:
+  dry-runs `data::steps::apply` + returns `data::stats::FrameDiff`
+  (rows Δ, cells changed/nulled, cols added/removed/renamed, capped
+  Before|After sample). Gated like `add_step` (Admin via any reach).
 
 ## Drift-prone areas
 

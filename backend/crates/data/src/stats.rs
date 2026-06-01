@@ -474,6 +474,124 @@ fn av_to_owned(v: AnyValue) -> Option<String> {
     }
 }
 
+/// One cell that changes between the before/after frames — the row the
+/// UI's Before|After table renders. `before`/`after` are the stringified
+/// cell values (`None` = null), so a `Some → None` pair is a value the
+/// step would blank out.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CellChange {
+    pub column: String,
+    pub row:    usize,
+    pub before: Option<String>,
+    pub after:  Option<String>,
+}
+
+/// A header that changes name (old → new) without changing its values.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RenamePair {
+    pub from: String,
+    pub to:   String,
+}
+
+/// Structured before/after diff — the data behind the generic
+/// "preview before apply" feature. The richer sibling of
+/// [`count_cell_diffs`] (same stringify-compare via [`av_to_owned`], so
+/// cross-dtype casts compare by displayed value): it also captures the
+/// dimension change, the added / removed / renamed columns, and a capped
+/// sample of changed cells for the UI table.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FrameDiff {
+    pub rows_before:     u64,
+    pub rows_after:      u64,
+    pub cells_changed:   u64,
+    /// Subset of `cells_changed` that go from a value to null — the
+    /// "data loss" signal (e.g. casting unparseable cells). This is what
+    /// the cast-only `cast_preview` surfaced; kept here so the generic
+    /// preview carries the same warning for every tool.
+    pub cells_nulled:    u64,
+    pub columns_added:   Vec<String>,
+    pub columns_removed: Vec<String>,
+    pub columns_renamed: Vec<RenamePair>,
+    pub columns_changed: Vec<String>,
+    pub sample:          Vec<CellChange>,
+}
+
+/// Diff `before` against `after` (the result of dry-running a step).
+///
+/// `kind` only steers rename detection: the rename-y kinds
+/// (`rename_column`, `snake_case_columns`, `replace_in_names`) preserve
+/// column order + count, so a positional name change is reported as a
+/// rename (old → new) rather than a remove + add. Every other kind
+/// reports plain added / removed columns from the set difference.
+///
+/// Cell-level diffing runs only when row counts match — index alignment
+/// is meaningful then. When a step changes the row count (drop_nulls,
+/// filter_rows, …) the dropped/added rows ARE the story, so `rows_before`
+/// / `rows_after` carry it and the cell sample is left empty. `sample_cap`
+/// bounds the sample globally; a per-column cap (~⅓ of it) keeps one wide
+/// column from crowding out the rest. O(rows × common-cols), pure scan.
+pub fn diff_frames(before: &DataFrame, after: &DataFrame, kind: &str, sample_cap: usize) -> FrameDiff {
+    let rows_before = before.height() as u64;
+    let rows_after  = after.height() as u64;
+
+    let before_names: Vec<String> = before.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let after_names:  Vec<String> = after.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let before_set: HashSet<&String> = before_names.iter().collect();
+    let after_set:  HashSet<&String> = after_names.iter().collect();
+
+    let mut columns_added   = Vec::new();
+    let mut columns_removed = Vec::new();
+    let mut columns_renamed = Vec::new();
+
+    let positional_rename = before_names.len() == after_names.len()
+        && matches!(kind, "rename_column" | "snake_case_columns" | "replace_in_names");
+    if positional_rename {
+        for (b, a) in before_names.iter().zip(after_names.iter()) {
+            if b != a {
+                columns_renamed.push(RenamePair { from: b.clone(), to: a.clone() });
+            }
+        }
+    } else {
+        columns_removed = before_names.iter().filter(|n| !after_set.contains(*n)).cloned().collect();
+        columns_added   = after_names.iter().filter(|n| !before_set.contains(*n)).cloned().collect();
+    }
+
+    let mut cells_changed = 0u64;
+    let mut cells_nulled  = 0u64;
+    let mut columns_changed: Vec<String> = Vec::new();
+    let mut sample: Vec<CellChange> = Vec::new();
+    let per_col_cap = (sample_cap / 3).max(2);
+
+    if rows_before == rows_after {
+        let n = before.height();
+        for cname in &before_names {
+            if !after_set.contains(cname) { continue; } // removed or renamed away
+            let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else { continue; };
+            let mut col_touched = false;
+            let mut per_col = 0usize;
+            for i in 0..n {
+                let bs  = bc.get(i).ok().and_then(av_to_owned);
+                let as_ = ac.get(i).ok().and_then(av_to_owned);
+                if bs != as_ {
+                    cells_changed += 1;
+                    if bs.is_some() && as_.is_none() { cells_nulled += 1; }
+                    col_touched = true;
+                    if sample.len() < sample_cap && per_col < per_col_cap {
+                        sample.push(CellChange { column: cname.clone(), row: i, before: bs, after: as_ });
+                        per_col += 1;
+                    }
+                }
+            }
+            if col_touched { columns_changed.push(cname.clone()); }
+        }
+    }
+
+    FrameDiff {
+        rows_before, rows_after, cells_changed, cells_nulled,
+        columns_added, columns_removed, columns_renamed, columns_changed, sample,
+    }
+}
+
 /// Count rows where *every* column is null. Cross-column — can't be
 /// derived from per-column null_pct (a column with 50% nulls and
 /// another with 50% nulls might have zero rows where both are null).
@@ -519,4 +637,47 @@ pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<Stri
     vec.sort();
     vec.truncate(limit);
     Ok(vec)
+}
+
+#[cfg(test)]
+mod diff_tests {
+    use super::*;
+    use crate::steps::apply;
+    use serde_json::json;
+
+    #[test]
+    fn value_change_counts_cells_nulls_and_samples() {
+        let df = df!["name" => ["FOO", "Bar", "baz"]].unwrap();
+        let after = apply(df.clone(), "change_case", &json!({ "mode": "lower" })).unwrap();
+        let d = diff_frames(&df, &after, "change_case", 12);
+        assert_eq!((d.rows_before, d.rows_after), (3, 3));
+        // "FOO"→"foo" and "Bar"→"bar" change; "baz" is already lower.
+        assert_eq!(d.cells_changed, 2);
+        assert_eq!(d.cells_nulled, 0);
+        assert_eq!(d.columns_changed, vec!["name".to_string()]);
+        assert!(d.sample.iter().any(|c|
+            c.before.as_deref() == Some("FOO") && c.after.as_deref() == Some("foo")));
+    }
+
+    #[test]
+    fn rename_reads_as_a_rename_not_remove_plus_add() {
+        let df = df!["old" => [1, 2, 3]].unwrap();
+        let after = apply(df.clone(), "rename_column", &json!({ "from": "old", "to": "new" })).unwrap();
+        let d = diff_frames(&df, &after, "rename_column", 12);
+        assert_eq!(d.columns_renamed.len(), 1);
+        assert_eq!(d.columns_renamed[0].from, "old");
+        assert_eq!(d.columns_renamed[0].to, "new");
+        assert!(d.columns_removed.is_empty() && d.columns_added.is_empty());
+        assert_eq!(d.cells_changed, 0); // values untouched
+    }
+
+    #[test]
+    fn row_drop_reports_delta_and_leaves_sample_empty() {
+        let df = df!["v" => [10, 20, 30]].unwrap();
+        let after = apply(df.clone(), "drop_rows", &json!({ "indices": [1] })).unwrap();
+        let d = diff_frames(&df, &after, "drop_rows", 12);
+        assert_eq!((d.rows_before, d.rows_after), (3, 2));
+        assert!(d.sample.is_empty());   // row-count change → cell diff is not meaningful
+        assert_eq!(d.cells_changed, 0);
+    }
 }

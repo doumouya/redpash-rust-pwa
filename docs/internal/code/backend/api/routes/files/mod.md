@@ -32,6 +32,9 @@ steps on top of the freshly-parsed base.
   admin via cascade; platform). A file has no direct membership — ownership
   flows User→Project→File, so `effective` (not `is_member`) captures the owner.
   Applying a cleaning step (`add_step`) is a content mutation gated like update.
+  `steps/preview` (`state_ops::step_preview`) dry-runs a step + returns a diff
+  without persisting — gated at the same Admin reach as `add_step` (you preview
+  what you could apply; the diff sample reveals cell values).
   The `patch_file` move (`project` change) stays double-gated on the destination.
   `patch_file` then **field-gates** via `field_perms::require_fields(.., "file", ..)`
   (CAS_C4219F2B s3) — narrows per field via the matrix.

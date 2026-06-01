@@ -25,7 +25,9 @@ ASCII order; the frontend renders as a `<datalist>`.
 - `pub struct CleannessReport` — struct
 - `pub fn cleanness` — function
 - `pub fn cleanness_report` — function
-- `pub fn count_cell_diffs` — function
+- `pub fn count_cell_diffs` — function (count-only before/after diff)
+- `pub struct CellChange` / `pub struct RenamePair` / `pub struct FrameDiff` — the structured diff types
+- `pub fn diff_frames` — function: the richer sibling of `count_cell_diffs` powering the generic "preview before apply" feature (rows Δ, cells changed/nulled, cols added/removed/renamed, capped Before|After sample; reuses `av_to_owned` so cross-dtype casts compare by displayed value)
 - `pub fn count_fully_null_rows` — function
 
 ## Drift-prone areas

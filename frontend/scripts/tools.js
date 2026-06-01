@@ -73,6 +73,7 @@ export function mountTools(panelBody, ctx) {
   let editingName  = null;        // column name whose Name cell is being edited, or null
   let editingDtype = null;        // column name whose Datatype cell is being edited, or null
   let castConfirm  = null;        // { column, dtype, total, would_null, samples } — open confirm sheet, or null
+  let stepPreview  = null;        // { label, steps:[{kind,params,label}], typedSentinels, diff } — open preview panel, or null
   let colFilter    = "";          // toolbar search text — filters the columns table by name
   let refocusColSearch = false;   // re-focus the search input after a filter-driven re-render
 
@@ -222,6 +223,7 @@ export function mountTools(panelBody, ctx) {
       + renderColumnsToolbar(summary)
       + (activeSheet ? renderColumnsSheet(cols) : '')
       + (castConfirm ? renderCastConfirm() : '')
+      + (stepPreview ? renderStepPreview() : '')
       + '<div class="rt-tool-columns-tablewrap">'
       +   '<table class="rt-table rt-tool-columns-table">'
       +     '<thead><tr>'
@@ -436,6 +438,10 @@ export function mountTools(panelBody, ctx) {
       +    '</div>'
       +    '<div class="rt-tool-columns-sheet-foot">'
       +      '<button class="rt-btn rt-tool-columns-sheet-cancel" type="button">Cancel</button>'
+      +      '<button class="rt-btn rt-tool-columns-sheet-preview" type="button"'
+      +        ' title="See what this will change before applying">'
+      +        '<i class="bi bi-eye"></i> Preview'
+      +      '</button>'
       +      '<button class="rt-btn rt-btn--accent rt-tool-columns-sheet-apply" type="button">'
       +        '<i class="bi bi-play-fill"></i> Apply'
       +      '</button>'
@@ -518,69 +524,66 @@ export function mountTools(panelBody, ctx) {
     const applyBtn = e.target.closest(".rt-tool-columns-sheet-apply");
     if (applyBtn) {
       if (!activeSheet) return;
-      const state = {};
-      sheetFields.forEach((r) => { state[r.field.key] = r.read(columnsEl); });
-      const tool   = activeSheet;
-      const source = sheetSource;
-      const cfg    = sheetCfg;
-      const cols   = pickedInOrder();
-      // Custom junk the user typed — captured BEFORE the optimistic
-      // re-render clears the input; persisted to their Settings list
-      // after the step applies (Share-on → server promotes it global).
-      const typedSentinels = tool.kind === "fix_invalid"
-        ? (columnsEl.querySelector("[data-sentinel-add]")?.value || "")
-            .split(",").map((t) => t.trim()).filter(Boolean)
-        : [];
+      const { steps, typedSentinels } = buildSheetSteps();
       // Close optimistically — runStep → onApplied → loadFile → refresh
       // re-renders the view. On failure status shows the error inline
       // and the user re-opens the sheet (rare path; sheets are short).
-      activeSheet = null;
-      sheetSource = null;
-      sheetCfg    = null;
-      sheetFields = [];
-      if (source === "select" && cfg?.perColumn) {
-        // One step per selected column. The engine for these kinds
-        // (fill_nulls, replace_text, split_column, format_dates) takes
-        // singular `column`; the per-column loop also gives each one
-        // its own undo entry. Sequential awaits because each step's
-        // response is the input to the next (envelope refetch via
-        // onApplied).
-        for (const c of cols) {
-          const params = tool.toParams({ ...state, column: c });
-          const label  = (cfg.label || tool.label) + ' — ' + c;
-          await runStep(tool.kind, params, label, { busyBtn: applyBtn });
-        }
-      } else if (source === "select" && cfg?.mapCols) {
-        // Custom selection-to-param mapping — join_columns needs
-        // col1 + col2 from the picked column order.
-        const params = { ...tool.toParams(state), ...cfg.mapCols(cols) };
-        const label  = (cfg.label || tool.label) + ' (' + cols.join(' + ') + ')';
-        await runStep(tool.kind, params, label, { busyBtn: applyBtn });
-      } else if (source === "select") {
-        // Sheet result + selection collapses into one step. Cols go
-        // under `colsParam` (default "cols", overridden to "columns"
-        // for engines that already have a `cols` of their own —
-        // fix_invalid).
-        const colsParam = cfg?.colsParam || "cols";
-        const params = { ...tool.toParams(state), [colsParam]: cols };
-        const label  = (cfg?.label || tool.label) + ' (' + cols.length + ')';
-        await runStep(tool.kind, params, label, { busyBtn: applyBtn });
-      } else {
-        // Global sheet — one step from the form alone.
-        const params = tool.toParams(state);
-        await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+      clearSheetState();
+      // Sequential awaits: each step's onApplied refetches the envelope
+      // the next step builds on (per-column tools get one undo entry each).
+      for (const s of steps) {
+        await runStep(s.kind, s.params, s.label, { busyBtn: applyBtn });
       }
-      // Remember typed custom junk — lands in Settings → Personal
-      // sentinels (setPref → PATCH /api/me/prefs); the server promotes it
-      // to the global vocabulary once a 2nd user flags it, if Share is on.
-      if (typedSentinels.length) {
-        try {
-          const cur  = getPref("learned_sentinels");
-          const list = Array.isArray(cur) ? cur : [];
-          const next = [...new Set([...list, ...typedSentinels])];
-          if (next.length !== list.length) setPref("learned_sentinels", next);
-        } catch (_e) { /* best-effort; the clean already applied */ }
+      rememberSentinels(typedSentinels);
+      return;
+    }
+    // Preview — same step list as Apply, but dry-run each against the
+    // current frame (POST /steps/preview, no persist) and show the merged
+    // before/after diff. The user then commits or backs out from the panel.
+    const previewBtn = e.target.closest(".rt-tool-columns-sheet-preview");
+    if (previewBtn) {
+      if (!activeSheet) return;
+      const { steps, typedSentinels } = buildSheetSteps();
+      if (!steps.length) return;
+      previewBtn.disabled = true; previewBtn.classList.add("is-busy");
+      try {
+        // Per-column steps each touch only their own column, so previewing
+        // them all against the SAME current frame and merging is accurate —
+        // no need to chain. Single-step tools just preview once.
+        const diffs = await Promise.all(steps.map((s) => apiPreview(s.kind, s.params)));
+        clearSheetState();
+        stepPreview = {
+          label: steps.length === 1
+            ? steps[0].label
+            : (steps[0].label.split(' — ')[0] + ' (' + steps.length + ' columns)'),
+          steps, typedSentinels, diff: mergeDiffs(diffs),
+        };
+        renderColumnsView();
+      } catch (err) {
+        const msg = (err && (err.body?.message || err.body?.error)) || err?.message || "Preview failed";
+        setStatus(msg + (err?.status ? " (" + err.status + ")" : ""), "err");
+        previewBtn.disabled = false; previewBtn.classList.remove("is-busy");
       }
+      return;
+    }
+    // Step-preview panel controls. Apply commits the previewed steps;
+    // Back / close returns to the columns view (re-open the tool to retry —
+    // the diff captured exactly the steps Apply will run, so they can't drift).
+    const spApply = e.target.closest(".rt-step-preview-apply");
+    if (spApply && stepPreview) {
+      const { steps, typedSentinels } = stepPreview;
+      stepPreview = null;
+      for (const s of steps) {
+        await runStep(s.kind, s.params, s.label, { busyBtn: spApply });
+      }
+      rememberSentinels(typedSentinels);
+      return;
+    }
+    if ((e.target.closest(".rt-step-preview-back")
+         || e.target.closest(".rt-step-preview-close")) && stepPreview) {
+      stepPreview = null;
+      renderColumnsView();
+      return;
     }
   });
 
@@ -741,12 +744,96 @@ export function mountTools(panelBody, ctx) {
     renderColumnsView();
   }
 
-  function closeSheet() {
+  function clearSheetState() {
     activeSheet = null;
     sheetSource = null;
     sheetCfg    = null;
     sheetFields = [];
+  }
+
+  function closeSheet() {
+    clearSheetState();
     renderColumnsView();
+  }
+
+  // Build the list of steps the open sheet's Apply would run, from the
+  // field state + selection. The single source mirrored by BOTH Apply and
+  // Preview so they can't drift: per-column expansion (perColumn), the join
+  // mapping (mapCols), the cols-param collapse (select), or the lone global
+  // step. `typedSentinels` is the custom junk typed into a fix_invalid
+  // sheet, persisted after a successful apply.
+  function buildSheetSteps() {
+    if (!activeSheet) return { steps: [], typedSentinels: [] };
+    const state = {};
+    sheetFields.forEach((r) => { state[r.field.key] = r.read(columnsEl); });
+    const tool = activeSheet, source = sheetSource, cfg = sheetCfg;
+    const cols = pickedInOrder();
+    const typedSentinels = tool.kind === "fix_invalid"
+      ? (columnsEl.querySelector("[data-sentinel-add]")?.value || "")
+          .split(",").map((t) => t.trim()).filter(Boolean)
+      : [];
+    const steps = [];
+    if (source === "select" && cfg?.perColumn) {
+      for (const c of cols) {
+        steps.push({ kind: tool.kind, params: tool.toParams({ ...state, column: c }),
+                     label: (cfg.label || tool.label) + ' — ' + c });
+      }
+    } else if (source === "select" && cfg?.mapCols) {
+      steps.push({ kind: tool.kind, params: { ...tool.toParams(state), ...cfg.mapCols(cols) },
+                   label: (cfg.label || tool.label) + ' (' + cols.join(' + ') + ')' });
+    } else if (source === "select") {
+      const colsParam = cfg?.colsParam || "cols";
+      steps.push({ kind: tool.kind, params: { ...tool.toParams(state), [colsParam]: cols },
+                   label: (cfg?.label || tool.label) + ' (' + cols.length + ')' });
+    } else {
+      steps.push({ kind: tool.kind, params: tool.toParams(state), label: tool.label });
+    }
+    return { steps, typedSentinels };
+  }
+
+  // Persist custom junk typed into a fix_invalid sheet to the user's
+  // learned-sentinel pref (Share-on → server promotes to global once a
+  // 2nd user flags it). Best-effort; the clean already applied.
+  function rememberSentinels(typed) {
+    if (!typed || !typed.length) return;
+    try {
+      const cur  = getPref("learned_sentinels");
+      const list = Array.isArray(cur) ? cur : [];
+      const next = [...new Set([...list, ...typed])];
+      if (next.length !== list.length) setPref("learned_sentinels", next);
+    } catch (_e) { /* best-effort */ }
+  }
+
+  // Dry-run one step against the current frame — POST /steps/preview
+  // returns the structured FrameDiff (no persist, no history).
+  function apiPreview(kind, params) {
+    const rid = ctx.fileRid();
+    // DATA-ENDPOINT-ACK: caller-checks-file_type — tools.js renders only
+    // inside the Workspace Tools panel's CSV branch (see cast-preview).
+    return api.post("/files/" + encodeURIComponent(rid) + "/steps/preview", { kind, params });
+  }
+
+  // Merge N single-step FrameDiffs (one per column for perColumn tools)
+  // into one. Counts sum; column lists union; the sample concatenates up
+  // to the same 12-row cap the backend uses per step.
+  function mergeDiffs(diffs) {
+    const SAMPLE_CAP = 12;
+    const out = { rows_before: 0, rows_after: 0, cells_changed: 0, cells_nulled: 0,
+      columns_added: [], columns_removed: [], columns_renamed: [], columns_changed: [], sample: [] };
+    diffs.forEach((d, i) => {
+      if (i === 0) { out.rows_before = d.rows_before; out.rows_after = d.rows_after; }
+      out.cells_changed += d.cells_changed || 0;
+      out.cells_nulled  += d.cells_nulled  || 0;
+      pushUnique(out.columns_added,   d.columns_added);
+      pushUnique(out.columns_removed, d.columns_removed);
+      pushUnique(out.columns_changed, d.columns_changed);
+      (d.columns_renamed || []).forEach((r) => out.columns_renamed.push(r));
+      (d.sample || []).forEach((s) => { if (out.sample.length < SAMPLE_CAP) out.sample.push(s); });
+    });
+    return out;
+  }
+  function pushUnique(into, items) {
+    (items || []).forEach((x) => { if (!into.includes(x)) into.push(x); });
   }
 
   // Slice G — cast confirm sheet. Shown when /cast-preview reports
@@ -782,6 +869,71 @@ export function mountTools(panelBody, ctx) {
       +      '<button class="rt-btn rt-cast-confirm-cancel" type="button">Cancel</button>'
       +      '<button class="rt-btn rt-btn--accent rt-cast-confirm-apply" type="button">'
       +        '<i class="bi bi-play-fill"></i> Apply cast'
+      +      '</button>'
+      +    '</div>'
+      +    '</div>';
+  }
+
+  // Generic step-preview panel — the lost "see what will happen before you
+  // agree" feature, now for every tool (not just cast). Shows the merged
+  // FrameDiff from /steps/preview: a one-line summary (rows Δ, cells changed
+  // / blanked, columns added / removed / renamed) + a Before|After sample
+  // table. Foot commits (Apply) the exact previewed steps or backs out.
+  function renderStepPreview() {
+    if (!stepPreview) return '';
+    const d = stepPreview.diff;
+    const rowsDelta = d.rows_after - d.rows_before;
+    const plural = (n) => (n === 1 ? '' : 's');
+    const bits = [];
+    if (rowsDelta < 0)      bits.push('<b>' + (-rowsDelta) + '</b> row' + plural(-rowsDelta) + ' removed');
+    else if (rowsDelta > 0) bits.push('<b>' + rowsDelta + '</b> row' + plural(rowsDelta) + ' added');
+    if (d.cells_changed)    bits.push('<b>' + d.cells_changed + '</b> cell' + plural(d.cells_changed) + ' changed');
+    if (d.cells_nulled)     bits.push('<b>' + d.cells_nulled + '</b> blanked');
+    (d.columns_renamed || []).forEach((r) =>
+      bits.push('renamed <i>' + esc(r.from) + '</i> → <i>' + esc(r.to) + '</i>'));
+    if (d.columns_removed?.length)
+      bits.push('<b>' + d.columns_removed.length + '</b> column' + plural(d.columns_removed.length)
+        + ' removed: ' + d.columns_removed.map(esc).join(', '));
+    if (d.columns_added?.length)
+      bits.push('<b>' + d.columns_added.length + '</b> column' + plural(d.columns_added.length)
+        + ' added: ' + d.columns_added.map(esc).join(', '));
+    const noChange = bits.length === 0;
+    const summary = noChange
+      ? 'No changes — this step is a no-op on the current data.'
+      : bits.join(' · ');
+
+    // Stringified cell values: null → ∅, empty string → (empty), else escaped.
+    const fmtCell = (v) => v == null
+      ? '<span class="rt-step-preview-null">∅</span>'
+      : (v === '' ? '<span class="rt-step-preview-null">(empty)</span>' : esc(v));
+    const table = d.sample?.length
+      ? '<div class="rt-tool-columns-tablewrap rt-step-preview-tablewrap">'
+        + '<table class="rt-table rt-step-preview-table">'
+        + '<thead><tr><th>Column</th><th class="is-num">Row</th><th>Before</th><th>After</th></tr></thead>'
+        + '<tbody>'
+        + d.sample.map((s) =>
+            '<tr><td class="rt-step-preview-col">' + esc(s.column) + '</td>'
+            + '<td class="is-num">' + (s.row + 1) + '</td>'
+            + '<td class="rt-step-preview-before">' + fmtCell(s.before) + '</td>'
+            + '<td class="rt-step-preview-after">'  + fmtCell(s.after)  + '</td></tr>').join('')
+        + '</tbody></table></div>'
+      : '';
+
+    return '<div class="rt-tool-columns-sheet rt-step-preview">'
+      +    '<div class="rt-tool-columns-sheet-head">'
+      +      '<span class="rt-tool-columns-sheet-title">'
+      +        '<i class="bi bi-eye"></i> Preview: ' + esc(stepPreview.label)
+      +      '</span>'
+      +      '<button class="rt-icon-btn rt-step-preview-close" type="button"'
+      +        ' title="Back"><i class="bi bi-x-lg"></i></button>'
+      +    '</div>'
+      +    '<p class="rt-tool-columns-sheet-blurb rt-step-preview-summary">' + summary + '</p>'
+      +    table
+      +    '<div class="rt-tool-columns-sheet-foot">'
+      +      '<button class="rt-btn rt-step-preview-back" type="button">Back</button>'
+      +      '<button class="rt-btn rt-btn--accent rt-step-preview-apply" type="button"'
+      +        (noChange ? ' disabled' : '') + '>'
+      +        '<i class="bi bi-check2"></i> Apply'
       +      '</button>'
       +    '</div>'
       +    '</div>';

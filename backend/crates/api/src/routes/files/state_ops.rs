@@ -103,6 +103,48 @@ pub(super) async fn cast_preview(
     }))
 }
 
+/// `POST /api/files/:rid/steps/preview` — dry-run ANY cleaning step
+/// against the current cached frame and return a structured before/after
+/// diff WITHOUT persisting it: no `project_steps` row, no cache eviction,
+/// no `event`. The generic form of `cast_preview` — it powers the
+/// "preview before apply" surface for every tool, not just cast. The diff
+/// (rows Δ, cells changed / nulled, added / removed / renamed columns, a
+/// capped Before|After sample) is computed by `data::stats::diff_frames`.
+///
+/// Read-only, but gated at the same reach as *applying* the step
+/// (`add_step`: Admin via any reach) — you only preview what you could
+/// apply, and the diff sample reveals cell values. Reuses `StepRequest`,
+/// the same `{ kind, params }` body `add_step` takes.
+#[tracing::instrument(skip_all, fields(rid = %rid))]
+pub(super) async fn step_preview(
+    State(state): State<AppState>,
+    headers:      axum::http::HeaderMap,
+    Path(rid):    Path<String>,
+    Json(req):    Json<shared::step::StepRequest>,
+) -> Result<Json<data::stats::FrameDiff>, AppError> {
+    let user = crate::routes::resolve_user_rid(&state, &headers).await?;
+    crate::rbac::require_grant(&state, &user, &rid, "file",
+        |g| g.effective().map_or(false, |r| r >= crate::rbac::Role::Admin)).await?;
+    let entry = hydrate(&state, &rid).await?;
+    let before = Arc::clone(&entry.frame);
+
+    let kind   = req.kind.clone();
+    let params = req.params.clone();
+    let before_clone = (*before).clone();
+    let after = tokio::task::spawn_blocking(move || data::steps::apply(before_clone, &kind, &params))
+        .await
+        .map_err(|e| AppError::internal("join", e.to_string()))??;
+
+    let kind2 = req.kind.clone();
+    let before_for_diff = Arc::clone(&before);
+    let diff = tokio::task::spawn_blocking(move ||
+        data::stats::diff_frames(&before_for_diff, &after, &kind2, 12))
+        .await
+        .map_err(|e| AppError::internal("join", e.to_string()))?;
+
+    Ok(Json(diff))
+}
+
 #[tracing::instrument(skip_all, fields(rid = %rid))]
 pub(super) async fn undo(
     State(state): State<AppState>,

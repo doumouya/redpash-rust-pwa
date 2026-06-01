@@ -780,6 +780,36 @@
   color: var(--rp-warn);
 }
 
+/* Step-preview panel — the generic "preview before apply" diff. Reads as
+   informational (accent-2 / blue) to set it apart from the cast-confirm
+   warn vocab; the Before|After table colour-codes old vs new cell values. */
+.rt-tool-columns-sheet.rt-step-preview {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
+.rt-tool-columns-sheet.rt-step-preview .rt-tool-columns-sheet-title i {
+  color: var(--rp-accent-2);
+}
+.rt-step-preview-summary b { color: var(--rp-text); }
+.rt-step-preview-tablewrap {
+  max-height: 16rem;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+.rt-step-preview-table td.rt-step-preview-col { color: var(--rp-text-dim); }
+.rt-step-preview-table .rt-step-preview-before,
+.rt-step-preview-table .rt-step-preview-after {
+  white-space: normal;
+  word-break: break-word;
+}
+.rt-step-preview-table .rt-step-preview-before {
+  color: var(--rp-text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--rp-accent);
+}
+.rt-step-preview-table .rt-step-preview-after { color: var(--rp-ok); }
+.rt-step-preview-null { color: var(--rp-text-dim); font-style: italic; }
+
 /* ── filter panel — tab strip in the head ───────────────────────
    Filter / Report tabs share the panel head; clicking a tab swaps
    the body + foot sections (.rt-panel-tab / .rt-panel-tab-foot).

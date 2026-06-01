@@ -14,6 +14,7 @@
 //!   GET    /api/files/:rid            summary + columns + steps
 //!   GET    /api/files/:rid/page?…     paged rows (sort/filter/search)
 //!   POST   /api/files/:rid/steps      { kind, params } → apply
+//!   POST   /api/files/:rid/steps/preview  { kind, params } → dry-run diff
 //!   POST   /api/files/:rid/undo       no-op if no applied steps
 //!   POST   /api/files/:rid/redo       no-op if no undone steps
 
@@ -108,6 +109,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid",      get(get_summary).patch(patch_file).delete(delete_file))
         .route("/:rid/page", get(get_page))
         .route("/:rid/steps",    post(add_step))
+        .route("/:rid/steps/preview", post(state_ops::step_preview))
         .route("/:rid/cast-preview", post(state_ops::cast_preview))
         .route("/:rid/undo",     post(state_ops::undo))
         .route("/:rid/redo",     post(state_ops::redo))
