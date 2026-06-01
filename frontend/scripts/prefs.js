@@ -151,7 +151,8 @@ registerPref({
 });
 registerPref({
   key: "general-fontSize", group: "GENERAL", section: "set-appearance",
-  control: "onoff", label: "Font size",
+  control: "stepper", label: "Font size",
+  hint: "make the whole app bigger or smaller — your screen, your choice",
   values: ["sm", "md", "lg"], default: "md", attr: "fontSize",
   options: [
     { value: "sm", label: "Small" },

@@ -67,6 +67,7 @@ const SERVER_PREF_KEYS = ["share_sentinels", "learned_sentinels"];
 const CONTROLS = {
   onoff:     { render: (spec) => prefRow(prefRowSpecFromPref(spec)) },
   segmented: { render: (spec) => prefRow(prefRowSpecFromPref(spec)) },
+  stepper:   { render: fontStepperRow, postMount: wireFontStepper },
   "chart-layouts": chartLayouts,
 };
 
@@ -82,6 +83,47 @@ function prefRowSpecFromPref(spec) {
     pref:    spec.key,
     options: options,
   };
+}
+
+// ── stepper control — A− / A+ over a pref's `values` ────────────────
+// Renders the universal "decrease / increase text size" affordance for
+// the fontSize pref instead of an sm/md/lg toggle (Em 2026-06-01: "just
+// put A− / A+, everyone can pick a size, HiDPI or not"). setPref reflects
+// the value to <html data-fontSize> (prefs.js), and the type scale is rem
+// (tokens.css), so the whole app resizes live; the choice persists.
+// `data-step` (not `data-value`) keeps these off the absolute-value click
+// delegation below — the stepper drives itself via postMount.
+function fontStepperRow(spec) {
+  const hint = spec.hint ? '<small class="rp-settings__hint">' + spec.hint + "</small>" : "";
+  return '<div class="rp-page__row" data-pref="' + spec.key + '">'
+    + '<span class="rp-page__row-label">' + spec.label + hint + "</span>"
+    + '<div class="rp-page__row-control rp-fontstep">'
+      + '<button type="button" class="rt-btn rp-fontstep__btn rp-fontstep__btn--dn" data-step="-1" title="Smaller text" aria-label="Decrease text size">A&minus;</button>'
+      + '<span class="rp-fontstep__preview" aria-hidden="true">Aa</span>'
+      + '<button type="button" class="rt-btn rp-fontstep__btn rp-fontstep__btn--up" data-step="1" title="Larger text" aria-label="Increase text size">A+</button>'
+    + "</div>"
+  + "</div>";
+}
+
+function wireFontStepper(app, spec) {
+  const row = app.querySelector('[data-pref="' + spec.key + '"]');
+  if (!row) return;
+  const values = Array.isArray(spec.values) ? spec.values : [];
+  const btns = [...row.querySelectorAll("[data-step]")];
+  const idx = () => Math.max(0, values.indexOf(getPref(spec.key)));
+  const sync = () => {
+    const i = idx();
+    btns.forEach((b) => {
+      b.disabled = Number(b.dataset.step) < 0 ? i <= 0 : i >= values.length - 1;
+    });
+  };
+  btns.forEach((b) => b.addEventListener("click", () => {
+    const i = idx();
+    const next = Math.min(values.length - 1, Math.max(0, i + Number(b.dataset.step)));
+    if (next !== i) setPref(spec.key, values[next]); // reflects to <html> + persists
+    sync();
+  }));
+  sync();
 }
 
 // ── section extras ─────────────────────────────────────────────────

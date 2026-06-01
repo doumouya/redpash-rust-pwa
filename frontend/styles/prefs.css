@@ -33,24 +33,28 @@ html[data-density="comfortable"] {
   --rp-sp-8: 3.5rem;
 }
 
-/* ── font size — body text scale ────────────────────────────────
-   Overrides the text-size tokens; body inherits via base.css's
-   font-size: var(--rp-text-md). Small chrome elements (badges,
-   captions) already use --rp-text-sm explicitly and shift in step.
-   md is the default — no override. */
+/* ── font size — A− / A+ stepper (Settings → Appearance) ─────────
+   ONE knob: scale the ROOT font-size and the whole rem-based UI —
+   text AND spacing (--rp-sp-* are rem) — scales together, so bigger
+   text comes with proportional breathing room. md = the browser
+   default (no override, also honors the user's own browser size);
+   sm/lg step ±12.5%. This is *why* everything is rem: px can't ride
+   this knob (that was the HiDPI "tiny + cramped" bug). */
 
-html[data-font-size="sm"] {
-  --rp-text-sm: 0.75rem;
-  --rp-text-md: 0.875rem;
-  --rp-text-lg: 1.125rem;
-  --rp-text-xl: 1.75rem;
-}
+html[data-font-size="sm"] { font-size: 87.5%;  }  /* root ~14px → UI ×0.875 */
+html[data-font-size="lg"] { font-size: 112.5%; }  /* root ~18px → UI ×1.125 */
 
-html[data-font-size="lg"] {
-  --rp-text-sm: 0.875rem;
-  --rp-text-md: 1rem;
-  --rp-text-lg: 1.375rem;
-  --rp-text-xl: 2.25rem;
+/* A− / A+ stepper (Settings → Appearance) — the size buttons signal
+   their direction by their own glyph size. The preview "Aa" rides the
+   live --rp-text-md so the user sees the current size as they step. */
+.rp-fontstep { display: inline-flex; align-items: center; gap: 0.5rem; }
+.rp-fontstep__btn { font-weight: 700; line-height: 1; min-width: 2.5rem; }
+.rp-fontstep__btn--dn { font-size: 0.8125rem; }
+.rp-fontstep__btn--up { font-size: 1.125rem; }
+.rp-fontstep__btn:disabled { opacity: 0.4; cursor: default; }
+.rp-fontstep__preview {
+  min-width: 2.5ch; text-align: center; font-weight: 600;
+  color: var(--rp-text-mute); font-size: var(--rp-text-md);
 }
 
 /* ── show stage dots — workspace rail file tabs ─────────────────
