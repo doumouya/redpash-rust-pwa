@@ -164,12 +164,16 @@ export const TOOLS = [
     blurb: "Replace sentinel values (N/A, NULL, ?, …) with a chosen value (blank = null).",
     fields: [
       { type: "multicolumn", key: "columns", label: "Columns (blank = every string column)" },
-      { type: "text", key: "sentinels", label: "Sentinels (comma-separated)",
-        placeholder: "N/A, NULL, ?, -" },
+      // Scan-and-pick: tools.js populates chips from GET /files/:rid/sentinels
+      // (the junk actually in this file + the known set); "add your own"
+      // rides in the same field and lands in the user's Settings list.
+      { type: "sentinels", key: "sentinels", label: "Junk values to clean" },
       { type: "text", key: "replacement", label: "Replace with", placeholder: "(blank → null)" },
     ],
     toParams: (s) => {
-      const sentinels = (s.sentinels || "").split(",").map((t) => t.trim()).filter(Boolean);
+      const sentinels = Array.isArray(s.sentinels)
+        ? s.sentinels
+        : (s.sentinels || "").split(",").map((t) => t.trim()).filter(Boolean);
       const p = { sentinels };
       if (s.columns && s.columns.length) p.columns = s.columns;
       if (s.replacement) p.replacement = s.replacement;

@@ -82,4 +82,31 @@ export const FIELDS = {
       root.querySelectorAll('[data-key="' + key + '"] input:checked')
     ).map((el) => el.value),
   }),
+
+  // Sentinel picker — the junk-value scan-and-pick. The chips are
+  // populated ASYNC by tools.js (`populateSentinels`) after the sheet
+  // mounts, since the file scan (GET /files/:rid/sentinels) can't run in
+  // a sync FIELDS renderer. Here we render the container + the
+  // "add your own" input; `read` collects the ticked chips + typed values.
+  sentinels: ({ key, label }) => ({
+    html:
+      '<div class="rt-pred rt-pred--stack rt-sentinel-pick" data-key="' + esc(key) + '">'
+      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
+      + '<div class="rt-sentinel-found" data-sentinel-found>'
+      +   '<span class="rt-sentinel-scanning">Scanning this file…</span>'
+      + '</div>'
+      + '<input class="rt-pred-val rt-sentinel-add" data-sentinel-add'
+      +   ' placeholder="add your own — comma-separated (remembered in Settings)" />'
+      + '</div>',
+    read: (root) => {
+      const wrap = root.querySelector('.rt-sentinel-pick[data-key="' + key + '"]');
+      if (!wrap) return [];
+      const picked = Array.from(
+        wrap.querySelectorAll('input[type="checkbox"][data-sentinel-val]:checked')
+      ).map((c) => c.getAttribute("data-sentinel-val"));
+      const typed = (wrap.querySelector("[data-sentinel-add]")?.value || "")
+        .split(",").map((t) => t.trim()).filter(Boolean);
+      return [...new Set([...picked, ...typed])];
+    },
+  }),
 };

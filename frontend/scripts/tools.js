@@ -33,6 +33,9 @@ import { FIELDS } from "/scripts/tools/fields.js";
 // colsParam / enabled). See `tools/actions.js`'s header for the
 // shape contract.
 import { GLOBAL_ACTIONS, SELECT_ACTIONS } from "/scripts/tools/actions.js";
+// Sentinel picker reads/writes the user's learned-sentinel list (a server
+// pref) so "add your own" persists + (with Share on) promotes to global.
+import { getPref, setPref } from "/scripts/prefs.js";
 // Slice 3 — the 12-tool catalog. Each entry pairs a server step kind
 // (matches Rust steps.rs verbatim) with its picker label / icon /
 // blurb / fields / toParams. See `tools/catalog.js`'s header for the
@@ -254,6 +257,51 @@ export function mountTools(panelBody, ctx) {
         try { search.setSelectionRange(end, end); } catch (_) { /* type=search */ }
       }
     }
+    // Sentinel picker — the sheet's `sentinels` field renders only a
+    // placeholder; scan the file async and paint the junk chips into it
+    // (FIELDS renderers are sync; the /sentinels scan isn't).
+    if (activeSheet && activeSheet.fields?.some((f) => f.type === "sentinels")) {
+      populateSentinels();
+    }
+  }
+
+  // Scan the active file + render its junk values as pickable chips into
+  // the open Fix-invalid sheet. Found-in-file (pre-checked, with counts)
+  // first, then the rest of the known set. Reuses the existing
+  // GET /files/:rid/sentinels scanner — the FE just stopped calling it.
+  async function populateSentinels() {
+    const host = columnsEl.querySelector("[data-sentinel-found]");
+    const rid  = ctx.fileRid && ctx.fileRid();
+    if (!host || !rid) return;
+    let learned = [];
+    try { const l = getPref("learned_sentinels"); if (Array.isArray(l)) learned = l; } catch (_e) { /* unregistered */ }
+    const qs = learned.length ? "?extra=" + encodeURIComponent(learned.join(",")) : "";
+    try {
+      // DATA-ENDPOINT-ACK: caller-checks-file_type — populateSentinels runs
+      // only from the Fix-invalid sheet in the Tools panel, which renders
+      // for data files only (never a chart/dashboard rid).
+      const res   = await api.get("/files/" + rid + "/sentinels" + qs);
+      const items = res.items || [];
+      const known = res.known || [];
+      const seen  = new Set(items.map((i) => i.canonical || i.value));
+      const chip  = (val, count, on) =>
+        '<label class="rt-sentinel-chip' + (on ? " is-on" : "") + '">'
+        + '<input type="checkbox" class="rt-chk" data-sentinel-val="' + esc(val) + '"'
+        + (on ? " checked" : "") + " /> "
+        + '<span class="rt-sentinel-chip-val">' + esc(val) + "</span>"
+        + (count != null ? '<span class="rt-sentinel-chip-n">×' + count + "</span>" : "")
+        + "</label>";
+      let html = items.map((i) => chip(i.value, i.total, true)).join("");
+      const others = known.filter((k) => !seen.has(k));
+      if (others.length) {
+        html += '<div class="rt-sentinel-known-lbl">also known</div>'
+          + others.map((k) => chip(k, null, false)).join("");
+      }
+      host.innerHTML = html
+        || '<span class="rt-sentinel-clean">No junk values found — this file looks clean.</span>';
+    } catch (_e) {
+      host.innerHTML = '<span class="rt-sentinel-err">Couldn’t scan — type values below.</span>';
+    }
   }
 
   // Toolbar — global actions (Slice B) + select actions (Slice C).
@@ -471,6 +519,13 @@ export function mountTools(panelBody, ctx) {
       const source = sheetSource;
       const cfg    = sheetCfg;
       const cols   = pickedInOrder();
+      // Custom junk the user typed — captured BEFORE the optimistic
+      // re-render clears the input; persisted to their Settings list
+      // after the step applies (Share-on → server promotes it global).
+      const typedSentinels = tool.kind === "fix_invalid"
+        ? (columnsEl.querySelector("[data-sentinel-add]")?.value || "")
+            .split(",").map((t) => t.trim()).filter(Boolean)
+        : [];
       // Close optimistically — runStep → onApplied → loadFile → refresh
       // re-renders the view. On failure status shows the error inline
       // and the user re-opens the sheet (rare path; sheets are short).
@@ -509,6 +564,17 @@ export function mountTools(panelBody, ctx) {
         // Global sheet — one step from the form alone.
         const params = tool.toParams(state);
         await runStep(tool.kind, params, tool.label, { busyBtn: applyBtn });
+      }
+      // Remember typed custom junk — lands in Settings → Personal
+      // sentinels (setPref → PATCH /api/me/prefs); the server promotes it
+      // to the global vocabulary once a 2nd user flags it, if Share is on.
+      if (typedSentinels.length) {
+        try {
+          const cur  = getPref("learned_sentinels");
+          const list = Array.isArray(cur) ? cur : [];
+          const next = [...new Set([...list, ...typedSentinels])];
+          if (next.length !== list.length) setPref("learned_sentinels", next);
+        } catch (_e) { /* best-effort; the clean already applied */ }
       }
     }
   });

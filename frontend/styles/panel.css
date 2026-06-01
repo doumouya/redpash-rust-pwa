@@ -1689,3 +1689,37 @@
   padding: 0 0.25rem;
 }
 .rt-chip-picker .rt-chip-input:focus { outline: 0; }
+
+/* Sentinel picker — Fix-invalid scan-and-pick chips (tools.js). Junk
+   values found in the file (+ the known set) as tick-able chips. */
+.rt-sentinel-found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.rt-sentinel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.rt-sentinel-chip.is-on { background: var(--rp-accent-soft); border-color: var(--rp-accent); }
+.rt-sentinel-chip-n { color: var(--rp-text-mute); font-variant-numeric: tabular-nums; }
+.rt-sentinel-known-lbl {
+  flex-basis: 100%;
+  margin-top: 0.25rem;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rt-sentinel-scanning,
+.rt-sentinel-clean,
+.rt-sentinel-err { color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
+.rt-sentinel-add { margin-top: 0.25rem; }

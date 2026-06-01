@@ -17,8 +17,16 @@ use std::collections::{HashMap, HashSet};
 /// `find_sentinels` scan (and any UI that wants the canonical list)
 /// can reuse it without redefining.
 pub const SENTINELS: &[&str] = &[
-    "n/a", "na", "n.a.", "-", "--", "?", "null", "none", "nan",
-    "#n/a", ".", "tbd", "x", "#ref!", "#value!", "unknown", "undefined",
+    // English + symbolic
+    "n/a", "na", "n.a.", "-", "--", "—", "–", "?", "??", "???",
+    "null", "(null)", "<null>", "none", "nan", "nil", ".", "..",
+    "tbd", "tba", "x", "unknown", "undefined", "missing", "(blank)", "blank",
+    // French — the founding (Fleury) locale: inconnu / non disponible /
+    // sans objet / non communiqué. These were the biggest miss (a French
+    // dataset's junk slipped straight through the English-only set).
+    "inconnu", "n/d", "nd", "n.d.", "non disponible", "s/o", "s.o.", "n.c.",
+    // Excel error literals exported as text
+    "#n/a", "#name?", "#ref!", "#value!", "#div/0!", "#num!", "#null!",
 ];
 
 /// One sentinel value discovered across the frame, with per-column
