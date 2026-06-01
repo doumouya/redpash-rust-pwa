@@ -12,10 +12,11 @@ last modified date: 2026-05-30
 
 Builds the `data` crate as a browser-loadable WASM module — the bundle
 the login-page CSV demo loads to run `parse_csv` + `auto_clean`
-client-side. Three stages gated by `wasm-bindgen` and `wasm-opt`:
+client-side. Four stages gated by `wasm-bindgen` and `wasm-opt`:
 release-mode cargo build → wasm-bindgen JS wrapper generation → wasm-opt
-size pass. Output lands in the frontend bundle dir so the login page
-can `import('/wasm/data.js')`.
+size pass → **content-hash** (rename `data_bg.wasm` → `data_bg.<sha256[:12]>.wasm`
+and rewrite the single loader ref in `data.js`). Output lands in the frontend
+bundle dir so the login page can `import('/wasm/data.js')`.
 
 ## Public surface
 
@@ -31,6 +32,14 @@ can `import('/wasm/data.js')`.
   flags it.
 - **The script assumes a release build** (the dev path uses `cargo
   watch` instead). Don't add debug-mode without splitting the entry.
+- **Content-hash (stage 4, 2026-06-01):** the `.wasm` is named by its sha256
+  prefix so the hash IS the cache version — every rebuild auto-versions the URL
+  (never stale, never a manual cache-version bump, the treadmill that got the
+  caching SW gutted). `data.js`'s `new URL('data_bg.wasm', …)` is rewritten to
+  the hashed name; `.gitignore` covers `data_bg*.wasm`; the dir holds exactly
+  one (`rm -f data_bg.*.wasm` before the rename). Do NOT reintroduce a manual
+  SW cache-version. Offline caching, when wanted, = SW Cache API keyed on this
+  hashed URL — see [wasm-engine](../../../subsystems/wasm-engine.md).
 
 ## Related
 
