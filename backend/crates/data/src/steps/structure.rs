@@ -237,6 +237,16 @@ pub(super) fn format_dates(df: DataFrame, params: &serde_json::Value) -> Result<
     let column = params.get("column").and_then(|v| v.as_str())
         .ok_or_else(|| DataError::InvalidSpec("format_dates needs params.column".into()))?;
     let fmt = params.get("fmt").and_then(|v| v.as_str()).unwrap_or("%Y-%m-%d").to_string();
+    // Guard: chrono's strftime emits any non-`%` text verbatim, so a literal
+    // like "yyyy-mm-dd" (no field specifiers) would stamp itself into EVERY
+    // row instead of formatting the date — silent data loss. Reject it; a
+    // real output format must carry at least one `%` specifier.
+    if !fmt.contains('%') {
+        return Err(DataError::InvalidSpec(format!(
+            "format_dates: output format must use strftime field specifiers \
+             like %Y-%m-%d — got the literal {fmt:?}, which would overwrite \
+             every cell with that text")));
+    }
     let on_incomplete = params.get("on_incomplete").and_then(|v| v.as_str()).unwrap_or("null");
 
     // Multi-format parser — handles ISO, slash, dot, and dotted

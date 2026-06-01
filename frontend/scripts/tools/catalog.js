@@ -208,10 +208,23 @@ export const TOOLS = [
     kind: "format_dates",
     label: "Format dates",
     icon: "bi-calendar3",
-    blurb: "Parse and format date strings with a strftime pattern.",
+    blurb: "Parse messy dates and re-output them in one standard format.",
+    // Output format is a PICKER, not free text — a raw strftime field let a
+    // user type "yyyy-mm-dd" (the obvious human notation), which has no `%`
+    // specifiers, so chrono's strftime echoed the literal string into every
+    // row. The options below carry the real strptime spec as their value;
+    // the user only sees a dated example. ISO is the default + the clean-
+    // pipeline target.
     fields: [
       { type: "column", key: "column", label: "Column" },
-      { type: "text", key: "fmt", label: "Format", placeholder: "%Y-%m-%d" },
+      { type: "enum", key: "fmt", label: "Output as", options: [
+        ["%Y-%m-%d", "2026-05-21  (ISO, YYYY-MM-DD)"],
+        ["%d/%m/%Y", "21/05/2026  (DD/MM/YYYY)"],
+        ["%m/%d/%Y", "05/21/2026  (MM/DD/YYYY)"],
+        ["%d-%m-%Y", "21-05-2026  (DD-MM-YYYY)"],
+        ["%d.%m.%Y", "21.05.2026  (DD.MM.YYYY)"],
+        ["%Y/%m/%d", "2026/05/21  (YYYY/MM/DD)"],
+      ]},
       { type: "enum", key: "on_incomplete", label: "If unparseable", options: [
         ["null", "Set to null"], ["keep", "Keep original"],
       ]},
