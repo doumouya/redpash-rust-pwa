@@ -299,8 +299,13 @@ export function mountTools(panelBody, ctx) {
       }
       host.innerHTML = html
         || '<span class="rt-sentinel-clean">No junk values found — this file looks clean.</span>';
-    } catch (_e) {
-      host.innerHTML = '<span class="rt-sentinel-err">Couldn’t scan — type values below.</span>';
+    } catch (e) {
+      // Surface the real failure (api.js attaches err.status / err.body) so a
+      // 404/500 reads as itself, not a vague "couldn't scan" — honest errors.
+      const why = e && e.status ? " (HTTP " + e.status + ")" : "";
+      const msg = (e && e.body && (e.body.error || e.body.message)) || "";
+      host.innerHTML = '<span class="rt-sentinel-err">Couldn’t scan this file' + esc(why)
+        + (msg ? " — " + esc(msg) : "") + '. Type the junk values below instead.</span>';
     }
   }
 
