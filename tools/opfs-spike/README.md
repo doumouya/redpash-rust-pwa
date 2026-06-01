@@ -35,10 +35,15 @@ cp tools/opfs-spike/opfs-spike.html tools/opfs-spike/opfs-spike-worker.js fronte
 - **Worker kills the freeze ✓** — identical parse, but the main thread froze for **~400 ms**
   (rAF stalled) while the worker run kept the UI at ~60 fps (16.8 ms max gap). Fix #1 from the
   edge bench, confirmed.
-- **`persist()` NOT granted ⚠️** — in a plain (non-installed) desktop tab, `navigator.storage.persist()`
-  returned **false** (quota 10.25 GB, usage 11.75 MB). Confirms the eval: `persist()` is
-  heuristic-gated; the deterministic grant comes from an **installed** context (PWAsForFirefox /
-  installed PWA). → on-device storage stays a **re-derivable cache, server/source = truth**.
+- **`persist()` NOT granted ⚠️ — confirmed in a real INSTALLED Edge PWA.** In Playwright's plain
+  tab `persist()` returned false (quota 10.25 GB, usage 11.75 MB). Then tested on Em's actual
+  **installed, aged, engaged Edge PWA**: `persisted() = false`, `persist() = false` — Chromium/Edge
+  denied persistent storage **even installed** (the "installed ⇒ persistent" hypothesis is
+  empirically false on Chromium). → the **re-derivable-cache invariant is MANDATORY**: on-device
+  storage is never the sole copy, always reconstructable from server/source, re-sync on eviction.
+  Deterministic durable on-device storage is a **Firefox-only path** (Firefox `persist()` is a user
+  prompt; Chromium's is an opaque heuristic) → the only browser route to guaranteed offline
+  durability for air-gapped data-sovereignty is a Firefox-based runtime (PWAsForFirefox / firefox-rp).
 
 ## Findings that change the design
 
