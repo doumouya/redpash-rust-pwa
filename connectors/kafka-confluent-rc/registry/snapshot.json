@@ -1,0 +1,39 @@
+{
+  "fetched_at": "2026-06-01T01:50:50Z",
+  "registry_url": "https://psrc-ze8rp68.europe-west2.gcp.confluent.cloud",
+  "global": {
+    "mode": "READWRITE",
+    "compatibility": "BACKWARD"
+  },
+  "subject_count": 2,
+  "subjects": [
+    {
+      "subject": "topic_account_jlr-value",
+      "versions": [
+        1,
+        2,
+        3
+      ],
+      "compatibility": null,
+      "mode": null,
+      "latest": {
+        "version": 3,
+        "id": 100005,
+        "schemaType": "AVRO"
+      }
+    },
+    {
+      "subject": "topic_account_transaction-value",
+      "versions": [
+        1
+      ],
+      "compatibility": null,
+      "mode": null,
+      "latest": {
+        "version": 1,
+        "id": 100004,
+        "schemaType": "AVRO"
+      }
+    }
+  ]
+}
