@@ -70,6 +70,11 @@ reasons. Consumed today by `POST /api/demo/parse`
   rectangular parse** (`!ragged_suspect && !multiline_quoted`) — on a ragged file
   the field positions are off, so a stray `00` from a mis-split decimal
   (`2.000,00`) would false-positive (and the raggedness is already flagged).
+- **date_drift** — a date column (≥80% date-shaped) mixing ≥2 incompatible
+  format shapes (`2026-01-13` + `13/01/2026` + `01/13/2026`), or a contradictory
+  day/month order (one cell dd/mm, another mm/dd). The dates *parse* — to the
+  wrong day, silently — so this never shows as a null or mismatch. Detected by
+  `dtype::worst_date_drift`; penalty 18, reason calls out the contradiction.
 - **type_drift** (hook #6) — a String-stored column whose non-empty cells are
   *mostly* (≥50%) one structured kind (numeric/bool/date) but *not pure* (<95%) —
   the silent band the semantic sniff waves through as a clean string column at

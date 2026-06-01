@@ -314,6 +314,99 @@ pub(crate) fn worst_type_drift(df: &DataFrame) -> Option<(String, f32)> {
     worst
 }
 
+// ── date-format drift ────────────────────────────────────────────────
+//
+// A column can be 100% date-shaped (so the sniff types it `date` and no
+// type-drift fires) yet mix incompatible FORMATS: `2026-01-13` + `13/01/2026`
+// + `01/13/2026`. That's the most dangerous dirt in CSV land — `13/01` and
+// `01/13` both "parse", to different days, silently. `worst_date_drift`
+// surfaces a date column carrying ≥2 distinct format shapes, and flags the
+// day/month *contradiction* (one cell forces dd/mm, another forces mm/dd).
+
+/// The coarse format shape of a date-shaped cell, or `None` if not date-shaped.
+/// Structural only (not a parse) — enough to tell "this column mixes formats".
+/// `head` = year-first (yyyy-sep-x-sep-x), `tail` = year-last (x-sep-x-yyyy).
+pub(crate) fn date_format_shape(s: &str) -> Option<&'static str> {
+    let t = s.trim();
+    if t.len() == 8 && t.bytes().all(|b| b.is_ascii_digit()) {
+        return Some("compact8"); // yyyymmdd
+    }
+    for (sep, head, tail) in [('-', "dash-head", "dash-tail"),
+                              ('/', "slash-head", "slash-tail"),
+                              ('.', "dot-head", "dot-tail")] {
+        let p: Vec<&str> = t.split(sep).collect();
+        if p.len() == 3 && p.iter().all(|g| !g.is_empty() && g.len() <= 4 && g.bytes().all(|b| b.is_ascii_digit())) {
+            return Some(if p[0].len() == 4 { head } else { tail });
+        }
+    }
+    None
+}
+
+/// For a year-last date (`x/x/yyyy`), which order does this cell *force*?
+/// `Some(true)` = day-first (first group > 12, can only be a day),
+/// `Some(false)` = month-first (second group > 12), `None` = ambiguous.
+fn daymonth_force(s: &str) -> Option<bool> {
+    let t = s.trim();
+    for sep in ['/', '-', '.'] {
+        let p: Vec<&str> = t.split(sep).collect();
+        if p.len() == 3 && p[2].len() == 4 {
+            let g0: u32 = p[0].parse().ok()?;
+            let g1: u32 = p[1].parse().ok()?;
+            if g0 > 12 && g1 <= 12 { return Some(true); }   // dd/mm
+            if g1 > 12 && g0 <= 12 { return Some(false); }  // mm/dd
+            return None;
+        }
+    }
+    None
+}
+
+/// Scan String columns for date-format drift. Returns the worst date column's
+/// `(name, distinct_shape_count, daymonth_contradiction)` or `None`. A column
+/// qualifies when ≥80% of its non-empty cells are date-shaped (it's "a date
+/// column") and it carries ≥2 distinct format shapes, OR a day/month
+/// contradiction even within one shape.
+pub(crate) fn worst_date_drift(df: &DataFrame) -> Option<(String, usize, bool)> {
+    let mut worst: Option<(String, usize, bool)> = None;
+    for c in df.get_columns() {
+        if !matches!(c.dtype(), DataType::String) {
+            continue;
+        }
+        let mut shapes = std::collections::HashSet::new();
+        let (mut total, mut dated, mut dmy, mut mdy) = (0usize, 0usize, false, false);
+        for i in 0..c.len() {
+            let raw = match c.get(i) {
+                Ok(AnyValue::String(s)) => s.to_string(),
+                Ok(AnyValue::StringOwned(s)) => s.to_string(),
+                _ => continue,
+            };
+            if raw.trim().is_empty() {
+                continue;
+            }
+            total += 1;
+            if let Some(shape) = date_format_shape(&raw) {
+                dated += 1;
+                shapes.insert(shape);
+                match daymonth_force(&raw) {
+                    Some(true) => dmy = true,
+                    Some(false) => mdy = true,
+                    None => {}
+                }
+            }
+        }
+        if total < 3 || dated * 5 < total * 4 {
+            continue; // not a date column (≥80% date-shaped required)
+        }
+        let contradiction = dmy && mdy;
+        if shapes.len() >= 2 || contradiction {
+            let better = worst.as_ref().map_or(true, |(_, n, _)| shapes.len() > *n);
+            if better {
+                worst = Some((c.name().to_string(), shapes.len(), contradiction));
+            }
+        }
+    }
+    worst
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +435,18 @@ mod tests {
         let (col, off) = worst_type_drift(&df).expect("should flag drift");
         assert_eq!(col, "amount");
         assert!((off - 0.25).abs() < 1e-6, "off fraction = {off}");
+    }
+
+    #[test]
+    fn date_drift_flags_mixed_formats_and_contradiction() {
+        // 3 shapes (dash-head, slash-tail, slash-head) + 13/01 vs 01/13 clash.
+        let df = df1("date", &["2026-01-13", "13/01/2026", "01/13/2026", "2026/01/13", "2026-01-14"]);
+        let (col, shapes, contradiction) = worst_date_drift(&df).expect("mixed formats should drift");
+        assert_eq!(col, "date");
+        assert!(shapes >= 2 && contradiction, "shapes={shapes} contradiction={contradiction}");
+        // A clean single-format ISO column does NOT drift.
+        let df = df1("date", &["2026-01-13", "2026-01-14", "2026-02-01", "2026-03-09"]);
+        assert!(worst_date_drift(&df).is_none(), "single-format dates are clean");
     }
 
     #[test]

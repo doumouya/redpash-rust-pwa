@@ -29,6 +29,12 @@ proportional to how many cells fail a strict native parse.
   (`Empty`/`Numeric`/`Bool`/`Date`/`Text`) reusing the same shape checks the
   semantic sniff uses, applied at cell granularity. A bare `1`/`0` is `Numeric`,
   not `Bool` (mirrors the sniff's int-over-bool guard).
+- `pub(crate) fn worst_date_drift(df) -> Option<(String, usize, bool)>` — a date
+  column (≥80% date-shaped) that mixes ≥2 distinct format shapes
+  (`date_format_shape`: dash/slash/dot × year-head/tail + compact8), or whose
+  day/month order is self-contradictory (`daymonth_force` — one cell forces
+  dd/mm, another mm/dd). Returns `(name, distinct_shapes, contradiction)`.
+  Consumed by [structure.rs](structure.md) `date_drift_suspect`.
 - `pub(crate) fn worst_type_drift(df) -> Option<(String, f32)>` — **hook #6**.
   Scans String columns for the *worst* one that's mostly (≥50%) one structured
   kind but not pure (<95%) — the 50–95% band `sniff_semantic_type` waves through

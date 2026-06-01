@@ -37,6 +37,10 @@ pub struct StructureFlags {
     /// id), is silently gone. Only visible by comparing raw bytes to the
     /// typed frame.
     pub numeric_id_loss_suspect: bool,
+    /// A date column mixes ≥2 incompatible formats (`2026-01-13` + `13/01/2026`)
+    /// — the dates parse to different days silently. Worse when day/month order
+    /// is contradictory (one cell is dd/mm, another mm/dd).
+    pub date_drift_suspect:  bool,
     /// Human-readable reasons (one per fired flag) for the cleaner banner.
     pub reasons: Vec<String>,
 }
@@ -62,6 +66,9 @@ impl StructureFlags {
         // Identity loss, not corruption: the data parsed, but a code/id lost
         // its leading zero. Moderate — the file is usable, the column isn't.
         if self.numeric_id_loss_suspect { p += 20.0; }
+        // Mixed date formats parse to silently-wrong days; ambiguous and
+        // dangerous, but the values are recoverable once normalized.
+        if self.date_drift_suspect { p += 18.0; }
         p.min(100.0)
     }
 
@@ -73,6 +80,7 @@ impl StructureFlags {
             || self.header_suspect
             || self.type_drift_suspect
             || self.numeric_id_loss_suspect
+            || self.date_drift_suspect
     }
 }
 
@@ -210,6 +218,18 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
             "type drift: column \"{col}\" is mostly one type with {:.0}% off-type values",
             off * 100.0
         ));
+    }
+
+    // ── date-format drift: a date column mixing incompatible formats ──
+    // Parses "fine" to silently-wrong days. Worst when the day/month order is
+    // self-contradictory (one cell dd/mm, another mm/dd) — flag it loudly.
+    if let Some((col, shapes, contradiction)) = crate::dtype::worst_date_drift(df) {
+        f.date_drift_suspect = true;
+        f.reasons.push(if contradiction {
+            format!("date drift: column \"{col}\" mixes {shapes} date formats with contradictory day/month order — dates are ambiguous")
+        } else {
+            format!("date drift: column \"{col}\" mixes {shapes} date formats — may parse to wrong days")
+        });
     }
 
     // ── header weirdness: duplicates / all-numeric ──
