@@ -1360,12 +1360,32 @@
   font-weight: 700;
   background: var(--rp-hover);
 }
+/* Totals foot — NOT sticky: a multi-measure matrix has K foot rows
+   (one per measure), and `position: sticky; bottom: 0` would pin all K
+   to the same edge so they stack and bleed over the last body rows.
+   The foot sits at the table bottom and scrolls into view normally. */
 .rt-report-matrix-table tfoot tr.is-total td {
-  position: sticky;
-  bottom: 0;
   background: var(--rp-accent-soft);
   font-weight: 700;
   border-top: 1px solid var(--rp-accent-2);
+}
+/* Multi-measure matrix (CAS_AF836C82 #1) — each row value spans K
+   measure sub-rows; the measure name lives in its own column. */
+.rt-report-matrix-table .rt-report-matrix-measure,
+.rt-report-matrix-table th.rt-report-matrix-measure-h {
+  color: var(--rp-text-mute);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  white-space: nowrap;
+  text-align: left;
+}
+/* The row-dim cells span their measure sub-rows — anchor them to the
+   top so the value reads against its first measure. */
+.rt-report-matrix-table tbody td[rowspan] { vertical-align: top; }
+/* A hairline between row groups (the first measure sub-row of each
+   row value) so the K-row blocks read as units. */
+.rt-report-matrix-table tbody tr.rt-report-matrix-rowstart > td {
+  border-top: 1px solid var(--rp-border);
 }
 
 /* ── joins picker (Tools panel · Joins tab, slice B) ───────────────

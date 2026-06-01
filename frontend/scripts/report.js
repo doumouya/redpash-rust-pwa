@@ -539,102 +539,121 @@ export function mountReport(panelBody, ctx) {
   }
 
   // Matrix renderer — pivots the long-format subtotals into a wide
-  // cross-tab: rows = groupBy values, columns = pivotBy values, cells
-  // = aggregation values. First aggregation drives the cell metric
-  // (multi-agg matrices repeat the pivot block per metric — defer for
-  // now; the historic Phase-3 also shipped single-metric first).
-  // Numeric row/column totals + grand total rendered when show_total
-  // is on AND at least one cell is numeric.
+  // cross-tab. rows = groupBy values, columns = pivotBy values. Each
+  // row value gets ONE sub-row PER measure (Salesforce-style: the row
+  // dim cell spans its measure sub-rows; the measure name sits in its
+  // own "Measure" column), so a matrix carries N measures per cell
+  // instead of one. CAS_AF836C82 #1.
+  //
+  // Totals (when show_total): per-row and per-column totals are rolled
+  // up CLIENT-side, so they're only exact for ADDITIVE fns — sum/count
+  // (summed) and min/max (min/max-ed). Non-additive fns (mean, median,
+  // q1/q3, count_distinct, first/last) can't be re-derived from already-
+  // aggregated cell values, so their row/col total cells render "—".
+  // The per-measure GRAND total uses the engine's page.total (correct
+  // for every fn). Metric columns = columns.slice(dimCount); each
+  // metric's fn aligns to `aggregations` by index — the buildSpec
+  // auto-count (used when the user added no measures) defaults to a
+  // summable count.
   function renderMatrix(page) {
     const sub = page.subtotals;
     const columns = sub.columns;
     const rows    = sub.rows;
     const rowDimIdxs = groupBy.map((n) => columns.indexOf(n)).filter((i) => i >= 0);
     const colDimIdxs = pivotBy.map((n) => columns.indexOf(n)).filter((i) => i >= 0);
-    const metricIdx  = rowDimIdxs.length + colDimIdxs.length;
-    const metricName = columns[metricIdx] || "value";
+    const dimCount   = rowDimIdxs.length + colDimIdxs.length;
+    const metricCols = columns.slice(dimCount);             // measure aliases
+    const metricFns  = metricCols.map((_, j) => (aggregations[j] && aggregations[j].fn) || "count");
+    const K = Math.max(1, metricCols.length);
 
     const rowKeyOf = (r) => rowDimIdxs.map((i) => r[i] ?? "∅").join("␟");
     const colKeyOf = (r) => colDimIdxs.map((i) => r[i] ?? "∅").join("␟");
 
-    const rowKeyValues = new Map();   // rowKey → original cell array
-    const colKeyValues = new Map();
-    const cellMap      = new Map();   // rowKey + "␞" + colKey → value
+    const rowKeyValues = new Map();   // rowKey → row-dim cell array
+    const colKeyValues = new Map();   // colKey → col-dim cell array
+    const cellMap      = new Map();   // rowKey ␞ colKey → [metric values]
     for (const row of rows) {
       const rk = rowKeyOf(row);
       const ck = colKeyOf(row);
       if (!rowKeyValues.has(rk)) rowKeyValues.set(rk, rowDimIdxs.map((i) => row[i]));
       if (!colKeyValues.has(ck)) colKeyValues.set(ck, colDimIdxs.map((i) => row[i]));
-      cellMap.set(rk + "␞" + ck, row[metricIdx]);
+      cellMap.set(rk + "␞" + ck, row.slice(dimCount));
     }
     const rowKeys = Array.from(rowKeyValues.keys()).sort();
     const colKeys = Array.from(colKeyValues.keys()).sort();
 
-    const wantTotals = showTotal;
-    let anyNumeric = false;
-    const rowTotals = {};
-    const colTotals = {};
-    let grand = 0;
-    if (wantTotals) {
-      for (const rk of rowKeys) {
-        let s = 0;
-        for (const ck of colKeys) {
-          const v = cellMap.get(rk + "␞" + ck);
-          const n = v == null ? NaN : Number(v);
-          if (!Number.isNaN(n)) { s += n; anyNumeric = true; }
-        }
-        rowTotals[rk] = s;
-      }
-      for (const ck of colKeys) {
-        let s = 0;
-        for (const rk of rowKeys) {
-          const v = cellMap.get(rk + "␞" + ck);
-          const n = v == null ? NaN : Number(v);
-          if (!Number.isNaN(n)) s += n;
-        }
-        colTotals[ck] = s;
-      }
-      grand = Object.values(rowTotals).reduce((a, b) => a + b, 0);
-    }
+    const totalsOn = showTotal;
+    const SUMMABLE = new Set(["count", "sum"]);
+    // Roll a measure's cell values up along one axis — exact only for
+    // additive fns; everything else returns null → rendered "—".
+    const rollup = (fn, vals) => {
+      const nums = vals.filter((v) => v != null && v !== "" && !Number.isNaN(Number(v))).map(Number);
+      if (!nums.length) return null;
+      if (SUMMABLE.has(fn)) return nums.reduce((a, b) => a + b, 0);
+      if (fn === "min") return Math.min(...nums);
+      if (fn === "max") return Math.max(...nums);
+      return null;
+    };
+    const fmt = (v) => v == null ? null
+      : (typeof v === "number" && !Number.isInteger(v) ? String(Math.round(v * 1e4) / 1e4) : String(v));
+    const numCell = (v) => {
+      const f = fmt(v);
+      return f == null ? '<td class="is-num is-muted">—</td>'
+                       : '<td class="is-num">' + esc(f) + '</td>';
+    };
+    const colLabel = (ck) => esc(colKeyValues.get(ck).map((v) => v == null ? "∅" : String(v)).join(" / "));
 
-    const totalsOn = wantTotals && anyNumeric;
     const headerCells = [
       ...groupBy.map((d) => '<th>' + esc(d) + '</th>'),
-      ...colKeys.map((ck) =>
-        '<th>' + esc(colKeyValues.get(ck).map((v) => v == null ? "∅" : String(v)).join(" / ")) + '</th>'),
-      ...(totalsOn ? ['<th>Total</th>'] : []),
+      '<th class="rt-report-matrix-measure-h">Measure</th>',
+      ...colKeys.map((ck) => '<th class="is-num">' + colLabel(ck) + '</th>'),
+      ...(totalsOn ? ['<th class="is-num">Total</th>'] : []),
     ].join('');
 
+    // One <tr> per (rowKey, measure); the row-dim cells on the first
+    // measure sub-row span all K via rowspan.
     const body = rowKeys.map((rk) => {
       const rv = rowKeyValues.get(rk);
-      const dimCells = rv.map((v) =>
-        v == null ? '<td class="is-muted">∅</td>' : '<td>' + esc(String(v)) + '</td>').join('');
-      const valCells = colKeys.map((ck) => {
-        const v = cellMap.get(rk + "␞" + ck);
-        return v == null
-          ? '<td class="is-muted">∅</td>'
-          : '<td class="is-num">' + esc(String(v)) + '</td>';
+      return metricCols.map((alias, j) => {
+        const dimCells = j === 0
+          ? rv.map((v) => '<td rowspan="' + K + '">'
+              + (v == null ? '<span class="is-muted">∅</span>' : esc(String(v))) + '</td>').join('')
+          : '';
+        const valCells = colKeys.map((ck) =>
+          numCell((cellMap.get(rk + "␞" + ck) || [])[j])).join('');
+        const rowTot = totalsOn
+          ? numCell(rollup(metricFns[j], colKeys.map((ck) => (cellMap.get(rk + "␞" + ck) || [])[j])))
+          : '';
+        return '<tr' + (j === 0 ? ' class="rt-report-matrix-rowstart"' : '') + '>'
+          + dimCells
+          + '<td class="rt-report-matrix-measure">' + esc(alias) + '</td>'
+          + valCells + rowTot + '</tr>';
       }).join('');
-      const total = totalsOn
-        ? '<td class="is-num rt-report-matrix-rowtotal">' + esc(String(rowTotals[rk])) + '</td>'
-        : '';
-      return '<tr>' + dimCells + valCells + total + '</tr>';
     }).join('');
 
     const foot = totalsOn
-      ? '<tfoot><tr class="is-total">'
-        + '<td colspan="' + groupBy.length + '">Grand total</td>'
-        + colKeys.map((ck) => '<td class="is-num">' + esc(String(colTotals[ck])) + '</td>').join('')
-        + '<td class="is-num">' + esc(String(grand)) + '</td>'
-        + '</tr></tfoot>'
+      ? '<tfoot>' + metricCols.map((alias, j) => {
+          const label = j === 0
+            ? '<td rowspan="' + K + '" colspan="' + Math.max(1, groupBy.length) + '">Total</td>'
+            : '';
+          const colTots = colKeys.map((ck) =>
+            numCell(rollup(metricFns[j], rowKeys.map((rk) => (cellMap.get(rk + "␞" + ck) || [])[j])))).join('');
+          const grand = page.total ? page.total[dimCount + j] : null;
+          return '<tr class="is-total' + (j === 0 ? ' rt-report-matrix-rowstart' : '') + '">'
+            + label
+            + '<td class="rt-report-matrix-measure">' + esc(alias) + '</td>'
+            + colTots + numCell(grand) + '</tr>';
+        }).join('') + '</tfoot>'
       : '';
 
+    const metricsLabel = metricCols.length ? metricCols.map((m) => esc(m)).join(', ') : 'value';
     return ''
       + '<div class="rt-report-preview-head">'
       +   '<span class="rt-report-preview-meta">'
       +     '<b>' + rowKeys.length + '</b> row' + (rowKeys.length === 1 ? '' : 's')
       +     ' × <b>' + colKeys.length + '</b> col' + (colKeys.length === 1 ? '' : 's')
-      +     ' · metric: <b>' + esc(metricName) + '</b>'
+      +     ' · ' + metricCols.length + ' measure' + (metricCols.length === 1 ? '' : 's')
+      +     ' (' + metricsLabel + ')'
       +     ' · ' + page.ms + ' ms'
       +   '</span>'
       + '</div>'
@@ -857,23 +876,32 @@ export function mountReport(panelBody, ctx) {
 
   // ── spec build + apply ────────────────────────────────────────────
   function buildSpec() {
+    // count(*) workaround. The engine compiles count over the "*"
+    // sentinel (the "Count rows" measure) to `lit(1i64).count()`, which
+    // Polars rejects with "cannot aggregate a literal" → HTTP 400.
+    // Counting any REAL column dodges it (count is row-count regardless
+    // of which non-null column it targets); a group/pivot key is always
+    // present, so prefer one, else fall back to the first data column.
+    // Applies to EVERY count(*) measure, not just the auto-added one —
+    // an explicit "Count of rows" measure hit the same 400 before.
+    // Pinged Gus to fix in the engine (the shortcut should use `len()`
+    // / a column ref, not a literal); drop this once that lands.
+    const countCol = groupBy[0] || pivotBy[0]
+      || ((ctx.columns() || [])[0] && (ctx.columns() || [])[0].name) || "*";
     // Aggregations: drop empty alias keys so the backend infers a
     // default. Map shape matches shared::report::Aggregation:
     // { col, fn, alias? }. fn comes through as the snake_case enum.
     const aggs = aggregations.map((a) => {
-      const out = { col: a.col, fn: a.fn };
+      const isCountRows = a.fn === "count" && a.col === "*";
+      const out = { col: isCountRows ? countCol : a.col, fn: a.fn };
+      // Keep the column labelled "count" even though we count a real
+      // column under the hood (else the engine names it after countCol).
       if (a.alias) out.alias = a.alias;
+      else if (isCountRows) out.alias = "count";
       return out;
     });
-    // Engine auto-add workaround. When group_by is non-empty and the
-    // user gave no aggregations, the engine auto-pushes
-    // `{col:"*", fn:count}` (group_by.rs:44) which compiles to
-    // `lit(1i64).count()` — Polars rejects literal aggregations with
-    // "cannot aggregate a literal". Sending an explicit count over a
-    // real column dodges the auto-add. Pinged Gus to fix in the
-    // engine (the shortcut should use `len()` or a column reference,
-    // not a literal); this workaround can be dropped once the engine
-    // change lands.
+    // Auto-add: when group_by is non-empty and the user gave no
+    // aggregations, add a count over a real column (same workaround).
     if (groupBy.length && !aggs.length) {
       aggs.push({ col: groupBy[0], fn: "count", alias: "count" });
     }
