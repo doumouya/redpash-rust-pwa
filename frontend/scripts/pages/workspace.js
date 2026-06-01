@@ -1309,7 +1309,14 @@ export default function workspace(app, { session }) {
         // not_a_data_file guard when a dashboard loaded — they now
         // run only on the CSV branch.
         toolsCtrl?.refresh();
-        joinsCtrl?.refresh();
+        // workspace-joinsAutoDetect (default "1") gates the
+        // auto-refresh of the sibling-join candidates on every file
+        // open. Joins detection is expensive on large projects
+        // (one POST /joins per open) — off lets the user trigger
+        // via the Joins tab when they actually need it.
+        if (getPref("workspace-joinsAutoDetect") !== "0") {
+          joinsCtrl?.refresh();
+        }
         reportCtrl?.refresh();
         await fetchAndRender();
         // CAS_3BCD6727: data files belong to the "data" view slot.
@@ -2451,10 +2458,14 @@ export default function workspace(app, { session }) {
       return true;  // handled — nothing to chart, but not a "no dashboard" miss
     }
     const firstCol = src.columns[0]?.name || "";
+    // workspace-defaultChartKind controls the kind a freshly-added
+    // chart starts with (Add chart from the dashboard canvas).
+    // Registered pref; fallback "bar" preserves pre-step-6c behavior.
+    const defaultKind = getPref("workspace-defaultChartKind") || "bar";
     const chart = await api.post("/charts", {
       source_file_id: src.rid,
       title:          "Untitled chart",
-      spec: { kind: "bar", group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
+      spec: { kind: defaultKind, group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
     });
     await designerCtrl?.addChartWidget?.(chart);  // appends widget, PUTs, mounts tile
     await loadProjects();                          // rail picks up the new CHT_ row

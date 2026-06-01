@@ -27,6 +27,7 @@
 import { api } from "/scripts/api.js";
 import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 import { esc } from "/scripts/dom.js";
+import { getPref } from "/scripts/prefs.js";
 // THEMES + TYPE_TO_KIND + buildOption lifted into
 // /scripts/charts/build.js (Slice A — Em 2026-05-27). Designer
 // still needs THEMES (theme lookup) + TYPE_TO_KIND (mountChartTile
@@ -44,10 +45,17 @@ import { mountBuilder } from "/scripts/charts/builder-ui.js";
 
 // Defaults applied to a new chart cfg. Mirrors the prototype's D
 // plus the modifiers added in C3.1 (smooth for line/area).
+//
+// `theme` reads the workspace-defaultChartTheme pref (Settings v2
+// step 6c follow-up) so users can pick their preferred ECharts
+// theme palette for every new chart. Lazy-read via the getter
+// below — module-load order means prefs.js may not have populated
+// the registry yet when this module imports, so we resolve at
+// access time, not at module init.
 const DEFAULTS = {
   legend: false, legendPos: "bottom",
   tooltip: true, splitLines: true, axisLine: true,
-  theme: "vintage",
+  get theme() { return getPref("workspace-defaultChartTheme") || "vintage"; },
   smooth: false,
 };
 

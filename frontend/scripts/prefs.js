@@ -223,6 +223,45 @@ registerPref({
   options: ON_OFF_OPTIONS,
   tags: ["defaults"],
 });
+// Phase 1 hardcoded-value sweep follow-up — three more workspace
+// behaviors that read as obvious pref candidates. Each one swaps a
+// hardcoded constant in workspace.js / designer.js for a getPref
+// call with the fallback preserved as the registered default, so
+// behavior is byte-identical until the user touches the pref.
+registerPref({
+  key: "workspace-defaultChartKind", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Default chart kind",
+  hint:  "kind a freshly-added chart starts with (Add chart from a dashboard)",
+  values: ["bar", "line", "area", "pie", "donut"], default: "bar", attr: null,
+  options: [
+    { value: "bar",   label: "Bar"   },
+    { value: "line",  label: "Line"  },
+    { value: "area",  label: "Area"  },
+    { value: "pie",   label: "Pie"   },
+    { value: "donut", label: "Donut" },
+  ],
+  tags: ["charts", "defaults"],
+});
+registerPref({
+  key: "workspace-defaultChartTheme", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Default chart theme",
+  hint:  "ECharts palette new charts start with",
+  values: ["vintage", "latte", "mocha"], default: "vintage", attr: null,
+  options: [
+    { value: "vintage", label: "Vintage" },
+    { value: "latte",   label: "Latte"   },
+    { value: "mocha",   label: "Mocha"   },
+  ],
+  tags: ["charts", "appearance"],
+});
+registerPref({
+  key: "workspace-joinsAutoDetect", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Auto-detect joins on file open",
+  hint:  "off avoids the per-open POST /joins on very large projects",
+  values: ["1", "0"], default: "1", attr: null,
+  options: ON_OFF_OPTIONS,
+  tags: ["defaults", "performance"],
+});
 
 // WORKSPACE · Data & Export — none reshape <html>, so no attr;
 // consumed by upload / export handlers when they pick a sensible
