@@ -16,6 +16,7 @@
 //! handler-facing gates (dev_user bypasses as the dev-mode platform admin).
 
 use sqlx::PgPool;
+use std::collections::BTreeMap;
 
 use crate::{error::AppError, state::AppState};
 
@@ -264,4 +265,117 @@ pub async fn require_view(
     label:  &str,
 ) -> Result<(), AppError> {
     require_grant(state, caller, object, label, |g| g.effective().is_some()).await
+}
+
+// ─── permission contract (CAS_0DE2DDEF) ────────────────────────────────────
+// Step 1: storage + types + the horizontal-axis check. STORAGE ONLY — wired
+// into the gates in step 2, so nothing below changes enforcement yet.
+//
+// Em's reframe: RBAC is one declarative, per-company, versioned JSONB contract
+// the single evaluator reads. The tier ladder (`Role`), the self-overlay, and
+// the see-down visibility rule are framework DEFAULTS — not stored. The
+// contract carries the company-scope specials (owner/admins) + the HORIZONTAL
+// axis: per-(team, object-TYPE) action grants (HR owns Users+Payslips, Eng owns
+// Cases+Monitoring — capability, not team-over-team rank). The `memberships`
+// graph stays the instances; this is the policy over it.
+
+/// The per-company RBAC permission contract. Stored as JSONB in `company_rbac`
+/// (active = max(version)).
+///
+/// INVARIANT (Em, emphasised twice): enforcement branches on the TIER and these
+/// `grants` ONLY. `labels` is DISPLAY-ONLY (their label → tier, for the UI); no
+/// enforcement path reads it, and nothing here is keyed on a team/department
+/// NAME — only PKs (`company`, the grant keys = team PK) + object TYPEs. They
+/// pick whatever `context_role` / names they like; the framework ignores them.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Contract {
+    #[serde(default)] pub company: String,
+    /// company_owner (USR_ id) — god of this company's subtree.
+    #[serde(default)] pub owner:  Option<String>,
+    /// company_admin (USR_ ids) — ORG-management only (teams/memberships/users-as-org),
+    /// NO auto content-CRUD (fail-closed). Content access is the explicit grants below.
+    #[serde(default)] pub admins: Vec<String>,
+    /// DISPLAY ONLY: label → tier (e.g. "Manager"→"owner"). Never enforced on.
+    #[serde(default)] pub labels: BTreeMap<String, String>,
+    /// The horizontal axis: team PK → object-TYPE → allowed actions (⊆ {c,r,u,d}).
+    #[serde(default)] pub grants: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+impl Contract {
+    /// A minimal starter for `company` owned by `owner` (empty grants — an admin
+    /// fills them in). Convenience for seeding/Admin-Console; the ABSENCE of any
+    /// contract row is treated as "unconfigured → tier-only", so this isn't required.
+    pub fn default_for(company: &str, owner: &str) -> Self {
+        Contract { company: company.into(), owner: Some(owner.into()), ..Default::default() }
+    }
+
+    pub fn is_company_owner(&self, user: &str) -> bool { self.owner.as_deref() == Some(user) }
+    pub fn is_company_admin(&self, user: &str) -> bool { self.admins.iter().any(|a| a == user) }
+
+    /// Horizontal-axis check: does ANY of `principals` (the caller + their teams,
+    /// from `principals()`) grant `action` (`"c"`/`"r"`/`"u"`/`"d"`) on
+    /// `object_type`? Tier-capping is applied separately by the evaluator (via
+    /// `resolve_grant`); this is purely the per-team object-TYPE capability.
+    /// Multi-team = union (any team that grants it wins). A user PK isn't a grant
+    /// key, so non-team principals contribute nothing.
+    pub fn allows(&self, principals: &[String], object_type: &str, action: &str) -> bool {
+        principals.iter().any(|p| {
+            self.grants
+                .get(p)
+                .and_then(|by_type| by_type.get(object_type))
+                .map_or(false, |acts| acts.iter().any(|a| a == action))
+        })
+    }
+}
+
+/// Load a company's ACTIVE contract (highest version), or `None` if it has none.
+/// `None` = "unconfigured" → the evaluator falls back to tier-only (today's
+/// behaviour), keeping the rollout non-breaking until a real contract lands.
+pub async fn load_contract(pool: &PgPool, company_id: &str) -> sqlx::Result<Option<Contract>> {
+    let row: Option<sqlx::types::Json<Contract>> = sqlx::query_scalar(
+        "SELECT contract FROM company_rbac WHERE company_id = $1 ORDER BY version DESC LIMIT 1",
+    )
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|j| j.0))
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    #[test]
+    fn deserializes_the_sketch_and_enforces_object_type_grants() {
+        let json = r#"{
+          "company":"CMP_x","owner":"USR_o","admins":["USR_a"],
+          "labels":{"Manager":"owner"},
+          "grants":{"TEAM_eng":{"Case":["c","r","u","d"],"Monitoring":["r"]},
+                    "TEAM_hr":{"User":["c","r","u","d"],"Payslip":["r"],"Case":["c"]}}
+        }"#;
+        let c: Contract = serde_json::from_str(json).unwrap();
+        assert!(c.is_company_owner("USR_o"));
+        assert!(c.is_company_admin("USR_a"));
+        // Engineering owns Cases + Monitoring, NOT Users
+        assert!( c.allows(&["TEAM_eng".into()], "Case", "u"));
+        assert!(!c.allows(&["TEAM_eng".into()], "User", "u"));
+        assert!( c.allows(&["TEAM_eng".into()], "Monitoring", "r"));
+        assert!(!c.allows(&["TEAM_eng".into()], "Monitoring", "u"));
+        // HR owns Users + payslips; only CREATE on Cases
+        assert!( c.allows(&["TEAM_hr".into()], "User", "d"));
+        assert!( c.allows(&["TEAM_hr".into()], "Case", "c"));
+        assert!(!c.allows(&["TEAM_hr".into()], "Case", "u"));
+        // multi-team membership = union of grants
+        assert!( c.allows(&["TEAM_eng".into(), "TEAM_hr".into()], "User", "u"));
+        // a non-team principal (the user themselves) grants nothing
+        assert!(!c.allows(&["USR_o".into()], "Case", "u"));
+    }
+
+    #[test]
+    fn default_for_grants_nothing_until_filled() {
+        let c = Contract::default_for("CMP_x", "USR_o");
+        assert!(c.is_company_owner("USR_o"));
+        assert!(c.grants.is_empty());
+        assert!(!c.allows(&["TEAM_eng".into()], "Case", "r"));
+    }
 }

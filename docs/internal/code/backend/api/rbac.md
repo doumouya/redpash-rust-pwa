@@ -28,6 +28,16 @@ object, unioned across three sources, or `None` (default-deny):
 3. **team** — a membership held by any team the caller belongs to (recursive
    CTE, so nested teams close)
 
+**Permission contract (CAS_0DE2DDEF, step 1 — storage only).** Em's reframe:
+RBAC is one declarative, per-company, **versioned JSONB contract** (`company_rbac`
+table, active = max(version)) the single evaluator reads. The tier ladder, the
+self-overlay, and the see-down visibility rule are framework DEFAULTS; the
+contract carries the company-scope specials (owner/admins) + the **horizontal
+axis** — per-`(team, object-TYPE)` action grants (HR owns Users+Payslips, Eng
+owns Cases+Monitoring; capability, not team-over-team rank). `memberships` stays
+the instance graph. As of step 1 the contract is **storage + types only — the
+gates do NOT consult it yet** (wired in step 2), so enforcement is unchanged.
+
 ## Public surface
 
 - `pub enum Role` — `Viewer · Member · Admin · Owner`, `Ord` so "highest role
@@ -61,6 +71,14 @@ object, unioned across three sources, or `None` (default-deny):
   or `scope` (on a parent). Backs `GET /api/admin/rbac` (platform-admin gated in
   [routes/admin.rs](routes/admin.md)). Read-only; pairs with `resolve_grant`
   (tiers) for "who has reach on X, and why".
+- `pub struct Contract { company, owner, admins, labels, grants }` — the
+  per-company JSONB policy. `grants`: team PK → object-TYPE → actions (⊆ c,r,u,d).
+  Methods: `default_for(company, owner)`, `is_company_owner/admin(user)`,
+  `allows(principals, object_type, action)` (horizontal-axis check, multi-team =
+  union; tier-cap applied separately by the evaluator).
+- `pub async fn load_contract(pool, company_id) -> Option<Contract>` — the active
+  (max-version) contract, or `None` = unconfigured → evaluator stays tier-only
+  (non-breaking).
 
 ## Drift-prone areas
 
@@ -75,6 +93,11 @@ object, unioned across three sources, or `None` (default-deny):
   [entity-membership-model §2](../../../specs/rbac/entity-membership-model.md);
   keep the `role` rank mapping (`owner=4 … viewer=1`) in sync with the
   `memberships.role` CHECK.
+- **Contract INVARIANT (Em, emphasised twice):** enforcement branches on the
+  TIER + `Contract.grants` ONLY. `labels` is DISPLAY-ONLY; nothing is keyed on a
+  team/department NAME or `context_role` (free-text the framework ignores) — only
+  PKs (`company`, team PK) + object TYPEs. The contract is policy; `memberships`
+  is the graph — don't fold the graph into the JSON.
 
 ## Related
 
