@@ -10,7 +10,7 @@ last modified date: 2026-05-30
 
 ## Purpose
 
-Monitoring — the system telemetry surface. Same shell pattern as Home (rail + body). Static rail groups: REQUESTS / AUDITS / CATALOG. Tabs render observability data (requests, events, runs, findings, steps, charts, optimization, user activity).
+Monitoring — the system telemetry surface. Same shell pattern as Home (rail + body). The rail is split into two top-level surfaces by a `mountRailSeg` switcher (`#rpMonRailView`, `monitoring-railView` pref) — the same Data ↔ Dashboard mechanism Workspace uses (CAS_274EDF3B): **Monitoring** (system observability — REQUESTS / AUDITS / OPTIMIZATION / USERS / CATALOG) and **Admin Console** (org management — the ADMIN group, platform-admin-only). The switcher flips `data-rail-view` on `.rt-nav`; `rail.css` hides the off-surface groups (by `data-surface`, stamped per group in `renderGroup`). The Admin Console button is hidden until `/me` confirms `is_platform_admin` (`.rp-mon-admin` on the nav), and a non-admin's saved "admin" pref is coerced back to "monitoring".
 
 ## Public surface
 

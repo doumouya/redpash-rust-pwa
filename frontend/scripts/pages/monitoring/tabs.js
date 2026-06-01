@@ -73,18 +73,27 @@ export const MON_TABS = [
   { group: "CATALOG",  key: "case_categories", label: "Categories", icon: "bi-tags",          endpoint: "/cases/categories",        wired: true },
 ];
 
+// `surface` partitions the rail into the two top-level views the rail
+// switcher (#rpMonRailView, mounted in monitoring.js) toggles between —
+// the same Data ↔ Dashboard mechanism Workspace uses (CAS_274EDF3B):
+//   "monitoring" — SYSTEM observability (what's happening live)
+//   "admin"      — Admin Console: ORG management / config
+// renderGroup stamps `data-surface` on each group; rail.css hides the
+// groups not in the active surface. The "admin" surface is platform-
+// admin-only (the ADMIN group is already /me.is_platform_admin-gated),
+// so the switcher's Admin Console option only shows for admins.
 export const MON_GROUPS = [
-  { name: "REQUESTS",     mark: "RQ", color: "blue"  },
-  { name: "AUDITS",       mark: "AD", color: "peach" },
+  { name: "REQUESTS",     mark: "RQ", color: "blue",  surface: "monitoring" },
+  { name: "AUDITS",       mark: "AD", color: "peach", surface: "monitoring" },
   // ADMIN — Em-locked page-purpose split (2026-05-31 CAS_274EDF3B).
   // Hosted on Monitoring's rail rather than a standalone /admin page
   // so the platform-admin's surfaces all live in one shell. Whole
   // group gated on /api/me.is_platform_admin (skipped at render time
   // for non-admins; backend /admin/* endpoints are the real auth).
-  { name: "ADMIN",        mark: "AM", color: "mauve" },
-  { name: "OPTIMIZATION", mark: "OP", color: "green" },
-  { name: "USERS",        mark: "US", color: "sky"   },
-  { name: "CATALOG",      mark: "CT", color: "teal"  },
+  { name: "ADMIN",        mark: "AM", color: "mauve", surface: "admin"      },
+  { name: "OPTIMIZATION", mark: "OP", color: "green", surface: "monitoring" },
+  { name: "USERS",        mark: "US", color: "sky",   surface: "monitoring" },
+  { name: "CATALOG",      mark: "CT", color: "teal",  surface: "monitoring" },
 ];
 
 export const WINDOWS = ["1h", "24h", "7d", "30d"];

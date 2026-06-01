@@ -15,7 +15,11 @@ Monitoring page tab definitions — slice 5 of the god-object decomposition. Mir
 ## Public surface
 
 - MON_TABS — tab inventory across rail groups (REQUESTS / AUDITS / ADMIN / OPTIMIZATION / USERS / CATALOG).
-- MON_GROUPS — rail-group definitions.
+- MON_GROUPS — rail-group definitions. Each carries a `surface` tag
+  (`"monitoring"` = system observability | `"admin"` = Admin Console / org
+  management) that partitions the rail into the two top-level views the
+  `#rpMonRailView` switcher toggles (CAS_274EDF3B). Today: ADMIN → `admin`; all
+  other groups → `monitoring`.
 
 ## Drift-prone areas
 

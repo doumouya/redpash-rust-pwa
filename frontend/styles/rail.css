@@ -53,6 +53,21 @@
   display: none;
 }
 
+/* Monitoring rail surface filter (CAS_274EDF3B) — same data-rail-view
+   mechanism, but partitioning whole GROUPS (data-surface) instead of file
+   rows. "monitoring" = system observability, "admin" = Admin Console (org
+   management). The active surface hides the other's groups. No refetch. */
+.rt-nav[data-rail-view="monitoring"] .rt-group[data-surface="admin"],
+.rt-nav[data-rail-view="admin"] .rt-group[data-surface="monitoring"] {
+  display: none;
+}
+
+/* Admin Console is platform-admin-only — hide the switcher button until
+   monitoring.js confirms /api/me.is_platform_admin (.rp-mon-admin). */
+.rt-nav:not(.rp-mon-admin) #rpMonRailView [data-rail-seg="admin"] {
+  display: none;
+}
+
 /* ── rail filter zone — name search + filter chips ──────────────
    Shared atoms for the data-item rails (Workspace today; Cases'
    .rp-cases-rail-* migrate here in the consolidation pass). The search

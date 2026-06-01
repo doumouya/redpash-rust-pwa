@@ -11,7 +11,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
-import { mountRailCollapse } from "/scripts/rail-controls.js";
+import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
@@ -61,12 +61,18 @@ export default function monitoring(app, { session }) {
   // backend /admin/* endpoints enforce the real auth). Non-admins
   // never see the group; renderGroup filters MON_GROUPS by this.
   let isPlatformAdmin = false;
+  let railSeg = null; // the Monitoring ↔ Admin Console switcher (mounted below)
   api.get("/me")
     .then((me) => {
       isPlatformAdmin = !!me?.is_platform_admin;
-      // Re-render the rail once /me lands so the ADMIN group
-      // appears (or stays hidden) without requiring an interaction.
+      // Reveal the Admin Console switcher button (CSS-gated on this class)
+      // + re-render so the ADMIN group appears, then re-apply the saved
+      // view — if the user's pref was "admin" it was coerced to
+      // "monitoring" at mount (isPlatformAdmin was still false), so
+      // re-firing now restores Admin Console for an actual admin.
+      nav.classList.toggle("rp-mon-admin", isPlatformAdmin);
       if (typeof renderRail === "function") renderRail();
+      if (railSeg) railSeg.set(railSeg.current());
     })
     .catch(() => { /* leave false; backend is the real gate */ });
 
@@ -391,8 +397,22 @@ export default function monitoring(app, { session }) {
     });
   const listPanel       = (columns) => _listPanel(columns, "rp-mon-list-tbody");
 
-  // ─── rail collapse (shared rail-controls helper) ────────────
+  // ─── rail collapse + Monitoring ↔ Admin Console switcher ────
   mountRailCollapse(nav, app.querySelector("#rpMonNavCollapse"));
+  // Same mechanism as Workspace's Data ↔ Dashboard (mountRailSeg →
+  // data-rail-view on .rt-nav → CSS hides the off-surface groups). The
+  // Admin Console surface is platform-admin-only: a non-admin can't
+  // select it (coerced back to "monitoring") and never sees the button
+  // (CSS gate on .rp-mon-admin). CAS_274EDF3B.
+  railSeg = mountRailSeg(app.querySelector("#rpMonRailView"), {
+    pref:        "monitoring-railView",
+    fallback:    "monitoring",
+    fireOnMount: true,
+    onChange:    (v) => {
+      const view = (v === "admin" && !isPlatformAdmin) ? "monitoring" : v;
+      nav.dataset.railView = view;
+    },
+  });
 
   // ─── render the rail (static groups → tabs, minus hidden) ───
   renderRail();
@@ -453,7 +473,7 @@ export default function monitoring(app, { session }) {
     // Whole group hidden → drop the section header too (no empty groups).
     if (!tabs.length) return "";
     return ''
-      + '<div class="rt-group">'
+      + '<div class="rt-group" data-surface="' + esc(g.surface || "monitoring") + '">'
       +   '<button class="rt-group-head" type="button">'
       +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
       +     '<span class="rt-group-mark" data-c="' + g.color + '">' + g.mark + '</span>'
