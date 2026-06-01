@@ -298,6 +298,95 @@ async function phase5(env, phase1Result) {
 // schemas file-based at runtime with zero registry calls. The file
 // shape matches GET /subjects/{subject}/versions/{version} exactly so
 // it's round-trippable. Re-run when schemas evolve. ───────────────
+// `bootstrap-contracts diff` — drift detector. Compares the registry's
+// current state to what's in contracts/ and surfaces:
+//   (a) subjects in registry not in local       (new producer schemas)
+//   (b) subjects local not in registry          (deleted or never bootstrapped)
+//   (c) versions in registry not in local       (new version registered)
+//   (d) content drift on a (subject, version)   (shouldn't happen given
+//                                                Confluent's immutability
+//                                                invariant; catches local edits)
+// Read-only — does NOT modify either side. The first write-aware capability
+// per [[data-contract-first]] extension (Em 2026-06-01): credentials are a
+// stewardship mandate, not just a read pass.
+async function bootstrapContractsDiff(sr) {
+  console.log("\n── bootstrap-contracts diff: drift between local + registry ──");
+  if (!existsSync(CONTRACTS_DIR)) {
+    console.log("(no local contracts/ — run `bootstrap-contracts` first)");
+    return { driftDetected: false };
+  }
+  // Read local index
+  const indexPath = resolvePath(CONTRACTS_DIR, "index.json");
+  if (!existsSync(indexPath)) {
+    console.log("(no contracts/index.json — run `bootstrap-contracts` first)");
+    return { driftDetected: false };
+  }
+  const localIndex = JSON.parse(readFileSync(indexPath, "utf8"));
+  const localBySubject = new Map();
+  for (const c of localIndex.contracts || []) {
+    if (!localBySubject.has(c.subject)) localBySubject.set(c.subject, new Map());
+    localBySubject.get(c.subject).set(c.version, c);
+  }
+
+  // Walk current registry state
+  const remoteSubjects = await sr.get("/subjects");
+  const drift = {
+    subjectsAddedInRegistry: [],
+    subjectsRemovedFromRegistry: [],
+    versionsAddedInRegistry: [],
+    contentDrift: [],
+  };
+
+  for (const subject of remoteSubjects) {
+    const versions = await sr.get(`/subjects/${encodeURIComponent(subject)}/versions`);
+    if (!localBySubject.has(subject)) {
+      drift.subjectsAddedInRegistry.push({ subject, versions });
+      console.log(`  + subject "${subject}" exists in registry, NOT local (v: ${versions.join(",")})`);
+      continue;
+    }
+    const localVersions = localBySubject.get(subject);
+    for (const v of versions) {
+      if (!localVersions.has(v)) {
+        drift.versionsAddedInRegistry.push({ subject, version: v });
+        console.log(`  + ${subject} v${v} in registry, NOT local`);
+        continue;
+      }
+      // Content drift check
+      const remote = await sr.get(`/subjects/${encodeURIComponent(subject)}/versions/${v}`);
+      const localFile = resolvePath(CONTRACTS_DIR, localVersions.get(v).envelope);
+      if (!existsSync(localFile)) {
+        console.log(`  ⚠ index references ${localFile} but file missing`);
+        continue;
+      }
+      const local = JSON.parse(readFileSync(localFile, "utf8"));
+      const remoteSchema = typeof remote.schema === "string" ? remote.schema : JSON.stringify(remote.schema);
+      const localSchema = typeof local.schema === "string" ? local.schema : JSON.stringify(local.schema);
+      if (remoteSchema !== localSchema) {
+        drift.contentDrift.push({ subject, version: v, localId: local.id, remoteId: remote.id });
+        console.log(`  ✗ ${subject} v${v} DIFFERS  local id=${local.id} vs remote id=${remote.id}`);
+      }
+    }
+  }
+  for (const [localSub] of localBySubject) {
+    if (!remoteSubjects.includes(localSub)) {
+      drift.subjectsRemovedFromRegistry.push(localSub);
+      console.log(`  − subject "${localSub}" in local, NOT in registry (deleted upstream?)`);
+    }
+  }
+
+  const driftDetected =
+    drift.subjectsAddedInRegistry.length > 0 ||
+    drift.subjectsRemovedFromRegistry.length > 0 ||
+    drift.versionsAddedInRegistry.length > 0 ||
+    drift.contentDrift.length > 0;
+  if (!driftDetected) {
+    console.log("  ✓ local contracts/ in sync with registry");
+  } else {
+    console.log(`\n  drift detected — run \`bootstrap-contracts\` to refresh local`);
+  }
+  return { driftDetected, drift };
+}
+
 async function bootstrapContracts(sr) {
   console.log("\n── bootstrap-contracts: fetch + cache all schemas locally ──");
   if (!existsSync(CONTRACTS_DIR)) mkdirSync(CONTRACTS_DIR, { recursive: true });
@@ -366,10 +455,15 @@ async function main() {
     secret: env.SCHEMA_REGISTRY_SECRET,
   });
 
-  // Standalone command — no phases, just dump contracts + exit.
+  // Standalone commands — no phases, one-off operations + exit.
   if (phase === "bootstrap-contracts") {
     process.env.__SR_URL__ = env.SCHEMA_REGISTRY_URL;
-    await bootstrapContracts(sr);
+    const sub = process.argv[3];
+    if (sub === "diff") {
+      await bootstrapContractsDiff(sr);
+    } else {
+      await bootstrapContracts(sr);
+    }
     return;
   }
 

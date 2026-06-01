@@ -59,15 +59,26 @@ cd connectors/kafka-confluent-rc && npm install
 
 Deps: `@kafkajs/confluent-schema-registry` (wraps avsc + Confluent magic-byte wire format) + `kafkajs` (the consumer). The libs are connector-scoped — production codec usage is a separate v1.1 decision based on spike data. When backend codec registry ships, the FE bundle does NOT consume these (backend-mediated decode per design call 6).
 
-### 3. Bootstrap contracts (one-time)
+### 3. Bootstrap contracts + drift detection
 
 ```sh
-node spike.mjs bootstrap-contracts
+node spike.mjs bootstrap-contracts       # fetch + cache all schemas locally
+node spike.mjs bootstrap-contracts diff  # compare local to registry, surface drift
 ```
 
-Walks every subject + version on the registry with your `.env` credentials and saves each as `contracts/<subject>-v<n>.json` (plus an `index.json`). After this runs once, the codec can resolve schemas FILE-BASED at runtime with zero registry calls (Em 2026-06-01 — see [[feedback-data-contract-first]] and the contracts/[README.md](contracts/README.md)).
+**`bootstrap-contracts`** walks every (subject, version) on the registry with your `.env` credentials and saves each as `contracts/<subject>-v<n>.json` (envelope) + `contracts/<subject>-v<n>.avsc` (bare Avro schema) + `contracts/index.json`. After this runs once, the codec resolves schemas FILE-BASED at runtime with zero registry calls.
 
-Re-run when schemas evolve. This is the canonical way to get contracts — never ask the producer team to email schema files; use the credentials we already have.
+**`bootstrap-contracts diff`** is the **first write-aware capability** — compares the registry's current state to local files + surfaces:
+- subjects added in registry (new producer schemas)
+- subjects removed from registry (deleted upstream)
+- versions added per subject (schema evolution we haven't pulled yet)
+- content drift on a specific (subject, version) (shouldn't happen given Confluent's immutability invariant, catches local edits)
+
+Read-only — does NOT modify either side. Run periodically (or wire into a cron / CI hook) to catch upstream schema changes.
+
+**Why both modes exist** ([[data-contract-first]] memory): Schema Registry credentials are a **stewardship mandate**, not just a read pass. When a user grants us key+secret, they're delegating us to manage their schemas on their behalf. `bootstrap-contracts` is the read side; `bootstrap-contracts diff` is the drift-detection side; future `push <file>` will be the write side when we have a concrete trigger.
+
+Re-run `bootstrap-contracts` (without `diff`) to refresh local from registry. Never ask the producer team to email schema files — use the credentials we already have.
 
 ### 4. Run the spike
 
