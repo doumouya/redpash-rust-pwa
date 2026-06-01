@@ -2,15 +2,16 @@
  * Doc: docs/internal/code/frontend/scripts/pages/settings.md */
 // Settings page — app preferences.
 //
-// **Settings v2 (CAS_55984AC7, step 2):** the page is now declarative
-// from the OPEN PREF REGISTRY in prefs.js. Each registered pref
+// **Settings v2 (CAS_55984AC7, steps 2-4):** the page renders by
+// iterating the OPEN PREF REGISTRY in prefs.js. Each registered pref
 // carries its `section` / `control` / `label` / `hint` / `options`,
-// and `render()` iterates the registry to build the rows — no more
-// hand-written SETTINGS_ROWS tree. The Section EXTRAS map below
-// handles non-pref rows (sentinels mount, account values, signout
-// action, about brand, chart-picker mounts, Cases stub). Step 4 moves
-// the chart pickers into a control renderer; step 5 lands Hidden
-// Items as a new section.
+// and `renderFromRegistry()` dispatches via the CONTROLS map to the
+// matching page-row.js helper. Section EXTRAS below handles the few
+// non-pref rows that remain inline (sentinels mount + share toggle,
+// account fields + signout, about brand, Cases stub). Step 4 moved
+// the chart picker into a separate control module
+// (prefs/controls/chart-layouts.js) — dispatched the same way; step
+// 5 lands Hidden Items as a new section under GENERAL.
 //
 // One delegated click handler drives every option group: each wrapper
 // carries data-pref, each button carries data-value. Click → resolve
@@ -38,36 +39,29 @@ import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
 // rendered pref rows by label / hint / key / tags and re-paints
 // rail group badges with hit counts.
 import { mountSearch } from "/scripts/pages/settings-search.js";
-// Slice D — Monitoring chart picker. Mounts the shared mountBuilder
-// (from Slice C) against a `monitoring-stats` source so the user can
-// build per-tab chart layouts on the Settings page. Persisted to
-// `user_preferences.prefs.monitoringCharts.<tab>`; consumed by
-// pages/monitoring.js via the same pref name.
-import { mountBuilder } from "/scripts/charts/builder-ui.js";
-import { renderChart } from "/scripts/charts/render.js";
-import {
-  MON_STATS_SCHEMA, MON_DEFAULT_CHARTS,
-  newChartTemplate as newMonitoringChart,
-} from "/scripts/charts/monitoring-bank.js";
-// Slice D2 — Home tabs join the picker. Same registry shape +
-// monitoring-stats source kind (the resolver is endpoint-agnostic).
-import {
-  HOME_STATS_SCHEMA, HOME_DEFAULT_CHARTS,
-  newChartTemplate as newHomeChart,
-} from "/scripts/charts/home-bank.js";
+// Settings v2 step 4 — chart-layouts control renderer. Owns the
+// Slice D / D2 picker for monitoringCharts + homeCharts (moved out
+// of this file). Module shape: { render(spec), postMount(app, spec) }
+// — same shape every future deferred-mount control follows.
+import * as chartLayouts from "/scripts/prefs/controls/chart-layouts.js";
 
 // Server-side pref keys read on mount. Distinct from the registered
 // pref keys in prefs.js — these come from /me, not the local registry.
 const SERVER_PREF_KEYS = ["share_sentinels", "learned_sentinels"];
 
 // ── controls dispatcher ─────────────────────────────────────────────
-// Given a registry spec, return the HTML row. Settings v2 control
-// types map to page-row.js helpers:
-//   onoff / segmented — prefRow (button-group)
-// Future: value, action, mount, chart-layouts (step 4).
+// Each entry is a small module with a `render(spec) => htmlString` +
+// an optional `postMount(app, spec)` hook for deferred painters
+// (chart-layouts, future mount-style controls). settings.js iterates
+// the registry once to gather HTML, mounts it, then iterates again
+// to fire each present postMount.
+//
+// Adding a new control type = importing the renderer module +
+// adding it here.
 const CONTROLS = {
-  onoff(spec)     { return prefRow(prefRowSpecFromPref(spec)); },
-  segmented(spec) { return prefRow(prefRowSpecFromPref(spec)); },
+  onoff:     { render: (spec) => prefRow(prefRowSpecFromPref(spec)) },
+  segmented: { render: (spec) => prefRow(prefRowSpecFromPref(spec)) },
+  "chart-layouts": chartLayouts,
 };
 
 function prefRowSpecFromPref(spec) {
@@ -86,10 +80,10 @@ function prefRowSpecFromPref(spec) {
 
 // ── section extras ─────────────────────────────────────────────────
 // Pre-rendered HTML for rows that aren't backed by a registered pref:
-// sentinels mountRow, share_sentinels chip-row (server-passthrough,
-// special boolean coercion), monitoring + home chart-picker mount
-// slots, Cases stub placeholder, account fields, about brand. Each
-// section's extras render AFTER its registered prefs.
+// sentinels mountRow + share_sentinels chip-row (server-passthrough,
+// special boolean coercion), Cases stub placeholder, account fields
+// (display name / username / signout), about brand. Each section's
+// extras render AFTER its registered prefs.
 const SECTION_EXTRAS = {
   "set-cleaner": [
     mountRow({
@@ -109,26 +103,9 @@ const SECTION_EXTRAS = {
       ],
     }),
   ],
-  // Slice D / D2 — chart picker mounts. The panel body is rendered by
-  // mountChartPickerPanel; mountRow just stamps the slot the panel
-  // paints into. Step 4 moves these into a `chart-layouts` control
-  // renderer.
-  "set-monitoring-charts": [
-    mountRow({
-      label: "Per-tab chart layouts",
-      hint:  "your saved charts replace the curated defaults on each Monitoring tab. Build via the chart designer.",
-      id:    "rp-settings-mon-charts",
-      containerClass: "rp-settings__mon-charts",
-    }),
-  ],
-  "set-home-charts": [
-    mountRow({
-      label: "Per-tab chart layouts",
-      hint:  "your saved charts replace the curated defaults on each Home tab. Build via the chart designer.",
-      id:    "rp-settings-home-charts",
-      containerClass: "rp-settings__mon-charts",
-    }),
-  ],
+  // Note: set-monitoring-charts + set-home-charts moved to the
+  // chart-layouts control renderer in step 4 (their specs in
+  // prefs.js carry control: "chart-layouts" + the surface name).
   "set-account": [
     valueRow({ label: "Display name", id: "rp-settings-display" }),
     valueRow({ label: "Username",     id: "rp-settings-username" }),
@@ -187,10 +164,10 @@ function renderFromRegistry(app) {
   const rowsBySection = {};
   eachPref((spec) => {
     if (!spec.section) return;     // pref doesn't surface in Settings
-    const renderer = CONTROLS[spec.control];
-    if (!renderer)   return;       // unknown control; skip until step 4 lands more
+    const ctrl = CONTROLS[spec.control];
+    if (!ctrl || typeof ctrl.render !== "function") return;
     if (!rowsBySection[spec.section]) rowsBySection[spec.section] = [];
-    rowsBySection[spec.section].push(renderer(spec));
+    rowsBySection[spec.section].push(ctrl.render(spec));
   });
   // Append extras AFTER registered prefs for each section.
   for (const [section, extras] of Object.entries(SECTION_EXTRAS)) {
@@ -203,6 +180,19 @@ function renderFromRegistry(app) {
     const mount = app.querySelector('[data-rp-rows="' + mountKey + '"]');
     if (mount) mount.innerHTML = rows.join("");
   }
+}
+
+// ── post-mount hooks ────────────────────────────────────────────────
+// Some controls (chart-layouts today, future mount-style ones) paint
+// imperatively into their slot AFTER the row HTML lands. After
+// renderFromRegistry mounts the rows, iterate the registry once more
+// and call each spec's control.postMount hook if present.
+function callPostMountHooks(app) {
+  eachPref((spec) => {
+    if (!spec.section) return;
+    const ctrl = CONTROLS[spec.control];
+    if (ctrl && typeof ctrl.postMount === "function") ctrl.postMount(app, spec);
+  });
 }
 
 // Rail data — section index, grouped to match the canonical
@@ -404,261 +394,14 @@ export default async function settings(app, { session }) {
     renderSentinels(app, serverPrefs);
   });
 
-  // ─── Slice D / D2 — chart pickers ──────────────────────────
-  // Same picker implementation drives Monitoring + Home; only the
-  // schema / defaults / pref name / labels differ. Step 4 moves
-  // this into a `chart-layouts` control renderer.
-  CHART_PICKERS.forEach((cfg) => mountChartPickerPanel(app, cfg));
+  // ─── post-mount hooks (chart-layouts + future deferred painters) ─
+  callPostMountHooks(app);
 }
 
-// ── chart-picker panel (Slice D / D2) ──────────────────────────────
-// Surface-parameterised: same implementation paints Monitoring and
-// Home picker sections. Each config entry names where its slot lives
-// (rootId), what pref key persists its layouts (prefName), which
-// tabs participate (schema), what the defaults look like (defaults),
-// what an empty starter spec looks like (newTemplate), and what
-// human labels to show (labels — fallback is the tab key).
-const CHART_PICKERS = [
-  {
-    surface:    "monitoring",
-    rootId:     "rp-settings-mon-charts",
-    prefName:   "monitoringCharts",
-    schema:     MON_STATS_SCHEMA,
-    defaults:   MON_DEFAULT_CHARTS,
-    newTemplate: newMonitoringChart,
-    labels:     { requests: "Requests", events: "Events", runs: "Runs",
-                  findings: "Findings", steps:  "Steps" },
-  },
-  {
-    surface:    "home",
-    rootId:     "rp-settings-home-charts",
-    prefName:   "homeCharts",
-    schema:     HOME_STATS_SCHEMA,
-    defaults:   HOME_DEFAULT_CHARTS,
-    newTemplate: newHomeChart,
-    // Only tabs with directly-addressable stats fields participate in
-    // Slice D2; companies/cases/projects/charts use gauge ratios or
-    // client-derived aggregates, deferred to a `transform` source kind.
-    labels:     { users: "Users", memberships: "Memberships", files: "Files" },
-  },
-];
-
-function mountChartPickerPanel(app, cfg) {
-  const root = app.querySelector("#" + cfg.rootId);
-  if (!root) return;
-  const tabKeys = Object.keys(cfg.schema);
-  if (!tabKeys.length) return;
-  let activeTab = tabKeys[0];
-
-  function readPref() {
-    const v = getPref(cfg.prefName);
-    return (v && typeof v === "object") ? v : {};
-  }
-  function writePref(next) { setPref(cfg.prefName, next); }
-  function chartsForActive() {
-    const pref = readPref();
-    const saved = pref[activeTab];
-    return Array.isArray(saved) ? saved : (cfg.defaults[activeTab] || []);
-  }
-  function isCustomised() {
-    return Array.isArray(readPref()[activeTab]);
-  }
-
-  function render() {
-    const tabs = tabKeys.map((k) =>
-      '<button type="button" class="rp-settings__mon-tab' + (k === activeTab ? " is-active" : "") + '"'
-      + ' data-tab="' + esc(k) + '">' + esc(cfg.labels[k] || k) + '</button>').join("");
-    const list = chartsForActive();
-    const customised = isCustomised();
-    const items = list.length
-      ? list.map((c, i) =>
-          '<li class="rp-settings__mon-chart" data-idx="' + i + '">'
-          + '<span class="rp-settings__mon-chart-title">' + esc(c.title || "Untitled chart") + '</span>'
-          + '<span class="rp-settings__mon-chart-meta">'
-          +   esc(c.cfg?.type || c.cfg?.kind || "?") + " · "
-          +   esc(c.source?.pointer || "(no field)")
-          + '</span>'
-          + (customised
-              ? '<button class="rt-btn rp-settings__mon-chart-x" type="button" data-idx="' + i + '" title="Remove">×</button>'
-              : '<span class="rp-settings__mon-chart-default" title="Default chart — customise to remove">default</span>')
-          + '</li>').join("")
-      : '<li class="rp-settings__mon-empty">No charts. Add one or reset to defaults.</li>';
-    root.innerHTML = ''
-      + '<div class="rp-settings__mon-tabs">' + tabs + '</div>'
-      + '<ul class="rp-settings__mon-charts-list">' + items + '</ul>'
-      + '<div class="rp-settings__mon-actions">'
-      +   '<button class="rt-btn rp-settings__mon-add" type="button"><i class="bi bi-plus-circle"></i> Add chart</button>'
-      +   (customised
-            ? '<button class="rt-btn rp-settings__mon-reset" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset to defaults</button>'
-            : '')
-      + '</div>';
-  }
-
-  root.addEventListener("click", (e) => {
-    const tab = e.target.closest(".rp-settings__mon-tab");
-    if (tab) { activeTab = tab.dataset.tab; render(); return; }
-    const rm = e.target.closest(".rp-settings__mon-chart-x");
-    if (rm) {
-      const idx = parseInt(rm.dataset.idx, 10);
-      const pref = readPref();
-      const list = (pref[activeTab] || []).slice();
-      list.splice(idx, 1);
-      pref[activeTab] = list;
-      writePref(pref);
-      render();
-      return;
-    }
-    if (e.target.closest(".rp-settings__mon-reset")) {
-      const pref = readPref();
-      delete pref[activeTab];
-      writePref(pref);
-      render();
-      return;
-    }
-    if (e.target.closest(".rp-settings__mon-add")) {
-      openAddChartModal(activeTab, cfg, (spec) => {
-        const pref = readPref();
-        // First "Add" on a tab promotes the defaults to a user list so
-        // the user starts from "the defaults plus mine," not "blank +
-        // mine" — surfacing the +1 instead of replacing.
-        const base = Array.isArray(pref[activeTab])
-          ? pref[activeTab]
-          : (cfg.defaults[activeTab] || []).map(cloneSpec);
-        pref[activeTab] = [...base, spec];
-        writePref(pref);
-        render();
-      });
-      return;
-    }
-  });
-
-  render();
-}
-
-// Deep clone a chart spec (defaults → user list seed). JSON
-// round-trip is fine — specs are pure JSON-encodable data.
-function cloneSpec(s) { return JSON.parse(JSON.stringify(s)); }
-
-// ── Add-chart modal ───────────────────────────────────────────────
-// Inline overlay with two columns: live preview (left) + mountBuilder
-// accordion (right). The builder owns the cfg; every onCfgChange
-// reruns the preview's renderChart. "Add" persists via the caller's
-// onAdd(spec) callback; cancel dismisses.
-//
-// `pickerCfg` carries the surface-specific knobs: schema (drives
-// the field-picker), newTemplate (creates the starter spec), labels
-// (for the modal title), surface name (drives the Add button label
-// + the modal title preposition).
-function openAddChartModal(tabKey, pickerCfg, onAdd) {
-  const schema = pickerCfg.schema[tabKey];
-  if (!schema) return;
-
-  // The starter spec drives both the preview and the builder. We
-  // pass the SAME object — builder mutates in place, preview reads
-  // the same reference.
-  const spec = pickerCfg.newTemplate(tabKey);
-  if (!spec) return;
-  const tabLabel = pickerCfg.labels[tabKey] || tabKey;
-  spec.title = spec.cfg.title = "New " + tabLabel + " chart";
-  const surfaceLabel = pickerCfg.surface === "home" ? "Home" : "Monitoring";
-
-  // Modal shell — reuse the rp-mon-modal pattern (overlay backdrop +
-  // centered card) but namespaced rp-settings-chart-modal so the
-  // cross-page audit doesn't see a leak from monitoring.
-  let modal = document.getElementById("rp-settings-chart-modal");
-  if (modal) modal.remove();
-  modal = document.createElement("div");
-  modal.id = "rp-settings-chart-modal";
-  modal.className = "rp-settings-chart-modal";
-  modal.innerHTML = ''
-    + '<div class="rp-settings-chart-modal-backdrop"></div>'
-    + '<div class="rp-settings-chart-modal-body">'
-    +   '<header class="rp-settings-chart-modal-head">'
-    +     '<h3>Add chart to <em>' + esc(tabLabel) + '</em></h3>'
-    +     '<button type="button" class="rt-btn rp-settings-chart-modal-close" aria-label="Close">×</button>'
-    +   '</header>'
-    +   '<div class="rp-settings-chart-modal-grid">'
-    +     '<div class="rp-settings-chart-modal-preview" id="rp-settings-chart-preview"></div>'
-    +     '<aside class="ds-config rp-settings-chart-modal-builder" id="rp-settings-chart-builder"></aside>'
-    +   '</div>'
-    +   '<footer class="rp-settings-chart-modal-foot">'
-    +     '<button type="button" class="rt-btn rp-settings-chart-modal-cancel">Cancel</button>'
-    +     '<button type="button" class="rt-btn rt-btn--accent rp-settings-chart-modal-add">Add to ' + esc(surfaceLabel) + '</button>'
-    +   '</footer>'
-    + '</div>';
-  document.body.appendChild(modal);
-  const previewEl = modal.querySelector("#rp-settings-chart-preview");
-  const builderEl = modal.querySelector("#rp-settings-chart-builder");
-
-  // Live preview — re-render on every cfg change. renderChart disposes
-  // any instance already on the slot before init. repaintPreview is async
-  // (monitoring-stats sources fetch), so rapid cfg changes can overlap; a
-  // generation token discards a stale render whose await resolved after a
-  // newer one started, so it can't linger as the live previewInst.
-  let previewInst = null;
-  let repaintGen = 0;
-  async function repaintPreview() {
-    const gen = ++repaintGen;
-    try { previewInst?.dispose(); } catch { /* gone */ }
-    previewInst = null;
-    try {
-      const inst = await renderChart(previewEl, spec, spec.cfg.theme);
-      if (gen !== repaintGen) { try { inst?.dispose(); } catch { /* gone */ } return; }
-      previewInst = inst;
-    } catch (err) {
-      console.warn("[settings] chart preview failed:", err);
-    }
-  }
-
-  // Mount the shared chart-spec builder against this tab's
-  // monitoring-stats source (schema fields drive the field-picker
-  // select; supportsWindow toggles the window chip row).
-  const schemaPaths = (schema.fields || []).map((f) => f.path);
-  const builder = mountBuilder(builderEl, {
-    getCfg: () => spec.cfg,
-    getSource: () => ({
-      kind:     "monitoring-stats",
-      endpoint: schema.endpoint,
-      pointer:  spec.source.pointer,
-      window:   spec.source.window,
-      schema:   schemaPaths,
-    }),
-    onCfgChange: () => {
-      // The builder's window-chip handler writes onto cfg.source —
-      // mirror it back into our spec.source so the preview + saved
-      // spec share one shape.
-      if (spec.cfg.source) {
-        spec.source = { ...spec.source, ...spec.cfg.source };
-        delete spec.cfg.source;  // cfg shouldn't carry source — only spec does
-      }
-      spec.title = spec.cfg.title;  // mirror title for the saved spec
-      void repaintPreview();
-    },
-    onSave: () => { /* the modal's Add button handles save */ },
-  });
-  builder.render();
-  builder.setDirty(true);
-  void repaintPreview();
-
-  function close() {
-    try { previewInst?.dispose(); } catch { /* gone */ }
-    builder.destroy();
-    modal.remove();
-  }
-  modal.querySelector(".rp-settings-chart-modal-backdrop").addEventListener("click", close);
-  modal.querySelector(".rp-settings-chart-modal-close").addEventListener("click", close);
-  modal.querySelector(".rp-settings-chart-modal-cancel").addEventListener("click", close);
-  modal.querySelector(".rp-settings-chart-modal-add").addEventListener("click", () => {
-    onAdd(cloneSpec(spec));
-    close();
-  });
-
-  // ESC dismisses too — same affordance as the monitoring request-replay modal.
-  function onKey(e) {
-    if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
-  }
-  document.addEventListener("keydown", onKey);
-}
+// mountChartPickerPanel / cloneSpec / openAddChartModal moved to
+// frontend/scripts/prefs/controls/chart-layouts.js in step 4. The
+// CONTROLS map + callPostMountHooks dispatch the picker per registered
+// spec; settings.js doesn't know about chart specifics any more.
 
 function renderSentinels(app, prefs) {
   const root = app.querySelector("#rp-settings-sentinels");

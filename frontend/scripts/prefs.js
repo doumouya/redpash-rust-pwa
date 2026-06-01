@@ -276,6 +276,32 @@ registerPref({
   values: ["data", "dashboards"], default: "data", attr: null,
 });
 
+// MONITORING / HOME — per-tab chart layouts (Slice D / D2). The
+// `chart-layouts` control renderer lives in
+// prefs/controls/chart-layouts.js (step 4 of Settings v2 — moved
+// out of settings.js, registered here so settings.js iterates these
+// like any other pref). No enum / no default — the pref value is a
+// JSON object (per-tab arrays of chart specs); the picker manages
+// shape internally.
+registerPref({
+  key: "monitoringCharts",
+  group: "MONITORING", section: "set-monitoring-charts",
+  control: "chart-layouts", surface: "monitoring",
+  label: "Per-tab chart layouts",
+  hint:  "your saved charts replace the curated defaults on each Monitoring tab. Build via the chart designer.",
+  default: {},
+  tags: ["charts"],
+});
+registerPref({
+  key: "homeCharts",
+  group: "HOME", section: "set-home-charts",
+  control: "chart-layouts", surface: "home",
+  label: "Per-tab chart layouts",
+  hint:  "your saved charts replace the curated defaults on each Home tab. Build via the chart designer.",
+  default: {},
+  tags: ["charts"],
+});
+
 // ── legacy-key migration ─────────────────────────────────────────────
 // One-shot at module-load time. Moves old per-pref keys (rp-density,
 // rp-font-size, rp-rows-per-page, rp-show-rownum, rp-show-stage-dots)
