@@ -49,6 +49,15 @@ pub enum RescueDiag {
 }
 
 pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
+    // Normalize line endings to `\n` FIRST. Both `str::lines()` (the sniff
+    // below) and Polars' CSV reader split on `\n` / `\r\n` but NOT a lone `\r`
+    // (classic-Mac), so a CR-only file otherwise reads as a SINGLE line — the
+    // header parses, every data row is silently lost (stress suite #2 Case 11:
+    // a 3-row file → 0 rows). Also smooths mixed CRLF/LF/CR. A `\r` inside a
+    // quoted field becomes a `\n` (still one field after quote-aware parsing),
+    // so this is safe for embedded newlines too.
+    let text = normalize_newlines(text);
+
     // Heuristic header / delimiter sniff. Real-world CSVs ride in with
     // junk on top — `""` blank lines, `# Export …` comments,
     // `Source: legacy v2` metadata, `Domaine: clients` markers, an
@@ -176,6 +185,16 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
         .map_err(DataError::from)
 }
 
+/// Normalize all line endings to `\n` — `\r\n` and lone `\r` (classic-Mac)
+/// alike. Fast-path returns the input untouched when there's no `\r` at all
+/// (the common case), so `\n`-only files pay nothing.
+fn normalize_newlines(text: String) -> String {
+    if !text.as_bytes().contains(&b'\r') {
+        return text;
+    }
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 /// Count occurrences of byte `d` outside of `"…"` quoted regions.
 /// A simple two-state machine — `"` toggles the in-quotes flag,
 /// occurrences are counted only when not in quotes. This keeps a
@@ -210,4 +229,33 @@ fn looks_like_preamble_1col(line: &str) -> bool {
     if t.contains(": ") && t.len() >= 10 { return true; }
     if t.len() > 30 && t.contains(' ') { return true; }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_newlines_handles_cr_variants() {
+        assert_eq!(normalize_newlines("a\r\nb\rc\nd".into()), "a\nb\nc\nd");
+        // fast path: no '\r' → unchanged.
+        assert_eq!(normalize_newlines("a\nb\nc".into()), "a\nb\nc");
+        assert_eq!(normalize_newlines("plain".into()), "plain");
+    }
+
+    #[test]
+    fn cr_only_file_keeps_its_rows() {
+        // classic-Mac line endings: was lost entirely (one "line" → 0 data rows).
+        let (df, _) = parse_text_with_diag("id,name\r1,Alice\r2,Bob\r3,Carl".into()).unwrap();
+        assert_eq!(df.height(), 3, "all 3 CR-delimited rows survive");
+        assert_eq!(df.width(), 2);
+    }
+
+    #[test]
+    fn quoted_embedded_newline_stays_one_field() {
+        // a '\r' inside a quoted field normalizes to '\n' but stays one cell.
+        let (df, _) = parse_text_with_diag("a,b\n1,\"x\ry\"\n2,z\n".into()).unwrap();
+        assert_eq!(df.height(), 2);
+        assert_eq!(df.width(), 2);
+    }
 }
