@@ -33,6 +33,11 @@ import { applyTheme, currentTheme } from "/scripts/theme.js";
 import { getPref, setPref, eachPref } from "/scripts/prefs.js";
 import { esc } from "/scripts/dom.js";
 import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
+// Settings v2 step 3 — behavior-first search + tag chips. Sits in
+// the surface header above the section view; live-filters the
+// rendered pref rows by label / hint / key / tags and re-paints
+// rail group badges with hit counts.
+import { mountSearch } from "/scripts/pages/settings-search.js";
 // Slice D — Monitoring chart picker. Mounts the shared mountBuilder
 // (from Slice C) against a `monitoring-stats` source so the user can
 // build per-tab chart layouts on the Settings page. Persisted to
@@ -321,6 +326,10 @@ export default async function settings(app, { session }) {
   mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "settings", session });
   renderFromRegistry(app);
   mountSettingsRail(app);
+  // Search must mount AFTER the rail is built — it indexes
+  // `.rt-group-count` badges per section so hit-count updates know
+  // where to land.
+  mountSearch(app);
 
   // ─── account section — read-only from session ────────────────
   const name = (session?.display_name || "—").trim();

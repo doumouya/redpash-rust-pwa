@@ -46,6 +46,15 @@
           <p class="rp-page__sub">App preferences. Stored on this device.</p>
         </header>
 
+        <!-- Settings v2 search shell — mountSearch() in settings-search.js
+             paints the live filter input + tag chip cloud here. Behavior:
+             input debounces 80ms, matches against label/hint/key/tags;
+             non-matching rows get .is-dim (40% opacity, kept in place so
+             users see what they're filtering past); rail group badges
+             switch from tab-count to hit-count while a query is active.
+             "/" focuses the input from anywhere in Settings; Esc clears. -->
+        <div class="rp-settings__search-shell" id="rpSetSearchShell" hidden></div>
+
         <section class="rp-page__section" id="set-appearance">
           <h2 class="rp-page__section-h">Appearance</h2>
           <div class="rp-page__section-body" data-rp-rows="appearance"></div>
