@@ -31,10 +31,14 @@ set +a
 
 export REDPASH_KAFKA_LOAD=1
 export REDPASH_DATA_DIR="$ROOT/backend/data"
+# KAFKA_CONTRACT only locates the contracts DIR (its parent) + the subject; the
+# loader resolves the schema PER RECORD by the version in the Kafka header.
 export KAFKA_CONTRACT="$HERE/contracts/topic_account_jlr-value-v2.json"
 export KAFKA_WIRE_FORMAT="${KAFKA_WIRE_FORMAT:-raw}"      # this producer emits bare Avro
 export KAFKA_TARGET_PROJECT="${1:-${KAFKA_TARGET_PROJECT:-PRJ_D32D474BB899488B84CBB1F49A418F17}}"
 export KAFKA_MAX_RECORDS="${2:-${KAFKA_MAX_RECORDS:-200}}"
+# Optional explicit version-header key; empty → auto-detect a "version" header.
+export KAFKA_VERSION_HEADER="${KAFKA_VERSION_HEADER:-}"
 
 mkdir -p "$HERE/results"
 LOG="$HERE/results/load-$(date -u +%Y%m%dT%H%M%SZ).log"
@@ -45,6 +49,7 @@ echo "  contract : $KAFKA_CONTRACT"
 echo "  wire     : $KAFKA_WIRE_FORMAT"
 echo "  project  : $KAFKA_TARGET_PROJECT"
 echo "  max      : $KAFKA_MAX_RECORDS"
+echo "  ver-hdr  : ${KAFKA_VERSION_HEADER:-<auto-detect>}"
 echo "  log      : $LOG"
 echo "─────────────────────────"
 

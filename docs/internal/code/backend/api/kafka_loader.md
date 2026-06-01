@@ -15,12 +15,24 @@ The **Kafka loader** — the **L** of ETL for the first connector
 One-shot batch: consume → decode → load.
 
 ```
-rskafka consume (Confluent Cloud, SASL_SSL/PLAIN)
-  → codec_avro::decode  (the avro meta-codec; schema from the saved contract)
-  → records_to_csv      (decoded JSON records → tabular CSV)
+rskafka consume (Confluent Cloud, SASL_SSL/PLAIN; all partitions, earliest)
+  → per-record: read schema VERSION from the Kafka header
+  → codec_avro::decode against THAT version's contract (never a fixed default)
+  → records_to_csv      (decoded JSON records → tabular CSV, UNION of all versions' fields)
   → data::parse + db::insert_file  (the existing upload/import pipeline)
   → a project_files row (a File, per [object-model])
 ```
+
+**Version comes from the header, never a default.** Each record's writer schema
+version is read from its Kafka headers (`header_version` — explicit
+`KAFKA_VERSION_HEADER` key, else auto-detect a key containing "version"). The
+record is decoded against `contracts/{subject}-v{version}.json` for THAT version.
+A record with no resolvable version (or no contract file for it) is **skipped +
+logged, never decoded against a guessed schema** — raw Avro is schema-shaped, so
+a wrong version silently misaligns every field after an add/delete. CSV columns
+are the UNION of all decoded records' fields, so a field deleted in a newer
+version just yields empty cells (no misalignment). The first record's full
+headers are logged each run so the version-source key is always visible.
 
 **Runs as a MODE of the main binary**, not a `src/bin`: a `src/bin` can't see
 `main.rs`'s `codec_avro`/`db` modules, and the loader needs both. `main.rs`
@@ -46,8 +58,13 @@ KAFKA_WIRE_FORMAT=raw \                              # Em's producer; default co
   ./target/debug/redpash-api
 ```
 
-Optional: `KAFKA_MAX_RECORDS` (500). The runner `connectors/kafka-confluent-rc/load.sh`
-wires all of this + tees output to `results/load-<UTC>.log`.
+`KAFKA_CONTRACT` now only locates the contracts **dir** (its parent) + the
+subject base; the actual schema per record is resolved by VERSION from the
+header. Optional: `KAFKA_MAX_RECORDS` (500); `KAFKA_VERSION_HEADER` (explicit
+header key — omit to auto-detect a "version" key). The runner
+`connectors/kafka-confluent-rc/load.sh` wires all of this + tees to
+`results/load-<UTC>.log`, and logs the first record's headers so the version key
+is visible.
 
 ## Public surface
 

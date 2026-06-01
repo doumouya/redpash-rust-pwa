@@ -16,7 +16,8 @@
 //! decode→csv→parse) is unit-tested offline.
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -32,7 +33,13 @@ pub struct Cfg {
     pub topic:         String,
     pub max_records:   usize,
     pub project_rid:   String,
+    /// A representative contract file; its PARENT dir is where per-version
+    /// schemas are resolved (`{subject}-v{N}.json`). The loader never decodes
+    /// against a fixed version — it reads each record's version from the header.
     pub contract_path: String,
+    /// Optional explicit Kafka-header key carrying the schema version. When
+    /// unset, the loader auto-detects a header whose key contains "version".
+    pub version_header: Option<String>,
     pub wire_format:   WireFormat,
 }
 
@@ -48,6 +55,7 @@ impl Cfg {
             max_records:   std::env::var("KAFKA_MAX_RECORDS").ok().and_then(|s| s.parse().ok()).unwrap_or(500),
             project_rid:   var("KAFKA_TARGET_PROJECT")?,
             contract_path: var("KAFKA_CONTRACT")?,
+            version_header: std::env::var("KAFKA_VERSION_HEADER").ok().filter(|s| !s.is_empty()),
             wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
         })
     }
@@ -141,12 +149,16 @@ pub async fn ingest_csv(
     Ok(rid)
 }
 
-/// Consume up to `max_records` raw record VALUES via rskafka (SASL PLAIN over
-/// TLS — Confluent Cloud). Walks EVERY partition of the topic from each one's
-/// EARLIEST offset (data is spread across partitions; offset 0 is out-of-range
-/// once retention has pruned). Returns the raw bytes per record; decode is the
-/// caller's (codec_avro). Live-cluster path.
-async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
+/// One consumed record: the raw value bytes + the Kafka record headers (which
+/// carry the schema version — the loader decodes per-version, never a default).
+type RawRecord = (Vec<u8>, BTreeMap<String, Vec<u8>>);
+
+/// Consume up to `max_records` records via rskafka (SASL PLAIN over TLS —
+/// Confluent Cloud). Walks EVERY partition of the topic from each one's EARLIEST
+/// offset (data is spread across partitions; offset 0 is out-of-range once
+/// retention has pruned). Returns `(value, headers)` per record; decode is the
+/// caller's (codec_avro), keyed off the version header. Live-cluster path.
+async fn consume_raw(cfg: &Cfg) -> Result<Vec<RawRecord>> {
     use rskafka::client::{
         partition::{OffsetAt, UnknownTopicHandling},
         ClientBuilder, Credentials, SaslConfig,
@@ -217,7 +229,7 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
             }
             for rec in &batch {
                 if let Some(v) = &rec.record.value {
-                    out.push(v.clone());
+                    out.push((v.clone(), rec.record.headers.clone()));
                 }
                 offset = rec.offset + 1;
                 if out.len() >= cfg.max_records {
@@ -232,34 +244,128 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
     Ok(out)
 }
 
-/// One-shot run: consume → decode → csv → ingest. Logs a summary.
+/// Human-readable dump of a record's headers (for discovering the version key).
+fn header_dump(headers: &BTreeMap<String, Vec<u8>>) -> Vec<String> {
+    headers
+        .iter()
+        .map(|(k, v)| format!("{k}={:?}", String::from_utf8_lossy(v)))
+        .collect()
+}
+
+/// The integer in a header value (e.g. `"3"`, `"v3"`, `b"\x03"`-ish text) — the
+/// schema version. Pulls the ASCII digits out of the UTF-8 rendering.
+fn parse_version(bytes: &[u8]) -> Option<i32> {
+    let s = String::from_utf8_lossy(bytes);
+    let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+/// Resolve the schema version from a record's headers. Uses `key_hint` if set,
+/// else auto-detects the first header whose key contains "version"
+/// (case-insensitive). Returns None if no version header is present — the
+/// caller then SKIPS the record rather than guess a schema (a wrong schema
+/// silently misaligns raw-Avro binary, esp. across field add/delete).
+fn header_version(headers: &BTreeMap<String, Vec<u8>>, key_hint: Option<&str>) -> Option<i32> {
+    if let Some(k) = key_hint {
+        return headers.get(k).and_then(|v| parse_version(v));
+    }
+    headers
+        .iter()
+        .find(|(k, _)| k.to_lowercase().contains("version"))
+        .and_then(|(_, v)| parse_version(v))
+}
+
+/// One-shot run: consume → (per-record, version-from-header) decode → csv →
+/// ingest. NEVER decodes against a fixed version — each record is decoded
+/// against the writer schema named by its header; records without a resolvable
+/// version (or contract) are skipped + logged, not mis-decoded.
 pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
-    let schema = load_contract_schema(Path::new(&cfg.contract_path))?;
-    let columns = schema_field_names(&schema)?;
+    // Per-version schemas resolve from the contracts dir as `{subject}-v{N}.json`.
+    let contracts_dir: PathBuf = Path::new(&cfg.contract_path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let subject = format!("{}-value", cfg.topic);
 
     let raw = consume_raw(cfg).await?;
     tracing::info!(consumed = raw.len(), topic = %cfg.topic, "kafka-load: consumed");
+    if let Some((_, h)) = raw.first() {
+        // Surface the headers so the version-source key is visible per run.
+        tracing::info!(headers = ?header_dump(h), "kafka-load: first-record headers (version source)");
+    }
 
-    let mut records = Vec::with_capacity(raw.len());
-    let (mut ok, mut bad) = (0usize, 0usize);
-    for bytes in &raw {
+    let mut schema_cache: HashMap<i32, String> = HashMap::new();
+    let mut records: Vec<Value> = Vec::with_capacity(raw.len());
+    let mut by_version: BTreeMap<i32, usize> = BTreeMap::new();
+    let (mut ok, mut bad, mut skipped) = (0usize, 0usize, 0usize);
+
+    for (bytes, headers) in &raw {
+        let Some(ver) = header_version(headers, cfg.version_header.as_deref()) else {
+            skipped += 1;
+            tracing::warn!(headers = ?header_dump(headers),
+                "kafka-load: no version header — SKIPPING (refusing to guess the writer schema)");
+            continue;
+        };
+        // Load (cache) the writer schema for this exact version.
+        let schema = match schema_cache.get(&ver) {
+            Some(s) => s.clone(),
+            None => {
+                let path = contracts_dir.join(format!("{subject}-v{ver}.json"));
+                match load_contract_schema(&path) {
+                    Ok(s) => {
+                        schema_cache.insert(ver, s.clone());
+                        s
+                    }
+                    Err(e) => {
+                        skipped += 1;
+                        tracing::warn!(version = ver, path = %path.display(), error = %e,
+                            "kafka-load: no contract for version — SKIPPING (run bootstrap-contracts?)");
+                        continue;
+                    }
+                }
+            }
+        };
         match codec_avro::decode(bytes, &schema, cfg.wire_format) {
-            Ok(v) => { records.push(v); ok += 1; }
-            Err(e) => { bad += 1; tracing::warn!(error = %e, "kafka-load: decode failed"); }
+            Ok(v) => {
+                records.push(v);
+                ok += 1;
+                *by_version.entry(ver).or_default() += 1;
+            }
+            Err(e) => {
+                bad += 1;
+                tracing::warn!(version = ver, error = %e, "kafka-load: decode failed");
+            }
         }
     }
-    tracing::info!(decoded = ok, failed = bad, "kafka-load: decoded");
+    tracing::info!(decoded = ok, failed = bad, skipped = skipped, by_version = ?by_version,
+        "kafka-load: decoded");
 
     if records.is_empty() {
-        tracing::warn!("kafka-load: nothing to load");
+        tracing::warn!("kafka-load: nothing to load (0 decoded — check the version header above)");
         return Ok(());
     }
+
+    // CSV columns = UNION of all decoded records' fields. Records span schema
+    // versions, so a field added/deleted across versions just yields empty cells
+    // for the records that lack it — no misalignment (each was decoded against
+    // its own version).
+    let mut colset: BTreeSet<String> = BTreeSet::new();
+    for r in &records {
+        if let Some(o) = r.as_object() {
+            colset.extend(o.keys().cloned());
+        }
+    }
+    let columns: Vec<String> = colset.into_iter().collect();
 
     let csv = records_to_csv(&records, &columns);
     let filename = format!("{}-load", cfg.topic);
     let rid = ingest_csv(pool, data_dir, &cfg.project_rid, &filename, csv.as_bytes()).await?;
-    tracing::info!(file = %rid, rows = records.len(), project = %cfg.project_rid, "kafka-load: loaded");
-    println!("kafka-load: loaded {} rows into {rid} (project {})", records.len(), cfg.project_rid);
+    tracing::info!(file = %rid, rows = records.len(), cols = columns.len(),
+        project = %cfg.project_rid, "kafka-load: loaded");
+    println!(
+        "kafka-load: loaded {} rows ({} cols) into {rid} (project {}); by version {:?}; skipped {}",
+        records.len(), columns.len(), cfg.project_rid, by_version, skipped
+    );
     Ok(())
 }
 
@@ -267,6 +373,22 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn header_version_resolution() {
+        let mut h = BTreeMap::new();
+        h.insert("schemaVersion".to_string(), b"3".to_vec());
+        assert_eq!(header_version(&h, None), Some(3)); // auto: key contains "version"
+        assert_eq!(header_version(&h, Some("schemaVersion")), Some(3)); // explicit key
+        // "v2"-style value → digits extracted
+        let mut h2 = BTreeMap::new();
+        h2.insert("x-schema-version".to_string(), b"v2".to_vec());
+        assert_eq!(header_version(&h2, None), Some(2));
+        // no version-ish header → None (caller SKIPS, never guesses a schema)
+        let mut h3 = BTreeMap::new();
+        h3.insert("traceId".to_string(), b"abc".to_vec());
+        assert_eq!(header_version(&h3, None), None);
+    }
 
     #[test]
     fn schema_field_names_in_order() {
