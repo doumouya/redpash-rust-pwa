@@ -2,20 +2,23 @@
  * Doc: docs/internal/code/frontend/scripts/pages/settings.md */
 // Settings page — app preferences.
 //
-// Page is declarative: SETTINGS_ROWS defines what each section
-// contains; render() materialises them via page-row.js helpers
-// (prefRow / valueRow / actionsRow / mountRow). The shape audit
-// (html-audit 2026-05-25) flagged `rp-page__row` as the heaviest
-// duplication signal on the page; centralising the structure
-// here keeps the page__row contract in one place.
+// **Settings v2 (CAS_55984AC7, step 2):** the page is now declarative
+// from the OPEN PREF REGISTRY in prefs.js. Each registered pref
+// carries its `section` / `control` / `label` / `hint` / `options`,
+// and `render()` iterates the registry to build the rows — no more
+// hand-written SETTINGS_ROWS tree. The Section EXTRAS map below
+// handles non-pref rows (sentinels mount, account values, signout
+// action, about brand, chart-picker mounts, Cases stub). Step 4 moves
+// the chart pickers into a control renderer; step 5 lands Hidden
+// Items as a new section.
 //
-// One delegated click handler drives every option group: each
-// wrapper carries data-pref, each button carries data-value. Click
-// → resolve pref → call the right setter (theme.js for theme,
-// prefs.js setPref for everything else) → repaint is-active.
-// Most pref values are strings, validated against PREFS[name].values.
-// `share_sentinels` is a boolean and gets coerced from its
-// "true"/"false" data-value before write.
+// One delegated click handler drives every option group: each wrapper
+// carries data-pref, each button carries data-value. Click → resolve
+// pref → call the right setter (theme.js for theme, prefs.js setPref
+// for everything else) → repaint is-active. Most pref values are
+// strings, validated against the spec's `values` enum. `share_sentinels`
+// is a boolean and gets coerced from its "true"/"false" data-value
+// before write.
 //
 // Sentinels list is read from /api/me's prefs.learned_sentinels —
 // each entry renders as a chip with an × that splices the array
@@ -27,7 +30,7 @@ import { mountRailFooterNav } from "/scripts/rail-footer.js";
 import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { api } from "/scripts/api.js";
 import { applyTheme, currentTheme } from "/scripts/theme.js";
-import { getPref, setPref } from "/scripts/prefs.js";
+import { getPref, setPref, eachPref } from "/scripts/prefs.js";
 import { esc } from "/scripts/dom.js";
 import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
 // Slice D — Monitoring chart picker. Mounts the shared mountBuilder
@@ -48,101 +51,64 @@ import {
   newChartTemplate as newHomeChart,
 } from "/scripts/charts/home-bank.js";
 
-// Server-side pref keys read on mount. Distinct from PREFS in prefs.js:
-// these come from /me, not the local registered enum.
+// Server-side pref keys read on mount. Distinct from the registered
+// pref keys in prefs.js — these come from /me, not the local registry.
 const SERVER_PREF_KEYS = ["share_sentinels", "learned_sentinels"];
 
-// Reusable option-button sets.
-const ROWS_PER_PAGE = [
-  { value: "10",   label: "10"  },
-  { value: "25",   label: "25"  },
-  { value: "50",   label: "50"  },
-  { value: "100",  label: "100" },
-  { value: "250",  label: "250" },
-  { value: "500",  label: "500" },
-  { value: "1000", label: "1k"  },
-];
-const ON_OFF = [
-  { value: "1", label: "On"  },
-  { value: "0", label: "Off" },
-];
+// ── controls dispatcher ─────────────────────────────────────────────
+// Given a registry spec, return the HTML row. Settings v2 control
+// types map to page-row.js helpers:
+//   onoff / segmented — prefRow (button-group)
+// Future: value, action, mount, chart-layouts (step 4).
+const CONTROLS = {
+  onoff(spec)     { return prefRow(prefRowSpecFromPref(spec)); },
+  segmented(spec) { return prefRow(prefRowSpecFromPref(spec)); },
+};
 
-// Section → row specs. Order matches the rendered page.
-const SETTINGS_ROWS = {
-  appearance: [
-    prefRow({ label: "Theme", pref: "theme", options: [
-      { value: "dark",  label: "Dark",  icon: "moon-stars" },
-      { value: "light", label: "Light", icon: "sun" },
-    ]}),
-    prefRow({ label: "Density", pref: "density", options: [
-      { value: "compact",     label: "Compact" },
-      { value: "cozy",        label: "Cozy" },
-      { value: "comfortable", label: "Comfortable" },
-    ]}),
-    prefRow({ label: "Font size", pref: "fontSize", options: [
-      { value: "sm", label: "Small" },
-      { value: "md", label: "Medium" },
-      { value: "lg", label: "Large" },
-    ]}),
-  ],
-  // Rows-per-page is split per surface so the Workspace's tight
-  // editing size doesn't pollute the wider Home/Monitoring browse
-  // sizes (or vice versa).
-  tables: [
-    prefRow({ label: "Rows per page · Workspace",  pref: "rowsPerPageWorkspace",  options: ROWS_PER_PAGE }),
-    prefRow({ label: "Rows per page · Home",       pref: "rowsPerPageHome",       options: ROWS_PER_PAGE }),
-    prefRow({ label: "Rows per page · Monitoring", pref: "rowsPerPageMonitoring", options: ROWS_PER_PAGE }),
-  ],
-  workspace: [
-    prefRow({ label: "Show row numbers",   pref: "showRowNumbers", options: ON_OFF }),
-    prefRow({ label: "Stage dots in rail", pref: "showStageDots",  options: ON_OFF }),
-  ],
-  data: [
-    prefRow({ label: "CSV delimiter", hint: "applied when opening files", pref: "csvDelimiter", options: [
-      { value: "auto", label: "Auto" },
-      { value: "comma", label: ",", title: "Comma" },
-      { value: "semi",  label: ";", title: "Semicolon" },
-      { value: "tab",   label: "↹", title: "Tab" },
-    ]}),
-    prefRow({ label: "Default encoding", hint: "fallback when RedPash can't detect", pref: "csvEncoding", options: [
-      { value: "auto",         label: "Auto",       title: "Auto-detect (chardetng)" },
-      { value: "utf-8",        label: "UTF-8" },
-      { value: "utf-16le",     label: "UTF-16 LE" },
-      { value: "utf-16be",     label: "UTF-16 BE" },
-      { value: "windows-1252", label: "Win-1252" },
-      { value: "iso-8859-1",   label: "Latin-1" },
-      { value: "iso-8859-15",  label: "Latin-9" },
-      { value: "windows-1250", label: "Win-1250" },
-      { value: "macintosh",    label: "MacRoman" },
-    ]}),
-    prefRow({ label: "Export format", hint: "default for downloading cleaned data", pref: "exportFormat", options: [
-      { value: "csv",  label: "CSV",   icon: "filetype-csv"  },
-      { value: "xlsx", label: "Excel", icon: "filetype-xlsx" },
-      { value: "json", label: "JSON",  icon: "filetype-json" },
-    ]}),
-  ],
-  cleaner: [
+function prefRowSpecFromPref(spec) {
+  // Synthesise an `options` array from the spec's `values` when the
+  // spec didn't supply one (e.g. simple enums whose labels match values).
+  const options = Array.isArray(spec.options) ? spec.options
+                : Array.isArray(spec.values)  ? spec.values.map((v) => ({ value: v, label: v }))
+                : [];
+  return {
+    label:   spec.label,
+    hint:    spec.hint,
+    pref:    spec.key,
+    options: options,
+  };
+}
+
+// ── section extras ─────────────────────────────────────────────────
+// Pre-rendered HTML for rows that aren't backed by a registered pref:
+// sentinels mountRow, share_sentinels chip-row (server-passthrough,
+// special boolean coercion), monitoring + home chart-picker mount
+// slots, Cases stub placeholder, account fields, about brand. Each
+// section's extras render AFTER its registered prefs.
+const SECTION_EXTRAS = {
+  "set-cleaner": [
     mountRow({
       label: "Personal sentinel values",
-      hint: "junk placeholders you've flagged in Fix invalid values. Add via the Cleaner; remove here.",
-      id: "rp-settings-sentinels",
+      hint:  "junk placeholders you've flagged in Fix invalid values. Add via the Cleaner; remove here.",
+      id:    "rp-settings-sentinels",
       containerClass: "rp-settings__sentinels",
-      emptyClass: "rp-settings__sentinels-empty",
+      emptyClass:     "rp-settings__sentinels-empty",
     }),
     prefRow({
-      label: "Share with all users",
-      hint: "your sentinels join the global vocabulary after 2+ users flag the same value. Only the placeholder string is shared.",
-      pref: "share_sentinels",
+      label:   "Share with all users",
+      hint:    "your sentinels join the global vocabulary after 2+ users flag the same value. Only the placeholder string is shared.",
+      pref:    "share_sentinels",
       options: [
         { value: "true",  label: "On"  },
         { value: "false", label: "Off" },
       ],
     }),
   ],
-  // Slice D — Monitoring chart picker. The panel body is rendered
-  // by JS (mountChartPickerPanel below); mountRow just stamps the
-  // slot the panel paints into.
-  monitoringCharts: [
+  // Slice D / D2 — chart picker mounts. The panel body is rendered by
+  // mountChartPickerPanel; mountRow just stamps the slot the panel
+  // paints into. Step 4 moves these into a `chart-layouts` control
+  // renderer.
+  "set-monitoring-charts": [
     mountRow({
       label: "Per-tab chart layouts",
       hint:  "your saved charts replace the curated defaults on each Monitoring tab. Build via the chart designer.",
@@ -150,10 +116,7 @@ const SETTINGS_ROWS = {
       containerClass: "rp-settings__mon-charts",
     }),
   ],
-  // Slice D2 — Home chart picker. Same panel implementation; only the
-  // tabs / schema / defaults registry differs (the picker is
-  // surface-parameterised in mountChartPickerPanel below).
-  homeCharts: [
+  "set-home-charts": [
     mountRow({
       label: "Per-tab chart layouts",
       hint:  "your saved charts replace the curated defaults on each Home tab. Build via the chart designer.",
@@ -161,20 +124,17 @@ const SETTINGS_ROWS = {
       containerClass: "rp-settings__mon-charts",
     }),
   ],
-  account: [
+  "set-account": [
     valueRow({ label: "Display name", id: "rp-settings-display" }),
     valueRow({ label: "Username",     id: "rp-settings-username" }),
     actionsRow({ label: "Sign out", actions: [
       { kind: "button", id: "rp-settings-signout", label: "Sign out", icon: "box-arrow-right" },
     ]}),
   ],
-  // Cases page settings — CAS_3FC70F56 stub group (Em 2026-05-31).
-  // No pref rows yet; the section ships with a placeholder telling
-  // the user this lives here so they can find it. Rows land as
-  // Cases-page surfaces identify them (kanban behavior, attachment
-  // rail default state, default status filter, etc. — coupled to
-  // CAS_1E6D3B2E + future cases-page work).
-  cases: [
+  // CAS_3FC70F56 stub group (Em 2026-05-31). Cases prefs land here
+  // in step 6 of Settings v2 — until then the placeholder tells the
+  // user this lives here so they can find it.
+  "set-cases": [
     '<div class="rp-page__row rp-page__row--placeholder">'
       + '<span class="rp-page__row-label">'
         + '<span>No Cases preferences yet.</span> '
@@ -184,7 +144,7 @@ const SETTINGS_ROWS = {
   ],
   // About row is structurally unique (branded label + version mount);
   // inlined here rather than parameterised — no second site exists.
-  about: [
+  "set-about": [
     '<div class="rp-page__row">'
       + '<span class="rp-page__row-label">'
         + '<span class="rp-settings__about-brand">RedPash</span> '
@@ -199,9 +159,43 @@ const SETTINGS_ROWS = {
   ],
 };
 
-function render(app) {
-  for (const [section, rows] of Object.entries(SETTINGS_ROWS)) {
-    const mount = app.querySelector('[data-rp-rows="' + section + '"]');
+// ── section ↔ mount-key map ────────────────────────────────────────
+// The partial uses short `[data-rp-rows="<key>"]` selectors while the
+// rail tabs + spec.section use the full `set-<key>` form. One small
+// map bridges the two; lookup is O(1).
+const SECTION_MOUNT_KEY = {
+  "set-appearance":        "appearance",
+  "set-tables":            "tables",
+  "set-workspace":         "workspace",
+  "set-data":              "data",
+  "set-cleaner":           "cleaner",
+  "set-monitoring-charts": "monitoringCharts",
+  "set-home-charts":       "homeCharts",
+  "set-cases":             "cases",
+  "set-account":           "account",
+  "set-about":             "about",
+};
+
+// ── render: iterate registry → group by section → dispatch + extras ──
+function renderFromRegistry(app) {
+  // Bucket every registered pref by section.
+  const rowsBySection = {};
+  eachPref((spec) => {
+    if (!spec.section) return;     // pref doesn't surface in Settings
+    const renderer = CONTROLS[spec.control];
+    if (!renderer)   return;       // unknown control; skip until step 4 lands more
+    if (!rowsBySection[spec.section]) rowsBySection[spec.section] = [];
+    rowsBySection[spec.section].push(renderer(spec));
+  });
+  // Append extras AFTER registered prefs for each section.
+  for (const [section, extras] of Object.entries(SECTION_EXTRAS)) {
+    if (!rowsBySection[section]) rowsBySection[section] = [];
+    rowsBySection[section].push(...extras);
+  }
+  // Mount each section's combined HTML into its `[data-rp-rows]` slot.
+  for (const [section, rows] of Object.entries(rowsBySection)) {
+    const mountKey = SECTION_MOUNT_KEY[section] || section;
+    const mount = app.querySelector('[data-rp-rows="' + mountKey + '"]');
     if (mount) mount.innerHTML = rows.join("");
   }
 }
@@ -325,7 +319,7 @@ function mountSettingsRail(app) {
 export default async function settings(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "settings", session });
   mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "settings", session });
-  render(app);
+  renderFromRegistry(app);
   mountSettingsRail(app);
 
   // ─── account section — read-only from session ────────────────
@@ -403,8 +397,8 @@ export default async function settings(app, { session }) {
 
   // ─── Slice D / D2 — chart pickers ──────────────────────────
   // Same picker implementation drives Monitoring + Home; only the
-  // schema / defaults / pref name / labels differ. Adding a third
-  // surface = registering another config entry.
+  // schema / defaults / pref name / labels differ. Step 4 moves
+  // this into a `chart-layouts` control renderer.
   CHART_PICKERS.forEach((cfg) => mountChartPickerPanel(app, cfg));
 }
 

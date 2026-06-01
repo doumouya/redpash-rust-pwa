@@ -97,55 +97,184 @@ export function eachPref(fn) {
   REGISTRY.forEach(fn);
 }
 
-// ── built-in prefs (registered via registerPref so the legacy
-//   const-shape is preserved exactly; behavior here is identical to
-//   the pre-Settings-v2 module — just the storage shape changed) ────
-registerPref({ key: "theme",          values: ["light", "dark"],                  default: "dark", attr: "theme" });
-registerPref({ key: "density",        values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density" });
-registerPref({ key: "fontSize",       values: ["sm", "md", "lg"],                 default: "md",   attr: "fontSize" });
-// Per-page rows-per-page — each table surface gets its own pref so
-// the Workspace's working size doesn't pollute the Home/Monitoring
-// browse size (and vice versa). Migration of the old shared
-// `rowsPerPage` key into all three happens once at module load (see
-// SPLIT_LEGACY_KEYS below).
+// ── built-in prefs ─────────────────────────────────────────────────
+// Each spec carries the Settings v2 UI fields (group / section /
+// control / label / hint / options / tags) so the page renders by
+// iterating the registry rather than from a hand-written rows tree.
+// Step 1 (5629395) added the registry; step 2 (this commit) adds the
+// UI fields + flips settings.js to iterate. Behavior preserved
+// exactly — the visible Settings page output is byte-identical.
 const ROWS_PER_PAGE_VALUES = ["10", "25", "50", "100", "250", "500", "1000"];
-registerPref({ key: "rowsPerPageWorkspace",  values: ROWS_PER_PAGE_VALUES, default: "25", attr: null });
-registerPref({ key: "rowsPerPageHome",       values: ROWS_PER_PAGE_VALUES, default: "25", attr: null });
-registerPref({ key: "rowsPerPageMonitoring", values: ROWS_PER_PAGE_VALUES, default: "25", attr: null });
-registerPref({ key: "showRowNumbers",        values: ["1", "0"],           default: "1",  attr: "showRownum" });
-registerPref({ key: "showStageDots",         values: ["1", "0"],           default: "1",  attr: "showStageDots" });
-// Defaults the cleaner + export flows read. None of them reshape
-// <html>, so no attr; they're consumed by the upload / export
-// handlers when they pick a sensible default.
-registerPref({ key: "csvDelimiter", values: ["auto", "comma", "semi", "tab"], default: "auto", attr: null });
-registerPref({ key: "csvEncoding",
+const ROWS_PER_PAGE_OPTIONS = [
+  { value: "10",   label: "10"  },
+  { value: "25",   label: "25"  },
+  { value: "50",   label: "50"  },
+  { value: "100",  label: "100" },
+  { value: "250",  label: "250" },
+  { value: "500",  label: "500" },
+  { value: "1000", label: "1k"  },
+];
+const ON_OFF_OPTIONS = [
+  { value: "1", label: "On"  },
+  { value: "0", label: "Off" },
+];
+
+// GENERAL · Appearance
+registerPref({
+  key: "theme", group: "GENERAL", section: "set-appearance",
+  control: "onoff", label: "Theme",
+  values: ["light", "dark"], default: "dark", attr: "theme",
+  options: [
+    { value: "dark",  label: "Dark",  icon: "moon-stars" },
+    { value: "light", label: "Light", icon: "sun" },
+  ],
+  tags: ["appearance"],
+});
+registerPref({
+  key: "density", group: "GENERAL", section: "set-appearance",
+  control: "onoff", label: "Density",
+  values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density",
+  options: [
+    { value: "compact",     label: "Compact" },
+    { value: "cozy",        label: "Cozy" },
+    { value: "comfortable", label: "Comfortable" },
+  ],
+  tags: ["appearance"],
+});
+registerPref({
+  key: "fontSize", group: "GENERAL", section: "set-appearance",
+  control: "onoff", label: "Font size",
+  values: ["sm", "md", "lg"], default: "md", attr: "fontSize",
+  options: [
+    { value: "sm", label: "Small" },
+    { value: "md", label: "Medium" },
+    { value: "lg", label: "Large" },
+  ],
+  tags: ["appearance"],
+});
+
+// WORKSPACE · Tables — split per surface so the Workspace's tight
+// editing size doesn't pollute Home/Monitoring browse sizes (or
+// vice versa). Migration of the old shared `rowsPerPage` key is
+// handled by the SPLIT_LEGACY_KEYS block below.
+registerPref({
+  key: "rowsPerPageWorkspace", group: "WORKSPACE", section: "set-tables",
+  control: "onoff", label: "Rows per page · Workspace",
+  values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
+  options: ROWS_PER_PAGE_OPTIONS,
+  tags: ["tables", "defaults"],
+});
+registerPref({
+  key: "rowsPerPageHome", group: "WORKSPACE", section: "set-tables",
+  control: "onoff", label: "Rows per page · Home",
+  values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
+  options: ROWS_PER_PAGE_OPTIONS,
+  tags: ["tables", "defaults"],
+});
+registerPref({
+  key: "rowsPerPageMonitoring", group: "WORKSPACE", section: "set-tables",
+  control: "onoff", label: "Rows per page · Monitoring",
+  values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
+  options: ROWS_PER_PAGE_OPTIONS,
+  tags: ["tables", "defaults"],
+});
+
+// WORKSPACE · Workspace
+registerPref({
+  key: "showRowNumbers", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Show row numbers",
+  values: ["1", "0"], default: "1", attr: "showRownum",
+  options: ON_OFF_OPTIONS,
+  tags: ["appearance"],
+});
+registerPref({
+  key: "showStageDots", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Stage dots in rail",
+  values: ["1", "0"], default: "1", attr: "showStageDots",
+  options: ON_OFF_OPTIONS,
+  tags: ["appearance"],
+});
+
+// WORKSPACE · Data & Export — none reshape <html>, so no attr;
+// consumed by upload / export handlers when they pick a sensible
+// default.
+registerPref({
+  key: "csvDelimiter", group: "WORKSPACE", section: "set-data",
+  control: "onoff", label: "CSV delimiter", hint: "applied when opening files",
+  values: ["auto", "comma", "semi", "tab"], default: "auto", attr: null,
+  options: [
+    { value: "auto",  label: "Auto" },
+    { value: "comma", label: ",", title: "Comma" },
+    { value: "semi",  label: ";", title: "Semicolon" },
+    { value: "tab",   label: "↹", title: "Tab" },
+  ],
+  tags: ["data", "defaults"],
+});
+registerPref({
+  key: "csvEncoding", group: "WORKSPACE", section: "set-data",
+  control: "onoff", label: "Default encoding", hint: "fallback when RedPash can't detect",
   values: ["auto", "utf-8", "utf-16le", "utf-16be",
            "windows-1252", "iso-8859-1", "iso-8859-15",
            "windows-1250", "macintosh"],
   default: "auto", attr: null,
+  options: [
+    { value: "auto",         label: "Auto",       title: "Auto-detect (chardetng)" },
+    { value: "utf-8",        label: "UTF-8" },
+    { value: "utf-16le",     label: "UTF-16 LE" },
+    { value: "utf-16be",     label: "UTF-16 BE" },
+    { value: "windows-1252", label: "Win-1252" },
+    { value: "iso-8859-1",   label: "Latin-1" },
+    { value: "iso-8859-15",  label: "Latin-9" },
+    { value: "windows-1250", label: "Win-1250" },
+    { value: "macintosh",    label: "MacRoman" },
+  ],
+  tags: ["data", "defaults"],
 });
-registerPref({ key: "exportFormat", values: ["csv", "xlsx", "json"], default: "csv", attr: null });
-// Cases page — how far back to show the "Done" column / rail group
+registerPref({
+  key: "exportFormat", group: "WORKSPACE", section: "set-data",
+  control: "onoff", label: "Export format", hint: "default for downloading cleaned data",
+  values: ["csv", "xlsx", "json"], default: "csv", attr: null,
+  options: [
+    { value: "csv",  label: "CSV",   icon: "filetype-csv"  },
+    { value: "xlsx", label: "Excel", icon: "filetype-xlsx" },
+    { value: "json", label: "JSON",  icon: "filetype-json" },
+  ],
+  tags: ["data", "defaults"],
+});
+
+// CASES — how far back to show the "Done" column / rail group
 // (productivity-tracking window). Default "day" caps to today's
-// closed cases; "all" disables the filter. Live-toggleable from the
-// chip-row at the top of the Done column.
-registerPref({ key: "casesDoneWindow",  values: ["day", "week", "month", "all"], default: "day",    attr: null });
-// Cases page — which axis the left rail groups by. "status" is the
-// default kanban-mirrored grouping; "assignee" surfaces the "what
-// is each agent / user working on" view named in
-// `docs/internal/jira-flow-proposition/proposition.md` as a phase
-// 2-3 migration requirement. Live-toggleable from the rail head.
-registerPref({ key: "casesRailGroupBy", values: ["status", "assignee"],         default: "status", attr: null });
-// Cases page — whether the case-detail properties side panel is open.
-// Persisted so the collapse/expand choice survives reloads + case
-// switches. Two-state like casesRailGroupBy; cases.js applies it as a
-// class on the panel element (per-surface, not <html>), so attr:null.
-registerPref({ key: "casesDetailPanel", values: ["open", "closed"],             default: "open",   attr: null });
+// closed cases; "all" disables the filter. Live-toggleable from
+// the chip-row at the top of the Done column. Not surfaced in
+// Settings today (the Cases group ships empty in step 2; populated
+// in step 6 with the candidates from Phase 1 + these three
+// existing registered specs).
+registerPref({
+  key: "casesDoneWindow",
+  control: "onoff",  // Settings v2 may surface; today the live chip drives.
+  values: ["day", "week", "month", "all"], default: "day", attr: null,
+});
+registerPref({
+  key: "casesRailGroupBy",
+  control: "onoff",
+  values: ["status", "assignee"], default: "status", attr: null,
+});
+registerPref({
+  key: "casesDetailPanel",
+  control: "onoff",
+  values: ["open", "closed"], default: "open", attr: null,
+});
 // Workspace rail — which object kind each project group lists.
-// "data" shows CSV/Excel data files (the redtable surface); whereas
-// "dashboards" shows reports (chart files) + dashboards (the designer
-// surface). A single rail-head toggle flips every group at once.
-registerPref({ key: "workspaceRailView", values: ["data", "dashboards"],        default: "data",   attr: null });
+// "data" shows CSV/Excel data files (the redtable surface);
+// "dashboards" shows reports (chart files) + dashboards (the
+// designer surface). A single rail-head toggle flips every group
+// at once; not currently surfaced in Settings (the toggle is the
+// rail itself).
+registerPref({
+  key: "workspaceRailView",
+  control: "onoff",
+  values: ["data", "dashboards"], default: "data", attr: null,
+});
 
 // ── legacy-key migration ─────────────────────────────────────────────
 // One-shot at module-load time. Moves old per-pref keys (rp-density,
