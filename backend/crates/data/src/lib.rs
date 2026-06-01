@@ -30,6 +30,7 @@ pub mod distinct;
 pub mod group_by;
 pub mod steps;
 pub mod stats;
+pub mod structure;
 // `render` is the Markdown / Maud / syntect path for `/api/docs` and
 // the report templates. Server-side only — its transitive deps
 // (`onig_sys`, `crossterm`) don't compile on wasm32-unknown-unknown.

@@ -24,8 +24,14 @@ const DEMO_MAX_BYTES: usize = 4 * 1024 * 1024;
 struct DemoResult {
     rows:            usize,
     columns:         usize,
-    /// Blended cleanness score, 0–100.
+    /// Blended cleanness score, 0–100 — AFTER the structure-suspicion penalty,
+    /// so a "looks clean" file that's actually mis-delimited/truncated/binary
+    /// doesn't read ≈100.
     score:           f64,
+    /// The pre-penalty cleanness score (type/null quality only).
+    score_raw:       f64,
+    /// Structure-suspicion flags (delimiter/line-ending/binary/header/ragged).
+    structure:       data::structure::StructureFlags,
     /// String columns whose values are really numbers / dates / bools.
     type_mismatches: usize,
     /// Empty cells as a percentage of the whole grid.
@@ -120,9 +126,15 @@ async fn parse(body: Bytes) -> Result<Json<DemoResult>, AppError> {
 
         // Eval against the canonical sentinel set only (`&[]`), same as
         // the score_dir harness — keeps the demo score reproducible.
-        let score = data::stats::cleanness_report(&df, &cols, &[])
+        let score_raw = data::stats::cleanness_report(&df, &cols, &[])
             .map(|r| r.score as f64)
             .unwrap_or(0.0);
+
+        // Structure suspicion: a clean type/null score lies when the file was
+        // silently mis-delimited / truncated / decoded-from-binary / mis-headered.
+        // Penalize so a cursed file can't read ≈100, and surface the reasons.
+        let structure = data::structure::detect(body.as_ref(), &df);
+        let score = (score_raw - structure.penalty() as f64).max(0.0);
 
         // Type drift — a string column that's really numeric / date /
         // bool: the dirt the cleaner fixes.
@@ -147,6 +159,8 @@ async fn parse(body: Bytes) -> Result<Json<DemoResult>, AppError> {
             rows: df.height(),
             columns: df.width(),
             score,
+            score_raw,
+            structure,
             type_mismatches,
             empty_pct,
             parse_ms,

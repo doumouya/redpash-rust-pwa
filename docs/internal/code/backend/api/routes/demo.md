@@ -24,8 +24,12 @@ body cap → 413 over-limit):
 ## Public surface
 
 - `pub fn routes` — the `/parse` + `/avro-decode` router with the 4 MiB cap.
-- `POST /parse` — body = raw CSV bytes; 200 → `{rows, columns, score,
-  type_mismatches, empty_pct, parse_ms}`; 400 on empty.
+- `POST /parse` — body = raw CSV bytes; 200 → `{rows, columns, score, score_raw,
+  structure, type_mismatches, empty_pct, parse_ms}`; 400 on empty. `score` is the
+  cleanness score AFTER the structure-suspicion penalty
+  ([data::structure](../../data/structure.md)) so a mis-delimited / truncated /
+  binary / junk-header file can't read ≈100; `score_raw` is the pre-penalty
+  type/null score; `structure` carries the per-axis flags + reasons.
 - `POST /avro-decode` — body = JSON `{schema, wire_format, bytes_base64}`; 200 →
   `{decoded, decode_ms, byte_count}`. **400** = bad `wire_format`
   (not `raw`/`confluent`) / invalid base64 / unparseable Avro schema
