@@ -310,11 +310,33 @@ async function bootstrapContracts(sr) {
       const envelope = await sr.get(`/subjects/${encodeURIComponent(subject)}/versions/${v}`);
       // Sanitize subject for filesystem (subject names may contain '/').
       const safe = subject.replace(/[/\\:]/g, "_");
-      const fname = `${safe}-v${v}.json`;
-      const fpath = resolvePath(CONTRACTS_DIR, fname);
-      writeFileSync(fpath, JSON.stringify(envelope, null, 2) + "\n");
-      saved.push({ subject, version: v, id: envelope.id, file: fname });
-      console.log(`  ✓ ${fname.padEnd(48)} id=${envelope.id}`);
+
+      // Write BOTH forms for full Confluent ecosystem compatibility
+      // (Confluent VS Code extension convention, Em 2026-06-01):
+      //   `<subject>-v<n>.json`   — full Confluent registry envelope
+      //                              (subject + version + id + metadata
+      //                              + schema as string). Round-trippable
+      //                              with the registry.
+      //   `<subject>-v<n>.avsc`   — bare Avro schema (envelope.schema
+      //                              parsed + pretty-printed). What
+      //                              avro tooling (avro-tools, avsc lib,
+      //                              code generators) consumes natively.
+      const envName  = `${safe}-v${v}.json`;
+      const bareName = `${safe}-v${v}.avsc`;
+      const envPath  = resolvePath(CONTRACTS_DIR, envName);
+      const barePath = resolvePath(CONTRACTS_DIR, bareName);
+      writeFileSync(envPath, JSON.stringify(envelope, null, 2) + "\n");
+      let bareWritten = false;
+      try {
+        const bareSchema = typeof envelope.schema === "string"
+          ? JSON.parse(envelope.schema) : envelope.schema;
+        writeFileSync(barePath, JSON.stringify(bareSchema, null, 2) + "\n");
+        bareWritten = true;
+      } catch (e) {
+        console.log(`  ⚠ failed to extract bare schema for ${subject} v${v}: ${e.message}`);
+      }
+      saved.push({ subject, version: v, id: envelope.id, envelope: envName, bare: bareWritten ? bareName : null });
+      console.log(`  ✓ ${envName.padEnd(40)} id=${envelope.id}${bareWritten ? `  + ${bareName}` : ""}`);
     }
   }
   // Write an index so consumers can map (subject, version) → file
@@ -325,7 +347,7 @@ async function bootstrapContracts(sr) {
     registryUrl: process.env.__SR_URL__ || "(see .env)",
     contracts: saved,
   }, null, 2) + "\n");
-  console.log(`\n✓ ${saved.length} contract(s) saved to contracts/`);
+  console.log(`\n✓ ${saved.length} contract(s) saved (envelope + bare .avsc) to contracts/`);
   console.log(`✓ index written to contracts/index.json`);
   return { saved };
 }

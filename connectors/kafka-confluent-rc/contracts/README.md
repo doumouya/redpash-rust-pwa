@@ -8,21 +8,20 @@ Em 2026-06-01: *"maybe it would have been easier to decode if we asked for this 
 
 See [[feedback-data-contract-first]] memory + CAS_75A0D1FD codec registry design call #5 (multi-registry support) for the v1.1 design implication: `codec_meta.inline_schema` becomes first-class alongside `codec_meta.schema_id + registry`.
 
-## Files
+## Format — two parallel forms per (subject, version)
 
-| File | Topic / subject | Producer | What it carries |
-|------|----------------|----------|-----------------|
-| `topic_account_jlr-value-v2.json` | `topic_account_jlr` value (subject: `topic_account_jlr-value`, version 2) | JLR data-stream | JLR Account record: 21 top-level scalars (PII) + 4 nested-record arrays (telephone / email / accountRole / accountAddress). schema id=100003. |
+`bootstrap-contracts` writes BOTH files for each schema, matching the Confluent VS Code extension's convention (Em 2026-06-01):
 
-## Format
+- **`<subject>-v<n>.json`** — the full Confluent Schema Registry envelope (`{subject, version, id, metadata, schema}` where `schema` is the Avro schema as a JSON-encoded string). Round-trippable with the registry; this is what `GET /subjects/X/versions/N` returns.
+- **`<subject>-v<n>.avsc`** — the **bare Avro schema**, pretty-printed JSON. What `avro-tools`, the `avsc` library, code generators, and the Confluent VS Code extension consume natively. Identical content to the envelope's `schema` field, just unwrapped + pretty.
 
-Files store the **Confluent Schema Registry export envelope** — `{subject, version, id, guid, schemaType, metadata, schema}` — so the file is round-trippable with the registry. The actual Avro schema is the `schema` field (a JSON-encoded string of the Avro JSON schema, per Confluent's convention).
+The two forms are kept in parallel so the connector can be consumed by EITHER toolchain without re-extraction.
 
-To extract just the Avro schema for tooling that wants it bare:
+## Files (current)
 
-```sh
-jq -r '.schema | fromjson' contracts/topic_account_jlr-value-v2.json
-```
+| Subject | Versions | Schema (top-level shape) |
+|---------|----------|--------------------------|
+| `topic_account_jlr-value` | v1 (id=100002), v2 (id=100003) | `Account` record: 21 top-level scalars (PII) + 4 nested-record arrays (telephone / email / accountRole / accountAddress containing PostalAddress) |
 
 ## When to use file-source vs registry-fetch
 
