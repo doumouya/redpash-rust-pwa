@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T00:10:52.263Z",
+  "generatedAt": "2026-06-01T00:57:00.317Z",
   "registryUrl": "https://psrc-ze8rp68.europe-west2.gcp.confluent.cloud",
   "contracts": [
     {
@@ -15,6 +15,20 @@
       "id": 100003,
       "envelope": "topic_account_jlr-value-v2.json",
       "bare": "topic_account_jlr-value-v2.avsc"
+    },
+    {
+      "subject": "topic_account_jlr-value",
+      "version": 3,
+      "id": 100005,
+      "envelope": "topic_account_jlr-value-v3.json",
+      "bare": "topic_account_jlr-value-v3.avsc"
+    },
+    {
+      "subject": "topic_account_transaction-value",
+      "version": 1,
+      "id": 100004,
+      "envelope": "topic_account_transaction-value-v1.json",
+      "bare": "topic_account_transaction-value-v1.avsc"
     }
   ]
 }

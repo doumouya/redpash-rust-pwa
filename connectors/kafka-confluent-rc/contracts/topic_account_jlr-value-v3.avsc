@@ -1,0 +1,392 @@
+{
+  "type": "record",
+  "name": "Account",
+  "namespace": "example",
+  "fields": [
+    {
+      "name": "accountId",
+      "type": "string"
+    },
+    {
+      "name": "accountType",
+      "type": "string"
+    },
+    {
+      "name": "title",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "namePrefix",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "firstName",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "middleName",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "lastName",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "additionalLastName",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "academicTitle",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "nonAcademicTitle",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "dateOfBirth",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "employerName",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "organisationName1",
+      "type": "string"
+    },
+    {
+      "name": "organisationName2",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "preferredLanguage",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "preferredContactMethod",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "preferredContactTime",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "accountOrigin",
+      "type": "string"
+    },
+    {
+      "name": "gender",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "country",
+      "type": "string"
+    },
+    {
+      "name": "generation",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "telephone",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "TelephoneEntry",
+          "fields": [
+            {
+              "name": "phoneNumber",
+              "type": "string"
+            },
+            {
+              "name": "phoneNumberType",
+              "type": "string"
+            },
+            {
+              "name": "PhoneNumberExtension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "country",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "doNotUseFlag",
+              "type": {
+                "type": "int",
+                "arg.properties": {
+                  "options": [
+                    0,
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "name": "actionCode",
+              "type": "string"
+            },
+            {
+              "name": "actionDesc",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "default": []
+    },
+    {
+      "name": "email",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "EmailEntry",
+          "fields": [
+            {
+              "name": "emailAddress",
+              "type": "string"
+            },
+            {
+              "name": "doNotUseFlag",
+              "type": {
+                "type": "int",
+                "arg.properties": {
+                  "options": [
+                    0,
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "name": "actionCode",
+              "type": "string"
+            },
+            {
+              "name": "actionDesc",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "default": []
+    },
+    {
+      "name": "accountRole",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "AccountRoleEntry",
+          "fields": [
+            {
+              "name": "role",
+              "type": "string"
+            },
+            {
+              "name": "actionCode",
+              "type": "string"
+            },
+            {
+              "name": "actionDesc",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ]
+        }
+      },
+      "default": []
+    },
+    {
+      "name": "accountAddress",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "AccountAddressEntry",
+          "fields": [
+            {
+              "name": "addressType",
+              "type": "string"
+            },
+            {
+              "name": "address",
+              "type": {
+                "type": "record",
+                "name": "PostalAddress",
+                "fields": [
+                  {
+                    "name": "poBox",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "premiseNumber",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "building",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "buildingFloor",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "street",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "supplement1",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "supplement2",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "supplement3",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "cityTown",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "regionState",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "postcodeZip",
+                    "type": "string"
+                  },
+                  {
+                    "name": "country",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "default": []
+    }
+  ]
+}

@@ -194,10 +194,17 @@ async function phase4(env) {
 // ── PHASE 5 — end-to-end Avro decode ─────────────────────────────
 async function phase5(env, phase1Result) {
   console.log("\n── phase 5: end-to-end decode (Confluent + raw Avro) ──");
-  if (!env.KAFKA_TOPIC || !env.KAFKA_KEY) {
+  // CLI override for ad-hoc consumes against a non-default topic:
+  //   node spike.mjs phase5 <topic>
+  //   node spike.mjs phase5 <topic> <subject>     (subject = which contracts/ schema to decode against)
+  const cliTopic   = process.argv[3];
+  const cliSubject = process.argv[4];
+  const topic = cliTopic || env.KAFKA_TOPIC;
+  if (!topic || !env.KAFKA_KEY) {
     console.log("(KAFKA_TOPIC + KAFKA_KEY not set, skipping)");
     return null;
   }
+  console.log(`  topic: ${topic}${cliTopic ? " (CLI override)" : ""}`);
   let SchemaRegistry, Kafka, avsc;
   try {
     ({ SchemaRegistry } = await import("@kafkajs/confluent-schema-registry"));
@@ -217,18 +224,27 @@ async function phase5(env, phase1Result) {
   // universal. The spike's biggest find (2026-06-01): assume nothing
   // about wire format until you measure it.
   let rawType = null;
-  if (phase1Result.subjects.length) {
+  // Subject resolution priority:
+  //   1. CLI override (cliSubject)
+  //   2. Match by topic name convention: `<topic>-value` (Confluent default for values)
+  //   3. Fallback to phase1's first discovered subject
+  const targetSubjectName =
+    cliSubject ||
+    phase1Result.subjects.find((s) => s.subject === `${topic}-value`)?.subject ||
+    phase1Result.subjects[0]?.subject;
+  const targetSubject = phase1Result.subjects.find((s) => s.subject === targetSubjectName);
+  if (targetSubject) {
     try {
-      const sub = phase1Result.subjects[0];
       const sr = makeRegistryClient({
         url: env.SCHEMA_REGISTRY_URL,
         key: env.SCHEMA_REGISTRY_KEY,
         secret: env.SCHEMA_REGISTRY_SECRET,
       });
-      const latest = await sr.get(`/subjects/${encodeURIComponent(sub.subject)}/versions/latest`);
+      const latest = await sr.get(`/subjects/${encodeURIComponent(targetSubject.subject)}/versions/latest`);
       rawType = avsc.Type.forSchema(JSON.parse(latest.schema));
+      console.log(`  decoding against subject: ${targetSubject.subject} (v${latest.version}, id=${latest.id})`);
     } catch (e) {
-      console.log(`  ⚠ raw-avro type compile failed: ${e.message}`);
+      console.log(`  ⚠ raw-avro type compile failed for ${targetSubject.subject}: ${e.message}`);
     }
   }
   const kafka = new Kafka({
@@ -239,8 +255,8 @@ async function phase5(env, phase1Result) {
   });
   const consumer = kafka.consumer({ groupId: `redpash-spike-${Date.now()}` });
   await consumer.connect();
-  await consumer.subscribe({ topic: env.KAFKA_TOPIC, fromBeginning: true });
-  console.log(`  consuming one message from ${env.KAFKA_TOPIC}…`);
+  await consumer.subscribe({ topic, fromBeginning: true });
+  console.log(`  consuming one message from ${topic}…`);
   const decoded = await new Promise((resolve) => {
     const timeout = setTimeout(() => resolve({ error: "timeout 10s, no message" }), 10000);
     consumer.run({
