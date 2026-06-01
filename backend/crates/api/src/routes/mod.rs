@@ -221,9 +221,11 @@ async fn require_platform_admin_mw(
 
 pub fn router(state: AppState) -> Router {
     // capture_mw needs the pool; `with_state` below consumes `state`, so
-    // hand the middleware its own clone. Same for the monitoring admin gate.
+    // hand the middleware its own clone. Same for the monitoring + admin
+    // platform-admin gates.
     let capture_state = state.clone();
     let mon_admin_state = state.clone();
+    let admin_gate_state = state.clone();
 
     let api = Router::new()
         .nest("/health",   health::routes())
@@ -242,7 +244,16 @@ pub fn router(state: AppState) -> Router {
         .nest("/metrics",    metrics::routes())
         .nest("/monitoring", monitoring::routes()
             .layer(axum::middleware::from_fn_with_state(mon_admin_state, require_platform_admin_mw)))
-        .nest("/admin",      admin::routes())
+        // SECURITY: the entire /admin surface is platform-admin-only at the
+        // API layer (not merely hidden in the FE Admin Console). Mirrors the
+        // /monitoring gate above. Closes the dev-permissive escalation — incl.
+        // POST /admin/memberships, which let any authed user grant themselves
+        // Owner anywhere. 404-on-deny matches the leak-free contract. Per-handler
+        // is_platform_admin checks inside admin.rs become redundant but harmless.
+        // Org-admin self-service management lands later via reach-scoped
+        // resource endpoints (/:rid/members), NOT this platform surface.
+        .nest("/admin",      admin::routes()
+            .layer(axum::middleware::from_fn_with_state(admin_gate_state, require_platform_admin_mw)))
         .nest("/search",     search::routes())
         .nest("/demo",       demo::routes())
         .nest("/docs",       docs::routes())
