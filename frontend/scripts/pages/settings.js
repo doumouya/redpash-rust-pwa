@@ -39,6 +39,12 @@ import { prefRow, valueRow, actionsRow, mountRow } from "/scripts/page-row.js";
 // rendered pref rows by label / hint / key / tags and re-paints
 // rail group badges with hit counts.
 import { mountSearch } from "/scripts/pages/settings-search.js";
+// Settings v2 step 5 — Hidden Items recovery surface. Scans
+// localStorage for every `rp-pref-*_hidden_*` key (Workspace,
+// Home, Cases) and renders per-page grouped lists with per-item
+// + per-page restore. The source pages don't know this exists;
+// they keep writing the same unregistered keys.
+import { mountHidden } from "/scripts/pages/settings-hidden.js";
 // Settings v2 step 4 — chart-layouts control renderer. Owns the
 // Slice D / D2 picker for monitoringCharts + homeCharts (moved out
 // of this file). Module shape: { render(spec), postMount(app, spec) }
@@ -154,6 +160,7 @@ const SECTION_MOUNT_KEY = {
   "set-monitoring-charts": "monitoringCharts",
   "set-home-charts":       "homeCharts",
   "set-cases":             "cases",
+  "set-hidden":            "hidden",
   "set-account":           "account",
   "set-about":             "about",
 };
@@ -220,6 +227,7 @@ const SET_GROUPS = [
 const SET_TABS = [
   // GENERAL — global UI + identity + diagnostics
   { group: "GENERAL",    key: "set-appearance",        label: "Appearance",        icon: "bi-palette"         },
+  { group: "GENERAL",    key: "set-hidden",            label: "Hidden items",      icon: "bi-eye-slash"       },
   { group: "GENERAL",    key: "set-account",           label: "Account",           icon: "bi-person-circle"   },
   { group: "GENERAL",    key: "set-about",             label: "About",             icon: "bi-info-circle"     },
   // HOME — Home page-specific prefs (today: just chart toggles).
@@ -396,6 +404,9 @@ export default async function settings(app, { session }) {
 
   // ─── post-mount hooks (chart-layouts + future deferred painters) ─
   callPostMountHooks(app);
+
+  // ─── Hidden Items recovery surface (step 5) ─────────────────
+  mountHidden(app);
 }
 
 // mountChartPickerPanel / cloneSpec / openAddChartModal moved to

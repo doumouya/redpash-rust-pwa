@@ -97,6 +97,17 @@
           <div class="rp-page__section-body" data-rp-rows="cases"></div>
         </section>
 
+        <!-- Hidden Items — Settings v2 step 5 (CAS_55984AC7). Unified
+             recovery surface for everywhere the app lets users hide
+             rows (Workspace rail, Home tabs, Cases). Reads localStorage
+             `rp-pref-{rail_hidden_*,home_hidden_*,cases_hidden}` keys;
+             renders a per-page grouped list with per-item × restore
+             + per-page Restore all. -->
+        <section class="rp-page__section" id="set-hidden">
+          <h2 class="rp-page__section-h">Hidden items</h2>
+          <div class="rp-page__section-body" data-rp-rows="hidden"></div>
+        </section>
+
         <section class="rp-page__section" id="set-account">
           <h2 class="rp-page__section-h">Account</h2>
           <div class="rp-page__section-body" data-rp-rows="account"></div>

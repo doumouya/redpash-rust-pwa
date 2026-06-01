@@ -276,6 +276,25 @@ registerPref({
   values: ["data", "dashboards"], default: "data", attr: null,
 });
 
+// GENERAL — Hidden Items auto-purge cross-cutting pref. The Hidden
+// Items tab (step 5) reads / writes this. Today its only effect is
+// the toggle's persisted state; the actual age-based purge needs a
+// per-entry timestamp on the hide-write side (rail-controls.js +
+// home-hide-actions etc.) which lands as a follow-up. Registered now
+// so the toggle row renders in Settings + the pref is wire-ready.
+registerPref({
+  key: "general-hiddenAutoPurge",
+  group: "GENERAL", section: "set-hidden",
+  control: "onoff", label: "Auto-purge after 30 days",
+  hint:  "drop hidden entries older than 30 days. Today: persisted toggle only; the per-entry timestamp lands as a follow-up.",
+  values: ["1", "0"], default: "0", attr: null,
+  options: [
+    { value: "1", label: "On"  },
+    { value: "0", label: "Off" },
+  ],
+  tags: ["recovery"],
+});
+
 // MONITORING / HOME — per-tab chart layouts (Slice D / D2). The
 // `chart-layouts` control renderer lives in
 // prefs/controls/chart-layouts.js (step 4 of Settings v2 — moved
