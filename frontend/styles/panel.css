@@ -942,39 +942,29 @@
   font-style: italic;
 }
 
-/* Single measure row — [fn ▾] of [col ▾] [rename] [×]. Reads
-   left-to-right as "Sum of price". */
-/* Layout-modifier on top of the canonical .rt-pred row chrome (which
-   already provides border / padding / radius / gap / margin-bottom +
-   bordered form-field treatment on its child selects + inputs via
-   `.rt-pred select` / `.rt-pred input`). The HTML carries `.rt-pred
-   .rt-report-measure` — the modifier here only overrides the grid
-   layout to fit the measure-row shape:
-     Row 1 — [fn ▾]  of  [col ▾]  [×]  — `1fr auto 1fr auto`, so the
-              two selects share the available width 50/50 and "of"
-              + the delete button stay sized to content.
-     Row 2 — [alias input....................................] spans
-              all 4 columns via `grid-column: 1 / -1` on .rt-pred-val.
+/* Measure row — a structural twin of a filter predicate row
+   (Em 2026-06-01: "closer UI to Predicates"). It reuses the canonical
+   .rt-pred 20-track grid AS-IS (no grid-template-columns override) and
+   the .rt-pred select / .rt-pred input / .rt-pred-del chrome; the only
+   measure-specific rules below SWAP the fn/col placement so the
+   aggregation fn sits LEFT and the column RIGHT (the predicate places
+   col left / op right — here fn=.rt-pred-op is the left field):
+     Row 1 — [fn ▾]            [col ▾]      (50 / 50, like col | op)
+     Row 2 — [rename.........] [×]          (alias 85% | del 15%, like
+                                             the predicate's value | del)
    `width: 100%` claims the full parent flex track (the .rt-report-q-
-   measures flex container is `display: flex; flex-wrap: wrap`, so
-   measure rows stack vertically when more than one). */
-.rt-report-measure {
-  width: 100%;
-  grid-template-columns: 1fr auto 1fr auto;
-  align-items: center;
-}
-/* Alias input spans both rows of the measure-row grid (the row 2
-   continuation). Targets the canonical .rt-pred-val since the
-   measure-row html dropped its parallel `.rt-report-alias` class
-   as part of the cross-panel atom unification (2026-05-27). */
-.rt-report-measure .rt-pred-val {
-  grid-column: 1 / -1;
-}
-.rt-report-measure-of {
-  font-size: 0.6875rem;
-  color: var(--rp-text-mute);
-  padding: 0 0.125rem;
-}
+   measures flex container wraps, so measure rows stack when > 1). The
+   `.rt-pred:not(.rt-report-measure)` guards on the canonical placements
+   (top of file) keep those from applying here, so these win cleanly. */
+.rt-report-measure { width: 100%; }
+.rt-report-measure > .rt-pred-op  { grid-column: 1 / span 10;  grid-row: 1; }
+.rt-report-measure > .rt-pred-col { grid-column: 11 / span 10; grid-row: 1; }
+.rt-report-measure > .rt-pred-val { grid-column: 1 / span 17;  grid-row: 2; }
+.rt-report-measure > .rt-pred-del { grid-column: 18 / span 3;  grid-row: 2; justify-self: stretch; }
+/* `.rt-report-measure-of` retired 2026-06-01 — the inline "of"
+   connector was dropped when the measure row converged onto the
+   predicate layout (a predicate row has no connector between its two
+   selects). The fn dropdown already names the aggregation. */
 /* `.rt-report-fn` / `.rt-report-col` / `.rt-report-alias` rules
    retired 2026-05-27 — the .rt-pred select / .rt-pred input rules at
    the top of this file now cover both panels' form-field treatment

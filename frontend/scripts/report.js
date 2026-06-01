@@ -116,8 +116,9 @@ export function mountReport(panelBody, ctx) {
   function renderQuestionSection(cols) {
     // ── measures (aggregations) ────────────────────────────────────
     const measureRows = aggregations.map((a, i) => {
-      // Reorder: [fn ▾] of [col ▾] [alias?] [×] — reads as English
-      // "Sum of price" / "Mean of age" instead of "price sum".
+      // fn (.rt-pred-op) + col (.rt-pred-col) are the two row-1 selects
+      // — same atoms as a filter predicate's col/op pair. Reads
+      // "[Sum] [price]"; the fn label carries the aggregation verb.
       const fnSelect = '<select class="rt-pred-op" data-key="fn">'
         + AGG_FNS.map(([v, l]) =>
             '<option value="' + esc(v) + '"'
@@ -129,31 +130,29 @@ export function mountReport(panelBody, ctx) {
             + (c.name === a.col ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('')
         + '<option value="*"' + (a.col === "*" ? ' selected' : '') + '>rows</option>'
         + '</select>';
-      // Keeping the `rt-report-agg` class alongside the new visual
-      // class so the existing change/input event handlers (which
-      // target `.rt-report-agg`) keep working without rewires.
-      // Two-row grid layout. Row 1: [fn ▾] of [col ▾] [×] — the two
-      // selects fill the row width via grid `1fr` tracks. Row 2: the
-      // alias input spans the full width via `grid-column: 1 / -1`.
-      // DOM order matches the visual order — alias comes last (after
-      // the delete button) so screen readers + keyboard nav move
-      // through the row before stepping down to the rename.
-      // Carries `.rt-pred` so the canonical row chrome (border /
-      // padding / radius / sub-field bordered form treatment) flows in
-      // from the filter panel's shared atom set. `.rt-report-measure`
-      // stays on the element as the layout-modifier (4-track row 1 +
-      // full-width alias row 2) and as the JS selector handlers
-      // target. `.rt-report-agg` is the legacy alias for change-event
-      // delegation. See docs/internal/processes/replicable-feature-
-      // pattern.md — same UI concept = one canonical class set.
+      // The measure row is now a structural twin of a filter
+      // predicate row (Em 2026-06-01: "closer UI to Predicates"):
+      //   Row 1 — [fn ▾]  [col ▾]   (two selects, 50/50, like col|op)
+      //   Row 2 — [rename.................]  [×]   (alias 85% | del 15%,
+      //            like the predicate's value | delete)
+      // It reuses the canonical `.rt-pred` 20-track grid (no bespoke
+      // grid-template-columns); panel.css `.rt-report-measure` only
+      // SWAPS the fn(.rt-pred-op)/col(.rt-pred-col) placement so the
+      // aggregation fn sits LEFT and the column RIGHT ("Sum" | "price").
+      // The inline "of" connector was dropped for predicate fidelity —
+      // the fn dropdown already labels the aggregation. DOM order =
+      // visual/tab order: fn → col → alias → del. `.rt-report-measure`
+      // stays as the layout hook + JS selector; `.rt-report-agg` is the
+      // legacy alias the change/input handlers delegate on (kept so the
+      // wiring works without rewires). See docs/internal/processes/
+      // replicable-feature-pattern.md — same UI concept = one class set.
       return '<div class="rt-pred rt-report-measure rt-report-agg" data-i="' + i + '">'
         + fnSelect
-        + '<span class="rt-report-measure-of">of</span>'
         + colSelect
-        + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
-        + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
         + '<input class="rt-pred-val" data-key="alias" type="text"'
         + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
+        + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
+        + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
         + '</div>';
     }).join('');
     const measuresEmpty = !aggregations.length
