@@ -111,8 +111,8 @@ TASTE = [
      "axis: single-row over-width truncation"),
     ("14 one short row", b"id,name,age\n1,Alice,30\n2,Bob,\n3,Charlie,31\n4,Delta,32\n", 70, 90,
      "axis: single missing value (null, not shape)"),
-    ("15 control chars in cell", b'id,comment\n1,"all good"\n2,"has NUL \x00 inside"\n3,"has ESC \x1b here"\n4,"normal again"\n', 55, 75,
-     "axis: binary penalty severity — 1 ctrl byte vs whole-file garbage"),
+    ("15 control chars in cell", b'id,comment\n1,"all good"\n2,"has NUL \x00 inside"\n3,"has ESC \x1b here"\n4,"normal again"\n', 0, 40,
+     "axis: binary severity — Em's call (2026-06-01): KEEP HARSH. A control byte is a corruption/injection signal, never 'clean'. Band matches adversarial."),
     ("16 mixed CRLF/LF no lone CR", b"id,name,age\r\n1,Alice,30\r\n2,Bob,29\n3,Charlie,31\r\n4,Delta,32\n", 80, 95,
      "axis: line-ending penalty — mixed but no data loss"),
     ("17 very sparse, 1 real row", b"id,name,age\n,,,\n2,Bob,29\n,,,\n,,,\n", 10, 40,
@@ -134,7 +134,8 @@ SUITES = {
 # structure flags, in report order — keep in sync with StructureFlags.
 FLAG_KEYS = ("line_ending_suspect", "binary_suspect", "delimiter_suspect",
              "ragged_suspect", "header_suspect", "type_drift_suspect",
-             "numeric_id_loss_suspect")
+             "numeric_id_loss_suspect", "date_drift_suspect",
+             "whitespace_rows_suspect")
 
 def parse(b):
     req = urllib.request.Request(URL, data=b, method="POST",
