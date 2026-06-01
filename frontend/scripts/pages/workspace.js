@@ -1072,7 +1072,14 @@ export default function workspace(app, { session }) {
       focusedProjectRid = group.dataset.rid || null;
       const wasExpanded = group.classList.contains("expanded");
       group.classList.toggle("expanded");
-      if (!wasExpanded) loadFilesForGroup(group);
+      // Clear the lazy-load gate on every collapse→expand so external
+      // writes (Kafka loader, scheduled jobs, anything that lands a
+      // file outside the UI's create flows) become visible without a
+      // full page reload. Cheap: one API round-trip per expand.
+      if (!wasExpanded) {
+        group.dataset.filesLoaded = "";
+        loadFilesForGroup(group);
+      }
       return;
     }
     if (e.target.closest(".rt-tab-close")) {
