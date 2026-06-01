@@ -107,43 +107,52 @@ Phases 4–6 surface depending on data availability; phases 1–3 always run.
 
 Scaffolding shipped 2026-06-01. Awaiting `.env` population + initial run. Results sequence to addendum on CAS_ACAA76AA.
 
-## Production transition (Rust runtime)
+## Production runtime — SHIPPED 2026-06-01 (commits 4578509 + feef608)
 
-The Node tooling here is the **ops layer** — bootstrap, drift detection, future push/compat/sync. Long-term, the **runtime layer** (consume Kafka topic → decode against contract → load into `project_files`) ships in Rust as a backend binary, consuming the same `contracts/` files generated here.
+The Node tooling here is the **ops layer** — bootstrap, drift detection, future push/compat/sync. The **runtime layer** ships as a MODE of the main backend binary (`REDPASH_KAFKA_LOAD` env), consuming the same `contracts/` files this directory generates.
 
-**Canonical Rust crates** (verified Confluent Rust docs 2026-06-01 — https://docs.confluent.io/platform/current/clients/examples/rust.html):
+**First successful end-to-end run 2026-06-01T01:33Z**: connect 1.15s → consume 1 message → decode 2ms via codec_avro → load 18ms into `FIL_E9F50710...` (project `PRJ_D32D474B...`). Real Confluent Cloud, real JLR Account schema, real row in `project_files`. The first ETL connector is OPERATIONAL.
 
-| Crate | Role | Notes |
-|-------|------|-------|
-| `rdkafka` | Kafka consumer / producer client | Wraps librdkafka (C). De facto Rust Kafka client. Async via tokio futures. |
-| `apache-avro` | Avro schema parser + binary decoder | Official Apache crate. Reads our `contracts/*.json` (or `.avsc`) + decodes message buffers. |
-| `tokio` | Async runtime | rdkafka's async surface needs it. |
+**Canonical Rust crates (as-built)**:
+
+| Crate | Role | Why it was chosen |
+|-------|------|-------------------|
+| **`rskafka`** | Kafka consumer (pure Rust, no native deps) | **Em's call**: `rdkafka` needs cmake + librdkafka (C lib); rskafka is pure-Rust + no system deps + idiomatic async. Confluent's official docs recommend `rdkafka` because they ship librdkafka, but the engineering optimum for a Rust-native stack is `rskafka`. Third instance today of [[decades-of-innovation]] vendor-docs-as-unreliable-narrator pattern. |
+| `apache-avro` 0.21 | Avro schema parser + binary decoder | Reads our `contracts/*.json` envelopes + decodes message buffers. Consumed by `codec_avro.rs` in the codec registry (CAS_75A0D1FD s2). |
+| `rustls` 0.23 + `webpki-roots` 1 | TLS for SASL_SSL | Pure-Rust TLS via ring provider. **No native dep on OpenSSL.** Added during the security-review pass (commit feef608) when the first cut had SASL PLAIN over PLAINTEXT — fail-closed: TLS-setup failure errors the run rather than leaking creds. |
+| `tokio` | Async runtime | Standard. |
 | `serde_json` | Parse contract envelopes | Standard. |
+
+**Critical security note**: SASL_SSL + PLAIN over TLS is **mandatory**, not optional. Confluent Cloud requires it. The first cut (commit before feef608) used SASL PLAIN with no TLS — a security review caught it; rustls TLS config now fail-closes on setup failure rather than falling back to plaintext.
 
 **What we DON'T need at runtime** (because [[data-contract-first]]):
 
-- `schema-registry-converter` — community crate that does `{magic_byte, schema_id}` → registry lookup at runtime. Skipped because our schemas are local files. This is the design dividend of stewarding contracts client-side: the Rust runtime never makes a Schema Registry HTTP call on the hot path.
+- `schema-registry-converter` — community crate that does `{magic_byte, schema_id}` → registry lookup at runtime. Skipped because our schemas are local files.
 
-**Auth shape**: SASL_SSL + PLAIN mechanism (matches what we're using via kafkajs today). `rdkafka` config keys: `security.protocol=SASL_SSL`, `sasl.mechanisms=PLAIN`, `sasl.username` / `sasl.password`, `bootstrap.servers`. Same `.env` values as the Node spike + bootstrap-contracts.
+**Auth shape**: SASL_SSL + PLAIN mechanism. Same `.env` values as the Node spike + bootstrap-contracts. rskafka config: `.tls_config(rustls_config).sasl_config(SaslConfig::Plain { username, password }).bootstrap_brokers(...)`.
 
-**Future restructuring** (when the Rust runtime lands):
+**Loader architecture** (commit 4578509):
+
+- Runs as `REDPASH_KAFKA_LOAD=1` mode of the main binary (not `src/bin` — a binary can't reach `codec_avro` + `db` modules; mode-of-main reuses them).
+- `consume_raw` → rskafka single-partition fetch.
+- `codec_avro::decode` → JSON records.
+- `records_to_csv` → tabular CSV; nested arrays/objects flatten to compact JSON strings per cell; RFC-4180 quoted.
+- `ingest_csv` → existing upload/import pipeline (`data::parse::from_csv_bytes` + `db::insert_file`). **Decoded Kafka data flows through the SAME pipeline as CSV uploads** — `disposability-design-principle` reuse: no new ingest infra, just plumbing.
+- Result: a `project_files` row with the decoded Account record(s), queryable via the existing redtable + workspace surfaces.
+
+**Future restructuring (planned, not now)**:
 
 ```
 connectors/kafka-confluent-rc/
 ├── README.md
-├── ops/                 # Node: bootstrap, diff, push, compat, sync
+├── ops/                 # Node: bootstrap, diff, push, compat, sync (today)
 │   ├── package.json
 │   └── spike.mjs
-├── runtime/             # Rust: consume + decode + load
-│   ├── Cargo.toml
-│   └── src/{consumer.rs, decoder.rs, loader.rs}
 ├── contracts/           # shared — generated by ops, consumed by runtime
-└── results/             # ops outputs (gitignored)
+└── results/             # ops + loader outputs (gitignored)
 ```
 
-Until the runtime lands, the Node spike's phase 5 (consume + dual Avro decode) is the proof-of-concept the Rust runtime will replicate. Wire format detection + dual-decode (Confluent vs raw) carries over identically.
-
-The production transition is BE's lane (codec registry s2 lands first; the Kafka loader binary lands after, consuming the codec registry's avro codec for decode).
+The runtime currently lives in `backend/crates/api/src/kafka_loader.rs` (mode of main binary). If a future restructure splits it into its own crate, the `contracts/` dir stays the contract surface between ops + runtime regardless.
 
 ## Related
 
