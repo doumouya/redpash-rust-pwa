@@ -1,7 +1,20 @@
 ---
 title: User preferences — object spec
 section: Internal
-last modified date: 2026-05-23
+last modified date: 2026-06-01
+---
+
+> **Update 2026-06-01 — Settings v2 (CAS_55984AC7).** The schema +
+> wire shape in this spec are unchanged; what changed is the KEY
+> NAMING convention. Em locked the `<page>-<leaf>` shape
+> (CAS_3FC70F56); the open registry in `prefs.js` and a 20-key
+> migrateFrom dual-read window carry the legacy camelCase
+> identifiers forward client-side, and the one-shot SQL backfill
+> (`backend/migrations/20260601000000_kebab_pref_keys_backfill.sql`)
+> renames the rows on the server. See plan
+> `~/.claude/plans/transient-dazzling-conway.md` for the full 7-step
+> rollout. Below remains the original (still-valid) object spec.
+
 ---
 
 # `user_preferences` — object spec
