@@ -23,14 +23,19 @@ reasons. Consumed today by `POST /api/demo/parse`
 
 ## Public surface
 
-- `pub struct StructureFlags` — five booleans (`line_ending_suspect`,
-  `binary_suspect`, `delimiter_suspect`, `ragged_suspect`, `header_suspect`) +
-  `reasons: Vec<String>`. `Serialize`d straight into the demo response.
-  - `penalty() -> f32` — 0..=100 to subtract from a clean score. Weights (tuned
-    against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt bytes →
-    unusable), delimiter 45 (wrong shape), line-ending 25, ragged 25, header 20;
-    capped at 100. Calibration is approximate — direction is guaranteed, the
-    graded scale is still being tuned (type-drift, hook #6, is the open axis).
+- `pub struct StructureFlags` — six booleans (`line_ending_suspect`,
+  `binary_suspect`, `delimiter_suspect`, `ragged_suspect`, `header_suspect`,
+  `type_drift_suspect`) + `type_drift_frac: f32` (the worst drifting column's
+  off-type fraction) + `reasons: Vec<String>`. `Serialize`d straight into the
+  demo response.
+  - `penalty() -> f32` — 0..=100 to subtract from a clean score. Flat weights
+    (tuned against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt
+    bytes → unusable), delimiter 45 (wrong shape), line-ending 25, ragged 25,
+    header 20. **Type-drift is graded**: `type_drift_frac × 70`, capped at 35 —
+    a 25%-dirty column docks ~17, a 50%-dirty one ~30 (never enough alone to read
+    "cursed"). All summed, capped at 100. Verified at **16/18** in-band on the
+    calibration suite; the two outliers (leading-zero int-cast loss,
+    sparse-grid completeness) are distinct hooks, not drift.
   - `any() -> bool`.
 - `pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags` — the detector.
 
@@ -41,12 +46,27 @@ reasons. Consumed today by `POST /api/demo/parse`
 - **line_ending** — a lone `\r` (classic-Mac), or mixed `CRLF`+`LF` (Cases 11, 12).
 - **delimiter** — the header line carries ≥2 distinct delimiter candidates
   (`, ; \t |`), so the split is ambiguous (Case 22).
-- **ragged** — quote-aware field counts vary across sample rows (max ≥ 2× min, or
-  a spread ≥ 3) → truncation / wrong delimiter (Cases 4, 13). **Skipped when a
-  quoted field spans physical lines** (tracked via cumulative quote balance) —
-  otherwise a clean multiline-quoted file false-flags as ragged.
+- **ragged** — two signals, both feed `ragged_suspect`:
+  1. quote-aware field counts vary across sample rows (max ≥ 2× min, or a spread
+     ≥ 3) → truncation / wrong delimiter (Cases 4, 13).
+  2. the **header is consistently narrower than the data rows** (modal data width
+     > header width, in ≥ half the rows) → Polars truncates each row to the header
+     width, silently dropping the trailing field(s). The spread can be just 1, so
+     signal 1 misses it; the *direction* is the tell. Catches EU-decimal
+     mis-splits (`id,price` + `1,1.234,56`) and trailing-comma extra columns.
+
+  Both are **skipped when a quoted field spans physical lines** (tracked via
+  cumulative quote balance) — otherwise a clean multiline-quoted file false-flags.
 - **header** — duplicate header names (incl. Polars' `_duplicated_` rename) or
   all-numeric headers (a data row used as the header) (Cases 23, 25).
+- **type_drift** (hook #6) — a String-stored column whose non-empty cells are
+  *mostly* (≥50%) one structured kind (numeric/bool/date) but *not pure* (<95%) —
+  the silent band the semantic sniff waves through as a clean string column at
+  score≈100 (`amount=[10,20,foo,40]` is 75% numeric, just under the sniff's 80%
+  bar). Detected by `dtype::worst_type_drift`; `type_drift_frac` carries the worst
+  column's off-type fraction so the penalty scales by severity. Pure columns are
+  handled upstream (sniff types them, strict-parse docks stragglers);
+  mostly-text columns are genuine strings (Cases 6, 7).
 
 ## Drift-prone areas
 
@@ -56,10 +76,15 @@ reasons. Consumed today by `POST /api/demo/parse`
 - **`count_unquoted` is duplicated** from `parse::sniff` (a 6-line quote-aware
   counter) so the two stay private; if a third copy appears, lift it to a shared
   `pub(crate)` helper.
-- **Penalty weights are uncalibrated.** They guarantee the *direction* (cursed
-  drops, clean stays 100), not a graded scale. Tune against a dedicated
-  score-calibration suite (CSVs labelled "deserves ≈20/50/80/95") before relying
-  on the absolute number.
+- **Penalty weights are calibrated against the suite, not first-principles.**
+  `tools/wasm-bench/score-calibration.py` (18 CSVs labelled with a deserved band)
+  is the tuning instrument — re-run it after touching any weight. Currently
+  16/18 in-band. They still guarantee the *direction* (cursed drops, clean stays
+  100); the absolute graded scale is "good enough", not exact.
+- **`worst_type_drift` lives in `dtype.rs`, not here** — it reuses that module's
+  shape checks (`classify_cell` → the same `looks_numeric_ish` / `looks_date_shaped`
+  / bool-word logic the sniff uses) so drift detection agrees with the sniff. Keep
+  the cell-classification logic there; `structure.rs` only consumes the verdict.
 - **No false positives on clean input** is the contract — verified (a plain
   `\n` CSV with unique text headers flags nothing). Keep new heuristics
   conservative so they don't penalize legitimate files.

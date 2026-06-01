@@ -114,3 +114,55 @@ header 15 (capped 100).
 "deserves ≈20/50/80/95", and we tune the weights + add hook #6 until the scorer
 matches that judgment. The harness lives at `tools/wasm-bench/score-calibration.py`
 — run it, see which cases miss their target band, tune, repeat.
+
+---
+
+## ✅ Round 2 shipped (2026-06-01) — hook #6 + calibration suite
+
+The score-calibration suite is built (`tools/wasm-bench/score-calibration.py`):
+**18 CSVs each labelled with the score band it *deserves*** (clean 90–100 …
+cursed 0–40); the runner marks `PASS` / `HIGH↑` (lying) / `LOW↓` (over-harsh).
+That turned the fuzzing into a judgment engine — and immediately drove fixes.
+
+**Hook #6 — type-drift sensitivity — is in.** `dtype::worst_type_drift` finds the
+worst String column that's *mostly* one structured type (numeric/bool/date) but
+contaminated, and `structure` penalizes it **graded by contamination**
+(`off_fraction × 70`, capped 35) — exactly your "treat the 5% strings as heavy
+dirt." The silent zone was a threshold cliff: the semantic sniff only commits a
+type at **≥80%** agreement, so a **75%-numeric** column (`[10,20,foo,40]`) fell
+just under and scored 100. Hook #6 owns the 50–95% band the sniff leaves open.
+
+**Also shipped: a "data wider than header" shape signal** — when the header is
+consistently narrower than the data rows, Polars truncates each row to the header
+width and silently drops the trailing field(s). The field-count *spread* can be
+just 1 (so the old ragged check missed it); the *direction* is the tell. Catches
+your EU-decimal mis-split (Case 6) and trailing-comma cases.
+
+| calibration case | was | now | band | verdict |
+|------------------|-----|-----|------|---------|
+| one type-drift column | 100 | **82.5** | 65–88 | ✓ hook #6 |
+| boolean soup | 90 | **76** | 60–85 | ✓ hook #6 |
+| european decimals | 100 | **55** | 45–72 | ✓ wider-than-header |
+| (clean cases) | 100 | **100** | 90–100 | ✓ no regressions |
+
+**Result: 16/18 in band** (was 13/18 before hook #6).
+
+### ⏳ Still open — the 2 calibration outliers (distinct hooks, not drift)
+
+- **Leading-zero int-cast loss** (`leading-zero ids` → 100, wants 70–92). `001`
+  → Polars casts the column to int `1`, **destroying the zero silently**. The
+  sniff's leading-zero guard only fires when it samples the value *as a string*;
+  once Polars types the whole column int, the loss is invisible post-parse. Needs
+  a **raw-vs-parsed** detector (compare original bytes against the typed frame) —
+  its own hook. This is identity destruction (zips, codes, badge ids), the
+  highest-value remaining catch.
+- **Sparse-grid over-scoring** (`sparse single cell` → 42.3, wants 5–40, off by
+  2.3). A near-empty grid still scores into the low-40s because completeness is
+  only 35% of the blend. This is `stats.rs` completeness-scorer tuning, not a
+  structure flag.
+
+- **Normalization-collision headers** (Case 9) — still unflagged; NFC-collapsing
+  look-alike headers in different Unicode forms.
+
+The suite makes the next round mechanical: pick an outlier, add the detector,
+re-run, watch it flip to PASS without regressing the 16.

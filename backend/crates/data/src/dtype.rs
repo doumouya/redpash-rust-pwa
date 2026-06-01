@@ -220,3 +220,138 @@ fn looks_numeric_ish(s: &str) -> bool {
     let digits = s.chars().filter(|c| c.is_ascii_digit()).count();
     digits > 0 && digits * 2 >= total
 }
+
+// ── type-drift detection (hook #6) ───────────────────────────────────
+//
+// The semantic sniff above only commits to a structured type at ≥80%
+// agreement, so `type_consistency_score` can only dock columns that
+// cleared that bar. A column that's *mostly* one type but contaminated
+// — `[10, 20, foo, 40]` at 75% numeric — falls just under, is labelled
+// a "genuine string column", and scores ≈100. That silent 50–95% band
+// is the lie. `worst_type_drift` surfaces it for the structure penalty.
+
+/// Coarse per-cell kind for drift detection — the same shape checks
+/// `sniff_semantic_type` uses, applied at cell granularity. Blank /
+/// sentinel cells are `Empty` (excluded from the drift denominator).
+/// A bare `1`/`0` is `Numeric`, not `Bool` — matching the sniff's
+/// int-over-bool guard (`BOOL_WORDS_NON_NUMERIC`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CellKind {
+    Empty,
+    Numeric,
+    Bool,
+    Date,
+    Text,
+}
+
+pub(crate) fn classify_cell(raw: &str) -> CellKind {
+    let t = raw.trim();
+    if t.is_empty() {
+        return CellKind::Empty;
+    }
+    let low = t.to_ascii_lowercase();
+    if SENTINEL_TOKENS.contains(&low.as_str()) {
+        return CellKind::Empty;
+    }
+    if BOOL_WORDS_NON_NUMERIC.contains(&low.as_str()) {
+        return CellKind::Bool;
+    }
+    if looks_date_shaped(&low) {
+        return CellKind::Date;
+    }
+    if looks_numeric_ish(t) {
+        return CellKind::Numeric;
+    }
+    CellKind::Text
+}
+
+/// Scan every String-stored column for **type drift** and return the
+/// *worst* offender's `(name, off_type_fraction)`, or `None`.
+///
+/// A column drifts when its non-empty cells are *mostly* (≥50%) one
+/// structured kind (numeric/bool/date) but *not pure* (<95%). Pure
+/// columns are handled upstream (the sniff types them, the strict-parse
+/// score docks the stragglers); mostly-text columns are genuine strings.
+/// It's the in-between band that masquerades as clean. `off_fraction`
+/// is `1 − dominant/total` ∈ (0.05, 0.5] — how contaminated the column
+/// is — so the caller can scale the penalty by severity. Already-typed
+/// columns (int/float/bool/date storage) are clean by construction and
+/// skipped.
+pub(crate) fn worst_type_drift(df: &DataFrame) -> Option<(String, f32)> {
+    let mut worst: Option<(String, f32)> = None;
+    for c in df.get_columns() {
+        if !matches!(c.dtype(), DataType::String) {
+            continue;
+        }
+        let (mut num, mut boo, mut dat, mut total) = (0usize, 0usize, 0usize, 0usize);
+        for i in 0..c.len() {
+            let raw = match c.get(i) {
+                Ok(AnyValue::String(s)) => s.to_string(),
+                Ok(AnyValue::StringOwned(s)) => s.to_string(),
+                _ => continue,
+            };
+            match classify_cell(&raw) {
+                CellKind::Empty => continue,
+                CellKind::Numeric => num += 1,
+                CellKind::Bool => boo += 1,
+                CellKind::Date => dat += 1,
+                CellKind::Text => {}
+            }
+            total += 1;
+        }
+        if total < 4 {
+            continue; // too few cells to judge a trend
+        }
+        let dominant = num.max(boo).max(dat);
+        let frac = dominant as f32 / total as f32;
+        if (0.5..0.95).contains(&frac) {
+            let off = 1.0 - frac;
+            if worst.as_ref().map_or(true, |(_, w)| off > *w) {
+                worst = Some((c.name().to_string(), off));
+            }
+        }
+    }
+    worst
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn df1(name: &str, vals: &[&str]) -> DataFrame {
+        DataFrame::new(vec![Series::new(name.into(), vals).into()]).unwrap()
+    }
+
+    #[test]
+    fn classify_cell_kinds() {
+        assert_eq!(classify_cell("42"), CellKind::Numeric);
+        assert_eq!(classify_cell("1.234,56"), CellKind::Numeric); // dirty-numeric
+        assert_eq!(classify_cell("yes"), CellKind::Bool);
+        assert_eq!(classify_cell("N"), CellKind::Bool);
+        assert_eq!(classify_cell("0"), CellKind::Numeric); // bare 0/1 is numeric, not bool
+        assert_eq!(classify_cell("2024-01-15"), CellKind::Date);
+        assert_eq!(classify_cell("foo"), CellKind::Text);
+        assert_eq!(classify_cell("  "), CellKind::Empty);
+        assert_eq!(classify_cell("N/A"), CellKind::Empty); // sentinel
+    }
+
+    #[test]
+    fn drift_flags_contaminated_numeric_column() {
+        // 3/4 numeric, one "foo" → 75% numeric, the silent band.
+        let df = df1("amount", &["10", "20", "foo", "40"]);
+        let (col, off) = worst_type_drift(&df).expect("should flag drift");
+        assert_eq!(col, "amount");
+        assert!((off - 0.25).abs() < 1e-6, "off fraction = {off}");
+    }
+
+    #[test]
+    fn drift_skips_clean_and_genuine_text() {
+        // A genuine text column (all text) — no drift.
+        let df = df1("city", &["Paris", "Rome", "Lyon", "Nice"]);
+        assert!(worst_type_drift(&df).is_none());
+        // A pure dirty-numeric String column (100% numeric-ish, e.g. all
+        // `€`-prefixed) — handled by the sniff + strict-parse, not drift.
+        let df = df1("price", &["€10", "€20", "€30", "€40"]);
+        assert!(worst_type_drift(&df).is_none(), "pure numeric-ish is not drift");
+    }
+}
