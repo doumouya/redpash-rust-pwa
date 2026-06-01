@@ -112,13 +112,16 @@ export default function workspace(app, { session }) {
   // search wrapper — moving them client-side needs new wasm wrappers, a
   // follow-up). "Gated by capacity, not capability" — see
   // subsystems/wasm-engine.md. Em 2026-06-01.
-  // 200k since the sort moved into engine.worker.js (CAS_21B43BEC): the 50k
-  // line was the MAIN-THREAD freeze, now gone. Measured 50k→200k: max frame
-  // gap stays ≤50 ms (no freeze), sort round-trip 270 ms→1.2 s (worker time,
-  // off-thread, spinner-covered). MUST stay ≤ the server /page size clamp
-  // (raised in lockstep to 200_000 in files/mod.rs + data/parse/mod.rs) or the
-  // buffer truncates silently (the completeness guard then drops to server mode).
-  const CLIENT_ENGINE_ROW_CAP = 200000;
+  // 500k to cover the real-world 400k-row file (CAS_21B43BEC) without a tab
+  // freeze: the sort runs in engine.worker.js (off-thread) so at 400k it's a
+  // ~2.4 s SPINNER, not a lock. Residual main-thread costs at 400k are janks,
+  // not freezes: ~300 ms to JSON.parse the /page response (in api.js) + ~117 ms
+  // to structured-clone the buffer to the worker per sort + ~33 ms coerce.
+  // (Driving those to ~0 needs a stateful worker that holds the frame + returns
+  // only the visible page — the scale-past-500k follow-up.) MUST stay ≤ the
+  // server /page size clamp (raised in lockstep to 500_000 in files/mod.rs +
+  // data/parse/mod.rs) or the buffer truncates (completeness guard → server mode).
+  const CLIENT_ENGINE_ROW_CAP = 500000;
   let clientMode    = false;  // active file is under the cap → client sort/page
   let clientBuffer  = null;   // { cells: string[][], idxs: number[], typed: object[] } | null
   // Rail filter state — both ephemeral per visit (no pref): a deep-link

@@ -441,12 +441,12 @@ async fn get_page(
         .map_err(|e| AppError::internal("join", e.to_string()))??;
     let ms = start.elapsed().as_millis() as u32;
 
-    // 200k ceiling, raised from 50k in lockstep with the frontend
-    // CLIENT_ENGINE_ROW_CAP (CAS_21B43BEC): the client buffers the whole set in
-    // one fetch (size = cap+1) and sorts it in a Web Worker, so the old
-    // main-thread-freeze ceiling no longer applies. Must stay ≥ the client cap
-    // or the completeness guard drops the file to server-mode paging.
-    let size  = q.size.unwrap_or(25).clamp(1, 200_000);
+    // 500k ceiling, in lockstep with the frontend CLIENT_ENGINE_ROW_CAP
+    // (CAS_21B43BEC) — covers the real 400k-row file. The client buffers the
+    // whole set in one fetch (size = cap+1) and sorts it in a Web Worker, so the
+    // old main-thread-freeze ceiling no longer applies. Must stay ≥ the client
+    // cap or the completeness guard drops the file to server-mode paging.
+    let size  = q.size.unwrap_or(25).clamp(1, 500_000);
     let page  = q.page.unwrap_or(1).max(1);
     let pages = ((total as f64) / (size as f64)).ceil() as u32;
 
