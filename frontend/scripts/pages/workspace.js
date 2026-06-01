@@ -25,7 +25,7 @@ import { mountReport } from "/scripts/report.js";
 import { attachAutocomplete, mountChipPicker } from "/scripts/autocomplete.js";
 import { invalidateFile as invalidateColumnIndex } from "/scripts/column-index.js";
 import { mountDesigner } from "/scripts/designer.js";
-import { getEngine } from "/scripts/wasm-engine.js";
+import { getEngine, warmWorkerEngine, workerSort } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
 import { createVirtualRows } from "/scripts/virtual-rows.js";
@@ -54,7 +54,7 @@ export default function workspace(app, { session }) {
   // going to do data work, so trigger the lazy fetch now and await
   // later from whichever surface needs it. Fire-and-forget: any load
   // error stays silent until a real call happens (then surfaces there).
-  getEngine().catch(() => { /* lazy-loader error path; ignored on warm-up */ });
+  warmWorkerEngine(); // compile the wasm in the worker, where the ops will run
 
   // ─── element refs ──────────────────────────────────────────────
   const nav        = $("#wsNav");
@@ -1528,16 +1528,29 @@ export default function workspace(app, { session }) {
     const { cells, idxs, typed } = clientBuffer;
     let order = typed.map((_, i) => i);
     if (sortKeys.length) {
-      try {
-        const eng = await getEngine();
-        let rows = typed;
-        for (let k = sortKeys.length - 1; k >= 0; k--) {
-          const meta = activeColumns[sortKeys[k].col - 3];
-          if (!meta) continue;
-          rows = JSON.parse(eng.apply_sort(JSON.stringify(rows), meta.name, sortKeys[k].dir < 0));
+      // Display-col index (≥3) → engine column name; drop keys whose column is gone.
+      const specs = sortKeys
+        .map((k) => { const meta = activeColumns[k.col - 3]; return meta ? { col: meta.name, desc: k.dir < 0 } : null; })
+        .filter(Boolean);
+      if (specs.length) {
+        try {
+          // Off the main thread (engine.worker.js): the sort over the full
+          // buffer never freezes the tab, and only the ~N-int permutation
+          // crosses back, not the re-serialized rows.
+          order = await workerSort(typed, specs);
+        } catch (_err) {
+          // Fallback 1 — main-thread engine: correct, but may freeze a big buffer
+          // (only hit if the worker is unavailable/crashed).
+          try {
+            const eng = await getEngine();
+            let rows = typed;
+            for (let k = specs.length - 1; k >= 0; k--) {
+              rows = JSON.parse(eng.apply_sort(JSON.stringify(rows), specs[k].col, specs[k].desc));
+            }
+            order = rows.map((r) => r.__p);
+          } catch (_err2) { /* Fallback 2 — keep buffer order: a sort gesture never blanks the grid */ }
         }
-        order = rows.map((r) => r.__p);
-      } catch (_err) { /* keep buffer order — never blank the grid on a sort */ }
+      }
     }
     const total = order.length;
     // Render every row — the virtualizer windows it. No page slice.
