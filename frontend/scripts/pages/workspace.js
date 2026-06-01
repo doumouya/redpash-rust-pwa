@@ -73,11 +73,18 @@ export default function workspace(app, { session }) {
 
   // ─── state ─────────────────────────────────────────────────────
   let activeFileRid = null;
+  // True only while loadFile is syncing the rail seg to the file it
+  // just opened (maybeAutoToggleRail → set() → onChange). That echo
+  // must NOT re-run the surface swap — the file is already chosen.
+  // CAS_3BCD6727.
+  let railSyncing = false;
   // Per-view "last opened" memory — CAS_3BCD6727. When the user toggles
-  // the rail Data ↔ Dashboards view, the surface auto-swaps to the
-  // last-opened file of the new view kind (or the first available, or
-  // landing if none). One slot per view; loadFile updates the slot
-  // matching its file_type so toggling back restores the prior file.
+  // the rail Data ↔ Dashboards view, the surface swaps to the
+  // last-opened file of the new view kind, or — if that view has
+  // nothing to restore — drops to the landing overview (so a wrong-kind
+  // file never lingers under the new view). One slot per view; loadFile
+  // updates the slot matching the opened file's kind (data files → data;
+  // charts + dashboards → dashboards) so toggling back restores it.
   const lastFileRidByView = { data: null, dashboards: null };
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
@@ -207,6 +214,20 @@ export default function workspace(app, { session }) {
   // ─── rail — collapse + view switcher (shared rail-controls) ────
   mountRailCollapse(nav, $("#wsNavCollapse"));
 
+  // Which view kind the rp-surface is currently showing — derived from
+  // the #wsSurface mode classes (the single source of truth that
+  // loadFile/showLanding maintain), NOT a parallel variable that could
+  // drift across the ~dozen activeFileRid reset sites. landing ⇒ null
+  // (belongs to no view); designer ⇒ "dashboards" (chart/dashboard
+  // canvas); otherwise the data redtable, but only if a data file is
+  // actually open (guards the pre-file mount tick). CAS_3BCD6727.
+  function currentSurfaceView() {
+    const s = $("#wsSurface");
+    if (!s || s.classList.contains("is-landing-mode")) return null;
+    if (s.classList.contains("is-designer-mode")) return "dashboards";
+    return activeFileRid ? "data" : null;
+  }
+
   // View switcher (Data ↔ Dashboards) — the active view is a data
   // attribute on the rail; CSS hides the file rows that don't belong
   // (no refetch — every project group already renders all its file
@@ -220,21 +241,34 @@ export default function workspace(app, { session }) {
     fireOnMount: true,
     onChange:    (view) => {
       nav.dataset.railView = view;
-      // CAS_3BCD6727 — also swap the rp-surface so toggling the rail
-      // brings the corresponding view forward. Restore the last-
-      // opened file of the new view kind if we have one; otherwise
-      // leave the surface as-is (user picks from the rail).
-      // Skip on the initial fireOnMount tick — activeFileRid is still
-      // null and the deep-link / default-open paths haven't run yet,
-      // so there's no surface to swap into.
-      if (!activeFileRid) return;
+      // CAS_3BCD6727 — swap the rp-surface so toggling the rail brings
+      // the corresponding view forward. Ignore the loadFile rail-sync
+      // echo (the file is already chosen). If the surface already shows
+      // this view's kind, nothing to do. Otherwise it's showing the
+      // OTHER view (e.g. a CSV redtable while toggling to Dashboards) —
+      // restore this view's last-opened file, else drop to the landing
+      // so a wrong-kind file never lingers under the new view.
+      if (railSyncing) return;
+      if (currentSurfaceView() === view) return;
       const target = lastFileRidByView[view];
-      if (target && target !== activeFileRid) {
+      if (target) {
         loadFile(target);
+      } else if (activeFileRid) {
+        activeFileRid = null;   // wrong-kind file was showing — drop it
+        showLanding();
       }
     },
   });
-  const setRailView = (view) => railViewSeg.set(view);
+  // setRailView fires onChange even for the current value (rail-controls
+  // set() has no equality short-circuit), so wrap it in the railSyncing
+  // guard: loadFile uses it (via maybeAutoToggleRail) to mirror the rail
+  // to the file it opened, and that echo must not bounce back into a
+  // surface swap. CAS_3BCD6727.
+  const setRailView = (view) => {
+    railSyncing = true;
+    railViewSeg.set(view);
+    railSyncing = false;
+  };
 
   // ─── rail filter — project-name search + ownership pills ───────
   // Both are pure visibility filters (applyRailFilters); they never
@@ -1257,6 +1291,10 @@ export default function workspace(app, { session }) {
         rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
         totalPages = 1;
         renderPager();
+        // A chart renders in the designer canvas — it belongs to the
+        // Dashboards view, so record it as that view's last-opened file
+        // so toggling Data → Dashboards restores it. CAS_3BCD6727.
+        lastFileRidByView.dashboards = rid;
         return;
       }
 
@@ -1298,6 +1336,9 @@ export default function workspace(app, { session }) {
         rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
         totalPages = 1;
         renderPager();
+        // Charts render in the Dashboards view — record the restore
+        // slot (CAS_3BCD6727), as in the CHT_ branch above.
+        lastFileRidByView.dashboards = rid;
       } else if (fileType === "dashboard") {
         maybeAutoToggleRail("dashboards");
         // Dashboards = FIL_-prefix project_files rows with

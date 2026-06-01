@@ -118,6 +118,25 @@ Every entry follows the same five headings:
   stale-env-warm / stale-env-cold) against the live backend.
   Discipline rule: any MCP bridge that wraps an auth-gated HTTP API
   needs a refresh path — lazy init + retry-once-on-401 is the floor.
+- [0013 — Workspace rail view-switch leaves a wrong-kind file on the surface](CAS_3BCD6727-workspace-rail-view-surface-swap.md) —
+  **Resolved 2026-06-01** (CAS_3BCD6727). The Workspace "Data ↔
+  Dashboards" rail toggle CSS-filtered the rail rows but only
+  *additively* restored the new view's last file in `rp-surface` — so
+  toggling to Dashboards with a CSV open left the CSV redtable showing
+  ("if a csv file is selected in Data, switching to the dashboard still
+  show the csv file"). Fix: `onChange` now ignores the `loadFile`
+  rail-sync echo (a `railSyncing` flag wrapping `setRailView`, since
+  rail-controls `set()` always fires `onChange`), derives the showing
+  view from the `#wsSurface` mode classes (`currentSurfaceView()`, not a
+  drift-prone parallel variable), and — when the surface shows the other
+  view's content with nothing to restore — clears `activeFileRid` +
+  `showLanding()` so a wrong-kind file never lingers. Both chart
+  branches now record the `dashboards` restore slot. Discipline rules: a
+  view toggle must *reflect* the active view (evict wrong-kind content),
+  not just additively restore; read "what's showing" from the DOM; a
+  control that fires `onChange` on every `set()` needs a re-entrancy
+  guard. Verified live via Playwright (`:8088`, dev-login) across all
+  four toggle transitions.
 - [0012 — Cell-editor extensions — data-prefix render rule + chip-enum select-overlay editor](CAS_E97414C482AB431FA28D43392501F47B-cell-editor-data-prefix-and-chip-enum.md) —
   **Resolved 2026-05-31** (CAS_E97414C482AB431FA28D43392501F47B).
   Two coordinated extensions to the cell-editor contract that landed
