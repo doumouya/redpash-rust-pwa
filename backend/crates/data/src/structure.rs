@@ -29,6 +29,11 @@ pub struct StructureFlags {
     /// Worst drifting column's off-type fraction (0..0.5) — the penalty
     /// scales by this so heavier contamination stings more.
     pub type_drift_frac:     f32,
+    /// A pure-digit value with a leading zero (`001`, `07920`) was cast
+    /// to int — the zero, and the identity it encoded (zip / code / badge
+    /// id), is silently gone. Only visible by comparing raw bytes to the
+    /// typed frame.
+    pub numeric_id_loss_suspect: bool,
     /// Human-readable reasons (one per fired flag) for the cleaner banner.
     pub reasons: Vec<String>,
 }
@@ -49,6 +54,9 @@ impl StructureFlags {
         // Graded: contamination * scale, capped — a 25%-dirty column docks
         // ~17, a 50%-dirty one ~30, never enough alone to read "cursed".
         if self.type_drift_suspect  { p += (self.type_drift_frac * 70.0).min(35.0); }
+        // Identity loss, not corruption: the data parsed, but a code/id lost
+        // its leading zero. Moderate — the file is usable, the column isn't.
+        if self.numeric_id_loss_suspect { p += 20.0; }
         p.min(100.0)
     }
 
@@ -59,6 +67,7 @@ impl StructureFlags {
             || self.ragged_suspect
             || self.header_suspect
             || self.type_drift_suspect
+            || self.numeric_id_loss_suspect
     }
 }
 
@@ -150,6 +159,41 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
                     }
                 }
             }
+
+            // ── leading-zero / numeric-id loss ──
+            // Polars casts a pure-digit value with a leading zero ("001",
+            // "07920") to int, destroying the zero AND the identity it carried
+            // (zip / postal / badge id). It's already `1` in the frame, so the
+            // only way to see it is to compare the RAW field against the column
+            // Polars typed as int. Quote-aware split aligns raw fields to df
+            // columns by position — only reliable on a cleanly rectangular
+            // parse. On a ragged / multiline-quoted file the positions are off,
+            // so a stray "00" from a mis-split decimal ("2.000,00") would
+            // false-positive; that raggedness is already flagged, so skip.
+            let int_cols: Vec<usize> = df
+                .get_columns()
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.dtype().is_integer())
+                .map(|(j, _)| j)
+                .collect();
+            if !multiline_quoted && !f.ragged_suspect && !int_cols.is_empty() && sample.len() >= 2 {
+                let lost = sample[1..].iter().any(|row| {
+                    let fields = split_unquoted(row, dom);
+                    int_cols.iter().any(|&j| {
+                        fields.get(j).is_some_and(|v| {
+                            let t = v.trim();
+                            t.len() > 1 && t.starts_with('0') && t.bytes().all(|b| b.is_ascii_digit())
+                        })
+                    })
+                });
+                if lost {
+                    f.numeric_id_loss_suspect = true;
+                    f.reasons.push(
+                        "leading-zero values cast to int — the zero (and the identity it encoded: zip/code/id) is lost".into(),
+                    );
+                }
+            }
         }
     }
 
@@ -198,6 +242,24 @@ fn count_unquoted(line: &str, d: u8) -> usize {
         }
     }
     n
+}
+
+/// Split `line` on byte `d` outside `"…"` quoted regions (quote-aware) — the
+/// splitting twin of `count_unquoted`. `d` and `"` are ASCII, so every cut is
+/// on a char boundary and the `&str` slices are valid UTF-8. Used to align raw
+/// fields to parsed columns for the leading-zero / numeric-id-loss check.
+fn split_unquoted(line: &str, d: u8) -> Vec<&str> {
+    let (mut out, mut start, mut in_q) = (Vec::new(), 0usize, false);
+    for (i, b) in line.bytes().enumerate() {
+        if b == b'"' {
+            in_q = !in_q;
+        } else if b == d && !in_q {
+            out.push(&line[start..i]);
+            start = i + 1;
+        }
+    }
+    out.push(&line[start..]);
+    out
 }
 
 #[cfg(test)]
@@ -255,6 +317,23 @@ mod tests {
         let df = df2("id", "price");
         let f = detect(b"id,price\n1,1.234,56\n2,2.000,00\n3,3.500,75\n", &df);
         assert!(f.ragged_suspect, "data wider than header should flag ragged");
+    }
+
+    #[test]
+    fn flags_leading_zero_numeric_id_loss() {
+        // code column "001"/"010"/"100" → Polars stores int 1/10/100, the
+        // leading zero is gone. Frame is clean ints; only raw reveals it.
+        let df = DataFrame::new(vec![
+            Series::new("id".into(), &[1i64, 2, 3]).into(),
+            Series::new("code".into(), &[1i64, 10, 100]).into(),
+        ])
+        .unwrap();
+        let f = detect(b"id,code\n1,001\n2,010\n3,100\n", &df);
+        assert!(f.numeric_id_loss_suspect, "leading-zero ids cast to int should flag");
+
+        // Plain ints with no leading zeros → no false positive.
+        let f = detect(b"id,code\n1,5\n2,42\n3,100\n", &df);
+        assert!(!f.numeric_id_loss_suspect);
     }
 
     #[test]

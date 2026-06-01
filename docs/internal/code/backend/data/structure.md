@@ -23,19 +23,20 @@ reasons. Consumed today by `POST /api/demo/parse`
 
 ## Public surface
 
-- `pub struct StructureFlags` — six booleans (`line_ending_suspect`,
+- `pub struct StructureFlags` — seven booleans (`line_ending_suspect`,
   `binary_suspect`, `delimiter_suspect`, `ragged_suspect`, `header_suspect`,
-  `type_drift_suspect`) + `type_drift_frac: f32` (the worst drifting column's
-  off-type fraction) + `reasons: Vec<String>`. `Serialize`d straight into the
-  demo response.
+  `type_drift_suspect`, `numeric_id_loss_suspect`) + `type_drift_frac: f32` (the
+  worst drifting column's off-type fraction) + `reasons: Vec<String>`.
+  `Serialize`d straight into the demo response.
   - `penalty() -> f32` — 0..=100 to subtract from a clean score. Flat weights
     (tuned against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt
     bytes → unusable), delimiter 45 (wrong shape), line-ending 25, ragged 25,
-    header 20. **Type-drift is graded**: `type_drift_frac × 70`, capped at 35 —
-    a 25%-dirty column docks ~17, a 50%-dirty one ~30 (never enough alone to read
-    "cursed"). All summed, capped at 100. Verified at **16/18** in-band on the
-    calibration suite; the two outliers (leading-zero int-cast loss,
-    sparse-grid completeness) are distinct hooks, not drift.
+    header 20, numeric-id-loss 20 (identity gone, file still usable).
+    **Type-drift is graded**: `type_drift_frac × 70`, capped at 35 — a 25%-dirty
+    column docks ~17, a 50%-dirty one ~30 (never enough alone to read "cursed").
+    All summed, capped at 100. Verified at **17/18** in-band on the calibration
+    suite; the lone outlier (a 95%-empty grid reading 42 vs a hand-drawn band of
+    5–40) is inside labelling noise, not a scorer lie.
   - `any() -> bool`.
 - `pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags` — the detector.
 
@@ -59,6 +60,14 @@ reasons. Consumed today by `POST /api/demo/parse`
   cumulative quote balance) — otherwise a clean multiline-quoted file false-flags.
 - **header** — duplicate header names (incl. Polars' `_duplicated_` rename) or
   all-numeric headers (a data row used as the header) (Cases 23, 25).
+- **numeric_id_loss** — a pure-digit value with a leading zero (`001`, `07920`)
+  was cast to int, destroying the zero *and* the identity it encoded (zip / postal
+  / badge id). Invisible in the parsed frame (it's already `1`), so detected by
+  comparing the **raw bytes** against the columns Polars typed as `int`:
+  `split_unquoted` aligns raw fields to columns by position. **Gated on a cleanly
+  rectangular parse** (`!ragged_suspect && !multiline_quoted`) — on a ragged file
+  the field positions are off, so a stray `00` from a mis-split decimal
+  (`2.000,00`) would false-positive (and the raggedness is already flagged).
 - **type_drift** (hook #6) — a String-stored column whose non-empty cells are
   *mostly* (≥50%) one structured kind (numeric/bool/date) but *not pure* (<95%) —
   the silent band the semantic sniff waves through as a clean string column at

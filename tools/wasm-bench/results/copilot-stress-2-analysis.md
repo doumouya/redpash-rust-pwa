@@ -166,3 +166,35 @@ your EU-decimal mis-split (Case 6) and trailing-comma cases.
 
 The suite makes the next round mechanical: pick an outlier, add the detector,
 re-run, watch it flip to PASS without regressing the 16.
+
+---
+
+## ✅ Round 3 shipped (2026-06-01) — leading-zero / numeric-id loss
+
+**The highest-value remaining catch is in: silent identity destruction.** `001`
+→ Polars casts the column to int `1`, the leading zero (and the zip / postal /
+badge-id identity it encoded) gone — at score 100. It's a **raw-vs-parsed** bug:
+`1` is all that survives in the frame, so the detector splits the raw rows
+(quote-aware) and aligns each field against the columns Polars typed as `int`.
+
+| calibration case | was | now | band | verdict |
+|------------------|-----|-----|------|---------|
+| leading-zero ids | 100 | **80** | 70–92 | ✓ numeric-id-loss |
+
+One subtlety worth noting (it's the reusable lesson): the first cut **regressed
+EU-decimals** — the `00` in a mis-split `2.000,00` looked like a leading-zero id.
+Fix: gate the check on a **cleanly rectangular parse** (`!ragged && !multiline`).
+Field-position alignment is only trustworthy when the file isn't already ragged
+— and if it *is* ragged, that's the flag that should fire, not this one.
+
+**Result: 17/18 in band.** The one remaining outlier is `sparse single cell`
+(95%-empty grid) reading **42.3** against a hand-drawn band of **5–40** — off by
+2.3. That's not a lie (it's nowhere near the ≈100 class); it's a 2-point
+disagreement with a subjective band, inside labelling noise. Chasing a clean
+18/18 by adding a one-case sparsity flag would be over-fitting the suite — left
+as-is on purpose.
+
+**Net across rounds 1–3:** every "confidently-wrong ≈100" case Copilot's suite #2
+surfaced (binary, delimiter, line-ending, ragged, header, type-drift, leading-zero
+loss) now reads a penalized, *honest* score with a human reason. The parser was
+already crash-proof; it is now also **lie-proof** on the known failure surface.
