@@ -10,11 +10,17 @@ last modified date: 2026-06-01
 
 ## Purpose
 
-App-wide preferences — SWR cache over the server `user_preferences`
-table. Source of truth is the server (migration 023). localStorage
-holds a per-key cache so synchronous `getPref` doesn't block; cache
-seeded once at boot from `/api/me` + write-through to `/api/me/prefs`
-on every `setPref`.
+App-wide preferences. Prefs used to live in **two disjoint places** — a
+client-only localStorage set and the server `users.prefs` JSONB blob.
+They're now **unified under one user-preference object**: the server
+`user_preferences` table (`(user_redpash_id, key)` rows, promoted from
+the JSONB column in mig `20260606000001_user_preferences`; the dead
+`users.prefs` column dropped in `20260607000001`).
+
+Both stores still hold prefs, but no longer disjointly — the DB
+user-pref object is the **source of truth** and localStorage is a synced
+**SWR cache** so synchronous `getPref` doesn't block: seeded once at boot
+from `/api/me`, write-through to `/api/me/prefs` on every `setPref`.
 
 ## Public surface
 

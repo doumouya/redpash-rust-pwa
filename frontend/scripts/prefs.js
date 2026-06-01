@@ -3,13 +3,16 @@
 // App-wide preferences — SWR cache over the server `user_preferences`
 // table, with getPref/setPref helpers above it.
 //
-// Source of truth is the server (`user_preferences`, migration 023).
-// localStorage holds a per-key cache so synchronous getPref doesn't
-// block on the network; the cache is seeded once at boot from /api/me
-// (`seedPrefs(serverPrefs)`) and written through to the server on
-// every setPref via PATCH /api/me/prefs.
+// Prefs used to live in TWO disjoint places — a client-only localStorage
+// set + the server `users.prefs` JSONB blob. They're now unified under
+// one user-preference object: the `user_preferences` table (mig
+// 20260606000001; the old `users.prefs` column dropped in 20260607000001).
+// Both stores still hold prefs, but not disjointly — the DB object is the
+// source of truth; localStorage is a synced per-key SWR cache so getPref
+// doesn't block. Seeded once at boot from /api/me (`seedPrefs`),
+// write-through to /api/me/prefs on every setPref.
 //
-// Architecture: docs/internal/spec-user-preferences.md.
+// Architecture: docs/internal/specs/user-preferences.md.
 //
 // **Two pref classes:**
 //   - **Registered** (via `registerPref(spec)` below) — UI prefs with
