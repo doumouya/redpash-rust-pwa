@@ -24,11 +24,17 @@ spec §v2, `CAS_C7AEBE83`). Two tiers, mirroring the cleanness scorer's
 - **Tier 2 — soft suspicion layer** → `warnings[]` + `confidence`; never blocks.
   An open `FieldDetector` registry (the field-level twin of `StructureFlags`)
   runs on every shape-valid non-null value, even when Tier 1 passed — a value can
-  satisfy the contract and still smell wrong. Seed detectors: **`coercion_loss`**
-  (raw-vs-parsed — `"07920"` typed int loses its leading zero; the proven
-  general detector, ported from `structure.rs`) and **`drift`** (a date-looking
-  value in a `string` field, reusing `data::dtype::classify_cell`). A new
-  detector is one struct + one slot in `detectors()`, zero pipeline edits.
+  satisfy the contract and still smell wrong. A new detector is one struct + one
+  slot in `detectors()`, zero pipeline edits. Current set:
+  - **`coercion_loss`** — raw-vs-parsed: an `int` losing a leading zero / sign /
+    surrounding whitespace, or a `boolean` string losing case (`"TRUE"`→`"true"`).
+    Compares the canonical form to the UNTRIMMED raw (ported from `structure.rs`).
+  - **`drift`** — a date-looking value in a `string`/`markdown` field (reuses
+    `data::dtype::classify_cell`).
+  - **`invisible_chars`** — zero-width / bidi-override / control chars in a string
+    (security smell). Excludes ZWJ/ZWNJ + `\t\n\r` so emoji + real text don't trip.
+  - **`primitive_obsession`** — a string holding valid JSON (object/array) or
+    base64 (conservative gate). Structured data hidden in a string.
 
 Rule `kind` is an **OPEN string** resolved against the registry — never a closed
 `match` (the same open-ended contract as `data_type`/codecs). A new rule kind is

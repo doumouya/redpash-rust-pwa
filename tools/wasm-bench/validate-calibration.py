@@ -207,7 +207,74 @@ REDTEAM_1 = [
      "reject:redos", "RE2 linear-time: rejects instantly, no catastrophic backtracking"),
 ]
 
-SUITES = {"correctness": CORRECTNESS, "taste": TASTE, "redteam_1": REDTEAM_1}
+# ── Gemini/Copilot adversarial batch #2 (2026-06-01) ──
+# 20 more: null-matrix, nested expressions, and a heavy push on Tier-2 breadth.
+# Drove 3 new detectors (coercion_loss→bool, invisible_chars, primitive_obsession);
+# the rest match or are principled holds (see results/validate-redteam-2-analysis.md).
+REDTEAM_2 = [
+    ("21 paradoxical null bounds", {"data_type": "int", "field": "a", "value": 10,
+      "rules": [rule("expression", "null_trap", "x", expr="!(a < b) && !(a >= b)")]},
+     "valid", "missing b=null; both ordered compares false; negations both true"),
+    ("22 three-way missing equality", {"data_type": "boolean", "field": "x", "value": True,
+      "rules": [rule("expression", "deep_null", "x", expr="x == (y == z)")]},
+     "valid", "null==null=true; true==true=true (nested expr bubbles up)"),
+    ("23 missing vs explicit null", {"data_type": "string", "field": "a", "value": "test",
+      "row": {"explicit_c": None},
+      "rules": [rule("expression", "null_eq", "x", expr="missing_b == explicit_c")]},
+     "valid", "missing field and explicit null both resolve to the null token"),
+    ("24 f64 extreme precision", {"data_type": "float", "field": "m",
+      "value": 3.1415926535897932384626433}, "valid",
+     "LIMITATION: float loss is invisible post-serde-parse; the answer is data_type decimal (wire-as-string)"),
+    ("25 json whitespace normalize", {"data_type": "json", "field": "config",
+      "value": "{ \"key\" :   \"value\" }"}, "valid",
+     "DISAGREE: JSON whitespace normalization is desirable, not loss"),
+    ("26 string secretly JSON", {"data_type": "string", "field": "notes",
+      "value": "{\"user_id\": 42, \"role\": \"admin\"}"}, "warn:primitive_obsession",
+     "NEW DETECTOR: JSON hidden in a string field"),
+    ("27 string secretly base64", {"data_type": "string", "field": "payload",
+      "value": "SGVsbG8gV29ybGQ="}, "warn:primitive_obsession",
+     "NEW DETECTOR: base64 in a string field"),
+    ("28 self-referential NaN", {"data_type": "float", "field": "ratio", "value": "NaN",
+      "rules": [rule("expression", "eq_self", "x", expr="ratio == ratio")]},
+     "reject:eq_self", "DSL inherits IEEE NaN != NaN → false → reject"),
+    ("29 bool word case-loss", {"data_type": "boolean", "field": "is_active", "value": "TRUE"},
+     "warn:coercion_loss", "NEW: 'TRUE' normalizes to 'true' → case lost"),
+    ("30 decimal trailing point", {"data_type": "decimal", "field": "amount", "value": "10."},
+     "reject:data_type", "HOLD: '10.' is malformed (empty fractional) → codec rejects"),
+    ("31 negative zero", {"data_type": "decimal", "field": "balance", "value": "-0",
+      "rules": [rule("decimal", "scale0", "x", scale=0)]},
+     "valid", "HOLD: -0 fits scale 0; sign-on-zero loss too niche to flag"),
+    ("32 datetime tz +00:00", {"data_type": "datetime", "field": "created_at",
+      "value": "2026-06-01T12:00:00+00:00"}, "valid",
+     "DISAGREE: the validator doesn't normalize datetimes (no reserialize, no loss)"),
+    ("33 cross-type eq numeric-wins", {"data_type": "int", "field": "id", "value": 123,
+      "row": {"str_id": "123"}, "rules": [rule("expression", "cross_eq", "x", expr="id == str_id")]},
+     "valid", "== coerces numeric-first: 123 == '123' → true"),
+    ("34 zero-width space", {"data_type": "string", "field": "username", "value": "​admin"},
+     "warn:invisible_chars", "NEW DETECTOR: zero-width / invisible chars"),
+    ("35 datetime non-ISO", {"data_type": "datetime", "field": "start",
+      "value": "2026/06/01 12:00:00"}, "reject:data_type",
+     "HOLD: strict RFC3339 — non-ISO rejected (no lenient parse + silent reformat)"),
+    ("36 deep unparen precedence", {"data_type": "boolean", "field": "a", "value": False,
+      "row": {"b": True, "c": False, "d": True, "e": True},
+      "rules": [rule("expression", "prec_depth", "x", expr="a || b && c || d && e")]},
+     "valid", "&& binds tighter: false||(true&&false)||(true&&true) → true"),
+    ("37 empty enum options", {"data_type": "enum", "options": [], "field": "status",
+      "value": "active"}, "reject:data_type",
+     "empty options → codec rejects (value ∉ {}); caught, not silent"),
+    ("38 string 'null' trap", {"data_type": "string", "field": "state", "value": "null",
+      "rules": [rule("expression", "not_null", "x", expr="state != null")]},
+     "valid", "literal string 'null' is not the null token → != null is true"),
+    ("39 int vs bool cross-field", {"data_type": "int", "field": "count", "value": 1,
+      "row": {"bool_val": True}, "rules": [rule("expression", "int_bool", "x", expr="count == bool_val")]},
+     "reject:int_bool", "1 == true → false (bool matches word not number) → reject"),
+    ("40 multiline expression", {"data_type": "boolean", "field": "flag", "value": True,
+      "rules": [rule("expression", "format", "x", expr="\n  flag \n  == \n  true \n")]},
+     "valid", "newlines are whitespace to the lexer"),
+]
+
+SUITES = {"correctness": CORRECTNESS, "taste": TASTE,
+          "redteam_1": REDTEAM_1, "redteam_2": REDTEAM_2}
 
 def post(body):
     data = json.dumps(body).encode()

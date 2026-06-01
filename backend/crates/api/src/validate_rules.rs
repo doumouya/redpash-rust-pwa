@@ -397,22 +397,98 @@ struct CoercionLoss;
 impl FieldDetector for CoercionLoss {
     fn id(&self) -> &'static str { "coercion_loss" }
     fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
-        if ctx.data_type != "int" {
-            return None;
-        }
-        let raw = ctx.value.as_str()?; // UNTRIMMED — surrounding whitespace is loss too
-        let n: i64 = raw.trim().parse().ok()?; // parse trims; only when it cleanly parses
-        // Compare the canonical int form to the RAW wire string (not the trimmed
-        // one): a difference means the store dropped a leading zero, a `+` sign,
-        // OR surrounding whitespace — all silent identity/format loss.
-        if n.to_string() != raw {
+        let raw = ctx.value.as_str()?; // only a string value can lose form on store
+        let canonical = match ctx.data_type {
+            // int: leading zero / sign / surrounding whitespace all vanish.
+            "int" => raw.trim().parse::<i64>().ok()?.to_string(),
+            // boolean: "TRUE"/"True"/" true " all normalize to lowercase "true".
+            "boolean" => {
+                let low = raw.trim().to_ascii_lowercase();
+                if low != "true" && low != "false" {
+                    return None;
+                }
+                low
+            }
+            _ => return None,
+        };
+        if canonical != raw {
             return Some(Suspicion {
                 field:    ctx.field_key.to_string(),
                 detector: "coercion_loss".to_string(),
-                reason:   format!(
-                    "raw {raw:?} stored as int {n} — leading zero / sign / surrounding whitespace lost; use data_type \"string\" to preserve it"
-                ),
+                reason:   format!("raw {raw:?} normalizes to {canonical:?} on store — formatting/identity lost; use data_type \"string\" to preserve it"),
                 weight:   0.3,
+            });
+        }
+        None
+    }
+}
+
+/// **Invisible characters** — zero-width / bidi-override / control chars hiding in
+/// a string (security: a username with a U+200B, a BOM, an RTL override). Flags
+/// the genuinely-invisible set but NOT ZWJ/ZWNJ (U+200C/200D — legitimate in
+/// emoji + many scripts) and NOT `\t\n\r` — so real text doesn't false-trip.
+struct InvisibleChars;
+fn is_suspicious_invisible(c: char) -> bool {
+    matches!(c,
+        '\u{200B}'            // zero-width space
+        | '\u{200E}' | '\u{200F}'                       // LRM / RLM
+        | '\u{202A}'..='\u{202E}'                       // bidi embeddings/overrides
+        | '\u{2060}'          // word joiner
+        | '\u{2066}'..='\u{2069}'                       // bidi isolates
+        | '\u{FEFF}'          // BOM / zero-width no-break space
+    ) || (c.is_control() && !matches!(c, '\t' | '\n' | '\r'))
+}
+impl FieldDetector for InvisibleChars {
+    fn id(&self) -> &'static str { "invisible_chars" }
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
+        if !matches!(ctx.data_type, "string" | "markdown") {
+            return None;
+        }
+        let s = ctx.value.as_str()?;
+        if s.chars().any(is_suspicious_invisible) {
+            return Some(Suspicion {
+                field:    ctx.field_key.to_string(),
+                detector: "invisible_chars".to_string(),
+                reason:   "value contains zero-width / bidi / control characters — invisible, often a paste artifact or an attack".to_string(),
+                weight:   0.3,
+            });
+        }
+        None
+    }
+}
+
+/// **Primitive obsession** — a string field holding structured data: valid JSON
+/// (object/array) or base64. A schema smell — the data model is hiding a type
+/// inside a string. Soft hint. base64 detection is conservative (≥16 chars, len
+/// %4==0, base64 charset, contains one of `+/=` so plain words don't match, and
+/// it actually decodes) to keep false positives low.
+struct PrimitiveObsession;
+fn looks_base64(s: &str) -> bool {
+    use base64::Engine;
+    s.len() >= 16
+        && s.len() % 4 == 0
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='))
+        && s.bytes().any(|b| matches!(b, b'+' | b'/' | b'='))
+        && base64::engine::general_purpose::STANDARD.decode(s).is_ok()
+}
+impl FieldDetector for PrimitiveObsession {
+    fn id(&self) -> &'static str { "primitive_obsession" }
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
+        if !matches!(ctx.data_type, "string" | "markdown") {
+            return None;
+        }
+        let s = ctx.value.as_str()?;
+        let is_json_struct = matches!(
+            serde_json::from_str::<Value>(s),
+            Ok(Value::Object(_)) | Ok(Value::Array(_))
+        );
+        if is_json_struct || looks_base64(s) {
+            let kind = if is_json_struct { "JSON" } else { "base64" };
+            return Some(Suspicion {
+                field:    ctx.field_key.to_string(),
+                detector: "primitive_obsession".to_string(),
+                reason:   format!("string field holds {kind} — structured data hidden in a string (consider a typed field)"),
+                weight:   0.2,
             });
         }
         None
@@ -448,7 +524,12 @@ impl FieldDetector for Drift {
 pub fn detectors() -> &'static [Box<dyn FieldDetector>] {
     static D: OnceLock<Vec<Box<dyn FieldDetector>>> = OnceLock::new();
     D.get_or_init(|| {
-        let v: Vec<Box<dyn FieldDetector>> = vec![Box::new(CoercionLoss), Box::new(Drift)];
+        let v: Vec<Box<dyn FieldDetector>> = vec![
+            Box::new(CoercionLoss),
+            Box::new(Drift),
+            Box::new(InvisibleChars),
+            Box::new(PrimitiveObsession),
+        ];
         v
     })
 }
@@ -593,6 +674,28 @@ mod tests {
     }
 
     // ── redteam batch #1 (Gemini/Copilot 2026-06-01): the 4 real bugs found ──
+    #[test]
+    fn redteam2_new_detectors() {
+        // bool case-loss "TRUE" → coercion_loss
+        let o = validate_value("boolean", &[], "active", &[], &json!("TRUE"), &no_row());
+        assert!(o.is_ok() && o.warnings.iter().any(|w| w.detector == "coercion_loss"));
+        // invisible zero-width space → invisible_chars
+        let o = validate_value("string", &[], "u", &[], &json!("\u{200B}admin"), &no_row());
+        assert!(o.warnings.iter().any(|w| w.detector == "invisible_chars"));
+        // ZWJ emoji must NOT trip invisible_chars (legit in emoji)
+        let o = validate_value("string", &[], "u", &[], &json!("👨‍👩‍👧‍👦"), &no_row());
+        assert!(!o.warnings.iter().any(|w| w.detector == "invisible_chars"));
+        // JSON in a string field → primitive_obsession
+        let o = validate_value("string", &[], "notes", &[], &json!("{\"a\":1}"), &no_row());
+        assert!(o.warnings.iter().any(|w| w.detector == "primitive_obsession"));
+        // base64 in a string field → primitive_obsession
+        let o = validate_value("string", &[], "payload", &[], &json!("SGVsbG8gV29ybGQ="), &no_row());
+        assert!(o.warnings.iter().any(|w| w.detector == "primitive_obsession"));
+        // plain text → nothing
+        let o = validate_value("string", &[], "notes", &[], &json!("hello there"), &no_row());
+        assert!(o.warnings.is_empty());
+    }
+
     #[test]
     fn redteam_whitespace_coercion_warns() {
         // " \n 42 \t" passes int but loses its whitespace on store → Tier-2 warn.
