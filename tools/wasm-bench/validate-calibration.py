@@ -273,8 +273,64 @@ REDTEAM_2 = [
      "valid", "newlines are whitespace to the lexer"),
 ]
 
+# ── Gemini/Copilot adversarial batch #3 (2026-06-01) — heuristic FP/FN, ──
+# confidence stacking, the string-typed-float loophole. Drove JWT detection,
+# boundary-ZWJ, float_precision_loss, decimal/string coercion, all-invisible
+# weight=1.0. See results/validate-redteam-3-analysis.md.
+JWT = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+       "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ")
+REDTEAM_3 = [
+    ("41 base64 FP password", {"data_type": "string", "field": "password", "value": "Super/Secret+Password="},
+     "valid", "len%4!=0 (22) → not flagged; FP-averse guard protects passwords"),
+    ("42 base64 FN unpadded", {"data_type": "string", "field": "payload", "value": "SGVsbG8gV29ybGQg"},
+     "valid", "DISAGREE: clean base64 w/o +/= is a deliberate FN (bias FP-averse over passwords/words)"),
+    ("43 base64url JWT", {"data_type": "string", "field": "token", "value": JWT},
+     "warn:primitive_obsession", "NEW: JWT detection (dotted base64url, header decodes to {alg})"),
+    ("44 solo trailing ZWJ", {"data_type": "string", "field": "username", "value": "admin‍"},
+     "warn:invisible_chars", "NEW: boundary ZWJ flagged (joins nothing) — closes the bypass; interior ZWJ still ok"),
+    ("45 string-typed float precision", {"data_type": "string", "field": "exact_val", "value": "3.1415926535897932384626433"},
+     "warn:float_precision_loss", "NEW: the loophole — string carries raw digits; >17 sig → f64 loss"),
+    ("46 decimal leading zeros 007.50", {"data_type": "decimal", "field": "money", "value": "007.50",
+      "rules": [rule("decimal", "s2", "x", scale=2)]},
+     "warn:coercion_loss", "NEW: decimal int-part leading zeros lost"),
+    ("47 stack: json + invisible", {"data_type": "string", "field": "config", "value": "{\"key\": \"​value\"}"},
+     "warn:invisible_chars", "primitive_obsession(0.2)+invisible(0.3) → conf 0.5; invisible present"),
+    ("48 all-invisible string", {"data_type": "string", "field": "name", "value": "​​​",
+      "rules": [rule("length", "not_empty", "x", min=1)]},
+     "warn:invisible_chars", "DISAGREE on Tier-1 reject (never-blocks invariant); weight→1.0, conf 0; use a non_blank rule"),
+    ("49 empty json object", {"data_type": "string", "field": "data", "value": "{}"},
+     "warn:primitive_obsession", "empty {} is still JSON-in-a-string"),
+    ("50 cross-field f64 equal", {"data_type": "float", "field": "f_val", "value": 0.1,
+      "row": {"s_val": "0.10000000000000001"}, "rules": [rule("expression", "eq", "x", expr="f_val == s_val")]},
+     "valid", "both coerce to the same f64 → equal"),
+    ("51 dsl scientific coercion", {"data_type": "int", "field": "qty", "value": 1000,
+      "rules": [rule("expression", "eq_sci", "x", expr="qty == '1e3'")]},
+     "valid", "numeric-first coercion: '1e3'→1000, 1000==1000"),
+    ("52 datetime nanoseconds", {"data_type": "datetime", "field": "start", "value": "2026-06-01T12:00:00.123456789Z"},
+     "valid", "DISAGREE: chrono is nanosecond-precise + we don't reserialize → no truncation in our layer"),
+    ("53 markdown HTML script", {"data_type": "markdown", "field": "bio", "value": "Hello <script>alert(1)</script>"},
+     "valid", "DISAGREE: sanitization is a RENDER concern (js owns pixels); the validator doesn't mutate"),
+    ("54 markdown HTML entity zwj", {"data_type": "markdown", "field": "post", "value": "Title&zwj;"},
+     "valid", "DISAGREE: validation checks raw chars; '&zwj;' is literal text until render"),
+    ("55 enum null bypass", {"data_type": "enum", "options": ["A", "B"], "field": "status", "value": None},
+     "valid", "null clears the enum subset check too (nullability is required's job)"),
+    ("56 string 'true ' == true", {"data_type": "string", "field": "flag", "value": "true ",
+      "rules": [rule("expression", "is_true", "x", expr="flag == true")]},
+     "reject:is_true", "'true ' (space) != bool word 'true' → false → reject"),
+    ("57 double-missing ordered", {"data_type": "string", "field": "a", "value": "test",
+      "rules": [rule("expression", "gt_null", "x", expr="missing_a > missing_b")]},
+     "reject:gt_null", "null > null → false → reject, no crash"),
+    ("58 base64 FP math formula", {"data_type": "string", "field": "formula", "value": "Speed=Distance/T"},
+     "valid", "mid-string '=' fails the DECODE check → not flagged (FP defeated)"),
+    ("59 negative zero float", {"data_type": "float", "field": "f", "value": "-0.0",
+      "rules": [rule("expression", "eq0", "x", expr="f == 0.0")]},
+     "valid", "IEEE -0.0 == 0.0 is true"),
+    ("60 max penalty stacking", {"data_type": "string", "field": "data", "value": " { \"key\": \"​\" } "},
+     "warn:coercion_loss", "coercion(ws 0.3)+primitive(0.2)+invisible(0.3)=0.8 → conf 0.2; all three fire"),
+]
+
 SUITES = {"correctness": CORRECTNESS, "taste": TASTE,
-          "redteam_1": REDTEAM_1, "redteam_2": REDTEAM_2}
+          "redteam_1": REDTEAM_1, "redteam_2": REDTEAM_2, "redteam_3": REDTEAM_3}
 
 def post(body):
     data = json.dumps(body).encode()

@@ -393,6 +393,26 @@ pub trait FieldDetector: Send + Sync {
 /// leading zeros / a `+` sign when stored (`"07920"` → `7920`), destroying
 /// identity (zip / code / badge id). Caught by re-serializing the parse and
 /// comparing to the raw — no named rule required.
+/// Strip leading zeros (and a redundant `+`) from a decimal's integer part,
+/// keeping the fractional part verbatim — so `007.50`→`7.50` (leading-zero loss)
+/// but `7.50` stays `7.50` (trailing zeros are cosmetic, not flagged here).
+fn normalize_decimal(raw: &str) -> String {
+    let (sign, rest) = match raw.strip_prefix('-') {
+        Some(r) => ("-", r),
+        None => ("", raw.strip_prefix('+').unwrap_or(raw)),
+    };
+    let (int_part, frac) = match rest.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (rest, None),
+    };
+    let trimmed = int_part.trim_start_matches('0');
+    let int_norm = if trimmed.is_empty() { "0" } else { trimmed };
+    match frac {
+        Some(f) => format!("{sign}{int_norm}.{f}"),
+        None => format!("{sign}{int_norm}"),
+    }
+}
+
 struct CoercionLoss;
 impl FieldDetector for CoercionLoss {
     fn id(&self) -> &'static str { "coercion_loss" }
@@ -408,6 +428,22 @@ impl FieldDetector for CoercionLoss {
                     return None;
                 }
                 low
+            }
+            // decimal: leading zeros / sign on the integer part vanish (`007.50`
+            // → `7.50`). Trailing-zero (`7.50`→`7.5`) is cosmetic, NOT flagged.
+            "decimal" => {
+                if !crate::codec_registry::is_decimal_str(raw.trim()) {
+                    return None;
+                }
+                normalize_decimal(raw.trim())
+            }
+            // string / markdown: surrounding whitespace is lost on a trim-on-store
+            // (and breaks equality); interior whitespace is fine.
+            "string" | "markdown" => {
+                if raw == raw.trim() {
+                    return None;
+                }
+                raw.trim().to_string()
             }
             _ => return None,
         };
@@ -445,15 +481,32 @@ impl FieldDetector for InvisibleChars {
             return None;
         }
         let s = ctx.value.as_str()?;
-        if s.chars().any(is_suspicious_invisible) {
-            return Some(Suspicion {
-                field:    ctx.field_key.to_string(),
-                detector: "invisible_chars".to_string(),
-                reason:   "value contains zero-width / bidi / control characters — invisible, often a paste artifact or an attack".to_string(),
-                weight:   0.3,
-            });
+        let has_invisible = s.chars().any(is_suspicious_invisible);
+        // A ZWJ/ZWNJ is legitimate BETWEEN chars (emoji, scripts) — excluded
+        // above — but a LEADING or TRAILING joiner joins nothing, so it's a
+        // homoglyph/unique-constraint attack ("admin‍" looks like "admin").
+        let is_joiner = |c: Option<char>| matches!(c, Some('\u{200C}' | '\u{200D}'));
+        let boundary_joiner = is_joiner(s.chars().next()) || is_joiner(s.chars().last());
+        if !has_invisible && !boundary_joiner {
+            return None;
         }
-        None
+        // A string with NO visible content (all whitespace + invisibles) is
+        // effectively empty + almost certainly malicious → max weight (confidence
+        // → 0). It's still Tier-2 (never blocks); author a `non_blank` rule to
+        // hard-reject.
+        let visible_empty = s
+            .chars()
+            .all(|c| c.is_whitespace() || is_suspicious_invisible(c) || matches!(c, '\u{200C}' | '\u{200D}'));
+        Some(Suspicion {
+            field:    ctx.field_key.to_string(),
+            detector: "invisible_chars".to_string(),
+            reason:   if visible_empty {
+                "value is entirely invisible (whitespace / zero-width) — effectively empty".to_string()
+            } else {
+                "value contains zero-width / bidi / boundary-joiner / control characters — invisible, often a paste artifact or an attack".to_string()
+            },
+            weight:   if visible_empty { 1.0 } else { 0.3 },
+        })
     }
 }
 
@@ -465,11 +518,38 @@ impl FieldDetector for InvisibleChars {
 struct PrimitiveObsession;
 fn looks_base64(s: &str) -> bool {
     use base64::Engine;
+    // Conservative + FP-averse: require `+/=` (plain words/formulae lack them) AND
+    // a successful decode (a mid-string `=` like "Speed=Distance/T" fails decode).
+    // Clean unpadded base64 without `+/=` is a deliberate false-NEGATIVE — better
+    // to miss some base64 than dock a password. JWTs are caught separately.
     s.len() >= 16
         && s.len() % 4 == 0
         && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='))
         && s.bytes().any(|b| matches!(b, b'+' | b'/' | b'='))
         && base64::engine::general_purpose::STANDARD.decode(s).is_ok()
+}
+/// A JWT: 2–3 base64url segments split by `.`, whose first segment decodes to a
+/// JSON object with an `alg` key. Distinctive enough to be ZERO false-positive
+/// (a random `a.b` won't decode to a JSON-with-alg) — so it catches the base64url
+/// case `looks_base64` deliberately skips.
+fn looks_jwt(s: &str) -> bool {
+    use base64::Engine;
+    let parts: Vec<&str> = s.split('.').collect();
+    if !(2..=3).contains(&parts.len()) {
+        return false;
+    }
+    if parts.iter().any(|p| {
+        p.is_empty() || !p.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+    }) {
+        return false;
+    }
+    match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[0]) {
+        Ok(bytes) => matches!(
+            serde_json::from_slice::<Value>(&bytes),
+            Ok(Value::Object(ref m)) if m.contains_key("alg")
+        ),
+        Err(_) => false,
+    }
 }
 impl FieldDetector for PrimitiveObsession {
     fn id(&self) -> &'static str { "primitive_obsession" }
@@ -482,12 +562,49 @@ impl FieldDetector for PrimitiveObsession {
             serde_json::from_str::<Value>(s),
             Ok(Value::Object(_)) | Ok(Value::Array(_))
         );
-        if is_json_struct || looks_base64(s) {
-            let kind = if is_json_struct { "JSON" } else { "base64" };
+        let kind = if is_json_struct {
+            Some("JSON")
+        } else if looks_jwt(s) {
+            Some("a JWT")
+        } else if looks_base64(s) {
+            Some("base64")
+        } else {
+            None
+        };
+        kind.map(|k| Suspicion {
+            field:    ctx.field_key.to_string(),
+            detector: "primitive_obsession".to_string(),
+            reason:   format!("string field holds {k} — structured data hidden in a string (consider a typed field)"),
+            weight:   0.2,
+        })
+    }
+}
+
+/// **Float precision loss** — the string-typed-float loophole. A `float` field's
+/// value is already an `f64` by the time we see it (precision gone at the serde
+/// boundary — undetectable). But a number stored in a STRING field still carries
+/// its raw digits: if it has more significant digits than `f64` can hold (~17),
+/// it will silently lose precision the moment anyone does float math on it. Warn
+/// → "use data_type decimal". Only fires on a numeric string with a fractional
+/// part and >17 significant digits, so ordinary numbers don't trip it.
+struct FloatPrecisionLoss;
+impl FieldDetector for FloatPrecisionLoss {
+    fn id(&self) -> &'static str { "float_precision_loss" }
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
+        if !matches!(ctx.data_type, "string" | "markdown") {
+            return None;
+        }
+        let s = ctx.value.as_str()?.trim();
+        if !s.contains('.') || s.parse::<f64>().is_err() {
+            return None; // not a fractional numeric string
+        }
+        let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+        let sig = digits.trim_start_matches('0').trim_end_matches('0');
+        if sig.len() > 17 {
             return Some(Suspicion {
                 field:    ctx.field_key.to_string(),
-                detector: "primitive_obsession".to_string(),
-                reason:   format!("string field holds {kind} — structured data hidden in a string (consider a typed field)"),
+                detector: "float_precision_loss".to_string(),
+                reason:   format!("{} significant digits exceed f64 (~17) — precision is lost if parsed as a float; use data_type \"decimal\"", sig.len()),
                 weight:   0.2,
             });
         }
@@ -529,6 +646,7 @@ pub fn detectors() -> &'static [Box<dyn FieldDetector>] {
             Box::new(Drift),
             Box::new(InvisibleChars),
             Box::new(PrimitiveObsession),
+            Box::new(FloatPrecisionLoss),
         ];
         v
     })
@@ -694,6 +812,37 @@ mod tests {
         // plain text → nothing
         let o = validate_value("string", &[], "notes", &[], &json!("hello there"), &no_row());
         assert!(o.warnings.is_empty());
+    }
+
+    #[test]
+    fn redteam3_heuristics_and_stacking() {
+        // JWT (base64url) → primitive_obsession (looks_base64 misses it; JWT arm catches)
+        let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0";
+        let o = validate_value("string", &[], "tok", &[], &json!(jwt), &no_row());
+        assert!(o.warnings.iter().any(|w| w.detector == "primitive_obsession"));
+        // base64 FP guards: 22-char password (len%4!=0) and mid-'=' formula (decode fails) → clean
+        assert!(validate_value("string", &[], "p", &[], &json!("Super/Secret+Password="), &no_row()).warnings.is_empty());
+        assert!(validate_value("string", &[], "f", &[], &json!("Speed=Distance/T"), &no_row()).warnings.is_empty());
+        // boundary ZWJ flagged; interior ZWJ (emoji) not
+        assert!(validate_value("string", &[], "u", &[], &json!("admin\u{200D}"), &no_row())
+            .warnings.iter().any(|w| w.detector == "invisible_chars"));
+        assert!(validate_value("string", &[], "u", &[], &json!("a\u{200D}b"), &no_row())
+            .warnings.iter().all(|w| w.detector != "invisible_chars"));
+        // string-typed float precision loss (>17 sig digits)
+        assert!(validate_value("string", &[], "x", &[], &json!("3.1415926535897932384626433"), &no_row())
+            .warnings.iter().any(|w| w.detector == "float_precision_loss"));
+        assert!(validate_value("string", &[], "x", &[], &json!("3.14"), &no_row()).warnings.is_empty());
+        // decimal leading-zero coercion
+        let dr = vec![rule("decimal", json!({ "scale": 2 }), "s2")];
+        assert!(validate_value("decimal", &[], "m", &dr, &json!("007.50"), &no_row())
+            .warnings.iter().any(|w| w.detector == "coercion_loss"));
+        // confidence stacking + clamp: ws + json + invisible on one string → conf ~0.2
+        let stack = validate_value("string", &[], "d", &[], &json!(" { \"k\": \"\u{200B}\" } "), &no_row());
+        assert_eq!(stack.warnings.len(), 3);
+        assert!((stack.confidence - 0.2).abs() < 1e-6, "conf {}", stack.confidence);
+        // all-invisible → weight 1.0 → confidence 0
+        let allinv = validate_value("string", &[], "n", &[], &json!("\u{200B}\u{200B}"), &no_row());
+        assert_eq!(allinv.confidence, 0.0);
     }
 
     #[test]
