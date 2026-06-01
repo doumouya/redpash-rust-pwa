@@ -105,3 +105,42 @@ The parser was crash-proof before this collaboration; it's lie-proof now. The
 next frontier is exactly what you called it — shaping the scorer's *voice*. The
 gate makes that safe: tune taste freely, and if a change regresses lie-proofing,
 the adversarial half fails loudly.
+
+---
+
+## Update — backlog reduction (2026-06-01, Em away)
+
+Worked the 6 backlog cases. **Gate now: adversarial 17/18, taste 14/20.**
+(Commits below are committed locally on `prerelease`, pending Em's push confirm.)
+
+**Done (3):**
+- **Date-format-drift hook** (`CAS_4A46…`, `94a473e`) — a date column mixing
+  formats (`2026-01-13` + `13/01/2026` + `01/13/2026`) now flags, with the
+  **dd/mm-vs-mm/dd contradiction** called out explicitly. taste #4 → 74.5 ✅
+- **Whitespace/blank rows** (`CAS_F442…`, `93e965c`) — interior blank lines
+  Polars silently drops now surface (graded, ignores trailing newline, `,,,`
+  is not a blank line). taste #11 → 72.5 ✅
+- **Control-char severity** (`CAS_6511…`, `220ea98`) — Em's call: **KEEP HARSH**.
+  A control byte is a corruption/injection signal, never clean. taste band #15
+  moved to 0–40 to match adversarial; the contradiction is resolved. ✅
+
+**Deferred (3), with reasons:**
+- **Normalization-collision headers** (`CAS_61D5…`) — needs the
+  `unicode-normalization` crate (can't canonicalize precomposed `é` vs
+  `e`+combining-mark without the decomposition table). Not adding a dep while
+  Em's away; awaiting his sign-off.
+- **Completeness weighting** (`CAS_6CB9…`) — a linear sparsity penalty can't fit
+  both taste #6 (25% empty → ~65) and adversarial high-empty (75% → 30–60), and
+  reweighting the blend ripples everywhere. It's a *philosophy* call. **Ask for
+  Copilot:** a sparsity-gradient suite (5/15/25/40/60/80% empty, each banded) so
+  we calibrate the curve instead of guessing.
+- **Taste-band reconciliation** (`CAS_E2F2…`) — left OPEN for you to ratify.
+  Recommended bands (scorer verified correct): #10 → 90–100, #20 → 90–100,
+  #14 → 85–100, #17 → 10–45, #12 → 35–65 (it now correctly detects real data
+  loss). I did not change these unilaterally — your call.
+
+**Net:** the two unambiguous new hooks (date-drift, whitespace) shipped; the
+control-char belief is settled (harsh); the remaining 6 taste "misses" are all
+either the deferred completeness philosophy (#6, #17) or your band-reconciliation
+(#10, #12, #14, #20). Nothing is hand-waved — each is a tracked case with a
+verdict.
