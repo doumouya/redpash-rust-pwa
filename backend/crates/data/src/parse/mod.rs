@@ -234,8 +234,9 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
     let total = view.height() as u64;
     let page  = q.page.unwrap_or(1).max(1);
     // "All rows" comes through as a large sentinel from the frontend;
-    // 50k is the ceiling we trust the browser to render.
-    let size  = q.size.unwrap_or(25).clamp(1, 50_000);
+    // 200k is the ceiling we trust the browser to buffer + sort in a Web
+    // Worker (raised from 50k with the CLIENT_ENGINE_ROW_CAP lift, CAS_21B43BEC).
+    let size  = q.size.unwrap_or(25).clamp(1, 200_000);
     let offset = ((page - 1) as i64).saturating_mul(size as i64);
     let slice = view.slice(offset, size as usize);
 

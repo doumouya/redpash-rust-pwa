@@ -112,7 +112,13 @@ export default function workspace(app, { session }) {
   // search wrapper — moving them client-side needs new wasm wrappers, a
   // follow-up). "Gated by capacity, not capability" — see
   // subsystems/wasm-engine.md. Em 2026-06-01.
-  const CLIENT_ENGINE_ROW_CAP = 50000;
+  // 200k since the sort moved into engine.worker.js (CAS_21B43BEC): the 50k
+  // line was the MAIN-THREAD freeze, now gone. Measured 50k→200k: max frame
+  // gap stays ≤50 ms (no freeze), sort round-trip 270 ms→1.2 s (worker time,
+  // off-thread, spinner-covered). MUST stay ≤ the server /page size clamp
+  // (raised in lockstep to 200_000 in files/mod.rs + data/parse/mod.rs) or the
+  // buffer truncates silently (the completeness guard then drops to server mode).
+  const CLIENT_ENGINE_ROW_CAP = 200000;
   let clientMode    = false;  // active file is under the cap → client sort/page
   let clientBuffer  = null;   // { cells: string[][], idxs: number[], typed: object[] } | null
   // Rail filter state — both ephemeral per visit (no pref): a deep-link
@@ -1533,6 +1539,10 @@ export default function workspace(app, { session }) {
         .map((k) => { const meta = activeColumns[k.col - 3]; return meta ? { col: meta.name, desc: k.dir < 0 } : null; })
         .filter(Boolean);
       if (specs.length) {
+        // Cue: the worker sort is async (≤~1.2 s at the 200k cap); the table
+        // stays live so show progress in the row-count line (replaced with the
+        // real count when clientRender finishes below).
+        rowsInfo.textContent = "sorting…";
         try {
           // Off the main thread (engine.worker.js): the sort over the full
           // buffer never freezes the tab, and only the ~N-int permutation
