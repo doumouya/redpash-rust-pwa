@@ -46,7 +46,8 @@ KAFKA_WIRE_FORMAT=raw \                              # Em's producer; default co
   ./target/debug/redpash-api
 ```
 
-Optional: `KAFKA_PARTITION` (0), `KAFKA_MAX_RECORDS` (500), `KAFKA_START_OFFSET` (0).
+Optional: `KAFKA_MAX_RECORDS` (500). The runner `connectors/kafka-confluent-rc/load.sh`
+wires all of this + tees output to `results/load-<UTC>.log`.
 
 ## Public surface
 
@@ -75,10 +76,14 @@ Private: `consume_raw` (rskafka SASL_SSL fetch from one partition).
   JSON string in their column (the redtable/cleaner can expand later). If a
   consumer needs columnar nested data, that's a transform-step decision, not a
   loader change.
-- **Single-partition, offset-based, one-shot.** v1 fetches one partition from
-  `KAFKA_START_OFFSET`. Resume-across-runs (persisted checkpoint) + multi-partition
-  + consumer-group rebalancing are deferred (rskafka's simple consume fits v1;
-  revisit at streaming scale).
+- **All-partitions, earliest-offset, one-shot.** `consume_raw` discovers the
+  topic's partitions via `list_topics()` and walks EACH from its real earliest
+  offset (`get_offset(Earliest)`) to latest. This is required, not optional: the
+  data is spread across partitions (a single-partition fetch finds nothing —
+  `high_watermark: -1`) and `offset 0` is `OffsetOutOfRange` once retention prunes
+  (the first live run hit both). Resume-across-runs (persisted per-partition
+  checkpoint) + consumer-group rebalancing are deferred — this is a one-shot
+  batch; revisit at streaming scale.
 - **TLS is mandatory + fail-closed.** SASL PLAIN sends credentials in cleartext,
   so the client MUST ride TLS (Confluent Cloud = SASL_SSL). `consume_raw` builds a
   rustls `ClientConfig` (ring provider, webpki-roots CA store) and passes it via

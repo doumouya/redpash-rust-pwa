@@ -30,9 +30,7 @@ pub struct Cfg {
     pub sasl_user:     String,
     pub sasl_password: String,
     pub topic:         String,
-    pub partition:     i32,
     pub max_records:   usize,
-    pub start_offset:  i64,
     pub project_rid:   String,
     pub contract_path: String,
     pub wire_format:   WireFormat,
@@ -47,9 +45,7 @@ impl Cfg {
             sasl_user:     var("KAFKA_KEY")?,
             sasl_password: var("KAFKA_SECRET")?,
             topic:         var("KAFKA_TOPIC")?,
-            partition:     std::env::var("KAFKA_PARTITION").ok().and_then(|s| s.parse().ok()).unwrap_or(0),
             max_records:   std::env::var("KAFKA_MAX_RECORDS").ok().and_then(|s| s.parse().ok()).unwrap_or(500),
-            start_offset:  std::env::var("KAFKA_START_OFFSET").ok().and_then(|s| s.parse().ok()).unwrap_or(0),
             project_rid:   var("KAFKA_TARGET_PROJECT")?,
             contract_path: var("KAFKA_CONTRACT")?,
             wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
@@ -145,12 +141,15 @@ pub async fn ingest_csv(
     Ok(rid)
 }
 
-/// Consume up to `max_records` raw record VALUES from one partition via rskafka
-/// (SASL PLAIN over TLS — Confluent Cloud). Returns the raw bytes per record;
-/// decode is the caller's (codec_avro). Live-cluster path.
+/// Consume up to `max_records` raw record VALUES via rskafka (SASL PLAIN over
+/// TLS — Confluent Cloud). Walks EVERY partition of the topic from each one's
+/// EARLIEST offset (data is spread across partitions; offset 0 is out-of-range
+/// once retention has pruned). Returns the raw bytes per record; decode is the
+/// caller's (codec_avro). Live-cluster path.
 async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
     use rskafka::client::{
-        partition::UnknownTopicHandling, ClientBuilder, Credentials, SaslConfig,
+        partition::{OffsetAt, UnknownTopicHandling},
+        ClientBuilder, Credentials, SaslConfig,
     };
     use std::sync::Arc;
 
@@ -178,32 +177,56 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<Vec<u8>>> {
         .await
         .context("kafka connect")?;
 
-    let partition = client
-        .partition_client(cfg.topic.clone(), cfg.partition, UnknownTopicHandling::Error)
-        .await
-        .context("partition client")?;
+    // Discover the topic's partitions — the JLR messages are spread across
+    // them, so a single-partition fetch (the old partition-0 default) finds
+    // nothing (high_watermark = -1).
+    let topics = client.list_topics().await.context("list topics")?;
+    let topic = topics
+        .into_iter()
+        .find(|t| t.name == cfg.topic)
+        .with_context(|| format!("topic {} not visible to these credentials", cfg.topic))?;
+    let mut partitions: Vec<i32> = topic.partitions.into_iter().collect();
+    partitions.sort_unstable();
+    tracing::info!(topic = %cfg.topic, partitions = ?partitions, "kafka-load: partitions");
 
     let mut out = Vec::new();
-    let mut offset = cfg.start_offset;
-    while out.len() < cfg.max_records {
-        let (batch, high_watermark) = partition
-            .fetch_records(offset, 1..1_000_000, 1_000)
-            .await
-            .context("fetch_records")?;
-        if batch.is_empty() {
-            break; // caught up to the high watermark
+    for pid in partitions {
+        if out.len() >= cfg.max_records {
+            break;
         }
-        for rec in &batch {
-            if let Some(v) = &rec.record.value {
-                out.push(v.clone());
-            }
-            offset = rec.offset + 1;
-            if out.len() >= cfg.max_records {
+        let pc = client
+            .partition_client(cfg.topic.clone(), pid, UnknownTopicHandling::Error)
+            .await
+            .with_context(|| format!("partition client {pid}"))?;
+
+        // Start at the partition's REAL earliest (offset 0 is OffsetOutOfRange
+        // once retention prunes); stop at the latest (high watermark).
+        let earliest = pc.get_offset(OffsetAt::Earliest).await.context("earliest offset")?;
+        let latest = pc.get_offset(OffsetAt::Latest).await.context("latest offset")?;
+        if earliest >= latest {
+            continue; // empty partition
+        }
+        let mut offset = earliest;
+        while offset < latest && out.len() < cfg.max_records {
+            let (batch, hwm) = pc
+                .fetch_records(offset, 1..1_000_000, 1_000)
+                .await
+                .with_context(|| format!("fetch partition {pid} @ {offset}"))?;
+            if batch.is_empty() {
                 break;
             }
-        }
-        if offset >= high_watermark {
-            break;
+            for rec in &batch {
+                if let Some(v) = &rec.record.value {
+                    out.push(v.clone());
+                }
+                offset = rec.offset + 1;
+                if out.len() >= cfg.max_records {
+                    break;
+                }
+            }
+            if offset >= hwm {
+                break;
+            }
         }
     }
     Ok(out)
