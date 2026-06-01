@@ -1733,7 +1733,7 @@ export default function home(app, { session: _session }) {
   // on the next navigation. Workspace + Monitoring have their own
   // per-surface keys (rowsPerPageWorkspace / rowsPerPageMonitoring).
   function listPageSize() {
-    const n = parseInt(getPref("rowsPerPageHome") || "", 10);
+    const n = parseInt(getPref("home-rowsPerPage") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
@@ -2118,7 +2118,7 @@ export default function home(app, { session: _session }) {
     // renderChart below). Each user spec carries id + title — the
     // composite/extras layout only needs those shape-light fields, so
     // the layout decision still works against the user list.
-    const userPref     = getPref("homeCharts") || {};
+    const userPref     = getPref("home-charts") || {};
     const userCharts   = Array.isArray(userPref[tab.key]) && userPref[tab.key].length
                             ? userPref[tab.key]
                             : null;
@@ -2275,7 +2275,7 @@ export default function home(app, { session: _session }) {
       // The label/selection indicator are kept in sync via syncRowsLabel().
       const rowsDd = view.querySelector("#rp-list-toolbar-rows-dd");
       function syncRowsLabel() {
-        const raw = getPref("rowsPerPageHome") || "25";
+        const raw = getPref("home-rowsPerPage") || "25";
         const lbl = view.querySelector("#rp-list-toolbar-rows-label");
         if (lbl) lbl.textContent = raw + " rows";
         if (rowsDd) {
@@ -2295,7 +2295,7 @@ export default function home(app, { session: _session }) {
       rowsDd?.addEventListener("click", (e) => {
         const item = e.target.closest(".rt-dd-item");
         if (!item) return;
-        setPref("rowsPerPageHome", item.dataset.rows);
+        setPref("home-rowsPerPage", item.dataset.rows);
         listPage = 1;
         syncRowsLabel();
         fetchList(spec, chipState);

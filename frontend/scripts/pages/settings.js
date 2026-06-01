@@ -119,17 +119,11 @@ const SECTION_EXTRAS = {
       { kind: "button", id: "rp-settings-signout", label: "Sign out", icon: "box-arrow-right" },
     ]}),
   ],
-  // CAS_3FC70F56 stub group (Em 2026-05-31). Cases prefs land here
-  // in step 6 of Settings v2 — until then the placeholder tells the
-  // user this lives here so they can find it.
-  "set-cases": [
-    '<div class="rp-page__row rp-page__row--placeholder">'
-      + '<span class="rp-page__row-label">'
-        + '<span>No Cases preferences yet.</span> '
-        + '<small class="rp-settings__hint">Settings for the Cases page will land here as they\'re identified (kanban defaults, attachment rail open-state, etc.).</small>'
-      + '</span>'
-    + '</div>',
-  ],
+  // Cases section is now populated by registered prefs (step 6b
+  // landed cases-doneWindow / cases-railGroupBy / cases-detailPanel
+  // / cases-activeSource / cases-filterStatus + the dynamic-value
+  // cases-filterAssignee). No extras row needed; the registry-
+  // driven render fills the section.
   // About row is structurally unique (branded label + version mount);
   // inlined here rather than parameterised — no second site exists.
   "set-about": [

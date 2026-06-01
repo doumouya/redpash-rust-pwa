@@ -274,27 +274,95 @@ registerPref({
   migrateFrom: ["exportFormat"],
 });
 
-// CASES — how far back to show the "Done" column / rail group
-// (productivity-tracking window). Default "day" caps to today's
-// closed cases; "all" disables the filter. Live-toggleable from
-// the chip-row at the top of the Done column. Not surfaced in
-// Settings today (the Cases group ships empty in step 2; populated
-// in step 6 with the candidates from Phase 1 + these three
-// existing registered specs).
+// CASES · Filters & defaults — Settings v2 step 6b kebab migration.
+// The existing prefs (casesDoneWindow / casesRailGroupBy /
+// casesDetailPanel) renamed under `cases-*`; the three live-state
+// keys cases.js was writing as UNREGISTERED passthrough
+// (casesActiveSource / casesFilterAssignee / casesFilterStatus) are
+// now registered + surface in Settings (the Cases group v1 fill).
+// Dynamic per-agent assignee rids stay valid because the spec
+// carries no `values` enum — the chip click sets whatever rid the
+// user selected (registered passthrough behaves like unregistered
+// when there's no enum). See [[case-default-naming]] note in the
+// settings.md doc.
 registerPref({
-  key: "casesDoneWindow",
-  control: "onoff",  // Settings v2 may surface; today the live chip drives.
+  key: "cases-doneWindow",
+  group: "CASES", section: "set-cases",
+  control: "onoff", label: "Done window",
+  hint: "how far back to surface closed cases on the Done column + rail",
   values: ["day", "week", "month", "all"], default: "day", attr: null,
+  options: [
+    { value: "day",   label: "Day"   },
+    { value: "week",  label: "Week"  },
+    { value: "month", label: "Month" },
+    { value: "all",   label: "All"   },
+  ],
+  tags: ["defaults"],
+  migrateFrom: ["casesDoneWindow"],
 });
 registerPref({
-  key: "casesRailGroupBy",
-  control: "onoff",
+  key: "cases-railGroupBy",
+  group: "CASES", section: "set-cases",
+  control: "onoff", label: "Group rail by",
+  hint: "left rail kanban grouping axis",
   values: ["status", "assignee"], default: "status", attr: null,
+  options: [
+    { value: "status",   label: "Status"   },
+    { value: "assignee", label: "Assignee" },
+  ],
+  tags: ["defaults"],
+  migrateFrom: ["casesRailGroupBy"],
 });
 registerPref({
-  key: "casesDetailPanel",
-  control: "onoff",
+  key: "cases-detailPanel",
+  group: "CASES", section: "set-cases",
+  control: "onoff", label: "Detail side panel",
+  hint: "default open/closed state for the case-detail properties panel",
   values: ["open", "closed"], default: "open", attr: null,
+  options: [
+    { value: "open",   label: "Open"   },
+    { value: "closed", label: "Closed" },
+  ],
+  tags: ["defaults"],
+  migrateFrom: ["casesDetailPanel"],
+});
+registerPref({
+  key: "cases-activeSource",
+  group: "CASES", section: "set-cases",
+  control: "onoff", label: "Default source",
+  hint: "Internal vs External cases on rail load",
+  values: ["internal", "external"], default: "internal", attr: null,
+  options: [
+    { value: "internal", label: "Internal" },
+    { value: "external", label: "External" },
+  ],
+  tags: ["defaults"],
+  migrateFrom: ["casesActiveSource"],
+});
+registerPref({
+  key: "cases-filterStatus",
+  group: "CASES", section: "set-cases",
+  control: "onoff", label: "Default status filter",
+  hint: "pre-applied on every Cases visit",
+  values: ["all", "new", "in_progress", "done"], default: "all", attr: null,
+  options: [
+    { value: "all",         label: "All"         },
+    { value: "new",         label: "New"         },
+    { value: "in_progress", label: "In progress" },
+    { value: "done",        label: "Done"        },
+  ],
+  tags: ["defaults"],
+  migrateFrom: ["casesFilterStatus"],
+});
+// cases-filterAssignee: no `values` enum because the chip row
+// includes per-agent rid values that are populated dynamically from
+// the team. Registered without `values` so setPref accepts any
+// string (validation skip path); the migrateFrom carries the
+// existing localStorage value forward.
+registerPref({
+  key: "cases-filterAssignee",
+  default: "all", attr: null,
+  migrateFrom: ["casesFilterAssignee"],
 });
 // Workspace rail — which object kind each project group lists.
 // "data" shows CSV/Excel data files (the redtable surface);
@@ -336,22 +404,24 @@ registerPref({
 // JSON object (per-tab arrays of chart specs); the picker manages
 // shape internally.
 registerPref({
-  key: "monitoringCharts",
+  key: "monitoring-charts",
   group: "MONITORING", section: "set-monitoring-charts",
   control: "chart-layouts", surface: "monitoring",
   label: "Per-tab chart layouts",
   hint:  "your saved charts replace the curated defaults on each Monitoring tab. Build via the chart designer.",
   default: {},
   tags: ["charts"],
+  migrateFrom: ["monitoringCharts"],
 });
 registerPref({
-  key: "homeCharts",
+  key: "home-charts",
   group: "HOME", section: "set-home-charts",
   control: "chart-layouts", surface: "home",
   label: "Per-tab chart layouts",
   hint:  "your saved charts replace the curated defaults on each Home tab. Build via the chart designer.",
   default: {},
   tags: ["charts"],
+  migrateFrom: ["homeCharts"],
 });
 
 // ── legacy-key migration ─────────────────────────────────────────────

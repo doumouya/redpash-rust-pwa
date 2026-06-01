@@ -115,7 +115,7 @@ export default function cases(app, { session }) {
   // passes through; Done items keep only if their updated_at is
   // within the window cap.
   function applyDoneWindow(rows) {
-    const window = getPref("casesDoneWindow");
+    const window = getPref("cases-doneWindow");
     const capMs = DONE_WINDOW_MS[window];
     if (!Number.isFinite(capMs)) return rows;
     const cutoff = Date.now() - capMs;
@@ -130,7 +130,7 @@ export default function cases(app, { session }) {
     // host: "kanban" | "rail" — kept distinct so the click delegate
     // knows where the chip lives (purely informational; both update
     // the same pref).
-    const active = getPref("casesDoneWindow");
+    const active = getPref("cases-doneWindow");
     const chips = DONE_WINDOW_ORDER.map((w) =>
       '<button type="button" class="rp-chip rp-cases-done-chip'
         + (w === active ? ' is-active' : '') + '" '
@@ -206,7 +206,7 @@ export default function cases(app, { session }) {
   // the page's own boot calls refreshCases() once, which reads the
   // pref the helper seeds here.
   mountRailSeg(app.querySelector("#rp-cases-rail-source"), {
-    pref:     "casesActiveSource",
+    pref:     "cases-activeSource",
     fallback: "internal",
     onChange: () => refreshCases(),
   });
@@ -229,17 +229,17 @@ export default function cases(app, { session }) {
       b.classList.toggle("is-active", key === value);
     });
   }
-  if (getPref("casesFilterAssignee") == null) setPref("casesFilterAssignee", "all");
-  if (getPref("casesFilterStatus")   == null) setPref("casesFilterStatus",   "all");
-  syncChipRow(chipsAssignee, getPref("casesFilterAssignee"));
-  syncChipRow(chipsStatus,   getPref("casesFilterStatus"));
+  if (getPref("cases-filterAssignee") == null) setPref("cases-filterAssignee", "all");
+  if (getPref("cases-filterStatus")   == null) setPref("cases-filterStatus",   "all");
+  syncChipRow(chipsAssignee, getPref("cases-filterAssignee"));
+  syncChipRow(chipsStatus,   getPref("cases-filterStatus"));
 
   chipsAssignee?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-chip-assignee]");
     if (!btn) return;
     const next = btn.dataset.chipAssignee;
-    if (next && next !== getPref("casesFilterAssignee")) {
-      setPref("casesFilterAssignee", next);
+    if (next && next !== getPref("cases-filterAssignee")) {
+      setPref("cases-filterAssignee", next);
       syncChipRow(chipsAssignee, next);
       refreshCases();
     }
@@ -248,8 +248,8 @@ export default function cases(app, { session }) {
     const btn = e.target.closest("[data-chip-status]");
     if (!btn) return;
     const next = btn.dataset.chipStatus;
-    if (next && next !== getPref("casesFilterStatus")) {
-      setPref("casesFilterStatus", next);
+    if (next && next !== getPref("cases-filterStatus")) {
+      setPref("cases-filterStatus", next);
       syncChipRow(chipsStatus, next);
       refreshCases();
     }
@@ -278,7 +278,7 @@ export default function cases(app, { session }) {
       if (unassignedBtn) unassignedBtn.insertAdjacentHTML("beforebegin", html);
       else               chipsAssignee.insertAdjacentHTML("beforeend", html);
       // Re-sync in case the active pref is a per-agent rid.
-      syncChipRow(chipsAssignee, getPref("casesFilterAssignee"));
+      syncChipRow(chipsAssignee, getPref("cases-filterAssignee"));
     } catch (err) {
       console.warn("[cases] couldn't load agent chips:", err);
     }
@@ -362,8 +362,8 @@ export default function cases(app, { session }) {
     if (chip) {
       e.preventDefault();
       const w = chip.dataset.doneWindow;
-      if (w && w !== getPref("casesDoneWindow")) {
-        setPref("casesDoneWindow", w);
+      if (w && w !== getPref("cases-doneWindow")) {
+        setPref("cases-doneWindow", w);
         paintRail(cachedCases, activeCaseRid());
         paintBoard(cachedCases);
       }
@@ -382,8 +382,8 @@ export default function cases(app, { session }) {
     if (!chip) return;
     e.preventDefault();
     const w = chip.dataset.doneWindow;
-    if (w && w !== getPref("casesDoneWindow")) {
-      setPref("casesDoneWindow", w);
+    if (w && w !== getPref("cases-doneWindow")) {
+      setPref("cases-doneWindow", w);
       paintBoard(cachedCases);
       paintRail(cachedCases, activeCaseRid());
     }
@@ -460,17 +460,17 @@ export default function cases(app, { session }) {
       // Source filter — scopes the fetch to the active rail tab.
       // Defaults to "internal" so the agent team's queue shows on
       // first paint. External cases require flipping the toggle.
-      params.set("source", getPref("casesActiveSource") || "internal");
+      params.set("source", getPref("cases-activeSource") || "internal");
       // Assignee / Status chip filters — "all" = no constraint
       // (don't send the param). "mine" resolves to the caller's own
       // rid; "__unassigned__" is a sentinel the backend matches as
       // assignee_id IS NULL. Per-agent chips carry their USR_<rid>
       // directly in data-chip-assignee.
-      const fa = getPref("casesFilterAssignee");
+      const fa = getPref("cases-filterAssignee");
       if (fa && fa !== "all") {
         params.set("assignee", fa === "mine" ? meRid : fa);
       }
-      const fs = getPref("casesFilterStatus");
+      const fs = getPref("cases-filterStatus");
       if (fs && fs !== "all") params.set("status", fs);
       const data = await api.get("/cases?" + params.toString());
       // Backend returns { items, total, page, size } per the cookbook
@@ -1022,11 +1022,11 @@ export default function cases(app, { session }) {
       sideToggle.classList.toggle("is-active", open);
       sideToggle.setAttribute("aria-pressed", String(open));
     };
-    setSidePanel(getPref("casesDetailPanel") === "open");
+    setSidePanel(getPref("cases-detailPanel") === "open");
     sideToggle.addEventListener("click", () => {
       const open = !sidePanel.classList.contains("open");
       setSidePanel(open);
-      setPref("casesDetailPanel", open ? "open" : "closed");
+      setPref("cases-detailPanel", open ? "open" : "closed");
     });
   }
 

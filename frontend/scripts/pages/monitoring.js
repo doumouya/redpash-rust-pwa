@@ -326,7 +326,7 @@ export default function monitoring(app, { session }) {
   // next navigation. Workspace + Home have their own per-surface
   // keys (rowsPerPageWorkspace / rowsPerPageHome).
   function pageSizeFromPref() {
-    const n = parseInt(getPref("rowsPerPageMonitoring") || "", 10);
+    const n = parseInt(getPref("monitoring-rowsPerPage") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : 25;
   }
 
@@ -753,7 +753,7 @@ export default function monitoring(app, { session }) {
     // REPLACE the curated kpiX path entirely (rendered via the
     // unified `renderChart`). Otherwise the existing viewSpec.charts
     // / charts.mount path stays in effect.
-    const userPref       = getPref("monitoringCharts") || {};
+    const userPref       = getPref("monitoring-charts") || {};
     const userCharts     = Array.isArray(userPref[tab.key]) && userPref[tab.key].length
                               ? userPref[tab.key]
                               : null;
@@ -837,7 +837,7 @@ export default function monitoring(app, { session }) {
     });
     const rowsDd = view.querySelector("#rp-list-toolbar-rows-dd");
     function syncRowsLabel() {
-      const raw = getPref("rowsPerPageMonitoring") || "25";
+      const raw = getPref("monitoring-rowsPerPage") || "25";
       const lbl = view.querySelector("#rp-list-toolbar-rows-label");
       if (lbl) lbl.textContent = raw + " rows";
       if (rowsDd) {
@@ -857,7 +857,7 @@ export default function monitoring(app, { session }) {
     rowsDd?.addEventListener("click", (e) => {
       const item = e.target.closest(".rt-dd-item");
       if (!item) return;
-      setPref("rowsPerPageMonitoring", item.dataset.rows);
+      setPref("monitoring-rowsPerPage", item.dataset.rows);
       listPage = 1;
       syncRowsLabel();
       fetchList(viewSpec);
