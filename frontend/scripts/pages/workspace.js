@@ -1487,6 +1487,20 @@ export default function workspace(app, { session }) {
     const pageData = await api.get(
       "/files/" + encodeURIComponent(activeFileRid) + "/page?" + params.toString());
     const cells = pageData?.rows || [];
+    const total = pageData?.total ?? cells.length;
+    // CORRECTNESS GUARD (Em 2026-06-01): the client engine may only
+    // sort/page a COMPLETE buffer. If the server clamped the fetch below
+    // the full result-set size (cap > the /page size clamp, or the set
+    // exceeds the cap), sorting the buffer would silently order a
+    // TRUNCATED subset → a wrong global sort. Refuse: drop to server-mode
+    // (sorts the full frame) instead. Makes a partial sort impossible
+    // regardless of how CLIENT_ENGINE_ROW_CAP is set vs the server clamp.
+    if (total > cells.length) {
+      clientMode = false;
+      clientBuffer = null;
+      await fetchAndRender();
+      return;
+    }
     const idxs  = pageData?.row_indices || cells.map((_, i) => i);
     // Coerce ONCE; each typed row carries __p = its buffer position so a
     // sort's output order maps back to the original (uncoerced) string

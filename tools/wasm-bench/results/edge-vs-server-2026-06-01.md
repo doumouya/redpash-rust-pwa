@@ -60,6 +60,40 @@ dossier file covers it ad-hoc at ~similar volume.)*
    TypeDefinition validator / `try_cast_count` surfaced as a count), not the
    sampled parse-preview. → candidate follow-up.
 
+## SIMD experiment (`-C target-feature=+simd128`) — tested & reverted
+
+Rebuilt the wasm with `RUSTFLAGS=… -C target-feature=+simd128` and re-ran the
+edge parse:
+
+| File | Scalar (shipped) | SIMD | Δ |
+|---|---|---|---|
+| `mega_tricky_100k` 7.16 MB | 648.9 ms | 623.8 ms | ~4% faster |
+| `type_truth_100k` 3.94 MB | 169 ms | 159.9 ms | ~5% faster |
+
+Binary ~1% smaller (12.17 vs 12.32 MB). **Reverted** — two reasons: (1) ~5% on
+parse is marginal and doesn't touch the real bottleneck (the main-thread
+marshaling freeze; SIMD speeds Polars compute, not `serde_json`); (2)
+`+simd128` needs a modern browser (Chrome 91+/Safari 16.4+), so old WebViews on
+low-end devices ([[gtm-africa-first]]) couldn't instantiate the engine at all —
+losing reach on the exact target market for a 5% gain. Revisit only as a
+feature-detected dual-build (simd for capable, scalar fallback) if compute ever
+becomes the bottleneck. `build-wasm.sh` left scalar.
+
+## Real bottleneck (from Em's 22.04 history + this run)
+
+The 50k cap is an artifact of a **main-thread freeze**, not a compute ceiling.
+Scrolling 100k was always smooth (virtualized grid never touches the whole
+set). The freeze hit when an *operation* ran over the full buffer — opening a
+side panel or `snake_case` = one synchronous WASM call doing `rows_to_df` +
+`df_to_rows` over 100k rows **on the UI thread** → tab locks → close-browser.
+50k was the empirical line where that block stayed tolerable.
+
+Two fixes lift the cap (neither is SIMD):
+1. **Web Worker** — run the engine off the main thread; a heavy op shows a
+   spinner, never freezes the tab.
+2. **Stateful handle** — operate on a held `DataFrame`, return only the visible
+   page (~50 rows), so an op marshals 50 rows back, not 100k.
+
 ## How to re-run
 
 1. `python3 tools/wasm-bench/generate-edge-corpus.py /tmp/edge-corpus`
