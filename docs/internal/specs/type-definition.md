@@ -421,6 +421,7 @@ collide with `kind`/`code`/`message`. Builtin kinds:
 | `expression` | `expr: "<dsl>"` | the cross-field DSL is false (§9.3) |
 | `decimal` | `scale?`, `currency?` | more fractional digits than `scale` (loss of precision; XOF `scale:0` rejects `1.5`) — the reborn money contract, an open param not a fixed type |
 | `pattern` | `pattern: "<regex>"` | string value fails the regex (RE2 linear-time, no ReDoS; length + compiled-size capped) |
+| `non_blank` | — | string has no visible content (all whitespace / zero-width / invisible). The hard-reject pair of the `invisible_chars` Tier-2 detector. |
 
 ### 8.3 The expression DSL (hand-rolled, sandboxed)
 

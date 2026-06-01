@@ -329,8 +329,68 @@ REDTEAM_3 = [
      "warn:coercion_loss", "coercion(ws 0.3)+primitive(0.2)+invisible(0.3)=0.8 → conf 0.2; all three fire"),
 ]
 
-SUITES = {"correctness": CORRECTNESS, "taste": TASTE,
-          "redteam_1": REDTEAM_1, "redteam_2": REDTEAM_2, "redteam_3": REDTEAM_3}
+# ── Gemini/Copilot adversarial batch #4 (2026-06-01) — the non_blank Tier-1 ──
+# rule + contradiction-detector probes + DSL combinatorial load. 1 build
+# (non_blank); the contradiction probes all already pass. See
+# results/validate-redteam-4-analysis.md.
+REDTEAM_4 = [
+    ("61 non_blank + null", {"data_type": "string", "field": "name", "value": None,
+      "rules": [rule("non_blank", "nb", "x")]},
+     "valid", "NEW RULE: non_blank is a shape rule → skipped on null (≠ required)"),
+    ("62 non_blank control chars", {"data_type": "string", "field": "bio", "value": "\n\t\r\n",
+      "rules": [rule("non_blank", "nb", "x")]},
+     "reject:nb", "NEW RULE: whitespace-only has no visible content → reject"),
+    ("63 non_blank html illusion", {"data_type": "string", "field": "html", "value": "<div></div>",
+      "rules": [rule("non_blank", "nb", "x")]},
+     "valid", "visible chars present; validation doesn't parse HTML"),
+    ("64 markdown hard-break FP", {"data_type": "markdown", "field": "comment", "value": "Line 1  \nLine 2"},
+     "valid", "whitespace coercion is BOUNDARY-only → interior trailing spaces (md hard-break) don't trip"),
+    ("65 float-loss strips ws first", {"data_type": "string", "field": "exact", "value": "  3.14159265358979323846  "},
+     "warn:float_precision_loss", "float_precision_loss trims before parsing → fires (+ coercion_loss for the ws)"),
+    ("66 invisible survives (raw)", {"data_type": "string", "field": "username", "value": " ​ "},
+     "warn:invisible_chars", "detectors see the RAW value; ZWSP not eaten by any trim"),
+    ("67 dsl short-circuit null", {"data_type": "int", "field": "x", "value": 1,
+      "rules": [rule("expression", "sc_null", "x", expr="missing == null || missing > 5")]},
+     "valid", "short-circuit + null>5 is false, no panic"),
+    ("68 dsl != coercion", {"data_type": "int", "field": "id", "value": 5,
+      "rules": [rule("expression", "neq_str", "x", expr="id != 'gold'")]},
+     "valid", "5 != 'gold' → true"),
+    ("69 triple cross-type eq", {"data_type": "int", "field": "i_val", "value": 1,
+      "row": {"s_val": "1", "b_val": True},
+      "rules": [rule("expression", "triple_eq", "x", expr="i_val == s_val && s_val == b_val")]},
+     "reject:triple_eq", "1=='1' true; '1'==true false (bool word) → && false → reject"),
+    ("70 demorgan null law", {"data_type": "string", "field": "test", "value": "test",
+      "rules": [rule("expression", "demorgan", "x", expr="!(missing == 5 || missing == 'A')")]},
+     "valid", "null==anything false; !(false||false)=true"),
+    ("71 rid uuid", {"data_type": "rid", "field": "user_id", "value": "123e4567-e89b-12d3-a456-426614174000"},
+     "valid", "rid codec is shape-only (any string)"),
+    ("72 rid-pattern in string", {"data_type": "string", "field": "account_id", "value": "usr_2Tfedo93K45abc"},
+     "valid", "DISAGREE: a generic prefix_alnum heuristic is too FP-prone (docks 'abc_123'); we don't guess rids"),
+    ("73 enum duplicate options", {"data_type": "enum", "options": ["A", "A", "B"], "field": "status", "value": "A"},
+     "valid", "contains() handles dup options fine"),
+    ("74 decimal leading-point .50", {"data_type": "decimal", "field": "price", "value": ".50",
+      "rules": [rule("decimal", "s2", "x", scale=2)]},
+     "reject:data_type", "HOLD: '.50' has no integer part → malformed wire (symmetric with '10.' reject)"),
+    ("75 dsl null inequality chain", {"data_type": "boolean", "field": "b", "value": True,
+      "rules": [rule("expression", "neq_null", "x", expr="missing != 5 && missing != 'test'")]},
+     "valid", "null != x is true (negation flips the null matrix)"),
+    ("76 decimal huge scale 256", {"data_type": "decimal", "field": "rate", "value": "0.1",
+      "rules": [rule("decimal", "huge_scale", "x", scale=256)]},
+     "valid", "scale is a digit-count compare, no allocation → safe"),
+    ("77 markdown hex entity", {"data_type": "markdown", "field": "post", "value": "Hello&#x200B;World"},
+     "valid", "DISAGREE: '&#x200B;' is literal text; entity expansion is render-layer (consistent with &zwj;)"),
+    ("78 json codec 'null'", {"data_type": "json", "field": "config", "value": "null"},
+     "valid", "'null' is valid JSON → Value::Null → reserializes to 'null', no loss"),
+    ("79 datetime cross-field eq", {"data_type": "datetime", "field": "t1", "value": "2026-06-01T12:00:00Z",
+      "row": {"t2": "2026-06-01T12:00:00+00:00"},
+      "rules": [rule("expression", "dt_eq", "x", expr="t1 == t2")]},
+     "reject:dt_eq", "DSL string-compares datetimes (no chrono cast): Z != +00:00 → reject"),
+    ("80 confidence floor lock", {"data_type": "string", "field": "spam", "value": " {\"key\": \"​\"} \n"},
+     "warn:invisible_chars", "coercion+primitive+invisible stack → conf clamps at 0, no underflow panic"),
+]
+
+SUITES = {"correctness": CORRECTNESS, "taste": TASTE, "redteam_1": REDTEAM_1,
+          "redteam_2": REDTEAM_2, "redteam_3": REDTEAM_3, "redteam_4": REDTEAM_4}
 
 def post(body):
     data = json.dumps(body).encode()

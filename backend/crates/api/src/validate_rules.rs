@@ -154,6 +154,7 @@ fn builtin_rules() -> Vec<Rule> {
         Rule { kind: "expression",  check: crate::validate_expr::r_expression },
         Rule { kind: "decimal",     check: r_decimal },
         Rule { kind: "pattern",     check: r_pattern },
+        Rule { kind: "non_blank",   check: r_non_blank },
     ]
 }
 
@@ -259,6 +260,21 @@ fn r_decimal(v: &Value, p: &Params, _: &Row) -> RuleCheck {
         }
     }
     RuleCheck::Pass
+}
+
+/// `non_blank {}` — the Tier-1 hard-reject for a string with no VISIBLE content
+/// (all whitespace / zero-width / invisible chars). Distinct from `required`
+/// (which is the null check): a present-but-blank string (`"\n\t"`, `" ​ "`)
+/// passes `required` but fails this. A null value is skipped (shape rules clear
+/// on null — nullability is `required`'s job, not this rule's). Non-string values
+/// pass (they're not blank strings). Pairs with the Tier-2 `invisible_chars`
+/// detector (which warns); `non_blank` is the rule that BLOCKS when authored.
+fn r_non_blank(v: &Value, _: &Params, _: &Row) -> RuleCheck {
+    let Some(s) = v.as_str() else { return RuleCheck::Pass };
+    let has_visible = s.chars().any(|c| {
+        !c.is_whitespace() && !is_suspicious_invisible(c) && !matches!(c, '\u{200C}' | '\u{200D}')
+    });
+    if has_visible { RuleCheck::Pass } else { RuleCheck::Fail }
 }
 
 /// `pattern { pattern: "<regex>" }` — value (a string) must match. Uses the
@@ -812,6 +828,18 @@ mod tests {
         // plain text → nothing
         let o = validate_value("string", &[], "notes", &[], &json!("hello there"), &no_row());
         assert!(o.warnings.is_empty());
+    }
+
+    #[test]
+    fn non_blank_rule() {
+        let r = vec![rule("non_blank", json!({}), "nb")];
+        assert!(validate_value("string", &[], "x", &r, &json!("hello"), &no_row()).is_ok());
+        assert!(validate_value("string", &[], "x", &r, &json!("<div></div>"), &no_row()).is_ok());
+        // whitespace-only and invisible-only have no visible content → reject.
+        assert!(!validate_value("string", &[], "x", &r, &json!("\n\t\r\n"), &no_row()).is_ok());
+        assert!(!validate_value("string", &[], "x", &r, &json!(" \u{200B} "), &no_row()).is_ok());
+        // null is skipped (shape rule, not `required`).
+        assert!(validate_value("string", &[], "x", &r, &Value::Null, &no_row()).is_ok());
     }
 
     #[test]

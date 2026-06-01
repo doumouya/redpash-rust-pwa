@@ -78,6 +78,11 @@ not a redesign.
   an opaque ISO-4217 string (3 uppercase letters — never an enum, so any currency
   works); it rides for FE formatting + messages. Reuses
   `codec_registry::is_decimal_str` for the shape check.
+- `non_blank {}` — Tier-1 hard-reject for a string with no VISIBLE content (all
+  whitespace / zero-width / invisible). Distinct from `required` (the null check):
+  a present-but-blank `"\n\t"` passes `required` but fails this. Null is skipped
+  (shape rule). Pairs with the Tier-2 `invisible_chars` detector — the detector
+  warns, `non_blank` blocks when authored.
 - `pattern { pattern: "<regex>" }` — string value must match. Uses the `regex`
   crate (RE2-style **linear-time** matching — no ReDoS, the reason it's the safe
   choice over a hand-rolled backtracker; `regex` was already in-tree via Polars,
