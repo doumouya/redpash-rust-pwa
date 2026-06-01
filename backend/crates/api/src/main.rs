@@ -22,6 +22,7 @@ mod rbac;
 // Field-level permission registry (CAS_C4219F2B). Ord/Perm variants are used
 // by the matrix + reserved for slice-3 enforcement.
 #[allow(dead_code)]
+mod codec_registry;
 mod field_perms;
 mod field_validate;
 mod redact;

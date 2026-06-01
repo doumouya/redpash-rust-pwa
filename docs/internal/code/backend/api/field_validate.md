@@ -15,6 +15,14 @@ TypeDefinition `data_type` (spec [type-definition](../../specs/type-definition.m
 §4.2, CAS_0FBF301F): a pure format check + an async rid-reference existence +
 `rel.type` check.
 
+**The pure format check now delegates to the [codec registry](codec_registry.md)**
+(CAS_75A0D1FD, 2026-06-01): `validate_format` is a one-line call into
+`codec_registry::registry().validate(...)`. The closed `match data_type` moved
+into registered `Codec`s, so `data_type` is an open codec id (custom codecs
+register without touching this file). Behavior is identical — the tests here
+exercise the same cases through the registry. `validate_ref` (the async
+referential layer) stays here.
+
 **Deliberately unwired** (Em decision, 2026-05-31). The per-resource PATCH
 handlers (cases / companies / projects / charts / dashboards / files) already
 validate builtin writes with bespoke per-field logic + FK constraints + the
@@ -31,11 +39,11 @@ custom type has no source-code handler to bake validation into, so its writes
 - `pub enum FieldError` — `BadValue(String)` → HTTP 400, `MissingRef(String)` →
   HTTP 404 (the §4.2 status mapping the caller applies).
 - `pub fn validate_format(data_type, value, options) -> Result<(), FieldError>`
-  — PURE, no DB. Covers `string`/`markdown` (any string), `int`/`float`
-  (JSON number OR numeric string), `boolean` (bool OR "true"/"false"), `enum`
-  (∈ `options`), `datetime` (RFC-3339), `json` (object/array, or a string that
-  parses), `rid` (string shape only). JSON `null` = clear-the-field → ok.
-  Unknown `data_type` → `BadValue`.
+  — PURE, no DB. Delegates to [`codec_registry::registry().validate`](codec_registry.md),
+  which covers the builtin codecs (`string`/`markdown`, `int`, `float`,
+  `boolean`, `enum` ∈ `options`, `datetime`, `json`, `rid` shape-only, +
+  `decimal`). JSON `null` = clear → ok. Unregistered codec id →
+  `BadValue("codec_not_registered: …")`.
 - `pub async fn validate_ref(pool, rel, rid) -> Result<(), FieldError>` — the
   cross-type rid check: prefix mismatch → `BadValue`/400, absent row →
   `MissingRef`/404, unmapped `rel.type` → ok (fail-open; FK is the backstop).

@@ -34,66 +34,16 @@ fn bad(m: impl Into<String>) -> FieldError {
     FieldError::BadValue(m.into())
 }
 
-fn as_str(v: &Value) -> Result<&str, FieldError> {
-    v.as_str().ok_or_else(|| bad("expected a string"))
-}
-
 /// Validate a value against a §4.2 `data_type` — PURE (no DB). For `rid` this
 /// only confirms it's a string; existence + type go through [`validate_ref`].
 ///
-/// Values may arrive as their native JSON type OR as a string — the cell-editor
-/// reads `contenteditable` and PATCHes strings — so `int`/`float`/`boolean`/
-/// `json` accept either form. A JSON `null` is "clear the field"; nullability
-/// (the `required` flag) is enforced separately.
+/// Delegates to the [codec registry](crate::codec_registry) — `data_type` is an
+/// opaque codec id, no longer a closed `match` (CAS_75A0D1FD). Values may arrive
+/// as their native JSON type OR as a string (the cell-editor PATCHes
+/// contenteditable strings); a JSON `null` is "clear the field" (the registry
+/// handles it); an unregistered codec id → `BadValue("codec_not_registered: …")`.
 pub fn validate_format(data_type: &str, value: &Value, options: &[&str]) -> Result<(), FieldError> {
-    if value.is_null() {
-        return Ok(());
-    }
-    match data_type {
-        "string" | "markdown" => as_str(value).map(|_| ()),
-        "int" => {
-            let ok = value.as_i64().is_some()
-                || as_str(value).ok().and_then(|s| s.trim().parse::<i64>().ok()).is_some();
-            ok.then_some(()).ok_or_else(|| bad("expected an integer"))
-        }
-        "float" => {
-            let ok = value.as_f64().is_some()
-                || as_str(value).ok().and_then(|s| s.trim().parse::<f64>().ok()).is_some();
-            ok.then_some(()).ok_or_else(|| bad("expected a number"))
-        }
-        "boolean" => {
-            let ok = value.is_boolean()
-                || matches!(
-                    as_str(value).map(str::to_ascii_lowercase).as_deref(),
-                    Ok("true") | Ok("false")
-                );
-            ok.then_some(()).ok_or_else(|| bad("expected true or false"))
-        }
-        "enum" => {
-            let s = as_str(value)?;
-            options
-                .contains(&s)
-                .then_some(())
-                .ok_or_else(|| bad(format!("must be one of: {}", options.join(", "))))
-        }
-        "datetime" => {
-            let s = as_str(value)?;
-            chrono::DateTime::parse_from_rfc3339(s)
-                .map(|_| ())
-                .map_err(|_| bad("expected an ISO-8601 datetime"))
-        }
-        // existence + cross-type are validated by validate_ref (needs the DB).
-        "rid" => as_str(value).map(|_| ()),
-        "json" => match value {
-            // a JSON object/array/scalar is already valid; a string must itself
-            // parse as JSON (the wire form when an editor sends raw text).
-            Value::String(s) => serde_json::from_str::<Value>(s)
-                .map(|_| ())
-                .map_err(|_| bad("expected valid JSON")),
-            _ => Ok(()),
-        },
-        other => Err(bad(format!("unknown data_type: {other}"))),
-    }
+    crate::codec_registry::registry().validate(data_type, value, options)
 }
 
 /// The table + rid prefix a relationship type resolves to. Names are hardcoded
