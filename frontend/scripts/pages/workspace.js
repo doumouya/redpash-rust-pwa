@@ -2363,10 +2363,17 @@ export default function workspace(app, { session }) {
     // Also invalidate the column-index cache for this file — the step
     // may have changed rows or schema, so cached distinct values are
     // stale.
-    onApplied: () => {
+    onApplied: (res) => {
       if (!activeFileRid) return;
       const rid = activeFileRid;
       invalidateColumnIndex(rid);
+      // The /steps response IS the rebuilt envelope (new columns / steps
+      // / summary). Seed the cache with it so the loadFile re-run below
+      // renders the post-step SCHEMA, not the stale pre-step columns — a
+      // column-changing step (snake_case_columns, replace_in_names,
+      // split_column, drop_columns) otherwise left the main-table headers
+      // stale. Mirrors applyStep's fileEnvelopeCache.set.
+      if (res) fileEnvelopeCache.set(rid, res);
       activeFileRid = null;
       loadFile(rid);
     },
