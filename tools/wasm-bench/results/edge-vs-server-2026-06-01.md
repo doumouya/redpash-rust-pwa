@@ -94,6 +94,33 @@ Two fixes lift the cap (neither is SIMD):
 2. **Stateful handle** — operate on a held `DataFrame`, return only the visible
    page (~50 rows), so an op marshals 50 rows back, not 100k.
 
+## Edge ceiling — 8 GB stretch (head-slices of a 42 M-row FAOSTAT CSV)
+
+Pushed `parse_csv` up a ladder of head-slices from an 8.67 GB file (~42 M rows,
+14 cols):
+
+| Slice | Rows | Edge `parse_csv` | Observation |
+|---|---|---|---|
+| 50 MB | 242k | 5.7 s | works — but a 5.7 s **synchronous frozen tab** |
+| 200 MB | 1.0 M | 18.9 s | works — 19 s frozen tab |
+| 500 MB+ | 2.7 M+ | (not run live) | wasm32 4 GB ceiling + minute-scale freeze |
+
+Linear ≈ 0.1 s/MB, **synchronous on the main thread** (same freeze that caps the
+workspace at 50k). Extrapolated, 8.67 GB ≈ **~14 min** of frozen parse *if memory
+allowed* — but wasm32 is 32-bit (4 GB max addressable), and parse needs input +
+frame + overhead, so it OOMs around a few hundred MB of input. **8 GB is out of
+the in-memory edge model entirely.**
+
+### The tiering this implies
+- **≤ ~hundreds of MB (edge zone):** **Web Worker** — move parse/sort off the
+  main thread so a 50 MB parse is a 5.7 s spinner, not a frozen tab. Highest-value
+  change for everything that fits; works on every device.
+- **hundreds of MB → few GB:** **streaming/chunked parse** — bounded memory,
+  file size stops dictating RAM; extends the edge past the 4 GB wall.
+- **multi-GB (this file):** don't move it — **connect + query in place**
+  (ETL / connected-DB; pglite / `postgres-rp`). Governance thesis holds (data
+  stays put) via connect-and-stream, not in-browser-parse.
+
 ## How to re-run
 
 1. `python3 tools/wasm-bench/generate-edge-corpus.py /tmp/edge-corpus`
