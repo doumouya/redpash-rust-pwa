@@ -52,6 +52,8 @@ apache-avro        = "0.21"   # avro meta-codec decode (codec_registry, Rust-cen
 rskafka            = { version = "0.6", features = ["transport-tls"] }  # pure-Rust Kafka consumer (Confluent SASL_SSL)
 rustls             = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }  # TLS for SASL_SSL (mirror rskafka's rustls)
 webpki-roots       = "1"      # CA roots for the Kafka TLS config
+regex              = "1"       # `pattern` ValidateRule (CAS_C7AEBE83). Already in-tree (via polars);
+                               # RE2-style linear-time matching = no ReDoS — the safe choice vs a hand-rolled backtracker.
 base64             = "0.22"   # /api/demo/avro-decode: decode adversarial payloads
 
 dotenvy            = { workspace = true }

@@ -72,11 +72,13 @@ not a redesign.
   an opaque ISO-4217 string (3 uppercase letters — never an enum, so any currency
   works); it rides for FE formatting + messages. Reuses
   `codec_registry::is_decimal_str` for the shape check.
-
-**`pattern` is deferred** pending sign-off
-to promote `regex` to a direct dep of `api` (it's already in the build tree
-transitively; its guaranteed-linear matching is *safer* than a hand-rolled
-backtracker, so it's the recommended path — but it's a dep decision).
+- `pattern { pattern: "<regex>" }` — string value must match. Uses the `regex`
+  crate (RE2-style **linear-time** matching — no ReDoS, the reason it's the safe
+  choice over a hand-rolled backtracker; `regex` was already in-tree via Polars,
+  promoted to a direct dep 2026-06-01). Two prevent-don't-recover bounds: the
+  pattern source is length-capped (512) and the compiled program is
+  `size_limit`-capped (1 MiB), so a giant authored pattern can't blow memory. A
+  bad regex is `Malformed` (authoring bug), not a value `Fail`.
 
 ## Drift-prone areas
 

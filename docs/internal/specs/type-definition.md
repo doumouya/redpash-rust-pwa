@@ -420,7 +420,7 @@ collide with `kind`/`code`/`message`. Builtin kinds:
 | `enum_subset` | `values: [..]` | value ∉ values |
 | `expression` | `expr: "<dsl>"` | the cross-field DSL is false (§9.3) |
 | `decimal` | `scale?`, `currency?` | more fractional digits than `scale` (loss of precision; XOF `scale:0` rejects `1.5`) — the reborn money contract, an open param not a fixed type |
-| `pattern` | *(deferred)* | pending sign-off to promote `regex` to a direct dep |
+| `pattern` | `pattern: "<regex>"` | string value fails the regex (RE2 linear-time, no ReDoS; length + compiled-size capped) |
 
 ### 8.3 The expression DSL (hand-rolled, sandboxed)
 

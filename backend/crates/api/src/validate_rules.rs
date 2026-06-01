@@ -153,7 +153,7 @@ fn builtin_rules() -> Vec<Rule> {
         Rule { kind: "enum_subset", check: r_enum_subset },
         Rule { kind: "expression",  check: crate::validate_expr::r_expression },
         Rule { kind: "decimal",     check: r_decimal },
-        // "pattern"     — pending the regex direct-dep sign-off (regex is in-tree).
+        Rule { kind: "pattern",     check: r_pattern },
     ]
 }
 
@@ -252,6 +252,29 @@ fn r_decimal(v: &Value, p: &Params, _: &Row) -> RuleCheck {
         }
     }
     RuleCheck::Pass
+}
+
+/// `pattern { pattern: "<regex>" }` — value (a string) must match. Uses the
+/// `regex` crate: RE2-style **linear-time** matching, so a crafted value/pattern
+/// can't catastrophically backtrack (no ReDoS — the safe choice over a
+/// hand-rolled backtracker). Two prevent-don't-recover bounds: the pattern
+/// source is length-capped, and the compiled program is `size_limit`-capped, so
+/// a giant authored pattern can't blow memory. A bad regex is `Malformed` (an
+/// authoring bug), not a value `Fail`.
+fn r_pattern(v: &Value, p: &Params, _: &Row) -> RuleCheck {
+    const MAX_PATTERN_LEN: usize = 512;
+    const MAX_COMPILED_BYTES: usize = 1 << 20; // 1 MiB compiled program ceiling
+    let Some(pat) = p.get("pattern").and_then(Value::as_str) else {
+        return RuleCheck::Malformed("pattern rule needs params.pattern: \"<regex>\"".into());
+    };
+    if pat.len() > MAX_PATTERN_LEN {
+        return RuleCheck::Malformed(format!("pattern too long (> {MAX_PATTERN_LEN} bytes)"));
+    }
+    let Some(s) = v.as_str() else { return RuleCheck::Fail }; // pattern applies to strings
+    match regex::RegexBuilder::new(pat).size_limit(MAX_COMPILED_BYTES).build() {
+        Ok(re) => if re.is_match(s) { RuleCheck::Pass } else { RuleCheck::Fail },
+        Err(e) => RuleCheck::Malformed(format!("invalid regex: {e}")),
+    }
 }
 
 // ── the pipeline ──────────────────────────────────────────────────────────────
@@ -516,6 +539,18 @@ mod tests {
     fn decimal_currency_must_be_iso4217_shaped() {
         let bad = vec![rule("decimal", json!({ "scale": 2, "currency": "dollars" }), "x")];
         let out = validate_value("decimal", &[], "balance", &bad, &json!("1.00"), &no_row());
+        assert_eq!(out.errors[0].rule_code, "invalid_rule");
+    }
+
+    #[test]
+    fn pattern_matches_and_rejects() {
+        // a social handle: @ + 3-15 lowercase/digits/underscore.
+        let r = vec![rule("pattern", json!({ "pattern": "^@[a-z0-9_]{3,15}$" }), "bad_handle")];
+        assert!(validate_value("string", &[], "handle", &r, &json!("@redpash"), &no_row()).is_ok());
+        assert!(!validate_value("string", &[], "handle", &r, &json!("nope!"), &no_row()).is_ok());
+        // a malformed regex is an authoring error, not a value fail.
+        let bad = vec![rule("pattern", json!({ "pattern": "([" }), "x")];
+        let out = validate_value("string", &[], "handle", &bad, &json!("a"), &no_row());
         assert_eq!(out.errors[0].rule_code, "invalid_rule");
     }
 

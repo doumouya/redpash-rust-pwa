@@ -95,6 +95,14 @@ CORRECTNESS = [
      {"data_type": "string", "field": "status", "value": "pending",
       "rules": [rule("enum_subset", "bad_status", "unknown status", values=["open", "closed"])]},
      "reject:bad_status", "pending ∉ {open,closed}"),
+    ("pattern — social handle ok",
+     {"data_type": "string", "field": "handle", "value": "@redpash",
+      "rules": [rule("pattern", "bad_handle", "bad handle", pattern="^@[a-z0-9_]{3,15}$")]},
+     "valid", "matches the handle regex"),
+    ("pattern — social handle bad",
+     {"data_type": "string", "field": "handle", "value": "Nope!",
+      "rules": [rule("pattern", "bad_handle", "bad handle", pattern="^@[a-z0-9_]{3,15}$")]},
+     "reject:bad_handle", "fails the handle regex"),
 ]
 
 TASTE = [
