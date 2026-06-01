@@ -25,10 +25,12 @@ proportional to how many cells fail a strict native parse.
 
 - `pub fn summarize` — per-column `ColumnMeta` (storage dtype + `semantic_dtype`
   sniff + null/unique stats + sample value).
-- `pub(crate) fn classify_cell(raw) -> CellKind` — coarse per-cell kind
+- `pub fn classify_cell(raw) -> CellKind` (+ `pub enum CellKind`) — coarse per-cell kind
   (`Empty`/`Numeric`/`Bool`/`Date`/`Text`) reusing the same shape checks the
   semantic sniff uses, applied at cell granularity. A bare `1`/`0` is `Numeric`,
-  not `Bool` (mirrors the sniff's int-over-bool guard).
+  not `Bool` (mirrors the sniff's int-over-bool guard). `pub` (not `pub(crate)`)
+  so the api crate's Tier-2 `drift` detector ([validate_rules](../api/validate_rules.md))
+  single-sources the same judgment instead of reimplementing it.
 - `pub(crate) fn worst_date_drift(df) -> Option<(String, usize, bool)>` — a date
   column (≥80% date-shaped) that mixes ≥2 distinct format shapes
   (`date_format_shape`: dash/slash/dot × year-head/tail + compact8), or whose

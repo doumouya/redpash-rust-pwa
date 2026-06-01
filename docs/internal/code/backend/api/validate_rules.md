@@ -22,7 +22,13 @@ spec §v2, `CAS_C7AEBE83`). Two tiers, mirroring the cleanness scorer's
     (the FE shows every broken constraint at once, like `StructureFlags` collects
     all reasons).
 - **Tier 2 — soft suspicion layer** → `warnings[]` + `confidence`; never blocks.
-  The field-level twin of `StructureFlags` (wires in phase 5).
+  An open `FieldDetector` registry (the field-level twin of `StructureFlags`)
+  runs on every shape-valid non-null value, even when Tier 1 passed — a value can
+  satisfy the contract and still smell wrong. Seed detectors: **`coercion_loss`**
+  (raw-vs-parsed — `"07920"` typed int loses its leading zero; the proven
+  general detector, ported from `structure.rs`) and **`drift`** (a date-looking
+  value in a `string` field, reusing `data::dtype::classify_cell`). A new
+  detector is one struct + one slot in `detectors()`, zero pipeline edits.
 
 Rule `kind` is an **OPEN string** resolved against the registry — never a closed
 `match` (the same open-ended contract as `data_type`/codecs). A new rule kind is

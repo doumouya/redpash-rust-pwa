@@ -236,7 +236,7 @@ fn looks_numeric_ish(s: &str) -> bool {
 /// A bare `1`/`0` is `Numeric`, not `Bool` — matching the sniff's
 /// int-over-bool guard (`BOOL_WORDS_NON_NUMERIC`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CellKind {
+pub enum CellKind {
     Empty,
     Numeric,
     Bool,
@@ -244,7 +244,7 @@ pub(crate) enum CellKind {
     Text,
 }
 
-pub(crate) fn classify_cell(raw: &str) -> CellKind {
+pub fn classify_cell(raw: &str) -> CellKind {
     let t = raw.trim();
     if t.is_empty() {
         return CellKind::Empty;

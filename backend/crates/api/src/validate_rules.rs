@@ -319,8 +319,99 @@ pub fn validate_value(
         }
     }
 
-    // Tier 2 (detectors) wires in phase 5; confidence is 1.0 until then.
+    // ── Tier 2 — suspicion detectors (never block; warn + dock confidence) ──
+    // Runs on a shape-valid, non-null value even when Tier 1 passed — a value
+    // can satisfy the contract and still smell wrong. This tier is what catches
+    // UNKNOWN edge cases by general detectors (raw-vs-parsed, drift), not named
+    // rules.
+    let ctx = DetectCtx { field_key, data_type, value };
+    for d in detectors() {
+        if let Some(s) = d.inspect(&ctx) {
+            out.warnings.push(s);
+        }
+    }
     out.finalize()
+}
+
+// ── Tier 2 — open detector registry (the field-level StructureFlags) ─────────
+
+/// What a detector inspects: the field + its proposed value. The value AS A
+/// STRING is the raw wire form (the cell-editor PATCHes contenteditable
+/// strings), so raw-vs-parsed detectors read `value.as_str()`.
+pub struct DetectCtx<'a> {
+    pub field_key: &'a str,
+    pub data_type: &'a str,
+    pub value:     &'a Value,
+}
+
+/// A Tier-2 suspicion detector — the field-level analog of one `StructureFlags`
+/// axis. Returns a graded `Suspicion` or `None`. Pluggable: a new detector is
+/// one struct + one slot in `detectors()`, zero pipeline edits.
+pub trait FieldDetector: Send + Sync {
+    fn id(&self) -> &'static str;
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion>;
+}
+
+/// **Raw-vs-parsed coercion loss** — the single most general detector, ported
+/// from `structure.rs`'s leading-zero check. A string value typed `int` loses
+/// leading zeros / a `+` sign when stored (`"07920"` → `7920`), destroying
+/// identity (zip / code / badge id). Caught by re-serializing the parse and
+/// comparing to the raw — no named rule required.
+struct CoercionLoss;
+impl FieldDetector for CoercionLoss {
+    fn id(&self) -> &'static str { "coercion_loss" }
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
+        if ctx.data_type != "int" {
+            return None;
+        }
+        let raw = ctx.value.as_str()?.trim();
+        let n: i64 = raw.parse().ok()?; // only when it cleanly parses (codec passed)
+        if n.to_string() != raw {
+            return Some(Suspicion {
+                field:    ctx.field_key.to_string(),
+                detector: "coercion_loss".to_string(),
+                reason:   format!(
+                    "raw \"{raw}\" stored as int {n} — leading zero / sign lost; use data_type \"string\" to preserve identity"
+                ),
+                weight:   0.3,
+            });
+        }
+        None
+    }
+}
+
+/// **Type drift** — a value that *looks* like a structured type sitting in a
+/// `string`/`markdown` field (a date stored as text). Soft hint (low weight),
+/// reusing `data::dtype::classify_cell` so file- and field-level suspicion stay
+/// single-sourced.
+struct Drift;
+impl FieldDetector for Drift {
+    fn id(&self) -> &'static str { "drift" }
+    fn inspect(&self, ctx: &DetectCtx) -> Option<Suspicion> {
+        if !matches!(ctx.data_type, "string" | "markdown") {
+            return None;
+        }
+        let s = ctx.value.as_str()?;
+        if matches!(data::dtype::classify_cell(s), data::dtype::CellKind::Date) {
+            return Some(Suspicion {
+                field:    ctx.field_key.to_string(),
+                detector: "drift".to_string(),
+                reason:   format!("value \"{s}\" looks like a date but the field is typed string"),
+                weight:   0.1,
+            });
+        }
+        None
+    }
+}
+
+/// The process-wide detector set. A new detector slots in here — zero edits to
+/// the pipeline (the open-registry payoff, applied to Tier 2).
+pub fn detectors() -> &'static [Box<dyn FieldDetector>] {
+    static D: OnceLock<Vec<Box<dyn FieldDetector>>> = OnceLock::new();
+    D.get_or_init(|| {
+        let v: Vec<Box<dyn FieldDetector>> = vec![Box::new(CoercionLoss), Box::new(Drift)];
+        v
+    })
 }
 
 #[cfg(test)]
@@ -426,6 +517,28 @@ mod tests {
         let bad = vec![rule("decimal", json!({ "scale": 2, "currency": "dollars" }), "x")];
         let out = validate_value("decimal", &[], "balance", &bad, &json!("1.00"), &no_row());
         assert_eq!(out.errors[0].rule_code, "invalid_rule");
+    }
+
+    #[test]
+    fn tier2_coercion_loss_warns_but_does_not_block() {
+        // the zip case: "07920" passes the int codec but loses its leading zero.
+        let out = validate_value("int", &[], "zip", &[], &json!("07920"), &no_row());
+        assert!(out.is_ok(), "Tier-2 never blocks — the write saves");
+        assert_eq!(out.warnings.len(), 1);
+        assert_eq!(out.warnings[0].detector, "coercion_loss");
+        assert!(out.confidence < 1.0, "confidence docked: {}", out.confidence);
+        // a plain int with no leading zero → clean, full confidence.
+        let clean = validate_value("int", &[], "count", &[], &json!("42"), &no_row());
+        assert!(clean.warnings.is_empty() && clean.confidence == 1.0);
+    }
+
+    #[test]
+    fn tier2_drift_flags_date_in_string_field() {
+        let out = validate_value("string", &[], "note", &[], &json!("2026-01-13"), &no_row());
+        assert_eq!(out.warnings.iter().filter(|s| s.detector == "drift").count(), 1);
+        assert!(out.is_ok());
+        // ordinary text → no drift.
+        assert!(validate_value("string", &[], "note", &[], &json!("hello world"), &no_row()).warnings.is_empty());
     }
 
     #[test]
