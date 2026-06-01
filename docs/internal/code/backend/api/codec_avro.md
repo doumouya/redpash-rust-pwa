@@ -35,6 +35,9 @@ Two foundational decisions baked in:
   `codec_meta.wire_format`, defaults `Confluent`. The spike's 7th design call:
   Em's JLR producer emits **Raw** (bare Avro, no Confluent `{0x00, schema_id}`
   header); defaulting to Confluent would silently corrupt the first field.
+- `pub fn validate_schema(schema_json) -> Result<(), String>` — parses the Avro
+  schema only; lets a caller split a bad SCHEMA (→ 400) from a schema/bytes
+  mismatch at decode (→ 422). Used by `/api/demo/avro-decode`.
 - `pub fn decode(bytes, avro_schema_json, wire) -> Result<Value, String>` —
   parses the schema, strips the 5-byte Confluent header when `Confluent`, decodes
   one datum via `apache_avro::from_avro_datum`, converts to JSON. Errors are

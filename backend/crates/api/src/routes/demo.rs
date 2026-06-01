@@ -11,10 +11,11 @@
 
 use std::time::Instant;
 
-use axum::{body::Bytes, extract::DefaultBodyLimit, routing::post, Json, Router};
-use serde::Serialize;
+use axum::{body::Bytes, extract::DefaultBodyLimit, http::StatusCode, routing::post, Json, Router};
+use base64::Engine;
+use serde::{Deserialize, Serialize};
 
-use crate::{error::AppError, state::AppState};
+use crate::{codec_avro, error::AppError, state::AppState};
 
 /// 4 MiB — a demo file, not a real dataset.
 const DEMO_MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -35,7 +36,67 @@ struct DemoResult {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/parse", post(parse))
+        .route("/avro-decode", post(avro_decode))
+        // 4 MiB cap on the whole router → over-limit bodies become 413.
         .layer(DefaultBodyLimit::max(DEMO_MAX_BYTES))
+}
+
+#[derive(Deserialize)]
+struct AvroDecodeBody {
+    /// The writer Avro schema, as a JSON string.
+    schema:       String,
+    /// "raw" (bare Avro) | "confluent" ({0x00, 4-byte schema_id} framing).
+    wire_format:  String,
+    /// The message bytes, base64-encoded (standard alphabet).
+    bytes_base64: String,
+}
+
+#[derive(Serialize)]
+struct AvroDecodeResult {
+    decoded:    serde_json::Value,
+    decode_ms:  u64,
+    byte_count: usize,
+}
+
+/// `POST /api/demo/avro-decode` — decode an Avro payload against a supplied
+/// schema, in memory, no auth (the adversarial-testing sibling of `/parse`;
+/// drives Gemini Suite #2 at [codec_avro](../codec_avro.md) without Kafka).
+/// 400 = bad body / base64 / wire_format / schema; 422 = decode mismatch;
+/// 413 = body over 4 MiB (the router's DefaultBodyLimit).
+async fn avro_decode(Json(body): Json<AvroDecodeBody>) -> Result<Json<AvroDecodeResult>, AppError> {
+    // wire_format (400)
+    let wire = match body.wire_format.as_str() {
+        "raw" => codec_avro::WireFormat::Raw,
+        "confluent" => codec_avro::WireFormat::Confluent,
+        other => {
+            return Err(AppError::bad_request(
+                "wire_format",
+                format!("must be \"raw\" or \"confluent\", got {other:?}"),
+            ))
+        }
+    };
+    // base64 → bytes (400)
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(body.bytes_base64.trim())
+        .map_err(|e| AppError::bad_request("bytes_base64", format!("invalid base64: {e}")))?;
+    // schema must parse (400) — distinct from a schema/bytes mismatch (422)
+    codec_avro::validate_schema(&body.schema).map_err(|e| AppError::bad_request("schema", e))?;
+
+    // decode (422 on schema/bytes mismatch — the decoder's domain error, not a
+    // server fault, so UNPROCESSABLE_ENTITY rather than 500)
+    let started = Instant::now();
+    let decoded = codec_avro::decode(&bytes, &body.schema, wire).map_err(|e| AppError {
+        status:  StatusCode::UNPROCESSABLE_ENTITY,
+        kind:    "decode_failed",
+        message: e,
+        inner:   None,
+    })?;
+
+    Ok(Json(AvroDecodeResult {
+        decoded,
+        decode_ms: started.elapsed().as_millis() as u64,
+        byte_count: bytes.len(),
+    }))
 }
 
 /// `POST /api/demo/parse` — parse + score a CSV, in memory, no auth.

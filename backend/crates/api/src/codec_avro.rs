@@ -37,6 +37,15 @@ impl WireFormat {
     }
 }
 
+/// Validate that `schema_json` parses as an Avro schema. Lets a caller
+/// distinguish a bad SCHEMA (→ 400) from a schema/bytes mismatch at decode
+/// (→ 422) — e.g. the `/api/demo/avro-decode` adversarial surface.
+pub fn validate_schema(schema_json: &str) -> Result<(), String> {
+    apache_avro::Schema::parse_str(schema_json)
+        .map(|_| ())
+        .map_err(|e| format!("invalid avro schema: {e}"))
+}
+
 /// Decode an Avro datum to JSON given the writer schema JSON (the Avro schema,
 /// e.g. extracted from the Confluent contract envelope's `.schema` field).
 /// `Confluent` strips the 5-byte header first. Errors are strings (the caller
