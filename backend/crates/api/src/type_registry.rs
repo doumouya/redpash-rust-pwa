@@ -105,6 +105,9 @@ fn field_to_def(r: &FieldRow) -> FieldDef {
         data_type:  r.data_type.to_string(),
         required:   None,
         default:    None,
+        // Builtins carry no §v2 validate rules yet — they attach once
+        // field_perms::FieldRow gains a `validate` column (parallel to data_type).
+        validate:   Vec::new(),
         editable:   Some(r.is_editable),
         editor:     r.editor.map(str::to_string),
         options:    r.options.iter().map(|s| s.to_string()).collect(),

@@ -3,7 +3,7 @@ title: backend/crates/shared/src/type_def.rs
 source: ../../../../../backend/crates/shared/src/type_def.rs
 owner: Torv
 section: Internal · Code · backend · shared
-last modified date: 2026-05-31
+last modified date: 2026-06-01
 ---
 
 # type_def.rs
@@ -34,7 +34,13 @@ crate), and the override-merge + gating in the `/admin/types` handler.
   (`data_type` + `required`/`default`), presentation (`editable`/`editor`/
   `options`/`render`/`data_full`/`data_trunc`/`data_prefix`), permission
   (`perm_class` + the server-resolved `owner`/`admin`/`member`/`viewer` cells),
-  and `rel: Option<FieldRel>` / `requires_admin`.
+  validation (`validate: Vec<ValidateRule>`, §v2), and `rel: Option<FieldRel>` /
+  `requires_admin`.
+- `pub struct ValidateRule` (§v2) — one Tier-1 field-validation rule: `kind`
+  (OPEN string, resolved against the rule registry — never an enum), `params`
+  (NESTED kind-specific payload, so a param can't collide with `kind`/`code`/
+  `message`), `code` (machine rule_code echoed in the 400), `message`. Derives
+  `Deserialize` too (custom-object PATCH reads it back). Empty for most builtins.
 - `pub struct FieldRel` — a field's relationship target: `type` (serde-renamed
   from `to_type`) + `multi`.
 - `pub struct RelationshipDef` — a type-level edge: `field` / `to` / `multi` /

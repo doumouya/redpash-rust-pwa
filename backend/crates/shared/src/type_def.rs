@@ -4,7 +4,7 @@
 //! `GET /api/admin/types`. Forward-compatible with user-defined custom objects.
 //! Doc: docs/internal/code/backend/shared/type_def.md
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// `GET /api/admin/types` list envelope: `{ "types": [...] }`.
@@ -54,6 +54,14 @@ pub struct FieldDef {
     pub required: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
+    // ── validation (§v2, Tier-1 hard gate; backend-authoritative) ──
+    /// Field-level validation rules beyond `data_type` (range / length /
+    /// pattern / enum_subset / cross-field expression / decimal). An OPEN
+    /// list resolved against the rule registry — empty for most builtins.
+    /// Authored on the TypeDefinition, enforced on write, rendered FE-side as
+    /// inline constraints. See spec §v2 + `validate_rules.rs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validate: Vec<ValidateRule>,
     // ── presentation (FE-owned, opaque to backend) ──
     #[serde(skip_serializing_if = "Option::is_none")]
     pub editable: Option<bool>,
@@ -87,6 +95,22 @@ pub struct FieldDef {
     pub rel: Option<FieldRel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_admin: Option<bool>,
+}
+
+/// One field-level validation rule (spec §v2). Tier-1 hard gate: a write that
+/// fails any rule is rejected 400 with this `code` + `message`. `kind` is an
+/// OPEN string resolved against the rule registry (never a closed enum — the
+/// same open-ended contract as `data_type`), and `params` carries the
+/// kind-specific payload (`min`/`max`, `pattern`, `values`, `expr`, `scale`,
+/// `currency`, …). Params are NESTED, not flattened, so a param name can never
+/// collide with `kind`/`code`/`message`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidateRule {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, serde_json::Value>,
+    pub code: String,
+    pub message: String,
 }
 
 /// A field-level relationship target (spec §2, `FieldDef.rel`).
