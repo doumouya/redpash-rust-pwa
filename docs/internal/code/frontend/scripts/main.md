@@ -14,9 +14,13 @@ Hash-based SPA router. Each route names a partial (HTML fetched into #app) and a
 
 ## Public surface
 
-- ROUTES registry — route -> { partial, scriptPath, auth? }.
+- ROUTES registry — route -> { partial, scriptPath, auth?, admin? }.
 - Boot: fetch /api/me, seed prefs, then route.
 - 401 -> redirect to #/login.
+- `admin: true` routes (Monitoring — CAS_274EDF3B) bounce a non-admin
+  (`!session?.is_platform_admin`) to #/home after the `auth` check — guards a
+  direct hash deep-link. UX gate; the backend `require_platform_admin_mw` is the
+  real auth.
 
 ## Drift-prone areas
 

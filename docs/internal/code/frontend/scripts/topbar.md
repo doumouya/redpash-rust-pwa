@@ -20,6 +20,11 @@ Topbar — the shared chrome for authed pages. One component, one button pattern
 ## Drift-prone areas
 
 - Every authed page renders the identical topbar; new nav entries need this single change.
+- **Admin-only nav entries (`admin: true`)** are filtered out for non-admins
+  (`NAV.filter((n) => !n.admin || session?.is_platform_admin)`). Monitoring is
+  the only one today (CAS_274EDF3B) — members/viewers never see the link; the
+  `main.js` route guard + the backend `require_platform_admin_mw` are the
+  companions (URL deep-link + real auth).
 
 ## Related
 

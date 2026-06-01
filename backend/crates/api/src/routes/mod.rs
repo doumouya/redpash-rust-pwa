@@ -21,7 +21,7 @@ use axum::{
     extract::{DefaultBodyLimit, Request, State},
     http::HeaderValue,
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
     Router,
 };
 #[cfg(debug_assertions)]
@@ -195,10 +195,35 @@ async fn capture_mw(
     resp
 }
 
+/// Platform-admin gate for the Monitoring router (CAS_274EDF3B). Resolves the
+/// caller from the session cookie and 404s non-admins BEFORE any monitoring
+/// handler runs — so the whole surface (system observability + the Admin
+/// Console group) is admin-only at the API layer, not merely hidden in the FE
+/// topbar. 404 (not 403) matches the leak-free contract the per-handler
+/// `/admin` gates use. Auto-covers every current + future `/monitoring/*` route
+/// (no per-handler gate to forget). Closes the `routes/monitoring.rs` "Open
+/// today; gate behind the admin role" TODO.
+async fn require_platform_admin_mw(
+    State(state): State<AppState>,
+    req:          Request,
+    next:         Next,
+) -> Response {
+    let allowed = match resolve_user_rid(&state, req.headers()).await {
+        Ok(caller) => crate::rbac::is_platform_admin(&state, &caller).await.unwrap_or(false),
+        Err(_)     => false,
+    };
+    if allowed {
+        next.run(req).await
+    } else {
+        crate::error::AppError::not_found("not_found", "not found").into_response()
+    }
+}
+
 pub fn router(state: AppState) -> Router {
     // capture_mw needs the pool; `with_state` below consumes `state`, so
-    // hand the middleware its own clone.
+    // hand the middleware its own clone. Same for the monitoring admin gate.
     let capture_state = state.clone();
+    let mon_admin_state = state.clone();
 
     let api = Router::new()
         .nest("/health",   health::routes())
@@ -215,7 +240,8 @@ pub fn router(state: AppState) -> Router {
         .nest("/users",      users::routes())
         .nest("/events",     events::routes())
         .nest("/metrics",    metrics::routes())
-        .nest("/monitoring", monitoring::routes())
+        .nest("/monitoring", monitoring::routes()
+            .layer(axum::middleware::from_fn_with_state(mon_admin_state, require_platform_admin_mw)))
         .nest("/admin",      admin::routes())
         .nest("/search",     search::routes())
         .nest("/demo",       demo::routes())

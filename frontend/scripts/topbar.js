@@ -25,7 +25,12 @@ const NAV = [
   { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
   { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
   { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
-  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring" },
+  // Monitoring (system observability + Admin Console) is platform-admin
+  // only — never rendered in the topbar for members / viewers (CAS_274EDF3B).
+  // The route guard in main.js is the companion (a non-admin deep-linking
+  // #/monitoring is bounced home); both read /me.is_platform_admin, and the
+  // backend /monitoring/* + /admin/* endpoints are the real auth.
+  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring", admin: true },
 ];
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's
@@ -63,7 +68,7 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     +   '<kbd class="rp-omni-kbd">Ctrl K</kbd>'
     + '</div>'
     + '<nav class="rp-topbar-actions">'
-    +   NAV.map((n) => n.parked
+    +   NAV.filter((n) => !n.admin || session?.is_platform_admin).map((n) => n.parked
           ? '<button class="rt-btn" type="button" disabled title="' + n.label + ' — coming soon">'
             + '<i class="bi ' + n.icon + '"></i></button>'
           : '<a class="rt-btn' + (n.id === active ? ' is-active' : '') + '"'

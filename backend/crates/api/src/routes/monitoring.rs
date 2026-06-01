@@ -17,8 +17,11 @@
 //! Window values mirror `/api/metrics`: `1h`, `24h`, `7d`, `30d`.
 //!
 //! Wire contract: `docs/internal/admin-monitoring-surfaces.md §6`.
-//! Open today (solo / localhost); gate behind the company-admin role
-//! when RBAC lands. Mirrors events.rs's posture.
+//! **Platform-admin-only** (CAS_274EDF3B): the whole router is gated by
+//! `routes::require_platform_admin_mw` (a `from_fn_with_state` layer on the
+//! `/monitoring` nest in routes/mod.rs) — non-admins get a leak-free 404 before
+//! any handler runs, so no per-handler gate is needed here. Companion to the FE
+//! topbar/route hide; this is the real auth.
 
 use std::time::Instant;
 

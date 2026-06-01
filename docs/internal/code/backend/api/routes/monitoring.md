@@ -10,7 +10,12 @@ last modified date: 2026-05-30
 
 ## Purpose
 
-`/api/monitoring` — read surface for the `/monitoring` page.
+`/api/monitoring` — read surface for the `/monitoring` page. **Platform-admin
+only** (CAS_274EDF3B): the whole router is gated by
+`routes::require_platform_admin_mw` (a `from_fn_with_state` layer on the
+`/monitoring` nest in [routes/mod.rs](mod.md)) — non-admins get a leak-free 404
+before any handler runs, so no per-handler gate lives here. Companion to the FE
+topbar/route hide.
 
 GET /api/monitoring/events?page&size&window&level&kind
 GET /api/monitoring/audit-runs?page&size&tool

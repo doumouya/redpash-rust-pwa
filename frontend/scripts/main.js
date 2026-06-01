@@ -26,7 +26,7 @@ const ROUTES = {
   "/home":       { partial: "/partials/home.html",       script: "/scripts/pages/home.js",       auth: true  },
   "/workspace":  { partial: "/partials/workspace.html",  script: "/scripts/pages/workspace.js",  auth: true  },
   "/cases":      { partial: "/partials/cases.html",      script: "/scripts/pages/cases.js",      auth: true  },
-  "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true  },
+  "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true, admin: true },
   "/profile":    { partial: "/partials/profile.html",    script: "/scripts/pages/profile.js",    auth: true  },
   "/settings":   { partial: "/partials/settings.html",   script: "/scripts/pages/settings.js",   auth: true  },
   "/docs":       { partial: "/partials/docs.html",       script: "/scripts/pages/docs.js",       auth: true  },
@@ -70,6 +70,14 @@ async function mount(path) {
   if (!route) { app.innerHTML = errorShell("404", "Page not found", "We couldn't find " + path + "."); return; }
   if (route.auth && !session) {
     location.hash = "#/login";
+    return;
+  }
+  // Platform-admin-only route (Monitoring / Admin Console, CAS_274EDF3B):
+  // a member / viewer deep-linking the hash is bounced home. The topbar
+  // already hides the link; this guards the URL path. Backend /monitoring/*
+  // + /admin/* endpoints are the real auth — this is the UX gate.
+  if (route.admin && !session?.is_platform_admin) {
+    location.hash = "#/home";
     return;
   }
 
