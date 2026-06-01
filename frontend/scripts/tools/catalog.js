@@ -39,7 +39,7 @@ export const TOOLS = [
   defineTool({
     kind: "drop_nulls",
     label: "Drop nulls",
-    icon: "bi-eraser",
+    icon: "bi-funnel",
     blurb: "Remove rows where the chosen column is empty.",
     fields: [{ type: "column", key: "column", label: "Column" }],
     toParams: (s) => ({ column: s.column }),
@@ -48,7 +48,7 @@ export const TOOLS = [
   defineTool({
     kind: "fill_nulls",
     label: "Fill nulls",
-    icon: "bi-pencil-square",
+    icon: "bi-droplet-half",
     blurb: "Replace empty cells with a fixed value, zero, or carry forward.",
     fields: [
       { type: "column", key: "column", label: "Column" },
@@ -90,7 +90,7 @@ export const TOOLS = [
   defineTool({
     kind: "drop_columns",
     label: "Drop columns",
-    icon: "bi-x-square",
+    icon: "bi-trash3",
     blurb: "Remove one or more columns from the file.",
     fields: [
       { type: "multicolumn", key: "cols", label: "Columns to drop" },
@@ -112,7 +112,7 @@ export const TOOLS = [
   defineTool({
     kind: "snake_case_columns",
     label: "Snake-case all columns",
-    icon: "bi-type",
+    icon: "bi-fonts",
     blurb: "Convert every column name to snake_case. No options.",
     fields: [],
     toParams: () => ({}),
@@ -133,7 +133,7 @@ export const TOOLS = [
   defineTool({
     kind: "change_case",
     label: "Change case (values)",
-    icon: "bi-type-strikethrough",
+    icon: "bi-type",
     blurb: "Lowercase or uppercase every string column's values.",
     fields: [
       { type: "enum", key: "mode", label: "Mode", options: [
@@ -160,7 +160,7 @@ export const TOOLS = [
   defineTool({
     kind: "fix_invalid",
     label: "Fix invalid values",
-    icon: "bi-wrench-adjustable",
+    icon: "bi-bandaid",
     blurb: "Replace sentinel values (N/A, NULL, ?, …) with a chosen value (blank = null).",
     fields: [
       { type: "multicolumn", key: "columns", label: "Columns (blank = every string column)" },
@@ -207,7 +207,7 @@ export const TOOLS = [
   defineTool({
     kind: "format_dates",
     label: "Format dates",
-    icon: "bi-calendar3",
+    icon: "bi-calendar-date",
     blurb: "Parse messy dates and re-output them in one standard format.",
     // Output format is a PICKER, not free text — a raw strftime field let a
     // user type "yyyy-mm-dd" (the obvious human notation), which has no `%`
