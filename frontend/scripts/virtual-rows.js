@@ -50,7 +50,19 @@ export function createVirtualRows({ scroller, tbody, rowHeight, renderRow, overs
   let rowH = Math.max(1, rowHeight || 36);
   let lastStart = -1;
   let lastEnd = -1;
+  let lastTopPx = -1;
   let frame = 0;
+
+  // Browsers composite layers with float32 — exact only to 2^24 px (~16.7M). A
+  // scroll OFFSET past that paints rows blurry / mispositioned, even though
+  // layout + our index math stay correct (measured: the grid "goes weird"
+  // ~row 261k at the comfortable density, 261k × ~64px ≈ 2^24). So we cap the
+  // real scrollable height well under 2^24 and, for taller content, SCALE: the
+  // scroll range maps proportionally onto the row range with sub-row
+  // positioning, so it still scrolls smoothly — the only trade is "scroll
+  // speed" (more rows per pixel), fine for the >200k-row lists that need it.
+  // Below the cap nothing changes (exact, native 1:1 scroll).
+  const MAX_SCROLL_PX = 12_000_000;
 
   // Spacer rows. colspan=999 spans whatever the real column count is
   // (browsers clamp to the actual number) so we never have to know it.
@@ -64,29 +76,52 @@ export function createVirtualRows({ scroller, tbody, rowHeight, renderRow, overs
     '<tr class="rt-vrow-spacer" aria-hidden="true" style="content-visibility:visible">' +
     '<td colspan="999" style="height:' + h + 'px;padding:0;border:0"></td></tr>';
 
-  // Compute the [start, end) window for the current scroll position.
-  function windowRange() {
+  // Geometry for the current scroll position. Returns the window [start, end),
+  // the top-spacer height, and the total scrollable height. In SCALED mode the
+  // scroll range (≤ MAX_SCROLL_PX) maps proportionally onto the row range and
+  // topPx tracks scrollTop (so the window stays in the viewport, sub-row
+  // smooth); below the cap it's exact 1:1 (topPx = start*rowH, native scroll).
+  // topPx is always < MAX_SCROLL_PX, so painted rows stay in the float32-safe zone.
+  function geometry() {
     const total = rows.length;
-    if (total === 0) return [0, 0];
+    if (total === 0) return { start: 0, end: 0, topPx: 0, scrollH: 0 };
     const viewport = scroller.clientHeight || 0;
-    const first = Math.floor(scroller.scrollTop / rowH);
+    const contentH = total * rowH;
+    const scaled = contentH > MAX_SCROLL_PX;
+    const scrollH = scaled ? MAX_SCROLL_PX : contentH;
     const visible = Math.ceil(viewport / rowH);
+
+    let first, subRow;
+    if (!scaled) {
+      first  = Math.floor(scroller.scrollTop / rowH);
+      subRow = scroller.scrollTop - first * rowH;       // 0..rowH (native smooth scroll)
+    } else {
+      const maxScroll = Math.max(1, scrollH - viewport);
+      const f = Math.min(1, Math.max(0, scroller.scrollTop / maxScroll));
+      const vScroll = f * Math.max(0, contentH - viewport); // virtual offset into the content
+      first  = Math.floor(vScroll / rowH);
+      subRow = vScroll - first * rowH;
+    }
     const start = Math.max(0, first - overscan);
-    const end = Math.min(total, first + visible + overscan);
-    return [start, end];
+    const end   = Math.min(total, first + visible + overscan);
+    // Position `start` so `first` lands at scrollTop-subRow (scrolled up by the
+    // sub-row remainder → smooth). Clamp ≥ 0.
+    const topPx = Math.max(0, scroller.scrollTop - subRow - (first - start) * rowH);
+    return { start, end, topPx, scrollH };
   }
 
   function paint(force) {
-    const total = rows.length;
-    const [start, end] = windowRange();
-    if (!force && start === lastStart && end === lastEnd) return;
+    const { start, end, topPx, scrollH } = geometry();
+    if (!force && start === lastStart && end === lastEnd && topPx === lastTopPx) return;
     lastStart = start;
     lastEnd = end;
+    lastTopPx = topPx;
 
     let html = "";
-    if (start > 0) html += SPACER(start * rowH);
+    if (topPx > 0) html += SPACER(topPx);
     for (let i = start; i < end; i++) html += renderRow(rows[i], i);
-    if (end < total) html += SPACER((total - end) * rowH);
+    const bottomPx = Math.max(0, scrollH - topPx - (end - start) * rowH);
+    if (bottomPx > 0) html += SPACER(bottomPx);
 
     tbody.innerHTML = html;
   }
@@ -109,7 +144,7 @@ export function createVirtualRows({ scroller, tbody, rowHeight, renderRow, overs
     setRows(next) {
       rows = Array.isArray(next) ? next : [];
       scroller.scrollTop = 0;
-      lastStart = lastEnd = -1; // force a repaint even if range matches
+      lastStart = lastEnd = lastTopPx = -1; // force a repaint even if range matches
       paint(true);
     },
     refresh() {
