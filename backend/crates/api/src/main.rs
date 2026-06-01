@@ -19,13 +19,15 @@ mod id;
 // `case.view`; effective_role / Role expand as more atoms are gated).
 #[allow(dead_code)]
 mod rbac;
-// Field-level permission registry (CAS_C4219F2B). Ord/Perm variants are used
-// by the matrix + reserved for slice-3 enforcement.
-#[allow(dead_code)]
+// Open codec registry + avro meta-codec decode (CAS_75A0D1FD) + the Kafka
+// loader (ETL L hop). Each carries its own module-level allow(dead_code) for
+// the not-yet-wired generic-PATCH / ingestion surface.
 mod codec_avro;
 mod codec_registry;
+// Field-level permission registry (CAS_C4219F2B) + the codec-delegating validator.
 mod field_perms;
 mod field_validate;
+mod kafka_loader;
 mod redact;
 mod request_log;
 mod routes;
@@ -42,6 +44,27 @@ use tracing_subscriber::{EnvFilter, Layer};
 async fn main() -> anyhow::Result<()> {
     // Step 1 — env. `.env` is dev-only; in prod the systemd unit sets vars.
     let _ = dotenvy::dotenv();
+
+    // ── Kafka loader mode (ETL L hop, CAS_75A0D1FD) ──────────────────────
+    // One-shot: consume a Kafka batch → decode (avro meta-codec) → load into a
+    // project_files row, then exit. Runs INSTEAD of serving when
+    // REDPASH_KAFKA_LOAD is set — a `src/bin` can't reach `codec_avro`/`db`, so
+    // the loader rides the main binary. Config via KAFKA_* env (see Cfg).
+    if std::env::var("REDPASH_KAFKA_LOAD").is_ok() {
+        tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+        let db_url = std::env::var("DATABASE_URL")
+            .map_err(|_| anyhow::anyhow!("DATABASE_URL not set"))?;
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&db_url)
+            .await?;
+        let data_dir = std::env::var("REDPASH_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
+        let cfg = kafka_loader::Cfg::from_env()?;
+        kafka_loader::run(&pool, &data_dir, &cfg).await?;
+        return Ok(());
+    }
 
     // Step 2 — tracing. RUST_LOG wins; otherwise the pre-market verbose
     // default: `info` on our crates + tower_http (so request_id-bearing

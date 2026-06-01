@@ -17,6 +17,12 @@ Boots in three steps:
 2. init `tracing-subscriber` from RUST_LOG (default `info`)
 3. build the Axum router from `routes::router()` and serve until SIGTERM
 
+**Kafka loader mode** (CAS_75A0D1FD): when `REDPASH_KAFKA_LOAD` is set, after
+the `.env` load the binary runs the one-shot ETL loader
+([kafka_loader.rs](kafka_loader.md)) — consume → decode → load into a
+project_files row — then exits, INSTEAD of serving HTTP. A `src/bin` can't reach
+`codec_avro`/`db`, so the loader rides the main binary as a mode.
+
 ## Public surface
 
 - Module-private helpers (no `pub` items at the top level).
