@@ -41,6 +41,10 @@ pub struct StructureFlags {
     /// — the dates parse to different days silently. Worse when day/month order
     /// is contradictory (one cell is dd/mm, another mm/dd).
     pub date_drift_suspect:  bool,
+    /// Blank / whitespace-only rows are interspersed in the data — Polars drops
+    /// them silently, so the parsed frame hides that the source was peppered
+    /// with empty lines.
+    pub whitespace_rows_suspect: bool,
     /// Human-readable reasons (one per fired flag) for the cleaner banner.
     pub reasons: Vec<String>,
 }
@@ -69,6 +73,9 @@ impl StructureFlags {
         // Mixed date formats parse to silently-wrong days; ambiguous and
         // dangerous, but the values are recoverable once normalized.
         if self.date_drift_suspect { p += 18.0; }
+        // Dropped blank rows — the data's fine, but the source was messier than
+        // the frame admits. Mild.
+        if self.whitespace_rows_suspect { p += 12.0; }
         p.min(100.0)
     }
 
@@ -81,6 +88,7 @@ impl StructureFlags {
             || self.type_drift_suspect
             || self.numeric_id_loss_suspect
             || self.date_drift_suspect
+            || self.whitespace_rows_suspect
     }
 }
 
@@ -202,6 +210,25 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
                     f.reasons.push(
                         "leading-zero values cast to int — the zero (and the identity it encoded: zip/code/id) is lost".into(),
                     );
+                }
+            }
+
+            // ── blank / whitespace-only rows interspersed in the data ──
+            // Polars drops them silently, so the frame hides that the source
+            // was peppered with empty lines. Count INTERIOR blanks only (up to
+            // the last non-blank line) so a trailing newline doesn't trip it,
+            // and require a material fraction so one stray blank in a big file
+            // is ignored. A row of empty FIELDS (",,,") is NOT blank — its
+            // line trims to ",,,", not "".
+            let lines: Vec<&str> = text.lines().collect();
+            if let Some(last) = lines.iter().rposition(|l| !l.trim().is_empty()) {
+                let blank = lines[..=last].iter().filter(|l| l.trim().is_empty()).count();
+                let total = last + 1;
+                if blank > 0 && blank as f32 / total as f32 >= 0.08 {
+                    f.whitespace_rows_suspect = true;
+                    f.reasons.push(format!(
+                        "{blank} blank/whitespace-only rows silently dropped (of {total} lines)"
+                    ));
                 }
             }
         }
@@ -354,6 +381,20 @@ mod tests {
         .unwrap();
         let f = detect(b"id,name,age\n1,Alice,30\n2,Bob,29\n3,Charlie,31,extra\n4,Delta,32\n", &df);
         assert!(f.ragged_suspect, "one over-wide row drops a field → flag");
+    }
+
+    #[test]
+    fn flags_whitespace_rows_but_not_empty_fields() {
+        let df = df2("id", "name");
+        // interior blank + whitespace-only lines → flag
+        let f = detect(b"id,name\n1,a\n\n2,b\n  \n3,c\n", &df);
+        assert!(f.whitespace_rows_suspect);
+        // a row of empty FIELDS (",,") is NOT a blank line → no flag
+        let f = detect(b"id,name\n1,a\n,\n3,c\n4,d\n", &df);
+        assert!(!f.whitespace_rows_suspect, "empty-field row is not a blank line");
+        // a single trailing newline is not interior → no flag
+        let f = detect(b"id,name\n1,a\n2,b\n", &df);
+        assert!(!f.whitespace_rows_suspect);
     }
 
     #[test]

@@ -31,9 +31,10 @@ reasons. Consumed today by `POST /api/demo/parse`
   - `penalty() -> f32` — 0..=100 to subtract from a clean score. Flat weights
     (tuned against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt
     bytes → unusable), delimiter 45 (wrong shape), ragged 25, header 20,
-    numeric-id-loss 20 (identity gone, file still usable). **Line-ending is
-    split by severity**: a lone CR swallows rows (lossy) → 25; mixed CRLF/LF is
-    cosmetic (Polars reads both, no loss) → 8 (`line_ending_cosmetic`).
+    numeric-id-loss 20 (identity gone, file still usable), date-drift 18,
+    whitespace-rows 12. **Line-ending is split by severity**: a lone CR swallows
+    rows (lossy) → 25; mixed CRLF/LF is cosmetic (Polars reads both, no loss) →
+    8 (`line_ending_cosmetic`).
     **Type-drift is graded**: `type_drift_frac × 70`, capped at 35 — a 25%-dirty
     column docks ~17, a 50%-dirty one ~30 (never enough alone to read "cursed").
     All summed, capped at 100. Verified at **17/18** in-band on the calibration
@@ -70,6 +71,11 @@ reasons. Consumed today by `POST /api/demo/parse`
   rectangular parse** (`!ragged_suspect && !multiline_quoted`) — on a ragged file
   the field positions are off, so a stray `00` from a mis-split decimal
   (`2.000,00`) would false-positive (and the raggedness is already flagged).
+- **whitespace_rows** — blank / whitespace-only physical lines interspersed in
+  the data, which Polars drops silently (penalty 12). Counts INTERIOR blanks
+  only (up to the last non-blank line, so a trailing newline doesn't trip it)
+  and requires a material fraction (≥8%). A row of empty *fields* (`,,,`) is NOT
+  blank — its line trims to `,,,`, not `""`.
 - **date_drift** — a date column (≥80% date-shaped) mixing ≥2 incompatible
   format shapes (`2026-01-13` + `13/01/2026` + `01/13/2026`), or a contradictory
   day/month order (one cell dd/mm, another mm/dd). The dates *parse* — to the
