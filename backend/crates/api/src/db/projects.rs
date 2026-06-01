@@ -140,10 +140,16 @@ pub async fn ensure_named_project(pool: &PgPool, owner: &str, name: &str) -> sql
 //
 // PROJECT-FILES-ACK: type=mixed — three project_files subqueries:
 //   1) EXISTS dashboard rows for the 'published' overlay,
-//   2) EXISTS any non-chart file for the 'active' derivation
-//      (same predicate as file_count, so Files>0 ⟺ Active),
-//   3) COUNT excluding charts for the user-facing file_count
-//      (charts aren't surfaced as files in the rail).
+//   2) EXISTS any non-chart file for the 'active' derivation —
+//      a project with only charts (no data) is still in design,
+//      so charts don't promote draft→active; this predicate
+//      stays exclusive.
+//   3) COUNT of ALL project_files for the user-facing
+//      file_count. 2026-06-01: previously excluded charts, but
+//      charts surface in the Workspace rail under the Dashboards
+//      view and adding one wasn't moving the rail badge — Em
+//      reported the count freezing at the data-files total. The
+//      badge now matches "anything you can open in the rail".
 const PROJECT_SELECT: &str =
     "SELECT p.redpash_id, p.name, p.description,
             COALESCE(u.default_project_id = p.redpash_id, false) AS is_default,
@@ -167,7 +173,7 @@ const PROJECT_SELECT: &str =
             p.created_at, p.updated_at,
             u.display_name AS owner_display_name, u.username AS owner_username,
             (SELECT COUNT(*) FROM project_files f
-             WHERE f.project_redpash_id = p.redpash_id AND f.file_type <> 'chart') AS file_count
+             WHERE f.project_redpash_id = p.redpash_id) AS file_count
      FROM projects p
      JOIN LATERAL (SELECT m.member_redpash_id FROM memberships m
                    WHERE m.object_redpash_id = p.redpash_id AND m.role = 'owner'

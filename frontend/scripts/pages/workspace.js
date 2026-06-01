@@ -937,9 +937,25 @@ export default function workspace(app, { session }) {
     const visible = items.filter((f) => !hiddenSet.has(f.redpash_id));
     if (!visible.length) {
       body.innerHTML = '<div class="rt-nav-state">No files yet.</div>';
-      return;
+    } else {
+      body.innerHTML = visible.map(fileTab).join("");
     }
-    body.innerHTML = visible.map(fileTab).join("");
+    syncGroupCount(body.closest(".rt-group"));
+  }
+
+  // Reconcile the rail group's count badge with what's actually
+  // rendered in its body. Server's `file_count` is the
+  // first-paint approximation; once the group expands + files
+  // load, the badge becomes accurate (excludes hidden via ×).
+  // Em 2026-06-01: badge was freezing at the server value
+  // because charts didn't increment file_count and the × hide
+  // doesn't trigger a server-side delete.
+  function syncGroupCount(group) {
+    if (!group) return;
+    const badge = group.querySelector(":scope > .rt-group-head .rt-group-count");
+    if (!badge) return;
+    const tabs = group.querySelectorAll(":scope > .rt-group-body .rt-tab").length;
+    badge.textContent = String(tabs);
   }
 
   // Recovery section at the rail body's tail — appears only when at
@@ -1096,6 +1112,12 @@ export default function workspace(app, { session }) {
       const project = group?.querySelector(".rt-group-name")?.textContent?.trim() || null;
       if (rid) hideOne(HIDDEN_FILES_KEY, { rid, name, project });
       tab.remove();
+      // Decrement the parent group's count badge so hiding is
+      // visible immediately (loadProjects below re-renders the
+      // whole rail, but its server-side file_count doesn't know
+      // about client-side hides — syncGroupCount runs from
+      // renderFiles too once the body is re-loaded).
+      syncGroupCount(group);
       // Show the new Hidden (N) section / refresh its count without
       // a full reload — cheap re-render of just the rail body.
       loadProjects();
