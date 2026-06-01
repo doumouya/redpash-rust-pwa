@@ -200,69 +200,28 @@ async fn upload(
 
     let bytes = bytes.ok_or_else(|| AppError::bad_request("missing_file", "no `file` field"))?;
 
-    // Excel uploads: convert .xlsx / .xls / .xlsm / .xlsb / .ods to CSV
-    // bytes BEFORE we hit disk so the rest of the pipeline (encoding
-    // detection, Polars CSV parser, redtable paging, cleaning steps)
-    // treats the file as plain CSV. The DB row keeps the user's
-    // original filename for display — only the stored bytes change.
-    let bytes = if data::parse::is_excel_filename(&original_filename) {
-        let xbytes = bytes;
-        tokio::task::spawn_blocking(move || data::parse::xlsx_to_csv(&xbytes))
-            .await
-            .map_err(|e| AppError::internal("join", e.to_string()))??
-    } else {
-        bytes
-    };
-
-    let size  = bytes.len() as u64;
-    let rid   = id::new("FIL");
-    let storage_rel = format!("files/{rid}.bin");
-
-    let abs_path = state.file_path(&rid);
-    tokio::fs::write(&abs_path, &bytes).await
-        .map_err(|e| AppError::internal("io", format!("write {}: {e}", abs_path.display())))?;
-    // Past this point the blob exists on disk but no DB row references it
-    // yet. Guard it so any early return (parse / DB failure) removes the
-    // orphan instead of leaking disk; disarmed once the row is committed.
-    let mut blob_guard = BlobGuard::arm(abs_path.clone());
-
-    let globals = db::list_global_sentinels(&state.db).await?;
-    let tld = tld_hint.clone();
-    let bytes_for_parse = bytes;
-    let parsed = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
-        let (df, enc) = data::parse::from_csv_bytes(&bytes_for_parse, tld.as_deref())?;
-        let cols = data::dtype::summarize(&df)?;
-        // Score on the worker thread — the structural pass touches every
-        // string cell, so it doesn't belong on the async runtime.
-        // Upload-path scoring uses the shared vocabulary (globals).
-        // The uploader's personal additions get applied later via
-        // compute_cleanness when they explicitly request it.
-        let cleanness = data::stats::cleanness(&df, &cols, &globals);
-        let fully_null = data::stats::count_fully_null_rows(&df);
-        Ok((df, enc, cols, cleanness, fully_null))
-    })
-    .await
-    .map_err(|e| AppError::internal("join", e.to_string()))??;
-    let (df, encoding, columns, cleanness, fully_null_rows) = parsed;
-
-    // Strip the upload extension off the DB-stored filename (mig 011).
-    // file_type owns the extension; filename is the user-facing stem.
-    // `data::parse::strip_upload_ext` covers the seven upload-accepted
-    // extensions, falls through for anything else.
-    let filename = data::parse::strip_upload_ext(&original_filename).to_string();
-    db::insert_file(
-        &state.db, &rid, &project, &filename, &encoding,
-        df.height() as u64, df.width() as u32, size, &storage_rel, &columns, cleanness,
+    // Route through the framework upload pipeline — RBAC + blob write + parse
+    // + summarize + insert + the `file_upload` audit event all live there now,
+    // shared with every connector (kafka_loader and future ETL). Excel→CSV
+    // conversion and the TLD parse hint are handled inside. The web caller
+    // uploads to their OWN project (resolved above), so the pipeline's
+    // write-reach check is a pass-through here; platform admins bypass it.
+    let is_admin = crate::rbac::is_platform_admin(&state, &user).await?;
+    let outcome = crate::pipeline::upload_csv(
+        &state.db,
+        state.data_dir.as_path(),
+        &user,
+        is_admin,
+        &project,
+        &original_filename,
+        bytes,
+        tld_hint,
     )
     .await?;
-    blob_guard.disarm();
 
-    crate::event::info(&state.db, "file_upload", format!("uploaded {filename}"))
-        .user(user.clone())
-        .context(serde_json::json!({
-            "file": rid.clone(), "project": project.clone(), "rows": df.height(),
-        }))
-        .send();
+    let crate::pipeline::UploadOutcome {
+        rid, filename, encoding, columns, cleanness, size_bytes, fully_null_rows, frame,
+    } = outcome;
 
     let now = Utc::now();
     let summary = FileSummary {
@@ -272,9 +231,9 @@ async fn upload(
         display_name:       Some(filename),
         file_type:          "csv".into(),
         stage:              "new".into(), // fresh file — no steps/charts/dashboards yet
-        row_count:          Some(df.height() as u64),
-        col_count:          Some(df.width() as u32),
-        file_size_bytes:    Some(size),
+        row_count:          Some(frame.height() as u64),
+        col_count:          Some(frame.width() as u32),
+        file_size_bytes:    Some(size_bytes),
         cleanness_pct:      cleanness,
         encoding:           Some(encoding),
         delimiter:          Some(",".into()),
@@ -282,9 +241,11 @@ async fn upload(
         updated_at:         now,
         fully_null_rows:    Some(fully_null_rows),
     };
+    // Web-only: cache the hot frame so the redtable's first page doesn't
+    // re-parse. A batch connector skips this (no interactive session).
     state.files.insert(
         rid,
-        FileEntry { summary: summary.clone(), columns: columns.clone(), frame: Arc::new(df) },
+        FileEntry { summary: summary.clone(), columns: columns.clone(), frame: Arc::new(frame) },
     );
 
     Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))

@@ -2,7 +2,9 @@
 //! a MODE of the main binary (`REDPASH_KAFKA_LOAD=1`), not a `src/bin/` (those
 //! can't see main.rs's `codec_avro`/`db`). One-shot batch:
 //!   rskafka consume → codec_avro::decode (the avro meta-codec) → records_to_csv
-//!   → data::parse + db::insert_file → a project_files row.
+//!   → pipeline::upload_csv → a project_files row. The loader is thin transport:
+//!   it routes through the framework upload pipeline (RBAC + audit), never the
+//!   storage layer directly (CAS_A4448B94 / connector-through-framework).
 //! Doc: docs/internal/code/backend/api/kafka_loader.md
 //!
 //! Decisions baked in: rskafka (Em 2026-06-01 — rdkafka needs cmake/librdkafka,
@@ -33,6 +35,11 @@ pub struct Cfg {
     pub topic:         String,
     pub max_records:   usize,
     pub project_rid:   String,
+    /// USR_ rid the load is attributed to — the framework checks this caller has
+    /// ≥Member write-reach on `project_rid` (no platform-admin bypass for
+    /// connectors). Required: a load can't silently land in a project with no
+    /// owning operator.
+    pub as_user:       String,
     /// A representative contract file; its PARENT dir is where per-version
     /// schemas are resolved (`{subject}-v{N}.json`). The loader never decodes
     /// against a fixed version — it reads each record's version from the header.
@@ -54,6 +61,7 @@ impl Cfg {
             topic:         var("KAFKA_TOPIC")?,
             max_records:   std::env::var("KAFKA_MAX_RECORDS").ok().and_then(|s| s.parse().ok()).unwrap_or(500),
             project_rid:   var("KAFKA_TARGET_PROJECT")?,
+            as_user:       var("KAFKA_AS_USER")?,
             contract_path: var("KAFKA_CONTRACT")?,
             version_header: std::env::var("KAFKA_VERSION_HEADER").ok().filter(|s| !s.is_empty()),
             wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
@@ -123,30 +131,28 @@ fn csv_field(s: &str) -> String {
     }
 }
 
-/// The L: write CSV bytes as a project_files row (reuses the upload pipeline —
-/// parse → summarize → insert_file). Returns the new file rid.
+/// The L: hand CSV bytes to the framework upload pipeline AS `caller`. The
+/// connector is thin transport — it no longer touches the storage layer
+/// directly, so it inherits every policy invariant the UI upload path enforces
+/// (RBAC write-reach check, `file_upload` audit event, org-rule cascade).
+/// Returns the new file rid. See `CAS_A4448B94…` / `connector-through-framework`.
 pub async fn ingest_csv(
     pool:     &PgPool,
     data_dir: &Path,
+    caller:   &str,
     project:  &str,
     filename: &str,
     csv:      &[u8],
 ) -> Result<String> {
-    let rid = crate::id::new("FIL");
-    let storage_rel = format!("files/{rid}.bin");
-    let abs = data_dir.join("files").join(format!("{rid}.bin"));
-    std::fs::create_dir_all(abs.parent().unwrap()).ok();
-    std::fs::write(&abs, csv).with_context(|| format!("write {}", abs.display()))?;
-
-    let (df, encoding) = data::parse::from_csv_bytes(csv, None).context("parse loaded csv")?;
-    let columns = data::dtype::summarize(&df).context("summarize loaded frame")?;
-    crate::db::insert_file(
-        pool, &rid, project, filename, &encoding,
-        df.height() as u64, df.width() as u32, csv.len() as u64, &storage_rel, &columns, None,
+    // Connectors never get the platform-admin bypass (`caller_is_admin=false`):
+    // the as-user must hold a real ≥Member membership on the target project, or
+    // the load fails loudly instead of landing data where the caller can't reach.
+    let outcome = crate::pipeline::upload_csv(
+        pool, data_dir, caller, false, project, filename, csv.to_vec(), None,
     )
     .await
-    .context("insert_file")?;
-    Ok(rid)
+    .map_err(|e| anyhow::anyhow!("framework upload_csv: {e:?}"))?;
+    Ok(outcome.rid)
 }
 
 /// One consumed record: the raw value bytes + the Kafka record headers (which
@@ -361,12 +367,12 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
 
     let csv = records_to_csv(&records, &columns);
     let filename = format!("{}-load", cfg.topic);
-    let rid = ingest_csv(pool, data_dir, &cfg.project_rid, &filename, csv.as_bytes()).await?;
+    let rid = ingest_csv(pool, data_dir, &cfg.as_user, &cfg.project_rid, &filename, csv.as_bytes()).await?;
     tracing::info!(file = %rid, rows = records.len(), cols = columns.len(),
-        project = %cfg.project_rid, "kafka-load: loaded");
+        project = %cfg.project_rid, as_user = %cfg.as_user, "kafka-load: loaded");
     println!(
-        "kafka-load: loaded {} rows ({} cols) into {rid} (project {}); by version {:?}; skipped {}",
-        records.len(), columns.len(), cfg.project_rid, by_version, skipped
+        "kafka-load: loaded {} rows ({} cols) into {rid} (project {}, as {}); by version {:?}; skipped {}",
+        records.len(), columns.len(), cfg.project_rid, cfg.as_user, by_version, skipped
     );
     Ok(())
 }

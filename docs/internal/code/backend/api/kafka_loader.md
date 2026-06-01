@@ -19,9 +19,16 @@ rskafka consume (Confluent Cloud, SASL_SSL/PLAIN; all partitions, earliest)
   → per-record: read schema VERSION from the Kafka header
   → codec_avro::decode against THAT version's contract (never a fixed default)
   → records_to_csv      (decoded JSON records → tabular CSV, UNION of all versions' fields)
-  → data::parse + db::insert_file  (the existing upload/import pipeline)
+  → pipeline::upload_csv (the framework upload path — RBAC + audit, NOT db:: directly)
   → a project_files row (a File, per [object-model])
 ```
+
+**Routes through the framework, not the storage layer** (`CAS_A4448B94…`,
+`[[connector-through-framework]]`). `ingest_csv` hands the CSV to
+[`pipeline::upload_csv`](pipeline.md) AS `KAFKA_AS_USER` with `caller_is_admin=false`,
+so the load is RBAC-checked (the as-user must hold ≥Member write-reach on the
+target project) and emits a `file_upload` audit event — exactly like a UI upload.
+A connector can no longer silently land data in a project the caller can't reach.
 
 **Version comes from the header, never a default.** Each record's writer schema
 version is read from its Kafka headers (`header_version` — explicit
@@ -68,16 +75,17 @@ is visible.
 
 ## Public surface
 
-- `pub struct Cfg` + `from_env()` — all loader config from `KAFKA_*` env.
+- `pub struct Cfg` + `from_env()` — all loader config from `KAFKA_*` env, incl.
+  `as_user` (`KAFKA_AS_USER`, REQUIRED — the RBAC-checked upload identity).
 - `pub fn load_contract_schema(path)` — the Avro schema JSON from a Confluent
   envelope's `.schema` (or a bare schema file).
 - `pub fn schema_field_names(schema)` — top-level field names IN ORDER (the CSV
   column order, matching the producer's schema).
 - `pub fn records_to_csv(records, columns)` — flatten decoded records to CSV;
   scalars → cells, nested arrays/objects → compact JSON string; RFC-4180 quoting.
-- `pub async fn ingest_csv(pool, data_dir, project, filename, csv)` — the L:
-  write the blob + `data::parse::from_csv_bytes` + `data::dtype::summarize` +
-  `db::insert_file` → returns the new file rid.
+- `pub async fn ingest_csv(pool, data_dir, caller, project, filename, csv)` — the L:
+  hands the CSV to `pipeline::upload_csv` AS `caller` (`caller_is_admin=false`),
+  which does RBAC + blob + parse + summarize + insert + audit → returns the rid.
 - `pub async fn run(pool, data_dir, cfg)` — orchestrate consume → decode → csv →
   ingest, with a logged summary.
 

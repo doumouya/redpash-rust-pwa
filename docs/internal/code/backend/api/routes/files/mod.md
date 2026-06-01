@@ -35,7 +35,11 @@ steps on top of the freshly-parsed base.
   The `patch_file` move (`project` change) stays double-gated on the destination.
   `patch_file` then **field-gates** via `field_perms::require_fields(.., "file", ..)`
   (CAS_C4219F2B s3) — narrows per field via the matrix.
-- `upload` (create) — gated on the destination project.
+- `upload` (create) — resolves the user + multipart + destination project, then
+  delegates the core (RBAC + blob + parse + insert + `file_upload` event) to
+  [`pipeline::upload_csv`](../../pipeline.md), shared with the Kafka loader and
+  future connectors (CAS_A4448B94). The route keeps only the web-only bits: the
+  `state.files` hot-frame cache + the `FileEnvelope` response.
 
 ## Drift-prone areas
 

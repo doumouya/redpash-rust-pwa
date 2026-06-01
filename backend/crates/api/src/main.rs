@@ -28,6 +28,7 @@ mod codec_registry;
 mod field_perms;
 mod field_validate;
 mod kafka_loader;
+mod pipeline;
 mod redact;
 mod request_log;
 mod routes;
