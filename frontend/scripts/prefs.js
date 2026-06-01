@@ -119,9 +119,15 @@ const ON_OFF_OPTIONS = [
   { value: "0", label: "Off" },
 ];
 
-// GENERAL · Appearance
+// GENERAL · Appearance — Settings v2 step 6a (CAS_55984AC7):
+// migrated from camelCase legacy keys to `<page>-<leaf>` shape per
+// Em's lock (CAS_3FC70F56). `migrateFrom` covers the dual-read
+// window so old localStorage values carry forward until the user
+// next touches the pref (which writes the new key + clears the
+// legacy alias). attr names stay the same so <html data-*>
+// reflection (and CSS) is unchanged.
 registerPref({
-  key: "theme", group: "GENERAL", section: "set-appearance",
+  key: "general-theme", group: "GENERAL", section: "set-appearance",
   control: "onoff", label: "Theme",
   values: ["light", "dark"], default: "dark", attr: "theme",
   options: [
@@ -129,9 +135,10 @@ registerPref({
     { value: "light", label: "Light", icon: "sun" },
   ],
   tags: ["appearance"],
+  migrateFrom: ["theme"],
 });
 registerPref({
-  key: "density", group: "GENERAL", section: "set-appearance",
+  key: "general-density", group: "GENERAL", section: "set-appearance",
   control: "onoff", label: "Density",
   values: ["compact", "cozy", "comfortable"], default: "cozy", attr: "density",
   options: [
@@ -140,9 +147,10 @@ registerPref({
     { value: "comfortable", label: "Comfortable" },
   ],
   tags: ["appearance"],
+  migrateFrom: ["density"],
 });
 registerPref({
-  key: "fontSize", group: "GENERAL", section: "set-appearance",
+  key: "general-fontSize", group: "GENERAL", section: "set-appearance",
   control: "onoff", label: "Font size",
   values: ["sm", "md", "lg"], default: "md", attr: "fontSize",
   options: [
@@ -151,55 +159,76 @@ registerPref({
     { value: "lg", label: "Large" },
   ],
   tags: ["appearance"],
+  migrateFrom: ["fontSize"],
 });
 
 // WORKSPACE · Tables — split per surface so the Workspace's tight
 // editing size doesn't pollute Home/Monitoring browse sizes (or
-// vice versa). Migration of the old shared `rowsPerPage` key is
-// handled by the SPLIT_LEGACY_KEYS block below.
+// vice versa). Step 6a (CAS_55984AC7) migrates the legacy
+// `rowsPerPage<Surface>` keys to the `<page>-rowsPerPage` shape
+// per the namespace lock; dual-read carries existing values
+// forward until the user next touches each pref.
 registerPref({
-  key: "rowsPerPageWorkspace", group: "WORKSPACE", section: "set-tables",
+  key: "workspace-rowsPerPage", group: "WORKSPACE", section: "set-tables",
   control: "onoff", label: "Rows per page · Workspace",
   values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
   options: ROWS_PER_PAGE_OPTIONS,
   tags: ["tables", "defaults"],
+  migrateFrom: ["rowsPerPageWorkspace"],
 });
 registerPref({
-  key: "rowsPerPageHome", group: "WORKSPACE", section: "set-tables",
+  key: "home-rowsPerPage", group: "WORKSPACE", section: "set-tables",
   control: "onoff", label: "Rows per page · Home",
   values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
   options: ROWS_PER_PAGE_OPTIONS,
   tags: ["tables", "defaults"],
+  migrateFrom: ["rowsPerPageHome"],
 });
 registerPref({
-  key: "rowsPerPageMonitoring", group: "WORKSPACE", section: "set-tables",
+  key: "monitoring-rowsPerPage", group: "WORKSPACE", section: "set-tables",
   control: "onoff", label: "Rows per page · Monitoring",
   values: ROWS_PER_PAGE_VALUES, default: "25", attr: null,
   options: ROWS_PER_PAGE_OPTIONS,
   tags: ["tables", "defaults"],
+  migrateFrom: ["rowsPerPageMonitoring"],
 });
 
 // WORKSPACE · Workspace
 registerPref({
-  key: "showRowNumbers", group: "WORKSPACE", section: "set-workspace",
+  key: "workspace-showRowNumbers", group: "WORKSPACE", section: "set-workspace",
   control: "onoff", label: "Show row numbers",
   values: ["1", "0"], default: "1", attr: "showRownum",
   options: ON_OFF_OPTIONS,
   tags: ["appearance"],
+  migrateFrom: ["showRowNumbers"],
 });
 registerPref({
-  key: "showStageDots", group: "WORKSPACE", section: "set-workspace",
+  key: "workspace-showStageDots", group: "WORKSPACE", section: "set-workspace",
   control: "onoff", label: "Stage dots in rail",
   values: ["1", "0"], default: "1", attr: "showStageDots",
   options: ON_OFF_OPTIONS,
   tags: ["appearance"],
+  migrateFrom: ["showStageDots"],
+});
+// New candidate pref (Phase 1 inventory) — gates the
+// rail-view auto-toggle in workspace.js loadFile() so opening a
+// CHT_/dashboard file while the rail is on Data (or vice versa)
+// auto-flips to the matching kind. On by default; off restores
+// pre-step-6 behavior (manual rail toggle).
+registerPref({
+  key: "workspace-railViewAutoFollow", group: "WORKSPACE", section: "set-workspace",
+  control: "onoff", label: "Auto-switch rail view to opened file",
+  hint:  "flips Data ↔ Dashboards to match the file kind",
+  values: ["1", "0"], default: "1", attr: null,
+  options: ON_OFF_OPTIONS,
+  tags: ["defaults"],
 });
 
 // WORKSPACE · Data & Export — none reshape <html>, so no attr;
 // consumed by upload / export handlers when they pick a sensible
 // default.
 registerPref({
-  key: "csvDelimiter", group: "WORKSPACE", section: "set-data",
+  key: "workspace-csvDelimiter", group: "WORKSPACE", section: "set-data",
   control: "onoff", label: "CSV delimiter", hint: "applied when opening files",
   values: ["auto", "comma", "semi", "tab"], default: "auto", attr: null,
   options: [
@@ -209,9 +238,10 @@ registerPref({
     { value: "tab",   label: "↹", title: "Tab" },
   ],
   tags: ["data", "defaults"],
+  migrateFrom: ["csvDelimiter"],
 });
 registerPref({
-  key: "csvEncoding", group: "WORKSPACE", section: "set-data",
+  key: "workspace-csvEncoding", group: "WORKSPACE", section: "set-data",
   control: "onoff", label: "Default encoding", hint: "fallback when RedPash can't detect",
   values: ["auto", "utf-8", "utf-16le", "utf-16be",
            "windows-1252", "iso-8859-1", "iso-8859-15",
@@ -229,9 +259,10 @@ registerPref({
     { value: "macintosh",    label: "MacRoman" },
   ],
   tags: ["data", "defaults"],
+  migrateFrom: ["csvEncoding"],
 });
 registerPref({
-  key: "exportFormat", group: "WORKSPACE", section: "set-data",
+  key: "workspace-exportFormat", group: "WORKSPACE", section: "set-data",
   control: "onoff", label: "Export format", hint: "default for downloading cleaned data",
   values: ["csv", "xlsx", "json"], default: "csv", attr: null,
   options: [
@@ -240,6 +271,7 @@ registerPref({
     { value: "json", label: "JSON",  icon: "filetype-json" },
   ],
   tags: ["data", "defaults"],
+  migrateFrom: ["exportFormat"],
 });
 
 // CASES — how far back to show the "Done" column / rail group
@@ -271,9 +303,10 @@ registerPref({
 // at once; not currently surfaced in Settings (the toggle is the
 // rail itself).
 registerPref({
-  key: "workspaceRailView",
+  key: "workspace-railView",
   control: "onoff",
   values: ["data", "dashboards"], default: "data", attr: null,
+  migrateFrom: ["workspaceRailView"],
 });
 
 // GENERAL — Hidden Items auto-purge cross-cutting pref. The Hidden

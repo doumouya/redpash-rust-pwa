@@ -17,15 +17,28 @@
   <script>
     try {
       var d = document.documentElement;
-      function rp(name, legacy, ok) {
-        var raw = localStorage.getItem("rp-pref-" + name);
-        if (raw != null) { try { var v = JSON.parse(raw); if (ok(v)) return v; } catch (_) {} }
-        if (legacy) { var lv = localStorage.getItem(legacy); if (ok(lv)) return lv; }
+      // FOUC pre-paint — read each appearance pref before any CSS
+      // applies so the first paint already carries the right theme.
+      // CAS_55984AC7 step 6a — the registry's preferred key is the
+      // kebab `<page>-<leaf>` shape (general-theme, etc.); legacy
+      // camelCase + the old rp-* namespace are still read as
+      // fallbacks until the user next touches the pref (prefs.js
+      // setPref clears the legacy aliases on write).
+      function rp(names, ok) {
+        for (var i = 0; i < names.length; i++) {
+          var raw = localStorage.getItem(names[i]);
+          if (raw == null) continue;
+          try { var v = JSON.parse(raw); if (ok(v)) return v; } catch (_) {}
+          if (ok(raw)) return raw;
+        }
         return null;
       }
-      var t  = rp("theme",    "rp-theme",     function (v) { return v === "light" || v === "dark"; });
-      var dn = rp("density",  "rp-density",   function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
-      var fs = rp("fontSize", "rp-font-size", function (v) { return v === "sm" || v === "md" || v === "lg"; });
+      var t  = rp(["rp-pref-general-theme",    "rp-pref-theme",    "rp-theme"],
+                  function (v) { return v === "light" || v === "dark"; });
+      var dn = rp(["rp-pref-general-density",  "rp-pref-density",  "rp-density"],
+                  function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
+      var fs = rp(["rp-pref-general-fontSize", "rp-pref-fontSize", "rp-font-size"],
+                  function (v) { return v === "sm" || v === "md" || v === "lg"; });
       if (t)  d.dataset.theme    = t;
       if (dn) d.dataset.density  = dn;
       if (fs) d.dataset.fontSize = fs;

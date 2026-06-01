@@ -351,7 +351,7 @@ export default async function settings(app, { session }) {
 
   // ─── prefs: read current value, paint is-active per group ────
   function readCurrent(prefName) {
-    if (prefName === "theme") return currentTheme();
+    if (prefName === "general-theme") return currentTheme();
     if (SERVER_PREF_KEYS.includes(prefName)) {
       const v = serverPrefs[prefName];
       if (typeof v === "boolean") return v ? "true" : "false";
@@ -376,7 +376,7 @@ export default async function settings(app, { session }) {
     if (!group) return;
     const prefName = group.dataset.pref;
     const value    = btn.dataset.value;
-    if (prefName === "theme") {
+    if (prefName === "general-theme") {
       applyTheme(value);
     } else if (prefName === "share_sentinels") {
       // The PATCH /me/prefs gate keys off as_bool(), so write an

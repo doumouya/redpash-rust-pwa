@@ -200,7 +200,7 @@ export default function workspace(app, { session }) {
   // The wire-level pref ("10" / "25" / "50" / "100" / "all") into the
   // numeric pageSize the fetch uses.
   function pageSizeFromPref() {
-    const n = parseInt(getPref("rowsPerPageWorkspace") || "", 10);
+    const n = parseInt(getPref("workspace-rowsPerPage") || "", 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
   }
 
@@ -215,7 +215,7 @@ export default function workspace(app, { session }) {
   // dashboard → dashboards) so a freshly-created row isn't hidden by
   // the current filter.
   const railViewSeg = mountRailSeg($("#wsRailView"), {
-    pref:        "workspaceRailView",
+    pref:        "workspace-railView",
     fallback:    "data",
     fireOnMount: true,
     onChange:    (view) => {
@@ -1187,6 +1187,17 @@ export default function workspace(app, { session }) {
     };
   }
 
+  // CAS_55984AC7 step 6a — auto-toggle the rail view to match the
+  // opened file's kind so a CHT_/dashboard file isn't hidden behind
+  // a Data-view rail (and vice versa). Gated by the pref
+  // workspace-railViewAutoFollow (default "1"); off restores the
+  // pre-step-6 manual-toggle behavior. setRailView is idempotent —
+  // calling it with the current view is a no-op.
+  function maybeAutoToggleRail(targetView) {
+    if (getPref("workspace-railViewAutoFollow") !== "1") return;
+    setRailView(targetView);
+  }
+
   async function loadFile(rid) {
     if (!rid || rid === activeFileRid) return;
     hideLanding();   // opening any file leaves the overview surface
@@ -1206,6 +1217,7 @@ export default function workspace(app, { session }) {
       // 500s on chart rids (no row/column metadata), so we MUST not
       // hit it for charts.
       if (rid.startsWith("CHT_")) {
+        maybeAutoToggleRail("dashboards");
         const chart = await api.get("/charts/" + encodeURIComponent(rid));
         await ensureSourceCache(chart?.source_file_id);
         await ensureProjectSourceFiles(chart?.project_redpash_id);
@@ -1251,6 +1263,7 @@ export default function workspace(app, { session }) {
       // file_types that route through the same designer path.
       const fileType = envelope?.summary?.file_type;
       if (fileType === "chart") {
+        maybeAutoToggleRail("dashboards");
         // Defensive fallback — shouldn't normally hit since the
         // CHT_ branch returns above, but legacy/wrong-prefixed rids
         // could land here.
@@ -1264,6 +1277,7 @@ export default function workspace(app, { session }) {
         totalPages = 1;
         renderPager();
       } else if (fileType === "dashboard") {
+        maybeAutoToggleRail("dashboards");
         // Dashboards = FIL_-prefix project_files rows with
         // file_type='dashboard'. Spec carries widgets[] each
         // referencing a chart by id. Designer fetches each in
@@ -1279,6 +1293,7 @@ export default function workspace(app, { session }) {
         // Dashboards in the rail restores the right file.
         lastFileRidByView.dashboards = rid;
       } else {
+        maybeAutoToggleRail("data");
         rebuildColsDropdown(activeColumns);
         rebuildFilterCols(activeColumns);
         // Cache the open data file so the designer's Add-chart (from a
@@ -2592,13 +2607,13 @@ export default function workspace(app, { session }) {
 
   // ─── row numbers toggle — initial state from prefs, persists on click ─
   const rownumBtn = $("#wsRownum");
-  const rownumOnAtMount = getPref("showRowNumbers") !== "0";
+  const rownumOnAtMount = getPref("workspace-showRowNumbers") !== "0";
   rownumBtn.classList.toggle("is-active", rownumOnAtMount);
   table.classList.toggle("no-rownum", !rownumOnAtMount);
   rownumBtn.addEventListener("click", (e) => {
     const on = e.currentTarget.classList.toggle("is-active");
     table.classList.toggle("no-rownum", !on);
-    setPref("showRowNumbers", on ? "1" : "0");
+    setPref("workspace-showRowNumbers", on ? "1" : "0");
   });
 
   // Dropdown toggles (rows-per-page, columns) handled centrally
@@ -2614,14 +2629,14 @@ export default function workspace(app, { session }) {
     const item = e.target.closest(".rt-dd-item");
     if (!item) return;
     const raw = item.dataset.rows;
-    setPref("rowsPerPageWorkspace", raw);
+    setPref("workspace-rowsPerPage", raw);
     pageSize = parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
     currentPage = 1;
     syncRowsDropdown();
     refetchPage();
   });
   function syncRowsDropdown() {
-    const raw = getPref("rowsPerPageWorkspace");
+    const raw = getPref("workspace-rowsPerPage");
     $("#wsRowsDd").querySelectorAll(".rt-dd-item").forEach((i) => {
       i.classList.remove("selected");
       const t = i.querySelector(".tick");
