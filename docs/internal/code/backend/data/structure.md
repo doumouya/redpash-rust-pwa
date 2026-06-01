@@ -30,8 +30,10 @@ reasons. Consumed today by `POST /api/demo/parse`
   `Serialize`d straight into the demo response.
   - `penalty() -> f32` — 0..=100 to subtract from a clean score. Flat weights
     (tuned against `tools/wasm-bench/score-calibration.py`): binary 70 (corrupt
-    bytes → unusable), delimiter 45 (wrong shape), line-ending 25, ragged 25,
-    header 20, numeric-id-loss 20 (identity gone, file still usable).
+    bytes → unusable), delimiter 45 (wrong shape), ragged 25, header 20,
+    numeric-id-loss 20 (identity gone, file still usable). **Line-ending is
+    split by severity**: a lone CR swallows rows (lossy) → 25; mixed CRLF/LF is
+    cosmetic (Polars reads both, no loss) → 8 (`line_ending_cosmetic`).
     **Type-drift is graded**: `type_drift_frac × 70`, capped at 35 — a 25%-dirty
     column docks ~17, a 50%-dirty one ~30 (never enough alone to read "cursed").
     All summed, capped at 100. Verified at **17/18** in-band on the calibration
@@ -50,11 +52,11 @@ reasons. Consumed today by `POST /api/demo/parse`
 - **ragged** — two signals, both feed `ragged_suspect`:
   1. quote-aware field counts vary across sample rows (max ≥ 2× min, or a spread
      ≥ 3) → truncation / wrong delimiter (Cases 4, 13).
-  2. the **header is consistently narrower than the data rows** (modal data width
-     > header width, in ≥ half the rows) → Polars truncates each row to the header
-     width, silently dropping the trailing field(s). The spread can be just 1, so
-     signal 1 misses it; the *direction* is the tell. Catches EU-decimal
-     mis-splits (`id,price` + `1,1.234,56`) and trailing-comma extra columns.
+  2. **any data row is wider than the header** → Polars truncates it to the
+     header width, silently dropping the trailing field(s). One over-wide row is
+     still lost data, and the spread can be just 1, so signal 1 misses it; the
+     *direction* (data > header) is the tell. Catches a single extra-column row,
+     EU-decimal mis-splits (`id,price` + `1,1.234,56`), trailing-comma columns.
 
   Both are **skipped when a quoted field spans physical lines** (tracked via
   cumulative quote balance) — otherwise a clean multiline-quoted file false-flags.

@@ -18,6 +18,9 @@ const DELIMS: [u8; 4] = [b',', b';', b'\t', b'|'];
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct StructureFlags {
     pub line_ending_suspect: bool,
+    /// The line-ending issue is cosmetic (mixed CRLF/LF, no data loss) rather
+    /// than lossy (a lone CR that swallows rows) — penalized far less.
+    pub line_ending_cosmetic: bool,
     pub binary_suspect:      bool,
     pub delimiter_suspect:   bool,
     pub ragged_suspect:      bool,
@@ -48,7 +51,9 @@ impl StructureFlags {
         let mut p: f32 = 0.0;
         if self.binary_suspect      { p += 70.0; } // corrupt bytes → unusable
         if self.delimiter_suspect   { p += 45.0; } // wrong shape
-        if self.line_ending_suspect { p += 25.0; }
+        // Lone CR swallows rows (data loss); mixed CRLF/LF is cosmetic (Polars
+        // reads both) — so the cosmetic case docks a token amount, not 25.
+        if self.line_ending_suspect { p += if self.line_ending_cosmetic { 8.0 } else { 25.0 }; }
         if self.ragged_suspect      { p += 25.0; }
         if self.header_suspect      { p += 20.0; }
         // Graded: contamination * scale, capped — a 25%-dirty column docks
@@ -97,11 +102,12 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
     }
     if prev == b'\r' { lone_cr = true; } // trailing CR
     if lone_cr {
-        f.line_ending_suspect = true;
+        f.line_ending_suspect = true; // lossy: a lone CR swallows whole rows
         f.reasons.push("lone CR line endings (classic-Mac)".into());
     } else if crlf && bare_lf {
         f.line_ending_suspect = true;
-        f.reasons.push("mixed CRLF / LF line endings".into());
+        f.line_ending_cosmetic = true; // Polars reads both — no data lost
+        f.reasons.push("mixed CRLF / LF line endings (cosmetic)".into());
     }
 
     // ── delimiter ambiguity + raggedness (text-level) ──
@@ -139,24 +145,20 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
                 f.ragged_suspect = true;
                 f.reasons.push(format!("ragged rows: field count ranges {mn}..{mx} (truncation/wrong delimiter)"));
             }
-            // Header consistently NARROWER than the data rows → Polars
-            // truncates each row to the header width, silently dropping the
-            // trailing field(s). The spread can be small (header 2, data 3)
-            // so the variance check above misses it; the *direction* is the
-            // tell. Catches EU-decimal mis-splits (`id,price` + `1,1.234,56`)
-            // and trailing-comma extra columns.
-            if !multiline_quoted && !f.ragged_suspect && widths.len() >= 3 {
+            // ANY data row wider than the header → Polars truncates it to the
+            // header width, silently dropping the trailing field(s). One such
+            // row is still lost data, and the field-count spread can be just 1,
+            // so the variance check above misses it — the *direction* (data >
+            // header) is the tell. Catches a single over-wide row, EU-decimal
+            // mis-splits (`id,price` + `1,1.234,56`), trailing-comma columns.
+            if !multiline_quoted && !f.ragged_suspect && widths.len() >= 2 {
                 let hdr = widths[0];
-                let data = &widths[1..];
-                let mut freq: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-                for &w in data { *freq.entry(w).or_insert(0) += 1; }
-                if let Some((&modal, &n)) = freq.iter().max_by_key(|&(_, &v)| v) {
-                    if modal > hdr && n.saturating_mul(2) >= data.len() {
-                        f.ragged_suspect = true;
-                        f.reasons.push(format!(
-                            "data rows wider than header ({hdr} → {modal} fields): trailing values silently dropped"
-                        ));
-                    }
+                let data_max = widths[1..].iter().copied().max().unwrap_or(hdr);
+                if data_max > hdr {
+                    f.ragged_suspect = true;
+                    f.reasons.push(format!(
+                        "a data row is wider than the header ({hdr} → {data_max} fields): trailing values silently dropped"
+                    ));
                 }
             }
 
@@ -277,8 +279,12 @@ mod tests {
     #[test]
     fn flags_binary_and_line_endings() {
         let df = df2("a", "b");
-        let f = detect(b"a,b\r1,2\r3,4", &df); // lone CR
-        assert!(f.line_ending_suspect);
+        let f = detect(b"a,b\r1,2\r3,4", &df); // lone CR — lossy
+        assert!(f.line_ending_suspect && !f.line_ending_cosmetic);
+        assert_eq!(f.penalty(), 25.0, "lone CR is the lossy 25-point penalty");
+        let f = detect(b"a,b\r\n1,2\nx,y\r\n", &df); // mixed CRLF/LF — cosmetic
+        assert!(f.line_ending_suspect && f.line_ending_cosmetic);
+        assert_eq!(f.penalty(), 8.0, "mixed CRLF/LF is the cosmetic 8-point penalty");
         let f = detect(b"a,b\n1,\x00\n", &df); // control byte
         assert!(f.binary_suspect);
         let f = detect("a,b\nx,y\n".as_bytes(), &df); // clean
@@ -317,6 +323,17 @@ mod tests {
         let df = df2("id", "price");
         let f = detect(b"id,price\n1,1.234,56\n2,2.000,00\n3,3.500,75\n", &df);
         assert!(f.ragged_suspect, "data wider than header should flag ragged");
+
+        // A SINGLE over-wide row (the rest match the header) is still lost
+        // data — one dropped field must flag, spread of 1 notwithstanding.
+        let df = DataFrame::new(vec![
+            Series::new("id".into(), &["1", "2", "3", "4"]).into(),
+            Series::new("name".into(), &["Alice", "Bob", "Charlie", "Delta"]).into(),
+            Series::new("age".into(), &["30", "29", "31", "32"]).into(),
+        ])
+        .unwrap();
+        let f = detect(b"id,name,age\n1,Alice,30\n2,Bob,29\n3,Charlie,31,extra\n4,Delta,32\n", &df);
+        assert!(f.ragged_suspect, "one over-wide row drops a field → flag");
     }
 
     #[test]
