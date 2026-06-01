@@ -10,7 +10,10 @@ use std::collections::HashSet;
 use crate::{DataError, Result};
 use polars::prelude::*;
 
-use super::util::{default_strptime, json_to_string, parse_date_flex, parse_datetime_flex};
+use super::util::{
+    default_strptime, json_to_string, normalize_bool_cell, normalize_numeric_cell,
+    parse_date_flex, parse_datetime_flex,
+};
 
 pub(super) fn set_cell(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
     let row = params.get("row").and_then(|v| v.as_u64())
@@ -98,6 +101,43 @@ pub(super) fn cast(df: DataFrame, params: &serde_json::Value) -> Result<DataFram
     // unparseable values become null.
     let src_dtype  = df.column(column).map_err(DataError::from)?.dtype().clone();
     let is_str_src = matches!(src_dtype, DataType::String);
+
+    // Locale-aware numeric coercion. Polars' plain cast to Int64/Float64
+    // nulls dirty numbers — `2114,29`, `1 234,56 €`, `1000 EUR` — and the
+    // clean-score corpus shows numeric-intent string columns are the single
+    // biggest cleanliness gap (255 of them). Normalize each cell first
+    // (strip currency / spaces, French comma→dot) so real money / quantity
+    // columns survive the cast instead of silently vanishing to null.
+    if is_str_src && matches!(dtype, "int" | "float") {
+        let ca = df.column(column).map_err(DataError::from)?
+            .str().map_err(DataError::from)?;
+        let floats: Vec<Option<f64>> = ca.into_iter()
+            .map(|o| o.and_then(normalize_numeric_cell))
+            .collect();
+        let series = Series::new(column.into(), floats);
+        let new_col = if dtype == "int" {
+            series.cast(&DataType::Int64).map_err(DataError::from)?
+        } else {
+            series
+        };
+        let mut out = df;
+        out.with_column(new_col).map_err(DataError::from)?;
+        return Ok(out);
+    }
+
+    // Locale-aware boolean coercion (EN + FR): oui/non, yes/no, 1/0, vrai/
+    // faux → real booleans. Polars' plain cast only knows true/false.
+    if is_str_src && dtype == "bool" {
+        let ca = df.column(column).map_err(DataError::from)?
+            .str().map_err(DataError::from)?;
+        let bools: Vec<Option<bool>> = ca.into_iter()
+            .map(|o| o.and_then(normalize_bool_cell))
+            .collect();
+        let series = Series::new(column.into(), bools);
+        let mut out = df;
+        out.with_column(series).map_err(DataError::from)?;
+        return Ok(out);
+    }
 
     let expr = match dtype {
         "int"      => col(column).cast(DataType::Int64),

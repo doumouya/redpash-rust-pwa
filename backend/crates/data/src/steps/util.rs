@@ -181,9 +181,22 @@ pub(super) fn default_strptime() -> StrptimeOptions {
 /// Polars' default `cast(Date)` only accepts ISO `YYYY-MM-DD`, so
 /// strings like `2021/02/16` or `16/02/2021` would otherwise become null.
 pub(super) fn parse_date_flex(column: &str) -> Expr {
+    // Order matters — `coalesce` takes the first format that parses, so
+    // less-ambiguous shapes come first and DAY-FIRST precedes month-first
+    // (RedPash's FR + Africa-first market default; a true mm/dd file with
+    // all days ≤12 is the rare loss). 2-digit years (`%y`: 00-68→20xx,
+    // 69-99→19xx) handle `02/01/23` — the dominant clean-score date shape.
     const FORMATS: &[&str] = &[
-        "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y",
-        "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d",
+        // 4-digit year, year-first (unambiguous)
+        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d",
+        // 4-digit year, day-first then month-first
+        "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
+        "%m/%d/%Y", "%m-%d-%Y",
+        // 2-digit year, day-first then month-first
+        "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",
+        "%m/%d/%y",
+        // compact
+        "%Y%m%d",
     ];
     let exprs: Vec<Expr> = FORMATS.iter()
         .map(|f| col(column).str().to_date(StrptimeOptions {
@@ -212,6 +225,57 @@ pub(super) fn parse_datetime_flex(column: &str) -> Expr {
         ))
         .collect();
     coalesce(&exprs)
+}
+
+/// Parse a "dirty" numeric string to `f64`, tolerant of the shapes real
+/// CSV exports carry — the dominant `type_consistency` gap (clean-score
+/// corpus: 255 string columns that *want* to be numeric). Handles:
+///   • surrounding currency / units — `€`, `$`, `£`, `EUR`, `HT`, `%` …
+///     (anything that isn't a digit / sign / separator is dropped);
+///   • thousands separators — ASCII space, NBSP, narrow-NBSP;
+///   • the French decimal comma — `2114,29` → `2114.29`.
+///
+/// Separator rule: if BOTH `,` and `.` appear, the LAST is the decimal
+/// point and the other is a thousands group (`1.234,56`→`1234.56`,
+/// `1,234.56`→`1234.56`). If only `,` appears it's the decimal point
+/// (French / EU default — RedPash's FR + Africa-first market). Only `.`
+/// is left as-is (US / standard). Returns `None` when there's no number.
+pub(super) fn normalize_numeric_cell(raw: &str) -> Option<f64> {
+    // Keep sign / digits / separators / spaces; drop currency, letters, %.
+    let kept: String = raw.chars()
+        .filter(|c| c.is_ascii_digit()
+            || matches!(c, ',' | '.' | '-' | '+' | ' ' | '\u{00A0}' | '\u{202F}'))
+        .collect();
+    let s = kept.replace([' ', '\u{00A0}', '\u{202F}'], ""); // spaces = thousands → drop
+    if !s.chars().any(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let (has_comma, has_dot) = (s.contains(','), s.contains('.'));
+    let normalized = if has_comma && has_dot {
+        if s.rfind(',') > s.rfind('.') {
+            s.replace('.', "").replace(',', ".") // 1.234,56 → 1234.56
+        } else {
+            s.replace(',', "")                   // 1,234.56 → 1234.56
+        }
+    } else if has_comma {
+        s.replace(',', ".")                      // 2114,29 → 2114.29
+    } else {
+        s                                        // 1234 / 12.5 / -3
+    };
+    normalized.parse::<f64>().ok()
+}
+
+/// Parse a boolean from the many spellings real data carries, across EN +
+/// FR (the founding locales). Polars' plain `cast(Boolean)` only knows
+/// `true`/`false`, so `oui`/`non`/`yes`/`1`/`0` would null. Trimmed +
+/// lowercased. Returns `None` for anything not clearly truthy/falsy (so a
+/// genuine enum like `feminin`/`masculin` is left for the user, not coerced).
+pub(super) fn normalize_bool_cell(raw: &str) -> Option<bool> {
+    match raw.trim().to_lowercase().as_str() {
+        "true" | "t" | "yes" | "y" | "oui" | "o" | "vrai" | "v" | "1" => Some(true),
+        "false" | "f" | "no" | "n" | "non" | "faux" | "0" => Some(false),
+        _ => None,
+    }
 }
 
 /// Header → snake_case. Trims, lowercases, splits CamelCase boundaries,
@@ -244,4 +308,42 @@ pub(super) fn snake_case(s: &str) -> String {
         }
     }
     collapsed.trim_matches('_').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_bool_cell, normalize_numeric_cell};
+
+    #[test]
+    fn numeric_handles_french_currency_and_thousands() {
+        // French decimal comma, with/without currency + spaces.
+        assert_eq!(normalize_numeric_cell("2114,29"), Some(2114.29));
+        assert_eq!(normalize_numeric_cell("1667,63 €"), Some(1667.63));
+        assert_eq!(normalize_numeric_cell("€911.18"), Some(911.18));
+        assert_eq!(normalize_numeric_cell(" 729.65  "), Some(729.65));
+        assert_eq!(normalize_numeric_cell("1000 EUR"), Some(1000.0));
+        assert_eq!(normalize_numeric_cell("-3,5"), Some(-3.5));
+        // Thousands separators — last separator is the decimal point.
+        assert_eq!(normalize_numeric_cell("1 234,56"), Some(1234.56)); // space thousands, comma dec
+        assert_eq!(normalize_numeric_cell("1.234,56"), Some(1234.56)); // dot thousands, comma dec
+        assert_eq!(normalize_numeric_cell("1,234.56"), Some(1234.56)); // comma thousands, dot dec
+        // No number → None (sentinels / blanks handled elsewhere).
+        assert_eq!(normalize_numeric_cell("inconnu"), None);
+        assert_eq!(normalize_numeric_cell(""), None);
+        assert_eq!(normalize_numeric_cell("ND"), None);
+    }
+
+    #[test]
+    fn bool_handles_en_fr_spellings() {
+        for t in ["true", "TRUE", "oui", "Oui", "yes", "y", "1", "vrai", "o"] {
+            assert_eq!(normalize_bool_cell(t), Some(true), "{t:?} should be true");
+        }
+        for f in ["false", "non", "NON", "no", "n", "0", "faux"] {
+            assert_eq!(normalize_bool_cell(f), Some(false), "{f:?} should be false");
+        }
+        // A genuine enum is NOT a bool — left for the user, not coerced.
+        assert_eq!(normalize_bool_cell("feminin"), None);
+        assert_eq!(normalize_bool_cell("maybe"), None);
+        assert_eq!(normalize_bool_cell(""), None);
+    }
 }
