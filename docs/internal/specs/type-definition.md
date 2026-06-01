@@ -2,9 +2,9 @@
 title: TypeDefinition — runtime-typed object contract
 section: Internal
 order: 67
-last modified date: 2026-05-31
+last modified date: 2026-06-01
 owner: Torv
-status: spec v1 — co-authored 2026-05-31 (Torv-FE writes; Torv-BE provides §3 + §4 tables; Em approves Q1/Q4/Q5). Coordination case CAS_0FBF301FDD0F4EF49AD6BF0E3FE105FC. Sibling-of CAS_9E4F134B (framework-layer epic); blocks every framework child case including CAS_8A210C7A (cell-editor).
+status: spec v1 co-authored 2026-05-31 (Torv-FE writes; Torv-BE provides §3 + §4 tables; Em approves Q1/Q4/Q5) · **v2 field validation shipped 2026-06-01 (CAS_C7AEBE83, §8)** — two-tier validator, hand-rolled DSL, calibration gate. Coordination case CAS_0FBF301FDD0F4EF49AD6BF0E3FE105FC. Sibling-of CAS_9E4F134B (framework-layer epic); blocks every framework child case including CAS_8A210C7A (cell-editor).
 ---
 
 # TypeDefinition — runtime-typed object contract
@@ -385,7 +385,83 @@ Tracked: CAS_8A210C7A (cell-editor) + child cases per framework.
 - The acceptance test (§6) is the convergence point: both lanes
   smoke-feed it once their slices are in.
 
-## 8. Cross-references
+## 8. v2 — field validation (shipped 2026-06-01, CAS_C7AEBE83)
+
+v1 §4.2 validates a value against its `data_type` (codec). v2 adds **field-level
+rules** + a **two-tier model** that catches not just the edge cases we found in
+adversarial testing but the ones we haven't — the architecture is the defense,
+not an enumeration. It mirrors the CSV cleanness scorer's `value_quality ×
+structural` model (`data/src/structure.rs`) at the field level.
+
+### 8.1 Two tiers
+
+- **Tier 1 — hard contract gate** → `errors[]`; non-empty ⇒ **400**. Gate 1a:
+  the `data_type` codec (short-circuits). Gate 1b: each `ValidateRule`
+  (collect-all). 400 body: `{error, field, rule_code, message}`.
+- **Tier 2 — soft suspicion layer** → `warnings[]` + `confidence`; never blocks.
+  Open `FieldDetector` registry runs on every shape-valid value even when Tier 1
+  passes. Seeds: `coercion_loss` (raw-vs-parsed — `"07920"` typed int loses its
+  zero) and `drift` (date in a string field). **This tier absorbs unknown
+  cases** — a general detector, not a named rule, catches the smell. Warnings +
+  `confidence` ride the 200 response (the `/api/demo/parse` `structure.reasons`
+  pattern).
+
+### 8.2 ValidateRule (extends §2 FieldDef)
+
+`FieldDef.validate: ValidateRule[]`, each `{kind, params, code, message}`. `kind`
+is an **OPEN string** resolved against a rule registry (never an enum — same
+contract as `data_type`); `params` is **nested** (not flattened) so a param can't
+collide with `kind`/`code`/`message`. Builtin kinds:
+
+| kind | params | rejects when |
+|------|--------|--------------|
+| `range` | `min?`, `max?` | numeric value outside bounds |
+| `length` | `min?`, `max?` | Unicode char count outside bounds |
+| `enum_subset` | `values: [..]` | value ∉ values |
+| `expression` | `expr: "<dsl>"` | the cross-field DSL is false (§9.3) |
+| `decimal` | `scale?`, `currency?` | more fractional digits than `scale` (loss of precision; XOF `scale:0` rejects `1.5`) — the reborn money contract, an open param not a fixed type |
+| `pattern` | *(deferred)* | pending sign-off to promote `regex` to a direct dep |
+
+### 8.3 The expression DSL (hand-rolled, sandboxed)
+
+A tiny boolean DSL: `==,!=,<,<=,>,>=,&&,||,!`, field refs, literals (number /
+'string' / true / false / null). No functions, no arithmetic, no loops.
+Bounded-by-construction (`MAX_EXPR_DEPTH=32`, `MAX_TOKENS=256` enforced at parse)
+so a `((((…))))` bomb fails at parse — the `codec_avro` recursion-DoS lesson.
+Deterministic (no I/O / clock / RNG). **Locked null/type truth table:**
+
+- `x == null` / `x != null` test null explicitly (the only truthy null).
+- ordered compare (`< <= > >=`) with a null operand ⇒ **false**.
+- `==`/`!=`: coerce numeric then string; null ≠ non-null.
+- ordered compare across incompatible types ⇒ **false** (a type-mismatch *smell*
+  is a Tier-2 detector's job, not a hard 400).
+
+### 8.4 The regression gate
+
+`tools/wasm-bench/validate-calibration.py` — the field-level twin of
+`score-calibration.py`. Two suites under one gate: **CORRECTNESS** (hard
+bands — a value passes or rejects with a specific `rule_code`) + **TASTE** (Tier-2
+warnings, Copilot/Gemini-authored). A future challenge is a new labelled row, not
+a redesign. Target: `POST /api/demo/validate`. Disposability bar met:
+`RealEstateListing` + `BankingAccount` (banking) pass with zero framework source
+change — only their `validate[]` rules differ.
+
+### 8.5 Locked decisions
+
+- Two-tier (gate + suspicion), not flat binary reject — Em 2026-06-01.
+- Hand-rolled DSL + i128/string money compare, **zero new crates** (no CEL, no
+  `rust_decimal`) — Em 2026-06-01.
+- Nested `params`, open `kind` string, `FieldOutcome` (not `Result<(),E>`).
+- Builtin per-resource PATCH handlers NOT retrofitted (the pipeline proves on the
+  future custom-object PATCH endpoint; retrofits are opt-in, additive).
+
+### 8.6 Code
+
+`shared/type_def.rs` (`ValidateRule`), `api/validate_rules.rs` (pipeline + rule +
+detector registries), `api/validate_expr.rs` (DSL), `api/routes/demo.rs`
+(`/validate`). Each has its atomic doc under `docs/internal/code/backend/...`.
+
+## 9. Cross-references
 
 - [[framework-layer]] — the parent epic this case is sibling-of.
 - [[disposability-design-principle]] — the keystone memory that drove
