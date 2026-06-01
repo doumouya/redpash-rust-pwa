@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ENV_PATH = resolvePath(__dirname, ".env");
 const RESULTS_DIR = resolvePath(__dirname, "results");
+const CONTRACTS_DIR = resolvePath(__dirname, "contracts");
 
 // ── env loading (no dotenv dep — manual parse is trivial) ──────────
 function loadEnv() {
@@ -291,6 +292,44 @@ async function phase5(env, phase1Result) {
   return decoded;
 }
 
+// ── bootstrap-contracts: fetch every (subject, version) from the
+// registry with the credentials we already have + save each response
+// envelope to contracts/. After this runs once, the codec can resolve
+// schemas file-based at runtime with zero registry calls. The file
+// shape matches GET /subjects/{subject}/versions/{version} exactly so
+// it's round-trippable. Re-run when schemas evolve. ───────────────
+async function bootstrapContracts(sr) {
+  console.log("\n── bootstrap-contracts: fetch + cache all schemas locally ──");
+  if (!existsSync(CONTRACTS_DIR)) mkdirSync(CONTRACTS_DIR, { recursive: true });
+  const subjects = await sr.get("/subjects");
+  console.log(`  ${subjects.length} subject(s) discovered`);
+  const saved = [];
+  for (const subject of subjects) {
+    const versions = await sr.get(`/subjects/${encodeURIComponent(subject)}/versions`);
+    for (const v of versions) {
+      const envelope = await sr.get(`/subjects/${encodeURIComponent(subject)}/versions/${v}`);
+      // Sanitize subject for filesystem (subject names may contain '/').
+      const safe = subject.replace(/[/\\:]/g, "_");
+      const fname = `${safe}-v${v}.json`;
+      const fpath = resolvePath(CONTRACTS_DIR, fname);
+      writeFileSync(fpath, JSON.stringify(envelope, null, 2) + "\n");
+      saved.push({ subject, version: v, id: envelope.id, file: fname });
+      console.log(`  ✓ ${fname.padEnd(48)} id=${envelope.id}`);
+    }
+  }
+  // Write an index so consumers can map (subject, version) → file
+  // without re-globbing the dir.
+  const indexPath = resolvePath(CONTRACTS_DIR, "index.json");
+  writeFileSync(indexPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    registryUrl: process.env.__SR_URL__ || "(see .env)",
+    contracts: saved,
+  }, null, 2) + "\n");
+  console.log(`\n✓ ${saved.length} contract(s) saved to contracts/`);
+  console.log(`✓ index written to contracts/index.json`);
+  return { saved };
+}
+
 // ── runner ────────────────────────────────────────────────────────
 async function main() {
   const env = loadEnv();
@@ -304,6 +343,13 @@ async function main() {
     key: env.SCHEMA_REGISTRY_KEY,
     secret: env.SCHEMA_REGISTRY_SECRET,
   });
+
+  // Standalone command — no phases, just dump contracts + exit.
+  if (phase === "bootstrap-contracts") {
+    process.env.__SR_URL__ = env.SCHEMA_REGISTRY_URL;
+    await bootstrapContracts(sr);
+    return;
+  }
 
   const out = { startedAt: new Date().toISOString(), env: { registryUrl: env.SCHEMA_REGISTRY_URL } };
   const outPath = resolvePath(RESULTS_DIR, `run-${out.startedAt.replace(/[:.]/g, "-")}.json`);

@@ -59,7 +59,17 @@ cd connectors/kafka-confluent-rc && npm install
 
 Deps: `@kafkajs/confluent-schema-registry` (wraps avsc + Confluent magic-byte wire format) + `kafkajs` (the consumer). The libs are connector-scoped — production codec usage is a separate v1.1 decision based on spike data. When backend codec registry ships, the FE bundle does NOT consume these (backend-mediated decode per design call 6).
 
-### 3. Run the spike
+### 3. Bootstrap contracts (one-time)
+
+```sh
+node spike.mjs bootstrap-contracts
+```
+
+Walks every subject + version on the registry with your `.env` credentials and saves each as `contracts/<subject>-v<n>.json` (plus an `index.json`). After this runs once, the codec can resolve schemas FILE-BASED at runtime with zero registry calls (Em 2026-06-01 — see [[feedback-data-contract-first]] and the contracts/[README.md](contracts/README.md)).
+
+Re-run when schemas evolve. This is the canonical way to get contracts — never ask the producer team to email schema files; use the credentials we already have.
+
+### 4. Run the spike
 
 ```sh
 node connectors/kafka-confluent-rc/spike.mjs                # all phases

@@ -10,7 +10,8 @@
     "spike:phase2": "node spike.mjs phase2",
     "spike:phase3": "node spike.mjs phase3",
     "spike:phase4": "node spike.mjs phase4",
-    "spike:phase5": "node spike.mjs phase5"
+    "spike:phase5": "node spike.mjs phase5",
+    "bootstrap-contracts": "node spike.mjs bootstrap-contracts"
   },
   "dependencies": {
     "@kafkajs/confluent-schema-registry": "^3.3.0",
