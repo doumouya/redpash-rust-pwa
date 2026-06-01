@@ -187,15 +187,18 @@ pub(super) fn parse_date_flex(column: &str) -> Expr {
     // all days ≤12 is the rare loss). 2-digit years (`%y`: 00-68→20xx,
     // 69-99→19xx) handle `02/01/23` — the dominant clean-score date shape.
     const FORMATS: &[&str] = &[
-        // 4-digit year, year-first (unambiguous)
-        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d",
+        // 2-digit-year cases come FIRST. `%Y` is greedy — it matches "02"
+        // in `02/01/23` as year 0002 — so the 2-digit `%y` formats MUST be
+        // tried before any `%Y` format or dd/mm/yy dates parse to year 2.
+        // `exact: true` makes a real 4-digit year fail the `%y` formats (it
+        // leaves 2 unconsumed digits), so ordering 2-digit-first is safe.
+        "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",   // 2-digit, day-first (FR/Africa default)
+        "%m/%d/%y",                            // 2-digit, month-first (US)
         // 4-digit year, day-first then month-first
         "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
         "%m/%d/%Y", "%m-%d-%Y",
-        // 2-digit year, day-first then month-first
-        "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",
-        "%m/%d/%y",
-        // compact
+        // 4-digit year-first (ISO) + compact
+        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d",
         "%Y%m%d",
     ];
     let exprs: Vec<Expr> = FORMATS.iter()
@@ -345,5 +348,24 @@ mod tests {
         assert_eq!(normalize_bool_cell("feminin"), None);
         assert_eq!(normalize_bool_cell("maybe"), None);
         assert_eq!(normalize_bool_cell(""), None);
+    }
+
+    #[test]
+    fn date_flex_2digit_year_is_day_first_not_year_0002() {
+        use polars::prelude::*;
+        // The regression: "02/01/23" parsed to year 0002 because greedy
+        // %Y ran before %d/%m/%y. Day-first dd/mm/yy must win → 2023-01-02.
+        let df = df!["d" => ["02/01/23", "20/05/2020", "03/27/2023", "2021-02-16", "20211112"]].unwrap();
+        let out = df.lazy()
+            .select([super::parse_date_flex("d").dt().strftime("%Y-%m-%d").alias("d")])
+            .collect().unwrap();
+        let got: Vec<Option<&str>> = out.column("d").unwrap().str().unwrap().into_iter().collect();
+        assert_eq!(got, vec![
+            Some("2023-01-02"), // dd/mm/yy — NOT 0002-01-23
+            Some("2020-05-20"), // dd/mm/yyyy
+            Some("2023-03-27"), // mm/dd/yyyy (US; day 27 > 12 forces month-first)
+            Some("2021-02-16"), // ISO
+            Some("2021-11-12"), // compact yyyymmdd
+        ]);
     }
 }
