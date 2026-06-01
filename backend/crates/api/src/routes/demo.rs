@@ -82,20 +82,27 @@ async fn avro_decode(Json(body): Json<AvroDecodeBody>) -> Result<Json<AvroDecode
     // schema must parse (400) — distinct from a schema/bytes mismatch (422)
     codec_avro::validate_schema(&body.schema).map_err(|e| AppError::bad_request("schema", e))?;
 
-    // decode (422 on schema/bytes mismatch — the decoder's domain error, not a
-    // server fault, so UNPROCESSABLE_ENTITY rather than 500)
+    // decode_guarded is crash-safe: a recursive schema is byte-capped + run on a
+    // big-stack thread (recursion-bomb guard), a non-recursive schema decodes
+    // uncapped. Runs off the async runtime (it blocks on its decode thread). A
+    // recursion-bomb / mismatch → 422; the 4 MiB router body cap covers oversize → 413.
+    let byte_count = bytes.len();
     let started = Instant::now();
-    let decoded = codec_avro::decode(&bytes, &body.schema, wire).map_err(|e| AppError {
-        status:  StatusCode::UNPROCESSABLE_ENTITY,
-        kind:    "decode_failed",
-        message: e,
-        inner:   None,
-    })?;
+    let schema = body.schema.clone();
+    let decoded = tokio::task::spawn_blocking(move || codec_avro::decode_guarded(&bytes, &schema, wire))
+        .await
+        .map_err(|e| AppError::internal("join", e.to_string()))?
+        .map_err(|e| AppError {
+            status:  StatusCode::UNPROCESSABLE_ENTITY,
+            kind:    "decode_failed",
+            message: e,
+            inner:   None,
+        })?;
 
     Ok(Json(AvroDecodeResult {
         decoded,
         decode_ms: started.elapsed().as_millis() as u64,
-        byte_count: bytes.len(),
+        byte_count,
     }))
 }
 

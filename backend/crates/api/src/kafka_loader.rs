@@ -325,7 +325,9 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
                 }
             }
         };
-        match codec_avro::decode(bytes, &schema, cfg.wire_format) {
+        // decode_guarded (not decode): a crafted recursive message can't
+        // stack-overflow the loader process; oversized messages are rejected.
+        match codec_avro::decode_guarded(bytes, &schema, cfg.wire_format) {
             Ok(v) => {
                 records.push(v);
                 ok += 1;

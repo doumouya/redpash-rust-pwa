@@ -38,7 +38,12 @@ body cap → 413 over-limit):
   or file row here (that's the authenticated upload path). Keep the body cap small.
 - **400 vs 422 on avro-decode is deliberate**: a bad *schema* (client error, 400)
   vs a schema/bytes *mismatch* (decode domain, 422). `validate_schema` runs first
-  (400), then `decode` (422).
+  (400), then `codec_avro::decode_guarded` (422 on mismatch / trailing bytes /
+  recursion-bomb guard / over-cap). Decode runs via `spawn_blocking` (it blocks on
+  its own decode thread) — keep it off the async runtime. **Never call
+  `codec_avro::decode` here directly**: `decode_guarded` is the crash-safe boundary
+  (a recursive-schema payload would otherwise stack-overflow + abort the process —
+  Gemini Suite #2 Case 17).
 - The avro-decode path is the SAME `codec_avro::decode` the Kafka loader uses
   ([kafka_loader.md](../kafka_loader.md)) — adversarial fixes harden the live ETL.
 - Wire shapes in `shared::` change in lockstep with this file when it consumes them; backend ↔ frontend ↔ DB seam.
