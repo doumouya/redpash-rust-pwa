@@ -68,8 +68,13 @@ Every documented source file carries a 2-line header:
 - **No frameworks.** Stack is vanilla Rust + vanilla JS by deliberate
   choice. Tooling carve-out for static-analysis Node scripts under
   `tools/` (Acorn-style is fine there; nowhere else).
-- **No service-worker cache bump in dev.** `frontend/service-worker.js`
-  is install-only — frontend edits show up on a normal refresh.
+- **No manual service-worker cache bumping.** `frontend/service-worker.js`
+  caches ONLY the content-hashed wasm (`/wasm/data_bg.<hash>.wasm`,
+  cache-first) — safe because the hash IS the version (rebuild → new URL →
+  fresh, never stale). Everything else (JS / CSS / HTML / `/api`) is NOT
+  intercepted, so frontend edits still show on a normal refresh. Never add a
+  manual `CACHE_VERSION` or cache JS/CSS — that treadmill is why the old SW
+  was gutted (`tools/build-wasm.sh` content-hashes the wasm; the SW keys on it).
 - **JS↔Rust boundary is locked.** Rust owns data, JS owns pixels. JS
   never implements a data engine. See
   [`docs/internal/architecture/js-rust-boundary.md`](docs/internal/architecture/js-rust-boundary.md).
