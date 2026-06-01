@@ -102,6 +102,19 @@ export default function workspace(app, { session }) {
   let searchQ       = "";
   let activeFilter  = null; // FilterNode tree (see shared::filter::FilterNode) — null = no filter
   let searchDebounce = null;
+  // ─── client engine — sort over the loaded set in WASM, no round-trip ──
+  // A data file at/under this row cap loads its full (server-filtered +
+  // searched) result set into clientBuffer; SORT + PAGING then run
+  // client-side over it via the wasm engine (apply_sort) — instant, no
+  // server gesture. Larger files keep the server page path. Filter +
+  // search still hit the server (the wasm apply_filter is the FLAT
+  // filter_rows step, not the nested query FilterNode, and there's no
+  // search wrapper — moving them client-side needs new wasm wrappers, a
+  // follow-up). "Gated by capacity, not capability" — see
+  // subsystems/wasm-engine.md. Em 2026-06-01.
+  const CLIENT_ENGINE_ROW_CAP = 50000;
+  let clientMode    = false;  // active file is under the cap → client sort/page
+  let clientBuffer  = null;   // { cells: string[][], idxs: number[], typed: object[] } | null
   // Rail filter state — both ephemeral per visit (no pref): a deep-link
   // into a project must never be hidden by a stale persisted filter.
   // ownerFilter ∈ {all, personal, shared, company}; railSearchQ matches
@@ -1261,6 +1274,7 @@ export default function workspace(app, { session }) {
     // Reset all per-file state — column-indexed knobs only make sense
     // against the columns we're about to fetch.
     sortKeys = []; activeFilter = null; searchQ = "";
+    clientMode = false; clientBuffer = null;
     currentPage = 1;
     $("#wsRowSearch").value = "";
     $("#wsFilterToggle").classList.remove("has-filter");
@@ -1381,7 +1395,12 @@ export default function workspace(app, { session }) {
           joinsCtrl?.refresh();
         }
         reportCtrl?.refresh();
-        await fetchAndRender();
+        // Capacity gate: small files render through the client engine
+        // (full set buffered, sort/page client-side); big files keep the
+        // server page path.
+        clientMode = (envelope?.summary?.row_count || 0) <= CLIENT_ENGINE_ROW_CAP;
+        if (clientMode) await refreshClientBuffer();
+        else            await fetchAndRender();
         // CAS_3BCD6727: data files belong to the "data" view slot.
         lastFileRidByView.data = rid;
       }
@@ -1396,7 +1415,10 @@ export default function workspace(app, { session }) {
   async function refetchPage() {
     if (!activeFileRid) return;
     rowsInfo.textContent = "Loading…";
-    try { await fetchAndRender(); }
+    // clientMode: the filtered/searched set may have changed (filter,
+    // search, step) — re-pull the full set into the buffer. SORT + paging
+    // gestures bypass this and call clientRender() directly (no fetch).
+    try { await (clientMode ? refreshClientBuffer() : fetchAndRender()); }
     catch (err) {
       setTableState("Couldn’t load page" + (err.status ? " (" + err.status + ")" : "") + ".");
       rowsInfo.textContent = "Error.";
@@ -1428,6 +1450,89 @@ export default function workspace(app, { session }) {
     const to    = Math.min(from + shown - 1, total);
     rowsInfo.textContent = (total === 0 ? "0 rows" : from + "–" + to + " of " + total + " rows")
       + " · " + (pageData?.ms != null ? pageData.ms + " ms" : "—");
+    renderPager();
+    setTableState(null);
+  }
+
+  // ─── client engine — full-set buffer + client-side sort/page ─────
+  // coerceCell: a /page cell arrives as a STRING (the endpoint stringifies
+  // every value). Coerce to the column's STORAGE dtype so the wasm engine
+  // — which infers a column's type from the JSON value — sorts numerics
+  // numerically, matching the server (which sorts the parsed frame by
+  // storage dtype). Date/string stay strings → lexical (ISO / YYYY-MM-DD
+  // sorts correctly; other date formats are a typed-date follow-up).
+  function coerceCell(v, col) {
+    if (v == null || v === "") return null;
+    const dt = col && col.dtype;
+    if (dt === "int" || dt === "float") { const n = Number(v); return Number.isNaN(n) ? v : n; }
+    if (dt === "bool") return v === "true" || v === "1";
+    return v;
+  }
+
+  // refreshClientBuffer: pull the ENTIRE current result set (server
+  // applies filter + search; NO `sorts` param — sort is client-side now),
+  // coerce it once into a typed buffer, then render. Called on open and
+  // whenever the filtered/searched set changes (filter, search, step).
+  async function refreshClientBuffer() {
+    if (!activeFileRid) return;
+    const params = new URLSearchParams();
+    params.set("page", "1");
+    params.set("size", String(CLIENT_ENGINE_ROW_CAP + 1)); // whole file (≤ cap)
+    if (searchQ) params.set("q", searchQ);
+    if (activeFilter) params.set("filters", JSON.stringify(activeFilter));
+    // DATA-ENDPOINT-ACK: caller-checks-file_type — refreshClientBuffer
+    // only runs when clientMode is set, and clientMode is set only in
+    // loadFile's data (CSV) branch after the file_type switch, so
+    // activeFileRid points at a data file here (same as fetchAndRender).
+    const pageData = await api.get(
+      "/files/" + encodeURIComponent(activeFileRid) + "/page?" + params.toString());
+    const cells = pageData?.rows || [];
+    const idxs  = pageData?.row_indices || cells.map((_, i) => i);
+    // Coerce ONCE; each typed row carries __p = its buffer position so a
+    // sort's output order maps back to the original (uncoerced) string
+    // cells — display never drifts from the coercion.
+    const typed = cells.map((row, p) => {
+      const o = { __p: p };
+      activeColumns.forEach((c, ci) => { o[c.name] = coerceCell(row[ci], c); });
+      return o;
+    });
+    clientBuffer = { cells, idxs, typed, ms: pageData?.ms };
+    await clientRender();
+  }
+
+  // clientRender: sort the buffer via the wasm engine (stacked single-
+  // column sorts, least-significant key first — the wrapper sorts one
+  // column at a time; multi-key relies on a stable sort), slice the page,
+  // render. No server round-trip. Engine failure falls back to buffer
+  // order so a sort gesture never blanks the grid.
+  async function clientRender() {
+    if (!clientBuffer) return;
+    const { cells, idxs, typed } = clientBuffer;
+    let order = typed.map((_, i) => i);
+    if (sortKeys.length) {
+      try {
+        const eng = await getEngine();
+        let rows = typed;
+        for (let k = sortKeys.length - 1; k >= 0; k--) {
+          const meta = activeColumns[sortKeys[k].col - 3];
+          if (!meta) continue;
+          rows = JSON.parse(eng.apply_sort(JSON.stringify(rows), meta.name, sortKeys[k].dir < 0));
+        }
+        order = rows.map((r) => r.__p);
+      } catch (_err) { /* keep buffer order — never blank the grid on a sort */ }
+    }
+    const total = order.length;
+    totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start = (currentPage - 1) * pageSize;
+    const pageOrder = order.slice(start, start + pageSize);
+    rowIndices = pageOrder.map((p) => idxs[p]);
+    renderTable(activeColumns, pageOrder.map((p) => cells[p]));
+    syncSortHeaders();
+    const from = total === 0 ? 0 : start + 1;
+    const to   = start + pageOrder.length;
+    rowsInfo.textContent = (total === 0 ? "0 rows" : from + "–" + to + " of " + total + " rows")
+      + " · wasm" + (clientBuffer.ms != null ? " · " + clientBuffer.ms + " ms load" : "");
     renderPager();
     setTableState(null);
   }
@@ -1890,9 +1995,11 @@ export default function workspace(app, { session }) {
     }, 250);
   });
 
-  // ─── sort — server-side via PageQuery.sorts ──────────────────
-  // Shift-click extends the sort, plain click replaces. Same gesture
-  // as before; the difference is the refetch.
+  // ─── sort ─────────────────────────────────────────────────────
+  // Shift-click extends the sort, plain click replaces. In clientMode
+  // (file ≤ CLIENT_ENGINE_ROW_CAP) the sort runs in the wasm engine over
+  // the buffered set — no server round-trip (clientRender). Over the cap
+  // it still rides the server page query (fetchAndRender's `sorts`).
   thead.addEventListener("click", (e) => {
     const th = e.target.closest("th.sortable");
     if (!th) return;
@@ -1906,7 +2013,8 @@ export default function workspace(app, { session }) {
     } else {
       sortKeys = [{ col, dir: 1, isDate }];
     }
-    refetchPage();
+    // clientMode: re-sort the buffer in wasm — no server round-trip.
+    if (clientMode) clientRender(); else refetchPage();
   });
 
   // Paint sort-direction chevrons + multi-key order numbers on the
@@ -2707,7 +2815,8 @@ export default function workspace(app, { session }) {
     pageSize = parseInt(raw, 10) || DEFAULT_PAGE_SIZE;
     currentPage = 1;
     syncRowsDropdown();
-    refetchPage();
+    // clientMode: re-slice the buffer at the new page size — no fetch.
+    if (clientMode) clientRender(); else refetchPage();
   });
   function syncRowsDropdown() {
     const raw = getPref("workspace-rowsPerPage");
@@ -2761,7 +2870,8 @@ export default function workspace(app, { session }) {
     const target = parseInt(btn.dataset.page, 10);
     if (!Number.isFinite(target) || target < 1 || target > totalPages || target === currentPage) return;
     currentPage = target;
-    refetchPage();
+    // clientMode: re-slice the buffer client-side — no server round-trip.
+    if (clientMode) clientRender(); else refetchPage();
   });
 
 }
