@@ -75,7 +75,7 @@ SELECT p.redpash_id, p.name, COALESCE(p.description, '')
   FROM projects p
  WHERE (EXISTS (SELECT 1 FROM memberships m
                     WHERE m.object_redpash_id = p.redpash_id
-                      AND m.user_redpash_id    = $1))
+                      AND m.member_redpash_id    = $1))
    AND (p.name ILIKE '%' || $2 || '%' OR
         COALESCE(p.description, '') ILIKE '%' || $2 || '%')
  ORDER BY (CASE WHEN p.name ILIKE $2 || '%' THEN 0 ELSE 1 END),
@@ -104,7 +104,7 @@ WITH ranked AS (
      FROM project_files f
      JOIN projects p ON p.redpash_id = f.project_redpash_id
     WHERE (EXISTS (SELECT 1 FROM memberships m
-                   WHERE m.object_redpash_id = p.redpash_id AND m.user_redpash_id = $1))
+                   WHERE m.object_redpash_id = p.redpash_id AND m.member_redpash_id = $1))
       AND (f.filename ILIKE '%' || $2 || '%'
            OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
 )
@@ -237,7 +237,7 @@ SELECT p.redpash_id, p.name, COALESCE(p.description, '')
   FROM projects p
  WHERE (EXISTS (SELECT 1 FROM memberships m
                     WHERE m.object_redpash_id = p.redpash_id
-                      AND m.user_redpash_id    = $1))
+                      AND m.member_redpash_id    = $1))
    AND (p.name ILIKE '%' || $2 || '%'
         OR COALESCE(p.description, '') ILIKE '%' || $2 || '%')
  ORDER BY (CASE WHEN p.name ILIKE $2 || '%' THEN 0 ELSE 1 END),
@@ -282,7 +282,7 @@ WITH ranked AS (
       FROM project_files f
       JOIN projects p ON p.redpash_id = f.project_redpash_id
      WHERE (EXISTS (SELECT 1 FROM memberships m
-                   WHERE m.object_redpash_id = p.redpash_id AND m.user_redpash_id = $1))
+                   WHERE m.object_redpash_id = p.redpash_id AND m.member_redpash_id = $1))
        AND (f.filename ILIKE '%' || $2 || '%'
             OR COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
 )

@@ -3,7 +3,7 @@ title: backend/crates/api/src/rbac.rs
 source: ../../../../../backend/crates/api/src/rbac.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-05-31
+last modified date: 2026-06-03
 ---
 
 # rbac.rs
@@ -28,15 +28,19 @@ object, unioned across three sources, or `None` (default-deny):
 3. **team** — a membership held by any team the caller belongs to (recursive
    CTE, so nested teams close)
 
-**Permission contract (CAS_0DE2DDEF, step 1 — storage only).** Em's reframe:
+**Permission contract (CAS_0DE2DDEF, steps 1–2 — storage + evaluator).** Em's reframe:
 RBAC is one declarative, per-company, **versioned JSONB contract** (`company_rbac`
 table, active = max(version)) the single evaluator reads. The tier ladder, the
 self-overlay, and the see-down visibility rule are framework DEFAULTS; the
 contract carries the company-scope specials (owner/admins) + the **horizontal
 axis** — per-`(team, object-TYPE)` action grants (HR owns Users+Payslips, Eng
 owns Cases+Monitoring; capability, not team-over-team rank). `memberships` stays
-the instance graph. As of step 1 the contract is **storage + types only — the
-gates do NOT consult it yet** (wired in step 2), so enforcement is unchanged.
+the instance graph. **Storage (`company_rbac`) and the contract-aware evaluator
+(`require_action`) are both implemented** (`7d59460`, `193f554`); the evaluator is
+**not yet invoked by any endpoint**, and a company with no registered contract
+evaluates **tier-only** (today's behaviour) — so enforcement is unchanged until the
+cutover wires handlers onto it. Full model + semantics:
+[permission-contract](../../../specs/rbac/permission-contract.md).
 
 ## Public surface
 
@@ -89,8 +93,9 @@ gates do NOT consult it yet** (wired in step 2), so enforcement is unchanged.
   (`resolve_grant`) **∩** the company's contract (`object_kind` × `Action.crud`)
   via the private pure `evaluate(grant, contract, principals, caller, type,
   action)`. 404-on-deny. Non-breaking (tier-only when no contract). The target
-  single gate the rollout converges every endpoint onto — **not yet wired to any
-  endpoint** (storage + evaluator land before the cutover).
+  single gate the rollout converges every endpoint onto — **fully implemented; not
+  yet invoked by any endpoint** (no call-sites in `routes/` yet; the cutover wires
+  handlers onto it next).
 
 ## Drift-prone areas
 
@@ -114,5 +119,6 @@ gates do NOT consult it yet** (wired in step 2), so enforcement is unchanged.
 ## Related
 
 - [entity-membership-model](../../../specs/rbac/entity-membership-model.md) — the §2 resolver spec.
+- [permission-contract](../../../specs/rbac/permission-contract.md) — the versioned-JSONB contract model `require_action` evaluates (the two axes, storage, semantics).
 - [rbac catalog index](../../../specs/rbac/index.md) — the policy layer that will read this.
 - [Backend pillar landing](../index.md)

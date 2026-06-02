@@ -2,29 +2,38 @@
 title: Membership — object metadata
 section: Internal
 order: 49
-last modified date: 2026-05-30
+last modified date: 2026-06-03
 owner: Torv
 status: draft — per the object-metadata sweep ([index](index.md))
 ---
 
 # Membership (`memberships`)
 
-A user's role within an entity — a Company, a Project, or a Case.
-**One polymorphic table**, `memberships`, backs every scope: the
-parent is referenced by a single `object_redpash_id` FK →
-`entities.id`, and the joined parent type (company vs project vs case)
-discriminates the scope. A pure join table: composite PK on
-`(object_redpash_id, user_redpash_id)`, no `redpash_id`, never
-URL-addressable on its own — every membership operation routes through
-the parent (`/api/companies/:rid/members` or, eventually,
-`/api/projects/:rid/members`).
+A **member's** role within an entity — a Company, a Project, or a Case.
+The member is itself an entity, so a grant's holder can be a **user OR a
+team** (the symmetric edge). **One polymorphic table**, `memberships`,
+backs every scope: the parent is referenced by a single
+`object_redpash_id` FK → `entities.id`, and the joined parent type
+(company vs project vs case) discriminates the scope. A pure join table:
+composite PK on `(object_redpash_id, member_redpash_id, role,
+context_role)`, no `redpash_id`, never URL-addressable on its own — every
+membership operation routes through the parent
+(`/api/companies/:rid/members` or, eventually,
+`/api/projects/:rid/members`). The PK spans `role` + `context_role` so one
+principal can hold **many** roles on the same object (e.g. Reporter +
+Case Owner).
 
 **Backing table:**
-- `memberships` (unified baseline `20260529000000_init.sql`) — PK
-  `(object_redpash_id, user_redpash_id)`, FK `object_redpash_id →
-  entities.id ON DELETE CASCADE`. Replaces the former parallel
-  `company_memberships` + `project_memberships` tables, which were
-  consolidated into this one polymorphic table.
+- `memberships` (baseline `20260529000000_init.sql`; reshaped to the
+  symmetric entity→entity edge in `20260531000000_entity_membership_rbac`
+  + `20260531000001_rename_membership_subject`) — PK
+  `(object_redpash_id, member_redpash_id, role, context_role)`, with
+  **both** `object_redpash_id` **and** `member_redpash_id` FK →
+  `entities.id ON DELETE CASCADE` (the subject is any entity — a user or a
+  team). Replaces the former parallel `company_memberships` +
+  `project_memberships` tables, consolidated into this one polymorphic
+  table; the subject column was renamed `user_redpash_id →
+  member_redpash_id` (index `memberships_member_idx`).
 
 **DTO:** `backend/crates/shared/src/user.rs::UserMembership` (the
 company-membership row joined for `/api/users` + `/api/me`),
@@ -49,7 +58,7 @@ discriminator).
 | `update` | `PATCH /api/companies/:rid/members/:user_id` | Body: `{ role }`. Owner-only for promoting to `owner`. Last-owner demotion blocked. Emits `company_member_role_change`. |
 | `delete (self)` | `DELETE /api/companies/:rid/members/:user_id` (self-actor) | Self-leave. Last-owner removal blocked. Emits `company_member_leave`. |
 | `delete (other)` | `DELETE /api/companies/:rid/members/:user_id` (other-actor) | Admin / owner removes another member. Last-owner removal blocked. Emits `company_member_remove`. |
-| `delete (admin cross-scope)` | `DELETE /api/admin/memberships/:rid` | Special path — the membership PK is composite, so this endpoint takes a synthetic encoded rid that decodes back to `(parent_id, user_redpash_id)` on the server side. |
+| `delete (admin cross-scope)` | `DELETE /api/admin/memberships/:rid` | Special path — the membership PK is composite, so this endpoint takes a synthetic encoded rid that decodes back to `(parent_id, member_redpash_id, role, context_role)` on the server side. |
 | `list (per-company)` | `GET /api/companies/:rid/members` | Returns `Vec<CompanyMember>` — membership rows joined with the user's profile (display_name / username / avatar_url) so the members list renders without a second lookup. |
 | `list (admin)` | `GET /api/admin/memberships?scope=company|project&page&size&sort&dir&q` | Paginated `Page<MembershipSummary>` for the Home Memberships tab. Both scopes query the same `memberships` table, discriminated by joining `projects` vs `companies` on `object_redpash_id`. `scope=` defaults to `project` when absent (the rail-tab's "first paint" landing). |
 | `search` | `GET /api/admin/memberships?q=…` | ILIKE substring on `user_display_name` + `user_username` + `scope_name` (project name or company name). |
@@ -72,16 +81,19 @@ object_redpash_id
                column. CASCADE on parent delete (deleting a company
                / project / case removes its memberships; the users
                themselves stay). Part of the composite PK with
-               user_redpash_id.
+               member_redpash_id, role, and context_role.
 ```
 
 ```
-user_redpash_id
-  Type:        TEXT NOT NULL / String — FK to users.redpash_id
+member_redpash_id
+  Type:        TEXT NOT NULL / String — FK to entities.id
   Properties:  Layout
-  Description: The member's user. CASCADE on user delete (deleting
-               a user removes their memberships). Part of the
-               composite PK with the parent FK.
+  Description: The member (the grant's subject) — any entity, so a
+               USER or a TEAM (the symmetric edge). CASCADE on delete
+               (removing the entity removes its memberships). Part of
+               the composite PK with the parent FK, role, and
+               context_role. Renamed from user_redpash_id when users
+               rejoined the entity supertype (mig 20260531000001).
 ```
 
 ```
@@ -96,19 +108,23 @@ role
                `role='owner'` row written on project create. Per-scope
                narrowing (e.g. companies offer only owner/admin/member)
                is enforced at the route layer, not the column CHECK.
+               Part of the composite PK — distinct role values let one
+               principal hold multiple tiers on the same object.
 ```
 
 ```
 context_role
-  Type:        TEXT / Option<String>
+  Type:        TEXT NOT NULL DEFAULT '' / String
   Properties:  Update, Layout
-  Description: Free-text business descriptor for the membership,
-               separate from the access `role`. Holds 'Reporter' /
-               'Case Owner' on case rows; 'CEO' / 'Department' etc.
-               on org/project rows; NULL when there's no business
-               label. Collapsed from the former `display_name` +
-               `relationship_attribute` columns into this single
-               descriptor.
+  Description: Free-text business descriptor, separate from the access
+               `role` and IGNORED by every enforcement path (pure
+               display). Holds 'Reporter' / 'Case Owner' on case rows;
+               'CEO' / 'Department' etc. on org/project rows; '' when
+               there's no business label. NOT NULL DEFAULT '' because it
+               sits in the composite PK — distinct context_role values
+               are how one principal holds multiple roles on one object
+               (mig 20260531000000). Collapsed from the former
+               `display_name` + `relationship_attribute` columns.
 ```
 
 ```
@@ -133,7 +149,7 @@ user_display_name, user_username, user_avatar_url
   Type:        TEXT / String  (+ Option<String> for avatar)
   Properties:  Sort (user_display_name + user_username only), Layout
   Description: users.display_name / username / avatar_url JOINed
-               on user_redpash_id. Drives the member chip + the
+               on member_redpash_id (when the member is a user). Drives the member chip + the
                "Member" column on the Home Memberships tab.
 ```
 
@@ -209,11 +225,12 @@ object_redpash_id → Project (PRJ_)  [project-scope rows]
 ```
 
 ```
-user_redpash_id → User (USR_)
-  Cardinality:  N:1 (a User has many memberships across
-                companies + projects)
+member_redpash_id → Entity (USR_ user | TEAM_ team)
+  Cardinality:  N:1 (an entity holds many memberships across
+                companies + projects + cases; a team can be the member)
   On delete:    CASCADE
   Hydrated as:  user_display_name + user_username + user_avatar_url
+                (when the member is a user)
 ```
 
 ### Inverse relationships

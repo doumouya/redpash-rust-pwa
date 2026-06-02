@@ -358,6 +358,7 @@ gates exist today).
 
 ## See also
 
+- [permission-contract](permission-contract.md) — the per-company versioned-JSONB policy layer (the horizontal `(team, object-TYPE)` axis + field axis) the evaluator reads on top of this catalog.
 - [object-metadata](../object-metadata/index.md) — the model this catalog derives from.
 - [user-preferences](../user-preferences.md) — the pref-storage pattern the `/api/me` permissions payload will extend.
 - [[project-rbac-corporate-ready]] — the broader workstream framing (row-level scoping + route gating + `/api/me` permissions payload).
