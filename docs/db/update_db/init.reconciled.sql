@@ -147,7 +147,7 @@ CREATE TABLE public.teams (
 CREATE TABLE public.memberships (
     object_redpash_id text NOT NULL REFERENCES public.entities(id) ON DELETE CASCADE,
     member_redpash_id text NOT NULL REFERENCES public.entities(id) ON DELETE CASCADE,  -- ⟵ CHANGED: was user_redpash_id → users; now any entity (user|team)
-    role text DEFAULT 'viewer'::text NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+    role text DEFAULT 'member'::text NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),  -- ⟵ CORRECTED 2026-06-03: live default is 'member' (verified vs redpash_prerelease), the dump had drifted to 'viewer'
     context_role text DEFAULT ''::text NOT NULL, -- ⟵ CHANGED: NOT NULL DEFAULT '' (it sits in the PK). Free-text label; never overrides role.
     joined_at timestamp with time zone DEFAULT now() NOT NULL,
     PRIMARY KEY (object_redpash_id, member_redpash_id, role, context_role)  -- ⟵ CHANGED: was (object_redpash_id, user_redpash_id)
