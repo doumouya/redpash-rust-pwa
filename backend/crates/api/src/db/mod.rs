@@ -937,16 +937,15 @@ const COMPANY_COLS: &str = "redpash_id, name, slug, avatar_url, created_at, upda
 /// Companies the user belongs to, each carrying the caller's own role
 /// and the total member count.
 /// Returns every company. `my_role` is the caller's role when they
-/// belong to the company, or `None` when they don't — the Companies
-/// tab surfaces non-member companies too so the user can discover and
-/// request to join. Caller-scoped writes (member CRUD, company edits)
-/// still enforce `company_role()` checks at the route layer.
-pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<CompanySummary>> {
-    // LEFT JOIN here would emit one row per (object × member-role) edge
-    // after the PK widening — same company appearing 2× when the user
-    // holds two roles. Replace with a precedence-ordered subquery that
-    // collapses the user's roles to the highest tier (matches the
-    // admin list endpoints' contract).
+/// belong to the company, or `None` when they don't. The list is
+/// **see-down scoped** (CAS_AF2690C0, step-3): `viewer = Some(caller)` returns
+/// only companies the caller is a member of (no cross-company visibility — the
+/// see-down model has no discovery feature); `viewer = None` = platform-admin,
+/// the full directory. Caller-scoped writes (member CRUD, company edits) still
+/// enforce `company_role()` checks at the route layer.
+pub async fn list_companies(pool: &PgPool, user_rid: &str, viewer: Option<&str>) -> sqlx::Result<Vec<CompanySummary>> {
+    // my_role: precedence-ordered subquery collapsing the user's roles to the
+    // highest tier (a LEFT JOIN would emit one row per role-edge post-PK-widening).
     let rows = sqlx::query(
         "SELECT c.redpash_id, c.name, c.slug, c.avatar_url, c.created_at, c.updated_at,
                 (SELECT m.role FROM memberships m
@@ -961,9 +960,14 @@ pub async fn list_companies(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<C
                 (SELECT COUNT(*) FROM memberships cm
                  WHERE cm.object_redpash_id = c.redpash_id) AS member_count
          FROM companies c
+         WHERE ($2::text IS NULL
+                OR EXISTS (SELECT 1 FROM memberships mv
+                            WHERE mv.object_redpash_id = c.redpash_id
+                              AND mv.member_redpash_id = $2))
          ORDER BY c.name ASC",
     )
     .bind(user_rid)
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
     Ok(rows
@@ -1199,12 +1203,13 @@ impl From<TeamRow> for Team {
     }
 }
 
-/// Every team in the org, each carrying caller's role + member count +
-/// the joined company name. Same broader-than-membership shape as
-/// `list_companies` — non-member teams surface for discoverability and
-/// the Home Teams tab. Caller-scoped writes still go through the
-/// routes/members.rs gate.
-pub async fn list_teams(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<TeamSummary>> {
+/// Every team the caller can see, each carrying caller's role + member count +
+/// the joined company name. **See-down scoped** (CAS_AF2690C0, step-3):
+/// `viewer = Some(caller)` returns only teams the caller is a member of OR teams
+/// in a company the caller is a member of (you see your org's teams, not other
+/// orgs'); `viewer = None` = platform-admin, every team. Caller-scoped writes
+/// still go through the routes/members.rs gate.
+pub async fn list_teams(pool: &PgPool, user_rid: &str, viewer: Option<&str>) -> sqlx::Result<Vec<TeamSummary>> {
     // my_role: precedence-ordered LIMIT 1 subquery — see
     // list_companies for the same shape + the rationale.
     let rows = sqlx::query(
@@ -1223,9 +1228,15 @@ pub async fn list_teams(pool: &PgPool, user_rid: &str) -> sqlx::Result<Vec<TeamS
                  WHERE tm.object_redpash_id = t.redpash_id) AS member_count
          FROM teams t
          LEFT JOIN companies c ON c.redpash_id = t.company_id
+         WHERE ($2::text IS NULL
+                OR EXISTS (SELECT 1 FROM memberships mv
+                            WHERE mv.member_redpash_id = $2
+                              AND (mv.object_redpash_id = t.redpash_id
+                                   OR mv.object_redpash_id = t.company_id)))
          ORDER BY t.name ASC",
     )
     .bind(user_rid)
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
     Ok(rows

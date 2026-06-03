@@ -66,7 +66,11 @@ async fn list(
     headers:      HeaderMap,
 ) -> Result<Json<CompanyList>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
-    let items = db::list_companies(&state.db, &user).await.map_err(db_err)?;
+    // See-down scope: platform admins see the full directory; everyone else sees
+    // only companies they're a member of (CAS_AF2690C0, step-3 — no cross-company
+    // discovery under the see-down model).
+    let viewer = if crate::rbac::is_platform_admin(&state, &user).await? { None } else { Some(user.as_str()) };
+    let items = db::list_companies(&state.db, &user, viewer).await.map_err(db_err)?;
     Ok(Json(CompanyList { items }))
 }
 

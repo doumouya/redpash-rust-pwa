@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/users.rs
 source: ../../../../../../backend/crates/api/src/routes/users.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31
+last modified date: 2026-06-03
 ---
 
 # users.rs
@@ -13,7 +13,9 @@ last modified date: 2026-05-31
 `/api/users` — user directory.
 
 Powers the Objects page's owner-reassignment picker and the Users
-tab. Single-tenant for now: returns every user.
+tab. **See-down scoped** (CAS_AF2690C0, step-3): a non-admin caller gets
+the caller + users who share a company with them; platform admins get
+every user. (Was unscoped — returned every user + the full membership graph.)
 
 ## Public surface
 

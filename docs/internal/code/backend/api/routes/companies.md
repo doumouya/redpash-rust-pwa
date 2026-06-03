@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/companies.rs
 source: ../../../../../../backend/crates/api/src/routes/companies.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31
+last modified date: 2026-06-03
 ---
 
 # companies.rs
@@ -31,6 +31,7 @@ slug logic; the read gate `members::require_member` is reused by `get_one`.
 
 ## Gates
 
+- `list` — **see-down scoped** (CAS_AF2690C0, step-3): returns only companies the caller is a member of (`db::list_companies(.., viewer)`); platform admins get the full directory. Makes the Purpose's "company existence is never leaked" true for the *list* too (it leaked before — every company surfaced to every caller).
 - `get_one` — any company member (`members::require_member`, platform-admin bypass).
 - `patch` — `company.update`: company admin+ (direct) or platform admin
   (`require_grant`, 404 on deny).

@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/teams.rs
 source: ../../../../../../backend/crates/api/src/routes/teams.rs
 owner: Torv
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31 (kind field)
+last modified date: 2026-06-03
 ---
 
 # teams.rs
@@ -19,7 +19,7 @@ companies/projects/cases — so `routes/members.rs` is mounted under
 `/:rid/members` unchanged.
 
 ```
-GET    /              list teams (broader than membership — like /companies)
+GET    /              list teams — see-down scoped (caller's org teams; admin sees all) (CAS_AF2690C0)
 POST   /              create team + seat creator as owner (atomic)
 GET    /:rid          read (any member)
 PATCH  /:rid          update (team admin+ or platform admin) — name only

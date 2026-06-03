@@ -53,6 +53,12 @@ async fn search(
 ) -> Result<Json<SearchResponse>, AppError> {
     let started = Instant::now();
     let user = super::resolve_user_rid(&state, &headers).await?;
+    // See-down scope for the org-entity branches (users / companies / memberships):
+    // platform admins search the whole directory; everyone else is scoped to their
+    // reach (CAS_AF2690C0, step-3). The projects/files branches are already
+    // reach-scoped via their EXISTS-membership WHERE.
+    let viewer: Option<&str> =
+        if crate::rbac::is_platform_admin(&state, &user).await? { None } else { Some(user.as_str()) };
 
     // Trim + bail on empty. Single-char queries are noisy but allowed —
     // gives the user feedback that typing is doing something; the
@@ -178,18 +184,26 @@ async fn search(
     // uniformly in Phase 4 (the module note); these surface in omnisearch
     // the same way they're already visible on Home.
     let rows = sqlx::query(
-        "SELECT redpash_id, display_name, username
-           FROM users
-          WHERE display_name        ILIKE '%' || $1 || '%'
-             OR username            ILIKE '%' || $1 || '%'
-             OR COALESCE(email, '') ILIKE '%' || $1 || '%'
-          ORDER BY (CASE WHEN display_name ILIKE $1 || '%'
-                           OR username     ILIKE $1 || '%' THEN 0 ELSE 1 END),
-                   display_name
+        "SELECT u.redpash_id, u.display_name, u.username
+           FROM users u
+          WHERE (u.display_name        ILIKE '%' || $1 || '%'
+              OR u.username            ILIKE '%' || $1 || '%'
+              OR COALESCE(u.email, '') ILIKE '%' || $1 || '%')
+            AND ($3::text IS NULL
+                 OR u.redpash_id = $3
+                 OR EXISTS (SELECT 1 FROM memberships ma
+                              JOIN memberships mb ON mb.object_redpash_id = ma.object_redpash_id
+                             WHERE ma.member_redpash_id = $3
+                               AND mb.member_redpash_id = u.redpash_id
+                               AND ma.object_redpash_id LIKE 'CMP\\_%'))
+          ORDER BY (CASE WHEN u.display_name ILIKE $1 || '%'
+                           OR u.username     ILIKE $1 || '%' THEN 0 ELSE 1 END),
+                   u.display_name
           LIMIT $2",
     )
     .bind(&q_owned)
     .bind(PER_KIND_LIMIT)
+    .bind(viewer)
     .fetch_all(&state.db)
     .await?;
     for r in rows {
@@ -207,15 +221,20 @@ async fn search(
 
     // ── companies ──────────────────────────────────────────────
     let rows = sqlx::query(
-        "SELECT redpash_id, name, COALESCE(slug, '') AS slug
-           FROM companies
-          WHERE name               ILIKE '%' || $1 || '%'
-             OR COALESCE(slug, '') ILIKE '%' || $1 || '%'
-          ORDER BY (CASE WHEN name ILIKE $1 || '%' THEN 0 ELSE 1 END), name
+        "SELECT c.redpash_id, c.name, COALESCE(c.slug, '') AS slug
+           FROM companies c
+          WHERE (c.name               ILIKE '%' || $1 || '%'
+              OR COALESCE(c.slug, '') ILIKE '%' || $1 || '%')
+            AND ($3::text IS NULL
+                 OR EXISTS (SELECT 1 FROM memberships mv
+                             WHERE mv.object_redpash_id = c.redpash_id
+                               AND mv.member_redpash_id = $3))
+          ORDER BY (CASE WHEN c.name ILIKE $1 || '%' THEN 0 ELSE 1 END), c.name
           LIMIT $2",
     )
     .bind(&q_owned)
     .bind(PER_KIND_LIMIT)
+    .bind(viewer)
     .fetch_all(&state.db)
     .await?;
     for r in rows {
@@ -245,9 +264,13 @@ async fn search(
                FROM memberships m
                JOIN projects p ON p.redpash_id = m.object_redpash_id
                JOIN users    u ON u.redpash_id = m.member_redpash_id
-              WHERE u.display_name ILIKE '%' || $1 || '%'
-                 OR u.username     ILIKE '%' || $1 || '%'
-                 OR p.name         ILIKE '%' || $1 || '%'
+              WHERE (u.display_name ILIKE '%' || $1 || '%'
+                  OR u.username     ILIKE '%' || $1 || '%'
+                  OR p.name         ILIKE '%' || $1 || '%')
+                AND ($3::text IS NULL
+                     OR EXISTS (SELECT 1 FROM memberships me
+                                 WHERE me.object_redpash_id = m.object_redpash_id
+                                   AND me.member_redpash_id = $3))
              UNION ALL
              SELECT 'company' AS scope, m.object_redpash_id AS scope_redpash_id,
                     c.name AS scope_name, m.member_redpash_id,
@@ -255,15 +278,20 @@ async fn search(
                FROM memberships m
                JOIN companies c ON c.redpash_id = m.object_redpash_id
                JOIN users     u ON u.redpash_id = m.member_redpash_id
-              WHERE u.display_name ILIKE '%' || $1 || '%'
-                 OR u.username     ILIKE '%' || $1 || '%'
-                 OR c.name         ILIKE '%' || $1 || '%'
+              WHERE (u.display_name ILIKE '%' || $1 || '%'
+                  OR u.username     ILIKE '%' || $1 || '%'
+                  OR c.name         ILIKE '%' || $1 || '%')
+                AND ($3::text IS NULL
+                     OR EXISTS (SELECT 1 FROM memberships me
+                                 WHERE me.object_redpash_id = m.object_redpash_id
+                                   AND me.member_redpash_id = $3))
            ) mm
           ORDER BY joined_at DESC
           LIMIT $2",
     )
     .bind(&q_owned)
     .bind(PER_KIND_LIMIT)
+    .bind(viewer)
     .fetch_all(&state.db)
     .await?;
     for r in rows {

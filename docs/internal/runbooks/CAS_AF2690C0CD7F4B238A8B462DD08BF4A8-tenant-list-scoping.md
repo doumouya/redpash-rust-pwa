@@ -49,12 +49,18 @@ reach-aware (GREEN).
 
 ### Per-endpoint
 
+**Decision (Em, 2026-06-03):** see-down wins — **no cross-company discovery feature**.
+Scope all org-entity reads to the caller's reach with a **platform-admin bypass** (admins +
+admin surfaces still see everything); regular users see only their org. Applied uniformly so
+list + search + the Home/admin tabs stay consistent.
+
 | Endpoint | db fn | scope predicate | status |
 |---|---|---|---|
-| `GET /api/events` | `list_events(.., viewer)` | `EXISTS` over `memberships` sharing a `CMP_` object with the caller (mirrors `users_share_company`); own + NULL-user pass | ✅ done (2026-06-03) |
-| `GET /api/companies` | `list_companies` | TBD — **pending Em product call** (cross-company discoverability vs. leak) | ⏳ |
-| `GET /api/search` (users/companies/memberships) | inline SQL | scope each branch to caller reach, admin-bypass | ⏳ |
-| `GET /api/teams` | `list_teams` | `EXISTS` membership on team or its company | ⏳ |
+| `GET /api/events` | `list_events(.., viewer)` | `EXISTS` over `memberships` sharing a `CMP_` object with the caller (mirrors `users_share_company`); own + NULL-user pass | ✅ `0f01cbe` |
+| `GET /api/companies` | `list_companies(.., viewer)` | `EXISTS` membership on the company | ✅ done 2026-06-03 |
+| `GET /api/teams` | `list_teams(.., viewer)` | `EXISTS` membership on the team OR its company | ✅ done 2026-06-03 |
+| `GET /api/users` | `list_users(.., viewer)` | caller + users sharing a `CMP_` company; the membership-graph join scoped too | ✅ done 2026-06-03 |
+| `GET /api/search` (users/companies/memberships) | inline SQL (`$3`=viewer) | users→company-mates, companies→caller's companies, memberships→objects the caller is in; projects/files were already scoped | ✅ done 2026-06-03 |
 
 **Deferred:** the full non-admin→404/scoped HTTP matrix lands in `tests/rbac_matrix.rs`
 (epic step 7).
@@ -66,6 +72,11 @@ reach-aware (GREEN).
   cross-tenant set = 949, total = 1897 (948 + 949 = 1897, exact); 292 system events pass
   through. `node tools/list-endpoint-rbac-audit/audit.js` → `list_events` flips
   AMBIGUOUS→**GREEN** (reach-aware), `list_cases` unregressed, no new RED.
-- **Watching:** `list_companies` + `list_teams` remain RED in the audit (correct — not yet
-  fixed); `/search` remains a YELLOW tenant-nest (inline SQL). Epic
-  `CAS_AF2690C0CD7F4B238A8B462DD08BF4A8` tracks the rest.
+- All four landed (2026-06-03): `cargo build -p api` green; **read-only DB partition check**
+  for a sample non-admin caller — companies 4→1, teams 6→1, users 10→4 (rest hidden); the audit
+  flips `list_companies`/`list_teams`/`list_users` AMBIGUOUS→**GREEN** (reach-aware via the
+  `viewer:` param), **zero remaining RED LEAK findings**.
+- **Watching:** the only remaining audit RED are the `strict-owner` *under-reach* findings
+  (`list_user_files`/`list_charts`/`list_dashboards` — owners missing their own rows) — a
+  *separate* bug class (too-tight, not a leak), not part of this slice. `/search` stays YELLOW at
+  the nest granularity (inline SQL the db-fn pass can't see) but its branches are now scoped.

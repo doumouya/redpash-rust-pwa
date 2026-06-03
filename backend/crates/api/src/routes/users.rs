@@ -38,8 +38,11 @@ async fn list(
     State(state): State<AppState>,
     headers:      HeaderMap,
 ) -> Result<Json<UserList>, AppError> {
-    super::resolve_user_rid(&state, &headers).await?;
-    let items = db::list_users(&state.db)
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    // See-down scope: platform admins see every user; everyone else sees the
+    // caller + users sharing a company with them (CAS_AF2690C0, step-3).
+    let viewer = if crate::rbac::is_platform_admin(&state, &user).await? { None } else { Some(user.as_str()) };
+    let items = db::list_users(&state.db, viewer)
         .await?;
     Ok(Json(UserList { items }))
 }

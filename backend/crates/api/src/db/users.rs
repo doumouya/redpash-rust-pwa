@@ -129,10 +129,12 @@ pub async fn list_memberships_for_user(
     }).collect())
 }
 
-/// Every user — powers the Objects page's owner-reassignment picker.
-/// No org scoping yet (single-tenant); add a `WHERE org_id = …` when
-/// organisations land.
-pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
+/// Every user the caller can see — powers the Objects page's owner-reassignment
+/// picker + the directory. **See-down scoped** (CAS_AF2690C0, step-3):
+/// `viewer = Some(caller)` returns the caller + users who share a company with
+/// them, and attaches only memberships in the caller's companies; `viewer = None`
+/// = platform-admin, every user + every membership.
+pub async fn list_users(pool: &PgPool, viewer: Option<&str>) -> sqlx::Result<Vec<UserProfile>> {
     let rows: Vec<UserRow> = sqlx::query_as(
         "SELECT redpash_id, username, email, display_name, avatar_url,
                 job_title, organisation, use_case, plan, locale,
@@ -145,18 +147,32 @@ pub async fn list_users(pool: &PgPool) -> sqlx::Result<Vec<UserProfile>> {
                   '{}'::jsonb
                 ) AS prefs,
                 first_name, last_name
-         FROM users ORDER BY display_name ASC",
+         FROM users
+         WHERE ($1::text IS NULL
+                OR users.redpash_id = $1
+                OR EXISTS (SELECT 1 FROM memberships ma
+                             JOIN memberships mb ON mb.object_redpash_id = ma.object_redpash_id
+                            WHERE ma.member_redpash_id = $1
+                              AND mb.member_redpash_id = users.redpash_id
+                              AND ma.object_redpash_id LIKE 'CMP\\_%'))
+         ORDER BY display_name ASC",
     )
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
-    // Memberships in one round-trip — group_concat by user id, then
-    // attach. Cheap at directory scale; if/when the users table grows
-    // into thousands, switch to a windowed query or paginate.
+    // Memberships in one round-trip — group_concat by user id, then attach.
+    // Scoped to the caller's companies (see-down) so the attached membership
+    // graph doesn't leak other orgs; None (platform-admin) attaches all.
     let mem_rows = sqlx::query(
         "SELECT m.member_redpash_id, m.object_redpash_id AS company_id, m.role, c.name AS company_name
          FROM memberships m
-         JOIN companies c ON c.redpash_id = m.object_redpash_id",
+         JOIN companies c ON c.redpash_id = m.object_redpash_id
+         WHERE ($1::text IS NULL
+                OR EXISTS (SELECT 1 FROM memberships me
+                            WHERE me.object_redpash_id = m.object_redpash_id
+                              AND me.member_redpash_id = $1))",
     )
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
     let mut by_user: std::collections::HashMap<String, Vec<UserMembership>> =
