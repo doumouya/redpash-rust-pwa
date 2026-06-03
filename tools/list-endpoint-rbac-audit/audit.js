@@ -292,7 +292,10 @@ function classify(fn, constants) {
   if (/resolve_grant\(/.test(fn.body))          hints.push('resolve_grant(');
   if (/\brequire_view\(/.test(fn.body))         hints.push('require_view(');
   if (/principals?\s*:/.test(params))           hints.push('principals param');
-  if (/viewer\s*:\s*Option<&\[String\]>/.test(params)) hints.push('viewer: Option<&[String]>');
+  // Any `viewer: Option<&…>` param is a caller-scope (the convention list_cases
+  // established + list_events follows): a slice of principals OR a single caller
+  // rid the SQL filters on. Either way the fn is reach-aware by intent.
+  if (/viewer\s*:\s*Option<&/.test(params))            hints.push('viewer: caller-scope param');
   if (/\bprincipals\(/.test(fn.body))           hints.push('principals(');
   // Inline-SQL reach (CAS_3B0DAD92 fix shape): a platform-admin bypass and/or a
   // company-cascade in the access WHERE are reach-aware too — and they keep this

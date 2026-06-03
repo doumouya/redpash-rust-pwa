@@ -191,6 +191,16 @@ Every entry follows the same five headings:
   Net surface: Cases 1 → 3 editable cols, Projects 1 → 2, Home
   total 5 → 8 across 5 tabs. Smoke-tested end-to-end (the case
   documenting this very fix got live-edited via the new pattern).
+- [0015 — Ungated tenant-list read leaks (scope `list_*` to caller reach)](CAS_AF2690C0CD7F4B238A8B462DD08BF4A8-tenant-list-scoping.md) —
+  **In progress 2026-06-03** (epic CAS_AF2690C0CD7F4B238A8B462DD08BF4A8). Pattern runbook
+  for the cross-tenant *list-read* leaks the "audit the auditor" review found: several
+  `GET` list endpoints returned every tenant's rows to any authed caller while the
+  singular `get_one` path was correctly gated. Fix pattern: list fn takes a
+  `viewer: Option<&str>` scope, route passes `None` for platform-admins else `Some(caller)`,
+  query gains a reach predicate mirroring the singular gate. `/events` done (verified by a
+  DB partition check: 948 scoped + 949 hidden = 1897 total); `/companies`/`/search`/`/teams`
+  append as they land. Discipline rule: a `$1` that feeds only a `my_role` display subquery
+  is the "looks-scoped-but-isn't" trap — the row filter must be in the main query.
 - [0014 — `/api/metrics` was anonymously readable (global request_log)](CAS_CBA057EE46F24BAD897089D2B9DDBDFC-metrics-anon-leak.md) —
   **Resolved 2026-06-03** (CAS_CBA057EE46F24BAD897089D2B9DDBDFC). `GET /api/metrics` had
   no auth in the handler AND no `.layer()` on its nest, so anyone could read the global,

@@ -1535,22 +1535,38 @@ const EVENT_COLS: &str =
 /// Recent events, newest first. `level` / `kind` are optional exact-match
 /// filters — the `$n::text IS NULL OR …` form means a `None` bind skips
 /// that filter without dynamic SQL. `limit` is clamped by the caller.
+///
+/// `viewer` is the tenant-isolation scope (CAS_AF2690C0 / leak 2/5): `Some(caller)`
+/// restricts the feed to events whose user shares a COMPANY with the caller — the
+/// caller's own events + system events (NULL user) always pass — mirroring
+/// `users_share_company` (the same CMP_-membership gate `get_one` uses). `None` =
+/// platform-admin: the full cross-tenant monitoring feed, unscoped.
 pub async fn list_events(
-    pool:  &PgPool,
-    level: Option<&str>,
-    kind:  Option<&str>,
-    limit: i64,
+    pool:   &PgPool,
+    level:  Option<&str>,
+    kind:   Option<&str>,
+    limit:  i64,
+    viewer: Option<&str>,
 ) -> sqlx::Result<Vec<Event>> {
     let rows: Vec<EventRow> = sqlx::query_as(&format!(
-        "SELECT {EVENT_COLS} FROM events
-         WHERE ($1::text IS NULL OR level = $1)
-           AND ($2::text IS NULL OR kind  = $2)
-         ORDER BY occurred_at DESC
+        "SELECT {EVENT_COLS} FROM events e
+         WHERE ($1::text IS NULL OR e.level = $1)
+           AND ($2::text IS NULL OR e.kind  = $2)
+           AND ($4::text IS NULL
+                OR e.user_redpash_id IS NULL
+                OR e.user_redpash_id = $4
+                OR EXISTS (SELECT 1 FROM memberships ma
+                             JOIN memberships mb ON mb.object_redpash_id = ma.object_redpash_id
+                            WHERE ma.member_redpash_id = $4
+                              AND mb.member_redpash_id = e.user_redpash_id
+                              AND ma.object_redpash_id LIKE 'CMP\\_%'))
+         ORDER BY e.occurred_at DESC
          LIMIT $3"
     ))
     .bind(level)
     .bind(kind)
     .bind(limit)
+    .bind(viewer)
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(Into::into).collect())

@@ -10,12 +10,12 @@
 //!                           `rp_session` cookie, never trusted from
 //!                           the request body.
 //!
-//! `list` is the internal monitoring read surface — requires a valid
-//! session (events carry PII: user rids, paths, context blobs); the
-//! company-admin role gate lands with RBAC. `get_one` is company-scoped:
-//! the caller must share a company with
-//! the event's user (system events pass through). The POST is the
-//! frontend capture funnel.
+//! `list` is **company-scoped** (CAS_AF2690C0, leak 2/5): a caller sees only
+//! events whose user shares a company with them — their own + system events
+//! (NULL user) pass through — and platform admins get the full cross-tenant
+//! feed. Symmetric with `get_one`, which gates the singular path the same way
+//! (`users_share_company`). Both require a valid session (events carry PII:
+//! user rids, paths, context blobs). The POST is the frontend capture funnel.
 
 use axum::{
     extract::{Path, Query, State},
@@ -52,13 +52,21 @@ async fn list(
     headers:      HeaderMap,
     Query(q):     Query<ListQuery>,
 ) -> Result<Json<EventList>, AppError> {
-    // Baseline gate: events expose PII (user rids, request paths, context
-    // blobs), so require a valid session. Role-scoping lands with RBAC.
-    super::resolve_user_rid(&state, &headers).await?;
+    // Events expose PII (user rids, request paths, context blobs). Require a
+    // valid session, then SCOPE the feed: platform admins get the full
+    // cross-tenant monitoring feed; everyone else sees only events whose user
+    // shares a company with them (own + system events pass) — symmetric with
+    // get_one's users_share_company gate. (CAS_AF2690C0 — leak 2/5.)
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    let viewer = if crate::rbac::is_platform_admin(&state, &caller).await? {
+        None
+    } else {
+        Some(caller.as_str())
+    };
     let limit = q.limit.unwrap_or(100).clamp(1, 1000);
     let level = q.level.as_deref().filter(|s| !s.is_empty());
     let kind  = q.kind.as_deref().filter(|s| !s.is_empty());
-    let items = db::list_events(&state.db, level, kind, limit)
+    let items = db::list_events(&state.db, level, kind, limit, viewer)
         .await?;
     Ok(Json(EventList { items }))
 }
