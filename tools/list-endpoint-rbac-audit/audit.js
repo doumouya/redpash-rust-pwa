@@ -96,8 +96,8 @@ var ROUTES_DIR = path.join(ROOT, 'backend/crates/api/src/routes');
                           list_* behind one is a RED leak (and inline-query nests
                           like search get a YELLOW "verify per-handler scoping"). */
 var GATE_MW           = ['require_platform_admin_mw'];
-var EXPECT_NEST_GATE  = ['admin', 'monitoring'];
-var TENANT_DATA_NESTS = ['search', 'events', 'metrics', 'companies', 'teams'];
+var EXPECT_NEST_GATE  = ['admin', 'monitoring', 'metrics'];
+var TENANT_DATA_NESTS = ['search', 'events', 'companies', 'teams'];
 
 /* ── classification taxonomy ─────────────────────────────────────────────── */
 var CLASS = {

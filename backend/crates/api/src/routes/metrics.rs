@@ -14,8 +14,14 @@
 //! `request_log::normalize_route` + `capture_mw`'s mount point) so the
 //! act of viewing the dashboard doesn't pollute its own data.
 //!
-//! Open today (solo / localhost); gate behind the company-admin role
-//! when RBAC lands. Mirrors the events.rs read surface.
+//! **Platform-admin-only** (2026-06-03): the `/metrics` nest is gated by
+//! `routes::require_platform_admin_mw` (a `from_fn_with_state` layer in
+//! routes/mod.rs, mirroring `/monitoring`) — non-admins get a leak-free 404
+//! before this handler runs, so no per-handler gate is needed here. `request_log`
+//! is tenant-less (no company column), so this is global system observability;
+//! per-company metrics would need a `request_log.company_id` column (future).
+//! Was anonymously readable before the gate
+//! (runbook CAS_CBA057EE46F24BAD897089D2B9DDBDFC-metrics-anon-leak).
 
 use axum::{
     extract::{Query, State},

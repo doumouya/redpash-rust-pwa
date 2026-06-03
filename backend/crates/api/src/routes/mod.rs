@@ -226,6 +226,7 @@ pub fn router(state: AppState) -> Router {
     let capture_state = state.clone();
     let mon_admin_state = state.clone();
     let admin_gate_state = state.clone();
+    let metrics_admin_state = state.clone();
 
     let api = Router::new()
         .nest("/health",   health::routes())
@@ -241,7 +242,12 @@ pub fn router(state: AppState) -> Router {
         .nest("/dashboards", dashboards::routes())
         .nest("/users",      users::routes())
         .nest("/events",     events::routes())
-        .nest("/metrics",    metrics::routes())
+        // SECURITY: /metrics aggregates the global, tenant-less request_log (error
+        // rates, p99, full route inventory) — platform-wide system observability, not
+        // tenant data. Gated platform-admin-only, mirroring /monitoring (which serves
+        // the same request_log). Closes the anonymous read (was ungated — any stranger).
+        .nest("/metrics",    metrics::routes()
+            .layer(axum::middleware::from_fn_with_state(metrics_admin_state, require_platform_admin_mw)))
         .nest("/monitoring", monitoring::routes()
             .layer(axum::middleware::from_fn_with_state(mon_admin_state, require_platform_admin_mw)))
         // SECURITY: the entire /admin surface is platform-admin-only at the

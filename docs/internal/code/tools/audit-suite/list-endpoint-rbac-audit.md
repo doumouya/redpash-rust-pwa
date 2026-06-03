@@ -81,8 +81,8 @@ both by parsing `routes/mod.rs`:
 | Constant | Value | Effect |
 |---|---|---|
 | `GATE_MW` | `[require_platform_admin_mw]` | what counts as a platform-admin nest gate |
-| `EXPECT_NEST_GATE` | `{admin, monitoring}` | these nests MUST carry a `GATE_MW .layer()` — **RED `nest-gate-missing`** if absent (drift fails the tool), **GREEN** affirmation when present |
-| `TENANT_DATA_NESTS` | `{search, events, metrics, companies, teams}` | ungated nests exposing tenant data — a caller-blind/ambiguous list-fn behind one is **RED** (leak); the nest also gets a YELLOW "verify per-handler scoping" so inline-SQL handlers like `search` (no db list-fn) aren't missed |
+| `EXPECT_NEST_GATE` | `{admin, monitoring, metrics}` | these nests MUST carry a `GATE_MW .layer()` — **RED `nest-gate-missing`** if absent (drift fails the tool), **GREEN** affirmation when present. (`metrics` added 2026-06-03 when `/metrics` was gated — runbook `CAS_CBA057EE…`.) |
+| `TENANT_DATA_NESTS` | `{search, events, companies, teams}` | ungated nests exposing tenant data — a caller-blind/ambiguous list-fn behind one is **RED** (leak); the nest also gets a YELLOW "verify per-handler scoping" so inline-SQL handlers like `search` (no db list-fn) aren't missed |
 
 **Recolor:** all-gated nest → GREEN (`nest-gated`); caller-blind/ambiguous behind an
 ungated `TENANT_DATA_NESTS` nest → RED (`LEAK`); `strict-owner` stays RED regardless

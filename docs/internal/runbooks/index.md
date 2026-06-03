@@ -2,7 +2,7 @@
 title: Runbooks
 section: Internal
 order: 60
-last modified date: 2026-05-24
+last modified date: 2026-06-03
 ---
 
 # Runbooks
@@ -191,6 +191,17 @@ Every entry follows the same five headings:
   Net surface: Cases 1 → 3 editable cols, Projects 1 → 2, Home
   total 5 → 8 across 5 tabs. Smoke-tested end-to-end (the case
   documenting this very fix got live-edited via the new pattern).
+- [0014 — `/api/metrics` was anonymously readable (global request_log)](CAS_CBA057EE46F24BAD897089D2B9DDBDFC-metrics-anon-leak.md) —
+  **Resolved 2026-06-03** (CAS_CBA057EE46F24BAD897089D2B9DDBDFC). `GET /api/metrics` had
+  no auth in the handler AND no `.layer()` on its nest, so anyone could read the global,
+  tenant-less `request_log` aggregation (error rates, p99, full route inventory). Found by
+  the "audit the auditor" review (`wf_afacef54`) — one of 5 read-leaks the SQL-only audit
+  missed because it never parsed `mod.rs` nest middleware. Fix: gated the `/metrics` nest
+  platform-admin via the same `require_platform_admin_mw` proven on `/admin` + `/monitoring`;
+  added `metrics` to the audit's `EXPECT_NEST_GATE` so the gate is now an asserted invariant
+  (RED if removed). Discipline rule: an RBAC posture audit must read route-nest `.layer()`
+  middleware, not just handler bodies + db SQL — else ungated tenant nests read as a
+  YELLOW shrug and gated nests false-positive as leaks.
 - [0009 — dev frontend edits don't show up (static assets ship no cache-control)](CAS_35090747FD78414D8CD060A73181A414-dev-static-assets-no-cache-control.md) —
   **Resolved 2026-05-31** (CAS_35090747FD78414D8CD060A73181A414). The `ServeDir` static fallback emitted
   `last-modified` but no `cache-control`, so browsers applied heuristic
