@@ -78,3 +78,166 @@ a.rp-avatar { cursor: pointer; }
 a.rp-avatar:hover { transform: scale(1.06); }
 a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
 .rp-avatar--lg { width: 4rem; height: 4rem; margin-left: 0; font-size: 1.375rem; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Layer-A shared atoms (manifest A2–A12). Each is the CANONICAL rule-set, copied
+   verbatim from its legacy source (zero-visual-change). A role = ONE atom; where a
+   context differs (size/colour/layout) it overrides via ancestor CSS at cutover —
+   never a new class. So `rp-search` is one atom across topbar/rail/toolbar/settings,
+   not four. The legacy divergent families collapse here.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── A2 rp-btn — CTA / text button (was .rp-btn, button.css) ─────────────────
+   panel Apply, comment Send, dashboards Save, login, create. */
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-3) var(--rp-sp-5);
+  font: inherit;
+  font-weight: 600;
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  cursor: pointer;
+  transition: transform 0.15s var(--rp-ease),
+              border-color 0.15s var(--rp-ease),
+              background 0.15s var(--rp-ease);
+}
+.rp-btn:hover { transform: translateY(-1px); }
+.rp-btn:active { transform: translateY(0); }
+.rp-btn:focus-visible { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 0.125rem; }
+.rp-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+
+/* ── A1 rp-btn-icon completions — --ghost + busy (was .rt-btn--ghost / .is-busy) ──
+   (the run/apply busy SPINNER is added with B3 RedTable, where it's used.) */
+.rp-btn-icon--ghost { background: transparent; border-color: var(--rp-border); }
+.rp-btn-icon--ghost:hover { color: var(--rp-text); background: var(--rp-hover); }
+.rp-btn-icon.is-busy { opacity: 0.6; pointer-events: none; }
+
+/* ── A3 rp-search — search box (was .rt-search; unifies topbar omni input, rail,
+   toolbar, settings — the named dedup). Contexts size it: .rp-topbar wide-pill,
+   .rp-rail short, toolbar flex. */
+.rp-search {
+  flex: 1;
+  min-width: 10rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--rp-glass);
+  border: 1px solid var(--rp-border);
+  transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
+}
+.rp-search:focus-within { border-color: var(--rp-accent-2); box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft); }
+.rp-search i { color: var(--rp-text-mute); font-size: 0.8125rem; }
+.rp-search input {
+  flex: 1; border: 0; outline: 0; background: transparent;
+  color: var(--rp-text); font: inherit; font-size: 0.8125rem;
+}
+.rp-search input::placeholder { color: var(--rp-text-mute); }
+
+/* ── A4 rp-chip — pill button (was .rp-chip, shell.css; absorbs sel-chip/pill).
+   Active = filled accent. Contexts (rail/cases) tune padding/bg. */
+.rp-chip {
+  padding: 0.25rem 0.875rem;
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 6.1875rem;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-chip:hover { color: var(--rp-text); }
+.rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
+
+/* ── A6 rp-title — title text (collapses the 12-class -title family: shell-head,
+   card, panel, chart, modal, dashboard…). BASE here; contexts set font-size
+   (e.g. shell-head → --rp-text-lg, card → --rp-text-md). */
+.rp-title { margin: 0; font-weight: 650; font-size: var(--rp-text-md); color: var(--rp-text); }
+.rp-title i { color: var(--rp-accent); }
+
+/* ── A7 rp-label — small uppercase label (was .rt-field-lbl; collapses kpi-label,
+   ds-sec-label, modal-label…). */
+.rp-label {
+  display: block;
+  margin: 0.875rem 0 0.4375rem;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+
+/* ── A8 rp-count — count pill (was .rp-shell-head-count; collapses rail group-count,
+   col counts). */
+.rp-count {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  padding: 0.125rem 0.625rem;
+  border-radius: 6.1875rem;
+  background: var(--rp-hover);
+}
+
+/* ── A9 rp-empty — empty-state text (was .rt-empty; collapses cases/ds/mon empties). */
+.rp-empty { margin: 0; text-align: center; color: var(--rp-text-mute); font-size: 0.75rem; }
+
+/* ── A10 rp-mono-pill — monospace id pill (was .rt-mono-pill; the object-id RID +
+   redtable id/method cells). `.is-copyable` adds the click-to-copy affordance
+   (was .rp-cases-detail-rid). */
+.rp-mono-pill {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  padding: 1px 0.375rem;
+  border-radius: 0.25rem;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+}
+.rp-mono-pill.is-copyable {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease);
+}
+.rp-mono-pill.is-copyable:hover { background: var(--rp-hover); color: var(--rp-text); border-color: var(--rp-border); }
+.rp-mono-pill.is-copied { background: var(--rp-accent-soft); color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+
+/* ── A11 rp-input — form / select field (was .ds-input; collapses modal-input,
+   config inputs, comment-edit). Distinct from rp-search. */
+.rp-input {
+  width: 100%;
+  height: 1.9375rem;
+  padding: 0 0.5625rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.7812rem;
+  outline: 0;
+}
+.rp-input:focus { border-color: var(--rp-accent-2); box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft); }
+
+/* ── A12 rp-status — status pill w/ leading dot (was .rt-status; collapses cases
+   status-dot / activity-kind). State classes colour it. */
+.rp-status {
+  font-size: 0.7188rem;
+  font-weight: 550;
+  padding: 0.125rem 0.5625rem;
+  border-radius: 6.1875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+}
+.rp-status::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 6.1875rem; }
+.rp-status.is-active { color: var(--rp-ok); background: rgba(166, 227, 161, 0.12); }
+.rp-status.is-active::before { background: var(--rp-ok); }
+.rp-status.is-new { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-status.is-new::before { background: var(--rp-accent-2); }
+.rp-status.is-lapsed { color: var(--rp-peach); background: rgba(250, 179, 135, 0.12); }
+.rp-status.is-lapsed::before { background: var(--rp-peach); }
