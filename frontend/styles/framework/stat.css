@@ -1,0 +1,139 @@
+/* ── stat (rp-stat) — framework component, STAT-HERO ──────────────────────────
+   Ported VERBATIM from shell.css (rp-kpi/rp-kpi-label/rp-kpi-value/rp-kpi-strip/
+   rp-hero-strip/rp-hero-strip__stats/rp-list-composite/rp-list-composite__stats)
+   + monitoring.css (rp-mon-stat-chip). The legacy family is renamed 1:1 to the
+   rp-stat- namespace (no __ BEM, no rt-/rp-mon- prefix) — a zero-visual-change diff.
+
+   STAT-HERO map: there are NO per-page overrides of any kpi/hero class in the
+   legacy sheets, so a single shared definition is correct (no context layer).
+
+   Composes atoms (defined in atoms.css — never redeclared here):
+     - rp-label   → the tile label line (rp-kpi-label collapses into rp-label per
+                    atoms.css A7). The tile relies on the parent flex gap, not the
+                    label's default margin, so a context override zeroes the margin.
+     - rp-mono-pill → the inline run-summary chip (was rp-mon-stat-chip) is a
+                    compact monospace pill on surface-2 with a border — exactly the
+                    rp-mono-pill atom, composed with one context margin tweak.
+
+   This sheet does NOT style the chart slots: the hero/composite grids POSITION
+   rp-chart-card children (owned by the chart unit) in their flanking columns; the
+   column math only reads correctly because those cards occupy the outer columns. */
+
+/* ── rp-stat — THE STAT TILE (was .rp-kpi) ───────────────────────────────────
+   The glass card holding a label + value. Reused by every strip variant
+   (rp-stat-strip, rp-stat-hero-stats, rp-list-composite-stats). */
+/* KPI strip — auto-fit tiles, glass surface, brand-typed values.
+   Atom (.rp-kpi) is also intended for Profile + Settings reuse per
+   the chart-primitives roadmap. */
+.rp-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-1);
+  padding: var(--rp-sp-3) var(--rp-sp-4);
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border: 1px solid var(--rp-glass-border);
+  border-radius: var(--rp-radius);
+}
+
+/* ── rp-stat-label — the tile's small uppercase label (was .rp-kpi-label) ─────
+   Composes the rp-label atom; the legacy .rp-kpi-label had no margin (the tile
+   uses the parent flex gap), so this context zeroes rp-label's default margin.
+   The remaining declarations match the legacy .rp-kpi-label rule verbatim. */
+.rp-stat .rp-label,
+.rp-stat-label {
+  margin: 0;
+  /* legacy .rp-kpi-label set NO font-weight (inherited 400); the rp-label atom
+     ships 650, so the tile context resets to 400 to keep zero-visual-change. */
+  font-weight: 400;
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── rp-stat-value — the big brand number (was .rp-kpi-value) ─────────────────
+   NEW value sub-element: no atom exists for the 1.375rem/700 brand number.
+   Filled either inline at render (baked variants) or async via the strip's
+   `set(id,val)` targeting the tile's id ('—' placeholder until then). */
+.rp-stat-value {
+  /* System font (inherits --rp-font from body). The brand font
+     Savate displays well on the home greeting but reads poorly at
+     small numeric sizes, especially on the Monitoring KPI row. One
+     family across both pages — not worth maintaining two versions. */
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--rp-text);
+}
+
+/* ── rp-stat-strip — standalone 1-to-N auto-fit grid (was .rp-kpi-strip) ──────
+   The simple strip (not inside a hero) emitted directly above a list/table on
+   Home + Monitoring. Carries its own bottom margin (it is not wrapped in a
+   fixed-height overview row). */
+.rp-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-6);
+}
+
+/* ── rp-stat-hero — the 3-column overview band (was .rp-hero-strip) ───────────
+   chart(40%) · stats sub-grid(20%) · chart(40%). Emitted for the Cases board +
+   Workspace landing overviews. The rp-chart-card slots (chart unit owns those)
+   occupy the flanking 2fr columns. No bottom margin: spacing comes from the
+   parent .rp-overview gap (the hero sits in a flex-shrink:0 .rp-overview__hero
+   row, owned by the page-layout unit). */
+/* Hero strip — the overview variant for the Cases/Workspace landings
+   (Em's spec): one chart (40%) · a 2×2 stats grid (20%) · one chart
+   (40%). Reuses .rp-chart-card / .rp-kpi atoms; only the 3-column split
+   differs from the 5-cell .rp-list-composite. Emitted by heroStripHTML
+   in list-page.js. */
+.rp-stat-hero {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  gap: var(--rp-sp-3);
+}
+
+/* ── rp-list-composite — the 5-cell composite sibling (was .rp-list-composite) ─
+   [chart 20%][chart 20%][stats 2×2 = 20%][chart 20%][chart 20%]. Emitted for
+   Home + Monitoring. Same stats sub-grid + tiles as the hero; only the column
+   split differs (5×1fr vs the hero's 2fr/1fr/2fr). The composite name is kept
+   (already a generic rp- name — no rename needed). */
+/* Renamed from `.rp-home-composite` 2026-05-25 — shared across Home
+   + Monitoring (and any future list-page consumer) per
+   [[feedback-compose-atoms-dont-parallel]]. `.rp-mon-composite` is
+   gone; both pages now emit `.rp-list-composite` via the shared
+   compositeStripHTML in list-page.js. */
+.rp-list-composite {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-4);
+}
+
+/* ── stats sub-grid — the 2×2 cell of 4 tiles, shared by both wrappers ────────
+   was .rp-hero-strip__stats / .rp-list-composite__stats; de-BEM'd to flat kebab. */
+.rp-list-composite-stats,
+.rp-stat-hero-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--rp-sp-2);
+}
+
+/* ── rp-stat--chip — inline run-summary stat (was .rp-mon-stat-chip) ──────────
+   NOT a tile: a compact monospace-numeric inline stat inside a run-summary table
+   cell (e.g. "files 14 errors 0 reachable 18"). Composes the rp-mono-pill atom
+   (same compact monospace pill on surface-2 with a border); only the inline-block
+   display + the inter-chip margin are added here as the chip context. */
+/* the run-summary cell shows multiple stat chips inline (e.g. "files 14
+   errors 0 reachable 18"); compact, monospace-numeric, neutral colour */
+.rp-stat--chip {
+  display: inline-block;
+  /* the rp-mono-pill atom has no border; the legacy .rp-mon-stat-chip did —
+     restore it here (the chip context) so the run-summary pill keeps its outline. */
+  border: 1px solid var(--rp-border);
+  margin-right: 0.25rem;
+}
+.rp-stat--chip:last-child { margin-right: 0; }

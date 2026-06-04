@@ -1,0 +1,157 @@
+/* ── chip-row (rp-chip-row) — framework component, CAS_37B2E1BF ───────────────
+   The horizontal pill-selector: a flat flex container (rp-chip-row) + optional
+   muted text prefix (rp-chip-row-label) that COMPOSES the rp-chip atom — the
+   chips ARE the atom, the row is just the flex capsule. Ported VERBATIM from
+   shell.css (the base capsule + label) — a zero-visual-change diff; the rp-
+   names are already compliant (the main.js audit observer + audit/snapshot.js
+   read the literal rp-chip-row / rp-chip selectors, so the names stay).
+
+   Per-context divergences from cases.css are carried here as ANCESTOR-SCOPED
+   overrides under page-shell classes (.rp-cases-*, and the rail-family .rp-rail
+   / compact ancestors), NEVER as duplicate classes. The chart-designer's
+   .ds-chip-row / .ds-chip is a SEPARATE component (accent-soft dimension tags)
+   and is deliberately NOT merged here. */
+
+/* ── base capsule (Home scope chips, Monitoring window chips, chart source
+   picker, cases activity-filter — all reuse this as-is) ───────────────────────
+   Group via .rp-chip-row, items via the .rp-chip atom; the active option carries
+   .is-active. Page-level JS reads data-chip-name on the row + data-value on each
+   chip (the audit observer's contract) to re-fire the surrounding fetcher. */
+.rp-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-bottom: var(--rp-sp-4);
+  padding: 0.1875rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 6.1875rem;
+}
+
+/* The muted text prefix that sits inside the capsule before the chips
+   (e.g. "Window", "Closed"). */
+.rp-chip-row-label {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  padding: 0 0.5rem 0 0.75rem;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Cases context overrides (de-cased from cases.css). The base class above is the
+   generic rp- name; these restyle it under the cases page-shell ancestors —
+   never a parallel class.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── cases rail filter: the FLAT-WRAP variant ─────────────────────────────────
+   .rp-cases-chip-row is the OUTER column WRAPPER (a label stacked ABOVE an inner
+   .rp-chip-row), NOT a variant of the row itself — its child-combinator rule is
+   what strips the capsule chrome so the rail's chips read as a flat wrapped flow
+   rather than a single segmented pill. */
+.rp-cases-chip-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+
+/* The uppercase micro-label on its own line above the rail chips — smaller,
+   distinct from the shared .rp-chip-row-label. */
+.rp-cases-chip-row-label {
+  font-size: 0.5938rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  padding: 0 0.25rem;
+}
+
+/* Override the shared .rp-chip-row to wrap + drop the pill-container
+   chrome — the rail's chips read better as a flat flow than as a
+   single-pill segmented control at this width. */
+.rp-cases-chip-row .rp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1875rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Tighten the .rp-chip atom + give each chip its OWN surface-2 background (the
+   capsule chrome was dropped above, so the chips themselves carry the pill look). */
+.rp-cases-chip-row .rp-chip {
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.6875rem;
+  border-radius: 6.1875rem;
+  background: var(--rp-surface-2);
+}
+
+/* Active chip in the flat-wrap variant — re-declares the atom's accent fill
+   because the override above changed the inactive background. */
+.rp-cases-chip-row .rp-chip.is-active {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+
+/* ── cases done-window: the DONE-WINDOW variant ───────────────────────────────
+   Applied DIRECTLY on a .rp-chip-row (class="rp-chip-row rp-cases-done-window").
+   Lives at the top of the Done body in both surfaces (rail group + kanban
+   column). Caps the productivity view to today / week / month / all; persists
+   via the casesDoneWindow pref so the choice survives reload. Turns the capsule
+   into a dashed-bottom-bordered wrapping window selector. */
+.rp-cases-done-window {
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.25rem 0.25rem 0.375rem;
+  border-bottom: 1px dashed var(--rp-border);
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* Shrink the shared label inside the done-window variant. */
+.rp-cases-done-window .rp-chip-row-label {
+  font-size: 0.5938rem;
+  margin-right: 0.125rem;
+}
+
+/* Sizes the individual chips in the done-window row (height-fixed, tighter).
+   Applied alongside .rp-chip (class="rp-chip rp-cases-done-chip"). */
+.rp-cases-done-chip {
+  height: 1.375rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+}
+
+/* ── done-window inside the RAIL group body ──────────────────────────────────
+   When the done-window sits inside a rail group body, it gets extra inset to
+   align with rail text. Scoped under the framework rail's group body
+   (rp-rail-group-body, framework/rail.css — the rail is ported, so this is the
+   rp- ancestor, not the legacy rt-group-body). */
+.rp-rail-group-body > .rp-cases-done-window {
+  padding-left: 1.75rem;       /* aligns with the rail tab's text inset */
+  padding-right: 0.5rem;
+}
+
+/* Compact rail collapse hides the cases done-window (and the rail-chips wrapper)
+   via display:none. Keyed off the framework rail's compact state
+   (rp-rail.compact, framework/rail.css); the grouped rule lists its rail-chips
+   sibling so the icon-only view stays clean. */
+.rp-rail.compact .rp-cases-rail-chips,
+.rp-rail.compact .rp-cases-done-window {
+  display: none;
+}
+
+/* ── cases detail-path: the DETAIL-PATH (Salesforce-Path) variant ─────────────
+   The status "Path" hero band reuses .rp-chip-row as a segmented status
+   selector; drop the chip-row atom's default bottom margin (the band owns the
+   spacing) and let it wrap full-width. */
+.rp-cases-detail-path .rp-chip-row { margin-bottom: 0; max-width: 100%; flex-wrap: wrap; }
+
+/* Completed pills — done-green text to read as "travelled" without stealing the
+   accent fill that marks the current pill. An .is-done STATE unique to the path
+   hero; NOT part of the rp-chip atom, so it lives here as a path-context state. */
+.rp-cases-detail-path .rp-chip.is-done { color: var(--rp-ok); }
+
+/* Current pill uses the atom's .is-active (accent fill) — ensure hover doesn't
+   dim it (the base .rp-chip:hover sets color:--rp-text which would fight the fill). */
+.rp-cases-detail-path .rp-chip.is-active:hover { color: var(--rp-bg); }

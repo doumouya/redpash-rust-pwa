@@ -1,0 +1,191 @@
+/* ── surface (rp-surface) — framework component, CAS_37B2E1BF ────────────────
+   The chrome'd content card + its OUTER container chain (shell → body → main →
+   surface) + the inner overview layout + per-page context. Ported VERBATIM from
+   the legacy sheets (shell.css / cases.css / home.css / monitoring.css) — only
+   the SELECTOR is renamed to its rp- flat-kebab framework name (no __ BEM), every
+   value is the legacy value, zero visual change.
+
+   SCOPE — this sheet owns the CONTAINER + assembly frame ONLY:
+     - the shell/body/main/surface chain + surface-body
+     - the shell-head row (title + count) and the shell-state loading twin
+     - the overview 3-row layout (hero / mid / table)
+     - per-page context overrides (Home/Monitoring inner padding, the Cases
+       two-surface main + board/detail/overview-table insets)
+   It does NOT define the STRIP grids — those belong to their components:
+     - the stat strips (rp-stat-hero / rp-list-composite / rp-stat-strip + the
+       2×2 stats sub-grids) live in framework/stat.css
+     - the chart strip (rp-charts) lives in framework/chart.css
+   The Workspace three-mode machine (is-landing-mode / is-designer-mode) + the
+   list-toolbar hides reference the toolbar / pager / panel components (not yet
+   ported, B3 + workspace cutover); they port WITH those components, not here —
+   keeping foreign rt-/ws- selectors out of the framework sheet.
+
+   Composes the rp-empty atom (rp-shell-state is the chrome'd loading twin) + the
+   rp-title / rp-count atoms in the shell-head row.
+
+   HEIGHT-CHAIN DEPENDENCY: .rp-surface's flex-fill only resolves because its
+   table descendant opts in — the table component's wrap claims the remaining
+   height (flex:1; min-height:0; overflow:auto) and the pager sits below at
+   natural height (framework/table.css). The surface stays collapsed/overflowing
+   if the consuming page omits those rules. Documented so the coupling isn't lost.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── shell chain — page root → rail+body split → main → surface ──────────────
+   The static partial wrapper around the surface card. .rp-shell is the
+   full-viewport flex column (topbar + body); .rp-shell-body is the rail + main
+   horizontal split; .rp-main is the flex column to the right of the rail that
+   holds exactly one .rp-surface child (its 0.875rem padding is the inset between
+   rail/edge and the card). */
+.rp-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rp-shell-body { flex: 1; display: flex; min-height: 0; }
+.rp-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.875rem;
+}
+
+/* ── surface card — the chrome'd content surface ─────────────────────────────
+   Flex column, claims remaining height (flex:1; min-height:0), opaque fill +
+   border + radius + shadow + overflow:hidden. Every page's surface IS this. The
+   flex-fill chain delegates remaining-height to the table-wrap and natural-height
+   to the pager (table.css). */
+.rp-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.875rem;
+  box-shadow: var(--rp-shadow);
+  overflow: hidden;
+}
+
+/* Horizontal flex wrapper INSIDE the surface for the filter-panel · table ·
+   tools-panel triad. Present only on the Workspace surface (data mode). */
+.rp-surface-body { flex: 1; min-height: 0; display: flex; }
+
+/* ── shell head — the per-view title + count row ─────────────────────────────
+   The Home/Monitoring section-header row (a plain title + count chip), distinct
+   from the Cases object header rp-head (head.js). The title COMPOSES the rp-title
+   atom and the count COMPOSES the rp-count atom; these two -title / -count rules
+   are the size context for the head-row instance (the atoms own the base). */
+.rp-shell-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-4);
+}
+.rp-shell-head-title {
+  margin: 0;
+  font-size: var(--rp-text-lg);
+  font-weight: 700;
+}
+.rp-shell-head-count {
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-mute);
+  padding: 0.125rem 0.625rem;
+  border-radius: 6.1875rem;
+  background: var(--rp-hover);
+}
+
+/* ── shell state — the loading/empty placeholder twin of rp-empty ────────────
+   The initial <p class="rp-shell-state">Loading…</p> seed that fills the surface
+   before the view renders. A glass dashed-border centred block (the chrome'd
+   loading twin of the rp-empty atom; rp-empty is plain text). */
+.rp-shell-state {
+  margin: 0;
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-blur));
+  backdrop-filter: blur(var(--rp-blur));
+  border: 1px dashed var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+}
+
+/* ── overview — the shared 3-row landing layout (Cases board + WS landing) ───
+   THE OVERVIEW ASSEMBLY CONTRACT. Flex column: row1 hero (fixed), row2 mid band
+   (kanban / recent cards, capped + scrolls), row3 table (flex-fills + scrolls).
+   The page container supplies its own padding; this sets column flow + per-row
+   sizing. Composed onto .rp-surface (#rp-cases-board carries all three:
+   rp-cases-board rp-overview rp-surface). The hero row holds the rp-stat-hero
+   strip (stat.css); the table row holds the rp-table (table.css). */
+.rp-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-4);
+  min-height: 0;
+}
+.rp-overview-hero { flex-shrink: 0; }
+.rp-overview-mid  { flex-shrink: 0; min-height: 0; }
+.rp-overview-table {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PAGE CONTEXT OVERRIDES (de-cased) — ancestor / id-scoped tweaks of the surface,
+   NOT duplicate classes. The base surface class is the generic rp- name above;
+   each page tunes its OWN instance here.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Home / Monitoring — id-scoped inner padding ─────────────────────────────
+   #rpHomeView / #rpMonView ARE the .rp-surface; the only override is inner
+   padding so head/chip/composite/table sit with a symmetric gap inside the card
+   (the .rp-main supplies the outer inset). (Monitoring's read-only toolbar hides
+   port with the toolbar component.) */
+#rpHomeView { padding: 0.875rem; }
+#rpMonView  { padding: 0.875rem; }
+
+/* ── Cases — the two-surface main + its coupled insets ───────────────────────
+   The cases main holds two mutually-exclusive .rp-surface cards (board + detail),
+   so it drops .rp-main's padding to 0 (the surfaces re-inset with their own
+   margin) and clips overflow + serves as the detail's positioning context. The
+   board's 0.875rem margin is correct ONLY because this padding is 0 — port the
+   pair together (the map's double-inset coupling). */
+.rp-main.rp-cases-main {
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+/* The board IS a .rp-surface composing .rp-overview; this adds only the
+   page-specific float-margin (its .rp-main has padding:0) + the inner padding
+   (matched to Workspace landing). The [hidden] rule restores display:none
+   against the .rp-surface flex (UA [hidden] LOSES to display:flex — the
+   surface-toggle gotcha). */
+.rp-cases-board {
+  margin: 0.875rem;
+  padding: 1.25rem 1.5rem;
+}
+.rp-cases-board[hidden] { display: none; }
+
+/* Caps the kanban (row 2 of the overview) to ~3 cards tall so it doesn't take
+   the whole surface; columns scroll internally. Overrides .rp-cases-cols' flex:1
+   default within the overview. */
+.rp-cases-cols.rp-overview-mid {
+  flex: 0 0 auto;
+  max-height: 16rem;
+  overflow: hidden;
+}
+
+/* (Row-3 cases-overview table tweaks — width:100% + empty-state padding — are
+   owned by framework/table.css's de-cased cases context, not duplicated here.) */
+
+/* The OTHER surface in the cases main (the open-case detail), a floating
+   .rp-surface card with its own margin, mutually exclusive with the board. Same
+   [hidden] gotcha override. */
+.rp-cases-detail {
+  margin: 0.875rem;           /* float like .rp-cases-board */
+}
+.rp-cases-detail[hidden] { display: none; }
