@@ -1,0 +1,337 @@
+/* ── filter-panel (rp-filter-panel) — framework component, CAS_37B2E1BF ───────
+   The FILTER-AST builder that mounts INTO the rp-panel shell's body: a stack of
+   group cards (each an AND/OR combo + a list of predicate rows + an Add-condition
+   button), joined by inter-group separator pills, that reads out a FilterNode
+   tree on Apply. Ported VERBATIM from panel.css (the filter-builder block) — the
+   rt- family becomes rp-, zero-visual-change at cutover.
+
+   This sheet owns ONLY the filter-SPECIFIC classes. It COMPOSES, never re-ports:
+     - rp-panel + mountPanel (framework/panel.css)   — the shell (head/tabs/body/
+       foot/close); the filter content mounts into its body.
+     - rp-seg / rp-seg--combo (framework/seg.css)    — the AND/OR group combo.
+     - rp-btn-icon (+ --glass/--block/--accent) (atoms.css) — Add-group,
+       Add-condition, Clear, Apply, close buttons (legacy .rt-btn = rp-btn-icon
+       verbatim; the foot Apply stretch is panel.css's rp-btn-icon--accent rule).
+     - rp-input (atoms.css)                          — the value <input> base.
+   The value editors (rp-chip-picker* + rp-ac*) ARE filter-specific and live HERE,
+   but their BEHAVIOR is the live autocomplete.js primitive (attachAutocomplete /
+   mountChipPicker) — currently rt-* in markup; the builder emits the rp-* markup +
+   slots and the live primitive is rewired at cutover (see filter-panel.js note). */
+
+/* the section sub-labels ("Condition groups") COMPOSE the rp-label atom (A7,
+   byte-identical to the legacy .rt-field-lbl — not re-ported as a parallel
+   class). The flush-top reset (.rp-panel-body .rp-label:first-child) is owned by
+   panel.css, so nothing is needed here. */
+
+/* ── rp-pred — THE predicate (condition) row ─────────────────────────────────
+   A 20-track CSS grid: row1 col(1/10)+op(11/10); row2 val-slot(1/17)+del(18/3).
+   The legacy :not(.rt-report-measure) guard scoped the placements so the report
+   builder could reuse rt-pred with a different grid; in the framework the report
+   measure row is a separate concern, so the placements apply unguarded here. The
+   tools-panel's stack variant is rp-pred--stack (below). Verbatim styling. */
+.rp-pred {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 0.3125rem;
+  margin-bottom: 0.5rem;
+  padding: 0.375rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+}
+.rp-pred > .rp-pred-col { grid-column: 1 / span 10; }
+.rp-pred > .rp-pred-op  { grid-column: 11 / span 10; }
+.rp-pred .rp-pred-val-slot { grid-column: 1 / span 17; }
+.rp-pred > .rp-pred-del { grid-column: 18 / span 3; justify-self: stretch; }
+.rp-pred select, .rp-pred input {
+  height: 1.875rem;
+  padding: 0 0.4375rem;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.7812rem;
+  outline: 0;
+}
+.rp-pred select:focus, .rp-pred input:focus { border-color: var(--rp-accent-2); }
+.rp-pred input:disabled { opacity: 0.45; }
+.rp-pred select optgroup {
+  color: var(--rp-text-mute);
+  font-size: 0.6875rem;
+  font-style: normal;
+}
+.rp-pred select option {
+  color: var(--rp-text);
+  font-size: 0.7812rem;
+}
+
+/* ── rp-pred-val-slot — row-2 value container ────────────────────────────────
+   Hosts the value input / range / chip-picker. :empty and :has(hidden) collapse
+   it — presence ops (is_null / not_null) emit a hidden <input> deliberately so
+   this :has() selector hides the unused value row. Verbatim. */
+.rp-pred-val-slot { min-width: 0; }
+.rp-pred-val-slot:empty { display: none; }
+.rp-pred-val-slot:has(input[type="hidden"]) { display: none; }
+
+/* ── rp-pred-range / rp-pred-range-sep — "between" two-input layout ──────────
+   min | "to" | max in a 1fr auto 1fr grid. Verbatim. */
+.rp-pred-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.3125rem;
+  align-items: center;
+}
+.rp-pred-range-sep {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  text-align: center;
+}
+
+/* ── rp-pred-del — remove-condition button ───────────────────────────────────
+   Fills the 3/20 row-2 cell, matches input height, accent-pink hover. NOTE this
+   is NOT the rp-btn-icon--sq atom (different size + grid-stretch behavior); it is
+   a row-local button shape, ported verbatim. */
+.rp-pred-del {
+  width: 100%;
+  height: 1.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.4375rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+}
+.rp-pred-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+
+/* ── rp-pred--stack / rp-pred-lbl — label-on-top variant ─────────────────────
+   The tools-panel forms reuse rp-pred as a vertical stack (label above field).
+   Ported with the base so lifting rp-pred doesn't break the tools forms — the
+   tools-panel slice composes this variant, the filter panel does not. Verbatim. */
+.rp-pred--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  grid-template-columns: none;
+  margin-bottom: 0.625rem;
+}
+.rp-pred--stack select,
+.rp-pred--stack input { width: 100%; }
+.rp-pred-lbl {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--rp-text-mute);
+}
+
+/* ── rp-group-card / -head / -del — the filter group card ────────────────────
+   Holds the AND/OR combo (rp-seg--combo), the per-group delete, the predicate
+   list, and the Add-condition button. Verbatim. */
+.rp-group-card {
+  margin-bottom: 0.375rem;
+  padding: 0.5625rem;
+  border-radius: 0.625rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+}
+.rp-group-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.rp-group-card-del {
+  width: 1.625rem;
+  height: 1.625rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+}
+.rp-group-card-del i { font-size: 0.75rem; }
+.rp-group-card-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+
+/* ── rp-add-pred — Add-condition button margin modifier ──────────────────────
+   The button itself composes rp-btn-icon (--glass --block); this adds the top
+   margin only. (Legacy .rt-add-pred on a rt-btn rt-btn--glass rt-btn--block —
+   and rt-btn maps to the rp-btn-icon atom, not rp-btn.) */
+.rp-add-pred { margin-top: 0.125rem; }
+
+/* ── rp-group-sep — inter-group AND/OR joiner pill ───────────────────────────
+   Rendered BETWEEN group cards by the builder. Pseudo-element divider lines flank
+   the pill; clicking it flips the top-level group combo. Verbatim. */
+.rp-group-sep { display: flex; align-items: center; gap: 0.5rem; margin: 0.4375rem 0.125rem; }
+.rp-group-sep::before, .rp-group-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rp-border);
+}
+.rp-group-sep button {
+  height: 1.375rem;
+  padding: 0 0.8125rem;
+  border-radius: 6.1875rem;
+  border: 1px solid var(--rp-border);
+  background: var(--rp-surface);
+  color: var(--rp-accent-2);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.rp-group-sep button:hover { background: var(--rp-accent-soft); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Value editors — the in/not_in chip-picker + the single-value autocomplete
+   dropdown. These are FILTER-SPECIFIC value editors (ported verbatim here); the
+   live BEHAVIOR is autocomplete.js's mountChipPicker / attachAutocomplete, which
+   today emit the rt- markup. The builder emits the rp- markup + slots; the live
+   primitive is rewired to the rp- names at cutover (filter-panel.js note).
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── rp-chip-picker / -list / rp-chip / -x / -input — in/not_in editor ────────
+   A chip-list + inline autocompleting add-input mounted into rp-pred-val-slot.
+   NOTE this rp-chip is the SEPARATE picker-chip visual (input-with-add), not the
+   read-only rp-chip-row band's atom — kept verbatim as its own family. The
+   rp-chip-input override beats the generic .rp-pred input{width:100%} on
+   specificity. Verbatim. */
+.rp-chip-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  min-height: 1.875rem;
+  padding: 0.1875rem 0.3125rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  cursor: text;
+}
+.rp-chip-picker:focus-within { border-color: var(--rp-accent-2); }
+.rp-chip-list {
+  display: contents;
+}
+.rp-chip-picker .rp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1px 0.25rem 1px 0.4375rem;
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+  border-radius: 62.4375rem;
+  font-size: 0.7188rem;
+  line-height: 1.6;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-chip-x {
+  width: 1rem;
+  height: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  line-height: 1;
+  padding: 0;
+}
+.rp-chip-x:hover {
+  background: rgba(243, 139, 168, 0.18);
+  color: var(--rp-accent);
+}
+.rp-chip-picker .rp-chip-input {
+  flex: 1 1 5rem;
+  width: auto;
+  min-width: 5rem;
+  height: 1.5rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0 0.25rem;
+}
+.rp-chip-picker .rp-chip-input:focus { outline: 0; }
+
+/* ── rp-ac-wrap / rp-ac / rp-ac.open / -head / -item / -empty — typeahead ─────
+   The autocomplete suggestion dropdown anchored under a value input, used by both
+   single-value text ops AND inside the chip-picker. Uses .rp-ac (separate from
+   any rp-menu/dropdown) so the global dropdown toggle doesn't fight the
+   focus-driven open/close in autocomplete.js. Verbatim. */
+.rp-ac-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.rp-ac-wrap > input {
+  width: 100%;
+}
+.rp-ac {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  max-height: 13.75rem;
+  overflow-y: auto;
+  z-index: 30;
+  display: none;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--rp-shadow);
+  padding: 0.25rem;
+  font-size: 0.75rem;
+}
+.rp-ac.open { display: block; }
+.rp-ac-head {
+  padding: 0.25rem 0.375rem 0.375rem;
+  border-bottom: 1px solid var(--rp-border);
+  color: var(--rp-text-mute);
+  font-size: 0.6562rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+.rp-ac-item {
+  padding: 0.3125rem 0.4375rem;
+  border-radius: 0.3125rem;
+  color: var(--rp-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.7188rem;
+}
+.rp-ac-item:hover,
+.rp-ac-item.is-active {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-ac-item.is-active {
+  outline: 1px solid var(--rp-accent-2);
+}
+.rp-ac-empty {
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: 0.7188rem;
+}
