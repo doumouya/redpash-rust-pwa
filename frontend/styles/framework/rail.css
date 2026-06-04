@@ -45,8 +45,34 @@
 /* Rail view switcher — the 2-option seg (e.g. Data ↔ Dashboards, Monitoring ↔
    Admin Console). Sits between head and body; the page supplies the seg's
    options, the placement margin is here. Hidden when the rail collapses. */
-.rp-rail-views { margin: 0.375rem 0.375rem 0.125rem; }
+.rp-rail-views {
+  margin: 0.375rem 0.375rem 0.125rem;
+  /* the seg control itself (ported from rt-seg + rt-seg--rail; rail-internal, full-width) */
+  display: flex;
+  padding: 0.125rem;
+  border-radius: 0.5rem;
+  background: var(--rp-hover);
+  border: 1px solid var(--rp-border);
+}
 .rp-rail.compact .rp-rail-views { display: none; }
+.rp-rail-views button {
+  flex: 1;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+.rp-rail-views button i { font-size: 0.75rem; }
+.rp-rail-views button.is-active { background: var(--rp-surface); color: var(--rp-text); font-weight: 650; }
 
 /* Per-view FILTERING (which tabs/groups a given data-rail-view shows, and the
    platform-admin gate on the Admin view) is PAGE COMPOSITION, not the component —
