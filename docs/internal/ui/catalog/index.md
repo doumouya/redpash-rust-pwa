@@ -8,41 +8,41 @@ frontend source; `tools/ui-doc-audit` fails if it drifts. Never hand-edit the ge
 ## Catalog
 
 <!-- doc-gen:component:index START — generated from the frontend source (css+html+js); do not hand-edit -->
-Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the complete, code-enumerated component list.
+Generated 2026-06-04 from the frontend source (42 css, 9 html, 71 js) — the complete, code-enumerated component list.
 
-- **238** styled components (the catalog denominator)
+- **244** styled components (the catalog denominator)
 - **118** dynamic hooks (un-styled JS-injected handles — not components)
-- **118** divergences · **26** parallel-class clusters (the dedup worklist)
+- **124** divergences · **26** parallel-class clusters (the dedup worklist)
 
 ### Parallel-class clusters — compose into one atom (`-suffix` shared across blocks)
 
 | -suffix | blocks | classes | members |
 |---------|-------:|--------:|---------|
-| `-head` | 25 | 35 | `ds-config-head`, `ds-sec-head`, `ds-tile-head`, `rp-cases-card-head`, `rp-cases-col-head`, `rp-cases-comment-head`, `rp-cases-detail-head`, `rp-cases-rail-attach-head` … |
-| `-body` | 24 | 32 | `ds-acc-body`, `ds-config-body`, `ds-sec-body`, `ds-tile-body`, `rp-cases-col-body`, `rp-cases-comment-body`, `rp-cases-detail-body`, `rp-cases-detail-side-desc-body` … |
-| `-title` | 26 | 30 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-dash-config-title` … |
+| `-head` | 26 | 36 | `ds-config-head`, `ds-sec-head`, `ds-tile-head`, `rp-cases-card-head`, `rp-cases-col-head`, `rp-cases-comment-head`, `rp-cases-detail-head`, `rp-cases-rail-attach-head` … |
+| `-body` | 25 | 33 | `ds-acc-body`, `ds-config-body`, `ds-sec-body`, `ds-tile-body`, `rp-cases-col-body`, `rp-cases-comment-body`, `rp-cases-detail-body`, `rp-cases-detail-side-desc-body` … |
+| `-title` | 27 | 31 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-dash-config-title` … |
 | `-name` | 13 | 26 | `rp-brand-name`, `rp-cases-attach-name`, `rp-cases-col-name`, `rp-cases-msg-file-name`, `rp-cases-pending-name`, `rp-cases-user-name`, `rp-comment-file-name`, `rp-composer-chip-name` … |
 | `-input` | 13 | 20 | `ds-input`, `rp-cases-comment-attach-input`, `rp-cases-comment-edit-input`, `rp-cases-comment-input`, `rp-cases-composer-input`, `rp-cases-create-desc-input`, `rp-cases-create-title-input`, `rp-cases-side-assignee-input` … |
 | `-row` | 17 | 18 | `ds-chip-row`, `ds-measure-row`, `ds-toggle-row`, `rp-cases-chip-row`, `rp-cases-ov-row`, `rp-chip-row`, `rp-dash-chip-row`, `rp-dash-measure-row` … |
 | `-empty` | 11 | 16 | `ds-empty`, `rp-cases-col-empty`, `rp-cases-empty`, `rp-cases-ov-table-empty`, `rp-cases-rail-empty`, `rp-empty`, `rp-mon-modal-empty`, `rp-profile__memberships-empty` … |
 | `-icon` | 12 | 16 | `ds-sec-icon`, `rp-btn-icon`, `rp-cases-attach-icon`, `rp-cases-msg-file-icon`, `rp-comment-file-icon`, `rp-dash-sec-icon`, `rp-home-org__icon`, `rp-list-sort-icon` … |
 | `-label` | 14 | 14 | `ds-sec-label`, `rp-cases-chip-row-label`, `rp-chip-row-label`, `rp-dash-sec-label`, `rp-kpi-label`, `rp-label`, `rp-list-toolbar-rows-label`, `rp-modal-label` … |
+| `-close` | 13 | 13 | `ds-tile-close`, `rp-cases-detail-close`, `rp-dash-tile-close`, `rp-modal-close`, `rp-object-close`, `rp-panel-close`, `rp-settings-chart-modal-close`, `rp-sw-update__close` … |
 | `-count` | 9 | 13 | `rp-cases-col-count`, `rp-cases-rail-attach-count`, `rp-cases-side-activity-count`, `rp-cases-side-attachments-count`, `rp-cases-side-section-count`, `rp-count`, `rp-list-toolbar-sel-count`, `rp-mon-user-activity-count` … |
 | `-state` | 12 | 13 | `rp-audit-state`, `rp-dash-chart-legacy-state`, `rp-omni-state`, `rp-profile-google-state`, `rp-profile__conn-state`, `rp-rail-state`, `rp-search-state`, `rp-shell-state` … |
-| `-close` | 12 | 12 | `ds-tile-close`, `rp-cases-detail-close`, `rp-dash-tile-close`, `rp-modal-close`, `rp-object-close`, `rp-settings-chart-modal-close`, `rp-sw-update__close`, `rt-cast-confirm-close` … |
-| `-item` | 7 | 11 | `rp-cases-activity-item`, `rp-cases-rail-item`, `rp-mention-item`, `rp-rail-footer-nav-item`, `rp-rail-footnav-item`, `rp-rail-hidden-item`, `rp-rail-item`, `rp-settings__hidden-item` … |
+| `-item` | 8 | 12 | `rp-cases-activity-item`, `rp-cases-rail-item`, `rp-mention-item`, `rp-menu-item`, `rp-rail-footer-nav-item`, `rp-rail-footnav-item`, `rp-rail-hidden-item`, `rp-rail-item` … |
+| `-foot` | 9 | 12 | `rp-cases-card-foot`, `rp-cases-composer-foot`, `rp-composer-foot`, `rp-modal-foot`, `rp-panel-foot`, `rp-panel-tab-foot`, `rp-settings-chart-modal-foot`, `rt-join-card__foot` … |
 | `-list` | 6 | 10 | `rp-cases-activity-list`, `rp-cases-attach-list`, `rp-cases-comments-list`, `rp-cases-rail-attach-list`, `rp-comment-list`, `rp-settings__hidden-list`, `rp-settings__mon-charts-list`, `rt-chip-list` … |
-| `-foot` | 8 | 10 | `rp-cases-card-foot`, `rp-cases-composer-foot`, `rp-composer-foot`, `rp-modal-foot`, `rp-settings-chart-modal-foot`, `rt-join-card__foot`, `rt-nav-foot`, `rt-panel-foot` … |
 | `-hint` | 10 | 10 | `rp-login__hint`, `rp-modal-hint`, `rp-mon-user-hint`, `rp-profile__hint`, `rp-settings__hint`, `rt-card-hint`, `rt-join-card__hint`, `rt-report-advanced-hint` … |
-| `-wrap` | 8 | 8 | `rp-login__minitable-wrap`, `rp-profile__rid-wrap`, `rp-table-wrap`, `rp-user-picker-wrap`, `rt-ac-wrap`, `rt-dd-wrap`, `rt-report-preview-wrap`, `rt-table-wrap` |
+| `-wrap` | 9 | 9 | `rp-login__minitable-wrap`, `rp-menu-wrap`, `rp-profile__rid-wrap`, `rp-table-wrap`, `rp-user-picker-wrap`, `rt-ac-wrap`, `rt-dd-wrap`, `rt-report-preview-wrap` … |
 | `-caret` | 7 | 7 | `ds-sec-caret`, `rp-cases-prop-caret`, `rp-dash-sec-caret`, `rp-mon-row-caret`, `rp-rail-group-caret`, `rt-group-caret`, `rt-report-advanced-caret` |
 | `-dot` | 5 | 6 | `rp-cases-priority-dot`, `rp-cases-status-dot`, `rp-priority-dot`, `rp-rail-tab-dot`, `rp-settings__tag-dot`, `rt-tab-dot` |
 | `-pill` | 5 | 6 | `rp-mon-opt-pill`, `rp-mono-pill`, `rp-profile-plan-pill`, `rp-profile__plan-pill`, `rt-mono-pill`, `rt-pill` |
 | `-error` | 4 | 5 | `rp-cases-comment-form-error`, `rp-cases-side-error`, `rp-comment-error`, `rp-home-create-error`, `rp-mon-modal-error` |
 | `-value` | 4 | 4 | `rp-kpi-value`, `rp-page__row-value`, `rp-stat-value`, `rt-report-window-value` |
-| `-inner` | 2 | 2 | `rp-cases-detail-side-inner`, `rt-panel-inner` |
+| `-inner` | 3 | 3 | `rp-cases-detail-side-inner`, `rp-panel-inner`, `rt-panel-inner` |
+| `-menu` | 3 | 3 | `rp-mention-menu`, `rp-menu`, `rp-search-menu` |
 | `-toggle` | 2 | 2 | `rp-cases-side-toggle`, `rt-report-show-toggle` |
-| `-menu` | 2 | 2 | `rp-mention-menu`, `rp-search-menu` |
 | `-bar` | 2 | 2 | `rp-audit-bar`, `rp-home-mem-role-bar` |
 
 ### Divergences — same class, ≥2 ancestor contexts (unify behavior)
@@ -88,10 +88,16 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `.rp-dash-tile-act` | `(own)` · `.rp-dash-tile:hover` · `.rp-dash-tile.is-selected` |
 | `.rp-dash-toolbar` | `(own)` · `.rp-surface.is-designer-mode` |
 | `.rp-empty` | `(own)` · `.rp-dash-grid` |
-| `.rp-label` | `(own)` · `.rp-stat` |
+| `.rp-label` | `(own)` · `.rp-panel-body` · `.rp-stat` |
 | `.rp-list-sort-icon` | `(own)` · `.rp-list-sortable:hover` · `.rp-list-sortable.is-asc` · `.rp-list-sortable.is-desc` |
+| `.rp-menu-item` | `(own)` · `.rp-pred-multi` |
 | `.rp-page__section` | `(own)` · `.rp-settings__surface` |
 | `.rp-page__section-h` | `(own)` · `.rp-profile__plan-card` |
+| `.rp-pager` | `.rp-surface.is-designer-mode` · `(own)` |
+| `.rp-panel-filter` | `(own)` · `.rp-surface.is-designer-mode` |
+| `.rp-panel-history` | `(own)` · `.rp-surface.is-designer-mode` |
+| `.rp-panel-inner` | `(own)` · `.rp-panel-tools.has-columns` · `.rp-panel-filter` |
+| `.rp-panel-tools` | `(own)` · `.rp-surface.is-designer-mode` |
 | `.rp-priority-dot` | `(own)` · `.rp-cases .rp-rail-item` · `.rp-rail-item` |
 | `.rp-rail-filter` | `(own)` · `.rp-rail.compact` |
 | `.rp-rail-footer` | `.rp-rail.compact` · `(own)` |
@@ -168,7 +174,7 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `.rt-toolbar` | `(own)` · `#rpHomeView` |
 | `.ws-landing` | `(own)` · `.rp-surface.is-landing-mode` |
 
-### Components (238) — flat / maximal grain
+### Components (244) — flat / maximal grain
 
 | component | cls | source | rendered by | flags |
 |-----------|----:|--------|-------------|-------|
@@ -262,6 +268,7 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `rp-login` | 24 | css+js | renderLocalResult, renderMinitable | `-head`† `-wrap`† |
 | `rp-main` | 1 | css+js | mountSurface |  |
 | `rp-mention` | 3 | css+js | createDescEl, createForm, createModal … | `-item`† `-menu`† |
+| `rp-menu` | 4 | css+js | mountMenu | ⚠ div×1 `-item`† `-menu`† `-wrap`† |
 | `rp-meta` | 1 | css+js | createBtn, createBtnIcon, createBtnLabel … |  |
 | `rp-modal` | 14 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-body`† `-close`† `-foot`† `-head`† `-hint`† `-input`† `-label`† `-title`† |
 | `rp-mon-act-icon` | 1 | css+js | mountUserCharts, openRequestReplay, renderCaseCategoriesBody … | `-icon`† |
@@ -296,12 +303,17 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `rp-omni` | 9 | css+js | mountOmni, mountOmnisearch, mountTopbar | `-label`† `-state`† |
 | `rp-overview` | 7 | css+js | buildFilterNode, buildSortsParam, createGhostTab … |  |
 | `rp-page` | 13 | css+js | mountCaptureBar, mountKey, mountProfileRail … | ⚠ div×2 `-body`† `-label`† `-value`† |
-| `rp-pager` | 1 | css |  |  |
-| `rp-panel` | 1 | css |  |  |
+| `rp-pager` | 1 | css+js | mountPager | ⚠ div×1 |
+| `rp-pages` | 1 | css+js | mountPager |  |
+| `rp-panel` | 15 | css+js | mountPanel | ⚠ div×4 `-body`† `-close`† `-foot`† `-head`† `-inner`† `-title`† |
+| `rp-pg` | 2 | css+js | mountPager |  |
+| `rp-pred-multi` | 1 | css |  |  |
 | `rp-priority-dot` | 1 | css+js | mountSimpleTable | ⚠ div×1 `-dot`† |
 | `rp-profile` | 56 | css+js | mountProfileRail, mountRow, renderForm | `-empty`† `-icon`† `-name`† `-pill`† `-state`† `-title`† `-wrap`† |
 | `rp-rail` | 49 | css+js | mountRail, mountRailFooterNav | ⚠ div×24 `-body`† `-caret`† `-count`† `-dot`† `-head`† `-icon`† `-item`† `-name`† `-state`† `-title`† |
+| `rp-rows-info` | 1 | css+js | mountPager |  |
 | `rp-search` | 9 | css+js | mountOmni, mountRail | ⚠ div×1 `-label`† `-menu`† `-state`† |
+| `rp-seg` | 1 | css |  |  |
 | `rp-settings` | 46 | css+js | mountHidden, mountKey, mountRow … | ⚠ div×1 `-count`† `-dot`† `-empty`† `-head`† `-icon`† `-input`† `-item`† `-list`† `-name`† `-title`† |
 | `rp-settings-chart-modal` | 11 | css+js | openAddChartModal | `-body`† `-close`† `-foot`† `-head`† |
 | `rp-shell` | 8 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-body`† `-count`† `-head`† `-state`† `-title`† |
@@ -309,7 +321,7 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `rp-status` | 1 | css+js | mountSimpleTable |  |
 | `rp-surface` | 2 | css+js | buildFilterNode, buildSortsParam, createGhostTab … | ⚠ div×1 `-body`† |
 | `rp-sw-update` | 4 | css |  |  |
-| `rp-table` | 6 | css+js | mountSimpleTable, mountSurface | ⚠ div×1 `-empty`† `-row`† `-state`† `-wrap`† |
+| `rp-table` | 6 | css+js | mountPager, mountSimpleTable, mountSurface | ⚠ div×1 `-empty`† `-row`† `-state`† `-wrap`† |
 | `rp-title` | 1 | css+js | mountChartTile, mountDashboardView, mountHead | ⚠ div×1 `-title`† |
 | `rp-tone-high` | 1 | css |  |  |
 | `rp-tone-low` | 1 | css |  |  |
@@ -348,7 +360,7 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `rt-mono-pill` | 1 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-pill`† |
 | `rt-nav` | 7 | css+js | buildFilterNode, buildSortsParam, createBtn … | ⚠ div×3 `-body`† `-foot`† `-head`† `-state`† `-title`† |
 | `rt-pager` | 1 | css+js | createBtn, createBtnIcon, createBtnLabel … | ⚠ div×1 |
-| `rt-pages` | 1 | css+js | createListCharts, mountData, renderListPager |  |
+| `rt-pages` | 1 | css+js | createListCharts, mountData, mountPager … |  |
 | `rt-panel` | 11 | css+js | buildFilterNode, buildSheetSteps, buildSortsParam … | ⚠ div×1 `-body`† `-close`† `-foot`† `-head`† `-inner`† `-title`† |
 | `rt-pg` | 2 | css+js | buildFilterNode, buildSortsParam, createBtn … |  |
 | `rt-pill` | 1 | css+js | createListCharts, mountData, renderListPager | `-pill`† |
@@ -387,7 +399,7 @@ Generated 2026-06-04 from the frontend source (38 css, 9 html, 67 js) — the co
 | `rt-report-undo-strip` | 1 | css+js | buildSpec, mountReport, renderAdvancedSection … |  |
 | `rt-report-window` | 5 | css+js | buildSpec, mountReport, renderAdvancedSection … | `-row`† `-value`† |
 | `rt-report-windows` | 1 | css+js | buildSpec, mountReport, renderAdvancedSection … |  |
-| `rt-rows-info` | 1 | css+js | createListCharts, mountData, renderListPager |  |
+| `rt-rows-info` | 1 | css+js | createListCharts, mountData, mountPager … |  |
 | `rt-search` | 1 | css+js | buildSheetSteps, createListCharts, mountData … | ⚠ div×1 |
 | `rt-seg` | 1 | css+js | buildFilterNode, buildSortsParam, createGhostTab … |  |
 | `rt-sel-chip` | 1 | css+js | createListCharts, mountData, renderListPager |  |

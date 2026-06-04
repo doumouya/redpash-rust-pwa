@@ -23,6 +23,11 @@
   <link rel="stylesheet" href="/styles/framework/stat.css" />
   <link rel="stylesheet" href="/styles/framework/chart.css" />
   <link rel="stylesheet" href="/styles/framework/table.css" />
+  <!-- B3.0 foundation atoms: dropdown menu, segmented toggle, panel shell, pager -->
+  <link rel="stylesheet" href="/styles/framework/menu.css" />
+  <link rel="stylesheet" href="/styles/framework/seg.css" />
+  <link rel="stylesheet" href="/styles/framework/panel.css" />
+  <link rel="stylesheet" href="/styles/framework/pager.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -68,6 +73,12 @@
   <section class="sbx-section" data-page="_chart"><h2>component — chart tile (B2, ECharts)</h2><div id="sbx-chart" class="sbx-mount" style="max-width:22rem;height:13rem"></div></section>
   <section class="sbx-section" data-page="_statstrip"><h2>component — stat strip (B2, composite variant)</h2><div id="sbx-statstrip" class="sbx-mount"></div></section>
 
+  <!-- B3.0 foundation atoms: menu (open by default for the proof), seg, panel shell, pager -->
+  <section class="sbx-section" data-page="_menu"><h2>atom — menu / dropdown (B3.0)</h2><div id="sbx-menu" class="sbx-mount" style="height:9rem"></div></section>
+  <section class="sbx-section" data-page="_seg"><h2>atom — seg toggle (B3.0): base · --rail · --combo</h2><div id="sbx-seg" class="sbx-mount" style="display:flex;gap:1rem;align-items:flex-start"></div></section>
+  <section class="sbx-section" data-page="_panel"><h2>component — panel shell (B3.0, tabs variant)</h2><div id="sbx-panel" class="sbx-mount" style="height:16rem;width:18rem;padding:0;overflow:hidden;display:flex"></div></section>
+  <section class="sbx-section" data-page="_pager"><h2>component — pager (B3.0)</h2><div id="sbx-pager" class="sbx-mount"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -93,8 +104,12 @@
     import "/scripts/framework/table.js";               // "table" (simple read-only)
     import "/scripts/framework/surface.js";             // "surface" (assembles head→chip→stats→table)
     import "/scripts/framework/page-assembly.js";       // "page" (assembles a full railed page from components)
+    // B3.0 foundation atoms (rp-menu / rp-panel / rp-pager register; rp-seg is CSS-only).
+    import "/scripts/framework/menu.js";                // "menu" (dropdown + global delegate)
+    import "/scripts/framework/panel.js";               // "panel" (side-panel shell)
+    import "/scripts/framework/pager.js";               // "pager" (windowed pagination)
     // As components land, import their modules here so they self-register, e.g.:
-    //   import "/scripts/framework/redtable.js";       // S2 (full RedTable)
+    //   import "/scripts/framework/redtable.js";       // S2 (full RedTable, B3.1)
     //   import "/scripts/framework/create-action.js";  // S4
 
     // mount the topbar once (shared chrome) with a demo session
@@ -152,6 +167,44 @@
           created_at: "2026-06-04T08:05:00Z", body: "Shipped the fix to prerelease — please re-test." },
       ],
     });
+
+    // ── B3.0 foundation atoms ────────────────────────────────────────────────
+    // menu (dropdown) — a rows-per-page style menu; open it for the render-proof.
+    const mountMenu = get("menu");
+    if (mountMenu) {
+      const m = mountMenu(document.getElementById("sbx-menu"), {
+        id: "sbx-menu-dd", trigger: { label: "Rows: 100", className: "rp-btn-icon" },
+        items: [{ label: "25", value: "25" }, { label: "50", value: "50" },
+                { label: "100", value: "100", selected: true, tick: true }, { label: "250", value: "250" }],
+      });
+      m?.panel?.classList.add("open");   // open so the panel renders in the proof
+    }
+
+    // seg — base + --rail + --combo, all driven by mountRailSeg (data-rail-seg).
+    document.getElementById("sbx-seg").innerHTML =
+        '<div class="rp-seg"><button data-rail-seg="a" class="is-active">Internal</button><button data-rail-seg="b">External</button></div>'
+      + '<div class="rp-seg rp-seg--rail" style="width:9rem"><button data-rail-seg="a" class="is-active"><i class="bi bi-table"></i>Data</button><button data-rail-seg="b"><i class="bi bi-grid-1x2"></i>Dash</button></div>'
+      + '<div class="rp-seg rp-seg--combo" style="flex:1"><button data-rail-seg="a" class="is-active">AND</button><button data-rail-seg="b">OR</button></div>';
+
+    // panel shell — tabs variant, opened, with demo body content.
+    const mountPanel = get("panel");
+    if (mountPanel) {
+      const p = mountPanel(document.getElementById("sbx-panel"), {
+        variant: "filter",
+        tabs: [{ id: "filter", label: "Filter", active: true }, { id: "saved", label: "Saved" }],
+        foot: true,
+      });
+      p?.setOpen(true);
+      if (p?.body) p.body.innerHTML = '<p style="padding:1rem;color:var(--rp-text-mute)">Filter conditions mount here (B3.3).</p>';
+      if (p?.foot) p.foot.innerHTML = '<button class="rp-btn-icon">Clear</button><button class="rp-btn-icon rp-btn-icon--accent">Apply</button>';
+    }
+
+    // pager — page 3 of 12 so the windowed ellipsis (‹ 1 … 2 3 4 … 12 ›) renders.
+    const mountPager = get("pager");
+    if (mountPager) {
+      mountPager(document.getElementById("sbx-pager"), { onPage: () => {} })
+        .render({ page: 3, totalPages: 12, total: 1180, shown: 100, pageSize: 100 });
+    }
 
     // mount the dashboards/designer view (B4) — canvas with a 12-col tile grid
     // (spans 6/6/12, one selected, one error tile) + the config accordion, all

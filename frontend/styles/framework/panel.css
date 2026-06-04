@@ -1,0 +1,194 @@
+/* ── panel (rp-panel) — framework component, CAS_37B2E1BF ─────────────────────
+   The side-panel SHELL shared by the filter / tools / history panels — slides
+   open from 0 width inside a surface, owns the head (title or tab strip + close)
+   and the scrolling body (+ optional foot). Ported VERBATIM from panel.css (and
+   the chart.css designer-mode hide) — the rt-panel family becomes rp-panel-, the
+   `--pills` tabs modifier de-BEMs to `-pills`, and the close button composes the
+   rp-btn-icon atom (legacy used .rt-btn, which is rp-btn-icon verbatim) so this
+   sheet only POSITIONS it. Zero-visual-change diff at cutover.
+   Content placed INTO the body (filter groups, report builder, step rows, tools)
+   stays with its own component; this is the frame those mount into. */
+
+/* ── shell + open/slide ───────────────────────────────────────────
+   Both side panels inside a surface slide open from 0 width. The
+   border side depends on which edge the panel docks to. */
+.rp-panel {
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--rp-surface-2);
+  transition: width 0.18s var(--rp-ease);
+}
+.rp-panel.open { width: 15.625rem; }
+.rp-panel-filter.open  { border-right: 1px solid var(--rp-border); }
+.rp-panel-tools.open   { border-left: 1px solid var(--rp-border); }
+.rp-panel-history.open { border-left: 1px solid var(--rp-border); }
+.rp-panel-inner {
+  width: 15.625rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.18s var(--rp-ease);
+}
+
+/* The tools panel hosts the columns-redtable surface (architecture/
+   columns-redtable.md). The class is set at mount time so the panel
+   widens to 35vw as soon as it opens — no second toggle, no swap.
+   Width matched to the filter panel's report-mode width for visual
+   symmetry — both wide panels share the same viewport budget. */
+.rp-panel-tools.has-columns.open { width: 35vw; }
+.rp-panel-tools.has-columns .rp-panel-inner { width: 35vw; }
+
+/* Filter panel runs at 35vw whenever it's open — matches the tools
+   panel's columns-mode width for visual symmetry. Both wide panels
+   share the same viewport budget regardless of which inner tab is
+   active (Em 2026-05-27 — "symmetry is the key"). */
+.rp-panel-filter.open { width: 35vw; }
+.rp-panel-filter .rp-panel-inner { width: 35vw; }
+
+/* ── head (title or tab strip + close) ────────────────────────────── */
+.rp-panel-head {
+  flex-shrink: 0;
+  height: 2.625rem;
+  padding: 0 0.375rem 0 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.7812rem;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-panel-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+
+/* ── body + foot ──────────────────────────────────────────────────── */
+.rp-panel-body { flex: 1; overflow-y: auto; padding: 0.75rem; }
+.rp-panel-foot {
+  flex-shrink: 0;
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  gap: 0.375rem;
+  border-top: 1px solid var(--rp-border);
+}
+/* the foot's primary (Apply) button stretches to fill — the legacy rule was
+   .rt-panel-foot .rt-btn--accent; rt-btn maps to the rp-btn-icon atom, so the
+   accent variant is rp-btn-icon--accent (NOT rp-btn--accent, which doesn't exist). */
+.rp-panel-foot .rp-btn-icon--accent { flex: 1; }
+
+/* A field label flush at the top of the body has no leading margin
+   (the rp-label atom otherwise adds a top margin for stacking). */
+.rp-panel-body .rp-label:first-child { margin-top: 0; }
+
+/* A section heading inside the body (was .rt-panel-sect). */
+.rp-panel-sect {
+  display: block;
+  margin-bottom: 0.5625rem;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+
+/* ── close button (positioner only) ───────────────────────────────────
+   SHAPE comes from the rp-btn-icon atom on the same element (the legacy
+   .rt-panel-close was a .rt-btn = rp-btn-icon verbatim). This class only
+   repositions it inside the pill-tab head — see the :has() rule below. */
+
+/* ── head tab strip — Filter / Report (or Clean / Joins) ────────────
+   Tabs share the panel head; clicking a tab swaps the body + foot
+   sections (.rp-panel-tab / .rp-panel-tab-foot). The strip replaces
+   the single .rp-panel-title text — same width budget. */
+.rp-panel-tabs {
+  display: flex;
+  gap: 0.125rem;
+  height: 100%;
+  margin-right: auto;
+}
+.rp-panel-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 100%;
+  padding: 0 0.625rem;
+  border: 0;
+  border-bottom: 0.125rem solid transparent;
+  background: transparent;
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 0.7812rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s var(--rp-ease), border-color 0.12s var(--rp-ease);
+}
+.rp-panel-tabs button:hover { color: var(--rp-text); }
+.rp-panel-tabs button.is-active {
+  color: var(--rp-text);
+  border-bottom-color: var(--rp-accent-2);
+}
+.rp-panel-tabs button i { font-size: 0.8125rem; color: var(--rp-accent-2); }
+
+/* Pill variant — Bootstrap nav-pills look (Em's ask 2026-05-25).
+   Each tab is a rounded pill in a tinted track; active fills with
+   accent. Used where the two tabs read as a switcher, not navigation.
+   Add `-pills` alongside `.rp-panel-tabs` to opt in.
+
+   80% width, centered in the head — the close button gets pulled out
+   of flex flow via the :has() rule below so the strip truly centers
+   across the head's full width, not just the space the close leaves. */
+.rp-panel-tabs-pills {
+  width: 80%;
+  height: auto;                         /* override base height: 100% */
+  margin: 0 auto;
+  padding: 0.25rem;
+  gap: 0.25rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 999rem;
+}
+.rp-panel-head:has(.rp-panel-tabs-pills) {
+  position: relative;
+}
+.rp-panel-head:has(.rp-panel-tabs-pills) .rp-panel-close {
+  position: absolute;
+  right: 0.375rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.rp-panel-tabs-pills button {
+  flex: 1;
+  height: auto;                         /* override base button height: 100% */
+  padding: 0.375rem 0.875rem;
+  border-radius: 999rem;
+  border-bottom: 0;                     /* drop the underline accent */
+  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+}
+.rp-panel-tabs-pills button:hover:not(.is-active) {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-panel-tabs-pills button.is-active {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  border-bottom-color: transparent;
+}
+.rp-panel-tabs-pills button.is-active i {
+  color: var(--rp-bg);                  /* override base icon color */
+}
+.rp-panel-tab[hidden],
+.rp-panel-tab-foot[hidden] { display: none; }
+
+/* ── page composition (designer mode) ───────────────────────────────
+   Ported verbatim from chart.css: the workspace designer mode hides
+   the data-only panels. Lives here as the panel's only home for the
+   rule; the integrator scopes it under the surface at cutover. */
+.rp-surface.is-designer-mode .rp-panel-filter,
+.rp-surface.is-designer-mode .rp-panel-history,
+.rp-surface.is-designer-mode .rp-panel-tools {
+  display: none !important;
+}
