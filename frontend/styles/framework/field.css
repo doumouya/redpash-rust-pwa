@@ -1,0 +1,38 @@
+/* ── framework form-control: rp-field — labeled field row ────────────────────
+   The labeled row that wraps any control (seg / select / input / badge / custom)
+   with a label + optional hint. Generalizes the page-local page-row.js so Profile
+   + Settings + any form compose ONE row. rp- only; composed by mountField (field.js).
+
+   Layout: label/hint block on the left, control on the right (space-between).
+   `--stack` puts the control on its own full-width line below the label (for
+   text inputs / wide controls). */
+
+.rp-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-field:last-child { border-bottom: 0; }
+
+.rp-field-main { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.rp-field-label { font-size: 0.8125rem; font-weight: 600; color: var(--rp-text); }
+.rp-field-hint { font-size: 0.6875rem; line-height: 1.35; color: var(--rp-text-mute); }
+.rp-field-control { flex: 0 0 auto; display: flex; align-items: center; gap: 0.375rem; }
+
+/* stacked — label above a full-width control (text inputs, previews) */
+.rp-field--stack { flex-direction: column; align-items: stretch; gap: 0.375rem; }
+.rp-field--stack .rp-field-control { width: 100%; }
+
+/* a section of fields inside a surface */
+.rp-field-group { display: flex; flex-direction: column; }
+.rp-field-group-title {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}

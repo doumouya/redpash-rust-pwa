@@ -1,0 +1,25 @@
+/* ── framework: rp-avatar-upload — editable avatar (picture upload affordance) ─
+   Wraps the rp-avatar atom with a small camera button overlay + a hidden file
+   input → the profile-picture edit the UI never exposed (PATCH /users {avatar_url},
+   backend-ready). rp- only; composed by avatar-upload.js. */
+
+.rp-avatar-upload { position: relative; display: inline-flex; }
+/* a real picture overrides the gradient + hides the initials */
+.rp-avatar-upload .rp-avatar[data-src] {
+  background-size: cover;
+  background-position: center;
+  color: transparent;
+}
+.rp-avatar-upload-btn {
+  position: absolute;
+  right: -0.25rem;
+  bottom: -0.25rem;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-radius: 6.1875rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+}
+.rp-avatar-upload-btn i { font-size: 0.75rem; }

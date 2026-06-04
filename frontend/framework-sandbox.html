@@ -30,6 +30,10 @@
   <link rel="stylesheet" href="/styles/framework/pager.css" />
   <!-- B3.1 redtable core: the interactive data table over the rp-table base -->
   <link rel="stylesheet" href="/styles/framework/redtable.css" />
+  <!-- form-controls (Profile/Settings unlock): field row · badge pill · avatar-upload (seg.css/menu.css already linked) -->
+  <link rel="stylesheet" href="/styles/framework/field.css" />
+  <link rel="stylesheet" href="/styles/framework/badge.css" />
+  <link rel="stylesheet" href="/styles/framework/avatar-upload.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -87,6 +91,9 @@
   <!-- S4: the generic modal (shown inline/visible for the proof) — the create-action target -->
   <section class="sbx-section" data-page="_modal"><h2>component — modal (S4): generic create dialog</h2><div id="sbx-modal" class="sbx-mount" style="position:relative;height:24rem;overflow:hidden"></div></section>
 
+  <!-- form-controls (Profile/Settings unlock): field rows wrapping seg / select / badge / avatar-upload -->
+  <section class="sbx-section" data-page="_formcontrols"><h2>form-controls — field · seg · select · badge · avatar-upload</h2><div id="sbx-formcontrols" class="sbx-mount" style="max-width:34rem"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -119,6 +126,11 @@
     import "/scripts/framework/panel.js";               // "panel" (side-panel shell)
     import "/scripts/framework/pager.js";               // "pager" (windowed pagination)
     import "/scripts/framework/redtable.js";            // "redtable" (B3.1 interactive data table)
+    import "/scripts/framework/seg.js";                 // "seg" (segmented control)
+    import "/scripts/framework/field.js";               // "field" (labeled row)
+    import "/scripts/framework/badge.js";               // "badge" (soft-tint pill)
+    import "/scripts/framework/select.js";              // "select" (form dropdown over menu)
+    import "/scripts/framework/avatar-upload.js";       // "avatar-upload" (editable avatar)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/create-action.js";  // S4
 
@@ -493,6 +505,25 @@
         empty: "Open a file from the rail to see its data.",
       },
     });
+
+    // form-controls demo — rp-field rows wrapping each control (the Profile/Settings unlock).
+    (function () {
+      const host = document.getElementById("sbx-formcontrols");
+      if (!host) return;
+      const mountField = get("field"), mountSeg = get("seg"), mountSelect = get("select"),
+            mountBadge = get("badge"), mountAvatarUpload = get("avatar-upload");
+      const row = () => { const d = document.createElement("div"); host.appendChild(d); return d; };
+      mountField(row(), { label: "Theme", hint: "Token theme applied app-wide",
+        mount: (s) => mountSeg(s, { options: [{ value: "dark", label: "Dark", icon: "bi-moon-stars" }, { value: "light", label: "Light", icon: "bi-sun" }], value: "dark" }) });
+      mountField(row(), { label: "Rows per page", hint: "RedTable pager size",
+        mount: (s) => mountSelect(s, { options: [{ value: "10", label: "10" }, { value: "25", label: "25" }, { value: "50", label: "50" }, { value: "100", label: "100" }], value: "25" }) });
+      mountField(row(), { label: "Plan",
+        mount: (s) => { const b = document.createElement("span"); s.appendChild(b); mountBadge(b, { label: "Pro", tone: "accent" }); } });
+      mountField(row(), { label: "Badge tones",
+        mount: (s) => ["accent", "ok", "warn", "soon", "neutral"].forEach((t) => { const b = document.createElement("span"); s.appendChild(b); mountBadge(b, { label: t, tone: t }); }) });
+      mountField(row(), { label: "Picture", hint: "Upload a profile picture",
+        mount: (s) => mountAvatarUpload(s, { name: "Emmanuel D.", onFile: (f) => console.log("[sandbox] avatar file", f.name) }) });
+    })();
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =
