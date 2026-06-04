@@ -79,6 +79,9 @@
   <section class="sbx-section" data-page="_panel"><h2>component — panel shell (B3.0, tabs variant)</h2><div id="sbx-panel" class="sbx-mount" style="height:16rem;width:18rem;padding:0;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="_pager"><h2>component — pager (B3.0)</h2><div id="sbx-pager" class="sbx-mount"></div></section>
 
+  <!-- S4: the generic modal (shown inline/visible for the proof) — the create-action target -->
+  <section class="sbx-section" data-page="_modal"><h2>component — modal (S4): generic create dialog</h2><div id="sbx-modal" class="sbx-mount" style="position:relative;height:24rem;overflow:hidden"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -104,6 +107,8 @@
     import "/scripts/framework/table.js";               // "table" (simple read-only)
     import "/scripts/framework/surface.js";             // "surface" (assembles head→chip→stats→table)
     import "/scripts/framework/page-assembly.js";       // "page" (assembles a full railed page from components)
+    import "/scripts/framework/modal.js";               // self-registers "modal" (S4)
+    import { createAction } from "/scripts/framework/create-action.js"; // S4 create-action factory
     // B3.0 foundation atoms (rp-menu / rp-panel / rp-pager register; rp-seg is CSS-only).
     import "/scripts/framework/menu.js";                // "menu" (dropdown + global delegate)
     import "/scripts/framework/panel.js";               // "panel" (side-panel shell)
@@ -284,6 +289,15 @@
           { id: "CAS_1", name: "Export times out on 80k rows", icon: "bi-exclamation-circle", dot: "#f38ba8", active: true, hidable: true },
           { id: "CAS_2", name: "Login returns 500", icon: "bi-bug", hidable: true } ] }],
         footer: { create: { label: "New case" }, nav: { active: "", session: { display_name: "Sandbox User" } } },
+        // S4: the rail's create button → createAction → the generic modal.
+        on: { create: createAction({
+          kind: "modal", title: "New case", label: "Create case", icon: "bi-plus-lg",
+          fields: [
+            { key: "title", label: "Title", required: true, placeholder: "What's the case about?", autocomplete: "off" },
+            { key: "description", label: "Description", type: "textarea", placeholder: "Steps to reproduce, context, expected…", hint: "Plain text for v1." },
+          ],
+          onSubmit: async (v) => { console.log("[sandbox] create case", v); }, // sandbox: no real POST
+        }) },
       },
       surface: {
         head: { objectId: "CAS_37B2E1BFF5534F55A92B61EB5FAEDBA3", title: "Export times out on the 80k-row file", editable: false, closeHash: "#/cases" },
@@ -299,6 +313,20 @@
           { rid: "CMT_3", author_id: "USR_ME", author_display_name: "You", created_at: "2026-06-04T08:05:00Z", body: "Shipped the fix to prerelease — please re-test." },
         ],
       },
+    });
+
+    // S4 modal (generic create dialog) — rendered visible for the proof; the same
+    // dialog openModal() pops as an overlay when the rail create button is clicked.
+    const mountModal = get("modal");
+    if (mountModal) mountModal(document.getElementById("sbx-modal"), {
+      title: "New user", submitLabel: "Create user", submitIcon: "bi-person-plus",
+      fields: [
+        { key: "display_name", label: "Display name", required: true, placeholder: "Full name" },
+        { key: "email", label: "Email", type: "email", placeholder: "optional" },
+        { key: "org_role", label: "Org role", type: "select", options: [
+          { value: "member", label: "Member" }, { value: "admin", label: "Admin" } ] },
+      ],
+      onSubmit: async (v) => { console.log("[sandbox] create user", v); },
     });
 
     const names = list();
