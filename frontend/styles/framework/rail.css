@@ -67,37 +67,10 @@
 }
 .rp-rail.compact .rp-rail-filter { display: none; }
 
-/* rp-rail-search — the rail's name-search input (self-contained; the broader
-   rp-search atom emerges when the toolbar/redtable port lands). Merges the base
-   search atom + the rail-tuned size. */
-.rp-rail-search {
-  flex: none;
-  min-width: 0;
-  height: 1.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4375rem;
-  padding: 0 0.625rem;
-  border-radius: 0.5rem;
-  background: var(--rp-glass);
-  border: 1px solid var(--rp-border);
-  transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
-}
-.rp-rail-search:focus-within {
-  border-color: var(--rp-accent-2);
-  box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
-}
-.rp-rail-search i { color: var(--rp-text-mute); font-size: 0.8125rem; }
-.rp-rail-search input {
-  flex: 1;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.8125rem;
-}
-.rp-rail-search input::placeholder { color: var(--rp-text-mute); }
+/* The rail composes the shared `rp-search` atom (atoms.css); only the rail-tuned
+   size differs — a context override, NOT a duplicate class. (Dedup fixup: the old
+   self-contained `rp-rail-search` is gone — search is one atom everywhere.) */
+.rp-rail .rp-search { flex: none; min-width: 0; height: 1.875rem; }
 .rp-rail-chips { display: flex; flex-wrap: wrap; gap: 0.1875rem; }
 .rp-rail-chips .rp-chip {
   padding: 0.1875rem 0.5rem;

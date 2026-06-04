@@ -1,4 +1,4 @@
-/* Purpose: Omnisearch framework component — the site-wide search box + results dropdown (rp-omni).
+/* Purpose: Omnisearch framework component — the rp-search box (topbar context) + rp-search-menu results.
  * Doc: docs/internal/code/frontend/scripts/framework/omni.md */
 // ── Omnisearch (framework component, CAS_37B2E1BF) ──────────────────────────
 // The centred site-wide search: GET /api/search, debounced 200ms, keyboard nav,
@@ -14,18 +14,18 @@ import { esc } from "/scripts/dom.js";
 
 let _ctrlKBound = false;   // the Ctrl/Cmd+K handler binds once for the app's life
 
-/** Build + wire the omnibox into `host` (host becomes the `.rp-omni`). */
+/** Build + wire the omnibox into `host` (host becomes the `.rp-search` box; results in `.rp-search-menu`). */
 export function mountOmni(host, { placeholder = "Search RedPash — projects, files, settings…" } = {}) {
   if (!host) return;
-  host.className = "rp-omni";
+  host.className = "rp-search";
   host.innerHTML =
       '<i class="bi bi-search"></i>'
     + '<input type="search" id="rp-omni" placeholder="' + esc(placeholder) + '" />'
-    + '<kbd class="rp-omni-kbd">Ctrl K</kbd>';
+    + '<kbd class="rp-search-kbd">Ctrl K</kbd>';
 
   const input = host.querySelector("input");
   const drop = document.createElement("div");
-  drop.className = "rp-omni-dropdown";
+  drop.className = "rp-search-menu";
   drop.hidden = true;
   host.appendChild(drop);
 
@@ -50,7 +50,7 @@ export function mountOmni(host, { placeholder = "Search RedPash — projects, fi
       open();
     } catch (err) {
       if (err.name === "AbortError") return;
-      drop.innerHTML = '<div class="rp-omni-state">Search failed'
+      drop.innerHTML = '<div class="rp-search-state">Search failed'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       open();
     }
@@ -58,14 +58,14 @@ export function mountOmni(host, { placeholder = "Search RedPash — projects, fi
 
   function render(q) {
     if (!results.length) {
-      drop.innerHTML = '<div class="rp-omni-state">No results.</div>';
+      drop.innerHTML = '<div class="rp-search-state">No results.</div>';
       return;
     }
     const parts = [];
     let lastKind = null;
     results.forEach((r, idx) => {
       if (r.kind !== lastKind) {
-        parts.push('<div class="rp-omni-section">' + esc(kindLabel(r.kind)) + '</div>');
+        parts.push('<div class="rp-search-menu-section">' + esc(kindLabel(r.kind)) + '</div>');
         lastKind = r.kind;
       }
       parts.push(rowHTML(r, idx, q));
@@ -74,11 +74,11 @@ export function mountOmni(host, { placeholder = "Search RedPash — projects, fi
   }
 
   function rowHTML(r, idx, q) {
-    return '<button type="button" class="rp-omni-result' + (idx === cursor ? ' is-active' : '')
+    return '<button type="button" class="rp-search-result' + (idx === cursor ? ' is-active' : '')
       + '" data-idx="' + idx + '">'
       +   '<i class="' + kindIcon(r.kind) + '"></i>'
-      +   '<span class="rp-omni-result-label">' + highlight(r.label, q) + '</span>'
-      +   (r.sub ? '<span class="rp-omni-result-sub">' + esc(r.sub) + '</span>' : '')
+      +   '<span class="rp-search-result-label">' + highlight(r.label, q) + '</span>'
+      +   (r.sub ? '<span class="rp-search-result-sub">' + esc(r.sub) + '</span>' : '')
       + '</button>';
   }
 
@@ -87,7 +87,7 @@ export function mountOmni(host, { placeholder = "Search RedPash — projects, fi
     const i = s.toLowerCase().indexOf(q.toLowerCase());
     if (i < 0) return esc(s);
     return esc(s.slice(0, i))
-      + '<span class="rp-omni-hl">' + esc(s.slice(i, i + q.length)) + '</span>'
+      + '<span class="rp-search-hl">' + esc(s.slice(i, i + q.length)) + '</span>'
       + esc(s.slice(i + q.length));
   }
 
@@ -135,12 +135,12 @@ export function mountOmni(host, { placeholder = "Search RedPash — projects, fi
   });
 
   function scrollCursorIntoView() {
-    const active = drop.querySelector(".rp-omni-result.is-active");
+    const active = drop.querySelector(".rp-search-result.is-active");
     if (active && active.scrollIntoView) active.scrollIntoView({ block: "nearest" });
   }
 
   drop.addEventListener("mousedown", (e) => {
-    const btn = e.target.closest(".rp-omni-result");
+    const btn = e.target.closest(".rp-search-result");
     if (!btn) return;
     e.preventDefault();
     const idx = parseInt(btn.dataset.idx, 10);
