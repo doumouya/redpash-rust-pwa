@@ -1,0 +1,38 @@
+{
+  "skill_name": "rust-object-registry-design",
+  "notes": "Should-trigger task prompts for the skill-creator eval loop. Assertions are qualitative (design-methodology output) — graded by whether the response follows the method: detect rigidity, reuse the existing seeds, ground in rustc's patterns, stage the work, and seam-map before editing. Run with-skill vs baseline (no skill) to see the lift. Near-miss should-NOT-trigger queries live in the description-optimization trigger set, not here.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "add-new-entity-type-without-boilerplate",
+      "prompt": "I need to add a new 'integration' object type to the RedPash backend (like connectors, but for outbound webhooks). When I added the Kafka connection last week it took a migration to extend the entities.type CHECK, a whole new db/connectors.rs, a new routes/connectors.rs, plus RBAC and audit wiring. Is there a way to stop paying that boilerplate tax for every new type? How should I approach this?",
+      "expected_output": "Recognizes this as the rigidity the registry pattern addresses; points to the codec_registry/members.rs/resolve_grant/entities seeds already in the codebase; references the rustc DefId + Providers patterns; recommends the staged arc (don't add another hand-written module — move toward a registry + generic handler) rather than just writing the Nth module. Cites the seam map.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "name": "kill-the-closed-check-enum",
+      "prompt": "Our entities.type is a Postgres CHECK constraint and field_perms::default_registry() is a giant hardcoded Vec<FieldRow> of &'static str — every new object type means a migration AND a Rust edit. I want the backend object model to be data-driven so adding a type is a row insert, not a redeploy. Worried about breaking the 7 existing builtin types though.",
+      "expected_output": "Identifies the code-baked-registry + closed-CHECK tells; proposes type_definitions tables seeded byte-identically from the builtins (the rustc Interner::prefill pattern); addresses the &'static str -> String concern via the interner lesson (cheap once cached); insists on back-compat for the 7 builtins as the bar; lists the exact default_registry consumers to redirect (Stage 1).",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "name": "user-defined-custom-objects",
+      "prompt": "We want RedPash users to define their own object types at runtime — e.g. a real-estate customer creates a 'Listing' type with their own fields — and get CRUD, RBAC, and field validation for free, no code deploy. How should the backend be structured to make that possible?",
+      "expected_output": "Lands on register_type modeled on rustc's Providers (register, don't edit a match); the Hybrid-C storage (builtins keep typed tables, custom -> entity_data JSONB, FK ON DELETE RESTRICT); reuse of resolve_grant + validate_rules for the auto-wired RBAC/validation; the generic /api/objects/:type/:rid handler. Frames it as Stage 3 of the staged arc, not a from-scratch build.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 4,
+      "name": "new-connector-type-no-new-module",
+      "prompt": "Two more connector types are coming (S3, then database CDC). Right now each connector is its own routes module + db module. Design how a new connector type plugs into the framework WITHOUT a new routes/*.rs each time.",
+      "expected_output": "Connects connector-as-type to the object registry; the generic resource handler (members.rs generalized) so a new connector is a registered type + transport, not a new module; reuse of the pipeline + RBAC seams; references the rustc query/Providers extensibility model. Avoids recommending another hand-written module.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}
