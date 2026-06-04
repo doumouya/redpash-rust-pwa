@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="/styles/framework/topbar.css" />
   <link rel="stylesheet" href="/styles/framework/omni.css" />
   <link rel="stylesheet" href="/styles/framework/rail.css" />
+  <link rel="stylesheet" href="/styles/framework/comments.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -44,6 +45,9 @@
   <!-- shared chrome: the TopBar component (rendered once; every page composes it) -->
   <section class="sbx-section" data-page="_chrome"><h2>shared chrome — topbar</h2><header id="sbx-topbar" class="sbx-mount"></header></section>
 
+  <!-- reusable component: the Comment view (B5) — thread + composer, de-cased from Cases -->
+  <section class="sbx-section" data-page="_comments"><h2>component — comment view (B5)</h2><div id="sbx-comments" class="sbx-mount" style="max-width:42rem"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -58,6 +62,7 @@
   <script type="module">
     import { list, get } from "/scripts/framework/component-registry.js";
     import "/scripts/framework/topbar.js";              // self-registers "topbar"
+    import "/scripts/framework/comments.js";            // self-registers "comments" (B5)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/rail.js";           // rail (full version)
     //   import "/scripts/framework/redtable.js";       // S2
@@ -67,6 +72,25 @@
     const mountTopbar = get("topbar");
     if (mountTopbar) mountTopbar(document.getElementById("sbx-topbar"),
       { active: "home", session: { first_name: "Sandbox", is_platform_admin: true } });
+
+    // mount the comment view (B5) with sample data — spans two days (divider),
+    // mixes reporter/assignee/own/other, an edited comment + an attachment, so
+    // every rp-comment-* / rp-composer-* class renders from framework parts.
+    const mountComments = get("comments");
+    if (mountComments) mountComments(document.getElementById("sbx-comments"), {
+      me: "USR_ME", reporterId: "USR_CUST", assigneeId: "USR_ENG",
+      sendingAs: "Sandbox",
+      comments: [
+        { rid: "CMT_1", author_id: "USR_CUST", author_display_name: "Aïcha Diallo",
+          created_at: "2026-06-03T09:12:00Z", body: "The export keeps timing out on the 80k-row file." },
+        { rid: "CMT_2", author_id: "USR_ENG", author_display_name: "Sam Okoro",
+          created_at: "2026-06-03T10:40:00Z", is_edited: true,
+          bodyHtml: "<p>Reproduced — it's the <code>group_by</code> pass. Patch incoming.</p>",
+          attachments: [{ name: "trace.log", icon: "bi-file-earmark-text", sizeLabel: "12 KB" }] },
+        { rid: "CMT_3", author_id: "USR_ME", author_display_name: "You",
+          created_at: "2026-06-04T08:05:00Z", body: "Shipped the fix to prerelease — please re-test." },
+      ],
+    });
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =

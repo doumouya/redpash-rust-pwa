@@ -8,37 +8,37 @@ frontend source; `tools/ui-doc-audit` fails if it drifts. Never hand-edit the ge
 ## Catalog
 
 <!-- doc-gen:component:index START — generated from the frontend source (css+html+js); do not hand-edit -->
-Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the complete, code-enumerated component list.
+Generated 2026-06-04 from the frontend source (31 css, 9 html, 59 js) — the complete, code-enumerated component list.
 
-- **241** styled components (the catalog denominator)
-- **148** dynamic hooks (un-styled JS-injected handles — not components)
-- **80** divergences · **26** parallel-class clusters (the dedup worklist)
+- **243** styled components (the catalog denominator)
+- **150** dynamic hooks (un-styled JS-injected handles — not components)
+- **105** divergences · **26** parallel-class clusters (the dedup worklist)
 
 ### Parallel-class clusters — compose into one atom (`-suffix` shared across blocks)
 
 | -suffix | blocks | classes | members |
 |---------|-------:|--------:|---------|
-| `-head` | 25 | 28 | `ds-config-head`, `ds-sec-head`, `ds-tile-head`, `rp-cases-card-head`, `rp-cases-col-head`, `rp-cases-comment-head`, `rp-cases-detail-head`, `rp-cases-rail-attach-head` … |
-| `-body` | 23 | 25 | `ds-acc-body`, `ds-config-body`, `ds-sec-body`, `ds-tile-body`, `rp-cases-col-body`, `rp-cases-comment-body`, `rp-cases-detail-body`, `rp-cases-detail-side-desc-body` … |
-| `-title` | 23 | 24 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-doc-title` … |
-| `-name` | 14 | 21 | `rp-brand-name`, `rp-cases-attach-name`, `rp-cases-col-name`, `rp-cases-msg-file-name`, `rp-cases-pending-name`, `rp-cases-user-name`, `rp-home-user-name`, `rp-profile-display-name` … |
-| `-input` | 15 | 17 | `ds-input`, `rp-cases-comment-attach-input`, `rp-cases-comment-edit-input`, `rp-cases-comment-input`, `rp-cases-composer-input`, `rp-cases-create-desc-input`, `rp-cases-create-title-input`, `rp-cases-side-assignee-input` … |
+| `-head` | 27 | 31 | `ds-config-head`, `ds-sec-head`, `ds-tile-head`, `rp-cases-card-head`, `rp-cases-col-head`, `rp-cases-comment-head`, `rp-cases-detail-head`, `rp-cases-rail-attach-head` … |
+| `-body` | 25 | 29 | `ds-acc-body`, `ds-config-body`, `ds-sec-body`, `ds-tile-body`, `rp-cases-col-body`, `rp-cases-comment-body`, `rp-cases-detail-body`, `rp-cases-detail-side-desc-body` … |
+| `-title` | 24 | 26 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-doc-title` … |
+| `-name` | 17 | 26 | `rp-brand-name`, `rp-cases-attach-name`, `rp-cases-col-name`, `rp-cases-msg-file-name`, `rp-cases-pending-name`, `rp-cases-user-name`, `rp-comment-file-name`, `rp-composer-chip-name` … |
+| `-input` | 17 | 19 | `ds-input`, `rp-cases-comment-attach-input`, `rp-cases-comment-edit-input`, `rp-cases-comment-input`, `rp-cases-composer-input`, `rp-cases-create-desc-input`, `rp-cases-create-title-input`, `rp-cases-side-assignee-input` … |
+| `-empty` | 13 | 15 | `ds-empty`, `rp-cases-col-empty`, `rp-cases-empty`, `rp-cases-ov-table-empty`, `rp-cases-rail-empty`, `rp-empty`, `rp-mon-modal-empty`, `rp-profile__memberships-empty` … |
+| `-icon` | 12 | 15 | `ds-sec-icon`, `rp-btn-icon`, `rp-cases-attach-icon`, `rp-cases-msg-file-icon`, `rp-comment-file-icon`, `rp-home-org__icon`, `rp-list-sort-icon`, `rp-mon-act-icon` … |
 | `-row` | 14 | 14 | `ds-chip-row`, `ds-measure-row`, `ds-toggle-row`, `rp-cases-chip-row`, `rp-cases-ov-row`, `rp-chip-row`, `rp-home-row`, `rp-mon-modal-request-row` … |
-| `-empty` | 12 | 14 | `ds-empty`, `rp-cases-col-empty`, `rp-cases-empty`, `rp-cases-ov-table-empty`, `rp-cases-rail-empty`, `rp-mon-modal-empty`, `rp-profile__memberships-empty`, `rp-settings__hidden-empty` … |
-| `-icon` | 9 | 12 | `ds-sec-icon`, `rp-cases-attach-icon`, `rp-cases-msg-file-icon`, `rp-home-org__icon`, `rp-list-sort-icon`, `rp-mon-act-icon`, `rp-profile__conn-icon`, `rp-profile__membership-icon` … |
-| `-count` | 11 | 11 | `rp-cases-col-count`, `rp-cases-rail-attach-count`, `rp-cases-side-activity-count`, `rp-cases-side-attachments-count`, `rp-cases-side-section-count`, `rp-list-toolbar-sel-count`, `rp-mon-user-activity-count`, `rp-settings__hidden-bucket-count` … |
+| `-count` | 12 | 12 | `rp-cases-col-count`, `rp-cases-rail-attach-count`, `rp-cases-side-activity-count`, `rp-cases-side-attachments-count`, `rp-cases-side-section-count`, `rp-list-toolbar-sel-count`, `rp-mon-user-activity-count`, `rp-rail-group-count` … |
 | `-label` | 10 | 10 | `ds-sec-label`, `rp-cases-chip-row-label`, `rp-chip-row-label`, `rp-kpi-label`, `rp-list-toolbar-rows-label`, `rp-modal-label`, `rp-mon-act-label`, `rp-omni-result-label` … |
 | `-close` | 10 | 10 | `ds-tile-close`, `rp-cases-detail-close`, `rp-modal-close`, `rp-settings-chart-modal-close`, `rp-sw-update__close`, `rt-cast-confirm-close`, `rt-panel-close`, `rt-step-preview-close` … |
+| `-item` | 8 | 10 | `rp-cases-activity-item`, `rp-cases-rail-item`, `rp-mention-item`, `rp-rail-footer-nav-item`, `rp-rail-footnav-item`, `rp-rail-hidden-item`, `rp-settings__hidden-item`, `rt-ac-item` … |
+| `-list` | 9 | 10 | `rp-cases-activity-list`, `rp-cases-attach-list`, `rp-cases-comments-list`, `rp-cases-rail-attach-list`, `rp-comment-list`, `rp-settings__hidden-list`, `rp-settings__mon-charts-list`, `rt-chip-list` … |
+| `-foot` | 9 | 10 | `rp-cases-card-foot`, `rp-cases-composer-foot`, `rp-composer-foot`, `rp-modal-foot`, `rp-settings-chart-modal-foot`, `rt-join-card__foot`, `rt-nav-foot`, `rt-panel-foot` … |
 | `-hint` | 10 | 10 | `rp-login__hint`, `rp-modal-hint`, `rp-mon-user-hint`, `rp-profile__hint`, `rp-settings__hint`, `rt-card-hint`, `rt-join-card__hint`, `rt-report-advanced-hint` … |
-| `-list` | 8 | 9 | `rp-cases-activity-list`, `rp-cases-attach-list`, `rp-cases-comments-list`, `rp-cases-rail-attach-list`, `rp-settings__hidden-list`, `rp-settings__mon-charts-list`, `rt-chip-list`, `rt-pred-list` … |
-| `-foot` | 8 | 9 | `rp-cases-card-foot`, `rp-cases-composer-foot`, `rp-modal-foot`, `rp-settings-chart-modal-foot`, `rt-join-card__foot`, `rt-nav-foot`, `rt-panel-foot`, `rt-panel-tab-foot` … |
-| `-state` | 8 | 9 | `rp-audit-state`, `rp-omni-state`, `rp-profile-google-state`, `rp-profile__conn-state`, `rp-shell-state`, `rt-chart__state`, `rt-nav-state`, `rt-step-state` … |
-| `-item` | 8 | 8 | `rp-cases-activity-item`, `rp-cases-rail-item`, `rp-mention-item`, `rp-rail-footnav-item`, `rp-settings__hidden-item`, `rt-ac-item`, `rt-dd-item`, `rt-hidden-item` |
+| `-state` | 9 | 10 | `rp-audit-state`, `rp-omni-state`, `rp-profile-google-state`, `rp-profile__conn-state`, `rp-rail-state`, `rp-shell-state`, `rt-chart__state`, `rt-nav-state` … |
 | `-wrap` | 7 | 7 | `rp-login__minitable-wrap`, `rp-profile__rid-wrap`, `rp-user-picker-wrap`, `rt-ac-wrap`, `rt-dd-wrap`, `rt-report-preview-wrap`, `rt-table-wrap` |
-| `-caret` | 5 | 5 | `ds-sec-caret`, `rp-cases-prop-caret`, `rp-mon-row-caret`, `rt-group-caret`, `rt-report-advanced-caret` |
+| `-caret` | 6 | 6 | `ds-sec-caret`, `rp-cases-prop-caret`, `rp-mon-row-caret`, `rp-rail-group-caret`, `rt-group-caret`, `rt-report-advanced-caret` |
+| `-error` | 5 | 5 | `rp-cases-comment-form-error`, `rp-cases-side-error`, `rp-comment-error`, `rp-home-create-error`, `rp-mon-modal-error` |
+| `-dot` | 5 | 5 | `rp-cases-priority-dot`, `rp-cases-status-dot`, `rp-rail-tab-dot`, `rp-settings__tag-dot`, `rt-tab-dot` |
 | `-pill` | 4 | 5 | `rp-mon-opt-pill`, `rp-profile-plan-pill`, `rp-profile__plan-pill`, `rt-mono-pill`, `rt-pill` |
-| `-error` | 4 | 4 | `rp-cases-comment-form-error`, `rp-cases-side-error`, `rp-home-create-error`, `rp-mon-modal-error` |
-| `-dot` | 4 | 4 | `rp-cases-priority-dot`, `rp-cases-status-dot`, `rp-settings__tag-dot`, `rt-tab-dot` |
 | `-value` | 3 | 3 | `rp-kpi-value`, `rp-page__row-value`, `rt-report-window-value` |
 | `-inner` | 2 | 2 | `rp-cases-detail-side-inner`, `rt-panel-inner` |
 | `-toggle` | 2 | 2 | `rp-cases-side-toggle`, `rt-report-show-toggle` |
@@ -55,6 +55,7 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `.ds-sec-caret` | `(own)` · `.ds-sec:not(.open)` |
 | `.ds-tile-act` | `(own)` · `.ds-tile:hover` · `.ds-tile.selected` |
 | `.rp-btn` | `(own)` · `.rp-login__card` · `.rp-login__demo` |
+| `.rp-btn-icon` | `(own)` · `.rp-comment-edit-actions` · `.rp-rail-footer` |
 | `.rp-cases-activity-filter` | `.rp-cases-detail-side` · `(own)` |
 | `.rp-cases-activity-item` | `.rp-cases-detail-side` · `(own)` |
 | `.rp-cases-activity-kind` | `.rp-cases-detail-side` · `(own)` |
@@ -75,13 +76,37 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `.rp-cases-rail-source` | `(own)` · `.rt-nav.compact` |
 | `.rp-cases-side-desc-edit` | `(own)` · `.rp-cases-side-blk-head` |
 | `.rp-chart-canvas` | `(own)` · `.rp-chart-card--empty` |
-| `.rp-chip` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `.rp-cases-activity-filter` · `.rt-rail-chips` · `(own)` |
+| `.rp-chip` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `.rp-cases-activity-filter` · `.rp-rail-chips` · `.rt-rail-chips` · `(own)` |
 | `.rp-chip-row` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `(own)` |
 | `.rp-chip-row-label` | `.rp-cases-done-window` · `(own)` |
+| `.rp-comment-actions` | `(own)` · `.rp-comment:hover` · `.rp-comment:focus-within` |
+| `.rp-comment-bubble` | `(own)` · `.rp-comment--own` |
 | `.rp-list-sort-icon` | `(own)` · `.rp-list-sortable:hover` · `.rp-list-sortable.is-asc` · `.rp-list-sortable.is-desc` |
 | `.rp-page__section` | `(own)` · `.rp-settings__surface` |
 | `.rp-page__section-h` | `(own)` · `.rp-profile__plan-card` |
+| `.rp-rail-filter` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-footer` | `.rp-rail.compact` · `(own)` |
+| `.rp-rail-footer-nav` | `(own)` · `.rp-rail-footer .rp-btn-icon` · `.rp-rail.compact` |
 | `.rp-rail-footnav` | `(own)` · `.rt-nav-foot .rt-btn` · `.rt-nav.compact` |
+| `.rp-rail-group-add` | `(own)` · `.rp-rail-group-head:hover` · `.rp-rail.compact` |
+| `.rp-rail-group-body` | `(own)` · `.rp-rail-group:not(.expanded)` |
+| `.rp-rail-group-caret` | `(own)` · `.rp-rail-group:not(.expanded)` · `.rp-rail.compact` |
+| `.rp-rail-group-count` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-group-head` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-group-hide` | `(own)` · `.rp-rail-group-head:hover` |
+| `.rp-rail-group-name` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-group-rename` | `(own)` · `.rp-rail-group-head:hover` |
+| `.rp-rail-hidden-restore` | `(own)` · `.rp-rail-hidden-item:hover` |
+| `.rp-rail-hidden-summary` | `(own)` · `.rp-rail-hidden[open]` |
+| `.rp-rail-tab` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-tab-dot` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-tab-hide` | `(own)` · `.rp-rail-tab:hover` · `.rp-rail-tab.active` · `.rp-rail.compact` |
+| `.rp-rail-tab-icon` | `.rp-rail-overview` · `(own)` · `.rp-rail-tab.active` · `.rp-rail-tab-ghost` · `.rp-rail-tab-ghost-failed` |
+| `.rp-rail-tab-name` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-tab-rename` | `(own)` · `.rp-rail-tab:hover` · `.rp-rail-tab.active` |
+| `.rp-rail-tab-spinner` | `.rp-rail-tab-ghost-done` · `.rp-rail-tab-ghost-failed` · `(own)` |
+| `.rp-rail-title` | `(own)` · `.rp-rail.compact` |
+| `.rp-rail-views` | `(own)` · `.rp-rail.compact` |
 | `.rp-settings__tag-dot` | `(own)` · `.rp-settings__tag.is-active` |
 | `.rp-surface-body` | `(own)` · `.rp-surface.is-landing-mode` |
 | `.rt-btn` | `(own)` · `.rp-cases-side-desc-actions` · `.rp-cases-comment-edit-actions` · `.rt-nav-foot` |
@@ -130,7 +155,7 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `.rt-toolbar` | `(own)` · `#rpHomeView` |
 | `.ws-landing` | `(own)` · `.rp-surface.is-landing-mode` |
 
-### Components (241) — flat / maximal grain
+### Components (243) — flat / maximal grain
 
 | component | cls | source | rendered by | flags |
 |-----------|----:|--------|-------------|-------|
@@ -157,9 +182,9 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `ds-toggle-row` | 1 | css+js | mountBuilder, openSecs, renderAxesSection … | `-row`† |
 | `ds-type-btn` | 1 | css+js | mountBuilder, openSecs, renderAxesSection … |  |
 | `ds-type-grid` | 1 | css+js | mountBuilder, openSecs, renderAxesSection … |  |
-| `rp-avatar` | 1 | css+js |  |  |
+| `rp-avatar` | 1 | css+js | mountComments |  |
 | `rp-brand` | 3 | css+js | mountOmnisearch, mountTopbar | `-name`† |
-| `rp-btn` | 1 | css+js | mountCaptureBar, mountProfileRail, renderForm | ⚠ div×1 |
+| `rp-btn` | 2 | css+js | mountCaptureBar, mountComments, mountProfileRail … | ⚠ div×2 `-icon`† |
 | `rp-cases-activity-filter` | 1 | css+js | createDescEl, createForm, createModal … | ⚠ div×1 |
 | `rp-cases-activity-item` | 1 | css+js | createDescEl, createForm, createModal … | ⚠ div×1 `-item`† |
 | `rp-cases-activity-kind` | 1 | css+js | createDescEl, createForm, createModal … | ⚠ div×1 |
@@ -218,6 +243,8 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `rp-chart-title` | 1 | css+js | createListCharts, mountData, renderListPager | `-title`† |
 | `rp-charts` | 1 | css+js | createListCharts, mountData, renderListPager |  |
 | `rp-chip` | 3 | css+js | buildFilterNode, buildSortsParam, createBtn … | ⚠ div×3 `-label`† `-row`† |
+| `rp-comment` | 24 | css+js | mountComments | ⚠ div×2 `-body`† `-error`† `-head`† `-icon`† `-input`† `-list`† `-name`† |
+| `rp-composer` | 17 | css+js | mountComments | `-foot`† `-input`† `-name`† |
 | `rp-doc` | 4 | css+js | renderEmpty, renderGroup, renderRail … | `-head`† `-title`† |
 | `rp-fontstep` | 3 | css+js | mountKey, mountSettingsRail, renderFromRegistry … |  |
 | `rp-hero-strip` | 2 | css+js | createListCharts, mountData, renderListPager |  |
@@ -268,11 +295,11 @@ Generated 2026-06-04 from the frontend source (26 css, 9 html, 55 js) — the co
 | `rp-mon-user-hint` | 1 | css+js | mountUserCharts, openRequestReplay, renderCaseCategoriesBody … | `-hint`† |
 | `rp-mon-user-picker-shell` | 1 | css+js | mountUserCharts, openRequestReplay, renderCaseCategoriesBody … |  |
 | `rp-muted` | 1 | css |  |  |
-| `rp-omni` | 9 | css+js | mountOmnisearch, mountTopbar | `-label`† `-state`† |
+| `rp-omni` | 9 | css+js | mountOmni, mountOmnisearch, mountTopbar | `-label`† `-state`† |
 | `rp-overview` | 4 | css+js | buildFilterNode, buildSortsParam, createGhostTab … |  |
 | `rp-page` | 13 | css+js | mountCaptureBar, mountKey, mountProfileRail … | ⚠ div×2 `-body`† `-label`† `-value`† |
 | `rp-profile` | 56 | css+js | mountProfileRail, mountRow, renderForm | `-empty`† `-icon`† `-name`† `-pill`† `-state`† `-title`† `-wrap`† |
-| `rp-rail-footnav` | 3 | css+js | mountRailFooterNav | ⚠ div×1 `-item`† |
+| `rp-rail` | 49 | css+js | mountRailFooterNav | ⚠ div×23 `-body`† `-caret`† `-count`† `-dot`† `-head`† `-icon`† `-item`† `-name`† `-state`† `-title`† |
 | `rp-settings` | 46 | css+js | mountHidden, mountKey, mountRow … | ⚠ div×1 `-count`† `-dot`† `-empty`† `-head`† `-icon`† `-input`† `-item`† `-list`† `-name`† `-title`† |
 | `rp-settings-chart-modal` | 11 | css+js | openAddChartModal | `-body`† `-close`† `-foot`† `-head`† |
 | `rp-shell` | 8 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-body`† `-count`† `-head`† `-state`† `-title`† |

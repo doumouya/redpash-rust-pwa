@@ -1,0 +1,466 @@
+/* ── framework comment view (rp- only) ──────────────────────────────────────
+   The generic comment thread + rich composer (CAS_37B2E1BF, manifest B5). A
+   de-cased port of the Cases comment view — Em: "We could decide to use a
+   Comment view somewhere else one day, don't specify rp-cases." So every
+   rp-cases-comment-* / rp-cases-composer-* / rp-cases-pending-* / rp-cases-msg-*
+   becomes rp-comment-* / rp-composer-*.
+
+   Rules are replicated VERBATIM from the legacy cases.css counterpart (959-1412)
+   — only the class NAME changes (values + tokens already --rp-*) — so the
+   eventual live cutover is a zero-visual-change diff (same method validated on
+   the atoms A1/A5 cross-check).
+
+   COMPOSES, does NOT redefine, the shared atoms:
+     • avatar  → rp-avatar (A5). The deterministic per-author colour
+       (data-c=blue|mauve|peach|green|teal) + the small size belong to the
+       atom; A5 must add `rp-avatar--sm` (1.5rem) + `rp-avatar[data-c]` when it
+       folds in rp-cases-user-avatar. Until then comment avatars render as the
+       default rp-avatar (gradient) — structure is correct, colour lands with A5.
+     • edit-actions Save/Cancel → rp-btn-icon (A1, already ported).
+   Loaded by the sandbox directly; main.css gains the @import at the cases-detail
+   cutover (which also deletes the legacy cases.css 959-1412 block in the same
+   commit).
+
+   Naming note: `.rp-comment-date` = the per-comment timestamp (legacy
+   .rp-cases-comment-when); `.rp-comment-day` = the day-divider row. Both kept. */
+
+/* ── thread ──────────────────────────────────────────────────────────────── */
+.rp-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.125rem;
+}
+/* A support thread reads top-to-bottom — author + role + time + body — not as a
+   two-party chat. Own messages get a subtle accent tint only. Avatar tops the bubble. */
+.rp-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  max-width: 100%;
+}
+.rp-comment-bubble {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
+}
+.rp-comment--own .rp-comment-bubble {
+  background: color-mix(in srgb, var(--rp-accent-2) 7%, var(--rp-surface-2));
+  border-color: color-mix(in srgb, var(--rp-accent-2) 22%, var(--rp-border));
+}
+.rp-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  margin-bottom: 0.3125rem;
+  font-size: 0.6562rem;
+  color: var(--rp-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.rp-comment-author {
+  color: var(--rp-text);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+/* Role tag — Reporter (the customer) vs Assignee (the engineer). */
+.rp-comment-role {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 6.1875rem;
+}
+.rp-comment-role.is-reporter { color: var(--rp-peach);    background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
+.rp-comment-role.is-assignee { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-comment-date { margin-left: auto; }   /* time pins to the head's right edge */
+.rp-comment-edited { font-style: italic; }
+
+/* Formatted body — rendered (sanitized) HTML: bold / italic / links /
+   inline code / code blocks / lists / quotes. */
+.rp-comment-body {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--rp-text);
+  word-break: break-word;
+}
+.rp-comment-body:empty { display: none; }
+.rp-comment-body > :first-child { margin-top: 0; }
+.rp-comment-body > :last-child  { margin-bottom: 0; }
+.rp-comment-body p { margin: 0 0 0.5rem; }
+.rp-comment-body strong, .rp-comment-body b { font-weight: 700; color: var(--rp-text); }
+.rp-comment-body a {
+  color: var(--rp-accent-2);
+  text-decoration: underline;
+  text-underline-offset: 0.125rem;
+}
+.rp-comment-body a:hover { color: color-mix(in srgb, var(--rp-accent-2) 80%, white); }
+.rp-comment-body code {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.78em;
+  background: var(--rp-bg);
+  padding: 0.05rem 0.3125rem;
+  border-radius: 0.25rem;
+}
+.rp-comment-body pre {
+  margin: 0.375rem 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--rp-bg);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.75rem;
+}
+.rp-comment-body pre code { background: none; padding: 0; }
+.rp-comment-body ul,
+.rp-comment-body ol { margin: 0.25rem 0; padding-left: 1.25rem; }
+.rp-comment-body li { margin: 0.125rem 0; }
+.rp-comment-body blockquote {
+  margin: 0.375rem 0;
+  padding: 0.125rem 0.75rem;
+  border-left: 0.1875rem solid var(--rp-border);
+  color: var(--rp-text-dim);
+}
+
+/* Files shared in a message — a row of cards under the body. */
+.rp-comment-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+.rp-comment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  max-width: 100%;
+  padding: 0.3125rem 0.5rem;
+  background: var(--rp-bg);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  cursor: default;
+}
+.rp-comment-file-icon { color: var(--rp-accent-2); font-size: 0.9375rem; flex: 0 0 auto; }
+.rp-comment-file-name { font-size: 0.75rem; color: var(--rp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-comment-file-size { font-size: 0.6562rem; color: var(--rp-text-mute); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+
+/* Own-comment edit / delete — hover-revealed toolbar floating at the bubble's
+   top edge. Bubble is the positioning context. */
+.rp-comment-bubble { position: relative; }
+.rp-comment-actions {
+  position: absolute;
+  top: -0.625rem;
+  right: 0.375rem;
+  display: flex;
+  gap: 0.125rem;
+  opacity: 0;
+  transition: opacity 0.12s var(--rp-ease);
+}
+.rp-comment:hover .rp-comment-actions,
+.rp-comment:focus-within .rp-comment-actions { opacity: 1; }
+.rp-comment-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.3125rem;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+.rp-comment-edit:hover   { background: var(--rp-hover); color: var(--rp-text); }
+.rp-comment-delete:hover { background: var(--rp-warn); color: var(--rp-bg); border-color: var(--rp-warn); }
+
+/* Inline edit form — replaces the body while editing. */
+.rp-comment-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.125rem;
+}
+.rp-comment-edit-input {
+  min-height: 3rem;
+  padding: 0.4375rem 0.5rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-accent-2);
+  border-radius: 0.375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  outline: 0;
+  word-break: break-word;
+}
+.rp-comment-edit-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-comment-edit-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
+.rp-comment-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+/* Save/Cancel reuse the rp-btn-icon atom (A1), tightened for the inline form. */
+.rp-comment-edit-actions .rp-btn-icon { padding: 0.1875rem 0.625rem; font-size: 0.6875rem; }
+
+/* @mention chip — inline reference rendered inside comment bodies + the
+   editors. Non-editable; accent text on a soft inset. (Generic rp- already;
+   the comment/editor surface owns it.) */
+.rp-mention {
+  color: var(--rp-accent-2);
+  background: var(--rp-surface-2);
+  padding: 0 0.25rem;
+  border-radius: 0.3125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* @mention autocomplete menu — fixed, anchored to the caret, opens upward
+   (composer sits at the panel bottom). */
+.rp-mention-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 12rem;
+  max-width: 18rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--rp-shadow);
+}
+.rp-mention-item { cursor: pointer; border-radius: 0.375rem; }
+.rp-mention-item.is-sel,
+.rp-mention-item:hover { background: var(--rp-surface-2); }
+
+/* Day divider — centered "Today / Yesterday / Mon / Mar 4, 2026" label on a
+   thin hairline. Shown above the first comment of each day. */
+.rp-comment-day {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.375rem 0 0.125rem;
+  color: var(--rp-text-mute);
+  font-size: 0.6562rem;
+}
+.rp-comment-day::before,
+.rp-comment-day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rp-border);
+}
+.rp-comment-day span {
+  padding: 0 0.25rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ── compose form ────────────────────────────────────────────────────────── */
+.rp-comment-form { margin-top: 0.5rem; }
+
+/* Rich composer — a bordered card: formatting toolbar, contentEditable,
+   pending-files tray, footer. focus-within lifts the border like a real input. */
+.rp-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.625rem;
+}
+.rp-composer:focus-within { border-color: var(--rp-accent-2); }
+.rp-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.0625rem;
+  padding: 0.25rem 0.375rem;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-composer-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.3125rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.rp-composer-toolbar button:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-composer-sep { width: 1px; height: 1.125rem; background: var(--rp-border); margin: 0 0.25rem; }
+.rp-composer-input {
+  padding: 0.625rem 0.75rem;
+  min-height: 4.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  color: var(--rp-text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  outline: 0;
+  word-break: break-word;
+}
+.rp-composer-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--rp-text-mute);
+}
+.rp-composer-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-composer-input code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem;
+}
+.rp-composer-input blockquote { margin: 0.25rem 0; padding-left: 0.625rem; border-left: 0.1875rem solid var(--rp-border); color: var(--rp-text-dim); }
+.rp-composer-input ul, .rp-composer-input ol { margin: 0.25rem 0; padding-left: 1.25rem; }
+
+.rp-composer-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0 0.75rem 0.5rem;
+}
+.rp-composer-pending[hidden] { display: none; }
+.rp-composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  font-size: 0.7188rem;
+}
+.rp-composer-chip > i { color: var(--rp-accent-2); }
+.rp-composer-chip-name { color: var(--rp-text); max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-composer-chip-size { color: var(--rp-text-mute); font-size: 0.6562rem; font-variant-numeric: tabular-nums; }
+.rp-composer-chip-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.125rem; height: 1.125rem; padding: 0; border: 0; border-radius: 0.25rem;
+  background: transparent; color: var(--rp-text-mute); cursor: pointer;
+}
+.rp-composer-chip-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
+
+.rp-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.4375rem 0.5rem 0.4375rem 0.625rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-composer-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  cursor: pointer;
+  font-size: 0.7188rem;
+}
+.rp-composer-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-composer-as { font-size: 0.6562rem; color: var(--rp-text-mute); margin-left: auto; }
+.rp-composer-as strong { color: var(--rp-text-dim); font-weight: 600; }
+.rp-comment-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.8125rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  font-size: 0.7188rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rp-comment-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-accent-2) 88%, white); }
+.rp-comment-send[disabled] { opacity: 0.4; cursor: not-allowed; }
+.rp-comment-send i { font-size: 0.8125rem; }
+
+/* drag-over overlay */
+.rp-composer-drop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: color-mix(in srgb, var(--rp-accent-2) 12%, var(--rp-surface));
+  border: 0.125rem dashed var(--rp-accent-2);
+  border-radius: 0.625rem;
+  color: var(--rp-accent-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+.rp-composer-drop[hidden] { display: none; }
+
+/* link popover — floats above the composer */
+.rp-composer-link-pop {
+  position: absolute;
+  left: 0.5rem;
+  bottom: calc(100% + 0.375rem);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+}
+.rp-composer-link-pop input {
+  padding: 0.3125rem 0.5rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.75rem;
+  outline: 0;
+}
+.rp-composer-link-pop input:focus { border-color: var(--rp-accent-2); }
+.rp-composer-link-text { width: 8rem; }
+.rp-composer-link-url  { width: 13rem; }
+.rp-composer-link-pop button {
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text-dim);
+  font-size: 0.7188rem;
+  cursor: pointer;
+}
+.rp-composer-link-add {
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+  border-color: var(--rp-accent-2);
+  font-weight: 600;
+}
+
+/* Inline error slot — surfaces a POST failure visibly instead of swallowing it.
+   Cleared on next submit attempt. */
+.rp-comment-error {
+  margin: 0.25rem 0 0;
+  padding: 0.375rem 0.625rem;
+  background: color-mix(in srgb, var(--rp-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rp-accent) 35%, transparent);
+  border-radius: 0.375rem;
+  color: var(--rp-accent);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.rp-comment-error[hidden] { display: none; }
