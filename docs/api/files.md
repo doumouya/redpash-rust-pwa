@@ -650,6 +650,35 @@ This endpoint is read-only; the replace happens through
 
 ---
 
+## `POST /api/files/:rid/steps/preview`
+
+**Generic dry-run** for any cleaning step. Same body as
+[`POST /api/files/:rid/steps`](#post-apifilesridsteps--apply-a-cleaning-step)
+(a `StepRequest`), but instead of persisting the step it clones the cached
+frame, applies the step in memory, and returns a **frame diff** — what the grid
+*would* look like — so the workspace can show a before/after preview before the
+user commits. Read-only: the cache, DB, and disk blob are untouched.
+
+```jsonc
+POST /api/files/FIL_…/steps/preview
+{
+  "kind":   "drop_columns",
+  "params": { "columns": ["unused_col"] }
+}
+```
+
+The response is a frame-diff envelope (changed/added/removed columns + a sample
+of affected rows); the dedicated [`/cast-preview`](#post-apifilesridcast-preview)
+below is the specialised, higher-signal dry-run for the `cast` step (it counts
+silently-nulled cells, which a generic diff wouldn't surface).
+
+| Status | `kind`         | When |
+|--------|----------------|------|
+| 400    | `invalid_spec` | Malformed step / unknown kind / bad params |
+| 404    | `not_found`    | File RID missing |
+
+---
+
 ## `POST /api/files/:rid/cast-preview`
 
 **Dry-run** for the `cast` step. The user hit a silent-null incident
@@ -657,9 +686,9 @@ This endpoint is read-only; the replace happens through
 that cell; they only noticed by luck), so cast is now a two-phase
 flow:
 
-1. Frontend POSTs the proposed `(column, target_type)`.
+1. Frontend POSTs the proposed `(column, dtype)`.
 2. Backend clones the cached frame, applies `data::steps::apply(frame,
-   "cast", { column, target })`, and counts cells where the *before*
+   "cast", { column, dtype })`, and counts cells where the *before*
    was non-null but the *after* is null — those are the values the
    cast would silently drop. It also returns up to N sample values to
    show in the modal.
@@ -670,14 +699,15 @@ flow:
 
 ```jsonc
 POST /api/files/FIL_…/cast-preview
-{ "column": "signed_at", "target": "date" }
+{ "column": "signed_at", "dtype": "date" }
 ```
 
 ```jsonc
 200 OK
 {
-  "would_null": 3,
-  "samples": ["2023", "n/a", "?"]
+  "total":      1024,                 // rows scanned
+  "would_null": 3,                    // non-null cells the cast would drop to null
+  "samples":    ["2023", "n/a", "?"]  // up to N of those would-null values
 }
 ```
 

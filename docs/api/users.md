@@ -39,11 +39,13 @@ roles without a second roundtrip.
       "username":     "jane.9a2b3c4d",
       "email":        "jane@example.com",
       "plan":         "pro",
+      "locale":       "en",
+      "prefs":        {},
       "avatar_url":   null,
       "memberships":  [
         { "company_id": "CMP_…", "company_name": "Acme", "role": "owner" }
       ]
-      /* …more UserProfile fields… */
+      /* …plus first_name / last_name / job_title / organisation / use_case (UserProfile) */
     }
   ]
 }

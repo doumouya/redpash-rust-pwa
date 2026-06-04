@@ -62,6 +62,24 @@ No pagination — user-owned project counts are bounded.
 
 ---
 
+## `GET /api/projects/:rid`
+
+Fetch one project summary — the **same `ProjectSummary` shape** as the items in
+[`GET /api/projects`](#get-apiprojects) above, so the frontend can use it as a
+fresh-after-edit refetch. RBAC: `project.view` — the owner, a company
+member/admin via the cascade, or a platform admin (`dev_user` bypasses).
+404 (leak-free) on miss or no reach.
+
+### Errors
+
+| Status | `kind`            | When |
+|--------|-------------------|------|
+| 401    | `unauthenticated` | OAuth enabled, no session |
+| 404    | `not_found`       | Project RID missing or caller lacks view reach |
+| 500    | `db`              | Postgres unreachable |
+
+---
+
 ## `GET /api/projects/:rid/files`
 
 Files in a project, as `FileSummary` records — same DTO shape as

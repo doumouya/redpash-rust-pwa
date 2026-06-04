@@ -40,13 +40,25 @@ YAML frontmatter above).
 ### API
 - [API overview](api/overview.md) — map, cross-cutting (error shape, auth, cookies, pagination, layers).
 - [Health](api/health.md) — `/api/health` liveness.
-- [Me](api/me.md) — `/api/me` + the `resolve_user_rid` spec used everywhere.
+- [Me](api/me.md) — `/api/me` (+ avatar, prefs) + the `resolve_user_rid` spec used everywhere.
 - [Auth](api/auth.md) — `/api/auth/google/*` + `/logout` (cookies, errors).
-- [Projects](api/projects.md) — `/api/projects` list + `/:rid/files`.
-- [Files](api/files.md) — `/api/files/*` upload, page, steps, undo/redo, joins, snapshots.
-- [Reports](api/reports.md) — `/api/reports/*` CRUD + preview/run + polymorphic source resolver.
-- [Dashboards](api/dashboards.md) — `/api/dashboards/*` CRUD; widgets fetch via `/api/reports`.
+- [Users](api/users.md) — `/api/users/*` directory CRUD (dev-permissive).
+- [Projects](api/projects.md) — `/api/projects` list/CRUD + `/:rid` + `/:rid/files`.
+- [Companies](api/companies.md) — `/api/companies/*` CRUD; the multi-tenancy boundary + role model.
+- [Teams](api/teams.md) — `/api/teams/*` company-scoped subgroups (grant-bearing principals).
+- [Members](api/members.md) — the generic `/:rid/members` CRUD mounted under companies/projects/cases/teams.
+- [Files](api/files.md) — `/api/files/*` upload, page, steps (+ preview), undo/redo, joins, snapshots.
+- [Charts](api/charts.md) — `/api/charts/*` saved-chart CRUD (chart-typed `project_files`).
+- [Dashboards](api/dashboards.md) — `/api/dashboards/*` CRUD; widgets point at saved charts.
+- [Cases](api/cases.md) — `/api/cases/*` issue tracker + comments + categories.
 - [Events](api/events.md) — `/api/events` runtime observability log — capture middleware + read API.
+- [Search](api/search.md) — `/api/search` omnisearch backing the topbar.
+- [Metrics](api/metrics.md) — `/api/metrics` request-log performance read (platform-admin).
+- [Monitoring](api/monitoring.md) — `/api/monitoring/*` events / requests / queries / audit (platform-admin).
+- [Admin](api/admin.md) — `/api/admin/*` org-wide admin read/write surface (platform-admin).
+
+> `api/reports.md` is a retired stub (the `/api/reports/*` resource was removed in
+> mig 016 — reports are now a derived view over a CSV file + its charts).
 
 ### Database
 - [Schema](db/schema.md) — tables, indexes, RedPash-ID prefix table.

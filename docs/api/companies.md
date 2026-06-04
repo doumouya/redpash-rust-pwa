@@ -140,55 +140,15 @@ projects survive as personal projects rather than being deleted.
 
 ---
 
-## `GET /api/companies/:rid/members`
+## Members
 
-Members of a company, joined with each member's user profile, sorted by
-`joined_at`. Requires membership.
-
-```jsonc
-200 OK
-{
-  "items": [
-    {
-      "user_redpash_id": "USR_9A2B…",
-      "display_name":    "Jane Smith",
-      "username":        "jane.9a2b3c4d",
-      "avatar_url":      null,
-      "role":            "owner",
-      "joined_at":       "2026-05-21T09:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-## `POST /api/companies/:rid/members`
-
-Add a member, or change an existing member's role (upsert on the
-composite PK). Requires `owner` / `admin`. Returns the refreshed
-member list.
-
-```jsonc
-POST /api/companies/CMP_…/members
-{
-  "user_id": "USR_…",
-  "role":    "admin"        // optional — owner | admin | member, defaults to "member"
-}
-```
-
-Only an `owner` may grant `role: "owner"`. Re-adding the last `owner`
-with a lesser role is refused (it would strand the company).
-
----
-
-## `DELETE /api/companies/:rid/members/:user_id`
-
-Remove a member. A member may remove **themselves** (leave); removing
-anyone else needs `owner` / `admin`. Returns the refreshed member list.
-
-The last `owner` can't be removed, and an `admin` can't remove an
-`owner`.
+Company members are managed through the **generic object-member CRUD** —
+`GET·POST /api/companies/:rid/members` and
+`PATCH·DELETE /api/companies/:rid/members/:member_id` — the same implementation
+mounted under projects / cases / teams. The roster row, request bodies, role
+rules (`owner` grants `owner`; last-owner guard; self-leave), and error shapes
+are documented once in **[members.md](members.md)**. The role model above
+(`owner` > `admin` > `member`) is what those endpoints enforce on a company.
 
 ---
 

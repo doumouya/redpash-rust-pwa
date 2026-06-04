@@ -41,6 +41,8 @@ Returns the `UserProfile` for whoever owns the request.
   "username":     "em.doumouya.5f3c7a21",
   "email":        "em.doumouya@gmail.com",
   "display_name": "Emmanuel Doumouya",
+  "first_name":   "Emmanuel",
+  "last_name":    "Doumouya",
   "avatar_url":   "https://lh3.googleusercontent.com/a/…",
   "job_title":    null,
   "organisation": null,
@@ -48,7 +50,11 @@ Returns the `UserProfile` for whoever owns the request.
   "plan":         "free",
   "locale":       "en",
   "prefs":        {},
-  "global_sentinels": ["???", "ndispo"]
+  "memberships":  [
+    { "company_id": "CMP_…", "company_name": "Acme", "role": "owner" }
+  ],
+  "global_sentinels":  ["???", "ndispo"],
+  "is_platform_admin": false
 }
 ```
 
@@ -61,7 +67,10 @@ See [objects/user.md](../objects/user.md) for the full field reference.
 
 The `/api/me` payload is wrapped in a `MeResponse` envelope that
 `#[serde(flatten)]`s the `UserProfile` and adds session-scoped
-context the frontend needs at bootstrap. Today: `global_sentinels` —
+context the frontend needs at bootstrap: `is_platform_admin` (drives
+FE gating of the admin / monitoring tabs — `rbac::is_platform_admin`:
+the bootstrap dev_user or `users.role='admin'`; per-object actions stay
+server-enforced) and `global_sentinels` —
 the canonical sentinel values that have been flagged by **at least 2
 distinct users** via the Cleaner's *Fix invalid values* modal (see
 [features/cleanness.md](../features/cleanness.md) and
@@ -84,6 +93,18 @@ plain DTO shape.
 | 401    | `unauthenticated`   | OAuth enabled and no valid `rp_session` cookie |
 | 404    | `not_found`         | Session cookie pointed at a deleted user row (rare; race with manual DB cleanup) |
 | 500    | `db` / `internal`   | Postgres unreachable / unexpected error |
+
+---
+
+## `GET /api/me/avatar`
+
+Proxies the session user's avatar image — the backend fetches the upstream
+`avatar_url` (e.g. the Google profile photo) server-side and streams the bytes
+back, so the browser never hits the third-party URL directly (avoids referrer
+leakage + mixed-content / CORS issues). Auth: `resolve_user_rid` (session or
+`dev_user`). Returns the image with its upstream content-type; a fetch failure
+emits an `avatar_fetch_failed` event and falls back (no avatar) rather than
+erroring the page.
 
 ---
 

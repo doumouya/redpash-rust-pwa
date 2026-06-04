@@ -13,11 +13,11 @@ redtable on each monitoring tab reuses the existing reader. Window
 parameters mirror [`/api/metrics`](metrics.md): `1h`, `24h`, `7d`,
 `30d`.
 
-> **Access.** Open today (solo / localhost). Gate behind the
-> company-admin role when RBAC lands. The data is admin-facing; the
-> read-only nature limits blast
-> radius but the rows include PII (request paths with user RIDs,
-> activity feeds).
+> **Access — platform-admin only.** The `/api/monitoring` subtree is gated by
+> `require_platform_admin_mw` (a `from_fn_with_state` layer on the nest in
+> `routes/mod.rs`); a non-admin gets a leak-free **404** before any handler
+> runs. The gate is mandatory because the rows include PII (request paths with
+> user RIDs, per-user activity feeds) and tenant-less system data.
 
 **Route file:** [`crates/api/src/routes/monitoring.rs`](../../backend/crates/api/src/routes/monitoring.rs)
 **DTOs:** [`shared::monitoring`](../../backend/crates/shared/src/monitoring.rs) — `EventSummary`, `AuditRunSummary`, `AuditFindingSummary`, `RequestSummary`, `RequestDetail`, `DbQuerySummary`, `ActivityRow`, plus the `*Stats` aggregates

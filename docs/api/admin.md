@@ -14,11 +14,16 @@ endpoint returns `Page<T>` — same envelope as
 reuses the existing reader and a new tab is one `LIST_VIEWS` entry on
 the frontend.
 
-> **Access.** Open today (solo / localhost) — same posture as
-> [events.md](events.md) / [monitoring.md](monitoring.md). Gate behind
-> the company-admin role when RBAC lands. The list endpoints surface
-> every row in their table — they bypass the per-resource owner gate
-> by design, so they're admin-only.
+> **Access — platform-admin only.** The entire `/api/admin` subtree is
+> gated by `require_platform_admin_mw` (a `from_fn_with_state` layer on the
+> nest in `routes/mod.rs`, mirroring [monitoring.md](monitoring.md)); a
+> non-admin gets a leak-free **404** before any handler runs. This closed the
+> former dev-permissive escalation (incl. `POST /admin/memberships`, which let
+> any signed-in user grant themselves Owner anywhere). The list endpoints
+> surface every row in their table — they bypass the per-resource owner gate by
+> design, which is exactly why the platform-admin gate is mandatory. Org-admin
+> self-service (scoped to a company/project) lands later via the reach-scoped
+> `/:rid/members` endpoints ([members.md](members.md)), not this surface.
 
 **Route file:** [`crates/api/src/routes/admin.rs`](../../backend/crates/api/src/routes/admin.rs)
 **DTOs:** [`shared::admin`](../../backend/crates/shared/src/admin.rs) — `UserSummary`, `CompanySummary`, `MembershipSummary`, `AdminFileSummary`, `ChartSummary`, `StepSummary`, plus matching `*Stats` aggregates
@@ -46,6 +51,18 @@ the frontend.
 | `GET /api/admin/charts/stats` | `ChartStats` | — |
 | `GET /api/admin/steps` | `Page<StepSummary>` | Every `project_steps` row across all files. |
 | `GET /api/admin/steps/stats` | `StepStats` | — |
+| `PATCH /api/admin/users/:rid` | — | Set a user's platform role / org fields — body `{ role?, org_role?, org_id? }`. Distinct from the per-user `PATCH /api/users/:rid` (profile fields); this is the admin role-assignment write. |
+| `GET /api/admin/teams` | `Page<TeamSummary>` | Every `teams` row, org-wide. |
+| `GET /api/admin/teams/stats` | `TeamStats` | `{ total, with_members, by_company }`. |
+| `GET /api/admin/rbac` | JSON | RBAC resolution debug — the effective grant graph for a `?user`/`?object` pair (platform-admin introspection of the resolver). |
+| `GET /api/admin/audit-catalog` | JSON | The static catalog of auditable actions (the action registry) — the inventory side of audit-everything. |
+| `GET /api/admin/fields` | field-permission rows | The `field_permissions` registry (per object-type × field × role → permission). |
+| `PUT /api/admin/fields` | `FieldRow` | Upsert one field-permission — body `{ object, field, role, permission }`. |
+| `GET /api/admin/types` | `{ types: [...] }` | The TypeDefinition registry list (object types + their RID prefixes). |
+| `GET /api/admin/types/:type` | `TypeDefinition` | One type's full definition — `{ type, rid_prefix, display_name, display_name_plural, is_builtin, source_origin, fields, relationships, ui_hints }`. |
+
+The `rbac` / `audit-catalog` / `types` / `fields` endpoints back the Admin
+Console's RBAC, audit-catalog, and TypeDefinition surfaces.
 
 ---
 
