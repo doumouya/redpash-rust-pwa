@@ -7,7 +7,7 @@ last modified date: 2026-05-31
 
 # RedPash internal docs
 
-The team-only counterpart to [public docs](../INDEX.md). Thirteen sections
+The team-only counterpart to [public docs](../INDEX.md). Fourteen sections
 plus this index, the [redmap](redmap.md), and [team-memory](team-memory.md)
 (shared conventions, project state, and working-with-Em notes that every
 Torv reads before opening a file). Each section captures a distinct
@@ -26,13 +26,14 @@ flat layout suffered from.
 | [runbooks](runbooks/index.md) | operational / incident playbooks | one per incident class |
 | [standup](standup/index.md) | daily logs, one append-only file per contributor | never retired — history |
 | [code](code/index.md) | the **what this file is** — one doc per source file under `tools/`, `frontend/scripts/`, `backend/crates/` | lives as long as the file does; refreshed in the touching commit (touch-policy) |
+| [ui](ui/index.md) | the **component catalog** — one entry per UI component (fullest form) + per-page deltas; the FE-framework registry + dedup instrument | generated from the frontend by `doc-gen --components`; `ui-doc-audit` fails on drift |
 | [observability](observability/index.md) | the **runtime visibility** — events / request_log / db_query_log capture + investigation playbooks | lives as long as the runtime stack does |
 | [cases](cases/index.md) | the **active workstream guide** — agent-facing operating playbook for the cases system | lives as long as the workstream is active |
 | [excel-edge-cases](excel-edge-cases/index.md) | the **fixtures** — triage data: 22 dirty `.xlsx` fixtures × 41 edge-case classes | grows when a new edge class is encountered |
 | [jira-flow-proposition](jira-flow-proposition/index.md) | the **design proposition** — one-off proposal that became the cases workstream | frozen reference once the workstream shipped |
 | [archive](archive/index.md) | snapshots no longer load-bearing | frozen reference |
 
-The thirteen categories answer different questions:
+The fourteen categories answer different questions:
 
 - *Why is it like this?* → architecture
 - *How does X actually work?* → subsystems
@@ -42,6 +43,7 @@ The thirteen categories answer different questions:
 - *Something broke, what do I do?* → runbooks
 - *What happened yesterday?* → standup
 - *Where's the deep-explanation for a specific source file?* → code
+- *What UI component is this / how does it look across pages?* → ui
 - *What's the runtime doing right now / what tools do I use to investigate?* → observability
 - *How do I work the cases system as an agent?* → cases
 - *What edge case in this dirty Excel file?* → excel-edge-cases

@@ -40,6 +40,7 @@
 var fs = require('fs');
 var path = require('path');
 var cp = require('child_process');
+var feInv = require('../lib/fe-inventory');   // the FE component enumerator (kind=component)
 
 var ROOT = path.resolve(__dirname, '..', '..');
 var SCHEMAS = ['public', 'audit'];
@@ -144,24 +145,31 @@ function fmtSchema(b, stamp) {
 }
 
 /* ── generated-region splice (the anti-clobber machinery) ─────────────────── */
-function regionMarkers(key) {
+function regionMarkers(key, source) {
   return {
-    start: '<!-- doc-gen:' + key + ' START — generated from the live DB; do not hand-edit -->',
+    start: '<!-- doc-gen:' + key + ' START — generated from ' + (source || 'the live DB') + '; do not hand-edit -->',
     end:   '<!-- doc-gen:' + key + ' END -->',
   };
 }
 /* Replace the content between START/END markers with `body`, preserving everything
    else (human prose). If the region is absent, append a fresh one. Idempotent. */
 function spliceRegion(docText, key, body) {
-  var mk = regionMarkers(key);
-  var si = docText.indexOf(mk.start);
+  // Match the START marker by its source-INDEPENDENT prefix (the source note after
+  // "START —" varies by kind: "the live DB" vs "the frontend source"). Matching the
+  // full line would miss a region written with a different source and wrongly append
+  // a duplicate. We replace everything between the start line's closing `-->` and END.
+  var startPrefix = '<!-- doc-gen:' + key + ' START';
+  var endMarker = '<!-- doc-gen:' + key + ' END -->';
+  var si = docText.indexOf(startPrefix);
   if (si >= 0) {
-    var afterStart = si + mk.start.length;
-    var ei = docText.indexOf(mk.end, afterStart);
-    if (ei >= 0) {
-      return docText.slice(0, afterStart) + '\n' + body + '\n' + docText.slice(ei);
+    var startClose = docText.indexOf('-->', si);
+    if (startClose >= 0) {
+      var afterStart = startClose + 3;
+      var ei = docText.indexOf(endMarker, afterStart);
+      if (ei >= 0) return docText.slice(0, afterStart) + '\n' + body + '\n' + docText.slice(ei);
     }
   }
+  var mk = regionMarkers(key);
   var block = '\n' + mk.start + '\n' + body + '\n' + mk.end + '\n';
   return (docText.replace(/\s*$/, '') + '\n' + block);
 }
@@ -182,10 +190,8 @@ function ensureDoc(outDir, b, key) {
 
 function die(msg) { console.error('doc-gen: ' + msg); process.exit(2); }
 
-/* ── main ─────────────────────────────────────────────────────────────────── */
-function main() {
-  var args = process.argv.slice(2);
-  if (args.indexOf('--schema') < 0) die('usage: node tools/doc-gen/gen.js --schema [<table>] [--out <dir>]');
+/* ── kind=schema ──────────────────────────────────────────────────────────── */
+function genSchema(args) {
   var only = null;
   var outDir = path.join(__dirname, 'out', 'schema');
   for (var i = 0; i < args.length; i++) {
@@ -229,6 +235,120 @@ function main() {
   console.log('written:  ' + written.length + ' doc(s) → ' + path.relative(ROOT, outDir) + '/');
   console.log('contract: ' + path.relative(ROOT, contractPath));
   written.slice(0, 30).forEach(function (w) { console.log('  + ' + w); });
+}
+
+/* ── kind=component (the flat catalog INDEX — full list + dedup flags) ──────── */
+function fmtComponentIndex(a, stamp) {
+  // per-component flags: which classes are divergent / participate in a parallel cluster
+  var divClasses = {}; a.divergences.forEach(function (d) { divClasses[d.cls] = d.contexts.length; });
+  var parSuffix = {}; a.parallels.forEach(function (p) { parSuffix[p.suffix] = p; });
+  function suffixOf(cls) { var i = cls.lastIndexOf('-'); return i >= 0 ? cls.slice(i + 1) : cls; }
+
+  var L = [];
+  L.push('Generated ' + stamp + ' from the frontend source (' + a.counts.css + ' css, ' + a.counts.html
+    + ' html, ' + a.counts.js + ' js) — the complete, code-enumerated component list.');
+  L.push('');
+  L.push('- **' + a.counts.components + '** styled components (the catalog denominator)');
+  L.push('- **' + a.counts.hooks + '** dynamic hooks (un-styled JS-injected handles — not components)');
+  L.push('- **' + a.divergences.length + '** divergences · **' + a.parallels.length + '** parallel-class clusters (the dedup worklist)');
+  L.push('');
+
+  // dedup worklist first (most actionable for the framework convergence)
+  L.push('### Parallel-class clusters — compose into one atom (`-suffix` shared across blocks)');
+  L.push('');
+  L.push('| -suffix | blocks | classes | members |');
+  L.push('|---------|-------:|--------:|---------|');
+  a.parallels.forEach(function (p) {
+    var m = p.members.slice(0, 8).map(function (c) { return '`' + c + '`'; }).join(', ') + (p.members.length > 8 ? ' …' : '');
+    L.push('| `-' + p.suffix + '` | ' + p.blocks + ' | ' + p.count + ' | ' + m + ' |');
+  });
+  L.push('');
+  L.push('### Divergences — same class, ≥2 ancestor contexts (unify behavior)');
+  L.push('');
+  L.push('| class | contexts |');
+  L.push('|-------|----------|');
+  a.divergences.forEach(function (d) {
+    L.push('| `.' + d.cls + '` | ' + d.contexts.map(function (c) { return '`' + c + '`'; }).join(' · ') + ' |');
+  });
+  L.push('');
+
+  // the full flat inventory
+  L.push('### Components (' + a.counts.components + ') — flat / maximal grain');
+  L.push('');
+  L.push('| component | cls | source | rendered by | flags |');
+  L.push('|-----------|----:|--------|-------------|-------|');
+  a.components.forEach(function (g) {
+    var flags = [];
+    var dv = g.classes.filter(function (c) { return divClasses[c]; });
+    if (dv.length) flags.push('⚠ div×' + dv.length);
+    var sufs = {};
+    g.classes.forEach(function (c) { var s = suffixOf(c); if (parSuffix[s]) sufs[s] = true; });
+    Object.keys(sufs).sort().forEach(function (s) { flags.push('`-' + s + '`†'); });
+    var src = g.jsRendered ? 'css+js' : 'css';
+    var by = g.renderFns.slice(0, 3).join(', ') + (g.renderFns.length > 3 ? ' …' : '');
+    L.push('| `' + g.key + '` | ' + g.classes.length + ' | ' + src + ' | ' + esc(by) + ' | ' + flags.join(' ') + ' |');
+  });
+  L.push('');
+  L.push('_† = participates in a parallel-class cluster · ⚠ = contains a divergent class (see worklists above)._');
+  return L.join('\n');
+}
+
+function ensureIndexDoc(file, key, source) {
+  try { return { file: file, text: fs.readFileSync(file, 'utf8') }; }
+  catch (e) {
+    var mk = regionMarkers(key, source);
+    var text = '# UI Component Catalog — Index\n\n' +
+      'The complete, **code-enumerated** list of every UI component — the flat / maximal-granular\n' +
+      'view (Em: "lay down the maximal granular view to remove duplicates"). This is the FE-framework\n' +
+      'component registry + the dedup instrument. Generated by `tools/doc-gen --components` from the\n' +
+      'frontend source; `tools/ui-doc-audit` fails if it drifts. Never hand-edit the generated block.\n\n' +
+      '## Catalog\n\n' + mk.start + '\n' + mk.end + '\n\n' +
+      '## Notes (human — how to read this / convergence decisions)\n\n' +
+      '_TODO: human prose. The catalog block above is generated; change the frontend + re-run doc-gen._\n';
+    return { file: file, text: text };
+  }
+}
+
+function genComponents(args) {
+  var outDir = path.join(ROOT, 'docs', 'internal', 'ui', 'catalog');
+  for (var i = 0; i < args.length; i++) { if (args[i] === '--out') outDir = path.resolve(args[++i]); }
+  fs.mkdirSync(outDir, { recursive: true });
+
+  var stamp = new Date().toISOString().slice(0, 10);
+  var a = feInv.analyze();
+  var key = 'component:index';
+  var source = 'the frontend source (css+html+js)';
+  var body = fmtComponentIndex(a, stamp);
+  var file = path.join(outDir, 'index.md');
+  var doc = ensureIndexDoc(file, key, source);
+  fs.writeFileSync(file, spliceRegion(doc.text, key, body));
+
+  var contract = {
+    generatedAt: stamp, source: 'frontend source (css+html+js)', counts: a.counts,
+    components: a.components.map(function (g) {
+      return { key: g.key, classes: g.classes, cssFiles: g.cssFiles, jsFiles: g.jsFiles,
+               renderFns: g.renderFns, jsRendered: g.jsRendered };
+    }),
+    hooks: a.hooks.map(function (g) { return { key: g.key, classes: g.classes, jsFiles: g.jsFiles }; }),
+    divergences: a.divergences, parallels: a.parallels,
+  };
+  var contractPath = path.join(__dirname, 'component.contract.json');
+  fs.writeFileSync(contractPath, JSON.stringify(contract, null, 2));
+
+  console.log('doc-gen component');
+  console.log('─────────────────');
+  console.log('components: ' + a.counts.components + ' · hooks: ' + a.counts.hooks + ' · classes: ' + a.counts.classes);
+  console.log('dedup:      ' + a.divergences.length + ' divergences · ' + a.parallels.length + ' parallel clusters');
+  console.log('index:      ' + path.relative(ROOT, file));
+  console.log('contract:   ' + path.relative(ROOT, contractPath));
+}
+
+/* ── dispatcher ───────────────────────────────────────────────────────────── */
+function main() {
+  var args = process.argv.slice(2);
+  if (args.indexOf('--components') >= 0) return genComponents(args);
+  if (args.indexOf('--schema') >= 0) return genSchema(args);
+  die('usage: node tools/doc-gen/gen.js --schema [<table>] | --components  [--out <dir>]');
 }
 
 main();

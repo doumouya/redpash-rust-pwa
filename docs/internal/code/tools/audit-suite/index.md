@@ -33,6 +33,7 @@ without editing the runner.
 | `redtable-audit/` | [redtable-audit.md](redtable-audit.md) | redtable atom consistency across consumers |
 | `rs-audit/` | [rs-audit.md](rs-audit.md) | backend Rust — structural / refactoring health (LOC, repeated lines, big match blocks, named anti-patterns) |
 | `rs-perf-audit/` | [rs-perf-audit.md](rs-perf-audit.md) | backend Rust — perf candidates (collect-then-slice, cache evict+rehydrate, n+1, etc.) |
+| `ui-doc-audit/` | [ui-doc-audit.md](ui-doc-audit.md) | UI doc **completeness gate** (every enumerated component is in the catalog) + dedup/divergence detector |
 | `ui-snapshot-audit/` | [ui-snapshot-audit.md](ui-snapshot-audit.md) | UI snapshot diff |
 
 ## Reading order

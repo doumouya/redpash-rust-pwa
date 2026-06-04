@@ -2,3 +2,4 @@
 # The canonical per-object docs (wired during the doc rebuild) are committed elsewhere.
 out/
 schema.contract.json
+component.contract.json
