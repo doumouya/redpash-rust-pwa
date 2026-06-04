@@ -90,7 +90,7 @@
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
-  <section class="sbx-section" data-page="home"><h2>home</h2><div class="sbx-mount" id="sbx-home"><span class="sbx-todo">TODO: rebuild from framework components</span></div></section>
+  <section class="sbx-section" data-page="home"><h2>page — Home (Users tab), ASSEMBLED from components + S4 create-action (rail "New user" → modal)</h2><div id="sbx-home" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="workspace"><h2>workspace</h2><div class="sbx-mount" id="sbx-workspace"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="monitoring"><h2>page — Monitoring, ASSEMBLED from components (topbar · rail · shellHead · window chips · stat strip · RedTable)</h2><div id="sbx-monitoring" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
@@ -411,6 +411,48 @@
         rowKey: (r) => r.rid, rownum: true,
         sort: { multi: false, onSort: () => {} },
         empty: "No requests in this window.",
+      },
+    });
+
+    // PAGE-ASSEMBLY PROOF — Home (Users tab): the list-page pattern + S4 create-action.
+    // topbar + rail(Library tabs + "New user" create → createAction → modal) + surface
+    // (shellHead + filter chips + composite stat strip) + RedTable (users).
+    if (assemblePage) assemblePage(document.getElementById("sbx-home"), {
+      topbar: { active: "home", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Home", collapsible: true,
+        groups: [{ id: "LIBRARY", name: "Library", mark: "#cba6f7", count: 3, tabs: [
+          { id: "users", name: "Users", icon: "bi-people", active: true },
+          { id: "files", name: "Files", icon: "bi-file-earmark" },
+          { id: "charts", name: "Charts", icon: "bi-bar-chart" }] }],
+        footer: { create: { label: "New user" }, nav: { active: "home", session: { display_name: "Sandbox User" } } },
+        on: { create: createAction({
+          kind: "modal", title: "New user", label: "Create user", icon: "bi-person-plus",
+          fields: [
+            { key: "display_name", label: "Display name", required: true, placeholder: "Full name" },
+            { key: "username", label: "Handle", required: true, placeholder: "e.g. mansa", autocomplete: "off" },
+            { key: "email", label: "Email", type: "email", placeholder: "optional" }],
+          onSubmit: async (v) => { console.log("[sandbox] create user", v); },
+        }) },
+      },
+      shellHead: { title: "Users", count: "42" },
+      surface: {
+        chipRow: { name: "filter", chips: [
+          { value: "all", label: "All", active: true }, { value: "admins", label: "Admins" }, { value: "active", label: "Active" }] },
+        statStrip: { variant: "composite", stats: [
+          { label: "Total", value: "42" }, { label: "Active", value: "38" },
+          { label: "Admins", value: "3" }, { label: "New (7d)", value: "2" }] },
+      },
+      redtable: {
+        columns: [
+          { key: "display_name", label: "Name" }, { key: "username", label: "Handle", kind: "id" },
+          { key: "email", label: "Email" }, { key: "org_role", label: "Role", kind: "status" }],
+        rows: [
+          { rid: "u1", display_name: "Aïcha Diallo", username: "aicha", email: "aicha@redpash.io", org_role: "admin" },
+          { rid: "u2", display_name: "Sam Okoro",    username: "sam",   email: "sam@redpash.io",   org_role: "member" },
+          { rid: "u3", display_name: "Emmanuel D.",  username: "em",    email: "em@redpash.io",    org_role: "owner" }],
+        rowKey: (r) => r.rid, rownum: true, sort: { multi: false, onSort: () => {} },
+        empty: "No users.",
       },
     });
 

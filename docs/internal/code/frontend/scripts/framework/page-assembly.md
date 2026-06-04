@@ -45,11 +45,13 @@ ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no co
 
 ## Drift-prone areas / completeness status
 
-Two pages now rebuild from components with **zero legacy class leak** (worked proofs
+Three pages now rebuild from components with **zero legacy class leak** (worked proofs
 in `framework-sandbox.html`):
 - **Cases detail** — topbar + rail + surface[object head + status chip-row] + comments.
-- **Monitoring** (the first LIST page) — topbar + rail + surface[shellHead + window
-  chips + composite stat strip] + the interactive **RedTable** (now that B3 landed).
+- **Monitoring** (first LIST page) — topbar + rail + surface[shellHead + window chips +
+  composite stat strip] + the interactive **RedTable** (now that B3 landed).
+- **Home** (Users tab) — the list-page pattern + **S4 create-action**: the rail "New user"
+  button → `createAction` → the modal opens with the user fields.
 
 Remaining gate gaps (do NOT fake them — flag + wait for the owner):
 
