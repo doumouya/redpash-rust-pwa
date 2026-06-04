@@ -3,7 +3,7 @@ title: tools/css-audit/audit.js
 source: ../../../../../tools/css-audit/audit.js
 owner: Torv
 section: Internal · Code · Tools · audit-suite
-last modified date: 2026-05-30
+last modified date: 2026-06-04
 ---
 
 # css-audit
@@ -29,6 +29,11 @@ and the columns-toolbar rework worked against.
 - Emits `report.html` (datatables view) + `audit.json` (ingest-compatible).
 - Auto-discovered as `css`. Ingest-wired.
 - Inline opt-out: `// css-audit-allow: <selector>` on the rule line.
+- **Reachability** view: every `.css` under `styles/` must be reached from a
+  `<link>` root or the `@import` graph — flags orphan sheets + dangling imports.
+  `@import`/`<link>` targets resolve by full STYLES_DIR-relative path
+  (subdir-aware, e.g. `framework/atoms.css`), not basename — so the framework
+  `@import` block in `main.css` resolves correctly (was basename-stripped before).
 
 ## Drift-prone areas
 

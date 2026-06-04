@@ -117,6 +117,11 @@
 .rp-input {
   width: 17.5rem;
   max-width: 100%;
+  /* content-sized, not the atom's fixed 1.9375rem — profile inputs use larger
+     padding. Pinned so the framework atoms.css .rp-input height (now live via the
+     CSS cutover) doesn't shrink these by ~6.5px. The proper fix is to scope this
+     to `.rp-profile .rp-input` / adopt the atom in Phase 3 (CAS_37B2E1BF). */
+  height: auto;
   padding: 0.4375rem 0.6875rem;
   font: inherit;
   font-size: var(--rp-text-sm);

@@ -8,7 +8,7 @@
    it: no orphan sheet, no surprise import).
 
    Order matters. Later @imports override earlier ones at equal
-   specificity. The three layers below sort that out:
+   specificity. The layers below sort that out:
 
      1. Foundation — tokens / prefs / base. Loaded first so every
         rule downstream sees the resolved CSS variables.
@@ -21,6 +21,10 @@
         2026-05-25 reorg — these were previously grouped under a
         "Workspace" section header, which hid the shared status
         of toolbar/table/pager post-naming-consistency alignment.
+     2.5 Framework atoms + components — the sandbox-proven rp-* layer
+        (atoms.css + framework/*), loaded after the legacy atoms and
+        before the page sheets so byte-identical atoms no-op and the few
+        remaining page-sheet conflicts still win (zero-visual). CAS_37B2E1BF.
      3. Page-specific sheets — login, home, monitoring, cases,
         workspace, etc. These ride on top of the atoms with #id-
         scoped overrides per [[unify-behavior-not-names]] +
@@ -44,6 +48,43 @@
 @import "panel.css";     /* .rt-panel — workspace slide-out side panels */
 @import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
 @import "sw-update.css"; /* service-worker update banner */
+
+/* ── 2.5 framework atoms + components — the rp-* layer (CAS_37B2E1BF) ─────
+   The sandbox-proven framework sheets, now LIVE. Placed AFTER the legacy
+   shared atoms and BEFORE the page-specific sheets so that:
+     (a) the shared atoms (rp-chip, rp-btn, rp-search, …) are byte-identical to
+         their legacy twins — dual-load is a no-op until the legacy duplicates
+         are deleted (the dedup phase); and
+     (b) the only 5 selectors that DIFFER from a page sheet (.rp-input vs
+         profile.css, the chart-empty ::after vs shell.css, .rp-main.rp-cases-main
+         + .rp-cases-detail vs cases.css) are still won by the Layer-3 page sheet
+         below → ZERO live-visual change at import.
+   atoms.css first (foundation), then components in framework-sandbox order. */
+@import "framework/atoms.css";
+@import "framework/topbar.css";
+@import "framework/omni.css";
+@import "framework/rail.css";
+@import "framework/comments.css";
+@import "framework/dashboards.css";
+@import "framework/surface.css";
+@import "framework/head.css";
+@import "framework/chip-row.css";
+@import "framework/stat.css";
+@import "framework/chart.css";
+@import "framework/table.css";
+@import "framework/menu.css";
+@import "framework/seg.css";
+@import "framework/panel.css";
+@import "framework/pager.css";
+@import "framework/redtable.css";
+@import "framework/field.css";
+@import "framework/badge.css";
+@import "framework/avatar-upload.css";
+@import "framework/profile-record.css";
+@import "framework/settings-config.css";
+@import "framework/filter-panel.css";
+@import "framework/tools-panel.css";
+@import "framework/toolbar.css";
 
 /* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
 @import "shell.css";     /* rail-page shell — home, monitoring */

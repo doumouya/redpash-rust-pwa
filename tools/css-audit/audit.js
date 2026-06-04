@@ -555,6 +555,21 @@ var allCss = files.map(function (full) {
 var allCssSet = {};
 allCss.forEach(function (f) { allCssSet[f] = true; });
 
+/* Resolve an @import target (relative to the importing sheet `f`, both
+   STYLES_DIR-relative forward-slash paths) to a STYLES_DIR-relative key — so
+   subdir imports like `framework/atoms.css` match allCss instead of being
+   basename-stripped to `atoms.css` (which silently flagged them dangling). */
+function resolveImport(f, raw) {
+  var rel = raw.split('?')[0].split('#')[0];
+  return path.posix.normalize(path.posix.join(path.posix.dirname(f), rel));
+}
+/* Map a <link href> web path to a STYLES_DIR-relative key (everything after
+   `/styles/`), or null if the href isn't under styles/. */
+function resolveLink(raw) {
+  var m = raw.split('?')[0].split('#')[0].match(/(?:^|\/)styles\/(.+)$/);
+  return m ? m[1] : null;
+}
+
 var htmlFiles = walkExt(FRONTEND_DIR, '.html', []);
 var rootLinks = [];
 var rootSet = {};
@@ -567,10 +582,11 @@ htmlFiles.forEach(function (full) {
   while ((m = LINK_HREF_RE.exec(text))) {
     var raw = m[1];
     var external = EXTERNAL_RE.test(raw);
-    var target = external ? raw : path.basename(raw.split('?')[0]);
-    rootLinks.push({ html: rel, target: target, external: external,
-                     resolved: external || !!allCssSet[target] });
-    if (!external) rootSet[target] = true;
+    var target = external ? raw : resolveLink(raw);
+    var resolved = external || (target != null && !!allCssSet[target]);
+    rootLinks.push({ html: rel, target: target || path.basename(raw.split('?')[0]), external: external,
+                     resolved: resolved });
+    if (!external && target) rootSet[target] = true;
   }
 });
 
@@ -580,7 +596,7 @@ allCss.forEach(function (f) {
   var m;
   IMPORT_RE.lastIndex = 0;
   while ((m = IMPORT_RE.exec(text))) {
-    var t = path.basename(m[1]);
+    var t = resolveImport(f, m[1]);
     importEdges.push({ from: f, target: t, resolved: !!allCssSet[t] });
   }
 });
