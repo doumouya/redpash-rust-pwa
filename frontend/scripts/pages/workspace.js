@@ -250,6 +250,36 @@ export default function workspace(app, { session }) {
     return activeFileRid ? "data" : null;
   }
 
+  // ─── rail-foot create button — ONE context-aware control (CAS_37B2E1BF) ──
+  // Em's coherence ask: collapse Workspace's separate create buttons into one
+  // button that adapts to the rail view, like Home's syncCreateButton. Data →
+  // New chart (charts the active data file); Dashboards → New dashboard. Upload
+  // now lives in the data toolbar + the landing; New project in the rail head.
+  // Refs are captured HERE — before railViewSeg mounts with fireOnMount — so the
+  // first onChange (which calls syncWsCreateButton) doesn't hit a TDZ. The run
+  // handlers (createChart/createDashboard) are hoisted function declarations.
+  const createBtn      = $("#wsCreate");
+  const createBtnIcon  = $("#wsCreateIcon");
+  const createBtnLabel = $("#wsCreateLabel");
+  const WS_CREATE = {
+    data:       { label: "New chart",     icon: "bi-bar-chart-line", run: createChart },
+    dashboards: { label: "New dashboard", icon: "bi-grid-1x2",       run: createDashboard },
+  };
+  let activeWsCreate = WS_CREATE.data;
+  function syncWsCreateButton(view) {
+    const spec = WS_CREATE[view] || WS_CREATE.data;
+    activeWsCreate = spec;
+    if (createBtnLabel) createBtnLabel.textContent = spec.label;
+    if (createBtnIcon)  createBtnIcon.className = "bi " + spec.icon;   // reset to a single class + set
+    if (createBtn)      createBtn.title = spec.label;
+  }
+  createBtn?.addEventListener("click", async () => {
+    createBtn.disabled = true;
+    createBtn.classList.add("is-busy");
+    try { await activeWsCreate.run(); }
+    finally { createBtn.disabled = false; createBtn.classList.remove("is-busy"); }
+  });
+
   // View switcher (Data ↔ Dashboards) — the active view is a data
   // attribute on the rail; CSS hides the file rows that don't belong
   // (no refetch — every project group already renders all its file
@@ -263,6 +293,7 @@ export default function workspace(app, { session }) {
     fireOnMount: true,
     onChange:    (view) => {
       nav.dataset.railView = view;
+      syncWsCreateButton(view);   // repoint the one rail-foot create button to this view
       // CAS_3BCD6727 — swap the rp-surface so toggling the rail brings
       // the corresponding view forward. Ignore the loadFile rail-sync
       // echo (the file is already chosen). If the surface already shows
@@ -319,6 +350,10 @@ export default function workspace(app, { session }) {
   // and the projects-table rows (row 3) carry data-rid. Delegated; the
   // container persists across renderLanding rebuilds.
   $("#wsLanding")?.addEventListener("click", (e) => {
+    // Landing Upload CTA — the data toolbar (where Upload also lives) is hidden
+    // in landing mode, so the empty/overview surface carries its own trigger
+    // for the same hidden #wsUploadInput (CAS_37B2E1BF).
+    if (e.target.closest("#wsLandingUpload")) { $("#wsUploadInput")?.click(); return; }
     const item = e.target.closest(".ws-landing-card, .ws-landing-row");
     if (item?.dataset.rid) openProjectFromLanding(item.dataset.rid);
   });
@@ -723,7 +758,7 @@ export default function workspace(app, { session }) {
       .slice(0, 8);
     const cards = recent.length
       ? recent.map(landingCard).join("")
-      : '<p class="rt-empty">No projects yet — upload a file from the rail to get started.</p>';
+      : '<p class="rt-empty">No projects yet — use the Upload button to add your first data file.</p>';
     landing.innerHTML = ''
       + '<div class="rp-overview__hero">'
       +   heroStripHTML(
@@ -734,7 +769,11 @@ export default function workspace(app, { session }) {
             WS_OV_CHARTS)
       + '</div>'
       + '<section class="ws-landing-section rp-overview__mid">'
-      +   '<h3 class="ws-landing-section-title">Recent projects</h3>'
+      +   '<div class="ws-landing-section-head">'
+      +     '<h3 class="ws-landing-section-title">Recent projects</h3>'
+      +     '<button class="rt-btn rt-btn--glass" id="wsLandingUpload" type="button" title="Upload a data file into the active project">'
+      +       '<i class="bi bi-upload"></i><span>Upload</span></button>'
+      +   '</div>'
       +   '<div class="ws-landing-grid">' + cards + '</div>'
       + '</section>'
       + '<div class="rp-overview__table">' + wsProjectsTableHTML(visible) + '</div>';
@@ -2751,14 +2790,17 @@ export default function workspace(app, { session }) {
         || navBody.querySelector(".rt-group")?.dataset?.rid
         || null;
   }
-  $("#wsNewDashboard")?.addEventListener("click", async (e) => {
+  // ─── create handlers for the one rail-foot button (CAS_37B2E1BF) ────
+  // Wired to #wsCreate via WS_CREATE / syncWsCreateButton (above); that click
+  // wrapper owns the disabled / is-busy state, so these just do the work and
+  // open the result. Both target activeProjectRid() (the focused rail group),
+  // exactly like the old per-button handlers.
+
+  // Dashboards view → New dashboard: an empty free-template dashboard in the
+  // active project, opened in the designer (was the #wsNewDashboard button).
+  async function createDashboard() {
     const projRid = activeProjectRid();
-    if (!projRid) {
-      console.warn("[designer] + New dashboard: no active project");
-      return;
-    }
-    const btn = e.currentTarget;
-    btn.disabled = true;
+    if (!projRid) { rowsInfo.textContent = "New dashboard: open or create a project first."; return; }
     try {
       const created = await api.post("/dashboards", {
         project_redpash_id: projRid,
@@ -2766,20 +2808,52 @@ export default function workspace(app, { session }) {
         spec:               { template_id: "free", widgets: [] },
       });
       const newRid = created?.redpash_id;
-      // A dashboard lives in the rail's Dashboards view — switch to it
-      // so the new row is visible (it'd be hidden under the Data view).
+      // A dashboard lives in the rail's Dashboards view — switch to it so the
+      // new row is visible (it'd be hidden under the Data view).
       setRailView("dashboards");
       await loadProjects();
-      if (newRid) {
-        activeFileRid = null;
-        await loadFile(newRid);
-      }
+      if (newRid) { activeFileRid = null; await loadFile(newRid); }
     } catch (err) {
       console.warn("[designer] + New dashboard failed:", err);
-    } finally {
-      btn.disabled = false;
+      rowsInfo.textContent = "New dashboard failed — see console.";
     }
-  });
+  }
+
+  // Data view → New chart: a standalone chart over the active data file (the
+  // open/last data file via sourceCache, else the project's first data file),
+  // opened in the designer. Mirrors addChartToOpenDashboard's source resolution
+  // + POST /charts, but standalone (no dashboard wrapper).
+  async function createChart() {
+    const projRid = activeProjectRid();
+    if (!projRid) { rowsInfo.textContent = "New chart: open or create a project first."; return; }
+    let src = sourceCache;
+    if (!src.rid) {
+      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
+      const dataFile = (list?.items || []).find((f) => f.file_type !== "chart" && f.file_type !== "dashboard");
+      if (dataFile) {
+        const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
+        src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
+      }
+    }
+    if (!src.rid) { rowsInfo.textContent = "New chart: this project has no data file yet — upload one first."; return; }
+    try {
+      const firstCol    = src.columns[0]?.name || "";
+      const defaultKind = getPref("workspace-defaultChartKind") || "bar";
+      const chart = await api.post("/charts", {
+        source_file_id: src.rid,
+        title:          "Untitled chart",
+        spec: { kind: defaultKind, group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
+      });
+      const newRid = chart?.redpash_id;
+      // Charts live in the Dashboards view — switch + open the new chart.
+      setRailView("dashboards");
+      await loadProjects();
+      if (newRid) { activeFileRid = null; await loadFile(newRid); }
+    } catch (err) {
+      console.warn("[designer] + New chart failed:", err);
+      rowsInfo.textContent = "New chart failed — see console.";
+    }
+  }
 
   // ─── new project — POST /api/projects + expand the new group ──
   // No prompt — the project lands with a placeholder name + an empty

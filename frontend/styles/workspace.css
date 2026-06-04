@@ -71,6 +71,16 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* landing section head — title left, Upload CTA right. The data toolbar's
+   Upload is hidden in landing mode, so the empty/overview surface carries its
+   own trigger for the same #wsUploadInput (CAS_37B2E1BF). */
+.ws-landing-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.ws-landing-section-head .ws-landing-section-title { margin: 0; }
 .ws-landing-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));

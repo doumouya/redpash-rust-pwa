@@ -11,6 +11,10 @@
     <aside class="rt-nav" id="wsNav">
       <div class="rt-nav-head">
         <span class="rt-nav-title">Projects</span>
+        <button class="rt-btn" id="wsNewProject" type="button"
+                title="New project — appears in the rail, rename via the group head">
+          <i class="bi bi-plus-lg"></i>
+        </button>
         <button class="rt-btn" id="wsNavCollapse" type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
         </button>
@@ -52,17 +56,13 @@
         <div class="rt-nav-state">Loading projects…</div>
       </div>
       <div class="rt-nav-foot">
-        <input type="file" id="wsUploadInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv" multiple hidden />
-        <button class="rt-btn rt-btn--glass" id="wsUpload" type="button">
-          <i class="bi bi-upload"></i><span>Upload file</span>
-        </button>
-        <button class="rt-btn rt-btn--glass" id="wsNewDashboard" type="button"
-                title="New dashboard in the active project">
-          <i class="bi bi-grid-1x2"></i><span>New dashboard</span>
-        </button>
-        <button class="rt-btn rt-btn--glass" id="wsNewProject" type="button"
-                title="Create a new project — appears in the rail, rename via the Objects page">
-          <i class="bi bi-plus-lg"></i><span>New project</span>
+        <!-- One context-aware create button (CAS_37B2E1BF): adapts to the rail
+             view like Home's single rail-foot create — Data → New chart (from the
+             active data file), Dashboards → New dashboard. Upload moved to the data
+             toolbar + landing; New project to the rail head. workspace.js repoints
+             label/icon/handler via syncWsCreateButton on every rail-view switch. -->
+        <button class="rt-btn rt-btn--glass" id="wsCreate" type="button">
+          <i class="bi bi-bar-chart-line" id="wsCreateIcon"></i><span id="wsCreateLabel">New chart</span>
         </button>
       </div>
     </aside>
@@ -82,6 +82,15 @@
         <!-- toolbar (data mode) — hidden when the surface is in
              designer mode (chart file open) -->
         <div class="rt-toolbar rt-toolbar--data">
+          <!-- Upload lives here (where files are worked) + on the landing (the
+               empty state). Moved off the rail foot in the create-button
+               consolidation (CAS_37B2E1BF). The hidden input is clicked
+               programmatically from both the toolbar button and the landing CTA. -->
+          <input type="file" id="wsUploadInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv" multiple hidden />
+          <button class="rt-btn rt-btn--glass" id="wsUpload" type="button" title="Upload a data file into the active project">
+            <i class="bi bi-upload"></i><span>Upload</span>
+          </button>
+          <span class="rt-toolbar-sep"></span>
           <button class="rt-btn" id="wsFilterToggle" type="button" title="Filter panel">
             <i class="bi bi-funnel"></i>
           </button>
