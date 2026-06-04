@@ -1,6 +1,8 @@
 /* ── framework atom: rp-seg — segmented toggle (was .rt-seg) ──────────────────
    The 2+-option pill switcher: a content-sized inline-flex track holding flat
-   buttons, where the `.is-active` button gets the raised surface fill. The
+   buttons, where the active button gets the raised surface fill (keyed off
+   `aria-pressed="true"` for the converted mountSeg builder, or the legacy
+   `.is-active` still set by the live mountRailSeg/filter consumers). The
    AND/OR filter toggle, the Cases source switcher (Internal/External), the
    Workspace view switcher (Data/Dashboards) all compose this.
 
@@ -38,7 +40,14 @@
   font-size: 0.75rem;
   cursor: pointer;
 }
-.rp-seg button.is-active {
+/* Active pill — TRANSITIONAL dual selector. The converted builder mountSeg()
+   (seg.js) sets `aria-pressed` per the locked one-class convention; the live
+   class-based consumers (mountRailSeg in rail-controls.js → the rail switchers;
+   the filter-panel AND/OR combo) still sync `.is-active`. One property block
+   serves both. Drop `.is-active` once those consumers migrate to aria-pressed
+   (the seg/rail cascade) — until then, removing it orphans every live pill. */
+.rp-seg button.is-active,
+.rp-seg button[aria-pressed="true"] {
   background: var(--rp-surface);
   color: var(--rp-text);
   font-weight: 650;

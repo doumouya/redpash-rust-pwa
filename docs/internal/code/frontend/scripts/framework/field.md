@@ -29,6 +29,20 @@ then calls `mount(slot)` so the row composes any control without knowing it. The
 configure-by-example Settings pairs each field's control with a live preview in the
 same row.
 
+`stack:true` sets the container-independent variant via `data-variant="stack"` (one
+attribute on the single `rp-field` class, per the locked one-class convention) — CSS
+keys off `.rp-field[data-variant="stack"]`, no modifier class.
+
+## Drift-prone areas
+
+- **`stack` ↔ selector pairing.** The full-width layout is `data-variant="stack"` (one
+  attribute on the single `rp-field` class), keyed by `.rp-field[data-variant="stack"]`
+  in `field.css`. The JS attribute and the CSS selector move together — renaming one
+  side orphans the stacked layout.
+- **The control is opaque.** `mount(slot)` / `html` fills the slot; the field never
+  styles the control. The sub-element classes (`rp-field-main` / `-label` / `-hint` /
+  `-control`) are structural children, not variants — don't add state classes here.
+
 ## Related
 
 - `styles/framework/field.css` · [seg](seg.md) · [select](select.md) · [badge](badge.md) · [component-registry](component-registry.md).

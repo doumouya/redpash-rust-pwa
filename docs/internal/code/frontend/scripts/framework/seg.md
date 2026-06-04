@@ -24,9 +24,31 @@ this module is behaviour only and does not edit that sheet.
 
 ## How it works
 
-One DOM build (a `<button data-seg=…>` per option, `.is-active` on the current),
-a delegated click that flips active + calls `onChange(value)`, and `set(v)` to drive
-it programmatically. Every option field is `esc()`'d.
+One DOM build (a `<button data-seg=…>` per option, `aria-pressed="true"` on the
+current — no `is-active` class, per the locked one-class convention), a delegated
+click that flips the pressed state + calls `onChange(value)`, and `set(v)` to
+drive it programmatically. Every option field is `esc()`'d.
+
+The active pill keys off `aria-pressed="true"`. `seg.css` carries a **transitional
+dual selector** (`.rp-seg button.is-active, …[aria-pressed="true"]`) because the
+still-class-based live consumers (`mountRailSeg` in `rail-controls.js`; the
+filter-panel AND/OR combo) sync `.is-active`; `.is-active` drops once they migrate
+to `aria-pressed` (the seg/rail cascade).
+
+## Drift-prone areas
+
+- **`seg.css` is transitional — don't drop the `.is-active` arm.** `mountSeg` sets only
+  `aria-pressed`, but the active rule is a dual selector
+  (`.rp-seg button.is-active, …[aria-pressed="true"]`) because the live class-based
+  consumers (`mountRailSeg` in `rail-controls.js`; the filter-panel AND/OR combo) still
+  sync `.is-active`. Removing that arm before they migrate orphans every live switcher's
+  active fill.
+- **Two seg builders coexist.** `mountSeg` (this module, aria-based) vs the class-agnostic
+  `mountRailSeg` (`rail-controls.js`, `.is-active`-based, the live path); they share
+  `seg.css`, so any change to the active rule must satisfy both.
+- **`variant` builds `rp-seg--<variant>` dynamically** (`--rail` / `--combo` live in
+  `seg.css`, shared with the class-based consumers) — those stay container-variant
+  modifier classes for now, not `data-variant`.
 
 ## Related
 

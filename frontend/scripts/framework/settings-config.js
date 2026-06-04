@@ -60,7 +60,7 @@ export function mountSettingsConfig(host, opts = {}) {
   {
     const r = configRow(host, "Theme", "Token theme applied app-wide.", "This card re-themes");
     r.preview.innerHTML = '<div class="rp-surface" data-theme="dark" style="padding:.75rem;display:flex;gap:.5rem;align-items:center">'
-      + '<button class="rp-btn">Save</button><span class="rp-chip is-active">Active</span><span class="rp-badge rp-badge--accent">Pro</span></div>';
+      + '<button class="rp-btn">Save</button><span class="rp-chip is-active">Active</span><span class="rp-badge" data-variant="accent">Pro</span></div>';
     const card = r.preview.querySelector(".rp-surface");
     if (seg) seg(r.control, { options: [{ value: "dark", label: "Dark", icon: "bi-moon-stars" }, { value: "light", label: "Light", icon: "bi-sun" }], value: "dark",
       onChange: (v) => card.setAttribute("data-theme", v) });

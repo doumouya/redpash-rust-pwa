@@ -10,24 +10,25 @@
 import { register } from "/scripts/framework/component-registry.js";
 import { esc } from "/scripts/dom.js";
 
-const TONES = { accent: "rp-badge--accent", ok: "rp-badge--ok", warn: "rp-badge--warn", soon: "rp-badge--soon", neutral: "" };
+const TONES = { accent: "accent", ok: "ok", warn: "warn", soon: "soon", neutral: "" };
 
-function toneClass(t) { return TONES[t] != null ? TONES[t] : ""; }
+function toneVariant(t) { return TONES[t] != null ? TONES[t] : ""; }
 function innerHTML(o) {
   return (o.icon ? '<i class="bi ' + esc(o.icon) + '"></i>' : '') + esc(o.label != null ? o.label : '');
 }
 
 /** Inline badge markup. @param {{label:string, tone?:string, icon?:string}} o */
 export function badgeHTML(o = {}) {
-  const tone = toneClass(o.tone);
-  return '<span class="rp-badge' + (tone ? " " + tone : "") + '">' + innerHTML(o) + '</span>';
+  const v = toneVariant(o.tone);
+  return '<span class="rp-badge"' + (v ? ' data-variant="' + v + '"' : '') + '>' + innerHTML(o) + '</span>';
 }
 
 /** Render a badge into `host` (host becomes the badge). @returns {{el:Element}} */
 export function mountBadge(host, opts = {}) {
   if (!host) return null;
-  const tone = toneClass(opts.tone);
-  host.className = "rp-badge" + (tone ? " " + tone : "");
+  const v = toneVariant(opts.tone);
+  host.className = "rp-badge";
+  if (v) host.setAttribute("data-variant", v);
   host.innerHTML = innerHTML(opts);
   return { el: host };
 }

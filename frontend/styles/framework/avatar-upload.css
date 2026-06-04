@@ -10,7 +10,7 @@
   background-position: center;
   color: transparent;
 }
-.rp-avatar-upload-btn {
+.rp-avatar-upload .rp-btn-icon {
   position: absolute;
   right: -0.25rem;
   bottom: -0.25rem;
@@ -22,4 +22,4 @@
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
 }
-.rp-avatar-upload-btn i { font-size: 0.75rem; }
+.rp-avatar-upload .rp-btn-icon i { font-size: 0.75rem; }

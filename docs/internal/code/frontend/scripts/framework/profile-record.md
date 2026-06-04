@@ -4,6 +4,7 @@ source: ../../../../../../frontend/scripts/framework/profile-record.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
 last modified date: 2026-06-04
+convention: one-class refactor (drop rp-profile-upgrade identity-stack)
 ---
 
 # framework/profile-record.js — the User record page
@@ -30,7 +31,10 @@ set into one editable User record. CSS glue: `styles/framework/profile-record.cs
   show a read-only value. The "edit all fields" the old UI never exposed.
 - **Memberships**: the simple-`table` related list (company · role) from `memberships`.
 - **Plan**: an `rp-field` whose control is the plan `badge` + an **Upgrade** `rp-btn`
-  (`onUpgrade`) — the upgrade affordance the old Plan tab lacked.
+  (`onUpgrade`) — the upgrade affordance the old Plan tab lacked. One-class convention:
+  the button is a bare `rp-btn` (no `rp-profile-upgrade` identity-stack class); the
+  handler binds via `slot.querySelector(".rp-btn")` — the only `rp-btn` in the
+  `.rp-profile-plan-control` slot (the sibling is an `rp-badge`).
 - **Connections**: `rp-field` rows, future-proofed — Google (live) + MFA / SSO / Okta
   as "Soon" badges.
 

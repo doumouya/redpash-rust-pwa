@@ -25,7 +25,7 @@ export function mountSelect(host, opts = {}) {
 
   const m = mountMenu(host, {
     id: opts.id,
-    trigger: { className: (opts.triggerClass || "rp-btn rp-btn--glass") + " rp-select-trigger", label: labelFor(value), icon: "bi-chevron-expand" },
+    trigger: { className: opts.triggerClass || "rp-btn rp-btn--glass", label: labelFor(value), icon: "bi-chevron-expand" },
     items: options.map((o) => ({ value: o.value, label: o.label != null ? o.label : o.value, icon: o.icon, selected: o.value === value, tick: o.value === value })),
     dataKey: "value",
   });

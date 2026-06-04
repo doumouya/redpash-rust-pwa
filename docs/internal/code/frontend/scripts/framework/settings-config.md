@@ -27,8 +27,8 @@ Each row (`.rp-settings-config-row`) is `[label + hint + control] | [live previe
 where the control is a form-control and the preview is a reused component the
 control drives via `onChange`:
 
-- **Theme** (`seg`) → a sample `.rp-surface` card (`rp-btn`/`rp-chip`/`rp-badge`) whose
-  `data-theme` flips live.
+- **Theme** (`seg`) → a sample `.rp-surface` card (`rp-btn`/`rp-chip`/`rp-badge` — the
+  badge's accent tone via `data-variant="accent"`) whose `data-theme` flips live.
 - **Default chart kind** (`seg`) → a real `chart` tile; `onChange` calls its
   `setOption(chartOption(kind))` so the chart morphs bar↔line↔pie.
 - **Rows per page** (`select`) → a `table` re-rendered to N rows.
@@ -42,6 +42,19 @@ from Settings (account identity lives on the Profile record — the dedup).
 
 Labels/hints `esc()`'d; the sample card markup is static; the chart `option` goes to
 `setOption()` (never interpolated into HTML).
+
+## Drift-prone areas
+
+- **The Theme preview is a hand-written demo string.** Its badge uses
+  `data-variant="accent"` (matching the converted `rp-badge` atom). The `rp-chip
+  is-active` in the same string is left as-is on purpose — `rp-chip`'s active state
+  still keys `.rp-chip.is-active`, so converting it now would orphan the fill; it
+  migrates with the chip-row lane.
+- **Previews resolve components by registry name** (`get("seg" / "select" / "chart" /
+  "table" / "redtable")`). Renaming or failing to register any of those silently drops
+  that row's preview — the row renders its control beside an empty preview pane.
+- Render-first proof: the `onChange`s drive the previews, not persistence. The live
+  cutover wires them to `prefs.js`; until then no pref is written.
 
 ## Related
 

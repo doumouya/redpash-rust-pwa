@@ -33,7 +33,7 @@ export function mountSeg(host, opts = {}) {
 
   host.innerHTML = options.map((o) =>
       '<button type="button" data-seg="' + esc(o.value) + '"'
-    +   (o.value === value ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"')
+    +   (o.value === value ? ' aria-pressed="true"' : ' aria-pressed="false"')
     +   (o.title ? ' title="' + esc(o.title) + '"' : '')
     + '>'
     +   (o.icon ? '<i class="bi ' + esc(o.icon) + '"></i>' : '')
@@ -45,7 +45,6 @@ export function mountSeg(host, opts = {}) {
     value = v;
     host.querySelectorAll("button[data-seg]").forEach((b) => {
       const on = b.getAttribute("data-seg") === v;
-      b.classList.toggle("is-active", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });
   }

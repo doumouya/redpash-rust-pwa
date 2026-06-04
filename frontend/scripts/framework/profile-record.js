@@ -105,8 +105,8 @@ export function mountProfileRecord(host, opts = {}) {
     mount: (slot) => {
       slot.classList.add("rp-profile-plan-control");
       slot.innerHTML = badgeHTML({ label: u.plan || "Free", tone: "accent" })
-        + '<button type="button" class="rp-btn rp-profile-upgrade"><i class="bi bi-arrow-up-circle"></i> Upgrade</button>';
-      const up = slot.querySelector(".rp-profile-upgrade");
+        + '<button type="button" class="rp-btn"><i class="bi bi-arrow-up-circle"></i> Upgrade</button>';
+      const up = slot.querySelector(".rp-btn");
       if (up) up.addEventListener("click", () => { if (typeof opts.onUpgrade === "function") opts.onUpgrade(); });
     },
   });

@@ -24,7 +24,8 @@ import { esc } from "/scripts/dom.js";
  */
 export function mountField(host, opts = {}) {
   if (!host) return null;
-  host.className = "rp-field" + (opts.stack ? " rp-field--stack" : "");
+  host.className = "rp-field";
+  if (opts.stack) host.setAttribute("data-variant", "stack");
   host.innerHTML =
       '<div class="rp-field-main">'
     +   '<span class="rp-field-label">' + esc(opts.label || "") + '</span>'

@@ -4,8 +4,8 @@
    + Settings + any form compose ONE row. rp- only; composed by mountField (field.js).
 
    Layout: label/hint block on the left, control on the right (space-between).
-   `--stack` puts the control on its own full-width line below the label (for
-   text inputs / wide controls). */
+   `[data-variant="stack"]` puts the control on its own full-width line below the
+   label (for text inputs / wide controls). */
 
 .rp-field {
   display: flex;
@@ -23,8 +23,8 @@
 .rp-field-control { flex: 0 0 auto; display: flex; align-items: center; gap: 0.375rem; }
 
 /* stacked — label above a full-width control (text inputs, previews) */
-.rp-field--stack { flex-direction: column; align-items: stretch; gap: 0.375rem; }
-.rp-field--stack .rp-field-control { width: 100%; }
+.rp-field[data-variant="stack"] { flex-direction: column; align-items: stretch; gap: 0.375rem; }
+.rp-field[data-variant="stack"] .rp-field-control { width: 100%; }
 
 /* a section of fields inside a surface */
 .rp-field-group { display: flex; flex-direction: column; }

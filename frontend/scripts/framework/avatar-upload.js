@@ -45,7 +45,7 @@ export function mountAvatarUpload(host, opts = {}) {
       '<span class="rp-avatar' + sizeCls + '" data-c="' + esc(opts.color || colorFor(name)) + '" title="' + esc(name) + '">'
     +   esc(initialsOf(name))
     + '</span>'
-    + '<button type="button" class="rp-btn-icon rp-avatar-upload-btn" title="Change picture"><i class="bi bi-camera"></i></button>'
+    + '<button type="button" class="rp-btn-icon" title="Change picture"><i class="bi bi-camera"></i></button>'
     + '<input type="file" accept="image/*" hidden>';
 
   const avatarEl = host.querySelector(".rp-avatar");
@@ -58,7 +58,7 @@ export function mountAvatarUpload(host, opts = {}) {
   }
   setSrc(opts.src);
 
-  host.querySelector(".rp-avatar-upload-btn").addEventListener("click", () => input.click());
+  host.querySelector(".rp-btn-icon").addEventListener("click", () => input.click());
   input.addEventListener("change", () => {
     const f = input.files && input.files[0];
     if (f && typeof opts.onFile === "function") opts.onFile(f);
