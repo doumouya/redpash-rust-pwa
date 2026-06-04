@@ -190,14 +190,8 @@
   border: 1px solid var(--rp-glass-border);
   border-radius: var(--rp-radius);
 }
-.rp-chart-title {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-  margin-bottom: var(--rp-sp-2);
-}
+/* .rp-chart-title collapsed to the rp-title atom — sizing is the
+   .rp-chart-card .rp-title context in framework/chart.css (CAS_37B2E1BF). */
 .rp-chart-canvas {
   flex: 1;
   width: 100%;

@@ -15,7 +15,10 @@ Shared runtime for the rail-page list surfaces (Home + Monitoring). Both pages r
 ## Public surface
 
 - mountListPage(el, spec) — paints the section shell.
-- Builders for KPI strip, chart cards, sortable table headers, pager.
+- Builders for KPI strip, chart cards, sortable table headers, pager. Chart-card
+  titles render the `rp-title` atom inside `.rp-chart-card` (sized by the
+  `.rp-chart-card .rp-title` context in `framework/chart.css`, not a `rp-chart-title`
+  class — CAS_37B2E1BF ≤1-class rule).
 - Returns control surface: refresh, setActiveTab.
 
 ## Drift-prone areas

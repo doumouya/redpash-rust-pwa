@@ -83,7 +83,7 @@ export function kpiStripValuesHTML(tiles) {
 export function compositeStripHTML(tiles, charts) {
   const chartCard = (c) => c
     ? '<div class="rp-chart-card">'
-    +   '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+    +   '<div class="rp-title">' + esc(c.title || "") + '</div>'
     +   '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
     + '</div>'
     : '<div class="rp-chart-card rp-chart-card--empty">'
@@ -113,7 +113,7 @@ export function compositeStripHTML(tiles, charts) {
 export function heroStripHTML(tiles, charts) {
   const chartCard = (c) => c
     ? '<div class="rp-chart-card">'
-    +   '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+    +   '<div class="rp-title">' + esc(c.title || "") + '</div>'
     +   '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
     + '</div>'
     : '<div class="rp-chart-card rp-chart-card--empty">'
@@ -140,7 +140,7 @@ export function chartsStripHTML(charts) {
   return '<div class="rp-charts">'
     + charts.map((c) =>
         '<div class="rp-chart-card">'
-        + '<div class="rp-chart-title">' + esc(c.title || "") + '</div>'
+        + '<div class="rp-title">' + esc(c.title || "") + '</div>'
         + '<div class="rp-chart-canvas" id="' + esc(c.id) + '"></div>'
         + '</div>'
       ).join("")

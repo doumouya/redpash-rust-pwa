@@ -10,8 +10,8 @@
 // the faded rp-chart-card--empty placeholder instead — the "lego brick".
 //
 // Composes, not duplicates:
-//   - rp-title atom (atoms.css A6) for the title text — .rp-chart-title is the
-//     chart-context sizing override on top of the atom base, NOT a new class.
+//   - rp-title atom (atoms.css A6) for the title text — the chart sizing is the
+//     .rp-chart-card .rp-title ancestor-context override, NOT a 2nd class.
 // Render path mirrors the echarts-kpi.js idiom (ensureRegisteredThemes() then
 // window.echarts.init(el, theme || chartTheme())) so the tile picks up the
 // RedPash Mocha/Latte themes like every other chart.
@@ -26,7 +26,7 @@ import { esc } from "/scripts/dom.js";
 import { ensureRegisteredThemes, chartTheme } from "/scripts/echarts-theme.js";
 
 // ── config shape ─────────────────────────────────────────────────────────────
-//   title  : string                 → rp-chart-title (optional; omit for a
+//   title  : string                 → rp-title (optional; omit for a
 //                                      title-less canvas-only card)
 //   option : ECharts option object   → setOption() target. Absent/null → the
 //                                      faded rp-chart-card--empty placeholder.
@@ -51,7 +51,7 @@ export function mountChartTile(host, config = {}) {
   // mount-lookup never targets them (view.querySelector('#'+id)).
   const idAttr = !empty && id ? ' id="' + esc(id) + '"' : "";
   host.innerHTML =
-      (title ? '<div class="rp-chart-title rp-title">' + esc(title) + "</div>" : "")
+      (title ? '<div class="rp-title">' + esc(title) + "</div>" : "")
     + '<div class="rp-chart-canvas"' + idAttr + "></div>";
 
   const canvas = host.querySelector(".rp-chart-canvas");

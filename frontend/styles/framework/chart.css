@@ -7,8 +7,9 @@
    Members:
      rp-charts            — the auto-fit grid wrapper (1-N cards).
      rp-chart-card        — the glass tile container (title + canvas).
-     rp-chart-title       — small uppercase tile title; COMPOSES the rp-title
-                            atom (atoms.css A6) + this chart-context sizing.
+     rp-chart-card .rp-title — small uppercase tile title; the markup is the
+                            rp-title atom (atoms.css A6), sized by this ancestor
+                            context (no rp-chart-title class — CAS_37B2E1BF).
      rp-chart-canvas      — the ECharts mount slot (load-bearing 11.25rem
                             height — ECharts sizes to the container, so a 0px
                             canvas renders a 0px chart).
@@ -40,11 +41,11 @@
   border-radius: var(--rp-radius);
 }
 
-/* Small uppercase tile title — COMPOSES the rp-title atom (A6, defined in
-   atoms.css). The atom owns margin/weight/font/color base; this context
-   override layers the chart sizing (0.6875rem / uppercase / muted /
-   margin-bottom) on top. NEVER a standalone re-declaration of the atom. */
-.rp-chart-title {
+/* Small uppercase tile title — the markup is just the rp-title atom (A6,
+   atoms.css); the chart-card ancestor sizes it (0.6875rem / uppercase / muted /
+   margin-bottom). Ancestor-context override (0-2-0 beats the atom's 0-1-0 per
+   MDN specificity), never a 2nd class on the element. CAS_37B2E1BF. */
+.rp-chart-card .rp-title {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.05em;

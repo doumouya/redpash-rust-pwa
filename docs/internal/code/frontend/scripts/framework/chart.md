@@ -35,7 +35,7 @@ hand-builds with `chartsStripHTML` / `compositeStripHTML` / `heroStripHTML` in
 
 | key | shape | effect |
 |---|---|---|
-| `title` | string | `rp-chart-title` (composes `rp-title`); omit for a canvas-only card |
+| `title` | string | renders the `rp-title` atom (sized by the `.rp-chart-card .rp-title` context); omit for a canvas-only card |
 | `option` | ECharts option object | `setOption()` target; absent/null → faded `rp-chart-card--empty` placeholder |
 | `theme` | string | overrides `chartTheme()` passed to `echarts.init` |
 | `id` | string | set on the canvas — the `createListCharts` mount-lookup contract (`querySelector('#'+id)`) |
@@ -59,10 +59,13 @@ tile (where `resize`/`setOption`/`dispose` are no-ops).
 - **Resize.** A per-tile `window 'resize'` listener calls `chart.resize()`;
   `dispose()` removes it and disposes the instance so a torn-down tile leaks
   neither the listener nor the canvas.
-- **Title composes the atom.** The title is `class="rp-chart-title rp-title"` —
-  the `rp-title` atom (atoms.css A6) owns the base; `.rp-chart-title`
-  (framework/styles/chart.css) is the chart-context sizing override
-  (0.6875rem / uppercase / muted / margin-bottom), never a duplicate class.
+- **Title composes the atom (one class).** The title markup is just
+  `class="rp-title"` (atoms.css A6 owns the base); the chart sizing
+  (0.6875rem / uppercase / muted / margin-bottom) is the
+  `.rp-chart-card .rp-title` ancestor-context rule in `framework/styles/chart.css`
+  (0-2-0, beats the atom's 0-1-0) — never a 2nd class on the element
+  (CAS_37B2E1BF). `list-page.js`'s hero/composite/charts strips render the same
+  `.rp-chart-card > .rp-title`.
 - All caller-supplied strings reaching `innerHTML` (`title`, `id`) are escaped
   via `esc()` — same XSS-safe pattern as [rail.js](rail.md) /
   [dashboards.js](dashboards.md). The `option` is an ECharts config object
