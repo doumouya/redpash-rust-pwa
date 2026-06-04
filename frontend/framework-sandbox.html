@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="/styles/framework/field.css" />
   <link rel="stylesheet" href="/styles/framework/badge.css" />
   <link rel="stylesheet" href="/styles/framework/avatar-upload.css" />
+  <link rel="stylesheet" href="/styles/framework/profile-record.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -101,7 +102,7 @@
   <section class="sbx-section" data-page="workspace"><h2>page — Workspace (data view), ASSEMBLED from components (topbar · rail · surface · RedTable grid)</h2><div id="sbx-workspace" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="monitoring"><h2>page — Monitoring, ASSEMBLED from components (topbar · rail · shellHead · window chips · stat strip · RedTable)</h2><div id="sbx-monitoring" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
-  <section class="sbx-section" data-page="profile"><h2>profile</h2><div class="sbx-mount" id="sbx-profile"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="profile"><h2>page — Profile, the USER RECORD page, ASSEMBLED from components (rp-head + avatar-upload + rp-field × all UserProfile fields + memberships + plan + connections)</h2><div id="sbx-profile" style="height:52rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="settings"><h2>settings</h2><div class="sbx-mount" id="sbx-settings"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
 
@@ -131,6 +132,7 @@
     import "/scripts/framework/badge.js";               // "badge" (soft-tint pill)
     import "/scripts/framework/select.js";              // "select" (form dropdown over menu)
     import "/scripts/framework/avatar-upload.js";       // "avatar-upload" (editable avatar)
+    import "/scripts/framework/profile-record.js";      // "profile-record" (the User record view)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/create-action.js";  // S4
 
@@ -524,6 +526,38 @@
       mountField(row(), { label: "Picture", hint: "Upload a profile picture",
         mount: (s) => mountAvatarUpload(s, { name: "Emmanuel D.", onFile: (f) => console.log("[sandbox] avatar file", f.name) }) });
     })();
+
+    // PAGE-ASSEMBLY PROOF — Profile = the User RECORD page (Em's reframe): rail-shell
+    // + the record (rp-head + avatar-upload + all UserProfile fields as rp-field +
+    // memberships table + plan/upgrade + future-proofed connections). 4→2 tabs (Record/Usage).
+    if (assemblePage) assemblePage(document.getElementById("sbx-profile"), {
+      topbar: { active: "profile", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Profile", collapsible: true,
+        groups: [{ id: "ACCOUNT", name: "Account", mark: "#cba6f7", count: 2, tabs: [
+          { id: "record", name: "Record", icon: "bi-person-vcard", active: true },
+          { id: "usage", name: "Usage", icon: "bi-graph-up" }] }],
+        footer: { nav: { active: "profile", session: { display_name: "Emmanuel D." } } },
+      },
+      surface: {},
+      mount: (el) => {
+        const m = get("profile-record");
+        if (m) m(el, {
+          user: {
+            redpash_id: "USR_3CA4706BE20F427DB165B448A673D59E", username: "em", email: "em@redpash.io",
+            display_name: "Emmanuel D.", first_name: "Emmanuel", last_name: "D.",
+            job_title: "Founder", organisation: "RedPash", use_case: "Operational", locale: "en", plan: "Free",
+          },
+          memberships: [
+            { company_name: "RedPash", role: "owner" },
+            { company_name: "Fleury Uni", role: "admin" },
+          ],
+          onPatch: (k, v) => console.log("[sandbox] PATCH /users", k, v),
+          onAvatarFile: (f) => console.log("[sandbox] avatar file", f.name),
+          onUpgrade: () => console.log("[sandbox] upgrade"),
+        });
+      },
+    });
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =

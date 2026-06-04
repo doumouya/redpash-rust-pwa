@@ -94,6 +94,11 @@ export function assemblePage(host, spec = {}) {
       handles.redtable = f(slot, spec.redtable);
     }
   }
+
+  // mount — generic escape hatch: fill the surface with arbitrary record content
+  // (e.g. the Profile record: rp-head + field sections + memberships) the four
+  // mountSurface slots don't cover. Called last, with the surface element.
+  if (typeof spec.mount === "function" && surfaceEl) handles.mount = spec.mount(surfaceEl);
   return handles;
 }
 

@@ -1,0 +1,17 @@
+/* ── framework page-component: rp-profile-record — the User record view ───────
+   The User object's record page (Em's reframe: the detail that opens from a Home
+   Users row). Pure LAYOUT GLUE around reused components — the header row (avatar +
+   rp-head), the read-only field value, the plan control cluster. Everything else
+   is rp-head / rp-field / rp-input / rp-table / rp-badge / rp-btn. rp- only. */
+
+.rp-profile-record { display: flex; flex-direction: column; padding: 1rem 1.25rem; }
+
+/* header — editable avatar + the rp-head (object-id + editable name) */
+.rp-profile-head { display: flex; align-items: center; gap: 1rem; padding-bottom: 0.875rem; }
+.rp-profile-head .rp-head { flex: 1; min-width: 0; }
+
+/* a read-only field's value (vs an editable rp-input) */
+.rp-field-value { font-size: 0.8125rem; color: var(--rp-text); }
+
+/* plan field control cluster: badge + Upgrade button */
+.rp-profile-plan-control { display: flex; align-items: center; gap: 0.5rem; }

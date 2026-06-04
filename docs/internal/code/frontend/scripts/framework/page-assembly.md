@@ -25,8 +25,10 @@ Figma page-automation plan is built on.
   Spec keys (each optional → slot skipped): `topbar` · `rail` · `surface` (→
   mountSurface: head/chipRow/statStrip/table) · `redtable` (the interactive B3
   RedTable, mounted INTO the surface after the stat strip) · `comments` ·
-  `shellHead` ({title, count}) · `wide`. Returns `{topbar, rail, surface, redtable,
-  comments}` handles.
+  `shellHead` ({title, count}) · `mount(surfaceEl)` (generic escape hatch — fill the
+  surface with arbitrary record content the four mountSurface slots don't cover, e.g.
+  the Profile record) · `wide`. Returns `{topbar, rail, surface, redtable, comments,
+  mount}` handles.
 
 ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no component markup.
 
