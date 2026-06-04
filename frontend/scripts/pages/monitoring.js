@@ -669,7 +669,7 @@ export default function monitoring(app, { session }) {
     }
     return reqLine
       + '<section class="rp-mon-modal-timeline">'
-      +   '<h4 class="rp-mon-modal-section-title">'
+      +   '<h4 class="rp-title">'
       +     'Timeline <span class="rt-card-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
       +   '</h4>'
       +   '<table class="rt-table">'

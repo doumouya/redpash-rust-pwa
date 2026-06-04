@@ -21,6 +21,8 @@ Docs page — rail-driven viewer. Rail = section groups, each containing doc tab
 ## Drift-prone areas
 
 - Backend endpoint shapes from crates/api/src/routes/docs.rs.
+- The doc heading renders the `rp-title` atom inside `.rp-doc-head` (sized by the
+  `.rp-doc-head .rp-title` context, not a `rp-doc-title` class — CAS_37B2E1BF).
 
 ## Related
 

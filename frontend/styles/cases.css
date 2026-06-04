@@ -362,7 +362,8 @@
 .rp-cases-status-dot.is-in_progress { background: var(--rp-mauve); }
 .rp-cases-status-dot.is-in_review   { background: var(--rp-warn); }
 .rp-cases-status-dot.is-done        { background: var(--rp-ok); }
-.rp-cases-card-title {
+/* case-card title — the rp-title atom sized by the card context (CAS_37B2E1BF). */
+.rp-cases-card .rp-title {
   margin: 0 0 0.375rem;
   font-size: 0.7812rem;
   font-weight: 500;

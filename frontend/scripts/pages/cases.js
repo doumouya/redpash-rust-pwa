@@ -641,7 +641,7 @@ export default function cases(app, { session }) {
       +        'title="' + esc(TYPE_LABEL[type] || type) + '"></i>'
       +     '<span class="rt-tab-close rp-cases-card-hide" title="Hide from board"><i class="bi bi-x"></i></span>'
       +   '</div>'
-      +   '<div class="rp-cases-card-title">' + esc(c.title || "(untitled)") + '</div>'
+      +   '<div class="rp-title">' + esc(c.title || "(untitled)") + '</div>'
       +   '<div class="rp-cases-card-foot">'
       +     '<span class="rp-cases-card-assignee">' + assignee + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'

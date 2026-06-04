@@ -147,7 +147,7 @@ export default function docs(app, { session }) {
       const lastMod = meta?.last_modified || "";
       view.innerHTML = ''
         + '<div class="rp-doc-head">'
-        +   '<h1 class="rp-doc-title">' + esc(meta?.title || slug) + '</h1>'
+        +   '<h1 class="rp-title">' + esc(meta?.title || slug) + '</h1>'
         +   (lastMod ? '<span class="rp-doc-stamp">last modified ' + esc(lastMod) + '</span>' : '')
         + '</div>'
         + '<article class="rp-doc">' + (typeof html === "string" ? html : "") + '</article>';

@@ -14,7 +14,8 @@
   padding-bottom: var(--rp-sp-3);
   border-bottom: 1px solid var(--rp-border);
 }
-.rp-doc-title {
+/* doc heading — the rp-title atom sized by the doc-head context (CAS_37B2E1BF). */
+.rp-doc-head .rp-title {
   margin: 0;
   font-size: var(--rp-text-xl);
   font-weight: 700;

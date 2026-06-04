@@ -103,9 +103,10 @@
 }
 
 /* The designer toolbar reuses .rp-table-toolbar layout (height +
-   padding + flex), only its children differ. .rp-dash-title is the
-   breadcrumb. */
-.rp-dash-toolbar .rp-dash-title {
+   padding + flex), only its children differ. The breadcrumb is the rp-title
+   atom, sized by this toolbar context (no rp-dash-title class — CAS_37B2E1BF;
+   mountDashboardView must emit class="rp-title" when designer.js wires it). */
+.rp-dash-toolbar .rp-title {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -113,7 +114,7 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.rp-dash-toolbar .rp-dash-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.rp-dash-toolbar .rp-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
 .rp-dash-toolbar-spacer { flex: 1; }
 
 /* ── designer shell ─────────────────────────────────────────────
