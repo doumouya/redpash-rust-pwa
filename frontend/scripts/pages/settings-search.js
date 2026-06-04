@@ -67,11 +67,10 @@ export function mountSearch(app) {
     +     ' title="Clear (Esc)" aria-label="Clear search" hidden>×</button>'
     + '</div>'
     + (allTags.length
-        ? '<div class="rp-settings__tags" id="rpSetSearchTags" role="group" aria-label="Filter by tag">'
+        ? '<div class="rp-settings-tags" id="rpSetSearchTags" role="group" aria-label="Filter by tag">'
         +   allTags.map((t) =>
-            '<button type="button" class="rp-settings__tag" role="button"'
+            '<button type="button" class="rp-chip"'
             +  ' aria-pressed="false" data-tag="' + esc(t) + '">'
-            +  '<span class="rp-settings__tag-dot" aria-hidden="true"></span>'
             +  esc(t)
             +  '</button>'
           ).join("")
@@ -229,7 +228,7 @@ export function mountSearch(app) {
 
   if (tagsRow) {
     tagsRow.addEventListener("click", (e) => {
-      const chip = e.target.closest(".rp-settings__tag");
+      const chip = e.target.closest(".rp-chip");
       if (!chip) return;
       const tag = chip.dataset.tag;
       if (selectedTags.has(tag)) {
@@ -249,7 +248,7 @@ export function mountSearch(app) {
     input.value = "";
     selectedTags.clear();
     if (tagsRow) {
-      tagsRow.querySelectorAll(".rp-settings__tag").forEach((chip) => {
+      tagsRow.querySelectorAll(".rp-chip").forEach((chip) => {
         chip.setAttribute("aria-pressed", "false");
         chip.classList.remove("is-active");
       });

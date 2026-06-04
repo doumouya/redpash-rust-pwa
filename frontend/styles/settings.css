@@ -312,46 +312,33 @@
   background: var(--rp-surface-3, var(--rp-surface));
 }
 
-/* Tag chip cloud — derived from registry tags. Click toggles
-   selection; multi-select is AND with the query. */
-.rp-settings__tags {
+/* Tag chip cloud — derived from registry tags. Click toggles selection;
+   multi-select is AND with the query. Items are the shared .rp-chip atom (was a
+   parallel .rp-settings__tag). The wrap-cloud has no segmented capsule to frame
+   the chips, so the standalone-pill outline is CONTEXT-forced here via ancestor
+   selectors — never a 2nd class on the atom (Em's coherence rule, CAS_37B2E1BF). */
+.rp-settings-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
 }
-.rp-settings__tag {
-  appearance: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.8125rem;
+/* the outline a free-standing chip needs (the capsule context gives borderless).
+   NB: the old .rp-settings__tag used `var(--rp-line)` — a dead token (undefined),
+   so its border silently never rendered; use the canonical --rp-border. */
+.rp-settings-tags .rp-chip {
   color: var(--rp-text-mute);
-  background: var(--rp-surface-2, var(--rp-surface));
-  border: 1px solid var(--rp-line);
-  border-radius: 999px;
-  padding: 0.1875rem 0.625rem 0.1875rem 0.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  line-height: 1.2;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  padding: 0.1875rem 0.625rem;
 }
-.rp-settings__tag:hover {
+.rp-settings-tags .rp-chip:hover {
   color: var(--rp-text);
-  border-color: var(--rp-line-strong, var(--rp-line));
+  border-color: var(--rp-text-mute);
 }
-.rp-settings__tag-dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 50%;
-  background: var(--rp-text-mute);
-  display: inline-block;
-}
-.rp-settings__tag.is-active {
+.rp-settings-tags .rp-chip.is-active {
   color: var(--rp-text);
-  background: var(--rp-accent-soft, var(--rp-surface-3, var(--rp-surface)));
-  border-color: var(--rp-accent, var(--rp-line-strong, var(--rp-line)));
-}
-.rp-settings__tag.is-active .rp-settings__tag-dot {
-  background: var(--rp-accent, var(--rp-text));
+  background: var(--rp-accent-soft);
+  border-color: var(--rp-accent);
 }
 
 .rp-settings__search-readout {

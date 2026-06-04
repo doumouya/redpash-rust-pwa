@@ -37,7 +37,12 @@ contentEditable). `Esc` clears the query + deselects every tag chip.
    `.includes()` call covers all four fields without per-row regex.
 3. Tags from the registry deduplicate into a sorted chip cloud. Click
    toggles selection; the matcher does query AND tags (all selected
-   tags must be present).
+   tags must be present). Each tag is the shared `.rp-chip` atom (was a
+   parallel `.rp-settings__tag`); the wrap-cloud `.rp-settings-tags`
+   container gives the free-standing outline via ancestor context
+   (`.rp-settings-tags .rp-chip`), not a 2nd class — the coherence rule
+   (CAS_37B2E1BF). The old leading selection dot is dropped; the chip's
+   `.is-active` fill is the selection cue.
 4. Each row's `.is-dim` + `aria-hidden` is updated in one pass; rail
    badges recompute as the sum of section hits.
 
@@ -52,7 +57,7 @@ Rail badges:
 ## A11y
 
 - Search input: `role="searchbox"`, `aria-label="Search settings"`.
-- Tag chips: `role="button"`, `aria-pressed="true|false"`.
+- Tag chips: native `<button>` (`.rp-chip`), `aria-pressed="true|false"`.
 - Live region: `<div aria-live="polite">` announces "N of M settings
   match" as the user types (after the 80ms debounce settles).
 - Non-matching rows: `aria-hidden="true"` so screen readers skip them.
