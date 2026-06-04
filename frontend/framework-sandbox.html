@@ -9,6 +9,8 @@
        "we have everything to build the full App" — the completeness proof. The live
        app is untouched until each component cuts over. -->
   <link rel="stylesheet" href="/styles/main.css" />
+  <!-- the framework atom sheet (sandbox links it directly; main.css gets the @import at first live cutover) -->
+  <link rel="stylesheet" href="/styles/framework/atoms.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -36,6 +38,9 @@
     <span style="margin-left:auto" class="sbx-todo">completeness = every page below rebuilt from registered components</span>
   </div>
 
+  <!-- shared chrome: the TopBar component (rendered once; every page composes it) -->
+  <section class="sbx-section" data-page="_chrome"><h2>shared chrome — topbar</h2><header id="sbx-topbar" class="sbx-mount"></header></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -48,12 +53,18 @@
   <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
 
   <script type="module">
-    import { list } from "/scripts/framework/component-registry.js";
+    import { list, get } from "/scripts/framework/component-registry.js";
+    import "/scripts/framework/topbar.js";              // self-registers "topbar"
     // As components land, import their modules here so they self-register, e.g.:
+    //   import "/scripts/framework/rail.js";           // rail (full version)
     //   import "/scripts/framework/redtable.js";       // S2
-    //   import "/scripts/framework/rail.js";           // S3
     //   import "/scripts/framework/create-action.js";  // S4
-    //   import "/scripts/framework/atoms.js";          // S5
+
+    // mount the topbar once (shared chrome) with a demo session
+    const mountTopbar = get("topbar");
+    if (mountTopbar) mountTopbar(document.getElementById("sbx-topbar"),
+      { active: "home", session: { first_name: "Sandbox", is_platform_admin: true } });
+
     const names = list();
     document.getElementById("sbx-registry").innerHTML =
       "registered components: <code>" + (names.length ? names.join("</code> <code>") : "(none yet — S1 scaffold)") + "</code>";

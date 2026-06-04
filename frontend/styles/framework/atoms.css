@@ -1,0 +1,54 @@
+/* ── framework atoms (rp- only) ─────────────────────────────────────────────
+   The single-namespace atom sheet for the framework components (CAS_37B2E1BF).
+   rp- flat kebab, no __, no rt-/ds-/ws-. Each component slice adds the atoms it
+   needs; S5 consolidates the broader set + migrates the legacy. Loaded by the
+   sandbox directly; main.css gains the @import at the first live cutover.
+
+   Rules are replicated VERBATIM from their legacy counterpart (only the name
+   changes) so a rename cutover is a zero-visual-change diff. */
+
+/* ── rp-btn-icon — compact icon button (was .rt-btn) ─────────────────────────
+   The 2rem icon button: topbar nav/theme/signout, rail buttons, toolbars, panels.
+   Atom owns the SHAPE; .is-active is the selected state; --glass/--accent/--block
+   are the modifiers the rail + toolbars use. */
+.rp-btn-icon {
+  position: relative;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--rp-text-mute);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.5625rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.14s var(--rp-ease),
+              color 0.14s var(--rp-ease),
+              border-color 0.14s var(--rp-ease),
+              transform 0.06s var(--rp-ease);
+}
+.rp-btn-icon:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-btn-icon:active { transform: scale(0.96); }
+.rp-btn-icon:disabled { opacity: 0.4; cursor: default; }
+.rp-btn-icon:disabled:hover { background: transparent; color: var(--rp-text-mute); }
+.rp-btn-icon:focus-visible { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 1px; }
+.rp-btn-icon.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+.rp-btn-icon i { font-size: 0.9375rem; }
+.rp-btn-icon--glass {
+  color: var(--rp-text);
+  background: var(--rp-glass);
+  border-color: var(--rp-glass-border);
+  -webkit-backdrop-filter: blur(0.5rem);
+  backdrop-filter: blur(0.5rem);
+}
+.rp-btn-icon--glass:hover { background: var(--rp-surface-2); }
+.rp-btn-icon--accent { color: var(--rp-bg); background: var(--rp-accent-2); }
+.rp-btn-icon--accent:hover { filter: brightness(1.08); }
+.rp-btn-icon--accent i { color: var(--rp-bg); }
+.rp-btn-icon--block { width: 100%; }
