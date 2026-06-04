@@ -25,7 +25,8 @@
    (gap-skipping). So `rp-cases-detail-side-attachments-head` → `rp-cases-detail`
    (climbs through defined ancestors) but `rp-cases-board` stays its own block
    (`rp-cases` is not a class). Distinct blocks stay distinct; elements fold into their
-   real block. `--modifier` / `__element` separators are stripped by the token regex.
+   real block; `--modifier` is stripped by the token regex while `__element` is kept and
+   folds to its BEM block (so `rp-page__title` is tracked, under block `rp-page`).
    The dedup detector (ui-doc-audit) is what flags parallel blocks
    (`rp-cases-detail-head` vs `rp-shell-head`) — grouping keeps them separate so the
    parallelism stays visible.
@@ -46,12 +47,14 @@ var path = require('path');
 var ROOT = path.resolve(__dirname, '..', '..');
 var FE = path.join(ROOT, 'frontend');
 
-/* Class tokens use rt-/rp-/ds-/ws- prefixes. The trailing `(?:-[a-z0-9]+)*` requires a
-   [a-z0-9] after every dash, so `rt-toolbar--data` captures `rt-toolbar` and
-   `rp-list-composite__stats` captures `rp-list-composite` — BEM modifier/element
-   separators are stripped, leaving the kebab base. */
-var CLASS_TOK = /\b(?:rt|rp|ds|ws)-[a-z0-9]+(?:-[a-z0-9]+)*/g;
-var CSS_DEF   = /\.((?:rt|rp|ds|ws)-[a-z0-9]+(?:-[a-z0-9]+)*)/g;   // a class as a selector subject
+/* Class tokens use rt-/rp-/ds-/ws- prefixes. Separator is a single `-` OR a BEM `__`
+   element join (`_+`), so `rp-page__title` / `rp-settings__search-shell` are captured
+   WHOLE — the element is tracked + enters the `-title`/divergence analysis (Profile &
+   Settings use BEM `__` heavily). A `--modifier` still breaks the match
+   (`rt-toolbar--data` → `rt-toolbar`): after the first `-` the next char is another `-`,
+   not [a-z0-9], so the run stops — modifiers stripped, elements kept. */
+var CLASS_TOK = /\b(?:rt|rp|ds|ws)-[a-z0-9]+(?:(?:-|_+)[a-z0-9]+)*/g;
+var CSS_DEF   = /\.((?:rt|rp|ds|ws)-[a-z0-9]+(?:(?:-|_+)[a-z0-9]+)*)/g;   // a class as a selector subject
 /* render-root DEFINITIONS only (not calls): `function mountX` / `const renderX =`. */
 var RENDER_FN = /(?:function\s+|(?:const|let|var)\s+)((?:mount|render|create|open|build)[A-Z][A-Za-z0-9_]*)\s*(?:=|\()/g;
 
@@ -118,7 +121,11 @@ function scan() {
 
 /* ── block-root folding (the grouping rule) ───────────────────────────────── */
 function blockRoot(cls, defined) {
-  var cur = cls, guard = 0;
+  // BEM: `block__element` — the block is everything before the first `_`. The element
+  // folds into its block (so `rp-page__title` → `rp-page`), then the block climbs its
+  // `-` ancestor chain to the top defined class.
+  var us = cls.indexOf('_');
+  var cur = us >= 0 ? cls.slice(0, us) : cls, guard = 0;
   while (guard++ < 40) {
     var parts = cur.split('-');
     var next = null;
@@ -229,7 +236,7 @@ var ROLE_SUFFIXES = {};
  + 'wrap inner list dot badge pill toggle empty state error hint menu bar').split(' ')
   .forEach(function (s) { ROLE_SUFFIXES[s] = true; });
 
-function lastSeg(cls) { var i = cls.lastIndexOf('-'); return i >= 0 ? cls.slice(i + 1) : cls; }
+function lastSeg(cls) { var p = cls.split(/[-_]+/); return p[p.length - 1]; }  // role suffix: split on `-` or BEM `__`
 
 function ancestorContext(selector, cls) {
   var compounds = selector.split(/\s*[>+~]\s*|\s+/).filter(Boolean);

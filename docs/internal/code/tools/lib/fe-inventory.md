@@ -45,8 +45,9 @@ catalog + the coverage gate are only as complete as this enumeration.
   HTML usage (`frontend/partials` + `index.html`), JS-rendered widgets
   (`frontend/scripts`, recursive — the BLIND SPOT of a static scan: modals,
   comments list, pickers are injected by JS, not present in partials).
-- **Token regex** anchored on the `rt-`/`rp-`/`ds-`/`ws-` prefixes; the trailing
-  `(?:-[a-z0-9]+)*` strips `--modifier` / `__element` separators to the kebab base.
+- **Token regex** anchored on the `rt-`/`rp-`/`ds-`/`ws-` prefixes; the separator is a
+  single `-` or a BEM `__` join, so `--modifier` is stripped but `__element` is kept and
+  tracked (`rp-page__title` folds to block `rp-page`; Profile/Settings use `__` heavily).
 - **Grouping (flat / maximal grain):** each class folds to its BLOCK ROOT — climb
   to the top defined CSS class via repeated jumps to the longest defined PROPER
   ancestor (gap-skipping). So `rp-cases-detail-side-attachments-head` →
