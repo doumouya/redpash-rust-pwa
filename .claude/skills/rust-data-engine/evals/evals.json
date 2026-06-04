@@ -1,0 +1,38 @@
+{
+  "skill_name": "rust-data-engine",
+  "notes": "Should-trigger task prompts for the rust-data-engine skill (working RedPash's data crate). Grading is qualitative: does the response use the actual data-crate patterns — lazy/col() expressions over row loops, reuse the right module, typed downcast vs AnyValue at the boundary, serde JSON, pure-compute discipline, wasm cfg awareness — rather than generic Polars or HTTP-in-the-crate answers? Run with-skill vs baseline (no skill).",
+  "evals": [
+    {
+      "id": 1,
+      "name": "add-cleaning-step",
+      "prompt": "I want to add a cleaning step to the engine that drops rows where a chosen column is null. Where in the data crate does it go, and how should I write it so it works on both the server and the in-browser wasm build?",
+      "expected_output": "Points to the steps module (apply/undo/redo of a project_steps op); expresses it as a Polars lazy filter (col(x).is_not_null()) collected once, not a row loop; keeps it pure-compute (no HTTP); notes it's automatically on both surfaces because the wasm wrapper calls the same engine fn (cdylib+rlib). Reuses the module pattern rather than inventing.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "name": "parse-csv-infer-types",
+      "prompt": "A user uploaded a CSV that might not be UTF-8 (could be Latin-1). I need to parse it into a dataframe in the data crate and infer each column's type. How?",
+      "expected_output": "Load = detect encoding first (chardetng / encoding module) then parse via a LazyFrame (streaming), not a naive UTF-8 read; type inference via the dtype module / DataType. Stays lazy; mentions the parse module. Avoids assuming UTF-8.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "name": "groupby-aggregation",
+      "prompt": "For Reports I need to group by the 'company' column, sum 'amount', and count rows per company. Show me how to do this in the engine.",
+      "expected_output": "Uses .lazy().group_by([col(\"company\")]).agg([col(\"amount\").sum(), col(\"amount\").count()]).collect(); points at the group_by module as the home/worked example; expression-based, collected once; not a manual HashMap row loop.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 4,
+      "name": "anyvalue-to-json",
+      "prompt": "When I read a cell out of a Series I get an AnyValue, but I need an owned String to put in the JSON response. What's the right pattern, and why AnyValue rather than a typed column read here?",
+      "expected_output": "The av_to_owned pattern (match AnyValue variants -> owned), serde for the JSON; explains AnyValue is the type-erased value used at the boundary (one fn for all column types) while typed .str()/.i64() downcast is for the hot path; ties to the boundary discipline.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}
