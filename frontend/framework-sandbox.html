@@ -16,6 +16,13 @@
   <link rel="stylesheet" href="/styles/framework/rail.css" />
   <link rel="stylesheet" href="/styles/framework/comments.css" />
   <link rel="stylesheet" href="/styles/framework/dashboards.css" />
+  <!-- B2 main-view: surface frame + head + chip-row + stat strips + chart tile + simple table -->
+  <link rel="stylesheet" href="/styles/framework/surface.css" />
+  <link rel="stylesheet" href="/styles/framework/head.css" />
+  <link rel="stylesheet" href="/styles/framework/chip-row.css" />
+  <link rel="stylesheet" href="/styles/framework/stat.css" />
+  <link rel="stylesheet" href="/styles/framework/chart.css" />
+  <link rel="stylesheet" href="/styles/framework/table.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -55,6 +62,12 @@
   <!-- reusable component: the Dashboards/designer view (B4) — canvas + tile grid + config accordion -->
   <section class="sbx-section" data-page="_dashboards"><h2>component — dashboards / designer (B4)</h2><div id="sbx-dashboards" class="sbx-mount" style="height:30rem;padding:0;overflow:hidden;display:flex"></div></section>
 
+  <!-- B2 main-view: the assembled Cases-overview SURFACE (head → chip-row → stat-hero → table)
+       built from the registered units via mountSurface, + the chart tile + stat strip standalone. -->
+  <section class="sbx-section" data-page="_mainview"><h2>component — main-view surface (B2): head · chip-row · stat-hero · table</h2><div id="sbx-surface" class="sbx-mount" style="height:34rem;padding:0;overflow:hidden;display:flex;flex-direction:column"></div></section>
+  <section class="sbx-section" data-page="_chart"><h2>component — chart tile (B2, ECharts)</h2><div id="sbx-chart" class="sbx-mount" style="max-width:22rem;height:13rem"></div></section>
+  <section class="sbx-section" data-page="_statstrip"><h2>component — stat strip (B2, composite variant)</h2><div id="sbx-statstrip" class="sbx-mount"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -72,8 +85,15 @@
     import "/scripts/framework/rail.js";                // self-registers "rail" (B1, full version)
     import "/scripts/framework/comments.js";            // self-registers "comments" (B5)
     import "/scripts/framework/dashboards.js";          // self-registers "dashboards" (B4)
+    // B2 main-view units (each self-registers); surface.js imports the four it composes.
+    import "/scripts/framework/head.js";                // "head" (object header)
+    import "/scripts/framework/chip-row.js";            // "chip-row"
+    import "/scripts/framework/stat.js";                // "stat-strip"
+    import "/scripts/framework/chart.js";               // "chart" (ECharts tile)
+    import "/scripts/framework/table.js";               // "table" (simple read-only)
+    import "/scripts/framework/surface.js";             // "surface" (assembles head→chip→stats→table)
     // As components land, import their modules here so they self-register, e.g.:
-    //   import "/scripts/framework/redtable.js";       // S2
+    //   import "/scripts/framework/redtable.js";       // S2 (full RedTable)
     //   import "/scripts/framework/create-action.js";  // S4
 
     // mount the topbar once (shared chrome) with a demo session
@@ -145,6 +165,50 @@
         { title: "Churn (failed)",   span: 6, error: "widget fetch failed" },
       ],
     });
+
+    // mount the B2 main-view SURFACE (the assembled Cases-overview): the surface
+    // composes head → chip-row → stat-strip → table in canonical order. Demo data
+    // exercises the object header (id pill + editable title + delete + close), a
+    // filter chip-row, a composite stat strip (4 KPI tiles + 4 chart slots), and
+    // the simple table (priority-dot + status cells + row-click). Render-proof.
+    const mountSurface = get("surface");
+    if (mountSurface) mountSurface(document.getElementById("sbx-surface"), {
+      head: { objectId: "CAS_4B7B9F2E", title: "Export times out on 80k-row file",
+        editable: true, onDelete: () => {}, closeHash: "#/cases",
+        shortenId: (id) => id.slice(0, 8) + "…" },
+      chipRow: { label: "View", chips: [
+        { value: "open", label: "Open", active: true },
+        { value: "mine", label: "Mine" }, { value: "all", label: "All" }] },
+      statStrip: { variant: "composite", chartSlots: 4, stats: [
+        { label: "Open", value: "12" }, { label: "Closed", value: "84" },
+        { label: "Median age", value: "3d" }, { label: "SLA breach", value: "1" }] },
+      table: { columns: [
+          { key: "rid", label: "Case", kind: "id" },
+          { key: "title", label: "Title" },
+          { key: "priority", label: "Priority", kind: "priority" },
+          { key: "status", label: "Status", kind: "status" }],
+        rows: [
+          { rid: "CAS_01", title: "Export timeout", priority: "critical", status: "Open", statusTone: "is-new" },
+          { rid: "CAS_02", title: "Slow group_by", priority: "high", status: "In progress", statusTone: "is-active" },
+          { rid: "CAS_03", title: "Typo in label", priority: "low", status: "Closed" }],
+        onRowClick: () => {} },
+    });
+
+    // mount a standalone chart tile (B2) — an ECharts pie if echarts is vendored,
+    // else the graceful faded --empty placeholder (never blanks the page).
+    const mountChartTile = get("chart");
+    if (mountChartTile) mountChartTile(document.getElementById("sbx-chart"), {
+      title: "Cases by status",
+      option: { series: [{ type: "pie", radius: ["40%", "70%"],
+        data: [{ value: 12, name: "Open" }, { value: 84, name: "Closed" }, { value: 5, name: "In progress" }] }] },
+    });
+
+    // mount a standalone composite stat strip (B2)
+    const mountStatStrip = get("stat-strip");
+    if (mountStatStrip) mountStatStrip(document.getElementById("sbx-statstrip"), {
+      variant: "composite", chartSlots: 4, stats: [
+        { label: "Files", value: "14" }, { label: "Errors", value: "0" },
+        { label: "Reachable", value: "18" }, { label: "Clean %", value: "94.5" }] });
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =
