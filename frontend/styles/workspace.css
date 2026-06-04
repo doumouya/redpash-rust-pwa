@@ -7,28 +7,8 @@
    identical duplicates, retired 2026-05-29 per the page-structure
    audit. */
 
-/* the redtable column to the right of the rail */
-.rp-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 0.875rem;
-}
-.rp-surface {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.875rem;
-  box-shadow: var(--rp-shadow);
-  overflow: hidden;
-}
-
-/* filter panel · table · tools panel */
-.rp-surface-body { flex: 1; min-height: 0; display: flex; }
+/* .rp-main / .rp-surface / .rp-surface-body — now the framework/surface.css atoms
+   (byte-identical duplicates, retired here at the CSS cutover, CAS_37B2E1BF). */
 
 /* ── landing surface — the default overview when no file is open ──
    A third surface mode alongside data + designer (the designer-mode
