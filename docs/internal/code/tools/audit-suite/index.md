@@ -21,6 +21,7 @@ without editing the runner.
 |---|---|---|
 | `auth-audit/` | [auth-audit.md](auth-audit.md) | backend route auth-posture audit — every handler has an explicit auth check or is explicitly `public:` |
 | `ci-audit/` | [ci-audit.md](ci-audit.md) | CI config drift |
+| `class-count-audit/` | [class-count-audit.md](class-count-audit.md) | the coherence burndown — ≤1 framework class + 1 id per atom (multi-class stacks + legacy state classes) |
 | `crossing-audit/` | [crossing-audit.md](crossing-audit.md) | the JS ↔ Rust `/api` seam — crossings / dangling / unused |
 | `css-audit/` | [css-audit.md](css-audit.md) | CSS conflicts, duplicate decl blocks, duplicate selectors |
 | `css-cross-page-audit/` | [css-cross-page-audit.md](css-cross-page-audit.md) | page-prefixed CSS class leaks across pages |
