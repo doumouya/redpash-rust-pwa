@@ -46,8 +46,8 @@ function shellHeadHTML(h) {
 /**
  * Assemble a railed page from registered components into `host`.
  * @param {Element} host
- * @param {{ topbar?:object, rail?:object, surface?:object, comments?:object, shellHead?:{title:string,count?:string}, wide?:boolean }} [spec]
- * @returns {{topbar:any, rail:any, surface:any, comments:any}|null}
+ * @param {{ topbar?:object, rail?:object, surface?:object, comments?:object, redtable?:object, shellHead?:{title:string,count?:string}, wide?:boolean }} [spec]
+ * @returns {{topbar:any, rail:any, surface:any, comments:any, redtable?:any}|null}
  */
 export function assemblePage(host, spec = {}) {
   if (!host) return null;
@@ -81,6 +81,18 @@ export function assemblePage(host, spec = {}) {
   // GAP: belongs in mountSurface as a `shellHead` section (see header note).
   if (spec.shellHead && surfaceEl) {
     surfaceEl.insertAdjacentHTML("afterbegin", shellHeadHTML(spec.shellHead));
+  }
+
+  // redtable (the interactive B3 RedTable) — the list pages' real table. mountSurface's
+  // own `table` slot is the read-only mountSimpleTable; for a faithful list-page rebuild,
+  // append the RedTable INTO the surface (after head/chip/stat), without touching surface.js.
+  if (spec.redtable && surfaceEl) {
+    const f = get("redtable");
+    if (f) {
+      const slot = document.createElement("div");
+      surfaceEl.appendChild(slot);
+      handles.redtable = f(slot, spec.redtable);
+    }
   }
   return handles;
 }

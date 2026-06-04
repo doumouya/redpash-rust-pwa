@@ -23,8 +23,10 @@ Figma page-automation plan is built on.
   `section.rp-shell > header(topbar) + div.rp-shell-body > [ rail + main.rp-main >
   div.rp-surface (+ comments) ]` and mounts each registered component from the spec.
   Spec keys (each optional → slot skipped): `topbar` · `rail` · `surface` (→
-  mountSurface: head/chipRow/statStrip/table) · `comments` · `shellHead` ({title,
-  count}) · `wide`. Returns `{topbar, rail, surface, comments}` handles.
+  mountSurface: head/chipRow/statStrip/table) · `redtable` (the interactive B3
+  RedTable, mounted INTO the surface after the stat strip) · `comments` ·
+  `shellHead` ({title, count}) · `wide`. Returns `{topbar, rail, surface, redtable,
+  comments}` handles.
 
 ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no component markup.
 
@@ -43,11 +45,13 @@ ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no co
 
 ## Drift-prone areas / completeness status
 
-Per the page mapping (workflow `wnbk5c1gz`), **no real page rebuilds 100% yet** —
-this assembler can only compose what exists. The worked proof in
-`framework-sandbox.html` is **Cases detail** (topbar + rail + surface[object head +
-status chip-row] + comments) — it assembles with **zero legacy class leak**. The
-remaining gate gaps (do NOT fake them — flag + wait for the owner):
+Two pages now rebuild from components with **zero legacy class leak** (worked proofs
+in `framework-sandbox.html`):
+- **Cases detail** — topbar + rail + surface[object head + status chip-row] + comments.
+- **Monitoring** (the first LIST page) — topbar + rail + surface[shellHead + window
+  chips + composite stat strip] + the interactive **RedTable** (now that B3 landed).
+
+Remaining gate gaps (do NOT fake them — flag + wait for the owner):
 
 - **B3 RedTable + list-toolbar** (interactive table) — Monitoring/Home/Cases list tabs. *(B3 lane)*
 - **S4 create-action** — Home/Cases create buttons + create-modal.

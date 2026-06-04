@@ -93,7 +93,7 @@
   <section class="sbx-section" data-page="home"><h2>home</h2><div class="sbx-mount" id="sbx-home"><span class="sbx-todo">TODO: rebuild from framework components</span></div></section>
   <section class="sbx-section" data-page="workspace"><h2>workspace</h2><div class="sbx-mount" id="sbx-workspace"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
-  <section class="sbx-section" data-page="monitoring"><h2>monitoring</h2><div class="sbx-mount" id="sbx-monitoring"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="monitoring"><h2>page — Monitoring, ASSEMBLED from components (topbar · rail · shellHead · window chips · stat strip · RedTable)</h2><div id="sbx-monitoring" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="profile"><h2>profile</h2><div class="sbx-mount" id="sbx-profile"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="settings"><h2>settings</h2><div class="sbx-mount" id="sbx-settings"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
@@ -368,6 +368,50 @@
           { value: "member", label: "Member" }, { value: "admin", label: "Admin" } ] },
       ],
       onSubmit: async (v) => { console.log("[sandbox] create user", v); },
+    });
+
+    // PAGE-ASSEMBLY PROOF — Monitoring (read-only list page) now that B3 RedTable +
+    // the shellHead fill exist: topbar + rail + surface(shellHead + window chips +
+    // composite stat strip) + the interactive RedTable. No create-action (read-only page).
+    if (assemblePage) assemblePage(document.getElementById("sbx-monitoring"), {
+      topbar: { active: "monitoring", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Telemetry", collapsible: true,
+        views: { pref: "sbx.mon.view", fallback: "monitoring",
+          options: [{ value: "monitoring", label: "Monitoring", icon: "bi-activity" },
+                    { value: "admin", label: "Admin Console", icon: "bi-sliders" }] },
+        groups: [
+          { id: "REQUESTS", name: "Requests", mark: "#89b4fa", count: 3, tabs: [
+            { id: "requests", name: "Requests", icon: "bi-globe2", active: true },
+            { id: "events", name: "Events", icon: "bi-envelope" },
+            { id: "queries", name: "Queries", icon: "bi-database" }] },
+          { id: "AUDITS", name: "Audits", mark: "#fab387", count: 2, tabs: [
+            { id: "runs", name: "Runs", icon: "bi-play-circle" },
+            { id: "findings", name: "Findings", icon: "bi-exclamation-triangle" }] }],
+        footer: { nav: { active: "", session: { display_name: "Sandbox User" } } },
+      },
+      shellHead: { title: "Requests", count: "128 in 24h" },
+      surface: {
+        chipRow: { name: "window", chips: [
+          { value: "1h", label: "1h" }, { value: "24h", label: "24h", active: true },
+          { value: "7d", label: "7d" }, { value: "30d", label: "30d" }] },
+        statStrip: { variant: "composite", stats: [
+          { label: "Total", value: "128" }, { label: "On page", value: "50" },
+          { label: "Page", value: "1 / 3" }, { label: "Last fetch", value: "18 ms" }] },
+      },
+      redtable: {
+        columns: [
+          { key: "at", label: "Time" }, { key: "method", label: "Method", kind: "id" },
+          { key: "status", label: "Status", kind: "num" }, { key: "route", label: "Route" },
+          { key: "duration_ms", label: "Latency", kind: "num" }, { key: "request_id", label: "ID", kind: "id" }],
+        rows: [
+          { rid: "r1", at: "Jun 04, 14:22:07", method: "GET",  status: 200, route: "/api/files",        duration_ms: 18,  request_id: "a1b2c3d4" },
+          { rid: "r2", at: "Jun 04, 14:21:55", method: "POST", status: 500, route: "/api/files/upload", duration_ms: 240, request_id: "e5f6g7h8" },
+          { rid: "r3", at: "Jun 04, 14:21:40", method: "GET",  status: 404, route: "/api/cases/zz",     duration_ms: 7,   request_id: "i9j0k1l2" }],
+        rowKey: (r) => r.rid, rownum: true,
+        sort: { multi: false, onSort: () => {} },
+        empty: "No requests in this window.",
+      },
     });
 
     const names = list();
