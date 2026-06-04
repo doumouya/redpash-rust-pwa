@@ -19,6 +19,7 @@ import {
   getCase,
   listCases,
   addComment,
+  setCaseStatus,
 } from "./cases.js";
 
 // ── resources ───────────────────────────────────────────────────────────
@@ -157,6 +158,16 @@ const CaseCommentArgsZ = z.object({
   body: z.string().min(1).describe("Comment body. Plain text in v1; markdown render is v2 polish."),
 });
 
+const CaseSetStatusArgsZ = z.object({
+  rid: z.string().describe("CAS_<rid> of the case to move."),
+  status: z
+    .enum(["backlog", "todo", "in_progress", "in_review", "done"])
+    .describe(
+      "Target kanban column. The backend validates the enum and emits a " +
+        "'status: X → Y' activity-feed event (audit spine).",
+    ),
+});
+
 // Common error mapping for case-tool branches — keep the response
 // shape consistent so the calling agent sees the same HTTP-mapped
 // text regardless of which tool tripped the error.
@@ -282,6 +293,25 @@ export async function listTools() {
           required: ["rid", "body"],
         },
       },
+      {
+        name: "case_set_status",
+        description:
+          "Move a case to a kanban column (backlog / todo / in_progress / " +
+            "in_review / done) — the close / transition verb. Sends only `status` " +
+            "to PATCH /api/cases/:rid, so title / priority / assignee stay " +
+            "untouched; the backend validates the enum and logs a 'status: X → Y' " +
+            "activity event. Use it to close a finished case (status='done') or to " +
+            "reflect real progress on the board. Pair with case_comment to record " +
+            "the why alongside the move.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            rid:    { type: "string" },
+            status: { type: "string", enum: ["backlog", "todo", "in_progress", "in_review", "done"] },
+          },
+          required: ["rid", "status"],
+        },
+      },
     ],
   };
 }
@@ -369,6 +399,22 @@ export async function callTool(name: string, args: unknown) {
             text:
               `Appended comment to ${parsed.rid}:\n\n` +
               JSON.stringify(comment, null, 2),
+          },
+        ],
+      };
+    } catch (err) { return caseErrorContent(err); }
+  }
+  if (name === "case_set_status") {
+    const parsed = CaseSetStatusArgsZ.parse(args);
+    try {
+      const updated = await setCaseStatus(parsed);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `Case ${parsed.rid} → status "${updated.status ?? parsed.status}".\n\n` +
+              JSON.stringify(updated, null, 2),
           },
         ],
       };

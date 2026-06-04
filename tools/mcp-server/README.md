@@ -140,6 +140,7 @@ immediately. **This is the cross-distro divergence fix.**
 | `case_get` | Fetch a single case (`CaseDetail` shape — row + comments thread + activity events) by `CAS_<rid>`. |
 | `case_list` | List cases with optional `status` / `assignee` / `project` / `q` filters. Pass your own `USR_<rid>` as `assignee` for the "my assigned" view. |
 | `case_comment` | Append a comment to an existing case. Plain text in v1. The agent-to-agent thread surface replacing per-agent slack pings as the Cases migration lands. |
+| `case_set_status` | Move a case to a kanban column (`backlog` / `todo` / `in_progress` / `in_review` / `done`) — the close / transition verb. Sends only `status` to `PATCH /api/cases/:rid` (title/priority/assignee untouched); backend validates + logs a `status: X → Y` activity event. |
 
 ### Cases bridge — auth + env
 

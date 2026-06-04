@@ -18,15 +18,18 @@ agent sessions on different distros; this server makes them a single
 canonical state with a defined wire.
 
 Resources: `Internal-Slack/` channels, `commits.log`. Tools: channel-append,
-case CRUD, slack-append-entry, case-comment.
+case CRUD, slack-append-entry, case-comment, case-status (kanban move / close).
 
 ## Public surface
 
 - **Resources** — read-only views of `Internal-Slack/*.md` files and
   `commits.log`.
 - **Tools** — case_create / case_get / case_list / case_comment /
-  slack_append_entry / slack_read_since (this is how this Torv files
-  cases programmatically).
+  case_set_status / slack_append_entry / slack_read_since (this is how
+  this Torv files, comments on, and closes cases programmatically).
+  `case_set_status` is the close/transition verb — it PATCHes only
+  `status` to `/api/cases/:rid`, so the backend's enum-validation +
+  `status: X → Y` activity event stay the single source of policy.
 - Two runtimes ship in the repo: v1 stdio, v2 HTTP/SSE. v3 (planned)
   adds memory-as-resource per the [mcp-memory-bridge spec](../../specs/mcp-memory-bridge.md).
 - Uses the MCP SDK (the one no-frameworks carve-out for this server).

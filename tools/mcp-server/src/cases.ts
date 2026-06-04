@@ -187,6 +187,11 @@ export interface CaseCommentArgs {
   body: string;
 }
 
+export interface CaseSetStatusArgs {
+  rid: string;
+  status: "backlog" | "todo" | "in_progress" | "in_review" | "done";
+}
+
 export interface CaseListArgs {
   status?: string;
   assignee?: string;
@@ -241,5 +246,16 @@ export function addComment(args: CaseCommentArgs) {
   return apiFetch<unknown>(
     `/cases/${encodeURIComponent(args.rid)}/comments`,
     { method: "POST", body: { body: args.body } },
+  );
+}
+
+export function setCaseStatus(args: CaseSetStatusArgs) {
+  // PATCH /cases/:rid is a partial update — sending only `status` moves the
+  // kanban column without touching title/priority/assignee. The Rust backend
+  // validates the enum and emits a "status: X → Y" activity-feed event (the
+  // audit spine), so the bridge duplicates no policy here.
+  return apiFetch<CaseSummary>(
+    `/cases/${encodeURIComponent(args.rid)}`,
+    { method: "PATCH", body: { status: args.status } },
   );
 }
