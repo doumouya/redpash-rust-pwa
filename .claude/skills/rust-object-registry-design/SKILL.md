@@ -55,8 +55,9 @@ This backend already contains the registry pattern in working form. Reuse, don't
   pipeline never grows a `match`). Fully built + tested; wired at `routes/demo.rs:217`.
 - `members.rs` — **one polymorphic module** nested under `/:rid/members` on every object type. Proof
   a generic resource handler works here.
-- `rbac::resolve_grant(pool, caller, object)` — type-agnostic RBAC over any object id. The hard part
-  is done; new types get RBAC for free.
+- `rbac::resolve_grant(pool, caller, object)` — type-agnostic RBAC over any object id (keyed on
+  principals + membership, never the object's type), so new types get RBAC for free. This is modelled on
+  Postgres's role system — see [`references/postgres-rbac-patterns.md`](references/postgres-rbac-patterns.md).
 - `entities` + `register_entity(ex, id, type)` — the one polymorphic id space; every subtype FKs in
   `ON DELETE CASCADE`.
 
@@ -137,6 +138,10 @@ itself ships.
 - [`references/postgres-registry-patterns.md`](references/postgres-registry-patterns.md) — **read for step 3
   first**: the capstone — Postgres's `pg_catalog` is the data-driven object registry RedPash mirrors
   (`pg_class`/`pg_attribute`/`pg_type`; `CREATE TYPE` = INSERT; `jsonb` as the escape hatch).
+- [`references/postgres-rbac-patterns.md`](references/postgres-rbac-patterns.md) — **read for the RBAC half**:
+  PG Ch. 22 role model → RedPash RBAC (recursive membership ↔ the `principals` closure; `SUPERUSER` ↔
+  `is_platform_admin`; `ADMIN OPTION` ↔ the ≥Admin membership gate; `SECURITY DEFINER` ↔ `as_user` run-as).
+  Why a new type gets RBAC for free.
 - [`references/rustc-registry-patterns.md`](references/rustc-registry-patterns.md) — **read for step 3**:
   the rustc → RedPash mapping (the type-system model), source-pointed.
 - [`references/polars-registry-patterns.md`](references/polars-registry-patterns.md) — **read for step 3**:
