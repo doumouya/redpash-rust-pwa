@@ -155,3 +155,11 @@ itself ships.
 - [`references/redpash-worked-example.md`](references/redpash-worked-example.md) — the concrete output
   of this method on the live backend: the reference-verified seam map + the staged 0→3 arc. Read it to
   see what "done" looks like and to lift the exact call-site counts.
+
+## Related skills
+
+- **`rust-data-engine`** (repo) — working the `data` crate the objects flow through (Polars `LazyFrame`/`col()`,
+  the `Series`↔`ChunkedArray<T>` type model, the JSON/wasm boundary). The "type-erased handle → concrete type"
+  pattern is shared; this skill *designs* the registry, that one *operates* the engine.
+- The general **`rust`** skill (if installed) — the idiomatic + compiler-as-oracle baseline (ownership, errors,
+  the verify loop) this skill assumes.

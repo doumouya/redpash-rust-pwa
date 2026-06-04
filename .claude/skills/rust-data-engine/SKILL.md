@@ -79,3 +79,11 @@ This is the crate's center of gravity (`DataType` ~62×, `AnyValue` ~72×) and t
   JSON-in/JSON-out shim; the pure-compute/HTTP-agnostic seam.
 - [`references/supporting.md`](references/supporting.md) — the supporting std + crate APIs: `chrono` (datetimes),
   `ndarray` (n-dim numerics), `Vec`, `Iterator`, `chardetng` (encoding).
+
+## Related skills
+
+- **`rust-object-registry-design`** (repo) — the object/type model the engine serves; the type-erased
+  `Series`↔`ChunkedArray<T>` move here is the same "erased handle → concrete type" pattern that skill designs into
+  the backend registry. Reach for it when *designing* types/storage rather than *working* the dataframe.
+- The general **`rust`** skill (if installed) — the idiomatic + compiler-as-oracle baseline (ownership, errors,
+  the `cargo check/clippy/test` verify loop) that this skill assumes.
