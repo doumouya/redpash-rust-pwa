@@ -45,13 +45,16 @@ ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no co
 
 ## Drift-prone areas / completeness status
 
-Three pages now rebuild from components with **zero legacy class leak** (worked proofs
+Four pages now rebuild from components with **zero legacy class leak** (worked proofs
 in `framework-sandbox.html`):
 - **Cases detail** — topbar + rail + surface[object head + status chip-row] + comments.
 - **Monitoring** (first LIST page) — topbar + rail + surface[shellHead + window chips +
   composite stat strip] + the interactive **RedTable** (now that B3 landed).
 - **Home** (Users tab) — the list-page pattern + **S4 create-action**: the rail "New user"
   button → `createAction` → the modal opens with the user fields.
+- **Workspace** (data view) — topbar + rail(Projects, views seg, files) + surface + the
+  **RedTable** data grid (select column + rownum + multi-sort). The 3-mode machine
+  (landing/designer) + filter/history/tools panels (compose `rp-panel`) are the remainder.
 
 Remaining gate gaps (do NOT fake them — flag + wait for the owner):
 

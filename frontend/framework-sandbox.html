@@ -91,7 +91,7 @@
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
   <section class="sbx-section" data-page="home"><h2>page — Home (Users tab), ASSEMBLED from components + S4 create-action (rail "New user" → modal)</h2><div id="sbx-home" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
-  <section class="sbx-section" data-page="workspace"><h2>workspace</h2><div class="sbx-mount" id="sbx-workspace"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="workspace"><h2>page — Workspace (data view), ASSEMBLED from components (topbar · rail · surface · RedTable grid)</h2><div id="sbx-workspace" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="monitoring"><h2>page — Monitoring, ASSEMBLED from components (topbar · rail · shellHead · window chips · stat strip · RedTable)</h2><div id="sbx-monitoring" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="profile"><h2>profile</h2><div class="sbx-mount" id="sbx-profile"><span class="sbx-todo">TODO</span></div></section>
@@ -453,6 +453,44 @@
           { rid: "u3", display_name: "Emmanuel D.",  username: "em",    email: "em@redpash.io",    org_role: "owner" }],
         rowKey: (r) => r.rid, rownum: true, sort: { multi: false, onSort: () => {} },
         empty: "No users.",
+      },
+    });
+
+    // PAGE-ASSEMBLY PROOF — Workspace (data view): the heaviest page = rail + the
+    // interactive RedTable grid (sort + select + rownum) in the surface. (Virtualization
+    // is proven standalone in the _redtable section; the 3-mode machine + filter/history/
+    // tools panels compose rp-panel — flagged remaining.)
+    if (assemblePage) assemblePage(document.getElementById("sbx-workspace"), {
+      topbar: { active: "workspace", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Projects", collapsible: true,
+        views: { pref: "sbx.ws.view", fallback: "data",
+          options: [{ value: "data", label: "Data", icon: "bi-table" },
+                    { value: "dash", label: "Dashboards", icon: "bi-grid-1x2" }] },
+        groups: [{ id: "PRJ", name: "Fleury — ressources", mark: "#89b4fa", count: 3, renamable: true, hidable: true, addLabel: "New file", tabs: [
+          { id: "f1", name: "sales.csv", icon: "bi-file-earmark-spreadsheet", active: true, hidable: true },
+          { id: "f2", name: "clients.csv", icon: "bi-file-earmark-spreadsheet", hidable: true },
+          { id: "f3", name: "temps.csv", icon: "bi-file-earmark-spreadsheet", dot: "#f9e2af", hidable: true }] }],
+        footer: { upload: { label: "Upload" }, create: { label: "New project" }, nav: { active: "workspace", session: { display_name: "Sandbox User" } } },
+      },
+      shellHead: { title: "sales.csv", count: "101,402 rows" },
+      surface: {},   // empty surface → just the .rp-surface card chrome; shellHead + redtable fill it
+      redtable: {
+        columns: [
+          { key: "id", label: "ID", kind: "id" }, { key: "client", label: "Client" },
+          { key: "region", label: "Region" }, { key: "amount", label: "Amount", kind: "num" },
+          { key: "date", label: "Date" }],
+        rows: Array.from({ length: 30 }, (_, i) => ({
+          id: "ROW_" + String(i + 1).padStart(4, "0"),
+          client: "Client " + (i + 1),
+          region: ["EU", "NA", "AF", "AS"][i % 4],
+          amount: 1000 + ((i * 137) % 9000),
+          date: "2026-0" + (1 + (i % 6)) + "-12",
+        })),
+        rowKey: (r) => r.id, rownum: true,
+        sort: { multi: true, onSort: () => {} },
+        select: { onChange: () => {} },
+        empty: "Open a file from the rail to see its data.",
       },
     });
 
