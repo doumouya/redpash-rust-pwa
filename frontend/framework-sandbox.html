@@ -9,8 +9,11 @@
        "we have everything to build the full App" — the completeness proof. The live
        app is untouched until each component cuts over. -->
   <link rel="stylesheet" href="/styles/main.css" />
-  <!-- the framework atom sheet (sandbox links it directly; main.css gets the @import at first live cutover) -->
+  <!-- the framework sheets (sandbox links them directly; main.css gets the @imports at first live cutover) -->
   <link rel="stylesheet" href="/styles/framework/atoms.css" />
+  <link rel="stylesheet" href="/styles/framework/topbar.css" />
+  <link rel="stylesheet" href="/styles/framework/omni.css" />
+  <link rel="stylesheet" href="/styles/framework/rail.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }

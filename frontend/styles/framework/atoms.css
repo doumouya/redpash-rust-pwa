@@ -52,3 +52,29 @@
 .rp-btn-icon--accent:hover { filter: brightness(1.08); }
 .rp-btn-icon--accent i { color: var(--rp-bg); }
 .rp-btn-icon--block { width: 100%; }
+
+/* ── rp-avatar — initials chip ───────────────────────────────────────────────
+   A shared atom (rail-footer-nav, profile head); lived in topbar.css but the
+   topbar carries no avatar. Ported verbatim so deleting the legacy sheet at
+   cutover leaves it a home. */
+.rp-avatar {
+  width: 1.875rem;
+  height: 1.875rem;
+  margin-left: 0.375rem;
+  border-radius: 6.1875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--rp-bg);
+  background: linear-gradient(135deg, var(--rp-accent-2), var(--rp-teal));
+  text-decoration: none;
+  outline: 0.125rem solid transparent;
+  outline-offset: 0.125rem;
+  transition: outline-color 0.15s var(--rp-ease), transform 0.15s var(--rp-ease);
+}
+a.rp-avatar { cursor: pointer; }
+a.rp-avatar:hover { transform: scale(1.06); }
+a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
+.rp-avatar--lg { width: 4rem; height: 4rem; margin-left: 0; font-size: 1.375rem; }

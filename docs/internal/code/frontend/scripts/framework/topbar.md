@@ -25,16 +25,17 @@ Per Em's spec (`docs/full-component-version.md`): `rp-topbar` is the same everyw
   `active` names the current nav entry; `session.is_platform_admin` gates the Monitoring entry
   (CAS_274EDF3B). Self-registers as `"topbar"` in the component registry.
 
-ESM. Imports the shared utilities `api`, `theme`, `dom` (not page-bound).
+ESM. Imports `theme` + `dom` (`esc`); composes [`omni`](omni.md); lazy-imports `api` for sign-out.
 
 ## How it works
 
-- One DOM build (brand + `.rp-omni` + `.rp-topbar-actions`), then wires: theme toggle (icon
-  shows the *current* theme), sign-out (`POST /auth/logout` then reload), and the omnisearch
-  dropdown (`GET /api/search`, debounced 200ms, Ctrl/Cmd+K focus). All user/result content
-  escaped via `esc()` — no new XSS surface vs the original.
-- `rp-btn-icon` atom lives in `frontend/styles/framework/atoms.css` (replicated verbatim from
-  `.rt-btn` so the rename is a zero-visual-change cutover).
+- One DOM build (brand + an omni slot + `.rp-topbar-actions`), then wires: theme toggle (icon
+  shows the *current* theme) + sign-out (`POST /auth/logout` then reload). The omnibox is
+  **composed, not embedded** — `mountOmni(slot)` fills the centre slot ([omni.md](omni.md)).
+  Greeting content escaped via `esc()`.
+- CSS is self-contained in the framework: `rp-topbar`/`rp-brand`/`rp-topbar-actions` in
+  `frontend/styles/framework/topbar.css`, the `rp-btn-icon` button atom in `atoms.css`, the
+  omnibox in `omni.css` — all ported verbatim (zero-visual-change cutover).
 
 ## Drift-prone areas
 
