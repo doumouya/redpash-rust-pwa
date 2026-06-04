@@ -3,7 +3,7 @@ title: tools/audit.sh
 source: ../../../../../tools/audit.sh
 owner: Gus / Torv
 section: Internal · Code · Tools · shell
-last modified date: 2026-05-30
+last modified date: 2026-06-03
 ---
 
 # audit.sh — the master runner
@@ -30,7 +30,9 @@ state.
 
 - **`INGEST_TOOLS` allowlist** must stay in sync with the
   `audit.run.tool` CHECK constraint. A new audit added to one without
-  the other regresses ingest.
+  the other regresses ingest. (`api-doc` joined the allowlist 2026-06-03
+  alongside migration `20260603000000_relax_audit_tool_check_api_doc.sql`
+  + the `audit_ingest.rs` `api-doc` explode arm.)
 - **Name resolution** strips `-audit` from the dir basename, then
   strips a leading `css-`. `tools/css-cross-page-audit/` resolves to
   `cross-page`. New audit naming has to play with this rule.

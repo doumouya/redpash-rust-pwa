@@ -43,7 +43,7 @@ INGEST="$REPO_ROOT/backend/target/debug/redpash-audit-ingest"
 # directories don't (yet) match the `tools/*-audit/` glob below so the
 # loop won't iterate them; harmless to list. They land for real once
 # `tools/css-parallel/` gets the `-audit` rename + ui-snapshot ships.
-INGEST_TOOLS=" css html tab-compare cross-page parallel ui-snapshot "
+INGEST_TOOLS=" css html tab-compare cross-page parallel ui-snapshot api-doc "
 
 fail=0
 for dir in tools/*-audit/; do

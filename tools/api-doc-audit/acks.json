@@ -1,0 +1,20 @@
+{
+  "_comment": "API-doc audit allowlist. Intentional doc↔code gaps, keyed by finding kind. Patterns: exact path, '/prefix/*' (subtree), or a path with :param/*slug (normalized match). doc_missing entries are module names. Seeded from POST-MERGE state (Torv cf5c326: /api/metrics is now gated+in-scope, NOT acked).",
+  "undocumented_endpoint": [
+    "/api/docs",
+    "/api/docs/*slug",
+    "/api/demo/*",
+    "/api/group/*"
+  ],
+  "stale_doc_endpoint": [
+    "/api/reports/*"
+  ],
+  "method_mismatch": [],
+  "path_param_mismatch": [],
+  "auth_mismatch": [],
+  "doc_missing": [
+    "docs",
+    "demo",
+    "group"
+  ]
+}

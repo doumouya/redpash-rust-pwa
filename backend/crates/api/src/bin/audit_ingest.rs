@@ -189,22 +189,23 @@ fn parse_args() -> Result<(String, Option<PathBuf>)> {
             "--file" => file = args.next().map(PathBuf::from),
             "-h" | "--help" => {
                 println!("usage: redpash-audit-ingest --tool <TOOL> [--file <path>]");
-                println!("  TOOL ∈ {{css, html, tab-compare, cross-page, parallel, ui-snapshot}}");
+                println!("  TOOL ∈ {{css, html, tab-compare, cross-page, parallel, ui-snapshot, api-doc}}");
                 std::process::exit(0);
             }
             _ => bail!("unknown arg {a}"),
         }
     }
     let tool = tool.ok_or_else(|| {
-        anyhow!("missing --tool <css|html|tab-compare|cross-page|parallel|ui-snapshot>")
+        anyhow!("missing --tool <css|html|tab-compare|cross-page|parallel|ui-snapshot|api-doc>")
     })?;
-    // The audit.run CHECK constraint allows only these names (see mig
-    // 20260613000001_relax_audit_tool_check.sql); keep the binary honest so a
+    // The audit.run CHECK constraint allows only these names (baseline init.sql,
+    // widened by 20260603000000_relax_audit_tool_check_api_doc.sql); keep the binary honest so a
     // typo fails fast with a clear message instead of a SQLSTATE 23514 surfacing
     // 50 lines down the call stack.
     const ALLOWED: &[&str] = &[
         "css", "html",
         "tab-compare", "cross-page", "parallel", "ui-snapshot",
+        "api-doc",
     ];
     if !ALLOWED.contains(&tool.as_str()) {
         bail!(
@@ -365,6 +366,33 @@ fn explode(tool: &str, data: &Value) -> Result<Vec<Finding>> {
                 "warning: --tool {tool} explode logic stubbed (await Woz spec); \
                  audit.run row recorded with 0 findings."
             );
+        }
+        // api-doc (tools/api-doc-audit): the JS side pre-formats each finding
+        // with its own stable `key`, `kind`, and a string `severity`
+        // (high/med/low). Straight projection — map severity to an int so
+        // audit.run_diff flags a severity escalation as `regressed`. The
+        // `key` is deterministic (METHOD path / surface label) so the diff
+        // self-join is stable across runs.
+        "api-doc" => {
+            if let Some(arr) = data.get("findings").and_then(Value::as_array) {
+                for item in arr {
+                    let key = item.get("key").and_then(Value::as_str).unwrap_or("").to_string();
+                    if key.is_empty() {
+                        continue; // unstable across runs — skip (run_diff joins on key)
+                    }
+                    let kind = item
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .unwrap_or("drift")
+                        .to_string();
+                    let severity = item.get("severity").and_then(Value::as_str).map(|s| match s {
+                        "high" => 3,
+                        "med" => 2,
+                        _ => 1,
+                    });
+                    out.push(Finding { kind, key, severity, detail: item.clone() });
+                }
+            }
         }
         _ => unreachable!("--tool validated upstream"),
     }

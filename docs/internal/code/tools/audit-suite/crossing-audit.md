@@ -3,7 +3,7 @@ title: tools/crossing-audit/audit.js
 source: ../../../../../tools/crossing-audit/audit.js
 owner: Gus
 section: Internal · Code · Tools · audit-suite
-last modified date: 2026-05-30
+last modified date: 2026-06-03
 ---
 
 # crossing-audit
@@ -23,17 +23,23 @@ that target it.
   - **Crossings** — an `/api` path the JS calls AND the Rust serves. Healthy.
   - **Dangling** — JS calls a path the Rust doesn't serve. **Bug.**
   - **Unused** — Rust serves a path no JS calls. May be admin / curl / future.
-- Emits `report.html` + `audit.json` (ingest-compatible).
+- Emits `report.html`.
 - Auto-discovered as `crossing`.
+- The **Rust route set** now comes from the shared
+  [`tools/lib/rust-routes.js`](../lib/rust-routes.md) extractor (migrated
+  2026-06-03), so it covers `routes/files/*` and the `/:rid/members` nests its
+  old private extractor silently skipped. `norm()` is shared from the same lib.
 
 ## Drift-prone areas
 
-- **Path normalisation** must collapse `:rid` ↔ `:id` and similar; new path segment kinds need adding.
+- **Path normalisation** lives in the shared lib now (`norm()`); new path
+  segment kinds are added there, for every consumer at once.
 - **`api.get` / `api.post` / `api.patch` / `api.del`** are the recognised JS call sites; alternative shapes (raw `fetch`, helper wrappers) would slip past.
 - The audit doesn't yet do the DTO half — that's the other crossing kind, deferred.
 
 ## Related
 
+- [Shared extractor: rust-routes](../lib/rust-routes.md)
 - [Audit-suite landing](index.md)
 - [Architecture: js-rust-boundary](../../../architecture/js-rust-boundary.md)
 - [Subsystem: api-routes](../../../subsystems/api-routes.md)

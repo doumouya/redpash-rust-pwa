@@ -31,10 +31,15 @@
 
 var fs = require('fs');
 var path = require('path');
+// Shared route extractor — the single code-side parser (drops crossing-audit's
+// private rustRoutes/norm/stripQuery copies, which missed routes/files/* + the
+// /:rid/members nests + the HTTP method). norm() stays shared so JS calls and
+// Rust routes still normalise identically.
+var routesLib = require('../lib/rust-routes');
+var norm = routesLib.norm;
 
 var ROOT = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, '..', '..');
 var JS_DIR = path.join(ROOT, 'frontend', 'scripts');
-var ROUTES_DIR = path.join(ROOT, 'backend', 'crates', 'api', 'src', 'routes');
 var OUT = path.join(__dirname, 'report.html');
 
 function read(f) { try { return fs.readFileSync(f, 'utf8'); } catch (e) { return null; } }
@@ -44,64 +49,10 @@ function lineOf(text, idx) {
   return n;
 }
 
-/* drop the ?query — depth-aware, so a `${a ? b : c}` ternary inside the
-   path isn't mistaken for the query separator. */
-function stripQuery(p) {
-  var depth = 0;
-  for (var i = 0; i < p.length; i++) {
-    var c = p.charAt(i);
-    if (c === '$' && p.charAt(i + 1) === '{') { depth++; i++; }
-    else if (c === '}' && depth > 0) { depth--; }
-    else if (c === '?' && depth === 0) return p.slice(0, i);
-  }
-  return p;
-}
-
-/* normalise a path so a JS call and the Rust route it hits compare equal.
-   Every param-ish segment collapses to :_ — Rust's `:rid`, JS's `${rid}`,
-   a literal FIL_… id, a digit run. A `${…}` glued onto a literal segment
-   (`/dedup${qs}`) is a query var appended to a real segment — keep the
-   literal, drop the var. The ?query is stripped first. Trailing slash dropped. */
-function norm(p) {
-  var segs = stripQuery(p).split('/').map(function (s) {
-    if (!s) return s;
-    s = s.replace(/\$\{[^}]*\}$/, '');               // trailing `${…}` glue
-    if (!s) return ':_';                             // segment was pure `${…}`
-    if (s.charAt(0) === ':') return ':_';            // Rust  :rid
-    if (s.charAt(0) === '*') return ':_';            // Rust  *slug catch-all
-    if (s.indexOf('${') >= 0) return ':_';           // JS    `${rid}`
-    if (/^[A-Z]{2,}_/.test(s)) return ':_';          // a literal FIL_… id
-    if (/^\d+$/.test(s)) return ':_';                // a numeric id
-    return s;
-  });
-  var out = segs.join('/').replace(/\/+$/, '');
-  return out || '/';
-}
-
-/* ── Rust side — the routes the backend serves ───────────────────────────── */
-function rustRoutes() {
-  var modText = read(path.join(ROUTES_DIR, 'mod.rs'));
-  if (modText === null) { console.error('routes/mod.rs not found'); process.exit(1); }
-
-  var nest = {}, m;
-  var nestRe = /\.nest\(\s*"(\/[^"]*)"\s*,\s*([a-z_]+)::routes\(\)\s*\)/g;
-  while ((m = nestRe.exec(modText))) nest[m[2]] = m[1];
-
-  var routes = [];
-  Object.keys(nest).forEach(function (mod) {
-    var text = read(path.join(ROUTES_DIR, mod + '.rs'));
-    if (text === null) return;
-    var re = /\.route\(\s*"([^"]*)"/g, mm;
-    while ((mm = re.exec(text))) {
-      var full = '/api' + nest[mod] + mm[1];
-      routes.push({
-        path: norm(full), raw: full,
-        file: 'routes/' + mod + '.rs', line: lineOf(text, mm.index)
-      });
-    }
-  });
-  return routes;
-}
+/* norm() + stripQuery() + the Rust-side route extractor now live in
+   tools/lib/rust-routes.js (see require at top). The shared rustRoutes()
+   resolves directory modules + nested routers + methods that this tool's old
+   private copy silently skipped (routes/files/*, /:rid/members). */
 
 /* ── JS side — the /api paths the frontend calls ─────────────────────────── */
 function walkJs(dir, acc) {
@@ -214,7 +165,12 @@ function jsCalls() {
 
 /* ── join ────────────────────────────────────────────────────────────────── */
 console.log('Crossing audit — ' + ROOT + ' …');
-var routes = rustRoutes();
+// Shared extractor yields one record per (method, path); the seam audit is
+// path-level, so map to {path(norm), raw, file, line} and let the rustBy dedup
+// below collapse the per-method duplicates.
+var routes = routesLib.rustRoutes(ROOT).map(function (r) {
+  return { path: r.pathNorm, raw: r.path, file: r.file, line: r.line };
+});
 var calls = jsCalls();
 
 var rustBy = {};
