@@ -73,7 +73,7 @@
        7 render from the registry alone, the framework is complete. -->
   <section class="sbx-section" data-page="home"><h2>home</h2><div class="sbx-mount" id="sbx-home"><span class="sbx-todo">TODO: rebuild from framework components</span></div></section>
   <section class="sbx-section" data-page="workspace"><h2>workspace</h2><div class="sbx-mount" id="sbx-workspace"><span class="sbx-todo">TODO</span></div></section>
-  <section class="sbx-section" data-page="cases"><h2>cases</h2><div class="sbx-mount" id="sbx-cases"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="monitoring"><h2>monitoring</h2><div class="sbx-mount" id="sbx-monitoring"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="profile"><h2>profile</h2><div class="sbx-mount" id="sbx-profile"><span class="sbx-todo">TODO</span></div></section>
   <section class="sbx-section" data-page="settings"><h2>settings</h2><div class="sbx-mount" id="sbx-settings"><span class="sbx-todo">TODO</span></div></section>
@@ -92,6 +92,7 @@
     import "/scripts/framework/chart.js";               // "chart" (ECharts tile)
     import "/scripts/framework/table.js";               // "table" (simple read-only)
     import "/scripts/framework/surface.js";             // "surface" (assembles head→chip→stats→table)
+    import "/scripts/framework/page-assembly.js";       // "page" (assembles a full railed page from components)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/redtable.js";       // S2 (full RedTable)
     //   import "/scripts/framework/create-action.js";  // S4
@@ -209,6 +210,43 @@
       variant: "composite", chartSlots: 4, stats: [
         { label: "Files", value: "14" }, { label: "Errors", value: "0" },
         { label: "Reachable", value: "18" }, { label: "Clean %", value: "94.5" }] });
+
+    // PAGE-ASSEMBLY PROOF (CAS_37B2E1BF): rebuild a real page from components only.
+    // Cases DETAIL is the page that rebuilds cleanest today — topbar + rail +
+    // surface(object head + status chip-row) + comments thread, all registered.
+    // (Board kanban, the right-side properties panel, the create-case modal, and
+    // the full B3 RedTable for list tabs are gap-flagged, not faked — see the case.)
+    const assemblePage = get("page");
+    if (assemblePage) assemblePage(document.getElementById("sbx-cases"), {
+      topbar: { active: "cases", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Cases", collapsible: true,
+        views: { pref: "sbx.cases.view", fallback: "mine",
+          options: [{ value: "mine", label: "My cases", icon: "bi-person" },
+                    { value: "ext", label: "External", icon: "bi-globe2" }] },
+        search: { placeholder: "Filter cases…" },
+        chips: [{ value: "all", label: "All", active: true }, { value: "open", label: "Open" }, { value: "urgent", label: "Urgent" }],
+        overview: { label: "Board", icon: "bi-kanban", active: false },
+        groups: [{ id: "PRJ_OPS", name: "Ops", mark: "#f38ba8", count: 2, renamable: true, hidable: true, addLabel: "New case", tabs: [
+          { id: "CAS_1", name: "Export times out on 80k rows", icon: "bi-exclamation-circle", dot: "#f38ba8", active: true, hidable: true },
+          { id: "CAS_2", name: "Login returns 500", icon: "bi-bug", hidable: true } ] }],
+        footer: { create: { label: "New case" }, nav: { active: "", session: { display_name: "Sandbox User" } } },
+      },
+      surface: {
+        head: { objectId: "CAS_37B2E1BFF5534F55A92B61EB5FAEDBA3", title: "Export times out on the 80k-row file", editable: false, closeHash: "#/cases" },
+        chipRow: { name: "status", chips: [
+          { value: "new", label: "New" }, { value: "triage", label: "Triage", active: true },
+          { value: "progress", label: "In progress" }, { value: "resolved", label: "Resolved" } ] },
+      },
+      comments: {
+        me: "USR_ME", reporterId: "USR_CUST", assigneeId: "USR_ENG", sendingAs: "Sandbox",
+        comments: [
+          { rid: "CMT_1", author_id: "USR_CUST", author_display_name: "Aïcha Diallo", created_at: "2026-06-03T09:12:00Z", body: "The export keeps timing out on the 80k-row file." },
+          { rid: "CMT_2", author_id: "USR_ENG", author_display_name: "Sam Okoro", created_at: "2026-06-03T10:40:00Z", is_edited: true, bodyHtml: "<p>Reproduced — it's the <code>group_by</code> pass. Patch incoming.</p>" },
+          { rid: "CMT_3", author_id: "USR_ME", author_display_name: "You", created_at: "2026-06-04T08:05:00Z", body: "Shipped the fix to prerelease — please re-test." },
+        ],
+      },
+    });
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =
