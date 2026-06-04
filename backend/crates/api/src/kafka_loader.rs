@@ -67,6 +67,41 @@ impl Cfg {
             wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
         })
     }
+
+    /// Build from a persisted connection (CON_… rid). The user-chosen DESTINATION
+    /// (project + as_user) and the topic come from the `connectors` row — Em:
+    /// "ask the user which project he wants to add the file." The cluster Kafka
+    /// transport (bootstrap / creds / contract / wire-format) stays in the
+    /// connector's `.env` for the RC. The topic on the connection wins; it falls
+    /// back to KAFKA_TOPIC if the connection left it unset. This replaces the
+    /// load.sh PRJ/USR hardcode — the load now routes to where the USER chose,
+    /// RBAC-checked + audited by pipeline::upload_csv exactly as before.
+    pub async fn from_connection(pool: &sqlx::PgPool, connection_id: &str) -> Result<Self> {
+        let conn = crate::db::get_connector_load_cfg(pool, connection_id)
+            .await
+            .with_context(|| format!("load connector {connection_id}"))?
+            .ok_or_else(|| anyhow::anyhow!("connector {connection_id} not found"))?;
+        if conn.kind != "kafka" {
+            anyhow::bail!("connector {connection_id} is kind '{}', not a kafka load target", conn.kind);
+        }
+        let var = |k: &str| std::env::var(k).with_context(|| format!("{k} not set"));
+        let topic = match conn.topic.filter(|s| !s.is_empty()) {
+            Some(t) => t,
+            None    => var("KAFKA_TOPIC")?,
+        };
+        Ok(Self {
+            bootstrap:     var("KAFKA_BOOTSTRAP")?,
+            sasl_user:     var("KAFKA_KEY")?,
+            sasl_password: var("KAFKA_SECRET")?,
+            topic,
+            max_records:   std::env::var("KAFKA_MAX_RECORDS").ok().and_then(|s| s.parse().ok()).unwrap_or(500),
+            project_rid:   conn.project_id,
+            as_user:       conn.as_user,
+            contract_path: var("KAFKA_CONTRACT")?,
+            version_header: std::env::var("KAFKA_VERSION_HEADER").ok().filter(|s| !s.is_empty()),
+            wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
+        })
+    }
 }
 
 /// Extract the bare Avro schema JSON from a Confluent contract envelope file

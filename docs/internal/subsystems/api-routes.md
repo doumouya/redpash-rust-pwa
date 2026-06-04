@@ -63,6 +63,7 @@ to the response.
 | `/api/me` | `me.rs` | `GET /`, `PATCH /`, `PATCH /prefs`, `GET /avatar` | session | current user; see [prefs](prefs.md) |
 | `/api/users` | `users.rs` | `GET /`, `POST /`, `GET /:rid`, `PATCH /:rid`, `DELETE /:rid` | session | full user CRUD |
 | `/api/companies` | `companies.rs` | `GET /`, `POST /`, `GET /:rid`, `PATCH /:rid`, `DELETE /:rid`, `GET /:rid/members`, `POST /:rid/members`, `DELETE /:rid/members/:user_id` | session | companies + memberships |
+| `/api/connectors` | `connectors.rs` | `GET /`, `POST /`, `GET /:rid` | session | persisted Kafka/connector configs; the user-chosen destination project |
 | `/api/projects` | `projects.rs` | `GET /`, `PATCH /:rid`, `DELETE /:rid`, `GET /:rid/files` | session | per-user project list |
 | `/api/files` | `files.rs` | `GET /`, `POST /upload`, `GET /:rid`, `PATCH /:rid`, `DELETE /:rid`, `GET /:rid/page`, `POST /:rid/steps`, `POST /:rid/cast-preview`, `POST /:rid/undo`, `POST /:rid/redo`, `POST /:rid/clear-filters`, `POST /:rid/encoding`, `GET /:rid/dedup`, `GET /:rid/joins`, `POST /:rid/joins`, `POST /:rid/snapshot`, `GET /:rid/uniques`, `GET /:rid/sentinels` | session, owner-scoped | the data-engine surface |
 | `/api/charts` | `charts.rs` | `GET /`, `POST /`, `GET /:rid`, `PUT /:rid`, `DELETE /:rid` | session | chart-typed `project_files` |

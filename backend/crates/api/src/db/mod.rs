@@ -28,11 +28,13 @@ mod sessions;
 mod sentinels;
 mod users;
 mod projects;
+mod connectors;
 pub use entities::*;
 pub use sessions::*;
 pub use sentinels::*;
 pub use users::*;
 pub use projects::*;
+pub use connectors::*;
 
 use chrono::{DateTime, Utc};
 use shared::case::{Case, Category, Comment};

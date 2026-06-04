@@ -77,6 +77,12 @@ is visible.
 
 - `pub struct Cfg` + `from_env()` — all loader config from `KAFKA_*` env, incl.
   `as_user` (`KAFKA_AS_USER`, REQUIRED — the RBAC-checked upload identity).
+- `pub async fn Cfg::from_connection(pool, connection_id)` — build from a
+  persisted connection (a `CON_` rid). The user-CHOSEN destination (project +
+  as_user) and the topic come from the `connectors` row (Em: "ask the user which
+  project"); the cluster Kafka transport (bootstrap/creds/contract/wire-format)
+  stays in `.env` for the RC. Guards `kind == "kafka"`. `main.rs` uses this when
+  `REDPASH_KAFKA_CONNECTION` is set, else `from_env` (the legacy hardcode).
 - `pub fn load_contract_schema(path)` — the Avro schema JSON from a Confluent
   envelope's `.schema` (or a bare schema file).
 - `pub fn schema_field_names(schema)` — top-level field names IN ORDER (the CSV

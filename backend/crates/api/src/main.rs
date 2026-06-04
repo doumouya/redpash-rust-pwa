@@ -64,7 +64,12 @@ async fn main() -> anyhow::Result<()> {
         let data_dir = std::env::var("REDPASH_DATA_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
-        let cfg = kafka_loader::Cfg::from_env()?;
+        // REDPASH_KAFKA_CONNECTION (a CON_ rid) → read the user-chosen destination
+        // from the persisted connection; otherwise the legacy env hardcode.
+        let cfg = match std::env::var("REDPASH_KAFKA_CONNECTION").ok().filter(|s| !s.is_empty()) {
+            Some(conn_id) => kafka_loader::Cfg::from_connection(&pool, &conn_id).await?,
+            None          => kafka_loader::Cfg::from_env()?,
+        };
         kafka_loader::run(&pool, &data_dir, &cfg).await?;
         return Ok(());
     }

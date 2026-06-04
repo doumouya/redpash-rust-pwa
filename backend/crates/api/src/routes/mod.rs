@@ -45,6 +45,7 @@ mod auth;
 mod cases;
 mod charts;
 mod companies;
+mod connectors;
 mod dashboards;
 mod demo;
 mod docs;
@@ -234,6 +235,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/auth",     auth::routes())
         .nest("/projects", projects::routes())
         .nest("/companies",  companies::routes())
+        .nest("/connectors", connectors::routes())
         .nest("/teams",      teams::routes())
         .nest("/files",      files::routes())
         .nest("/group",      group::routes())

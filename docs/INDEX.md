@@ -45,6 +45,7 @@ YAML frontmatter above).
 - [Users](api/users.md) — `/api/users/*` directory CRUD (dev-permissive).
 - [Projects](api/projects.md) — `/api/projects` list/CRUD + `/:rid` + `/:rid/files`.
 - [Companies](api/companies.md) — `/api/companies/*` CRUD; the multi-tenancy boundary + role model.
+- [Connectors](api/connectors.md) — `/api/connectors/*` persisted Kafka/connector configs; the user-chosen destination project.
 - [Teams](api/teams.md) — `/api/teams/*` company-scoped subgroups (grant-bearing principals).
 - [Members](api/members.md) — the generic `/:rid/members` CRUD mounted under companies/projects/cases/teams.
 - [Files](api/files.md) — `/api/files/*` upload, page, steps (+ preview), undo/redo, joins, snapshots.
