@@ -83,8 +83,9 @@
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-4);
 }
-.rp-shell-head-title {
-  margin: 0;
+/* per-tab heading — the rp-title atom sized up by the shell-head context
+   (0-2-0 beats the atom's 0-1-0); markup is just .rp-title (CAS_37B2E1BF). */
+.rp-shell-head .rp-title {
   font-size: var(--rp-text-lg);
   font-weight: 700;
 }

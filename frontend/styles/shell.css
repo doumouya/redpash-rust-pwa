@@ -121,11 +121,8 @@
   gap: var(--rp-sp-3);
   margin-bottom: var(--rp-sp-4);
 }
-.rp-shell-head-title {
-  margin: 0;
-  font-size: var(--rp-text-lg);
-  font-weight: 700;
-}
+/* .rp-shell-head-title collapsed to the rp-title atom — sized by the
+   .rp-shell-head .rp-title context in framework/surface.css (CAS_37B2E1BF). */
 .rp-shell-head-count {
   font-size: var(--rp-text-sm);
   color: var(--rp-text-mute);

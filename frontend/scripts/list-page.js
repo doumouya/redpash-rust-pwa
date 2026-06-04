@@ -37,7 +37,7 @@ import { kpiDonut, kpiBar, kpiBarH, kpiGauge, kpiLine, kpiPie, kpiRose } from "/
 
 export function headHTML(title, count) {
   return '<header class="rp-shell-head">'
-    +   '<h2 class="rp-shell-head-title">' + esc(title) + '</h2>'
+    +   '<h2 class="rp-title">' + esc(title) + '</h2>'
     +   '<span class="rp-shell-head-count">' + esc(count) + '</span>'
     + '</header>';
 }

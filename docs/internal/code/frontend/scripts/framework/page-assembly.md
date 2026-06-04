@@ -42,6 +42,8 @@ ESM. Imports `register` + `get` (registry) + `esc`. Composes only — owns no co
   the assembler and prepended into the surface — a **proof-layer fill** for a real
   gap: mountSurface has no shellHead section yet (it owns the Cases-style rp-head
   object header instead). The proper fix is a `shellHead` section in mountSurface.
+  The title is the `rp-title` atom, sized by the `.rp-shell-head .rp-title` context
+  (no `rp-shell-head-title` class — CAS_37B2E1BF ≤1-class rule).
 - **SECURITY**: only the `shellHead` title/count are interpolated, via `esc()`; the
   outer chain is static; every component escapes its own content.
 

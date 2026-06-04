@@ -38,7 +38,7 @@ import { esc } from "/scripts/dom.js";
 // shell-head page renders; the proper fix is a `shellHead` section in mountSurface.
 function shellHeadHTML(h) {
   return '<header class="rp-shell-head">'
-    + '<h2 class="rp-shell-head-title">' + esc(h.title || "") + '</h2>'
+    + '<h2 class="rp-title">' + esc(h.title || "") + '</h2>'
     + (h.count != null ? '<span class="rp-shell-head-count">' + esc(h.count) + '</span>' : "")
     + '</header>';
 }
