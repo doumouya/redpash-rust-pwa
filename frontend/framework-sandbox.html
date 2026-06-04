@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="/styles/framework/badge.css" />
   <link rel="stylesheet" href="/styles/framework/avatar-upload.css" />
   <link rel="stylesheet" href="/styles/framework/profile-record.css" />
+  <link rel="stylesheet" href="/styles/framework/settings-config.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -103,7 +104,7 @@
   <section class="sbx-section" data-page="cases"><h2>page — Cases detail, ASSEMBLED from components (topbar · rail · head · status chip-row · comments)</h2><div id="sbx-cases" style="height:44rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="monitoring"><h2>page — Monitoring, ASSEMBLED from components (topbar · rail · shellHead · window chips · stat strip · RedTable)</h2><div id="sbx-monitoring" style="height:46rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="profile"><h2>page — Profile, the USER RECORD page, ASSEMBLED from components (rp-head + avatar-upload + rp-field × all UserProfile fields + memberships + plan + connections)</h2><div id="sbx-profile" style="height:52rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:hidden;display:flex"></div></section>
-  <section class="sbx-section" data-page="settings"><h2>settings</h2><div class="sbx-mount" id="sbx-settings"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="settings"><h2>page — Settings, CONFIGURE-BY-EXAMPLE, ASSEMBLED from components (each pref beside a LIVE instance of the component it controls)</h2><div id="sbx-settings" style="height:48rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:auto;display:flex"></div></section>
   <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
 
   <script type="module">
@@ -133,6 +134,7 @@
     import "/scripts/framework/select.js";              // "select" (form dropdown over menu)
     import "/scripts/framework/avatar-upload.js";       // "avatar-upload" (editable avatar)
     import "/scripts/framework/profile-record.js";      // "profile-record" (the User record view)
+    import "/scripts/framework/settings-config.js";     // "settings-config" (configure-by-example)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/create-action.js";  // S4
 
@@ -557,6 +559,24 @@
           onUpgrade: () => console.log("[sandbox] upgrade"),
         });
       },
+    });
+
+    // PAGE-ASSEMBLY PROOF — Settings = configure-by-example (Em's idea): rail-shell +
+    // a body where each pref sits beside a LIVE instance of the component it controls
+    // (theme→a re-theming card, chart kind→a real chart, rows-per-page→a table, row
+    // numbers→a redtable). set-account is gone (account identity lives on Profile).
+    if (assemblePage) assemblePage(document.getElementById("sbx-settings"), {
+      topbar: { active: "", session: { first_name: "Sandbox", is_platform_admin: true } },
+      rail: {
+        title: "Settings", collapsible: true,
+        groups: [{ id: "GENERAL", name: "General", mark: "#89b4fa", count: 3, tabs: [
+          { id: "appearance", name: "Appearance", icon: "bi-palette", active: true },
+          { id: "tables", name: "Tables", icon: "bi-table" },
+          { id: "charts", name: "Charts", icon: "bi-bar-chart" }] }],
+        footer: { nav: { active: "settings", session: { display_name: "Sandbox User" } } },
+      },
+      surface: {},
+      mount: (el) => { const m = get("settings-config"); if (m) m(el); },
     });
 
     const names = list();

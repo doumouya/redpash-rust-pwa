@@ -1,0 +1,32 @@
+/* ── framework page-component: rp-settings-config — configure-by-example ──────
+   Em's Settings idea: every preference sits beside a LIVE instance of the
+   component it controls, so changing the control visibly changes the real thing.
+   Each row = [label + hint + control] | [live preview]. Pure layout glue; the
+   control + preview are reused framework components (seg/select + chart/table/
+   redtable/surface). rp- only. */
+
+.rp-settings-config { display: flex; flex-direction: column; padding: 1rem 1.25rem; }
+
+.rp-settings-config-row {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-settings-config-row:last-child { border-bottom: 0; }
+
+.rp-settings-config-control { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.rp-settings-config-label { font-size: 0.8125rem; font-weight: 600; color: var(--rp-text); }
+.rp-settings-config-hint { font-size: 0.6875rem; line-height: 1.35; color: var(--rp-text-mute); }
+
+.rp-settings-config-preview { min-width: 0; }
+.rp-settings-config-preview-label {
+  margin-bottom: 0.375rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
