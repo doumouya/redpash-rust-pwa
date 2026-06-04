@@ -1,16 +1,27 @@
 # Polars → RedPash: the in-dependency registry exemplar
 
-rustc (`references/rustc-registry-patterns.md`) is the type-*system* model; **Polars is the data model**, and
-it's sharper here for two reasons: (1) RedPash's `data` crate already runs on Polars, so these patterns are
-*importable*, not just instructive; (2) Polars solves the exact custom-object problem — "register a type the
-engine didn't know at compile time, store it type-erased, handle it generically" — and ships a literal
-**object registry** for it. Pointers are into the `polars-rp-main.zip` snapshot (Polars main).
+rustc (`references/rustc-registry-patterns.md`) is the type-*system* model; **Polars is the data model** — and
+RedPash already links Polars (`backend/Cargo.toml` v0.43; used in `pipeline.rs`, `routes/group.rs`,
+`data/src/distinct.rs`). Keep two layers straight:
+
+- **Public API RedPash imports today** — via `polars::prelude` (API ref: https://docs.rs/polars/latest/polars/):
+  `DataFrame`, `Series`, `Expr`/`LazyFrame`, `AnyValue`, `DataType`, `Schema`. Directly usable — and
+  `routes/group.rs:189` already converts a `polars::prelude::AnyValue` to an owned value, the exact dynamic-value
+  move `entity_data` needs.
+- **Internal mechanism to STUDY, not import** — `ObjectRegistry` (below) lives in `polars-core` internals and is
+  **not re-exported through the `polars` facade**, so it's a design *exemplar* you read in the source, not a
+  library call. It's still in RedPash's dependency tree, and it's the closest working precedent for `register_type`.
+
+Source pointers are into the `polars-rp-main.zip` snapshot (Polars **main**); the public-API companion is
+https://docs.rs/polars/latest/polars/. RedPash pins **0.43**, but these are long-stable core APIs, so the patterns
+hold — only the exact line numbers track main.
 
 ---
 
-## 1 · The headline — Polars' runtime `ObjectRegistry`
+## 1 · The headline — Polars' runtime `ObjectRegistry` (internal exemplar — study, don't import)
 
-**Polars** — `crates/polars-core/src/chunked_array/object/registry.rs`. The module's own opening line:
+**Polars** — `crates/polars-core/src/chunked_array/object/registry.rs` (a `polars-core` internal; not in the
+public `polars` facade — read it as a design model). The module's own opening line:
 *"a heap allocated utility that can be used to register an object type. That object type will know its own
 generic type parameter `T` and callers can simply send `&Any` values and don't have to know the generic type
 themselves."*
@@ -114,6 +125,8 @@ types live as a named, type-erased `entity_data` row. Polars proves you don't ch
 | `Expr`/LazyFrame (declare → optimize → execute) | `polars-plan/src/dsl/` | declare a type → machinery executes | 2–3 |
 | `.str`/`.dt`/`.list` namespace traits | `polars-plan/src/dsl/{string,dt,list}.rs` | per-type behavior via trait/provider | 2–3 |
 
-**Bottom line**: rustc proves the pattern at compiler scale; **Polars proves it inside a crate RedPash already
-links**, with a named `ObjectRegistry` and a typed-plus-`Object` dtype split that is Hybrid-C in the wild. When
-designing `register_type` and the storage split, read `registry.rs` first — it is the closest working precedent.
+**Bottom line**: rustc proves the pattern at compiler scale; Polars proves it **inside RedPash's own dependency
+tree**. The *public* parts (`DataFrame`/`AnyValue`/`DataType`/`Expr`/`Schema`) are imported today and show the
+typed-plus-`Object` split that is Hybrid-C in the wild; the *internal* `ObjectRegistry` is the closest working
+precedent for `register_type` — read `registry.rs` as a model when designing it (you won't import it, you'll
+mirror its shape).

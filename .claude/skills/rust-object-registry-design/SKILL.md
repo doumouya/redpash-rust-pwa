@@ -60,27 +60,42 @@ This backend already contains the registry pattern in working form. Reuse, don't
 - `entities` + `register_entity(ex, id, type)` — the one polymorphic id space; every subtype FKs in
   `ON DELETE CASCADE`.
 
-The closest *external* precedents for the parts not yet built — `register_type` and the typed-vs-custom
-storage split — live in **Polars (a dependency)**: its `ObjectRegistry` and `DataType::Object(name)` are
-`register_type` + Hybrid-C, already working (see step 3).
+The closest precedents for the parts not yet built live in **Polars (a dependency)**: `DataType::Object(name)`
+(public API) is Hybrid-C in the wild, and the `polars-core`-internal `ObjectRegistry` is the model for
+`register_type` — study its shape, don't import it (see step 3).
 
-### 3 · Ground the design in two proven Rust registries
+### 3 · Ground the design in proven registries (Postgres first — it's where you store)
 
-Don't invent the registration + storage layer — two battle-tested Rust systems already solve it, and
-one is a RedPash dependency. Read both before designing:
+Don't invent the registration + storage layer — battle-tested systems already solve it, and the closest one is
+the database RedPash already stores in. Read these before designing:
 
+- **[`references/postgres-registry-patterns.md`](references/postgres-registry-patterns.md)** — **the capstone,
+  and the closest.** RedPash stores in Postgres, whose *system catalog* IS a data-driven object registry:
+  `pg_class` ↔ `type_definitions`, `pg_attribute` ↔ `type_fields` (literal), `pg_type` + `typinput`/`typoutput`
+  ↔ the Providers pattern, `pg_type.dat` ↔ `seed_builtins`, and `jsonb` is *itself a catalog type* ↔ `entity_data`.
+  `CREATE TYPE` = `TypeCreate → CatalogTupleInsert` = a row INSERT, no recompile = `register_type`. When unsure,
+  ask *how does `pg_catalog` do it?*
 - **[`references/rustc-registry-patterns.md`](references/rustc-registry-patterns.md)** — the *type-system*
   model. rustc maps almost one-to-one: `DefId` (central id) ↔ `entities`; the query system + `Providers`
   (register a provider, never edit a `match`) ↔ `register_type`; `Symbol`/`Interned` interning ↔ the cache
   (and *why* `&'static str → String` is safe); `TyCtxt` ↔ `AppState`.
 - **[`references/polars-registry-patterns.md`](references/polars-registry-patterns.md)** — the *data* model,
-  and **Polars is already in `Cargo.toml`**, so its patterns are importable, not just instructive. Polars
-  ships a literal runtime `ObjectRegistry` (`register_object_builder`/`get_object_builder` behind a
-  `LazyLock<RwLock<Option<…>>>` — the exact `TypeDefCache` shape) and a `DataType::Object(name)` escape hatch
-  among its typed variants that **is Hybrid-C in the wild**. Read `registry.rs` first when designing
+  in RedPash's own dependency tree (`polars` 0.43 in `Cargo.toml`; API ref https://docs.rs/polars/latest/polars/).
+  Two layers: the **public API you already use** (`DataFrame`/`AnyValue`/`DataType`/`Expr`/`Schema` via
+  `polars::prelude`) shows the typed-plus-`DataType::Object(name)` split that **is Hybrid-C in the wild**; and the
+  **`polars-core`-internal `ObjectRegistry`** (`register_object_builder`/`get_object_builder` behind a
+  `LazyLock<RwLock<Option<…>>>` — the exact `TypeDefCache` shape) which you *study as a model* for `register_type`
+  (it's not a public import — mirror its shape, don't call it). Read `registry.rs` first when designing
   `register_type` + the storage split.
+- **[`references/wasm-bindgen-registry-patterns.md`](references/wasm-bindgen-registry-patterns.md)** — not a
+  registry to copy but the **constraint that forces** one. RedPash's `data` crate is `cdylib + rlib` (one
+  engine, two surfaces) with a type-erased **JSON boundary** (`data/src/wasm.rs`, `frontend/wasm/data.js`), so a
+  compile-time-typed engine would need a recompiled ~12 MB wasm per new type. A data-driven registry keeps the
+  wasm blob **stable** while new types are rows — this is *why* the design is non-negotiable, not just nicer
+  ([[wasm-replaces-js]]).
 
-Headline lessons (both agree): a new capability = **register a provider**, never grow a central `match`;
+Headline lessons (all four agree — a compiler, a dataframe engine, a wasm bridge, and a database): a new
+capability = **register a provider**, never grow a central `match`;
 keep **typed for the known set + one type-erased escape hatch** for the open set; hold the registry on one
 cheap-to-clone context; an interned/cached registry costs nothing per access.
 
@@ -113,15 +128,23 @@ blast radius when a registry moves from code to DB (the interner lesson makes th
 Builtins keep their typed tables (typed columns, indexes, existing queries); **custom** types land in
 one polymorphic `entity_data (… data JSONB)` table with `type_id → type_definitions ON DELETE
 RESTRICT`. This honors the locked one-polymorphic-table object model + disposability without an
-`ALTER TABLE` per new type.
+`ALTER TABLE` per new type. JSONB here isn't a workaround — it's Postgres's *own* catalog escape hatch
+(`jsonb` is a row in `pg_type`), so `entity_data` uses the same typed-plus-one-open-type split `pg_catalog`
+itself ships.
 
 ## The references
 
+- [`references/postgres-registry-patterns.md`](references/postgres-registry-patterns.md) — **read for step 3
+  first**: the capstone — Postgres's `pg_catalog` is the data-driven object registry RedPash mirrors
+  (`pg_class`/`pg_attribute`/`pg_type`; `CREATE TYPE` = INSERT; `jsonb` as the escape hatch).
 - [`references/rustc-registry-patterns.md`](references/rustc-registry-patterns.md) — **read for step 3**:
   the rustc → RedPash mapping (the type-system model), source-pointed.
 - [`references/polars-registry-patterns.md`](references/polars-registry-patterns.md) — **read for step 3**:
   the Polars → RedPash mapping (the data model, an in-`Cargo.toml` dependency). The closest working precedent
-  for `register_type` (`ObjectRegistry`) + Hybrid-C (`DataType::Object`).
+  for `register_type` (`ObjectRegistry`, polars-core-internal exemplar) + Hybrid-C (`DataType::Object`, public).
+- [`references/wasm-bindgen-registry-patterns.md`](references/wasm-bindgen-registry-patterns.md) — **read for
+  step 3**: the two-surface constraint — why a data-driven registry is *required* (not just nicer) so the
+  `cdylib+rlib` engine's wasm blob stays stable across an open type set.
 - [`references/rust-idioms.md`](references/rust-idioms.md) — the specific Rust Book chapters each
   registry decision rests on (open-vs-closed = trait objects vs enums, error handling, modules).
 - [`references/redpash-worked-example.md`](references/redpash-worked-example.md) — the concrete output
