@@ -3,7 +3,7 @@ title: frontend/scripts/framework/
 source: ../../../../../frontend/scripts/framework/
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-01
+last modified date: 2026-06-04
 ---
 
 # framework
@@ -28,6 +28,23 @@ Strategic frame: [[decades-of-innovation]] — RedPash ships CRM as the first em
 - `chip-registry.js` — open chip-render registry (parallel pattern to editor-registry). Lands with the chip-render contract hardening per CAS_BF208AA8.
 - `list-page.js` (long-horizon) — auto-build a list tab from a TypeDefinition + `ui_hints.default_columns`.
 - `filter-builder.js` (long-horizon) — emit query AST from a TypeDefinition's `fields[]` (per [[redtable-query-builder]]).
+
+## UI component layer (CAS_37B2E1BF)
+
+A second strand of the same framework: where the primitives above are *TypeDefinition-driven*
+(editors/types), this strand is *single-source UI components* — one implementation of each
+whole component (RedTable, Rail, Create-action, …) consumed by every page, so a change
+propagates everywhere (the fix for 6 RedTable impls / 4 rails / 4 create-actions). Both strands
+share the `framework/` folder, the `rp-`-only namespace rule, and the `ui-doc-audit` lint.
+
+- [component-registry.js](component-registry.md) — register/discover whole components
+  (sibling to `editor-registry` / `type-registry`). The sandbox + `tools/ui-runtime-audit`
+  read `list()` for coverage.
+- Sandbox: `frontend/framework-sandbox.html` — rebuilds the 7 real pages from registered
+  components (the completeness proof) before any live page cuts over.
+- Planned (claimable slices, CAS_37B2E1BF): `redtable.js` (6→1), `rail.js` (4→1 + External
+  Cases view), `create-action.js` (→1 context-aware), `atoms.*` (shared `rp-` atoms + the
+  `__`/prefix namespace cleanup).
 
 ## Architecture (spec lineage)
 

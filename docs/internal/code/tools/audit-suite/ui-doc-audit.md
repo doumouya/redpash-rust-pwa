@@ -23,7 +23,7 @@ UI = backend.
 ## Public surface
 
 `node tools/ui-doc-audit/audit.js` → console summary + `audit.json` + `audit.html`.
-Exit 1 iff there are **coverage** findings.
+Exit 1 iff there are **coverage** findings OR **framework namespace violations**.
 
 ## How it works
 
@@ -39,6 +39,13 @@ Exit 1 iff there are **coverage** findings.
   across blocks (`-head`, `-title`, `-body`…) → compose one atom.
   Advisory findings are work-items (route to the FE-framework case); only coverage
   gates CI, so day-1 dedup debt doesn't block anyone.
+- **Namespace lint (HARD on `framework/`):** the campaign target (CAS_37B2E1BF) is ONE
+  namespace — `rp-` flat kebab, no `__` (BEM), no `rt-/ds-/ws-`. Legacy violations across
+  the whole frontend are the migration **burndown** (advisory metric, currently ~438).
+  NEW violations under `frontend/.../framework/` **fail the build** — the framework is born
+  clean so it can't seed fresh dupes. Comments are stripped before scanning (prose mentioning
+  `rt-`/`__` doesn't false-fail); pre-existing refs (the cell-editor's `rt-table`) sit in a
+  documented `FW_NS_ALLOW` allowlist until their owning slice migrates them.
 
 ## Drift-prone areas
 

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RedPash — framework sandbox</title>
+  <!-- The framework sandbox (CAS_37B2E1BF): rebuild the 7 real pages from ONLY the
+       framework components. If every page renders here from registered components,
+       "we have everything to build the full App" — the completeness proof. The live
+       app is untouched until each component cuts over. -->
+  <link rel="stylesheet" href="/styles/main.css" />
+  <style>
+    /* sandbox chrome only — never ship; not part of the framework */
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+    .sbx-bar { position: sticky; top: 0; z-index: 50; display: flex; gap: 1rem; align-items: center;
+               padding: 0.5rem 1rem; background: var(--rp-surface-2, #1e1e2e); border-bottom: 1px solid var(--rp-border, #444); }
+    .sbx-bar h1 { font-size: 0.9rem; margin: 0; }
+    .sbx-bar code { background: rgba(127,127,127,.2); padding: 0 .3rem; border-radius: .25rem; }
+    .sbx-section { padding: 1rem; border-bottom: 1px dashed var(--rp-border, #444); }
+    .sbx-section > h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+    .sbx-mount { min-height: 4rem; border: 1px dashed rgba(127,127,127,.4); border-radius: .4rem; padding: .5rem; }
+    .sbx-todo { opacity: .5; font-style: italic; }
+  </style>
+</head>
+<body>
+  <!-- pre-paint theme so framework components render in the real tokens -->
+  <script>
+    try { var t = localStorage.getItem("rp-pref-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  </script>
+  <!-- ECharts (charts components will need it; same vendoring as index.html) -->
+  <script src="/vendor/echarts/echarts.min.js"></script>
+
+  <div class="sbx-bar">
+    <h1>RedPash framework sandbox</h1>
+    <span id="sbx-registry">loading registry…</span>
+    <span style="margin-left:auto" class="sbx-todo">completeness = every page below rebuilt from registered components</span>
+  </div>
+
+  <!-- One section per real page. As S2–S5 register components, assemble each page here
+       from framework parts (rail + surface + redtable + create-action + atoms). When all
+       7 render from the registry alone, the framework is complete. -->
+  <section class="sbx-section" data-page="home"><h2>home</h2><div class="sbx-mount" id="sbx-home"><span class="sbx-todo">TODO: rebuild from framework components</span></div></section>
+  <section class="sbx-section" data-page="workspace"><h2>workspace</h2><div class="sbx-mount" id="sbx-workspace"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="cases"><h2>cases</h2><div class="sbx-mount" id="sbx-cases"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="monitoring"><h2>monitoring</h2><div class="sbx-mount" id="sbx-monitoring"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="profile"><h2>profile</h2><div class="sbx-mount" id="sbx-profile"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="settings"><h2>settings</h2><div class="sbx-mount" id="sbx-settings"><span class="sbx-todo">TODO</span></div></section>
+  <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
+
+  <script type="module">
+    import { list } from "/scripts/framework/component-registry.js";
+    // As components land, import their modules here so they self-register, e.g.:
+    //   import "/scripts/framework/redtable.js";       // S2
+    //   import "/scripts/framework/rail.js";           // S3
+    //   import "/scripts/framework/create-action.js";  // S4
+    //   import "/scripts/framework/atoms.js";          // S5
+    const names = list();
+    document.getElementById("sbx-registry").innerHTML =
+      "registered components: <code>" + (names.length ? names.join("</code> <code>") : "(none yet — S1 scaffold)") + "</code>";
+  </script>
+</body>
+</html>

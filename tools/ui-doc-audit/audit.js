@@ -33,6 +33,56 @@ var inv = require('../lib/fe-inventory');
 var ROOT = path.resolve(__dirname, '..', '..');
 var INDEX = path.join(ROOT, 'docs', 'internal', 'ui', 'catalog', 'index.md');
 var INDEX_REL = path.relative(ROOT, INDEX);
+var FW_DIRS = [path.join(ROOT, 'frontend', 'scripts', 'framework'),
+               path.join(ROOT, 'frontend', 'styles', 'framework')];
+
+/* ── namespace lint — the rp--only guardrail (limits dupe CREATION) ───────────
+   Campaign target (CAS_37B2E1BF): ONE namespace — rp-, flat kebab, no __ (BEM
+   elements), no rt-/ds-/ws-. Legacy violations across the whole frontend are the
+   migration BURNDOWN (advisory metric). NEW violations under frontend/.../framework/
+   are a HARD fail — the framework is born clean so it can't seed fresh dupes. */
+function fwWalk(dir, out) {
+  out = out || [];
+  var ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return out; }
+  ents.forEach(function (e) {
+    var p = path.join(dir, e.name);
+    if (e.isDirectory()) fwWalk(p, out);
+    else if (/\.(js|css|html)$/.test(e.name)) out.push(p);
+  });
+  return out;
+}
+function stripComments(txt, file) {   // so prose mentioning rt-/__ doesn't false-fail
+  if (/\.css$/.test(file)) return txt.replace(/\/\*[\s\S]*?\*\//g, '');
+  if (/\.html$/.test(file)) return txt.replace(/<!--[\s\S]*?-->/g, '');
+  return txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1'); // js
+}
+var BAD_NS = /\b(?:(?:rt|ds|ws)-[a-z0-9]+(?:-[a-z0-9]+)*|rp-[a-z0-9]+(?:-[a-z0-9]+)*__[a-z0-9]+)/g;
+/* Pre-existing framework refs (the cell-editor extraction CAS_8A210C7A predates the
+   rp--only rule). Allowlisted so the guardrail has TEETH for NEW violations without
+   wedging on legacy — each migrates with its owning slice; remove the entry then. */
+var FW_NS_ALLOW = {
+  'frontend/scripts/framework/cell-editor.js|rt-table': 'renders into a redtable cell; migrates with redtable→rp (S2)',
+};
+function namespaceLint(a) {
+  var legacy = {};
+  a.components.concat(a.hooks).forEach(function (g) {
+    g.classes.forEach(function (c) { if (/^(rt|ds|ws)-/.test(c) || c.indexOf('__') >= 0) legacy[c] = true; });
+  });
+  var fw = [], fwAllowed = 0;
+  FW_DIRS.forEach(function (dir) {
+    fwWalk(dir).forEach(function (f) {
+      var rel = path.relative(ROOT, f), txt = '';
+      try { txt = stripComments(fs.readFileSync(f, 'utf8'), f); } catch (e) {}
+      var m; BAD_NS.lastIndex = 0;
+      while ((m = BAD_NS.exec(txt))) {
+        if (FW_NS_ALLOW[rel + '|' + m[0]]) { fwAllowed++; continue; }   // pre-existing, tracked
+        fw.push({ kind: 'namespace', severity: 'error', file: rel, token: m[0],
+          detail: 'framework/ must be rp- flat-kebab (no rt-/ds-/ws-/__) — found `' + m[0] + '`' });
+      }
+    });
+  });
+  return { legacyCount: Object.keys(legacy).length, fw: fw, fwAllowed: fwAllowed };
+}
 
 /* ── coverage: every enumerated component must appear in the generated index ── */
 function coverageFindings(components) {
@@ -82,17 +132,20 @@ function main() {
   var a = inv.analyze();
   var cov = coverageFindings(a.components);
   var div = a.divergences, par = a.parallels;
+  var ns = namespaceLint(a);
 
   var summary = {
     components: a.counts.components, hooks: a.counts.hooks, classes: a.counts.classes,
     coverageGaps: cov.length, divergences: div.length, parallelClusters: par.length,
+    namespaceLegacy: ns.legacyCount, namespaceFwViolations: ns.fw.length, namespaceFwAllowed: ns.fwAllowed,
   };
   var stamp = new Date().toISOString().slice(0, 10);
   var findings = cov
     .concat(div.map(function (d) { return { kind: 'divergence', severity: 'warn', cls: d.cls, contexts: d.contexts,
       detail: '`.' + d.cls + '` styled under ' + d.contexts.length + ' contexts' }; }))
     .concat(par.map(function (p) { return { kind: 'parallel', severity: 'warn', suffix: p.suffix, count: p.count,
-      blocks: p.blocks, members: p.members, detail: '`-' + p.suffix + '` in ' + p.count + ' classes across ' + p.blocks + ' blocks' }; }));
+      blocks: p.blocks, members: p.members, detail: '`-' + p.suffix + '` in ' + p.count + ' classes across ' + p.blocks + ' blocks' }; }))
+    .concat(ns.fw);
   fs.writeFileSync(path.join(__dirname, 'audit.json'),
     JSON.stringify({ tool: 'ui-doc', generatedAt: stamp, summary: summary, findings: findings }, null, 2));
   fs.writeFileSync(path.join(__dirname, 'audit.html'), html(summary, cov, div, par));
@@ -105,11 +158,14 @@ function main() {
   console.log('coverage gaps:     ' + summary.coverageGaps + (summary.coverageGaps ? '  ← FAIL (index stale/missing)' : '  ✓ index complete'));
   console.log('divergences:       ' + summary.divergences + '  (same class, ≥2 ancestor contexts)');
   console.log('parallel clusters: ' + summary.parallelClusters + '  (shared role-suffix across blocks)');
+  console.log('namespace legacy:  ' + summary.namespaceLegacy + '  (rt-/ds-/ws-/__ classes — migration burndown to 0)');
+  console.log('framework ns viol: ' + summary.namespaceFwViolations + (summary.namespaceFwViolations ? '  ← FAIL (framework/ must be rp- flat-kebab)' : '  ✓ no NEW framework violations') + (summary.namespaceFwAllowed ? '  (' + summary.namespaceFwAllowed + ' pre-existing allowlisted)' : ''));
   if (par.length) {
     console.log('\ntop parallel-class clusters (compose → atom):');
     par.slice(0, 8).forEach(function (f) { console.log('  -' + f.suffix + '  ×' + f.count + ' across ' + f.blocks + ' blocks'); });
   }
   console.log('\nreport: ' + path.relative(ROOT, path.join(__dirname, 'audit.html')));
-  process.exit(cov.length ? 1 : 0);   // HARD gate: coverage only
+  // HARD gate: index coverage + framework-namespace cleanliness (legacy is advisory)
+  process.exit((cov.length || ns.fw.length) ? 1 : 0);
 }
 main();
