@@ -47,8 +47,11 @@ function buildCtx(col, chipRender) {
 }
 
 export const cellEditor = {
-  // decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender })
-  //   view              — DOM root containing the redtable
+  // decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender, tableRoot })
+  //   view              — DOM root containing the redtable. Used only as
+  //                       the fallback scope when tableRoot is omitted
+  //                       (legacy ".rt-table" / "#rp-home-list-tbody"
+  //                       lookups stay view-scoped, exactly as before).
   //   spec              — page spec (spec.columns[] carries editKey,
   //                       editor, options, render, requiresAdmin, ...)
   //   editMode          — boolean. true → activate edit mode on
@@ -64,8 +67,20 @@ export const cellEditor = {
   //                       owns the chip vocabulary; this module just
   //                       passes the resolved renderer to chip-enum's
   //                       ctx so it can rebuild the chip on buildOff.
-  decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender }) {
-    const tbody = view.querySelector("#rp-home-list-tbody");
+  //   tableRoot         — OPTIONAL <table> element. When supplied, the
+  //                       tbody, thead row + tr[data-rid] are derived
+  //                       FROM this root (so rp-redtable can pass its
+  //                       <table class="rp-redtable">). When OMITTED,
+  //                       falls back to the legacy view-scoped lookups
+  //                       (".rt-table thead tr" + "#rp-home-list-tbody")
+  //                       — every existing caller (home.js,
+  //                       typedef-acceptance.js) behaves IDENTICALLY.
+  decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender, tableRoot }) {
+    // tbody: when a tableRoot is given, the editable cells live in THAT
+    // table's tbody; otherwise keep the legacy hard-coded id, view-scoped.
+    const tbody = tableRoot
+      ? tableRoot.querySelector("tbody")
+      : view.querySelector("#rp-home-list-tbody");
     if (!tbody) return;
     const colByKey = new Map(
       (spec.columns || []).filter((c) => c.editKey).map((c) => [c.editKey, c]),
@@ -85,7 +100,11 @@ export const cellEditor = {
     // ACTIVATE — walk spec's editable cols, resolve each TD by the
     // CURRENT thead position (survives column reorder), dispatch
     // buildOn per editor id.
-    const thead = view.querySelector(".rt-table thead tr");
+    // thead row: derived from tableRoot when supplied (rp-redtable),
+    // else the legacy view-scoped ".rt-table thead tr" lookup.
+    const thead = tableRoot
+      ? tableRoot.querySelector("thead tr")
+      : view.querySelector(".rt-table thead tr");
     if (!thead) return;
     const dataTHs = [...thead.querySelectorAll("th[data-col-key]")];
     const keyToPos = new Map(dataTHs.map((th, i) => [th.dataset.colKey, i]));

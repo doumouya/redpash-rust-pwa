@@ -28,6 +28,8 @@
   <link rel="stylesheet" href="/styles/framework/seg.css" />
   <link rel="stylesheet" href="/styles/framework/panel.css" />
   <link rel="stylesheet" href="/styles/framework/pager.css" />
+  <!-- B3.1 redtable core: the interactive data table over the rp-table base -->
+  <link rel="stylesheet" href="/styles/framework/redtable.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -79,6 +81,9 @@
   <section class="sbx-section" data-page="_panel"><h2>component — panel shell (B3.0, tabs variant)</h2><div id="sbx-panel" class="sbx-mount" style="height:16rem;width:18rem;padding:0;overflow:hidden;display:flex"></div></section>
   <section class="sbx-section" data-page="_pager"><h2>component — pager (B3.0)</h2><div id="sbx-pager" class="sbx-mount"></div></section>
 
+  <!-- B3.1 redtable core: virtualized workspace-style grid (multi-key sort + selection + rownum + 500 rows) -->
+  <section class="sbx-section" data-page="_redtable"><h2>component — RedTable (B3.1): sort · select · rownum · virtualization (500 rows)</h2><div id="sbx-redtable" class="sbx-mount" style="height:24rem;padding:0;overflow:auto;display:block"></div></section>
+
   <!-- S4: the generic modal (shown inline/visible for the proof) — the create-action target -->
   <section class="sbx-section" data-page="_modal"><h2>component — modal (S4): generic create dialog</h2><div id="sbx-modal" class="sbx-mount" style="position:relative;height:24rem;overflow:hidden"></div></section>
 
@@ -113,8 +118,8 @@
     import "/scripts/framework/menu.js";                // "menu" (dropdown + global delegate)
     import "/scripts/framework/panel.js";               // "panel" (side-panel shell)
     import "/scripts/framework/pager.js";               // "pager" (windowed pagination)
+    import "/scripts/framework/redtable.js";            // "redtable" (B3.1 interactive data table)
     // As components land, import their modules here so they self-register, e.g.:
-    //   import "/scripts/framework/redtable.js";       // S2 (full RedTable, B3.1)
     //   import "/scripts/framework/create-action.js";  // S4
 
     // mount the topbar once (shared chrome) with a demo session
@@ -209,6 +214,42 @@
     if (mountPager) {
       mountPager(document.getElementById("sbx-pager"), { onPage: () => {} })
         .render({ page: 3, totalPages: 12, total: 1180, shown: 100, pageSize: 100 });
+    }
+
+    // ── B3.1 RedTable — workspace-style grid: multi-key sort + selection + rownum
+    //    + virtualization over 500 rows (proves the windowing + the converged
+    //    interactive layers). Edit mode toggled below to prove contenteditable.
+    const mountRedTable = get("redtable");
+    if (mountRedTable) {
+      const KINDS = ["CSV", "Parquet", "JSON"];
+      const STAT = ["Clean", "Dirty", "Pending"];
+      const TONE = { Clean: "is-active", Dirty: "is-lapsed", Pending: "is-new" };
+      const rows = Array.from({ length: 500 }, (_, i) => ({
+        rid: "FIL_" + (1000 + i),
+        name: "dataset_" + String(i + 1).padStart(3, "0") + ".csv",
+        kind: KINDS[i % 3],
+        rowsN: ((i * 137) % 90000) + 100,
+        status: STAT[i % 3], statusTone: TONE[STAT[i % 3]],
+      }));
+      const rt = mountRedTable(document.getElementById("sbx-redtable"), {
+        columns: [
+          { key: "rid", label: "File", kind: "id" },
+          { key: "name", label: "Name", sortable: true, editable: true },
+          { key: "kind", label: "Kind", sortable: true },
+          { key: "rowsN", label: "Rows", kind: "num", sortable: true, align: "num" },
+          { key: "status", label: "Status", kind: "status", sortable: true },
+        ],
+        rows,
+        rowKey: (r) => r.rid,
+        sort: { multi: true, indicator: "chevron", onSort: () => {} },
+        select: { onChange: () => {} },
+        rownum: true,
+        edit: { host: "contenteditable", onCommit: () => {} },
+        virtual: { rowHeight: 33 },
+        empty: "No files.",
+      });
+      // prove the sortable + selectable header render in the active states
+      rt.setMode("select");
     }
 
     // mount the dashboards/designer view (B4) — canvas with a 12-col tile grid

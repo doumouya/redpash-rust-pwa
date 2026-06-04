@@ -1,0 +1,201 @@
+/* ── rp-redtable — the interactive RedTable layer, CAS_37B2E1BF ───────────────
+   The INTERACTIVE layers of the B3 RedTable, ported VERBATIM (rt-/rp-list- →
+   rp-redtable-* + state classes) from the three legacy forks — the workspace
+   grid (rt-table interactive family in legacy table.css), the list views
+   (rp-list-sortable / rp-list-sel in legacy shell.css + home.css), and the
+   orphan cell-editor widgets (rp-cell-edit-select / rp-cell-edit-input, produced
+   by framework/editor-chip-enum.js + editor-entity-picker.js but UNSTYLED in the
+   live app). A zero-visual-change diff: every rule below is a legacy rule with
+   only its selector renamed.
+
+   EXTENDS, never redeclares, the rp-table base (styles/framework/table.css): the
+   read-only base owns width/collapse/tabular-nums, sticky thead, tbody td
+   padding/border/nowrap, the tr content-visibility:auto + contain-intrinsic-size
+   virtualization rule, tr:hover, .is-selected (accent-soft row tone), the cell
+   kinds (.col-n / .cell-name / .cell-muted / .cell-warn), rp-table-wrap (scroll
+   host) and rp-table-state (centered placeholder). The interactive layers here
+   sit ON TOP of that base. The cell atoms (rp-status, rp-mono-pill, rp-empty,
+   rp-priority-dot) live in atoms.css / table.css and are COMPOSED by renderRow,
+   never redeclared.
+
+   The three legacy forks converge here behind config flags on the rp-redtable
+   builder (sort: single vs multi-key; selection key: idx vs rid; edit host:
+   contenteditable vs cell-editor vs input/select; reorder on/off; rownum on/off;
+   virtualization on/off). The mode state lives as a CLASS on the table element
+   (.mode-select / .mode-edit / .mode-delete) toggled by the toolbar area and
+   READ by renderRow — the styling here only reacts to those classes.
+
+   NOTE: .rp-redtable-spacer (the virtualizer's spacer <tr>) is intentionally
+   absent — it carries NO CSS rule and is styled entirely INLINE by virtual-rows.js
+   (content-visibility:visible on the <tr>, height/padding:0/border:0 on the <td>).
+   The inline content-visibility:visible is the explicit counter to the rp-table
+   base's `tbody tr { content-visibility:auto }` rule; do NOT add a rule for it. */
+
+/* ── selection column (was .rt-table .col-chk / .rt-table.mode-select .col-chk) ─
+   Leading sentinel TH/TD hosting the per-row + select-all checkbox. Hidden by
+   default; shown only when the table carries .mode-select. */
+.rp-redtable .rp-redtable-col-sel { width: 2.375rem; display: none; }
+.rp-redtable.mode-select .rp-redtable-col-sel { display: table-cell; }
+
+/* ── row-number column (was .rt-table .col-rownum / .rt-table.no-rownum) ───────
+   min-width (not just width) so the auto table-layout can't shrink the
+   row-number column as the visible digit-count changes during a virtual
+   scroll (e.g. row 9 → 999) — keeps the column edge from jittering.
+   .no-rownum on the table hides it (the rownum toggle). */
+.rp-redtable .rp-redtable-col-rownum { width: 3.125rem; min-width: 3.5rem; }
+.rp-redtable.no-rownum .rp-redtable-col-rownum { display: none; }
+
+/* ── sortable thead — shared + the two fork hover tones (was .rt-table th.sortable
+   /:hover/.sorted  +  .rp-list-sortable/:hover) ───────────────────────────────
+   The two legacy forks converge on ONE header class .is-sortable: cursor +
+   no-select + the active-sort accent (.is-sorted). The single point where the
+   forks DIVERGE is the hover tone — workspace dimmed to --rp-text-dim, the list
+   views brightened to --rp-text. To preserve BOTH verbatim (a zero-visual-change
+   port), the hover tone is keyed on WHICH sort-glyph the header carries: a
+   workspace header has the .rp-redtable-sort chevron <i>; a list header has the
+   .rp-redtable-sort-icon span. */
+.rp-redtable th.is-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.rp-redtable th.is-sortable.is-sorted { color: var(--rp-accent-2); }
+/* WORKSPACE fork hover (was .rt-table th.sortable:hover) — dims. */
+.rp-redtable th.is-sortable:has(.rp-redtable-sort):hover { color: var(--rp-text-dim); }
+/* LIST fork hover (was .rp-list-sortable:hover) — brightens. */
+.rp-redtable th.is-sortable:has(.rp-redtable-sort-icon):hover { color: var(--rp-text); }
+
+/* ── sort glyph — WORKSPACE variant (was .rt-table th .sort / .sort-ord) ───────
+   .rp-redtable-sort is the chevron <i> (bi-chevron-expand/up/down swapped by JS);
+   .rp-redtable-sort-ord is the superscript multi-key order number (1,2,3…) shown
+   only when sorting on >1 column. */
+.rp-redtable th .rp-redtable-sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
+.rp-redtable th .rp-redtable-sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-accent-2); }
+
+/* ── sort glyph — LIST variant (was .rp-list-sortable / .rp-list-sort-icon /
+   .is-asc / .is-desc, legacy shell.css) ───────────────────────────────────────
+   The list views (home / monitoring) sort on a STRING col-key with a 2-state
+   asc/desc cycle and NO multi-key order number. Diverges from the workspace
+   header by mechanism (CSS content glyphs \F285 / \F282, not the bi chevron
+   swap). The two converge on the same .is-sortable header class; the glyph
+   span carries .rp-redtable-sort-icon and the active direction lands on the
+   header as .is-asc / .is-desc.
+
+   Cursor / no-select / white-space / hover tone are in the shared .is-sortable
+   block above (the list fork's :hover{color:var(--rp-text)} is the
+   :has(.rp-redtable-sort-icon) branch there); only the icon glyph + the asc/desc
+   content live here. */
+.rp-redtable-sort-icon {
+  margin-left: 0.25rem;
+  font-size: 0.625rem;
+  opacity: 0.45;
+  transition: opacity 0.12s var(--rp-ease);
+}
+.rp-redtable th.is-sortable:hover .rp-redtable-sort-icon,
+.rp-redtable th.is-sortable.is-asc .rp-redtable-sort-icon,
+.rp-redtable th.is-sortable.is-desc .rp-redtable-sort-icon { opacity: 1; }
+.rp-redtable th.is-sortable.is-asc  .rp-redtable-sort-icon::before { content: "\F285"; }
+.rp-redtable th.is-sortable.is-desc .rp-redtable-sort-icon::before { content: "\F282"; }
+
+/* ── column drag-reorder (was .rt-table thead th[draggable] / .is-dragging /
+   .is-drop-before::before / .is-drop-after::after) ────────────────────────────
+   Column reorder (click-and-grab) — every TH carries draggable="true"
+   so the user can pick up a header and drop it on another.
+     .is-dragging        on the source — faded so the user sees it
+                         being moved
+     .is-drop-before     on the hovered TH when the cursor is in its
+                         LEFT half — accent bar straddling the LEFT
+                         edge marks where the column will land
+     .is-drop-after      same but right-edge — cursor in the RIGHT
+                         half drops after the target
+   The bar is drawn as a ::before/::after pseudo-element straddling
+   the column edge (positioned at left:-2px / right:-2px and 2px
+   taller than the row). This reads as a clear "insertion bar"
+   *between* columns — critical on the FIRST column (drop-before)
+   and the LAST column (drop-after), where an inset box-shadow would
+   collapse against the table boundary and become invisible
+   (Em 2026-05-31). Em 2026-05-25: "there's a feature in the live
+   app that has been lost here, reordering columns order". */
+.rp-redtable thead th[draggable="true"] { cursor: grab; }
+.rp-redtable thead th[draggable="true"]:active { cursor: grabbing; }
+.rp-redtable thead th.is-dragging { opacity: 0.45; }
+.rp-redtable thead th.is-drop-before::before,
+.rp-redtable thead th.is-drop-after::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0.3125rem;
+  background: var(--rp-accent-2);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+.rp-redtable thead th.is-drop-before::before { left: -2px; }
+.rp-redtable thead th.is-drop-after::after  { right: -2px; }
+
+/* ── selected row ─────────────────────────────────────────────────────────────
+   The accent-soft selected-row tone (.rp-table tbody tr.is-selected) already
+   lives in the rp-table base (styles/framework/table.css) and is COMPOSED here —
+   the redtable needs nothing more for the selected-row look, so no rule is
+   added (composing the base, per the no-redeclare rule). */
+
+/* ── checkbox input (was .rt-chk) ─────────────────────────────────────────────
+   The checkbox INPUT itself — select-all, per-row, cols-picker item, tools-panel
+   column-select. Accent-coloured, pointer cursor. Used in the select/edit modes
+   and the cols dropdown. */
+.rp-redtable-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-accent-2); cursor: pointer; }
+
+/* ── edit mode (was .rt-table.mode-edit td.editable / :hover / :focus) ─────────
+   WORKSPACE inline-edit cell wrapper. In edit mode every data cell gets an inset
+   accent-soft outline; hover fills it; :focus (cell is contenteditable=true, OR
+   the framework editor's swapped widget has focus) draws a solid accent outline.
+   CRITICAL: this layer was MISSING from framework/table.css — the framework
+   editors (editor-text/chip-enum/entity-picker) emit class="editable" and the
+   mode-machine toggles .mode-edit, but the rp-table base had no edit styling, so
+   a lifted cell rendered VISUALLY-DEAD. Ported here as the rp-redtable edit
+   layer. .editable is the cell-content state the editors add; .mode-edit is the
+   table-level flag the mode-machine toggles. */
+.rp-redtable.mode-edit td.editable {
+  cursor: text;
+  box-shadow: inset 0 0 0 1px var(--rp-accent-soft);
+}
+.rp-redtable.mode-edit td.editable:hover { background: var(--rp-accent-soft); }
+.rp-redtable td.editable:focus {
+  outline: 0.125rem solid var(--rp-accent-2);
+  outline-offset: -0.125rem;
+  background: var(--rp-surface);
+  border-radius: 0.25rem;
+}
+
+/* ── delete mode (was .rt-table.mode-delete tbody tr / :hover / :hover td) ─────
+   WORKSPACE delete-mode rows — pointer cursor + red-tinted hover (accent/danger)
+   on the whole row, signalling click-to-delete. */
+.rp-redtable.mode-delete tbody tr { cursor: pointer; }
+.rp-redtable.mode-delete tbody tr:hover { background: rgba(243, 139, 168, 0.1); }
+.rp-redtable.mode-delete tbody tr:hover td { color: var(--rp-accent); }
+
+/* ── cell-editor widgets — the two ORPHAN inline-editor inputs ────────────────
+   editor-chip-enum.js creates <select class="rp-cell-edit-select"> and
+   editor-entity-picker.js creates <input class="rp-cell-edit-input">, but
+   NEITHER has a rule in any live stylesheet — the only reference is inline in the
+   standalone test page (frontend/typedef-acceptance.html), so in production they
+   render as raw browser defaults inside an .editable cell. Authored here so the
+   inline editor is styled: a small field that FILLS the cell, inherits the cell
+   font, and shows the accent focus ring (matching the .editable:focus affordance
+   above + the rp-input atom's focus shadow). Composed by the cell-editor seam
+   when the redtable is in mode-edit. */
+.rp-cell-edit-select,
+.rp-cell-edit-input {
+  width: 100%;
+  height: 1.625rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--rp-accent-2);
+  border-radius: 0.375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  outline: 0;
+}
+.rp-cell-edit-select:focus,
+.rp-cell-edit-input:focus {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 0.125rem var(--rp-accent-soft);
+}
