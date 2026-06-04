@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/styles/framework/omni.css" />
   <link rel="stylesheet" href="/styles/framework/rail.css" />
   <link rel="stylesheet" href="/styles/framework/comments.css" />
+  <link rel="stylesheet" href="/styles/framework/dashboards.css" />
   <style>
     /* sandbox chrome only — never ship; not part of the framework */
     body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
@@ -51,6 +52,9 @@
   <!-- reusable component: the Comment view (B5) — thread + composer, de-cased from Cases -->
   <section class="sbx-section" data-page="_comments"><h2>component — comment view (B5)</h2><div id="sbx-comments" class="sbx-mount" style="max-width:42rem"></div></section>
 
+  <!-- reusable component: the Dashboards/designer view (B4) — canvas + tile grid + config accordion -->
+  <section class="sbx-section" data-page="_dashboards"><h2>component — dashboards / designer (B4)</h2><div id="sbx-dashboards" class="sbx-mount" style="height:30rem;padding:0;overflow:hidden;display:flex"></div></section>
+
   <!-- One section per real page. As S2–S5 register components, assemble each page here
        from framework parts (rail + surface + redtable + create-action + atoms). When all
        7 render from the registry alone, the framework is complete. -->
@@ -67,6 +71,7 @@
     import "/scripts/framework/topbar.js";              // self-registers "topbar"
     import "/scripts/framework/rail.js";                // self-registers "rail" (B1, full version)
     import "/scripts/framework/comments.js";            // self-registers "comments" (B5)
+    import "/scripts/framework/dashboards.js";          // self-registers "dashboards" (B4)
     // As components land, import their modules here so they self-register, e.g.:
     //   import "/scripts/framework/redtable.js";       // S2
     //   import "/scripts/framework/create-action.js";  // S4
@@ -124,6 +129,20 @@
           attachments: [{ name: "trace.log", icon: "bi-file-earmark-text", sizeLabel: "12 KB" }] },
         { rid: "CMT_3", author_id: "USR_ME", author_display_name: "You",
           created_at: "2026-06-04T08:05:00Z", body: "Shipped the fix to prerelease — please re-test." },
+      ],
+    });
+
+    // mount the dashboards/designer view (B4) — canvas with a 12-col tile grid
+    // (spans 6/6/12, one selected, one error tile) + the config accordion, all
+    // from framework parts. Behaviour (ECharts, drag, config binding) deferred.
+    const mountDashboards = get("dashboards");
+    if (mountDashboards) mountDashboards(document.getElementById("sbx-dashboards"), {
+      configTitle: "Revenue by region",
+      tiles: [
+        { title: "Revenue by month", span: 6, selected: true },
+        { title: "Top clients",      span: 6 },
+        { title: "Pipeline funnel",  span: 12 },
+        { title: "Churn (failed)",   span: 6, error: "widget fetch failed" },
       ],
     });
 

@@ -1,0 +1,469 @@
+/* ── dashboards designer surface ─────────────────────────────────
+   The Workspace body when a chart-typed file is open. The
+   .rp-dash-shell container hosts the canvas (12-col grid of tiles)
+   on the left + a config accordion on the right.
+
+   VERBATIM rename of the designer block from
+   frontend/styles/chart.css (the .ds-* / .rt-designer / .rt-chart*
+   designer vocabulary). Zero-visual-change cutover: only selector
+   NAMES change; every declaration value + every --rp-* token is
+   byte-identical to the source. Method validated on the atoms and
+   comments ports.
+
+   Rename shape (rule 3 — rp- only, flat kebab, no rt-/ds-/ws-/__):
+   - rt-chart / rt-chart__state  → rp-dash-chart-legacy / -state
+   - rt-toolbar--designer        → rp-dash-toolbar
+   - rt-toolbar-spacer           → rp-dash-toolbar-spacer
+   - rt-designer                 → rp-dash-shell
+   - ds-canvas/grid/span-N       → rp-dash-canvas/grid/span-N
+   - ds-tile*                    → rp-dash-tile*
+   - ds-config*                  → rp-dash-config*  (Save collapses, see below)
+   - ds-sec*                     → rp-dash-sec*
+   - ds-lbl/input/toggle/muted   → rp-dash-lbl/input/toggle/muted
+   - ds-type* / ds-source/chip*  → rp-dash-type* / -source / -chip*
+   - ds-measure*, ds-agg*        → rp-dash-measure* / -agg*
+   - ds-theme*, ds-sw, ds-check  → rp-dash-theme* / -sw / -check
+
+   State classes normalized to the is-* convention used by the
+   landed atoms (is-active/is-busy/is-copyable):
+   - .selected → .is-selected      (tile)
+   - .open     → .is-open          (accordion section)
+   - .active   → .is-active        (type-btn / theme-opt)
+   - ds-config-hidden → rp-dash-config-hidden (layout-state toggle on
+     the shell; not a generic is-* state, so it carries the prefix)
+   BEM '--' modifiers preserved per rule:
+   - rp-dash-tile--dirty / rp-dash-tile--error.
+
+   Composed atoms (referenced by name, NOT redefined here):
+   - rp-empty (A9)  — the canonical empty-state atom; the no-tiles
+     state composes it. The dashboard deltas vs the atom (margin
+     2.5rem auto + font-size 0.8125rem + grid-column 1/-1 to centre
+     across the 12-col grid) are a CONTEXT override below
+     (.rp-dash-grid > .rp-empty), NOT an atom redefinition.
+   - rp-btn-icon + --accent (A1)  — was rt-btn + rt-btn--accent (the
+     B5 cross-check proved them byte-identical). The Save CTA composes
+     both; rp-dash-config-save below is the SIZING modifier carrying
+     the verbatim ds-config-save deltas (height/padding/gap/font-size,
+     <i> size, 0.45 disabled-opacity). Markup: class="rp-btn-icon
+     rp-btn-icon--accent rp-dash-config-save".
+   Dedup-deferred candidates (kept as rp-dash-* full rules to stay
+   zero-visual-change; an atoms pass may later collapse them): the
+   section-header label, field label, input, muted text differ in
+   size/weight from rp-label/rp-input, so they are NOT collapsed now.
+
+   Foreign references (owned by the RedTable B3 port, NOT defined
+   here — these selectors only reference them, so the rename rewrites
+   the references to their canonical rp- names so matching is kept):
+   - rp-table-toolbar, rp-pager, rp-panel--filter/--history/--tools.
+   The .is-designer-mode state class stays (rule).
+
+   Ported originally from red-front/designer.html; tokens are the
+   redpash --rp-* family so chrome themes apply consistently.
+
+   The legacy single-canvas .rp-dash-chart-legacy + state classes
+   stay for /chart files rendered OUTSIDE the Designer (e.g. embeds)
+   or as a fallback when ECharts didn't load. */
+
+.rp-dash-chart-legacy {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 25rem;
+  padding: var(--rp-sp-4);
+}
+.rp-dash-chart-legacy-state {
+  padding: var(--rp-sp-8);
+  text-align: center;
+  color: var(--rp-text-mute);
+}
+
+/* ── mode swap ──────────────────────────────────────────────────
+   The Workspace surface has two modes:
+   - data:     existing toolbar + body (table + filter/history/tools
+               panels) + pager — the redtable surface.
+   - designer: chart-only toolbar + canvas + accordion config — the
+               full Designer takeover.
+   workspace.js toggles .is-designer-mode on .rp-surface when a CHT_
+   file is opened; CSS here swaps which children show. */
+
+/* default (data mode) — show data, hide designer */
+.rp-dash-toolbar { display: none; }
+
+/* designer mode — hide everything data, show the designer toolbar
+   and let the designer container own the body. */
+.rp-surface.is-designer-mode .rp-table-toolbar,
+.rp-surface.is-designer-mode .rp-pager,
+.rp-surface.is-designer-mode .rp-panel--filter,
+.rp-surface.is-designer-mode .rp-panel--history,
+.rp-surface.is-designer-mode .rp-panel--tools {
+  display: none !important;
+}
+.rp-surface.is-designer-mode .rp-dash-toolbar {
+  display: flex;
+}
+
+/* The designer toolbar reuses .rp-table-toolbar layout (height +
+   padding + flex), only its children differ. .rp-dash-title is the
+   breadcrumb. */
+.rp-dash-toolbar .rp-dash-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-dash-toolbar .rp-dash-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.rp-dash-toolbar-spacer { flex: 1; }
+
+/* ── designer shell ─────────────────────────────────────────────
+   Two columns: canvas + config accordion. Canvas scrolls; accordion
+   has its own scroll if sections expand beyond the panel height. */
+.rp-dash-shell {
+  flex: 1;
+  min-width: 0;
+  height: 100%;            /* fill .rt-table-wrap (which fills .rp-surface-body) */
+  display: flex;
+  background: var(--rp-bg);
+}
+/* `display: flex` above beats the UA-level `[hidden]` rule, so the
+   designer would stay visible under a 10-row data table when
+   setTableState() flips `hidden=true`. Restore the hidden semantic
+   explicitly. */
+.rp-dash-shell[hidden] { display: none; }
+.rp-dash-shell.rp-dash-config-hidden .rp-dash-config { display: none; }
+
+/* canvas ─────────────────────────────────────────────────────── */
+.rp-dash-canvas {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0.875rem;
+}
+.rp-dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0.875rem;
+  align-content: start;
+}
+.rp-dash-span-3  { grid-column: span 3; }
+.rp-dash-span-5  { grid-column: span 5; }
+.rp-dash-span-6  { grid-column: span 6; }
+.rp-dash-span-7  { grid-column: span 7; }
+.rp-dash-span-12 { grid-column: span 12; }
+
+.rp-dash-tile {
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 0.125rem rgba(0, 0, 0, 0.07), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.14s var(--rp-ease), box-shadow 0.14s var(--rp-ease);
+}
+.rp-dash-tile.is-selected {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
+}
+.rp-dash-tile-head {
+  flex-shrink: 0;
+  height: 2.5rem;
+  padding: 0 0.375rem 0 0.8125rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rp-dash-tile-title {
+  font-size: 0.7812rem;
+  font-weight: 600;
+  color: var(--rp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Tile-head action buttons (edit / save / delete / close). Hover-
+   fade in like the rail affordances; the destructive pair (delete +
+   close) tint accent on hover. The save button sits disabled until
+   the tile is dirty (an accordion edit), and gets the accent fill
+   when active so "this chart has unsaved edits" reads at a glance. */
+.rp-dash-tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+.rp-dash-tile-act {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.3125rem;
+  background: transparent;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-dash-tile-act i { font-size: 0.75rem; }
+.rp-dash-tile:hover .rp-dash-tile-act,
+.rp-dash-tile.is-selected .rp-dash-tile-act { opacity: 1; }
+.rp-dash-tile-act:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+.rp-dash-tile-del:hover,
+.rp-dash-tile-close:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.rp-dash-tile-act:disabled { opacity: 0; cursor: default; }
+/* Dirty tile → its save button stays visible + accent-filled even
+   without hover, signalling unsaved edits. */
+.rp-dash-tile--dirty .rp-dash-tile-save:not(:disabled) {
+  opacity: 1;
+  background: var(--rp-accent-2);
+  color: var(--rp-bg);
+}
+.rp-dash-tile-body {
+  flex: 1;
+  min-height: 17.5rem;
+  padding: 0 0.5rem 0.5rem;
+}
+.rp-dash-chart { width: 100%; height: 100%; }
+
+/* Empty state composes the rp-empty atom (A9); these are the dashboard
+   deltas vs the atom (verbatim from the legacy .ds-empty) — a context
+   override on the atom, NOT a redefinition. */
+.rp-dash-grid > .rp-empty { margin: 2.5rem auto; font-size: 0.8125rem; grid-column: 1 / -1; }
+
+/* Tile that couldn't load — chart fetch returned an error. */
+.rp-dash-tile--error { border-color: var(--rp-warn); }
+.rp-dash-tile-err {
+  padding: 1rem;
+  color: var(--rp-warn);
+  font-size: 0.7812rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.rp-dash-tile-err i { font-size: 0.875rem; }
+
+/* config accordion ───────────────────────────────────────────── */
+.rp-dash-config {
+  flex-shrink: 0;
+  width: 20rem;
+  background: var(--rp-surface-2);
+  border-left: 1px solid var(--rp-border);
+  display: flex;
+  flex-direction: column;
+}
+.rp-dash-config-head {
+  flex-shrink: 0;
+  height: 2.625rem;
+  padding: 0 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-dash-config-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.7812rem;
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-dash-config-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+/* Config-panel Save CTA composes the rp-btn-icon + --accent atom (A1,
+   was rt-btn + rt-btn--accent). rp-dash-config-save is the SIZING
+   modifier — the verbatim ds-config-save deltas vs the atom. */
+.rp-dash-config-save { height: 1.75rem; padding: 0 0.75rem; gap: 0.3125rem; font-size: 0.75rem; }
+.rp-dash-config-save i { font-size: 0.75rem; }
+.rp-dash-config-save:disabled { opacity: 0.45; cursor: not-allowed; }
+.rp-dash-config-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* accordion section */
+.rp-dash-sec { border-bottom: 1px solid var(--rp-border); }
+.rp-dash-sec:last-child { border-bottom: 0; }
+.rp-dash-sec-head {
+  width: 100%;
+  height: 2.5rem;
+  padding: 0 0.625rem;
+  gap: 0.5rem;
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: var(--rp-text);
+  transition: background 0.12s var(--rp-ease);
+}
+.rp-dash-sec-head:hover { background: var(--rp-hover); }
+.rp-dash-sec-caret {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  transition: transform 0.15s var(--rp-ease);
+}
+.rp-dash-sec:not(.is-open) .rp-dash-sec-caret { transform: rotate(-90deg); }
+.rp-dash-sec-icon { font-size: 0.8125rem; color: var(--rp-accent-2); }
+.rp-dash-sec-label {
+  flex: 1;
+  text-align: left;
+  font-size: 0.7812rem;
+  font-weight: 600;
+}
+.rp-dash-sec-body { padding: 0.125rem 0.75rem 0.875rem; }
+.rp-dash-sec:not(.is-open) .rp-dash-sec-body { display: none; }
+
+/* form atoms inside the accordion */
+.rp-dash-lbl {
+  display: block;
+  margin: 0.75rem 0 0.375rem;
+  font-size: 0.6562rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+.rp-dash-sec-body > .rp-dash-lbl:first-child { margin-top: 0.25rem; }
+.rp-dash-input {
+  width: 100%;
+  height: 1.9375rem;
+  padding: 0 0.5625rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.4375rem;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.7812rem;
+  outline: 0;
+}
+.rp-dash-input:focus {
+  border-color: var(--rp-accent-2);
+  box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
+}
+.rp-dash-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7812rem;
+  color: var(--rp-text);
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+.rp-dash-toggle-row input {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  accent-color: var(--rp-accent-2);
+  cursor: pointer;
+}
+.rp-dash-muted {
+  color: var(--rp-text-mute);
+  font-size: 0.7188rem;
+}
+
+/* chart-type grid (per family — cartesian / pie / barh) */
+.rp-dash-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.375rem;
+}
+.rp-dash-type-btn {
+  height: 3.125rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1875rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5625rem;
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 0.625rem;
+  cursor: pointer;
+  transition: color 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease),
+              background 0.14s var(--rp-ease);
+}
+.rp-dash-type-btn i { font-size: 0.9375rem; }
+.rp-dash-type-btn:hover { color: var(--rp-text); }
+.rp-dash-type-btn.is-active {
+  color: var(--rp-accent-2);
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
+
+/* Data section atoms (source chip + chip rows) */
+.rp-dash-source {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--rp-hover);
+  font-size: 0.75rem;
+  color: var(--rp-text);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rp-dash-source i { color: var(--rp-accent-2); font-size: 0.8125rem; }
+.rp-dash-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3125rem;
+}
+.rp-dash-chip {
+  font-size: 0.6875rem;
+  padding: 0.1875rem 0.5625rem;
+  border-radius: 6.1875rem;
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-2);
+  font-weight: 550;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+/* Measure row — agg fn + the column it runs on, side by side. The fn
+   takes a touch less width than the column (column names are longer). */
+.rp-dash-measure-row {
+  display: flex;
+  gap: 0.4375rem;
+}
+.rp-dash-measure-row .rp-dash-agg-fn  { flex: 0 0 44%; }
+.rp-dash-measure-row .rp-dash-agg-col { flex: 1 1 auto; min-width: 0; }
+.rp-dash-measure-row .rp-dash-agg-col:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Style section — theme picker swatches */
+.rp-dash-theme-opts { display: flex; flex-direction: column; gap: 0.3125rem; }
+.rp-dash-theme-opt {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
+  padding: 0.4375rem 0.5625rem;
+  border: 1px solid var(--rp-border);
+  border-radius: 0.5rem;
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: 0.7812rem;
+  cursor: pointer;
+  transition: border-color 0.14s var(--rp-ease), background 0.14s var(--rp-ease);
+}
+.rp-dash-theme-opt:hover { background: var(--rp-hover); }
+.rp-dash-theme-opt.is-active {
+  border-color: var(--rp-accent-2);
+  background: var(--rp-accent-soft);
+}
+.rp-dash-sw { display: flex; gap: 0.125rem; }
+.rp-dash-sw i {
+  width: 0.6875rem;
+  height: 0.875rem;
+  border-radius: 0.125rem;
+}
+.rp-dash-theme-opt span { flex: 1; text-align: left; font-weight: 550; }
+.rp-dash-theme-opt .rp-dash-check {
+  color: var(--rp-accent-2);
+  font-size: 0.75rem;
+}
