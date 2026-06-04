@@ -8,11 +8,11 @@ frontend source; `tools/ui-doc-audit` fails if it drifts. Never hand-edit the ge
 ## Catalog
 
 <!-- doc-gen:component:index START — generated from the frontend source (css+html+js); do not hand-edit -->
-Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the complete, code-enumerated component list.
+Generated 2026-06-04 from the frontend source (44 css, 9 html, 76 js) — the complete, code-enumerated component list.
 
-- **247** styled components (the catalog denominator)
-- **115** dynamic hooks (un-styled JS-injected handles — not components)
-- **128** divergences · **27** parallel-class clusters (the dedup worklist)
+- **249** styled components (the catalog denominator)
+- **119** dynamic hooks (un-styled JS-injected handles — not components)
+- **129** divergences · **27** parallel-class clusters (the dedup worklist)
 
 ### Parallel-class clusters — compose into one atom (`-suffix` shared across blocks)
 
@@ -20,7 +20,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 |---------|-------:|--------:|---------|
 | `-head` | 26 | 36 | `ds-config-head`, `ds-sec-head`, `ds-tile-head`, `rp-cases-card-head`, `rp-cases-col-head`, `rp-cases-comment-head`, `rp-cases-detail-head`, `rp-cases-rail-attach-head` … |
 | `-body` | 25 | 33 | `ds-acc-body`, `ds-config-body`, `ds-sec-body`, `ds-tile-body`, `rp-cases-col-body`, `rp-cases-comment-body`, `rp-cases-detail-body`, `rp-cases-detail-side-desc-body` … |
-| `-title` | 27 | 31 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-dash-config-title` … |
+| `-title` | 28 | 32 | `ds-config-title`, `ds-tile-title`, `ds-title`, `rp-cases-card-title`, `rp-cases-create-title`, `rp-cases-detail-title`, `rp-chart-title`, `rp-dash-config-title` … |
 | `-name` | 13 | 26 | `rp-brand-name`, `rp-cases-attach-name`, `rp-cases-col-name`, `rp-cases-msg-file-name`, `rp-cases-pending-name`, `rp-cases-user-name`, `rp-comment-file-name`, `rp-composer-chip-name` … |
 | `-input` | 13 | 20 | `ds-input`, `rp-cases-comment-attach-input`, `rp-cases-comment-edit-input`, `rp-cases-comment-input`, `rp-cases-composer-input`, `rp-cases-create-desc-input`, `rp-cases-create-title-input`, `rp-cases-side-assignee-input` … |
 | `-row` | 17 | 18 | `ds-chip-row`, `ds-measure-row`, `ds-toggle-row`, `rp-cases-chip-row`, `rp-cases-ov-row`, `rp-chip-row`, `rp-dash-chip-row`, `rp-dash-measure-row` … |
@@ -36,9 +36,9 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `-hint` | 10 | 10 | `rp-login__hint`, `rp-modal-hint`, `rp-mon-user-hint`, `rp-profile__hint`, `rp-settings__hint`, `rt-card-hint`, `rt-join-card__hint`, `rt-report-advanced-hint` … |
 | `-wrap` | 9 | 9 | `rp-login__minitable-wrap`, `rp-menu-wrap`, `rp-profile__rid-wrap`, `rp-table-wrap`, `rp-user-picker-wrap`, `rt-ac-wrap`, `rt-dd-wrap`, `rt-report-preview-wrap` … |
 | `-caret` | 7 | 7 | `ds-sec-caret`, `rp-cases-prop-caret`, `rp-dash-sec-caret`, `rp-mon-row-caret`, `rp-rail-group-caret`, `rt-group-caret`, `rt-report-advanced-caret` |
+| `-pill` | 6 | 7 | `rp-mon-opt-pill`, `rp-mono-pill`, `rp-profile-plan-pill`, `rp-profile__plan-pill`, `rp-toolbar-pill`, `rt-mono-pill`, `rt-pill` |
 | `-error` | 5 | 6 | `rp-cases-comment-form-error`, `rp-cases-side-error`, `rp-comment-error`, `rp-home-create-error`, `rp-modal-error`, `rp-mon-modal-error` |
 | `-dot` | 5 | 6 | `rp-cases-priority-dot`, `rp-cases-status-dot`, `rp-priority-dot`, `rp-rail-tab-dot`, `rp-settings__tag-dot`, `rt-tab-dot` |
-| `-pill` | 5 | 6 | `rp-mon-opt-pill`, `rp-mono-pill`, `rp-profile-plan-pill`, `rp-profile__plan-pill`, `rt-mono-pill`, `rt-pill` |
 | `-value` | 4 | 4 | `rp-kpi-value`, `rp-page__row-value`, `rp-stat-value`, `rt-report-window-value` |
 | `-inner` | 3 | 3 | `rp-cases-detail-side-inner`, `rp-panel-inner`, `rt-panel-inner` |
 | `-menu` | 3 | 3 | `rp-mention-menu`, `rp-menu`, `rp-search-menu` |
@@ -56,7 +56,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `.ds-sec-caret` | `(own)` · `.ds-sec:not(.open)` |
 | `.ds-tile-act` | `(own)` · `.ds-tile:hover` · `.ds-tile.selected` |
 | `.rp-btn` | `(own)` · `.rp-login__card` · `.rp-login__demo` |
-| `.rp-btn-icon` | `(own)` · `.rp-comment-edit-actions` · `.rp-rail-footer` |
+| `.rp-btn-icon` | `(own)` · `.rp-comment-edit-actions` · `.rp-rail-footer` · `.rp-toolbar` |
 | `.rp-cases-activity-filter` | `.rp-cases-detail-side` · `(own)` |
 | `.rp-cases-activity-item` | `.rp-cases-detail-side` · `(own)` |
 | `.rp-cases-activity-kind` | `.rp-cases-detail-side` · `(own)` |
@@ -77,7 +77,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `.rp-cases-rail-source` | `(own)` · `.rt-nav.compact` |
 | `.rp-cases-side-desc-edit` | `(own)` · `.rp-cases-side-blk-head` |
 | `.rp-chart-canvas` | `(own)` · `.rp-chart-card--empty` |
-| `.rp-chip` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `.rp-cases-activity-filter` · `(own)` · `.rp-rail-chips` · `.rt-rail-chips` |
+| `.rp-chip` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `.rp-cases-activity-filter` · `(own)` · `.rp-rail-chips` · `.rp-toolbar` · `.rt-rail-chips` |
 | `.rp-chip-row` | `.rp-cases-chip-row` · `.rp-cases-detail-path` · `(own)` |
 | `.rp-chip-row-label` | `.rp-cases-done-window` · `(own)` |
 | `.rp-comment-actions` | `(own)` · `.rp-comment:hover` · `.rp-comment:focus-within` |
@@ -133,6 +133,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `.rp-surface-body` | `(own)` · `.rp-surface.is-landing-mode` |
 | `.rp-table` | `(own)` · `.rp-cases` |
 | `.rp-title` | `(own)` · `.rp-head` |
+| `.rp-toolbar` | `(own)` · `#rpHomeView` |
 | `.rt-btn` | `(own)` · `.rp-cases-side-desc-actions` · `.rp-cases-comment-edit-actions` · `.rt-nav-foot` |
 | `.rt-card-hint` | `(own)` · `.rp-mon-modal-section-title` |
 | `.rt-card-title` | `(own)` · `.rt-card--panic` |
@@ -179,7 +180,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `.rt-toolbar` | `(own)` · `#rpHomeView` |
 | `.ws-landing` | `(own)` · `.rp-surface.is-landing-mode` |
 
-### Components (247) — flat / maximal grain
+### Components (249) — flat / maximal grain
 
 | component | cls | source | rendered by | flags |
 |-----------|----:|--------|-------------|-------|
@@ -275,7 +276,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `rp-login` | 24 | css+js | renderLocalResult, renderMinitable | `-head`† `-wrap`† |
 | `rp-main` | 1 | css+js | mountSurface |  |
 | `rp-mention` | 3 | css+js | createDescEl, createForm, createModal … | `-item`† `-menu`† |
-| `rp-menu` | 4 | css+js | mountMenu | ⚠ div×1 `-item`† `-menu`† `-wrap`† |
+| `rp-menu` | 4 | css+js | mountMenu, mountToolbar | ⚠ div×1 `-item`† `-menu`† `-wrap`† |
 | `rp-meta` | 1 | css+js | createBtn, createBtnIcon, createBtnLabel … |  |
 | `rp-modal` | 17 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-body`† `-close`† `-error`† `-foot`† `-head`† `-hint`† `-input`† `-label`† `-title`† |
 | `rp-mon-act-icon` | 1 | css+js | mountUserCharts, openRequestReplay, renderCaseCategoriesBody … | `-icon`† |
@@ -320,7 +321,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `rp-rail` | 49 | css+js | mountRail, mountRailFooterNav | ⚠ div×24 `-body`† `-caret`† `-count`† `-dot`† `-head`† `-icon`† `-item`† `-name`† `-state`† `-title`† |
 | `rp-redtable` | 10 | css+js | buildCtx, createVirtualRows, mountRedTable … | ⚠ div×4 `-cell`† `-icon`† |
 | `rp-rows-info` | 1 | css+js | mountPager |  |
-| `rp-search` | 9 | css+js | mountOmni, mountRail | ⚠ div×1 `-label`† `-menu`† `-state`† |
+| `rp-search` | 9 | css+js | mountOmni, mountRail, mountToolbar | ⚠ div×1 `-label`† `-menu`† `-state`† |
 | `rp-seg` | 1 | css |  |  |
 | `rp-settings` | 46 | css+js | mountHidden, mountKey, mountRow … | ⚠ div×1 `-count`† `-dot`† `-empty`† `-head`† `-icon`† `-input`† `-item`† `-list`† `-name`† `-title`† |
 | `rp-settings-chart-modal` | 11 | css+js | openAddChartModal | `-body`† `-close`† `-foot`† `-head`† |
@@ -334,6 +335,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `rp-tone-high` | 1 | css |  |  |
 | `rp-tone-low` | 1 | css |  |  |
 | `rp-tone-mid` | 1 | css |  |  |
+| `rp-toolbar` | 9 | css+js | mountToolbar | ⚠ div×1 `-pill`† `-title`† |
 | `rp-topbar` | 2 | css+js | buildFilterNode, buildSortsParam, createBtn … |  |
 | `rp-user-picker` | 6 | css+js | createBtn, createBtnIcon, createBtnLabel … | `-name`† `-wrap`† |
 | `rp-wordmark` | 1 | css |  |  |
@@ -418,6 +420,7 @@ Generated 2026-06-04 from the frontend source (43 css, 9 html, 75 js) — the co
 | `rt-sentinel-found` | 1 | css+js |  |  |
 | `rt-sentinel-known-lbl` | 1 | css+js | buildSheetSteps, mountTools, renderCastConfirm … |  |
 | `rt-sentinel-scanning` | 1 | css+js |  |  |
+| `rt-spin` | 1 | css |  |  |
 | `rt-spinning` | 1 | css+js | buildFilterNode, buildSortsParam, createBtn … |  |
 | `rt-status` | 1 | css |  |  |
 | `rt-step` | 18 | css+js | buildFilterNode, buildSheetSteps, buildSortsParam … | `-body`† `-close`† `-state`† |
