@@ -130,6 +130,74 @@ export async function captureSnapshot(state = null) {
 }
 
 /**
+ * `?audit=2` — the full rendered-component inventory (distinct from the
+ * `?audit=1` atom-drift snapshot above). Captures EVERY class the live DOM
+ * renders in this state — incl. JS-built + `display:none`-present components
+ * (redtable rows, chips, modal/dropdown portals, kanban cards, designer
+ * canvas) that never appear in the static partials, which is exactly what a
+ * source-only pass misses. Bucketed by shell region (topbar / rail / main) so
+ * the consumer can map classes to the proposition's component groups.
+ *
+ * Consumed by `tools/lib/fe-inventory.js` → `tools/ui-doc-audit/audit.js`.
+ */
+export async function captureInventory(state = null) {
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(r));
+
+  const class_counts = collectClasses();
+
+  // region buckets — which classes render inside each shell region. A class
+  // can appear in more than one region; that's fine (it's a set per region).
+  const REGION_ROOTS = { topbar: ".rp-topbar", rail: ".rt-nav", main: ".rp-main" };
+  const regions = {};
+  for (const name in REGION_ROOTS) {
+    const root = document.querySelector(REGION_ROOTS[name]);
+    const set = new Set();
+    if (root) {
+      const els = root.querySelectorAll("*");
+      for (const el of els) for (let i = 0; i < el.classList.length; i++) set.add(el.classList[i]);
+    }
+    regions[name] = Array.from(set).sort();
+  }
+
+  return {
+    capture:     "inventory",          // discriminates from the v1 atom snapshot
+    route:       location.hash || "#/",
+    theme:       document.documentElement.getAttribute("data-theme") || "dark",
+    state:       state || "default",
+    captured_at: new Date().toISOString(),
+    viewport:    { width: window.innerWidth, height: window.innerHeight },
+    classes:      Object.keys(class_counts).sort(),
+    class_counts: class_counts,
+    regions:      regions,
+  };
+}
+
+/**
+ * Walk the live DOM under <body> and tally every class name → instance
+ * count. <body> (not a scoped root) so modal/dropdown portals appended
+ * outside the shell are caught. Returns a plain `{ class: count }` map.
+ *
+ * Virtualized lists (virtual-rows.js mounts only the ~visible window)
+ * still surface their row/cell classes — the class SET is identical
+ * whether 30 or 30k rows are mounted, which is exactly what an inventory
+ * needs. Counts reflect only the mounted window (don't read row totals
+ * off them).
+ */
+export function collectClasses() {
+  const counts = Object.create(null);
+  const all = document.body ? document.body.querySelectorAll("*") : [];
+  for (const el of all) {
+    const list = el.classList;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      counts[c] = (counts[c] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+/**
  * Download the snapshot as a JSON file. Filename encodes route + theme
  * so consecutive captures across SPA navigation don't overwrite each
  * other in the Downloads folder.
