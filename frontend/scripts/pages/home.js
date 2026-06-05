@@ -3,7 +3,7 @@
 // Home — the org command center.
 //
 // Shell pattern shared with Workspace: a topbar over a greeting,
-// then a rail (.rt-nav, static groups) on the left and a body view
+// then a rail (.rp-rail, static groups) on the left and a body view
 // on the right. The rail tab routes to a per-entity body renderer.
 //
 // Phase 1 (this build): Projects tab is fully wired against the
@@ -54,7 +54,7 @@ import { cellEditor } from "/scripts/framework/cell-editor.js";
 
 export default function home(app, { session: _session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "home", session: _session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session: _session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "", session: _session });
 
   const nav     = app.querySelector("#rpHomeNav");
   const navBody = app.querySelector("#rpHomeNavBody");
@@ -1288,7 +1288,7 @@ export default function home(app, { session: _session }) {
   navBody.innerHTML = HOME_GROUPS.map(renderGroup).join("");
   // Expand both groups by default — the entity list is short and
   // there's no scroll cost.
-  navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
+  navBody.querySelectorAll(".rp-rail-group").forEach((g) => g.classList.add("expanded"));
 
   // List-tab paging + filter state. Declared BEFORE the activate()
   // call below — Projects is the default tab and now goes through
@@ -1313,12 +1313,12 @@ export default function home(app, { session: _session }) {
 
   // ─── rail click delegation ───────────────────────────────────
   navBody.addEventListener("click", (e) => {
-    const head = e.target.closest(".rt-group-head");
+    const head = e.target.closest(".rp-rail-group-head");
     if (head) {
-      head.closest(".rt-group").classList.toggle("expanded");
+      head.closest(".rp-rail-group").classList.toggle("expanded");
       return;
     }
-    const tab = e.target.closest(".rt-tab");
+    const tab = e.target.closest(".rp-rail-tab");
     if (tab) {
       activate(tab.dataset.key);
     }
@@ -1328,14 +1328,14 @@ export default function home(app, { session: _session }) {
   function renderGroup(g) {
     const tabs = HOME_TABS.filter((t) => t.group === g.name);
     return ''
-      + '<div class="rt-group">'
-      +   '<button class="rt-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
-      +     '<span class="rt-group-mark" data-c="' + g.color + '">' + g.mark + '</span>'
-      +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
-      +     '<span class="rt-group-count">' + tabs.length + '</span>'
+      + '<div class="rp-rail-group">'
+      +   '<button class="rp-rail-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
+      +     '<span class="rp-rail-group-mark" data-c="' + g.color + '">' + g.mark + '</span>'
+      +     '<span class="rp-rail-group-name">' + esc(g.name) + '</span>'
+      +     '<span class="rp-rail-group-count">' + tabs.length + '</span>'
       +   '</button>'
-      +   '<div class="rt-group-body">'
+      +   '<div class="rp-rail-group-body">'
       +     tabs.map(renderTab).join("")
       +   '</div>'
       + '</div>';
@@ -1350,9 +1350,9 @@ export default function home(app, { session: _session }) {
       ? ' data-key="' + esc(t.key) + '"'
       : ' disabled title="Coming soon — endpoint /api' + esc(t.endpoint) + ' pending"';
     return ''
-      + '<button class="rt-tab" type="button"' + attrs + '>'
-      +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
-      +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
+      + '<button class="rp-rail-tab" type="button"' + attrs + '>'
+      +   '<i class="' + esc(t.icon) + ' rp-rail-tab-icon"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(t.label) + '</span>'
       + '</button>';
   }
 
@@ -1366,8 +1366,8 @@ export default function home(app, { session: _session }) {
     const tab = (requested && requested.wired)
       ? requested
       : HOME_TABS.find((t) => t.key === HOME_DEFAULT_TAB);
-    navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
-    const btn = navBody.querySelector('.rt-tab[data-key="' + cssEsc(tab.key) + '"]');
+    navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
+    const btn = navBody.querySelector('.rp-rail-tab[data-key="' + cssEsc(tab.key) + '"]');
     if (btn) btn.classList.add("active");
     renderTabBody(tab);
     syncCreateButton(tab);
@@ -1694,7 +1694,7 @@ export default function home(app, { session: _session }) {
       // Refetch the current tab's list so the new row appears. fetchList
       // is closure-scoped to renderListBody; route through activate() on
       // the same tab to trigger a fresh render.
-      const activeKey = navBody.querySelector(".rt-tab.active")?.dataset.key;
+      const activeKey = navBody.querySelector(".rp-rail-tab.active")?.dataset.key;
       if (activeKey) activate(activeKey);
     } catch (err) {
       const msg = err?.body?.message || err?.body?.error || err?.message || "Create failed";

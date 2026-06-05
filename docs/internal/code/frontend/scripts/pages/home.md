@@ -3,7 +3,7 @@ title: frontend/scripts/pages/home.js
 source: ../../../../../frontend/scripts/pages/home.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # home.js
@@ -20,6 +20,15 @@ Home — the org command center. Shell pattern shared with Workspace: topbar + r
 
 ## Drift-prone areas
 
+- **Design-language rollout — RAIL migrated to `rp-rail*`; list surface NOT yet (2026-06-05).** The
+  rail nav is JS-rendered (`renderGroup`/`renderTab` emit `rp-rail-group*` / `rp-rail-tab*`) and
+  queried back (click delegation `closest('.rp-rail-group-head'|'.rp-rail-tab')`, `activate`'s
+  `.rp-rail-tab.active` / `[data-key]`, the post-create re-activation query, the footer mount
+  `.rp-rail-footer`) — all in lockstep with home.html. Group `.expanded` / tab `.active` stay plain
+  (atom contracts). The **list/redtable surface still emits `rt-*`** (`rt-mono-pill`, `rt-table`,
+  `rt-mode`, `rt-dd-item`, `rt-hidden*`, `rt-tone--*`, `rt-tab-close`, `rt-spinning`) — those are the
+  shared list-page/redtable/toolbar atoms and migrate with THAT lane, not here. home.css's `rt-*`
+  selector overrides (toolbar/redtable scoped) stay until then.
 - Pattern is LOCKED per pattern-lock-personalization-within; new tabs join via LIST_VIEWS entry.
 - Post-fetchList hook order: `_decorateSelectMode` → `_applyColumnOrder` → `_applyHiddenColumns` → `_decorateEditMode`. The drag-reorder MUST land before positional hide indexing (otherwise hide hits the wrong columns) AND before edit-mode decoration (otherwise the spec's `editable: true` flag tags whatever column the user dragged into spec position N instead of the column the spec actually named). See [list-page.js](../list-page.md) for the underlying reorder contract.
 - `decorateEditMode` resolves each editable col by its `data-col-key` on the LIVE thead — not by `spec.columns[i]` index — so a user's drag-reorder doesn't make the wrong cell editable.
