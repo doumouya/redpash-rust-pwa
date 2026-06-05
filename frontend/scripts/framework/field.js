@@ -78,20 +78,24 @@ export function mountFieldEditable(host, opts = {}) {
     editing = true;
     host.setAttribute("data-editing", "");
     control.innerHTML = "";                 // hand the slot to the caller's editor
-    // Click outside the row closes edit mode. An editor's own blur fires only when
-    // focus moves to a focusable element, so a click on non-focusable chrome would
-    // otherwise strand the editor open — the bespoke pickers this de-cased had an
-    // equivalent document-level dismissal.
+    // Click outside the row, or Escape, closes edit mode. An editor's own blur fires
+    // only when focus moves to a focusable element, so a click on non-focusable chrome
+    // would otherwise strand the editor open — the bespoke pickers this de-cased had an
+    // equivalent document-level dismissal. Escape is owned here too so every editor
+    // (the native <select>, the user-search input, any future one) cancels uniformly.
     document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onKeydown, true);
     opts.edit(control, commit, cancel);
   }
   function onOutside(e) { if (!host.contains(e.target)) cancel(); }
+  function onKeydown(e) { if (e.key === "Escape") cancel(); }
   function commit(v) { if (v != null) value = String(v); finish(); }
   function cancel() { finish(); }
   function finish() {
-    if (!editing) return;                   // idempotent — an editor's blur and onOutside can both fire
+    if (!editing) return;                   // idempotent — an editor's blur, onOutside, and onKeydown can all fire
     editing = false;
     document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKeydown, true);
     host.removeAttribute("data-editing");
     paintView(true);
   }

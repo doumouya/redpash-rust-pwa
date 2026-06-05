@@ -41,14 +41,16 @@ attribute on the single `rp-field` class, per the locked one-class convention) �
 keys off `.rp-field[data-variant="stack"]`, no modifier class.
 
 `mountFieldEditable`'s edit-mode lifecycle: `enterEdit` flips `data-editing`, hands the
-slot to `opts.edit(slot, commit, cancel)`, and installs a capture-phase
-`document` `pointerdown` listener that calls `cancel()` on any click **outside the row**.
-This is the component's job, not the editor's: an editor's own `blur` fires only when
-focus moves to a *focusable* element, so a click on non-focusable chrome (a label, a
-blank dropdown area, a "No matches" row) would otherwise strand the editor open — the
-regression the de-cased bespoke pickers had avoided. `finish()` is guarded by an
-`editing` flag so an editor's `blur` and the `onOutside` handler can both fire without
-double-painting, and it removes the `pointerdown` listener on every exit path.
+slot to `opts.edit(slot, commit, cancel)`, and installs capture-phase `document`
+listeners — `pointerdown` (cancel on a click **outside the row**) and `keydown` (cancel
+on **Escape**). These dismissals are the component's job, not each editor's: an editor's
+own `blur` fires only when focus moves to a *focusable* element, so a click on
+non-focusable chrome (a label, a blank dropdown area, a "No matches" row) would otherwise
+strand the editor open — the regression the de-cased bespoke pickers had avoided — and a
+native `<select>` editor never canceled on Escape at all. Owning both here means every
+editor (select, user-search input, any future one) cancels uniformly. `finish()` is
+guarded by an `editing` flag so an editor's `blur`, `onOutside`, and `onKeydown` can all
+fire without double-painting, and it removes both listeners on every exit path.
 
 ## Drift-prone areas
 
