@@ -105,6 +105,7 @@ dependencies = [
  "dotenvy",
  "encoding_rs",
  "eyre",
+ "futures-util",
  "polars",
  "pulldown-cmark",
  "regex",
