@@ -191,6 +191,13 @@ Every entry follows the same five headings:
   Net surface: Cases 1 → 3 editable cols, Projects 1 → 2, Home
   total 5 → 8 across 5 tabs. Smoke-tested end-to-end (the case
   documenting this very fix got live-edited via the new pattern).
+- [0016 — MySQL connector NUL byte from `CAST(geometry AS CHAR)` aborted `insert_file`](CAS_082A124FC4F7499CAD3805C267DE3437-mysql-connector-nul-geometry.md) —
+  **Fixed 2026-06-05.** Pulling a geometry/binary MySQL table crashed the upload:
+  `CAST(geometry AS CHAR)` emits WKB bytes full of NUL (U+0000), which Postgres
+  `text`/`jsonb` cannot store, so `insert_file` aborted ("unsupported Unicode escape
+  sequence"). Fix: type-aware projection (geometry→`ST_AsText`, binary→`HEX`) + a NUL-strip
+  in `csv_field`; plus the `information_schema.DATA_TYPE`-as-BLOB CAST and a FE pull-error
+  alert. `ec06e18` / `10ef2fa`.
 - [0015 — Ungated tenant-list read leaks (scope `list_*` to caller reach)](CAS_AF2690C0CD7F4B238A8B462DD08BF4A8-tenant-list-scoping.md) —
   **In progress 2026-06-03** (epic CAS_AF2690C0CD7F4B238A8B462DD08BF4A8). Pattern runbook
   for the cross-tenant *list-read* leaks the "audit the auditor" review found: several
