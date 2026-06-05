@@ -48,7 +48,7 @@ export default function workspace(app, { session }) {
   const meRid = session?.redpash_id || "";
 
   mountTopbar($("#rp-topbar"), { active: "workspace", session });
-  mountRailFooterNav($(".rt-nav-foot"), { active: "", session });
+  mountRailFooterNav($(".rp-rail-footer"), { active: "", session });
 
   // Warm the wasm engine cache — the user is on the workspace, they're
   // going to do data work, so trigger the lazy fetch now and await
@@ -400,7 +400,7 @@ export default function workspace(app, { session }) {
     for (let i = 0; i < total; i++) {
       const file = files[i];
       const ghost = ghosts[i];
-      ghost?.classList.add("rt-tab-ghost-active");
+      ghost?.classList.add("rp-rail-tab-ghost-active");
       if (labelEl) {
         labelEl.textContent = total === 1
           ? "Uploading…"
@@ -418,14 +418,14 @@ export default function workspace(app, { session }) {
         lastEnv = env;
         succeeded++;
         // Briefly flash success before the rail refresh wipes the ghost.
-        ghost?.classList.remove("rt-tab-ghost-active");
-        ghost?.classList.add("rt-tab-ghost-done");
+        ghost?.classList.remove("rp-rail-tab-ghost-active");
+        ghost?.classList.add("rp-rail-tab-ghost-done");
       } catch (err) {
         const msg = err?.body?.message || err?.body?.error || err?.message || "upload failed";
         failures.push({ name: file.name, msg, status: err?.status });
         if (ghost) {
-          ghost.classList.remove("rt-tab-ghost-active");
-          ghost.classList.add("rt-tab-ghost-failed");
+          ghost.classList.remove("rp-rail-tab-ghost-active");
+          ghost.classList.add("rp-rail-tab-ghost-failed");
           ghost.setAttribute("title", msg);
           // Linger long enough for the user to read the cause, then go.
           setTimeout(() => ghost.remove(), 6000);
@@ -466,7 +466,7 @@ export default function workspace(app, { session }) {
     if (labelEl && originalLabel) labelEl.textContent = originalLabel;
   }
 
-  // The .rt-group node for the user's current project focus, or null.
+  // The .rp-rail-group node for the user's current project focus, or null.
   // Prefers the explicit focusedProjectRid (set on group-head click +
   // file-open) over the active-file's parent group. Both rail-foot
   // resolvers (activeProjectName for upload, activeProjectRid for
@@ -474,13 +474,13 @@ export default function workspace(app, { session }) {
   // the visible project even when no file is open inside it.
   function focusedProjectGroup() {
     if (focusedProjectRid) {
-      const g = navBody.querySelector('.rt-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
+      const g = navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
       if (g) return g;
     }
     // Fall back to the active-file's group when focus hasn't been
     // explicitly set (e.g. brand-new session before any group click).
-    const activeTab = navBody.querySelector(".rt-tab.active");
-    if (activeTab) return activeTab.closest(".rt-group");
+    const activeTab = navBody.querySelector(".rp-rail-tab.active");
+    if (activeTab) return activeTab.closest(".rp-rail-group");
     return null;
   }
 
@@ -489,17 +489,17 @@ export default function workspace(app, { session }) {
   // the visible project (find-or-create). Returns null when there's
   // no project context → server uses the user's default project.
   function activeProjectName() {
-    return focusedProjectGroup()?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+    return focusedProjectGroup()?.querySelector(".rp-rail-group-name")?.textContent?.trim() || null;
   }
 
   // Resolve the rail group the upload will land in (focused project,
   // or the default group as fallback) and make sure it's expanded +
-  // its file body is loaded. Ghost tabs go inside `.rt-group-body`, so
+  // its file body is loaded. Ghost tabs go inside `.rp-rail-group-body`, so
   // a collapsed/empty body means the user wouldn't actually see them.
   async function ensureUploadGhostGroup() {
     const group = focusedProjectGroup()
-      || navBody.querySelector('.rt-group[data-default="1"]')
-      || navBody.querySelector('.rt-group');
+      || navBody.querySelector('.rp-rail-group[data-default="1"]')
+      || navBody.querySelector('.rp-rail-group');
     if (!group) return null;
     if (!group.classList.contains("expanded")) {
       group.classList.add("expanded");
@@ -510,24 +510,24 @@ export default function workspace(app, { session }) {
 
   // Insert a placeholder tab into a group's body for an in-flight
   // upload. The ghost shows the filename + a spinner; CSS classes
-  // (`rt-tab-ghost-active` / `done` / `failed`) drive the state
+  // (`rp-rail-tab-ghost-active` / `done` / `failed`) drive the state
   // animation. Returns the node so doUpload can flip its state per
   // outcome; null when no group was resolvable (caller no-ops).
   function createGhostTab(group, filename) {
     if (!group) return null;
-    const body = group.querySelector(".rt-group-body");
+    const body = group.querySelector(".rp-rail-group-body");
     if (!body) return null;
     // "No files yet" placeholder gets replaced — the ghost IS a file
     // (from the user's perspective) and the empty-state caption would
     // contradict that.
-    const emptyState = body.querySelector(".rt-nav-state");
+    const emptyState = body.querySelector(".rp-rail-state");
     if (emptyState) emptyState.remove();
     const ghost = document.createElement("div");
-    ghost.className = "rt-tab rt-tab-ghost";
+    ghost.className = "rp-rail-tab rp-rail-tab-ghost";
     ghost.setAttribute("aria-busy", "true");
-    ghost.innerHTML = '<i class="bi bi-arrow-up-circle rt-tab-icon"></i>'
-      + '<span class="rt-tab-name">' + esc(filename) + '</span>'
-      + '<span class="rt-tab-spinner" aria-hidden="true"></span>';
+    ghost.innerHTML = '<i class="bi bi-arrow-up-circle rp-rail-tab-icon"></i>'
+      + '<span class="rp-rail-tab-name">' + esc(filename) + '</span>'
+      + '<span class="rp-rail-tab-spinner" aria-hidden="true"></span>';
     body.appendChild(ghost);
     return ghost;
   }
@@ -539,13 +539,13 @@ export default function workspace(app, { session }) {
     // through the wrong content first.
     activeFileRid = newRid;
     await loadProjects();
-    const group = projRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(projRid) + '"]');
+    const group = projRid && navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(projRid) + '"]');
     if (!group) { activeFileRid = null; loadFile(newRid); return; }
     group.classList.add("expanded");
     await loadFilesForGroup(group);
-    const newTab = group.querySelector('.rt-tab[data-rid="' + cssEsc(newRid) + '"]');
+    const newTab = group.querySelector('.rp-rail-tab[data-rid="' + cssEsc(newRid) + '"]');
     if (newTab) {
-      navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
       newTab.classList.add("active");
     }
     activeFileRid = null;  // clear so loadFile's "same-rid" early-return doesn't fire
@@ -586,7 +586,7 @@ export default function workspace(app, { session }) {
       renderRail(cachedProjects);
     } catch (err) {
       navBody.setAttribute("aria-busy", "false");
-      navBody.innerHTML = '<div class="rt-nav-state">Couldn’t load projects'
+      navBody.innerHTML = '<div class="rp-rail-state">Couldn’t load projects'
         + (err.status ? " (" + err.status + ")" : "") + ".</div>";
     }
   }
@@ -598,7 +598,7 @@ export default function workspace(app, { session }) {
     const hiddenProjSet  = new Set(hiddenProjects.map((x) => x.rid));
     const visible        = items.filter((p) => !hiddenProjSet.has(p.redpash_id));
     if (!visible.length && !hiddenProjects.length && !hiddenFiles.length) {
-      navBody.innerHTML = '<div class="rt-nav-state">No projects yet.</div>';
+      navBody.innerHTML = '<div class="rp-rail-state">No projects yet.</div>';
       // No projects + no file open → land on the (empty) overview rather
       // than the bare "open a file" table prompt, so a brand-new user
       // gets the upload nudge.
@@ -620,9 +620,9 @@ export default function workspace(app, { session }) {
     const wantRid  = params.get("project");
     const wantFile = params.get("file");
     const hasDeepLink = !!(wantRid || wantFile);
-    const first = (wantRid && navBody.querySelector('.rt-group[data-rid="' + cssEsc(wantRid) + '"]'))
-               || navBody.querySelector('.rt-group[data-default="1"]')
-               || navBody.querySelector(".rt-group");
+    const first = (wantRid && navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(wantRid) + '"]'))
+               || navBody.querySelector('.rp-rail-group[data-default="1"]')
+               || navBody.querySelector(".rp-rail-group");
     if (first) {
       // data-autoopen (deep-link only) is the auto-open trigger now —
       // distinct from data-default (the is_default project), so a bare
@@ -649,15 +649,15 @@ export default function workspace(app, { session }) {
   // each group's `hidden` (cheap, preserves expand + loaded files) by
   // ANDing the ownership pill against the name search. The hidden
   // recovery <details> + an injected empty-state are left untouched
-  // (they aren't .rt-group). Never touches the data source.
+  // (they aren't .rp-rail-group). Never touches the data source.
   function applyRailFilters() {
     const q = railSearchQ.trim().toLowerCase();
-    const groups = navBody.querySelectorAll(".rt-group");
+    const groups = navBody.querySelectorAll(".rp-rail-group");
     let anyVisible = false;
     groups.forEach((g) => {
       const tokens   = (g.dataset.ownership || "").split(/\s+/).filter(Boolean);
       const ownerOk  = ownerFilter === "all" || tokens.includes(ownerFilter);
-      const name     = (g.querySelector(".rt-group-name")?.textContent || "").toLowerCase();
+      const name     = (g.querySelector(".rp-rail-group-name")?.textContent || "").toLowerCase();
       const searchOk = !q || name.includes(q);
       const show     = ownerOk && searchOk;
       g.hidden = !show;
@@ -669,7 +669,7 @@ export default function workspace(app, { session }) {
     if (needEmpty && !empty) {
       empty = document.createElement("div");
       empty.id = "wsRailNoMatch";
-      empty.className = "rt-nav-state";
+      empty.className = "rp-rail-state";
       navBody.appendChild(empty);
     }
     if (empty) {
@@ -690,14 +690,14 @@ export default function workspace(app, { session }) {
   // rebuild paints it correctly.
   function landingTabHTML() {
     const active = $("#wsSurface")?.classList.contains("is-landing-mode") ? " active" : "";
-    return '<button class="rt-tab rt-rail-pinned' + active + '" type="button" data-rail-landing>'
-      +   '<i class="rt-tab-icon bi bi-grid-1x2-fill"></i>'
-      +   '<span class="rt-tab-name">Overview</span>'
+    return '<button class="rp-rail-tab rp-rail-overview' + active + '" type="button" data-rail-landing>'
+      +   '<i class="rp-rail-tab-icon bi bi-grid-1x2-fill"></i>'
+      +   '<span class="rp-rail-tab-name">Overview</span>'
       + '</button>';
   }
   function setLandingTabActive(on) {
     const tab = navBody.querySelector("[data-rail-landing]");
-    if (on) navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+    if (on) navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
     tab?.classList.toggle("active", on);
   }
   // Explicit return-to-overview (the Overview rail click). Drops the
@@ -810,27 +810,27 @@ export default function workspace(app, { session }) {
     const dot   = STAGE_DOT[stage] || "is-dirty";
     const files = p.file_count || 0;
     return '<button class="ws-landing-card" type="button" data-rid="' + esc(p.redpash_id) + '">'
-      +   '<span class="rt-group-mark" data-c="' + color + '">' + esc(initials) + '</span>'
+      +   '<span class="rp-rail-group-mark" data-c="' + color + '">' + esc(initials) + '</span>'
       +   '<span class="ws-landing-card-body">'
       +     '<span class="ws-landing-card-name">' + esc(p.name || "(untitled)") + '</span>'
       +     '<span class="ws-landing-card-meta">' + files + ' file' + (files === 1 ? "" : "s")
       +       ' · ' + esc(stage) + '</span>'
       +   '</span>'
-      +   '<span class="rt-tab-dot ' + dot + '" title="' + esc(stage) + '"></span>'
+      +   '<span class="rp-rail-tab-dot ' + dot + '" title="' + esc(stage) + '"></span>'
       + '</button>';
   }
   // Landing card → open the project: expand its rail group, load files,
   // open the first one (which hides the landing). Empty project keeps the
   // landing up but reflects the focus + an empty table prompt.
   async function openProjectFromLanding(rid) {
-    const group = navBody.querySelector('.rt-group[data-rid="' + cssEsc(rid) + '"]');
+    const group = navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(rid) + '"]');
     if (!group) return;
     focusedProjectRid = rid;
     group.classList.add("expanded");
     await loadFilesForGroup(group);
-    const firstTab = group.querySelector(".rt-tab");
+    const firstTab = group.querySelector(".rp-rail-tab");
     if (firstTab) {
-      navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
       firstTab.classList.add("active");
       loadFile(firstTab.dataset.rid);
     } else {
@@ -851,26 +851,26 @@ export default function workspace(app, { session }) {
     // so filtering is a pure DOM-visibility toggle (no refetch).
     const ownership = [p.owner_id === meRid ? "personal" : "shared"];
     if (p.company_id) ownership.push("company");
-    return '<div class="rt-group" data-rid="' + esc(p.redpash_id) + '"'
+    return '<div class="rp-rail-group" data-rid="' + esc(p.redpash_id) + '"'
       + ' data-ownership="' + ownership.join(" ") + '"'
       + (p.is_default ? ' data-default="1"' : '') + '>'
-      +   '<button class="rt-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
-      +     '<span class="rt-group-mark" data-c="' + c + '">' + esc(initials) + '</span>'
-      +     '<span class="rt-group-name">' + esc(p.name) + '</span>'
-      +     '<span class="rt-group-rename" title="Rename project"><i class="bi bi-pencil"></i></span>'
-      +     '<span class="rt-group-hide" title="Hide from rail"><i class="bi bi-x"></i></span>'
-      +     '<span class="rt-group-count">' + (p.file_count || 0) + '</span>'
+      +   '<button class="rp-rail-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
+      +     '<span class="rp-rail-group-mark" data-c="' + c + '">' + esc(initials) + '</span>'
+      +     '<span class="rp-rail-group-name">' + esc(p.name) + '</span>'
+      +     '<span class="rp-rail-group-rename" title="Rename project"><i class="bi bi-pencil"></i></span>'
+      +     '<span class="rp-rail-group-hide" title="Hide from rail"><i class="bi bi-x"></i></span>'
+      +     '<span class="rp-rail-group-count">' + (p.file_count || 0) + '</span>'
       +   '</button>'
-      +   '<div class="rt-group-body" aria-busy="false"></div>'
+      +   '<div class="rp-rail-group-body" aria-busy="false"></div>'
       + '</div>';
   }
 
-  // Inline rename for a project's rail entry. Swaps `.rt-group-name` to
+  // Inline rename for a project's rail entry. Swaps `.rp-rail-group-name` to
   // contenteditable, selects all, listens for Enter (commit) / Esc
   // (cancel) / blur (commit). Empty or unchanged values cancel silently;
   // PATCH failures revert. Bubble-suppression on mousedown/click keeps
-  // the parent `.rt-group-head` button from toggling expand while the
+  // the parent `.rp-rail-group-head` button from toggling expand while the
   // user clicks inside the editable text.
   function enterProjectRename(group, span) {
     const rid = group.dataset.rid;
@@ -878,7 +878,7 @@ export default function workspace(app, { session }) {
     let commit = true;
 
     span.setAttribute("contenteditable", "plaintext-only");
-    span.classList.add("rt-group-name-editing");
+    span.classList.add("rp-rail-group-name-editing");
 
     const range = document.createRange();
     range.selectNodeContents(span);
@@ -898,7 +898,7 @@ export default function workspace(app, { session }) {
       span.removeEventListener("mousedown", suppress);
       span.removeEventListener("click", suppress);
       span.removeAttribute("contenteditable");
-      span.classList.remove("rt-group-name-editing");
+      span.classList.remove("rp-rail-group-name-editing");
 
       const next = (span.textContent || "").trim();
       if (!commit || !next || next === original) {
@@ -911,7 +911,7 @@ export default function workspace(app, { session }) {
         // Server may normalize (trim, truncate). Reflect the canonical value.
         if (updated?.name && updated.name !== next) span.textContent = updated.name;
         // Initials are derived from the name — refresh the mark too.
-        const mark = group.querySelector(".rt-group-mark");
+        const mark = group.querySelector(".rp-rail-group-mark");
         if (mark) {
           const init = ((updated?.name || next).trim().split(/\s+/)
             .map((w) => w[0]).join("") || "?").slice(0, 2).toUpperCase();
@@ -931,7 +931,7 @@ export default function workspace(app, { session }) {
   // Inline rename for a file's rail tab. Same contenteditable swap +
   // Enter/Esc/blur lifecycle as enterProjectRename, with two
   // differences: (1) PATCH /api/files/:rid {display_name} instead of
-  // /api/projects/:rid {name}, (2) the parent button is the .rt-tab
+  // /api/projects/:rid {name}, (2) the parent button is the .rp-rail-tab
   // which also triggers loadFile on plain click — the bubble-
   // suppression on mousedown/click prevents the file from being
   // re-opened while the user clicks inside the editable text.
@@ -941,7 +941,7 @@ export default function workspace(app, { session }) {
     let commit = true;
 
     span.setAttribute("contenteditable", "plaintext-only");
-    span.classList.add("rt-tab-name-editing");
+    span.classList.add("rp-rail-tab-name-editing");
 
     const range = document.createRange();
     range.selectNodeContents(span);
@@ -961,7 +961,7 @@ export default function workspace(app, { session }) {
       span.removeEventListener("mousedown", suppress);
       span.removeEventListener("click", suppress);
       span.removeAttribute("contenteditable");
-      span.classList.remove("rt-tab-name-editing");
+      span.classList.remove("rp-rail-tab-name-editing");
 
       const next = (span.textContent || "").trim();
       if (!commit || !next || next === original) {
@@ -992,10 +992,10 @@ export default function workspace(app, { session }) {
 
   async function loadFilesForGroup(group) {
     if (group.dataset.filesLoaded === "1") return;
-    const body = group.querySelector(".rt-group-body");
+    const body = group.querySelector(".rp-rail-group-body");
     const rid  = group.dataset.rid;
     body.setAttribute("aria-busy", "true");
-    body.innerHTML = '<div class="rt-nav-state">Loading files…</div>';
+    body.innerHTML = '<div class="rp-rail-state">Loading files…</div>';
     try {
       const data = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
       renderFiles(body, data?.items || []);
@@ -1012,16 +1012,16 @@ export default function workspace(app, { session }) {
       // default project here but lands on the overview, not a file.
       if (!activeFileRid && group.dataset.autoopen === "1") {
         const wantFile = group.dataset.wantFile;
-        const tab = (wantFile && body.querySelector('.rt-tab[data-rid="' + cssEsc(wantFile) + '"]'))
-                 || body.querySelector(".rt-tab");
+        const tab = (wantFile && body.querySelector('.rp-rail-tab[data-rid="' + cssEsc(wantFile) + '"]'))
+                 || body.querySelector(".rp-rail-tab");
         if (tab) {
-          navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+          navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
           tab.classList.add("active");
           loadFile(tab.dataset.rid);
         }
       }
     } catch {
-      body.innerHTML = '<div class="rt-nav-state">Couldn’t load files.</div>';
+      body.innerHTML = '<div class="rp-rail-state">Couldn’t load files.</div>';
     } finally {
       body.setAttribute("aria-busy", "false");
     }
@@ -1031,11 +1031,11 @@ export default function workspace(app, { session }) {
     const hiddenSet = new Set(getHidden(HIDDEN_FILES_KEY).map((x) => x.rid));
     const visible = items.filter((f) => !hiddenSet.has(f.redpash_id));
     if (!visible.length) {
-      body.innerHTML = '<div class="rt-nav-state">No files yet.</div>';
+      body.innerHTML = '<div class="rp-rail-state">No files yet.</div>';
     } else {
       body.innerHTML = visible.map(fileTab).join("");
     }
-    syncGroupCount(body.closest(".rt-group"));
+    syncGroupCount(body.closest(".rp-rail-group"));
   }
 
   // Reconcile the rail group's count badge with what's actually
@@ -1047,9 +1047,9 @@ export default function workspace(app, { session }) {
   // doesn't trigger a server-side delete.
   function syncGroupCount(group) {
     if (!group) return;
-    const badge = group.querySelector(":scope > .rt-group-head .rt-group-count");
+    const badge = group.querySelector(":scope > .rp-rail-group-head .rp-rail-group-count");
     if (!badge) return;
-    const tabs = group.querySelectorAll(":scope > .rt-group-body .rt-tab").length;
+    const tabs = group.querySelectorAll(":scope > .rp-rail-group-body .rp-rail-tab").length;
     badge.textContent = String(tabs);
   }
 
@@ -1109,12 +1109,12 @@ export default function workspace(app, { session }) {
     const viewKind = f.file_type === "chart"     ? "report"
                   : f.file_type === "dashboard"  ? "dashboard"
                   :                                 "data";
-    return '<button class="rt-tab" type="button" data-view-kind="' + viewKind + '" data-rid="' + esc(f.redpash_id) + '">'
-      +   '<i class="bi ' + icon + ' rt-tab-icon"></i>'
-      +   '<span class="rt-tab-name">' + esc(name) + '</span>'
-      +   '<span class="rt-tab-rename" title="Rename file"><i class="bi bi-pencil"></i></span>'
-      +   '<span class="rt-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
-      +   '<span class="rt-tab-close" title="Close"><i class="bi bi-x"></i></span>'
+    return '<button class="rp-rail-tab" type="button" data-view-kind="' + viewKind + '" data-rid="' + esc(f.redpash_id) + '">'
+      +   '<i class="bi ' + icon + ' rp-rail-tab-icon"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(name) + '</span>'
+      +   '<span class="rp-rail-tab-rename" title="Rename file"><i class="bi bi-pencil"></i></span>'
+      +   '<span class="rp-rail-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
+      +   '<span class="rp-rail-tab-hide" title="Close"><i class="bi bi-x"></i></span>'
       + '</button>';
   }
 
@@ -1123,21 +1123,21 @@ export default function workspace(app, { session }) {
     // Rename pencil short-circuits the head toggle. The pencil lives
     // inside the head button, so its click bubbles here too — catch it
     // first and bail before the expand/collapse branch runs.
-    const renameBtn = e.target.closest(".rt-group-rename");
+    const renameBtn = e.target.closest(".rp-rail-group-rename");
     if (renameBtn) {
-      const group = renameBtn.closest(".rt-group");
-      const nameSpan = group?.querySelector(".rt-group-name");
+      const group = renameBtn.closest(".rp-rail-group");
+      const nameSpan = group?.querySelector(".rp-rail-group-name");
       if (group && nameSpan) enterProjectRename(group, nameSpan);
       return;
     }
     // Project hide × — adds the project rid to rail_hidden_projects
     // pref, re-renders the rail. Same hover-affordance pattern as the
     // rename pencil; same short-circuit before the head-toggle branch.
-    const hideBtn = e.target.closest(".rt-group-hide");
+    const hideBtn = e.target.closest(".rp-rail-group-hide");
     if (hideBtn) {
-      const group = hideBtn.closest(".rt-group");
+      const group = hideBtn.closest(".rp-rail-group");
       const rid   = group?.dataset.rid;
-      const name  = group?.querySelector(".rt-group-name")?.textContent?.trim();
+      const name  = group?.querySelector(".rp-rail-group-name")?.textContent?.trim();
       if (rid && name) {
         hideOne(HIDDEN_PROJECTS_KEY, { rid, name });
         if (focusedProjectRid === rid) focusedProjectRid = null;
@@ -1148,10 +1148,10 @@ export default function workspace(app, { session }) {
     // File rename pencil — same pattern as the project rename pencil,
     // short-circuits before the tab-click branch so the pencil click
     // doesn't trigger loadFile. PATCH /api/files/:rid is the wire.
-    const tabRenameBtn = e.target.closest(".rt-tab-rename");
+    const tabRenameBtn = e.target.closest(".rp-rail-tab-rename");
     if (tabRenameBtn) {
-      const tab = tabRenameBtn.closest(".rt-tab");
-      const nameSpan = tab?.querySelector(".rt-tab-name");
+      const tab = tabRenameBtn.closest(".rp-rail-tab");
+      const nameSpan = tab?.querySelector(".rp-rail-tab-name");
       if (tab && nameSpan) enterFileRename(tab, nameSpan);
       return;
     }
@@ -1169,14 +1169,14 @@ export default function workspace(app, { session }) {
       return;
     }
     // Pinned "Overview" entry — return to the landing surface. Caught
-    // before the generic .rt-tab branch (it's a .rt-tab too, minus a rid).
+    // before the generic .rp-rail-tab branch (it's a .rp-rail-tab too, minus a rid).
     if (e.target.closest("[data-rail-landing]")) {
       goToLanding();
       return;
     }
-    const head = e.target.closest(".rt-group-head");
+    const head = e.target.closest(".rp-rail-group-head");
     if (head) {
-      const group = head.closest(".rt-group");
+      const group = head.closest(".rp-rail-group");
       // Group head click = explicit "I'm focused on this project"
       // signal. Update even when collapsing — collapse is a UI tweak,
       // the user is still in this project.
@@ -1193,8 +1193,8 @@ export default function workspace(app, { session }) {
       }
       return;
     }
-    if (e.target.closest(".rt-tab-close")) {
-      const tab = e.target.closest(".rt-tab");
+    if (e.target.closest(".rp-rail-tab-hide")) {
+      const tab = e.target.closest(".rp-rail-tab");
       const closingActive = tab.dataset.rid === activeFileRid;
       // Persist the hide via the rail_hidden_files pref so the tab
       // stays gone across reloads. The Hidden (N) recovery section
@@ -1202,9 +1202,9 @@ export default function workspace(app, { session }) {
       // captured at hide-time so the recovery UI can label the
       // entry without re-fetching.
       const rid     = tab.dataset.rid;
-      const name    = tab.querySelector(".rt-tab-name")?.textContent?.trim() || rid;
-      const group   = tab.closest(".rt-group");
-      const project = group?.querySelector(".rt-group-name")?.textContent?.trim() || null;
+      const name    = tab.querySelector(".rp-rail-tab-name")?.textContent?.trim() || rid;
+      const group   = tab.closest(".rp-rail-group");
+      const project = group?.querySelector(".rp-rail-group-name")?.textContent?.trim() || null;
       if (rid) hideOne(HIDDEN_FILES_KEY, { rid, name, project });
       tab.remove();
       // Decrement the parent group's count badge so hiding is
@@ -1232,14 +1232,14 @@ export default function workspace(app, { session }) {
       }
       return;
     }
-    const tab = e.target.closest(".rt-tab");
+    const tab = e.target.closest(".rp-rail-tab");
     if (tab) {
-      navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
+      navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       // Clicking a tab = "I'm focused on this file's project" — update
       // even when loadFile() no-ops (rid already active), so the rail-
       // foot buttons retarget back to A after a sidetrip through B.
-      const tabGroup = tab.closest(".rt-group");
+      const tabGroup = tab.closest(".rp-rail-group");
       if (tabGroup) focusedProjectRid = tabGroup.dataset.rid || focusedProjectRid;
       loadFile(tab.dataset.rid);
     }
@@ -2787,7 +2787,7 @@ export default function workspace(app, { session }) {
   // a default project still routes correctly. Auto-opens the new dash.
   function activeProjectRid() {
     return focusedProjectGroup()?.dataset?.rid
-        || navBody.querySelector(".rt-group")?.dataset?.rid
+        || navBody.querySelector(".rp-rail-group")?.dataset?.rid
         || null;
   }
   // ─── create handlers for the one rail-foot button (CAS_37B2E1BF) ────
@@ -2872,7 +2872,7 @@ export default function workspace(app, { session }) {
         // .expanded here doesn't fight the deep-link path that already
         // opened the previously-active group. Scroll the new group
         // into view so the user sees where it landed.
-        const group = navBody.querySelector('.rt-group[data-rid="' + cssEsc(newRid) + '"]');
+        const group = navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(newRid) + '"]');
         if (group) {
           group.classList.add("expanded");
           loadFilesForGroup(group);

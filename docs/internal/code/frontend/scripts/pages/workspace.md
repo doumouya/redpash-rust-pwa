@@ -3,7 +3,7 @@ title: frontend/scripts/pages/workspace.js
 source: ../../../../../frontend/scripts/pages/workspace.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # workspace.js
@@ -19,6 +19,21 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
 - Joins tab eager-mounted (2026-05-29).
 
 ## Drift-prone areas
+
+- **Design-language rollout — RAIL slice migrated to `rp-rail*` (2026-06-05); toolbar/panel/table/
+  designer slices PENDING.** The rail (projects→files tree) is JS-rendered with the full framework
+  family — `rp-rail`/`-head`/`-title`/`-body`/`-state`/`-footer`, `rp-rail-group*` (incl. `-hide`/
+  `-rename`/`-name-editing`), `rp-rail-tab*` (incl. `-dot`/`-ghost*`/`-rename`/`-spinner`; close→
+  **`rp-rail-tab-hide`**), `rp-rail-overview` (the pinned entry), `rp-rail-filter`/`-chips`,
+  `rp-rail-views` (the Data/Dashboards seg track — `rt-seg--rail` collapsed into it), `rp-search`.
+  Markup + the render/drag/hide/rename JS move in lockstep. The shared rail helpers (`rail-controls.js`
+  `mountRailCollapse`/`mountRailSeg`, `rail-footer.js`) are **ref/`[data-rail-seg]`-attribute based** —
+  they didn't need changing. **Still `rt-*` (later slices, all OUTSIDE `.rp-rail`):** the data/designer
+  toolbars (`rt-toolbar*`/`rt-mode`/`rt-pill`/`rt-dd*`/`rt-sel-chip` + their `rt-btn`), the filter/
+  history/tools panels (`rt-panel*`, the panel `rt-btn`, the report-builder `rt-seg`), the redtable
+  (`rt-table*`), and the designer surface (`rt-designer` → the canonical `rp-dash-*`, gated by nothing
+  now). `rt-step-state` (step-history empty marker) → resolve as a styleless hook composing `rp-empty`
+  when the tools/panel slice lands.
 
 - **One context-aware rail-foot create button (CAS_37B2E1BF, 2026-06-04):** the rail
   foot's three buttons (Upload / New dashboard / New project) collapsed into a single

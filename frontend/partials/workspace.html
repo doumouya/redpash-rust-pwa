@@ -8,23 +8,23 @@
   <div class="rp-shell-body">
 
     <!-- ════ rail — projects + files, lazy-loaded ════ -->
-    <aside class="rt-nav" id="wsNav">
-      <div class="rt-nav-head">
-        <span class="rt-nav-title">Projects</span>
-        <button class="rt-btn" id="wsNewProject" type="button"
+    <aside class="rp-rail" id="wsNav">
+      <div class="rp-rail-head">
+        <span class="rp-rail-title">Projects</span>
+        <button class="rp-btn-icon" id="wsNewProject" type="button"
                 title="New project — appears in the rail, rename via the group head">
           <i class="bi bi-plus-lg"></i>
         </button>
-        <button class="rt-btn" id="wsNavCollapse" type="button" title="Collapse">
+        <button class="rp-btn-icon" id="wsNavCollapse" type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
         </button>
       </div>
-      <!-- View switcher (reuses the .rt-seg--rail atom, same as the
+      <!-- View switcher (the rp-rail-views seg track, same as the
            Cases source toggle). Flips every project group's file list
            between data files (redtable surface) and reports +
            dashboards (designer surface). Persisted via the
            `workspaceRailView` pref. -->
-      <div class="rt-seg rt-seg--rail rt-nav-views" id="wsRailView">
+      <div class="rp-rail-views" id="wsRailView">
         <button type="button" class="is-active" data-rail-seg="data"
                 title="Show CSV / Excel data files — opens the redtable">
           <i class="bi bi-table"></i> Data
@@ -38,30 +38,30 @@
            client-side, render-time filters (no refetch): they toggle
            project-group visibility, never the data source. Mirrors the
            Cases rail-filter so the two data-item rails align (search +
-           pills); the shared .rt-rail-* atoms supersede cases'
+           pills); the shared .rp-rail-* atoms supersede cases'
            .rp-cases-rail-* in the consolidation pass. -->
-      <div class="rt-rail-filter">
-        <div class="rt-search">
+      <div class="rp-rail-filter">
+        <div class="rp-search">
           <i class="bi bi-search"></i>
           <input type="search" id="wsRailSearch" placeholder="Search projects…" autocomplete="off" />
         </div>
-        <div class="rt-rail-chips" id="wsOwnerFilter" role="group" aria-label="Project ownership filter">
+        <div class="rp-rail-chips" id="wsOwnerFilter" role="group" aria-label="Project ownership filter">
           <button type="button" class="rp-chip is-active" data-owner="all">All</button>
           <button type="button" class="rp-chip" data-owner="personal" title="Projects you own">Personal</button>
           <button type="button" class="rp-chip" data-owner="shared" title="Projects shared with you by others">Shared</button>
           <button type="button" class="rp-chip" data-owner="company" title="Company-scoped projects">Company</button>
         </div>
       </div>
-      <div class="rt-nav-body" id="wsNavBody" aria-busy="true">
-        <div class="rt-nav-state">Loading projects…</div>
+      <div class="rp-rail-body" id="wsNavBody" aria-busy="true">
+        <div class="rp-rail-state">Loading projects…</div>
       </div>
-      <div class="rt-nav-foot">
+      <div class="rp-rail-footer">
         <!-- One context-aware create button (CAS_37B2E1BF): adapts to the rail
              view like Home's single rail-foot create — Data → New chart (from the
              active data file), Dashboards → New dashboard. Upload moved to the data
              toolbar + landing; New project to the rail head. workspace.js repoints
              label/icon/handler via syncWsCreateButton on every rail-view switch. -->
-        <button class="rt-btn rt-btn--glass" id="wsCreate" type="button">
+        <button class="rp-btn-icon rp-btn-icon--glass" id="wsCreate" type="button">
           <i class="bi bi-bar-chart-line" id="wsCreateIcon"></i><span id="wsCreateLabel">New chart</span>
         </button>
       </div>
@@ -94,7 +94,7 @@
           <button class="rt-btn" id="wsFilterToggle" type="button" title="Filter panel">
             <i class="bi bi-funnel"></i>
           </button>
-          <div class="rt-search">
+          <div class="rp-search">
             <i class="bi bi-search"></i>
             <input type="search" id="wsRowSearch" placeholder="Search the file…" title="Server-side full-file search. Use the filter panel for column-specific predicates." />
           </div>

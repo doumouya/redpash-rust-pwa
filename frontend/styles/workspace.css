@@ -15,7 +15,7 @@
    rules live in chart.css). .is-landing-mode hides the toolbars / body
    / pager and reveals #wsLanding, which scrolls as one padded column —
    recent projects + a stats strip, the Workspace twin of the Cases
-   board. Reuses the shared .rp-kpi-* / .rt-group-mark / .rt-tab-dot
+   board. Reuses the shared .rp-kpi-* / .rp-rail-group-mark / .rp-rail-tab-dot
    atoms so it reads like the rest of the app. */
 .ws-landing { display: none; }
 .rp-surface.is-landing-mode .rt-toolbar--data,
