@@ -32,7 +32,9 @@ a dev server is up.
 Per railed page it asserts (PASS requires all):
 - rail renders on the framework `rp-rail*` atoms (`rp-rail-tab` / `rp-rail-group` present);
 - the **rail subtree has zero residual `rt-*`** (migration complete *within* the rail; list/redtable-surface `rt-*` outside `.rp-rail` is reported as `deferred list-surface rt-*`, never failed — that's the list-page/redtable lane);
-- a rail tab **click activates** (the JS-selector lockstep is functional);
+- a rail tab **click activates** (the JS-selector lockstep is functional) — **advisory, not a hard
+  gate**: the click→`.active` model is page-specific (profile/docs/home/settings use it; monitoring
+  renders the body view as the active indicator instead), so it's reported as a signal, not failed;
 - `--rp-accent` resolves under every theme (token-driven recolor);
 - no console / page errors during load + interaction.
 
