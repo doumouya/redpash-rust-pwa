@@ -33,9 +33,14 @@ it recolors with every theme).
   (project picker or ＋ New project, default = source DB) → **Create & Pull**
   (`POST /api/projects` for the new-project case, then `POST /api/connectors`
   kind=`mysql`, then `POST /api/connectors/:rid/sync`). The pulled CSV appears in
-  SOURCES. Configured connectors list each with a re-**Pull** button; a failed
-  pull surfaces the backend error message in an inline `#swConnErr` alert
-  (`role="alert"`) instead of vanishing into the console.
+  SOURCES. Configured connectors list each with **✎ rename** (inline `<input>` →
+  `PATCH /api/connectors/:rid`, Enter/blur commits, Esc cancels), **🗑 delete**
+  (two-click "Sure?" confirm → `DELETE /api/connectors/:rid`, no browser dialog;
+  removes the row, reloads if the list empties), and a re-**Pull** button. Rename +
+  delete are server-gated to Admin+ on the connector's project (managing connectors
+  is admin power; creation moves to the Admin Console post-test). A failed op
+  surfaces the backend error in an inline `#swConnErr` alert (`role="alert"`)
+  instead of vanishing into the console.
 
 ## Drift-prone areas
 

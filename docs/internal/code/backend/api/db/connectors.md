@@ -3,7 +3,7 @@ title: backend/crates/api/src/db/connectors.rs
 source: ../../../../../../backend/crates/api/src/db/connectors.rs
 owner: Torv
 section: Internal · Code · backend · api · db
-last modified date: 2026-06-04
+last modified date: 2026-06-05
 ---
 
 # connectors.rs
@@ -36,6 +36,11 @@ load time (`pipeline::upload_csv`) — the same write-reach check a UI upload us
 - `pub fn get_connector` — the full summary for one connector (route detail).
 - `pub fn get_connector_load_cfg` — the minimal destination the loader routes
   through; `None` if the connector doesn't exist (the loader fails loudly).
+- `pub fn rename_connector` — `UPDATE connectors SET name`; returns `true` if a row
+  changed. Route gates on Admin+ reach.
+- `pub fn delete_connector` — `DELETE FROM entities` type-guarded to a `connectors`
+  row, so the subtype cascades off the registry FK and a non-connector id is a no-op
+  (`false`). Mirrors `delete_project`. Route gates on Admin+ reach.
 
 ## Drift-prone areas
 

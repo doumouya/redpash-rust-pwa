@@ -146,3 +146,29 @@ pub async fn get_connector_load_cfg(pool: &PgPool, rid: &str) -> sqlx::Result<Op
         config:     r.try_get("config").unwrap_or_else(|_| serde_json::json!({})),
     }))
 }
+
+/// Rename a connector. Returns `true` if a row was updated, `false` if no such
+/// connector. The route gates this on Admin+ reach to the destination project.
+pub async fn rename_connector(pool: &PgPool, rid: &str, name: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("UPDATE connectors SET name = $2 WHERE redpash_id = $1")
+        .bind(rid)
+        .bind(name)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Delete a connector via the entity registry — the `connectors` subtype row
+/// cascades off the `entities` FK (`ON DELETE CASCADE`). Type-guarded so an id
+/// that isn't a connector is a no-op (`false`), mirroring `delete_project`. The
+/// route gates this on Admin+ reach to the destination project.
+pub async fn delete_connector(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query(
+        "DELETE FROM entities WHERE id = $1
+           AND EXISTS (SELECT 1 FROM connectors WHERE redpash_id = $1)",
+    )
+    .bind(rid)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}

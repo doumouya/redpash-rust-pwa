@@ -128,6 +128,8 @@
 #swSurface .sw-btn--accent:disabled { opacity: .6; cursor: default; }
 #swSurface .sw-btn--ghost { background: transparent; border-color: var(--rp-border); color: var(--rp-text-dim); }
 #swSurface .sw-btn--ghost:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+#swSurface .sw-btn--danger { background: var(--rp-danger, #f04438); color: #fff; border-color: transparent; }
+#swSurface .sw-conn-rename { font: var(--rp-text-sm)/1 var(--rp-font); color: var(--rp-text); background: var(--rp-surface-2); border: 1px solid var(--rp-accent-2); border-radius: var(--rp-radius); padding: 0.2rem 0.4rem; }
 #swSurface kbd { font: inherit; font-size: var(--rp-text-xs); background: var(--rp-bg); border: 1px solid var(--rp-border);
   border-radius: 5px; padding: 1px .35rem; color: var(--rp-text-dim); }
 

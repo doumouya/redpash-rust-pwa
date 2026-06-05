@@ -1,9 +1,11 @@
 //! Doc: docs/internal/code/backend/api/routes/connectors.md
 //! `/api/connectors` — persisted connector configs (Kafka, future S3/CDC).
 //!
-//!   GET  /        list the connectors the caller can reach
-//!   POST /        create one — the user picks the DESTINATION project
-//!   GET  /:rid    fetch one connector summary
+//!   GET    /        list the connectors the caller can reach
+//!   POST   /        create one — the user picks the DESTINATION project
+//!   GET    /:rid    fetch one connector summary
+//!   PATCH  /:rid    rename a connector (manage = Admin+ on its project)
+//!   DELETE /:rid    delete a connector (Admin+; the row cascades via the registry)
 //!
 //! This is the framework half of connector-through-framework: instead of the
 //! `load.sh` env hardcode, the user creates a connection (picking which project
@@ -23,7 +25,7 @@ struct ConnectorList { items: Vec<db::ConnectorSummary> }
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/",     get(list).post(create))
-        .route("/:rid", get(get_one))
+        .route("/:rid", get(get_one).patch(rename).delete(remove))
         .route("/:rid/sync", post(sync))
 }
 
@@ -160,4 +162,69 @@ async fn sync(
         .send();
 
     Ok(Json(SyncResult { file }))
+}
+
+#[derive(Deserialize)]
+struct PatchConnectorBody {
+    #[serde(default)] name: Option<String>,
+}
+
+/// `PATCH /api/connectors/:rid` — rename a connector. Managing a connector is
+/// **admin power** (per the connectors-as-managed-asset model), so this requires
+/// **≥Admin reach** on the connector's destination project — a step above the
+/// ≥Member create/sync gate. Leak-free: an unreachable connector reads as 404.
+async fn rename(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+    Json(body):   Json<PatchConnectorBody>,
+) -> Result<Json<db::ConnectorSummary>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_grant(&state, &user, &conn.project_id, "project",
+        |g| g.effective().is_some_and(|r| r >= crate::rbac::Role::Admin)).await?;
+
+    let name = body.name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let Some(name) = name else {
+        return Err(AppError::bad_request("invalid", "name is required"));
+    };
+    db::rename_connector(&state.db, &rid, name).await?;
+
+    crate::event::info(&state.db, "connector_rename", format!("renamed connector {rid} → {name}"))
+        .user(user.clone())
+        .context(serde_json::json!({ "connector": rid, "name": name }))
+        .send();
+
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::internal("internal", "connector vanished after rename"))?;
+    Ok(Json(conn))
+}
+
+/// `DELETE /api/connectors/:rid` — delete a connector. **≥Admin reach** on the
+/// destination project (same manage gate as rename). The `connectors` row
+/// cascades off the entity-registry FK (`ON DELETE CASCADE`); deleting the
+/// connector does NOT touch any files it previously pulled. Leak-free 404.
+async fn remove(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<StatusCode, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_grant(&state, &user, &conn.project_id, "project",
+        |g| g.effective().is_some_and(|r| r >= crate::rbac::Role::Admin)).await?;
+
+    db::delete_connector(&state.db, &rid).await?;
+
+    crate::event::info(&state.db, "connector_delete", format!("deleted connector {rid}"))
+        .user(user.clone())
+        .context(serde_json::json!({ "connector": rid, "project": conn.project_id }))
+        .send();
+
+    Ok(StatusCode::NO_CONTENT)
 }

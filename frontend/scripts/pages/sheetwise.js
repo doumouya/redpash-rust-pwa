@@ -243,13 +243,17 @@ export default function sheetwise(app, { session }) {
       if (!items.length) { host.innerHTML = '<p class="sw-conn-note">None yet — create one above.</p>'; return; }
       host.textContent = "";
       items.forEach((c) => {
-        const row = document.createElement("div"); row.className = "sw-conn-row";
-        const nm = document.createElement("span"); nm.textContent = c.name;
+        const row = document.createElement("div"); row.className = "sw-conn-row"; row.dataset.rid = c.redpash_id;
+        const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = c.name;
         const k = document.createElement("span"); k.className = "k"; k.textContent = c.kind;
         const sp = document.createElement("span"); sp.className = "sp2";
+        const ren = document.createElement("button"); ren.className = "sw-btn sw-btn--ghost"; ren.title = "Rename"; ren.textContent = "✎";
+        ren.addEventListener("click", () => renameConnector(c.redpash_id, nm));
+        const del = document.createElement("button"); del.className = "sw-btn sw-btn--ghost"; del.title = "Delete"; del.textContent = "🗑";
+        del.addEventListener("click", () => deleteConnector(c.redpash_id, del, row));
         const pull = document.createElement("button"); pull.className = "sw-btn sw-btn--ghost"; pull.textContent = "▶ Pull";
         pull.addEventListener("click", () => pullConnector(c.redpash_id, pull));
-        row.append(nm, k, sp, pull); host.append(row);
+        row.append(nm, k, sp, ren, del, pull); host.append(row);
       });
     } catch (e) { host.innerHTML = '<p class="sw-conn-note">' + esc(e.message) + "</p>"; }
   }
@@ -265,6 +269,52 @@ export default function sheetwise(app, { session }) {
       err.textContent = "Pull failed — " + e.message; err.style.display = "block";
       console.error("pull", e);
       setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 2500);
+    }
+  }
+  // Rename — inline edit → PATCH /api/connectors/:rid. Server gates on Admin+
+  // reach to the connector's project (manage = admin power).
+  async function renameConnector(rid, nmEl) {
+    const cur = nmEl.textContent;
+    const input = document.createElement("input"); input.className = "sw-conn-rename"; input.value = cur;
+    nmEl.replaceWith(input); input.focus(); input.select();
+    let done = false;
+    const restore = (text) => { input.replaceWith(nmEl); nmEl.textContent = text; };
+    const commit = async () => {
+      if (done) return; done = true;
+      const next = input.value.trim();
+      if (!next || next === cur) { restore(cur); return; }
+      try {
+        const c = await api("/api/connectors/" + encodeURIComponent(rid),
+          { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: next }) });
+        restore(c.name || next);
+      } catch (e) {
+        restore(cur);
+        const err = $("#swConnErr"); err.textContent = "Rename failed — " + e.message; err.style.display = "block";
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { done = true; restore(cur); }
+    });
+    input.addEventListener("blur", commit);
+  }
+  // Delete — two-click confirm (no browser dialog) → DELETE /api/connectors/:rid (204).
+  async function deleteConnector(rid, btn, row) {
+    if (btn.dataset.armed !== "1") {
+      btn.dataset.armed = "1"; btn.textContent = "Sure?"; btn.classList.add("sw-btn--danger");
+      setTimeout(() => {
+        if (btn.dataset.armed === "1") { btn.dataset.armed = ""; btn.textContent = "🗑"; btn.classList.remove("sw-btn--danger"); }
+      }, 2500);
+      return;
+    }
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      await api("/api/connectors/" + encodeURIComponent(rid), { method: "DELETE" });
+      row.remove();
+      if (!$("#swConnList").querySelector(".sw-conn-row")) loadConnectors();
+    } catch (e) {
+      btn.disabled = false; btn.dataset.armed = ""; btn.textContent = "🗑"; btn.classList.remove("sw-btn--danger");
+      const err = $("#swConnErr"); err.textContent = "Delete failed — " + e.message; err.style.display = "block";
     }
   }
   $("#myCreate").addEventListener("click", async () => {

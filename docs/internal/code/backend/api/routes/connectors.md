@@ -17,15 +17,17 @@ the data lands in**, and the loader reads that choice (Em 2026-06-04: "ask the
 user which project he wants to add the file").
 
 ```
-GET  /api/connectors            list the connectors the caller can reach
-POST /api/connectors            create one — body picks the destination project (+ config)
-GET  /api/connectors/:rid       fetch one connector summary
-POST /api/connectors/:rid/sync  run the extract → CSV → a new project file (SheetWise "Pull")
+GET    /api/connectors            list the connectors the caller can reach
+POST   /api/connectors            create one — body picks the destination project (+ config)
+GET    /api/connectors/:rid       fetch one connector summary
+PATCH  /api/connectors/:rid       rename (manage = Admin+ on its project)
+DELETE /api/connectors/:rid       delete (Admin+; the row cascades via the registry)
+POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (SheetWise "Pull")
 ```
 
 ## Public surface
 
-- `pub fn routes() -> Router<AppState>` — the three routes above.
+- `pub fn routes() -> Router<AppState>` — the routes above.
 - `create` (POST `/`) — validates `name` + `project_id`, gates the caller to
   **≥Member write-reach** on the chosen project via `rbac::require_grant`
   (the same write-check `pipeline::upload_csv` applies at load), then
@@ -37,6 +39,13 @@ POST /api/connectors/:rid/sync  run the extract → CSV → a new project file (
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
 - `get_one` (GET `/:rid`) — `db::get_connector` then `rbac::require_view` on the
   destination project (leak-free: unreachable reads as not-found).
+- `rename` (PATCH `/:rid`) — managing a connector is **admin power**: gates on
+  **≥Admin reach** to the destination project (a step above the ≥Member create gate),
+  then `db::rename_connector` + a `connector_rename` event. `{ name }` body; empty
+  name → 400; unreachable → leak-free 404. Returns the updated `ConnectorSummary`.
+- `remove` (DELETE `/:rid`) — same ≥Admin gate, then `db::delete_connector` (the row
+  cascades off the entity registry; previously-pulled CSV files are untouched) + a
+  `connector_delete` event. Returns 204.
 
 ## Drift-prone areas
 
