@@ -1,0 +1,11 @@
+# Pin to stable. The repo uses NO nightly features (no `#![feature(...)]`, no
+# build.rs), so nightly buys us nothing — and it actively breaks us: polars-ops
+# 0.43.1 (pulled by the `strings` feature, used by BOTH the native and wasm32
+# builds) imports nightly-internal `core::unicode::{Cased, Case_Ignorable}`,
+# which nightly 1.98.0 (2026-06-03) made private -> E0432/E0603, build fails.
+# Stable builds both targets cleanly (verified 2026-06-05: full `cargo check`
+# workspace + wasm32 target present). Reasoning:
+#   docs/internal/specs/sql-redtable/phase-0-coverage.md  (Toolchain finding)
+[toolchain]
+channel = "stable"
+targets = ["wasm32-unknown-unknown"]
