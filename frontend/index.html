@@ -34,7 +34,7 @@
         return null;
       }
       var t  = rp(["rp-pref-general-theme",    "rp-pref-theme",    "rp-theme"],
-                  function (v) { return v === "light" || v === "dark"; });
+                  function (v) { return ["light","dark","new-dark","new-light","catppuccin-mocha","catppuccin-latte"].indexOf(v) >= 0; });
       var dn = rp(["rp-pref-general-density",  "rp-pref-density",  "rp-density"],
                   function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
       var fs = rp(["rp-pref-general-fontSize", "rp-pref-fontSize", "rp-font-size"],

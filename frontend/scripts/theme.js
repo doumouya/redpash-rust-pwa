@@ -38,8 +38,13 @@ export function currentTheme() {
   return getPref("general-theme");
 }
 
+// The full theme set. light/dark = catppuccin aliases (today's default);
+// the four named themes are the design-language reset (2026-06-05). Kept in
+// lockstep with the `general-theme` enum in prefs.js + index.html's pre-paint.
+const THEMES = ["light", "dark", "new-dark", "new-light", "catppuccin-mocha", "catppuccin-latte"];
+
 export function applyTheme(theme) {
-  const t = theme === "light" ? "light" : "dark";
+  const t = THEMES.includes(theme) ? theme : "dark";
   // setPref handles: localStorage write (rp-pref-general-theme,
   // JSON-encoded), html data-attr reflection (spec.attr = "theme",
   // so html.dataset.theme = t), the fire-and-forget PATCH

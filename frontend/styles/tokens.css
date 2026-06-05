@@ -2,58 +2,23 @@
    RedPash design tokens — the single source of every colour, space,
    radius, type and elevation value in the app.
 
-   Authored fresh for the 2026-05-22 frontend reset; file #1 of the
-   CSS layer. Every other stylesheet consumes these vars and declares
-   no raw values of its own.
+   TWO-TIER, theme-agnostic (2026-06-05 design-language reset):
+     • Structure tier (`:root` below) — spacing / radius / type / motion.
+       Theme-independent; authored once.
+     • Palette tier (one block per theme) — colours + glass + elevation,
+       re-mapped onto the SAME `--rp-*` names so every component reads one
+       stable API and only the values swap per `html[data-theme]`.
+
+   Themes:  dark / catppuccin-mocha  (== today's default — zero-visual)
+            light / catppuccin-latte (== today's light  — zero-visual)
+            new-dark / new-light      (the new RedPash identity)
+   The new identity is selectable now; it becomes the default once the
+   component rework lands (see the design-language plan).
    ───────────────────────────────────────────────────────────────── */
+
+/* ── Structure tier — theme-agnostic ───────────────────────────────── */
 :root {
-  /* Tells browsers which colour scheme to use when rendering native
-     form widgets (<select> popups, default scrollbars, native input
-     chrome). Without this, the OS scheme wins regardless of our
-     tokens, so a dark RedPash on a light-OS shows light dropdown
-     popups (and vice versa). The `html[data-theme="light"]` override
-     below flips it for the latte theme. */
-  color-scheme: dark;
-
-  /* surface ladder (Catppuccin Mocha) — chrome sits on crust, content
-     lifts to base so the card reads clearly above the topbar+rail.
-     crust → base is a deliberate 2-rung gap; insets/border step up
-     one rung each to stay distinct from the content surface. */
-  --rp-bg:        #11111b;  /* crust   — topbar · rail · page gutter */
-  --rp-surface:   #1e1e2e;  /* base    — lifted content card          */
-  --rp-surface-2: #313244;  /* surface0 — inputs · hover insets · chips */
-  --rp-border:    #45475a;  /* surface1 — card + control borders       */
-
-  /* text */
-  --rp-text:      #cdd6f4;
-  --rp-text-dim:  #a6adc8;
-  --rp-text-mute: #6c7086;
-
-  /* brand + accents */
-  --rp-accent:    #f38ba8;
-  --rp-accent-2:  #89b4fa;
-  --rp-mauve:     #cba6f7;
-  --rp-ok:        #a6e3a1;
-  --rp-warn:      #f9e2af;
-
-  /* glass + elevation */
-  --rp-glass:        rgba(30, 30, 46, 0.55);
-  --rp-glass-border: rgba(205, 214, 244, 0.12);
-  --rp-blur:         16px;
-  --rp-shadow:       0 24px 60px -16px rgba(0, 0, 0, 0.7);
-
-  /* The lifted-card chrome — soft delineation for content cards on
-     the page bg. In dark mode the page bg is so dark that shadow is
-     invisible; the inset border-color via `box-shadow 0 0 0 1px`
-     does the delineating instead. Light mode below redefines this
-     as a real drop-shadow. Used by .rp-page__section + the per-page
-     panel cards that adopt the "lifted on calm bg" direction. */
-  --rp-shadow-card:  0 0 0 1px var(--rp-border),
-                     0 1px 2px rgba(0, 0, 0, 0.25);
-
-  /* spacing scale — rem, so margins scale with the root font-size (the
-     A−/A+ control) + browser zoom + HiDPI. px here meant margins stayed
-     physically tiny on HiDPI panels (= the "no breathing room" feeling). */
+  /* spacing scale — rem, so margins scale with root font-size + zoom */
   --rp-sp-1: 0.25rem;  /* 4px  */
   --rp-sp-2: 0.5rem;   /* 8px  */
   --rp-sp-3: 0.75rem;  /* 12px */
@@ -64,43 +29,86 @@
 
   /* radius — px ON PURPOSE: rem/em radii rendered inconsistently across
      different-sized elements (Em). The one sanctioned px carve-out. */
-  --rp-radius:    10px;
-  --rp-radius-lg: 16px;
+  --rp-radius:      10px;
+  --rp-radius-lg:   16px;
+  --rp-radius-pill: 999px;
 
-  /* type — rem, NOT px, so the scale honors HiDPI panels, browser zoom,
-     OS text-scaling, and the Settings → Appearance font-size slider
-     (px pinned them at a too-small size on HiDPI laptops). md = 1rem =
-     16px at the default root; the whole scale rides root font-size. */
-  --rp-font:       system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --rp-font-brand: "Savate", var(--rp-font);
-  --rp-text-sm: 0.875rem; /* 14px — table cells, captions (was 13px) */
-  --rp-text-md: 1rem;     /* 16px — body, controls       (was 15px) */
+  /* type — rem, NOT px, so the scale honors HiDPI, zoom, OS scaling, and
+     the Settings A−/A+ knob. `--rp-font-display` is a TREATMENT over the
+     body stack (weight + tracking in component CSS) — no extra webfont, a
+     deliberate low-bandwidth (Africa-first) choice; swap to a self-hosted
+     variable face here if a stronger display voice is wanted. */
+  --rp-font:         system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rp-font-brand:   "Savate", var(--rp-font);
+  --rp-font-display: var(--rp-font);
+  --rp-text-xs: 0.75rem;  /* 12px — pills, meta, table head */
+  --rp-text-sm: 0.875rem; /* 14px — table cells, captions */
+  --rp-text-md: 1rem;     /* 16px — body, controls */
   --rp-text-lg: 1.25rem;  /* 20px — section titles */
-  --rp-text-xl: 2rem;     /* 32px — page titles */
-
-  /* extra hues + interaction surfaces (workspace) */
-  --rp-teal:        #94e2d5;
-  --rp-peach:       #fab387;
-  --rp-hover:       rgba(255, 255, 255, 0.05);
-  --rp-accent-soft: rgba(137, 180, 250, 0.14);
+  --rp-text-xl: 2rem;     /* 32px — page titles (unchanged — zero-visual) */
+  --rp-text-2xl: 2.5rem;  /* 40px — display (new) */
 
   /* motion */
   --rp-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── light theme (Catppuccin Latte) — opt-in via the theme switcher.
-   Overrides only the colour tokens; spacing / radius / type / motion
-   are theme-independent and stay on :root. ─────────────────────────── */
-html[data-theme="light"] {
+/* ═══ Palette tier ═══════════════════════════════════════════════════ */
+
+/* ── Catppuccin Mocha — the app default + the `dark` alias (zero-visual:
+   identical to the pre-reset `:root`). The `:root` selector makes Mocha
+   the universal fallback, so every theme block below need only override
+   what differs. ─────────────────────────────────────────────────────── */
+:root,
+html[data-theme="dark"],
+html[data-theme="catppuccin-mocha"] {
+  color-scheme: dark;
+
+  --rp-bg:        #11111b;  /* crust   — topbar · rail · page gutter */
+  --rp-surface:   #1e1e2e;  /* base    — lifted content card          */
+  --rp-surface-2: #313244;  /* surface0 — inputs · hover insets · chips */
+  --rp-border:    #45475a;  /* surface1 — card + control borders       */
+
+  --rp-text:      #cdd6f4;
+  --rp-text-dim:  #a6adc8;
+  --rp-text-mute: #6c7086;
+
+  --rp-accent:    #f38ba8;
+  --rp-accent-2:  #89b4fa;
+  --rp-on-accent: #11111b;  /* dark text reads on the light-pink accent */
+  --rp-mauve:     #cba6f7;
+  --rp-ok:        #a6e3a1;
+  --rp-warn:      #f9e2af;
+  --rp-info:      #89b4fa;
+  --rp-danger:    #f38ba8;
+
+  --rp-teal:        #94e2d5;
+  --rp-peach:       #fab387;
+  --rp-hover:       rgba(255, 255, 255, 0.05);
+  --rp-accent-soft: rgba(137, 180, 250, 0.14);
+  --rp-ok-soft:     rgba(166, 227, 161, 0.14);
+  --rp-warn-soft:   rgba(249, 226, 175, 0.14);
+  --rp-info-soft:   rgba(137, 180, 250, 0.14);
+
+  --rp-glass:        rgba(30, 30, 46, 0.55);
+  --rp-glass-border: rgba(205, 214, 244, 0.12);
+  --rp-blur:         16px;
+  --rp-shadow:       0 24px 60px -16px rgba(0, 0, 0, 0.7);
+  /* dark-mode lifted-card chrome — the page bg is so dark a drop-shadow
+     is invisible, so an inset 1px ring does the delineating. */
+  --rp-shadow-card:  0 0 0 1px var(--rp-border),
+                     0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Catppuccin Latte — the `light` alias (zero-visual: identical to the
+   pre-reset `html[data-theme="light"]`). ───────────────────────────── */
+html[data-theme="light"],
+html[data-theme="catppuccin-latte"] {
   color-scheme: light;
 
-  /* surface ladder (Catppuccin Latte) — chrome drops to mantle so the
-     white content card lifts off the topbar+rail; insets step down to
-     base, border holds at surface0. */
-  --rp-bg:        #e6e9ef;  /* mantle   — topbar · rail · page gutter */
-  --rp-surface:   #ffffff;  /* white    — lifted content card          */
-  --rp-surface-2: #eff1f5;  /* base     — inputs · hover insets · chips */
-  --rp-border:    #ccd0da;  /* surface0 — card + control borders       */
+  --rp-bg:        #e6e9ef;  /* mantle */
+  --rp-surface:   #ffffff;
+  --rp-surface-2: #eff1f5;  /* base */
+  --rp-border:    #ccd0da;  /* surface0 */
 
   --rp-text:      #4c4f69;
   --rp-text-dim:  #5c5f77;
@@ -108,24 +116,102 @@ html[data-theme="light"] {
 
   --rp-accent:    #d20f39;
   --rp-accent-2:  #1e66f5;
+  --rp-on-accent: #ffffff;
   --rp-mauve:     #8839ef;
-  --rp-teal:      #179299;
-  --rp-peach:     #fe640b;
   --rp-ok:        #40a02b;
   --rp-warn:      #df8e1d;
+  --rp-info:      #1e66f5;
+  --rp-danger:    #d20f39;
+
+  --rp-teal:        #179299;
+  --rp-peach:       #fe640b;
+  --rp-hover:       rgba(76, 79, 105, 0.06);
+  --rp-accent-soft: rgba(30, 102, 245, 0.10);
+  --rp-ok-soft:     rgba(64, 160, 43, 0.10);
+  --rp-warn-soft:   rgba(223, 142, 29, 0.10);
+  --rp-info-soft:   rgba(30, 102, 245, 0.10);
 
   --rp-glass:        rgba(255, 255, 255, 0.62);
   --rp-glass-border: rgba(255, 255, 255, 0.75);
-  --rp-hover:        rgba(76, 79, 105, 0.06);
-  --rp-accent-soft:  rgba(30, 102, 245, 0.10);
   --rp-shadow:       0 1px 2px rgba(76, 79, 105, 0.08), 0 12px 32px rgba(76, 79, 105, 0.10);
-
-  /* Light-mode lifted-card chrome — a real drop-shadow + the lightest
-     1px ring. The ring is what the dark theme's `0 0 0 1px border`
-     does; the actual elevation comes from the two-stop shadow. Tuned
-     against the inspo deck (AI thread / Bexet / Nexus) — calm + soft,
-     never harsh. */
   --rp-shadow-card:  0 0 0 1px rgba(76, 79, 105, 0.06),
                      0 1px 2px rgba(76, 79, 105, 0.04),
                      0 8px 24px rgba(76, 79, 105, 0.06);
+}
+
+/* ── NEW IDENTITY · New Dark — confident RedPash red on calm slate.
+   Defines the FULL colour set (the universal fallback is Mocha). ────── */
+html[data-theme="new-dark"] {
+  color-scheme: dark;
+
+  --rp-bg:        #0c0d10;
+  --rp-surface:   #15171b;
+  --rp-surface-2: #1c1f25;
+  --rp-border:    #2a2e37;
+
+  --rp-text:      #e6e8ec;
+  --rp-text-dim:  #a0a6b0;
+  --rp-text-mute: #6b7280;
+
+  --rp-accent:    #f04438;  /* RedPash red */
+  --rp-accent-2:  #5b8def;  /* secondary hue (links/info) */
+  --rp-on-accent: #ffffff;
+  --rp-mauve:     #b692f6;
+  --rp-ok:        #2dd4a7;
+  --rp-warn:      #f5b14c;
+  --rp-info:      #5b8def;
+  --rp-danger:    #ff5c5c;
+
+  --rp-teal:        #2dd4bf;
+  --rp-peach:       #fb923c;
+  --rp-hover:       rgba(255, 255, 255, 0.05);
+  --rp-accent-soft: rgba(240, 68, 56, 0.14);
+  --rp-ok-soft:     rgba(45, 212, 167, 0.16);
+  --rp-warn-soft:   rgba(245, 177, 76, 0.16);
+  --rp-info-soft:   rgba(91, 141, 239, 0.16);
+
+  --rp-glass:        rgba(255, 255, 255, 0.045);
+  --rp-glass-border: rgba(255, 255, 255, 0.09);
+  --rp-blur:         14px;
+  --rp-shadow:       0 1px 2px rgba(0, 0, 0, 0.4);
+  --rp-shadow-card:  0 1px 2px rgba(0, 0, 0, 0.4),
+                     0 8px 24px -8px rgba(0, 0, 0, 0.5);
+}
+
+/* ── NEW IDENTITY · New Light — board-grade clean light. ───────────── */
+html[data-theme="new-light"] {
+  color-scheme: light;
+
+  --rp-bg:        #fafafb;
+  --rp-surface:   #ffffff;
+  --rp-surface-2: #f4f5f7;
+  --rp-border:    #e4e7ec;
+
+  --rp-text:      #16191f;
+  --rp-text-dim:  #667085;
+  --rp-text-mute: #98a2b3;
+
+  --rp-accent:    #f04438;  /* RedPash red */
+  --rp-accent-2:  #2563eb;
+  --rp-on-accent: #ffffff;
+  --rp-mauve:     #8b5cf6;
+  --rp-ok:        #16a34a;
+  --rp-warn:      #d97706;
+  --rp-info:      #2563eb;
+  --rp-danger:    #dc2626;
+
+  --rp-teal:        #0d9488;
+  --rp-peach:       #ea580c;
+  --rp-hover:       rgba(16, 24, 40, 0.05);
+  --rp-accent-soft: rgba(240, 68, 56, 0.10);
+  --rp-ok-soft:     rgba(22, 163, 74, 0.10);
+  --rp-warn-soft:   rgba(217, 119, 6, 0.10);
+  --rp-info-soft:   rgba(37, 99, 235, 0.10);
+
+  --rp-glass:        rgba(255, 255, 255, 0.65);
+  --rp-glass-border: rgba(16, 24, 40, 0.07);
+  --rp-blur:         14px;
+  --rp-shadow:       0 1px 2px rgba(16, 24, 40, 0.06);
+  --rp-shadow-card:  0 0 0 1px rgba(16, 24, 40, 0.06),
+                     0 12px 28px -12px rgba(16, 24, 40, 0.16);
 }

@@ -3,7 +3,7 @@ title: frontend/scripts/prefs.js
 source: ../../../../frontend/scripts/prefs.js
 owner: Torv
 section: Internal · Code · Frontend · scripts
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # prefs.js
@@ -116,6 +116,11 @@ clears the database side.
 - **Per-surface Cases UI prefs** live here too (`casesDoneWindow`,
   `casesRailGroupBy`, `casesDetailPanel`); future cases-prefs.js
   module will migrate them under the registry-import pattern.
+- **`general-theme` enum** carries the four design-language themes
+  (`dark`/`light` catppuccin aliases + `new-dark`/`new-light` +
+  `catppuccin-mocha`/`catppuccin-latte`, 2026-06-05). Its `values` list
+  is in lockstep with `theme.js`'s `THEMES` set, `index.html`'s pre-paint
+  validator, and the palette blocks in `tokens.css`.
 
 ## Settings v2 rollout reference
 

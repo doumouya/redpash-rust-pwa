@@ -132,7 +132,12 @@ const ON_OFF_OPTIONS = [
 registerPref({
   key: "general-theme", group: "GENERAL", section: "set-appearance",
   control: "onoff", label: "Theme",
-  values: ["light", "dark"], default: "dark", attr: "theme",
+  // light/dark are the catppuccin aliases (today's default — zero-visual);
+  // the four named themes are the design-language reset (2026-06-05). The
+  // visible toggle stays dark↔light until the new identity is switched on
+  // as the default; the named themes are valid + settable now (preview).
+  values: ["light", "dark", "new-dark", "new-light", "catppuccin-mocha", "catppuccin-latte"],
+  default: "dark", attr: "theme",
   options: [
     { value: "dark",  label: "Dark",  icon: "moon-stars" },
     { value: "light", label: "Light", icon: "sun" },
