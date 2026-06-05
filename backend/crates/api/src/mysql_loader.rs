@@ -84,11 +84,19 @@ impl Cfg {
 fn qi(ident: &str) -> String { format!("`{}`", ident.replace('`', "``")) }
 
 /// RFC-4180 escape one CSV field.
+///
+/// Also strips NUL (`\0`, U+0000): PostgreSQL text/JSONB cannot store it and the
+/// framework write (`insert_file`) aborts with "unsupported Unicode escape
+/// sequence". Type-aware projection already keeps real binary out (HEX, not CAST
+/// AS CHAR), so a residual NUL is binary leakage in a text value — drop it rather
+/// than fail the whole pull. Defense-in-depth for the NUL-breaks-insert class.
 fn csv_field(s: Option<&str>) -> String {
-    match s {
-        None => String::new(),
-        Some(v) if v.contains([',', '"', '\n', '\r']) => format!("\"{}\"", v.replace('"', "\"\"")),
-        Some(v) => v.to_string(),
+    let Some(v) = s else { return String::new() };
+    let v: std::borrow::Cow<str> = if v.contains('\0') { v.replace('\0', "").into() } else { v.into() };
+    if v.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", v.replace('"', "\"\""))
+    } else {
+        v.into_owned()
     }
 }
 
@@ -169,8 +177,13 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     }
 
     // Columns in ordinal order, with DATA_TYPE for type-aware projection.
+    // `CAST(… AS CHAR)`: MySQL 8's information_schema reports metadata columns
+    // (notably DATA_TYPE) with a BLOB result type, which sqlx refuses to decode
+    // as `String` ("Rust type String … not compatible with SQL type BLOB"). The
+    // cast forces a text result so both decode as `String` under the utf8mb4 session.
     let col_rows = sqlx::query(
-        "SELECT column_name, data_type FROM information_schema.columns \
+        "SELECT CAST(column_name AS CHAR) AS column_name, CAST(data_type AS CHAR) AS data_type \
+         FROM information_schema.columns \
          WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position",
     )
     .bind(&cfg.database)
@@ -300,5 +313,9 @@ mod tests {
         assert_eq!(csv_field(Some("he \"q\"")), "\"he \"\"q\"\"\"");
         assert_eq!(csv_field(Some("line\nbreak")), "\"line\nbreak\"");
         assert_eq!(csv_field(None), "");
+        // NUL is stripped (PostgreSQL text/JSONB cannot store it; would abort insert_file)
+        assert_eq!(csv_field(Some("a\0b")), "ab");
+        assert_eq!(csv_field(Some("\0\0")), "");
+        assert_eq!(csv_field(Some("x\0,y")), "\"x,y\"");
     }
 }

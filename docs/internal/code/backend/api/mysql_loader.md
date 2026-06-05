@@ -60,6 +60,10 @@ buffering); and a decode error is **surfaced, never swallowed**.
   read-only SELECT).
 - Decode errors are **surfaced** (`try_get(..)?`), not swallowed — every column
   is projected to a text/hex/WKT string, so a decode error is a real anomaly.
+- **`information_schema` metadata columns must be `CAST(… AS CHAR)`** in the
+  introspection query — MySQL 8 reports `DATA_TYPE` (and friends) with a **BLOB**
+  result type, which sqlx refuses to decode as `String`. The cast forces text.
+  (Caught as a regression when type-aware introspection added a `DATA_TYPE` read.)
 - Table mode only (v1): needs the column list + types up front. Raw-query /
   multi-table modes are a follow-up.
 - Credentials live in the connector's `config` JSONB (localhost v1, plaintext) —
