@@ -137,23 +137,23 @@ export function attachAutocomplete(input, ctx) {
  */
 export function mountChipPicker(slot, ctx) {
   slot.innerHTML = ''
-    + '<div class="rt-chip-picker">'
-    +   '<div class="rt-chip-list"></div>'
-    +   '<input class="rt-chip-input rt-pred-val" type="text" placeholder="Add value…" />'
+    + '<div class="rp-chip-picker">'
+    +   '<div class="rp-chip-list"></div>'
+    +   '<input class="rp-chip-input rt-pred-val" type="text" placeholder="Add value…" />'
     + '</div>';
 
-  const picker = slot.querySelector(".rt-chip-picker");
-  const chips  = slot.querySelector(".rt-chip-list");
-  const input  = slot.querySelector(".rt-chip-input");
+  const picker = slot.querySelector(".rp-chip-picker");
+  const chips  = slot.querySelector(".rp-chip-list");
+  const input  = slot.querySelector(".rp-chip-input");
 
   const selected = new Set(ctx.initialValues || []);
   renderChips();
 
   function renderChips() {
     chips.innerHTML = Array.from(selected).map((v) =>
-      '<span class="rt-chip" data-value="' + esc(v) + '">'
+      '<span class="rp-chip" data-value="' + esc(v) + '">'
       +   esc(v)
-      +   '<button type="button" class="rt-chip-x" aria-label="Remove ' + esc(v) + '">×</button>'
+      +   '<button type="button" class="rp-chip-x" aria-label="Remove ' + esc(v) + '">×</button>'
       + '</span>'
     ).join("");
   }
@@ -176,9 +176,9 @@ export function mountChipPicker(slot, ctx) {
   // Click on chip × → remove. Click anywhere else on picker → focus
   // input. Picker stays focused-feeling so the user can keep typing.
   picker.addEventListener("click", (e) => {
-    const x = e.target.closest(".rt-chip-x");
+    const x = e.target.closest(".rp-chip-x");
     if (x) {
-      const chip = x.closest(".rt-chip");
+      const chip = x.closest(".rp-chip");
       if (chip) removeChip(chip.dataset.value);
       return;
     }

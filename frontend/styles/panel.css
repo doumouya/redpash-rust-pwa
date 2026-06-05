@@ -1646,79 +1646,10 @@
   font-size: 0.7188rem;
 }
 
-/* ── chip-picker (.rt-chip-picker) — value input for in / not_in ─
-   Replaces the comma-separated text input with a chip-list + an
-   inline add-input that autocompletes through .rt-ac. Backspace at
-   empty input drops the last chip. Click anywhere on the picker
-   focuses the input so the user can keep typing without a precise
-   click on the input itself. */
-.rt-chip-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  align-items: center;
-  min-height: 1.875rem;
-  padding: 0.1875rem 0.3125rem;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.4375rem;
-  cursor: text;
-}
-.rt-chip-picker:focus-within { border-color: var(--rp-accent-2); }
-.rt-chip-list {
-  display: contents;            /* chips flow inline with the input */
-}
-.rt-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 1px 0.25rem 1px 0.4375rem;
-  background: var(--rp-accent-soft);
-  color: var(--rp-text);
-  border-radius: 62.4375rem;
-  font-size: 0.7188rem;
-  line-height: 1.6;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rt-chip-x {
-  width: 1rem;
-  height: 1rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--rp-text-mute);
-  cursor: pointer;
-  font-size: 0.8125rem;
-  line-height: 1;
-  padding: 0;
-}
-.rt-chip-x:hover {
-  background: rgba(243, 139, 168, 0.18);
-  color: var(--rp-accent);
-}
-/* `.rt-pred input { width: 100% }` would dominate here on specificity;
-   the picker-scoped selector beats it and restores flex-grow sizing. */
-.rt-chip-picker .rt-chip-input {
-  flex: 1 1 5rem;
-  width: auto;
-  min-width: 5rem;
-  height: 1.5rem;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 0 0.25rem;
-}
-.rt-chip-picker .rt-chip-input:focus { outline: 0; }
+/* chip-picker (in/not_in value input) → collapsed onto the framework
+   `rp-chip-picker` family (styles/framework/filter-panel.css, loaded via
+   main.css). autocomplete.js now emits rp-* classes; the legacy rt-* twin
+   was byte-identical and is removed here. */
 
 /* Sentinel picker — Fix-invalid scan-and-pick chips (tools.js). Junk
    values found in the file (+ the known set) as tick-able chips. */
