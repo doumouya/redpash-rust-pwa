@@ -119,8 +119,15 @@ a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
 }
 .rp-btn:hover { transform: translateY(-1px); }
 .rp-btn:active { transform: translateY(0); }
-.rp-btn:focus-visible { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 0.125rem; }
+.rp-btn:focus-visible { outline: 0.125rem solid var(--rp-accent); outline-offset: 0.125rem; }
 .rp-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+/* --accent: the primary CTA — the signature brand fill (RedPash red in the new
+   identity; the theme's accent in catppuccin). --ghost: a quiet bordered/transparent
+   secondary. Hover darkens the accent via color-mix (no per-theme hover token). */
+.rp-btn--accent { color: var(--rp-on-accent); background: var(--rp-accent); border-color: transparent; }
+.rp-btn--accent:hover { background: color-mix(in srgb, var(--rp-accent) 88%, #000); }
+.rp-btn--ghost { background: transparent; }
+.rp-btn--ghost:hover { background: var(--rp-hover); }
 
 /* ── A1 rp-btn-icon completions — --ghost + busy (was .rt-btn--ghost / .is-busy) ──
    (the run/apply busy SPINNER is added with B3 RedTable, where it's used.) */
@@ -246,9 +253,11 @@ a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
   gap: 0.3125rem;
 }
 .rp-status::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 6.1875rem; }
-.rp-status.is-active { color: var(--rp-ok); background: rgba(166, 227, 161, 0.12); }
+/* soft backgrounds via the per-theme *-soft tokens (were hardcoded catppuccin
+   rgbas — now recolor correctly across all four themes). */
+.rp-status.is-active { color: var(--rp-ok); background: var(--rp-ok-soft); }
 .rp-status.is-active::before { background: var(--rp-ok); }
 .rp-status.is-new { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
 .rp-status.is-new::before { background: var(--rp-accent-2); }
-.rp-status.is-lapsed { color: var(--rp-peach); background: rgba(250, 179, 135, 0.12); }
-.rp-status.is-lapsed::before { background: var(--rp-peach); }
+.rp-status.is-lapsed { color: var(--rp-warn); background: var(--rp-warn-soft); }
+.rp-status.is-lapsed::before { background: var(--rp-warn); }
