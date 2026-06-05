@@ -40,6 +40,7 @@ import { getPref, setPref } from "/scripts/prefs.js";
 import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
 import { mountActivity } from "/scripts/framework/activity.js"; // rp-activity timeline
+import { mountField, mountFieldEditable } from "/scripts/framework/field.js"; // rp-field rows
 
 // Case-state label vocabulary + done-window filter constants
 // extracted into `cases/labels.js` as slice 6 of the god-object
@@ -875,19 +876,9 @@ export default function cases(app, { session }) {
   const commentError    = app.querySelector("#rp-cases-comment-form-error");
   const activityList    = app.querySelector("#rp-cases-activity-list");
   const pathEl       = app.querySelector("#rp-cases-detail-path");
-  const sidePriority = app.querySelector("#rp-cases-side-priority");
-  const sideType     = app.querySelector("#rp-cases-side-type");
-  const sideCategory = app.querySelector("#rp-cases-side-category");
+  const propsHost    = app.querySelector("#rp-cases-props");
   const sideError    = app.querySelector("#rp-cases-side-error");
   const sideErrorPre = app.querySelector("#rp-cases-side-error-pre");
-  const sideAssignee        = app.querySelector("#rp-cases-side-assignee");
-  const sideAssigneeBtn     = app.querySelector("#rp-cases-side-assignee-btn");
-  const sideAssigneePicker  = app.querySelector("#rp-cases-side-assignee-picker");
-  const sideAssigneeInput   = app.querySelector("#rp-cases-side-assignee-input");
-  const sideAssigneeResults = app.querySelector("#rp-cases-side-assignee-results");
-  const sideReporter = app.querySelector("#rp-cases-side-reporter");
-  const sideCreated  = app.querySelector("#rp-cases-side-created");
-  const sideUpdated  = app.querySelector("#rp-cases-side-updated");
   const sideDescBody    = app.querySelector("#rp-cases-side-desc-body");
   const activityCountEl = app.querySelector("#rp-cases-side-activity-count");
   const activityFilterEl = app.querySelector("#rp-cases-activity-filter");
@@ -980,22 +971,6 @@ export default function cases(app, { session }) {
 
   let currentDetailRid = null;
   let assigneePickerTimer = null;
-
-  // Property value menus — Priority / Type / Category open a popover of
-  // choices; picking one fires a sparse PATCH. (Assignee uses the user
-  // picker below; status lives in the path hero.) Delegated click on the
-  // props container; an outside click closes the open menu.
-  const propsEl = app.querySelector(".rp-cases-props");
-  propsEl?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".rp-cases-prop-val[data-prop]");
-    if (!btn) return;
-    e.stopPropagation();
-    if (btn.classList.contains("is-menu-open")) { closePropMenu(); return; }
-    openPropMenu(btn);
-  });
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest(".rp-cases-prop-pop") && !e.target.closest(".rp-cases-prop-val[data-prop]")) closePropMenu();
-  });
 
   // Status path hero — click a step → set status directly (not just
   // cycle-forward). Allows backward moves (reopen) + jumps. The
@@ -1349,82 +1324,6 @@ export default function cases(app, { session }) {
     renderActivityList(lastDetailActivity);
   });
 
-  // ── assignee picker — shared atom from user-picker.css, hits the
-  //    same /admin/users?q= shape as Monitoring's M-2 surface. Click
-  //    the side-panel value → reveals the picker; pick a user →
-  //    PATCH /cases/:rid { assignee_id }; outside-click closes.
-  sideAssigneeBtn?.addEventListener("click", () => {
-    if (!sideAssigneePicker) return;
-    const opening = sideAssigneePicker.hidden;
-    sideAssigneePicker.hidden = !opening;
-    if (opening && sideAssigneeInput) {
-      sideAssigneeInput.value = "";
-      sideAssigneeInput.focus();
-    }
-    if (!opening && sideAssigneeResults) {
-      sideAssigneeResults.hidden = true;
-      sideAssigneeResults.innerHTML = "";
-    }
-  });
-  sideAssigneeInput?.addEventListener("input", () => {
-    const q = sideAssigneeInput.value.trim();
-    clearTimeout(assigneePickerTimer);
-    if (!q) {
-      if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
-      return;
-    }
-    assigneePickerTimer = setTimeout(() => searchAssignees(q), 200);
-  });
-  sideAssigneeResults?.addEventListener("click", (e) => {
-    const item = e.target.closest("[data-user-rid]");
-    if (!item) return;
-    const rid = item.dataset.userRid;
-    pickAssignee(rid);
-  });
-  // Outside-click closes the picker — scoped to the detail panel so
-  // hash navigation away from /cases?id=… doesn't fight this handler.
-  document.addEventListener("click", (e) => {
-    if (!sideAssigneePicker || sideAssigneePicker.hidden) return;
-    if (e.target.closest("#rp-cases-side-assignee-btn")) return;
-    if (e.target.closest("#rp-cases-side-assignee-picker")) return;
-    sideAssigneePicker.hidden = true;
-    if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
-  });
-
-  async function searchAssignees(q) {
-    if (!sideAssigneeResults) return;
-    try {
-      const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
-      const rows = data?.rows || [];
-      if (!rows.length) {
-        sideAssigneeResults.innerHTML = '<div class="rp-ac-empty">No matches.</div>';
-      } else {
-        sideAssigneeResults.innerHTML = rows.map((u) => {
-          const label = u.display_name || u.username || u.redpash_id;
-          const sub   = [u.username, u.email].filter(Boolean).join(" · ");
-          return '<div class="rp-user-picker-result" '
-            + 'data-user-rid="' + esc(u.redpash_id) + '">'
-            +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
-            +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
-            + '</div>';
-        }).join("");
-      }
-      sideAssigneeResults.hidden = false;
-    } catch (err) {
-      sideAssigneeResults.innerHTML = '<div class="rp-ac-empty">Couldn’t search'
-        + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
-      sideAssigneeResults.hidden = false;
-    }
-  }
-
-  async function pickAssignee(userRid) {
-    if (!currentDetailRid || !userRid) return;
-    // Close picker optimistically; patchCase will repaint the value.
-    if (sideAssigneePicker) sideAssigneePicker.hidden = true;
-    if (sideAssigneeResults) { sideAssigneeResults.hidden = true; sideAssigneeResults.innerHTML = ""; }
-    await patchCase({ assignee_id: userRid });
-  }
-
   // ── delete case ─────────────────────────────────────────────
   // Trash icon in the detail head → window.confirm → DELETE /cases/:rid
   // → navigate back to /cases (board). Refresh pulls the deleted row
@@ -1623,24 +1522,127 @@ export default function cases(app, { session }) {
   ];
   const TYPE_OPTS = ["task", "bug", "feature", "epic"].map((t) =>
     ({ value: t, label: TYPE_LABEL[t] || t, icon: TYPE_ICON[t] || TYPE_ICON.task }));
-  const CARET = '<i class="bi bi-chevron-down rp-cases-prop-caret"></i>';
+  // Property value labels (clean text — the rp-field-editable design).
+  function priorityLabel(p) { return PRIORITY_LABEL[p] || p || "Medium"; }
+  function typeLabel(t)     { return TYPE_LABEL[t] || t || "Task"; }
+  function categoryLabel(c) {
+    if (!c || !c.category_id) return "— none —";
+    const parent = c.category_parent_name ? c.category_parent_name + " › " : "";
+    return parent + (c.category_name || c.category_id);
+  }
+  function sourceBadgeHTML(c) {
+    return c.is_internal
+      ? '<span class="rp-cases-source-badge is-internal"><i class="bi bi-people"></i>Internal</span>'
+      : '<span class="rp-cases-source-badge is-external"><i class="bi bi-globe2"></i>External</span>';
+  }
 
-  function priorityValHTML(p) {
-    p = p || "medium";
-    return '<span class="rp-cases-priority-dot is-' + esc(p) + '"></span>'
-      + '<span class="rp-cases-prop-val-txt">' + esc(PRIORITY_LABEL[p] || p) + '</span>' + CARET;
+  // Mount a <select> editor into a field-editable slot: change → commit the
+  // label + fire a sparse PATCH (which repaints the panel); no-op / blur → cancel.
+  function mountSelectEditor(slot, options, current, commit, cancel, onPick) {
+    const sel = document.createElement("select");
+    sel.className = "rp-input rp-field-editor";
+    options.forEach((o) => {
+      const op = document.createElement("option");
+      op.value = o.value; op.textContent = o.label;
+      if ((o.value || "") === (current || "")) op.selected = true;
+      sel.appendChild(op);
+    });
+    slot.appendChild(sel);
+    sel.focus();
+    sel.addEventListener("change", () => {
+      const v = sel.value;
+      if (v === (current || "")) { cancel(); return; }
+      commit(sel.options[sel.selectedIndex]?.text || v); // show the new label
+      onPick(v);                                         // PATCH → paintDetail repaints
+    });
+    sel.addEventListener("blur", () => cancel());
   }
-  function typeValHTML(t) {
-    t = t || "task";
-    return '<i class="bi ' + (TYPE_ICON[t] || TYPE_ICON.task) + ' rp-cases-type-glyph is-' + esc(t) + '"></i>'
-      + '<span class="rp-cases-prop-val-txt">' + esc(TYPE_LABEL[t] || t) + '</span>' + CARET;
+
+  // Mount the assignee user-search into a field-editable slot — de-cased from the
+  // old bespoke side picker. Type → /admin/users?q=; click a result → PATCH.
+  function mountAssigneeEditor(slot, commit, cancel) {
+    slot.innerHTML =
+        '<div class="rp-user-picker-wrap">'
+      +   '<input class="rp-input rp-field-editor" type="text" autocomplete="off" '
+      +          'placeholder="Search by name, username, email…">'
+      +   '<div class="rp-user-picker-results" hidden></div>'
+      + '</div>';
+    const inp = slot.querySelector("input");
+    const results = slot.querySelector(".rp-user-picker-results");
+    inp.focus();
+    inp.addEventListener("input", () => {
+      const q = inp.value.trim();
+      clearTimeout(assigneePickerTimer);
+      if (!q) { results.hidden = true; results.innerHTML = ""; return; }
+      assigneePickerTimer = setTimeout(() => searchAssignees(q, results), 200);
+    });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Escape") cancel(); });
+    inp.addEventListener("blur", () => setTimeout(cancel, 150)); // let a result click land first
+    results.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-user-rid]");
+      if (item) patchCase({ assignee_id: item.dataset.userRid }); // repaints the panel
+    });
   }
-  function categoryValHTML(c) {
-    if (c && c.category_id) {
-      const parent = c.category_parent_name ? esc(c.category_parent_name) + " › " : "";
-      return '<span class="rp-cases-prop-val-txt">' + parent + esc(c.category_name || c.category_id) + '</span>' + CARET;
+
+  async function searchAssignees(q, resultsEl) {
+    if (!resultsEl) return;
+    try {
+      const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
+      const rows = data?.rows || [];
+      resultsEl.innerHTML = rows.length
+        ? rows.map((u) => {
+            const label = u.display_name || u.username || u.redpash_id;
+            const sub   = [u.username, u.email].filter(Boolean).join(" · ");
+            return '<div class="rp-user-picker-result" data-user-rid="' + esc(u.redpash_id) + '">'
+              +   '<span class="rp-user-picker-result-name">' + esc(label) + '</span>'
+              +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
+              + '</div>';
+          }).join("")
+        : '<div class="rp-ac-empty">No matches.</div>';
+      resultsEl.hidden = false;
+    } catch (err) {
+      resultsEl.innerHTML = '<div class="rp-ac-empty">Couldn’t search'
+        + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
+      resultsEl.hidden = false;
     }
-    return '<span class="rp-cases-prop-val-txt rp-cases-side-unassigned">— none —</span>' + CARET;
+  }
+
+  // Build the property rows into #rp-cases-props (called from paintDetail).
+  // Editable rows consume rp-field-editable; read-only rows use rp-field.
+  function paintProps(c) {
+    if (!propsHost) return;
+    propsHost.innerHTML = "";
+    const row = () => { const d = document.createElement("div"); propsHost.appendChild(d); return d; };
+
+    mountFieldEditable(row(), {
+      label: "Priority", value: priorityLabel(c.priority),
+      edit: (slot, commit, cancel) =>
+        mountSelectEditor(slot, PRIORITY_OPTS, c.priority, commit, cancel, (v) => patchCase({ priority: v })),
+    });
+    mountFieldEditable(row(), {
+      label: "Type", value: typeLabel(c.type),
+      edit: (slot, commit, cancel) =>
+        mountSelectEditor(slot, TYPE_OPTS, c.type, commit, cancel, (v) => patchCase({ type: v })),
+    });
+    mountFieldEditable(row(), {
+      label: "Category", value: categoryLabel(c),
+      edit: async (slot, commit, cancel) => {
+        const opts = await categoryOptions();
+        mountSelectEditor(slot, opts, c.category_id || "", commit, cancel,
+          (v) => { if (v) patchCase({ category_id: v }); });
+      },
+    });
+    mountFieldEditable(row(), {
+      label: "Assignee", value: c.assignee_display_name || "", placeholder: "— unassigned —",
+      edit: (slot, commit, cancel) => mountAssigneeEditor(slot, commit, cancel),
+    });
+
+    mountField(row(), { label: "Reporter",
+      html: c.reporter_id ? (esc(c.reporter_display_name || c.reporter_id) + sourceBadgeHTML(c)) : "—" });
+    mountField(row(), { label: "Opened",
+      html: c.created_at ? '<span title="' + esc(fmtTime(c.created_at)) + '">' + esc(fmtAge(c.created_at)) + '</span>' : "—" });
+    mountField(row(), { label: "Updated",
+      html: c.updated_at ? '<span title="' + esc(fmtTime(c.updated_at)) + '">' + esc(fmtAge(c.updated_at)) + '</span>' : "—" });
   }
   // Category list — fetched once, mapped to "parent › child" labels.
   async function categoryOptions() {
@@ -1653,45 +1655,6 @@ export default function cases(app, { session }) {
     return categoriesCache.map((cat) => {
       const parent = cat.parent_id && byId[cat.parent_id] ? byId[cat.parent_id].name + " › " : "";
       return { value: cat.redpash_id, label: parent + cat.name };
-    });
-  }
-
-  let activePropPop = null;
-  function closePropMenu() {
-    if (activePropPop) { activePropPop.remove(); activePropPop = null; }
-    app.querySelectorAll(".rp-cases-prop-val.is-menu-open").forEach((b) => b.classList.remove("is-menu-open"));
-  }
-  async function openPropMenu(btn) {
-    closePropMenu();
-    const prop = btn.dataset.prop;
-    const c = currentDetailCase || {};
-    const cur = prop === "category" ? (c.category_id || "") : (c[prop] || "");
-    let options;
-    if (prop === "priority")      options = PRIORITY_OPTS;
-    else if (prop === "type")     options = TYPE_OPTS;
-    else if (prop === "category") options = await categoryOptions();
-    else return;
-    if (!options.length) return;
-    const pop = document.createElement("div");
-    pop.className = "rp-cases-prop-pop";
-    pop.innerHTML = options.map((o) =>
-      '<button type="button" class="rp-cases-prop-opt' + ((o.value || "") === (cur || "") ? " is-active" : "") + '" data-val="' + esc(o.value || "") + '">'
-      + (o.dot ? '<span class="rp-cases-priority-dot is-' + esc(o.value) + '"></span>'
-               : (o.icon ? '<i class="bi ' + o.icon + ' rp-cases-type-glyph is-' + esc(o.value || "") + '"></i>' : ''))
-      + '<span class="rp-cases-prop-opt-lbl">' + esc(o.label) + '</span>'
-      + ((o.value || "") === (cur || "") ? '<i class="bi bi-check2 rp-cases-prop-opt-check"></i>' : '')
-      + '</button>').join("");
-    btn.parentNode.appendChild(pop);          // .rp-cases-prop is position:relative
-    btn.classList.add("is-menu-open");
-    activePropPop = pop;
-    pop.addEventListener("click", (e) => {
-      const opt = e.target.closest("[data-val]");
-      if (!opt) return;
-      const val = opt.dataset.val;
-      closePropMenu();
-      if (val === cur) return;                 // no-op on re-pick
-      if (prop === "category") { if (val) patchCase({ category_id: val }); }
-      else patchCase({ [prop]: val });
     });
   }
 
@@ -1734,30 +1697,8 @@ export default function cases(app, { session }) {
         step.classList.toggle("is-active", idx === curIdx);
       });
     }
-    // Properties — colored priority pill, type glyph, category path,
-    // assignee avatar. Each button opens its value menu / picker.
-    if (sidePriority) sidePriority.innerHTML = priorityValHTML(c.priority);
-    if (sideType)     sideType.innerHTML     = typeValHTML(c.type);
-    if (sideCategory) sideCategory.innerHTML = categoryValHTML(c);
-    if (sideAssignee) {
-      sideAssignee.innerHTML = c.assignee_id
-        ? userBadgeHTML(c.assignee_id, c.assignee_display_name)
-        : '<span class="rp-cases-side-unassigned">— unassigned —</span>';
-    }
-    // Reporter + source badge — Internal (RedPash team) vs External (customer).
-    if (sideReporter) {
-      if (!c.reporter_id) {
-        sideReporter.innerHTML = '—';
-      } else {
-        const badge = c.is_internal
-          ? '<span class="rp-cases-source-badge is-internal"><i class="bi bi-people"></i>Internal</span>'
-          : '<span class="rp-cases-source-badge is-external"><i class="bi bi-globe2"></i>External</span>';
-        sideReporter.innerHTML = userBadgeHTML(c.reporter_id, c.reporter_display_name) + badge;
-      }
-    }
-    // Timeline — relative, full timestamp on hover.
-    if (sideCreated) { sideCreated.textContent = c.created_at ? fmtAge(c.created_at) : "—"; sideCreated.title = c.created_at ? fmtTime(c.created_at) : ""; }
-    if (sideUpdated) { sideUpdated.textContent = c.updated_at ? fmtAge(c.updated_at) : "—"; sideUpdated.title = c.updated_at ? fmtTime(c.updated_at) : ""; }
+    // Properties — built from the rp-field / rp-field-editable framework rows.
+    paintProps(c);
 
     // Error payload — auto-triaged crashes carry a raw error string;
     // hidden when the case has none.
@@ -1869,9 +1810,8 @@ export default function cases(app, { session }) {
     if (railAttachWrap && n > 0) railAttachWrap.open = true;
   }
 
-  // composes into userBadgeHTML (avatar + name) and into the
-  // comment bubble (avatar standalone, name lives in the bubble
-  // header).
+  // Used in the case cards + comment bubbles (avatar standalone; the
+  // name lives in the card meta / bubble header).
   function userAvatarHTML(userRid, displayName, size) {
     const name = displayName || userRid || "—";
     const initials = name
@@ -1886,14 +1826,6 @@ export default function cases(app, { session }) {
       + 'data-c="' + color + '" title="' + esc(name) + '">'
       + esc(initials)
       + '</span>';
-  }
-  function userBadgeHTML(userRid, displayName) {
-    const name = displayName || userRid || "—";
-    return ''
-      + '<div class="rp-cases-user-badge" title="' + esc(name) + '">'
-      +   userAvatarHTML(userRid, displayName)
-      +   '<span class="rp-cases-user-name">' + esc(name) + '</span>'
-      + '</div>';
   }
   const USER_BADGE_COLORS = ["blue", "mauve", "peach", "green", "teal"];
   function userBadgeColor(key) {

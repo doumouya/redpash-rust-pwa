@@ -249,54 +249,10 @@
                  as the workspace .rt-panel-inner). -->
             <div class="rp-cases-detail-side-inner">
 
-            <!-- Properties — click a value to change it. -->
-            <div class="rp-cases-props">
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Priority</span>
-                <button class="rp-cases-prop-val" id="rp-cases-side-priority" data-prop="priority" type="button"></button>
-              </div>
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Type</span>
-                <button class="rp-cases-prop-val" id="rp-cases-side-type" data-prop="type" type="button"></button>
-              </div>
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Category</span>
-                <button class="rp-cases-prop-val" id="rp-cases-side-category" data-prop="category" type="button"></button>
-              </div>
-              <div class="rp-cases-prop rp-cases-prop--assignee">
-                <span class="rp-cases-prop-lbl">Assignee</span>
-                <button class="rp-cases-prop-val" id="rp-cases-side-assignee-btn" type="button" title="Change assignee">
-                  <span id="rp-cases-side-assignee">— unassigned —</span>
-                </button>
-                <div class="rp-cases-side-picker" id="rp-cases-side-assignee-picker" hidden>
-                  <div class="rp-user-picker-wrap">
-                    <input id="rp-cases-side-assignee-input" type="text" autocomplete="off"
-                           placeholder="Search by name, username, email…" />
-                    <div id="rp-cases-side-assignee-results" class="rp-user-picker-results" hidden></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- People + source -->
-            <div class="rp-cases-props rp-cases-props--meta">
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Reporter</span>
-                <span class="rp-cases-prop-static" id="rp-cases-side-reporter">—</span>
-              </div>
-            </div>
-
-            <!-- Timeline — relative, absolute on hover -->
-            <div class="rp-cases-props rp-cases-props--meta">
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Opened</span>
-                <span class="rp-cases-prop-static" id="rp-cases-side-created">—</span>
-              </div>
-              <div class="rp-cases-prop">
-                <span class="rp-cases-prop-lbl">Updated</span>
-                <span class="rp-cases-prop-static" id="rp-cases-side-updated">—</span>
-              </div>
-            </div>
+            <!-- Properties — paintDetail() builds rp-field / rp-field-editable
+                 rows into this host (Priority/Type/Category/Assignee editable;
+                 Reporter/Opened/Updated read-only). -->
+            <div class="rp-field-group" id="rp-cases-props"></div>
 
             <!-- Error payload — only for auto-triaged cases (raw crash
                  string). Hidden when the case has none. -->
