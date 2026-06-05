@@ -97,4 +97,5 @@
 @import "cases.css";      /* /cases — kanban board + case detail page */
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 @import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
+@import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
 @import "chart.css";     /* the redtable body when a chart file is open */

@@ -3,7 +3,7 @@ title: frontend/scripts/main.js
 source: ../../../../frontend/scripts/main.js
 owner: Torv
 section: Internal · Code · Frontend · scripts
-last modified date: 2026-05-30
+last modified date: 2026-06-05
 ---
 
 # main.js
@@ -29,3 +29,5 @@ Hash-based SPA router. Each route names a partial (HTML fetched into #app) and a
 ## Related
 
 - [Frontend pillar landing](../../index.md)
+- [pages/sheetwise.js](pages/sheetwise.md) — the `/sheetwise` route (added 2026-06-05;
+  replaced the standalone `frontend/sheetwise.html`).

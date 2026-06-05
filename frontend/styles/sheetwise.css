@@ -1,0 +1,156 @@
+/* Purpose: SheetWise page — the SQL console (view 1) + the Connectors view
+   (view 2), the whole-app design-language pilot. Every rule is scoped under
+   #swSurface and composed on the semantic --rp-* tokens, so the page recolors
+   automatically with the global theme (no per-page palette).
+   Doc: docs/internal/code/frontend/styles/sheetwise.md */
+
+/* ── surface layout ──────────────────────────────────────────────────────────
+   #swSurface IS the framework .rp-surface card (flex column, chrome'd). The
+   inner background is re-anchored to --rp-bg (not the card's --rp-surface) so
+   the editor/result/sidebar panels — which use --rp-surface — keep the contrast
+   they had when the standalone page sat on --rp-bg. The bar is a fixed sub-head;
+   the active view flex-fills below it.
+   The [hidden] !important is SCOPED to #swSurface so it can't override other
+   pages' flex-toggle logic (the surface-toggle gotcha — UA [hidden] loses to
+   display:flex; see framework/surface.css). */
+#swSurface { padding: 0; background: var(--rp-bg); }
+#swSurface [hidden] { display: none !important; }
+
+/* sub-header bar — page label + the [SQL | Connectors] switcher. Replaces the
+   standalone's own topbar; the app topbar now carries brand / nav / theme. */
+#swSurface .sw-bar {
+  display: flex; align-items: center; gap: var(--rp-sp-4); flex-shrink: 0;
+  padding: var(--rp-sp-3) var(--rp-sp-5);
+  background: var(--rp-surface-2); border-bottom: 1px solid var(--rp-border);
+}
+#swSurface .sw-bar-title { font-family: var(--rp-font-display); font-weight: 800; letter-spacing: -.02em; font-size: var(--rp-text-md); }
+#swSurface .sw-bar-title b { color: var(--rp-accent); }
+#swSurface .sw-bar-sub { font-family: var(--rp-font); font-weight: 400; font-size: var(--rp-text-xs); color: var(--rp-text-mute); margin-left: .5rem; }
+#swSurface .sw-bar-sp { flex: 1; }
+#swSurface .sw-seg { display:flex; gap:2px; background:var(--rp-surface); padding:3px; border-radius:var(--rp-radius-pill); border:1px solid var(--rp-border); }
+#swSurface .sw-seg button { appearance:none; border:0; background:transparent; color:var(--rp-text-dim); font:600 var(--rp-text-xs)/1 var(--rp-font); padding:.35rem .8rem; border-radius:var(--rp-radius-pill); cursor:pointer; }
+#swSurface .sw-seg button[aria-pressed="true"] { background:var(--rp-surface-2); color:var(--rp-text); box-shadow:var(--rp-shadow); }
+
+/* ── connectors view ─────────────────────────────────────────────────────────*/
+#swSurface .sw-conn { flex:1; min-height:0; overflow:auto; }
+#swSurface .sw-conn-wrap { max-width:62rem; margin:0 auto; padding:var(--rp-sp-6) var(--rp-sp-5); }
+#swSurface .sw-conn-h { font-family:var(--rp-font-display); font-weight:800; letter-spacing:-.02em; font-size:var(--rp-text-xl); margin:0; }
+#swSurface .sw-conn-sub-note { display:block; font-family:var(--rp-font); font-weight:400; font-size:var(--rp-text-sm); color:var(--rp-text-dim); margin-top:.35rem; }
+#swSurface .sw-conn-cards { display:flex; gap:var(--rp-sp-3); margin:var(--rp-sp-5) 0; flex-wrap:wrap; }
+#swSurface .sw-conn-card { display:flex; align-items:center; gap:.5rem; padding:.7rem 1rem; border:1px solid var(--rp-border); border-radius:var(--rp-radius-lg); background:var(--rp-surface); color:var(--rp-text); font:inherit; font-size:var(--rp-text-sm); cursor:pointer; box-shadow:var(--rp-shadow-card); }
+#swSurface .sw-conn-card:hover { border-color:var(--rp-accent); }
+#swSurface .sw-conn-card.is-active { border-color:var(--rp-accent); background:var(--rp-accent-soft); }
+#swSurface .sw-conn-card .nm { font-weight:600; }
+#swSurface .sw-conn-card .tag { font-size:var(--rp-text-xs); color:var(--rp-text-mute); background:var(--rp-surface-2); padding:1px .4rem; border-radius:5px; }
+#swSurface .sw-conn-panel { background:var(--rp-surface); border:1px solid var(--rp-border); border-radius:var(--rp-radius-lg); padding:var(--rp-sp-5); box-shadow:var(--rp-shadow-card); }
+#swSurface .sw-conn-h3 { font-size:var(--rp-text-lg); font-weight:700; margin:0 0 var(--rp-sp-4); }
+#swSurface .sw-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:var(--rp-sp-3); }
+#swSurface .sw-fl { display:grid; gap:.3rem; font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+#swSurface .sw-in { background:var(--rp-surface-2); border:1px solid var(--rp-border); border-radius:var(--rp-radius); color:var(--rp-text); font:inherit; font-size:var(--rp-text-sm); padding:.5rem .6rem; }
+#swSurface .sw-in:focus { outline:2px solid var(--rp-accent); outline-offset:1px; border-color:transparent; }
+#swSurface .sw-form-dest { display:flex; gap:var(--rp-sp-4); align-items:end; margin-top:var(--rp-sp-4); flex-wrap:wrap; }
+#swSurface .sw-chk { display:flex; align-items:center; gap:.4rem; font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+#swSurface .sw-form-actions { display:flex; align-items:center; gap:var(--rp-sp-3); margin-top:var(--rp-sp-4); }
+#swSurface .sw-form-msg { font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+#swSurface .sw-conn-note { color:var(--rp-text-mute); font-size:var(--rp-text-xs); line-height:1.5; margin:var(--rp-sp-4) 0 0; }
+#swSurface .sw-conn-list { display:flex; flex-direction:column; gap:2px; }
+#swSurface .sw-conn-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border:1px solid var(--rp-border); border-radius:var(--rp-radius); background:var(--rp-surface); font-size:var(--rp-text-sm); }
+#swSurface .sw-conn-row .k { font-size:var(--rp-text-xs); color:var(--rp-text-mute); background:var(--rp-surface-2); padding:1px .4rem; border-radius:5px; }
+#swSurface .sw-conn-row .sp2 { flex:1; }
+
+/* ── SQL view ────────────────────────────────────────────────────────────────*/
+#swSurface .sw-main { flex:1; min-height:0; display: grid; grid-template-columns: 240px 1fr; }
+/* sidebar — tables + columns (blends with the surface's --rp-bg, divider only) */
+#swSurface .sw-side { background: var(--rp-bg); border-right: 1px solid var(--rp-border); overflow: auto; padding: var(--rp-sp-3); }
+#swSurface .sw-side h2 { margin: var(--rp-sp-2) var(--rp-sp-2) var(--rp-sp-2); font-size: var(--rp-text-xs); font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--rp-text-mute); }
+#swSurface .sw-tbl { border-radius: var(--rp-radius); overflow: hidden; margin-bottom: 2px; }
+#swSurface .sw-tbl > button { width: 100%; display: flex; align-items: center; gap: .5rem; padding: .45rem .55rem;
+  background: transparent; border: 0; color: var(--rp-text-dim); font: inherit; font-size: var(--rp-text-sm); cursor: pointer; border-radius: var(--rp-radius); text-align: left; }
+#swSurface .sw-tbl > button:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+#swSurface .sw-tbl[aria-current="true"] > button { background: var(--rp-accent-soft); color: var(--rp-accent); font-weight: 600; }
+#swSurface .sw-tbl .alias { margin-left: auto; font-family: ui-monospace, monospace; font-size: var(--rp-text-xs);
+  background: var(--rp-surface-2); color: var(--rp-text-mute); padding: 1px .4rem; border-radius: 5px; }
+#swSurface .sw-cols { padding: 0 .3rem .4rem 1.5rem; display: none; }
+#swSurface .sw-tbl[aria-current="true"] .sw-cols { display: block; }
+#swSurface .sw-cols button { display: block; width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer;
+  color: var(--rp-text-mute); font: inherit; font-size: var(--rp-text-xs); padding: .2rem .4rem; border-radius: 6px; }
+#swSurface .sw-cols button:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+#swSurface .sw-cols .ty { color: var(--rp-text-mute); opacity: .7; margin-left: .4rem; }
+#swSurface .sw-h2-note { float: right; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--rp-text-mute); opacity: .8; }
+#swSurface .sw-connect { display: flex; align-items: center; gap: .5rem; margin: .4rem .2rem; padding: .5rem .55rem;
+  border: 1px dashed var(--rp-border); border-radius: var(--rp-radius); color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
+#swSurface .sw-connect .ico { color: var(--rp-text-mute); font-weight: 700; }
+#swSurface .sw-connect .soon { margin-left: auto; font-size: var(--rp-text-xs); background: var(--rp-accent-soft);
+  color: var(--rp-accent); padding: 1px .4rem; border-radius: 5px; font-weight: 600; }
+#swSurface .sw-targets-hint { margin: .3rem .2rem; padding: .55rem .6rem; font-size: var(--rp-text-xs); line-height: 1.55;
+  color: var(--rp-text-mute); background: var(--rp-surface-2); border-radius: var(--rp-radius); }
+#swSurface .sw-targets-hint b { color: var(--rp-text-dim); }
+#swSurface .sw-target-in { background: var(--rp-surface-2); border: 1px solid var(--rp-border); border-radius: var(--rp-radius);
+  color: var(--rp-text); font: inherit; font-size: var(--rp-text-xs); padding: .4rem .5rem; width: 9rem; }
+#swSurface .sw-target-in:focus { outline: 2px solid var(--rp-accent); outline-offset: 1px; border-color: transparent; }
+#swSurface .sw-target { display: flex; align-items: center; gap: .4rem; padding: .4rem .5rem; margin-top: 3px; border-radius: var(--rp-radius);
+  background: var(--rp-surface-2); border: 1px solid var(--rp-border); font-size: var(--rp-text-sm); cursor: pointer; }
+#swSurface .sw-target:hover { border-color: var(--rp-accent); }
+#swSurface .sw-target .ok { color: var(--rp-ok); font-weight: 700; }
+#swSurface .sw-target .n { margin-left: auto; color: var(--rp-text-mute); font-size: var(--rp-text-xs); }
+
+/* editor + result */
+#swSurface .sw-work { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+#swSurface .sw-editor-wrap { padding: var(--rp-sp-4) var(--rp-sp-5) 0; }
+#swSurface .sw-ed { position: relative; border: 1px solid var(--rp-border); border-radius: var(--rp-radius-lg);
+  background: var(--rp-surface); box-shadow: var(--rp-shadow-card); overflow: hidden; }
+#swSurface .sw-ed.is-focus { border-color: var(--rp-accent); box-shadow: 0 0 0 3px var(--rp-accent-soft); }
+#swSurface .sw-ed-scroll { position: relative; max-height: 9rem; overflow: auto; }
+/* the transparent textarea sits over the highlighted <pre>; identical metrics */
+#swSurface .sw-ed pre, #swSurface .sw-ed textarea {
+  margin: 0; padding: var(--rp-sp-3) var(--rp-sp-4); font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+  font-size: .9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; border: 0; }
+#swSurface .sw-ed pre { color: var(--rp-text); pointer-events: none; min-height: 4rem; }
+#swSurface .sw-ed textarea { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; background: transparent;
+  color: transparent; caret-color: var(--rp-text); outline: 0; overflow: hidden; }
+#swSurface .sw-ed textarea::selection { background: var(--rp-accent-soft); }
+/* token colours */
+#swSurface .tok-kw { color: var(--rp-accent); font-weight: 600; }
+#swSurface .tok-str { color: var(--rp-ok); }
+#swSurface .tok-num { color: var(--rp-info); }
+#swSurface .tok-com { color: var(--rp-text-mute); font-style: italic; }
+#swSurface .tok-fn { color: var(--rp-mauve); }
+
+#swSurface .sw-ed-bar { display: flex; align-items: center; gap: var(--rp-sp-3); padding: .5rem var(--rp-sp-4);
+  border-top: 1px solid var(--rp-border); background: var(--rp-surface-2); }
+#swSurface .sw-ed-bar .hint { color: var(--rp-text-mute); font-size: var(--rp-text-xs); }
+#swSurface .sw-ed-bar .sp { flex: 1; }
+#swSurface .sw-btn { appearance: none; display: inline-flex; align-items: center; gap: .4rem; font: 600 var(--rp-text-sm)/1 var(--rp-font);
+  padding: .55rem .95rem; border-radius: var(--rp-radius); border: 1px solid transparent; cursor: pointer; }
+#swSurface .sw-btn--accent { background: var(--rp-accent); color: var(--rp-on-accent); }
+#swSurface .sw-btn--accent:hover { background: color-mix(in srgb, var(--rp-accent) 88%, #000); }
+#swSurface .sw-btn--accent:disabled { opacity: .6; cursor: default; }
+#swSurface .sw-btn--ghost { background: transparent; border-color: var(--rp-border); color: var(--rp-text-dim); }
+#swSurface .sw-btn--ghost:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+#swSurface kbd { font: inherit; font-size: var(--rp-text-xs); background: var(--rp-bg); border: 1px solid var(--rp-border);
+  border-radius: 5px; padding: 1px .35rem; color: var(--rp-text-dim); }
+
+/* result grid */
+#swSurface .sw-result { margin: var(--rp-sp-4) var(--rp-sp-5) var(--rp-sp-5); min-height: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--rp-border); border-radius: var(--rp-radius-lg); overflow: hidden; background: var(--rp-surface); }
+#swSurface .sw-grid { overflow: auto; flex: 1; }
+#swSurface table.sw-t { width: 100%; border-collapse: collapse; font-size: var(--rp-text-sm); }
+#swSurface table.sw-t thead th { position: sticky; top: 0; background: var(--rp-surface-2); color: var(--rp-text-dim);
+  text-align: left; font-weight: 600; font-size: var(--rp-text-xs); text-transform: uppercase; letter-spacing: .04em;
+  padding: .6rem .8rem; border-bottom: 1px solid var(--rp-border); white-space: nowrap; }
+#swSurface table.sw-t tbody td { padding: .55rem .8rem; border-bottom: 1px solid var(--rp-border); white-space: nowrap; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; }
+#swSurface table.sw-t tbody tr:hover { background: var(--rp-surface-2); }
+#swSurface table.sw-t td.nul { color: var(--rp-text-mute); font-style: italic; }
+#swSurface .sw-foot { display: flex; align-items: center; gap: var(--rp-sp-3); padding: .55rem var(--rp-sp-4);
+  border-top: 1px solid var(--rp-border); color: var(--rp-text-mute); font-size: var(--rp-text-xs); background: var(--rp-surface); }
+#swSurface .sw-foot .sp { flex: 1; }
+#swSurface .sw-pager { display: flex; gap: .25rem; }
+#swSurface .sw-pager button { appearance: none; border: 1px solid var(--rp-border); background: var(--rp-surface); color: var(--rp-text-dim);
+  min-width: 1.7rem; height: 1.7rem; border-radius: 7px; cursor: pointer; font-size: var(--rp-text-xs); }
+#swSurface .sw-pager button[aria-current="true"] { background: var(--rp-accent); color: var(--rp-on-accent); border-color: transparent; }
+#swSurface .sw-pager button:disabled { opacity: .4; cursor: default; }
+#swSurface .sw-err { margin: 0 var(--rp-sp-4) var(--rp-sp-3); padding: .6rem .8rem; border-radius: var(--rp-radius);
+  background: var(--rp-accent-soft); border: 1px solid color-mix(in srgb, var(--rp-danger) 35%, transparent);
+  color: var(--rp-text); font-size: var(--rp-text-sm); display: none; }
+#swSurface .sw-empty { padding: var(--rp-sp-8); text-align: center; color: var(--rp-text-mute); }

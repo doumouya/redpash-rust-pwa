@@ -24,6 +24,7 @@ import { esc } from "/scripts/dom.js";
 const NAV = [
   { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
   { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
+  { id: "sheetwise",  hash: "#/sheetwise",  icon: "bi-database",    label: "SheetWise" },
   { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
   // Monitoring (system observability + Admin Console) is platform-admin
   // only — never rendered in the topbar for members / viewers (CAS_274EDF3B).
