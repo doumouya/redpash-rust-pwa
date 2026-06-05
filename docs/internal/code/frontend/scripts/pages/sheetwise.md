@@ -33,7 +33,9 @@ it recolors with every theme).
   (project picker or ＋ New project, default = source DB) → **Create & Pull**
   (`POST /api/projects` for the new-project case, then `POST /api/connectors`
   kind=`mysql`, then `POST /api/connectors/:rid/sync`). The pulled CSV appears in
-  SOURCES. Configured connectors list each with a re-**Pull** button.
+  SOURCES. Configured connectors list each with a re-**Pull** button; a failed
+  pull surfaces the backend error message in an inline `#swConnErr` alert
+  (`role="alert"`) instead of vanishing into the console.
 
 ## Drift-prone areas
 

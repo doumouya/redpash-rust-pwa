@@ -255,11 +255,17 @@ export default function sheetwise(app, { session }) {
   }
   async function pullConnector(rid, btn) {
     const prev = btn.textContent; btn.disabled = true; btn.textContent = "… Pulling";
+    const err = $("#swConnErr"); err.style.display = "none"; err.textContent = "";
     try {
       await api("/api/connectors/" + encodeURIComponent(rid) + "/sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       btn.textContent = "✓ Pulled"; await refreshSources();
       setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 1800);
-    } catch (e) { btn.textContent = "✗ failed"; console.error("pull", e); setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 2500); }
+    } catch (e) {
+      btn.textContent = "✗ failed";
+      err.textContent = "Pull failed — " + e.message; err.style.display = "block";
+      console.error("pull", e);
+      setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 2500);
+    }
   }
   $("#myCreate").addEventListener("click", async () => {
     const msg = $("#myMsg"); const btn = $("#myCreate");
