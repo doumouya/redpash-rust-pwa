@@ -47,7 +47,7 @@
 
 /* Source toggle — Internal vs External, replacing the older
    status/assignee groupBy (2026-05-28). Shape comes from the shared
-   .rt-seg--rail variant (panel.css); only the placement margin is
+   .rp-seg--rail variant (seg.css); only the placement margin is
    cases-specific (it sits below the rail search). */
 .rp-cases-rail-source { margin-top: 0.4375rem; }
 
