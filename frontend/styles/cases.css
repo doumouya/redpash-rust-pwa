@@ -19,9 +19,9 @@
 }
 
 /* ── rail filter + items ──────────────────────────────────────
-   The rail uses .rt-nav atoms (rail.css) for the chrome — head,
+   The rail uses .rp-rail atoms (rail.css) for the chrome — head,
    body, groups, tabs. These rules add the cases-specific filter
-   strip (search input below the head) and tune the .rt-tab
+   strip (search input below the head) and tune the .rp-rail-tab
    variant used for individual case rows. */
 /* Shape provided by `.rt-icon-btn` (button.css) — these rules only
    carry page-specific tweaks. Today there's nothing left to override
@@ -100,13 +100,13 @@
 }
 
 /* "Board" pseudo-tab — sits above the status groups, no group
-   indent. Uses the .rt-tab atom but reset the left-padding that
+   indent. Uses the .rp-rail-tab atom but reset the left-padding that
    the workspace's nested-under-group items use. */
 .rp-cases-rail-board {
   padding: 0 0.5rem;
   margin: 0.25rem 0 0.5rem;
 }
-.rp-cases-rail-board .rt-tab-icon { font-size: 0.8125rem; }
+.rp-cases-rail-board .rp-rail-tab-icon { font-size: 0.8125rem; }
 
 /* Case row in the rail — priority dot replaces the workspace's
    per-file dirty/clean dot. Reset the left-padding so the dot
@@ -146,22 +146,22 @@
   padding: 0 0.5rem;
   font-size: 0.6875rem;
 }
-/* Rail-context chip-row sits inside .rt-group-body, which has a
+/* Rail-context chip-row sits inside .rp-rail-group-body, which has a
    tighter inset than the kanban column body — pull padding in so
    the chips read as part of the rail's column rhythm. */
-.rt-group-body > .rp-cases-done-window {
-  padding-left: 1.75rem;       /* aligns with .rt-tab's text inset */
+.rp-rail-group-body > .rp-cases-done-window {
+  padding-left: 1.75rem;       /* aligns with .rp-rail-tab's text inset */
   padding-right: 0.5rem;
 }
 
 /* compact rail — hide the search + collapse the head's gap.
-   The rail itself collapses to 3.75rem via .rt-nav.compact (rail.css);
+   The rail itself collapses to 3.75rem via .rp-rail.compact (rail.css);
    these page-specific overrides keep the cases extras hidden so
    the icon-only view stays clean. */
-.rt-nav.compact .rp-cases-rail-filter,
-.rt-nav.compact .rp-cases-rail-source,
-.rt-nav.compact .rp-cases-rail-chips,
-.rt-nav.compact .rp-cases-done-window {
+.rp-rail.compact .rp-cases-rail-filter,
+.rp-rail.compact .rp-cases-rail-source,
+.rp-rail.compact .rp-cases-rail-chips,
+.rp-rail.compact .rp-cases-done-window {
   display: none;
 }
 
@@ -334,14 +334,14 @@
 .rp-cases-priority-dot.is-high     { background: var(--rp-warn); }
 .rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
 
-/* Hide × on the kanban card — reuses the .rt-tab-close atom from
+/* Hide × on the kanban card — reuses the .rp-rail-tab-hide atom from
    rail.css for shape, but the hover-fade trigger there is scoped to
-   .rt-tab parents. Card needs its own fade trigger. margin-left:auto
+   .rp-rail-tab parents. Card needs its own fade trigger. margin-left:auto
    keeps the rid+dot cluster flush-left while the × pins to the right
    edge of the card head. */
-.rp-cases-card .rt-tab-close { opacity: 0; margin-left: auto; }
-.rp-cases-card:hover .rt-tab-close,
-.rp-cases-card:focus-within .rt-tab-close { opacity: 1; }
+.rp-cases-card .rp-rail-tab-hide { opacity: 0; margin-left: auto; }
+.rp-cases-card:hover .rp-rail-tab-hide,
+.rp-cases-card:focus-within .rp-rail-tab-hide { opacity: 1; }
 
 /* Rail status dot — shown only in assignee-grouped mode (the group
    header doesn't carry the status signal there). Rounded-square
@@ -350,7 +350,7 @@
    margin-left: auto so the title takes the available space between.
    Same color tokens as the kanban column accents + the rail group
    marks (status-grouped mode) — one palette across the page. */
-/* Per-row status dot — composes the shared .rt-tab-dot atom (rail.css
+/* Per-row status dot — composes the shared .rp-rail-tab-dot atom (rail.css
    line 217) with per-status background variants. Pushed to the row's
    right edge with margin-left:auto so the title takes the available
    space between. Same color tokens as the kanban column accents — one
@@ -1484,8 +1484,8 @@
 .rp-cases-attach-remove:hover { background: var(--rp-warn); color: var(--rp-bg); }
 
 /* CAS_1E6D3B2E — rail mirror of the case attachments list. Lives
-   in the cases rail between the case list (.rt-nav-body) and the
-   .rt-nav-foot create button. Mirrors the Workspace project→files
+   in the cases rail between the case list (.rp-rail-body) and the
+   .rp-rail-footer create button. Mirrors the Workspace project→files
    pattern. Wrapped in a <details> so the user can collapse it; the
    list inherits the standard .rp-cases-attach-list styles and tones
    down padding to fit the rail's narrower column. */

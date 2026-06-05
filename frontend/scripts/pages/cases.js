@@ -11,7 +11,7 @@
 // the airlock.
 //
 // Layout — same rail-page shell as /home + /monitoring:
-//   • left rail (.rt-nav): case list, status-grouped, with a "Board"
+//   • left rail (.rp-rail): case list, status-grouped, with a "Board"
 //     pseudo-item at top + the New-case button in the head + the
 //     search input in a filter strip below the head
 //   • main: kanban board (default) OR case detail (when ?id=CAS_…)
@@ -59,7 +59,7 @@ import {
 
 export default function cases(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "cases", session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "", session });
 
   // Page state — module-scoped to the mount call (the router calls
   // this function fresh on each route activation).
@@ -86,7 +86,7 @@ export default function cases(app, { session }) {
   // ── hide / restore — replicated from workspace `8d070eb` per the
   //    docs/internal/processes/replicable-feature-pattern.md recipe.
   //    Pref key + helper trio + applyHiddenFilter; render-time filter
-  //    in paintBoard + paintRail; `<details class="rt-hidden">` recovery
+  //    in paintBoard + paintRail; `<details class="rp-rail-hidden">` recovery
   //    surface appended at the tail of the rail body. One pref key
   //    because cases are a single entity type (vs workspace's two).
   const HIDDEN_CASES_KEY = "cases_hidden";
@@ -335,7 +335,7 @@ export default function cases(app, { session }) {
   // ordinary clicks for free. Action branches per Invariant 2 each
   // end in `return` so the click never bubbles to the parent <a>.
   railBody?.addEventListener("click", (e) => {
-    const hideBtn = e.target.closest(".rp-cases-rail-item .rt-tab-close");
+    const hideBtn = e.target.closest(".rp-cases-rail-item .rp-rail-tab-hide");
     if (hideBtn) {
       e.preventDefault();
       e.stopPropagation();
@@ -351,7 +351,7 @@ export default function cases(app, { session }) {
       }
       return;
     }
-    const restoreItem = e.target.closest(".rt-hidden-item");
+    const restoreItem = e.target.closest(".rp-rail-hidden-item");
     if (restoreItem?.dataset.rid) {
       e.preventDefault();
       e.stopPropagation();
@@ -374,7 +374,7 @@ export default function cases(app, { session }) {
     // Group-head expand/collapse retired 2026-05-28 — the flat rail
     // has no groups (status moved into a per-row dot, source moved
     // into the top toggle tabs). Anything that wasn't a chip falls
-    // through to the browser-handled anchor click on the .rt-tab.
+    // through to the browser-handled anchor click on the .rp-rail-tab.
   });
 
   // Same Done-window chip-row sits in the kanban Done column; one
@@ -641,7 +641,7 @@ export default function cases(app, { session }) {
       +     '<span class="rp-cases-card-rid">' + esc(rid.slice(0, 8)) + '</span>'
       +     '<i class="bi ' + typeIcon + ' rp-cases-card-type is-' + esc(type) + '" '
       +        'title="' + esc(TYPE_LABEL[type] || type) + '"></i>'
-      +     '<span class="rt-tab-close rp-cases-card-hide" title="Hide from board"><i class="bi bi-x"></i></span>'
+      +     '<span class="rp-rail-tab-hide rp-cases-card-hide" title="Hide from board"><i class="bi bi-x"></i></span>'
       +   '</div>'
       +   '<div class="rp-title">' + esc(c.title || "(untitled)") + '</div>'
       +   '<div class="rp-cases-card-foot">'
@@ -655,19 +655,19 @@ export default function cases(app, { session }) {
   }
 
   // ── rail render ─────────────────────────────────────────────
-  // Reuses the workspace's rail atoms — .rt-group + .rt-tab —
+  // Reuses the workspace's rail atoms — .rp-rail-group + .rp-rail-tab —
   // so the visual rhythm matches the rest of the app. A
   // "Board" pseudo-tab sits above the groups as the always-on
   // way back to the kanban view. Each status group's mark uses
   // the same color token as the column accent stripe.
   function paintRailState(msg) {
-    if (railBody) railBody.innerHTML = '<p class="rt-nav-state">' + esc(msg) + '</p>';
+    if (railBody) railBody.innerHTML = '<p class="rp-rail-state">' + esc(msg) + '</p>';
   }
 
   // Flat rail painter — replaces the previous status/assignee group
   // dispatch (Em 2026-05-28). The active source-tab is the only axis
   // now; the cases come back already filtered server-side. Each row
-  // carries an inline status dot (rt-tab-dot family) so the kanban-
+  // carries an inline status dot (rp-rail-tab-dot family) so the kanban-
   // skim is preserved without group headers.
   //
   // The list sorts cases by status order (backlog → done) then by
@@ -701,32 +701,32 @@ export default function cases(app, { session }) {
   function railBoardItemHTML(activeRid) {
     const boardActive = !activeRid;
     return ''
-      + '<a class="rt-tab rp-cases-rail-board' + (boardActive ? ' active' : '') + '" '
+      + '<a class="rp-rail-tab rp-cases-rail-board' + (boardActive ? ' active' : '') + '" '
       +    'href="#/cases" data-tab="board">'
-      +   '<i class="rt-tab-icon bi bi-kanban"></i>'
-      +   '<span class="rt-tab-name">Board</span>'
+      +   '<i class="rp-rail-tab-icon bi bi-kanban"></i>'
+      +   '<span class="rp-rail-tab-name">Board</span>'
       + '</a>';
   }
 
   // Recovery surface — rendered only when ≥1 case is hidden. Native
   // <details> drives the open/closed state + a11y; reuses the
-  // `.rt-hidden-*` atoms from rail.css that workspace shares.
+  // `.rp-rail-hidden-*` atoms from rail.css that workspace shares.
   function renderHiddenSection() {
     const hidden = getHidden();
     if (!hidden.length) return "";
     const items = hidden.map((c) =>
-      '<button class="rt-hidden-item" type="button" data-rid="' + esc(c.rid) + '">'
-      +   '<span class="rt-hidden-name">' + esc(c.name || c.rid)
-      +     (c.status ? ' <span class="rt-hidden-meta">· ' + esc(STATUS_LABEL[c.status] || c.status) + '</span>' : "")
+      '<button class="rp-rail-hidden-item" type="button" data-rid="' + esc(c.rid) + '">'
+      +   '<span class="rp-rail-hidden-name">' + esc(c.name || c.rid)
+      +     (c.status ? ' <span class="rp-rail-hidden-meta">· ' + esc(STATUS_LABEL[c.status] || c.status) + '</span>' : "")
       +   '</span>'
-      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      +   '<i class="bi bi-arrow-counterclockwise rp-rail-hidden-restore" title="Restore"></i>'
       + '</button>'
     ).join("");
-    return '<details class="rt-hidden">'
-      +   '<summary class="rt-hidden-summary">'
+    return '<details class="rp-rail-hidden">'
+      +   '<summary class="rp-rail-hidden-summary">'
       +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
       +   '</summary>'
-      +   '<div class="rt-hidden-body">' + items + '</div>'
+      +   '<div class="rp-rail-hidden-body">' + items + '</div>'
       + '</details>';
   }
 
@@ -735,21 +735,21 @@ export default function cases(app, { session }) {
     const isActive = rid === activeRid;
     const href = "#/cases?id=" + encodeURIComponent(rid);
     // Status moved from group-header (previous design) into a per-row
-    // .rt-tab-dot 2026-05-28. Per-status variant class drives the
+    // .rp-rail-tab-dot 2026-05-28. Per-status variant class drives the
     // color (see cases.css); the shared atom keeps shape parity with
     // workspace's file dot.
     const statusKey = STATUS_ORDER.includes(c.status) ? c.status : "backlog";
     return ''
-      + '<a class="rt-tab rp-cases-rail-item' + (isActive ? ' active' : '') + '" '
+      + '<a class="rp-rail-tab rp-cases-rail-item' + (isActive ? ' active' : '') + '" '
       +    'href="' + esc(href) + '" title="' + esc(c.title || rid) + '" '
       +    'data-rid="' + esc(rid) + '" '
       +    'data-status="' + esc(statusKey) + '" '
       +    'data-title="' + esc(c.title || "(untitled)") + '">'
       +   priorityDotHTML(c.priority)
-      +   '<span class="rt-tab-name">' + esc(c.title || "(untitled)") + '</span>'
-      +   '<span class="rt-tab-dot rp-cases-status-dot is-' + esc(statusKey)
+      +   '<span class="rp-rail-tab-name">' + esc(c.title || "(untitled)") + '</span>'
+      +   '<span class="rp-rail-tab-dot rp-cases-status-dot is-' + esc(statusKey)
       +     '" title="Status: ' + esc(STATUS_LABEL[statusKey]) + '"></span>'
-      +   '<span class="rt-tab-close" title="Hide from rail"><i class="bi bi-x"></i></span>'
+      +   '<span class="rp-rail-tab-hide" title="Hide from rail"><i class="bi bi-x"></i></span>'
       + '</a>';
   }
 
