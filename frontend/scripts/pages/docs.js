@@ -22,7 +22,7 @@ const GROUP_COLORS = ["blue", "mauve", "teal", "peach"];
 
 export default function docs(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "docs", session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "docs", session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "docs", session });
 
   const nav     = app.querySelector("#rpDocsNav");
   const navBody = app.querySelector("#rpDocsNavBody");
@@ -37,12 +37,12 @@ export default function docs(app, { session }) {
 
   // ─── rail click delegation ───────────────────────────────────
   navBody.addEventListener("click", (e) => {
-    const head = e.target.closest(".rt-group-head");
+    const head = e.target.closest(".rp-rail-group-head");
     if (head) {
-      head.closest(".rt-group").classList.toggle("expanded");
+      head.closest(".rp-rail-group").classList.toggle("expanded");
       return;
     }
-    const tab = e.target.closest(".rt-tab");
+    const tab = e.target.closest(".rp-rail-tab");
     if (tab) {
       const slug = tab.dataset.slug;
       // Hash routing — the router re-mounts /docs on hashchange and
@@ -71,7 +71,7 @@ export default function docs(app, { session }) {
       else renderEmpty();
     } catch (err) {
       navBody.setAttribute("aria-busy", "false");
-      navBody.innerHTML = '<div class="rt-nav-state">Couldn’t load docs'
+      navBody.innerHTML = '<div class="rp-rail-state">Couldn’t load docs'
         + (err.status ? " (" + err.status + ")" : "") + ".</div>";
       view.innerHTML = '<p class="rp-shell-state">Couldn’t load the docs index.</p>';
     }
@@ -97,36 +97,36 @@ export default function docs(app, { session }) {
   function renderRail() {
     navBody.setAttribute("aria-busy", "false");
     if (!bySection.length) {
-      navBody.innerHTML = '<div class="rt-nav-state">No docs yet.</div>';
+      navBody.innerHTML = '<div class="rp-rail-state">No docs yet.</div>';
       return;
     }
     navBody.innerHTML = bySection.map(renderGroup).join("");
     // Expand all groups by default — section count is small + the
     // user wants to scan the whole TOC.
-    navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
+    navBody.querySelectorAll(".rp-rail-group").forEach((g) => g.classList.add("expanded"));
   }
 
   function renderGroup(g, idx) {
     const color = GROUP_COLORS[idx % GROUP_COLORS.length];
     const mark = (g.name.match(/[A-Z]/g)?.join("") || g.name.slice(0, 2)).slice(0, 2).toUpperCase();
     return ''
-      + '<div class="rt-group">'
-      +   '<button class="rt-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
-      +     '<span class="rt-group-mark" data-c="' + color + '">' + esc(mark) + '</span>'
-      +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
-      +     '<span class="rt-group-count">' + g.docs.length + '</span>'
+      + '<div class="rp-rail-group">'
+      +   '<button class="rp-rail-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
+      +     '<span class="rp-rail-group-mark" data-c="' + color + '">' + esc(mark) + '</span>'
+      +     '<span class="rp-rail-group-name">' + esc(g.name) + '</span>'
+      +     '<span class="rp-rail-group-count">' + g.docs.length + '</span>'
       +   '</button>'
-      +   '<div class="rt-group-body">' + g.docs.map(renderTab).join("") + '</div>'
+      +   '<div class="rp-rail-group-body">' + g.docs.map(renderTab).join("") + '</div>'
       + '</div>';
   }
 
   function renderTab(d) {
     return ''
-      + '<button class="rt-tab' + (d.slug === activeSlug ? ' active' : '') + '"'
+      + '<button class="rp-rail-tab' + (d.slug === activeSlug ? ' active' : '') + '"'
       +     ' type="button" data-slug="' + esc(d.slug) + '">'
-      +   '<i class="bi bi-file-text rt-tab-icon"></i>'
-      +   '<span class="rt-tab-name">' + esc(d.title) + '</span>'
+      +   '<i class="bi bi-file-text rp-rail-tab-icon"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(d.title) + '</span>'
       + '</button>';
   }
 
@@ -134,8 +134,8 @@ export default function docs(app, { session }) {
     activeSlug = slug;
     // Repaint active state in the rail. Cheap — same DOM, just flip
     // the class on the matching tab.
-    navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
-    const tab = navBody.querySelector('.rt-tab[data-slug="' + cssEsc(slug) + '"]');
+    navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
+    const tab = navBody.querySelector('.rp-rail-tab[data-slug="' + cssEsc(slug) + '"]');
     if (tab) tab.classList.add("active");
 
     view.innerHTML = '<p class="rp-shell-state">Loading…</p>';
