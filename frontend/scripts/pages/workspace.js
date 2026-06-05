@@ -1635,7 +1635,7 @@ export default function workspace(app, { session }) {
   // FilterGroup. Single group with no outer wrapping: hand the inner
   // group out directly (saves a level of nesting on the wire).
   function buildFilterNode() {
-    const groups = Array.from(groupList.querySelectorAll(".rt-group-card"))
+    const groups = Array.from(groupList.querySelectorAll(".rp-group-card"))
       .map(readGroup);
     const groupNodes = groups
       .map((g) => ({
@@ -1921,27 +1921,27 @@ export default function workspace(app, { session }) {
   }
   function groupCard() {
     const card = document.createElement("div");
-    card.className = "rt-group-card";
+    card.className = "rp-group-card";
     card.innerHTML =
-      '<div class="rt-group-card-head">'
-      + '<div class="rt-seg rt-group-card-combo">'
+      '<div class="rp-group-card-head">'
+      + '<div class="rt-seg rp-group-card-combo">'
       + '<button type="button" class="is-active" data-combo="AND">AND</button>'
       + '<button type="button" data-combo="OR">OR</button>'
       + "</div>"
-      + '<button class="rt-group-card-del" type="button" title="Remove group"><i class="bi bi-trash3"></i></button>'
+      + '<button class="rp-group-card-del" type="button" title="Remove group"><i class="bi bi-trash3"></i></button>'
       + "</div>"
       + '<div class="rt-pred-list"></div>'
-      + '<button class="rt-btn rt-btn--glass rt-btn--block rt-add-pred" type="button">'
+      + '<button class="rt-btn rt-btn--glass rt-btn--block rp-add-pred" type="button">'
       + '<i class="bi bi-plus-lg"></i> Add condition</button>';
     card.querySelector(".rt-pred-list").appendChild(predRow());
     return card;
   }
   function renderSeps() {
-    groupList.querySelectorAll(".rt-group-sep").forEach((s) => s.remove());
-    const cards = Array.from(groupList.querySelectorAll(".rt-group-card"));
+    groupList.querySelectorAll(".rp-group-sep").forEach((s) => s.remove());
+    const cards = Array.from(groupList.querySelectorAll(".rp-group-card"));
     cards.slice(0, -1).forEach((card) => {
       const sep = document.createElement("div");
-      sep.className = "rt-group-sep";
+      sep.className = "rp-group-sep";
       sep.innerHTML = '<button type="button">' + groupCombo + "</button>";
       card.after(sep);
     });
@@ -1952,25 +1952,25 @@ export default function workspace(app, { session }) {
 
   groupList.addEventListener("click", (e) => {
     if (e.target.closest(".rt-pred-del")) { e.target.closest(".rt-pred").remove(); return; }
-    if (e.target.closest(".rt-add-pred")) {
-      e.target.closest(".rt-group-card").querySelector(".rt-pred-list").appendChild(predRow());
+    if (e.target.closest(".rp-add-pred")) {
+      e.target.closest(".rp-group-card").querySelector(".rt-pred-list").appendChild(predRow());
       return;
     }
-    if (e.target.closest(".rt-group-card-del")) {
-      if (groupList.querySelectorAll(".rt-group-card").length > 1)
-        e.target.closest(".rt-group-card").remove();
+    if (e.target.closest(".rp-group-card-del")) {
+      if (groupList.querySelectorAll(".rp-group-card").length > 1)
+        e.target.closest(".rp-group-card").remove();
       renderSeps();
       return;
     }
-    const gcBtn = e.target.closest(".rt-group-card-combo button");
+    const gcBtn = e.target.closest(".rp-group-card-combo button");
     if (gcBtn) {
       gcBtn.parentElement.querySelectorAll("button").forEach((b) => b.classList.remove("is-active"));
       gcBtn.classList.add("is-active");
       return;
     }
-    if (e.target.closest(".rt-group-sep button")) {
+    if (e.target.closest(".rp-group-sep button")) {
       groupCombo = groupCombo === "AND" ? "OR" : "AND";
-      groupList.querySelectorAll(".rt-group-sep button").forEach((b) => { b.textContent = groupCombo; });
+      groupList.querySelectorAll(".rp-group-sep button").forEach((b) => { b.textContent = groupCombo; });
     }
   });
   groupList.addEventListener("change", (e) => {
@@ -2011,7 +2011,7 @@ export default function workspace(app, { session }) {
   }
   function readGroup(card) {
     return {
-      combo: card.querySelector(".rt-group-card-combo .is-active").dataset.combo,
+      combo: card.querySelector(".rp-group-card-combo .is-active").dataset.combo,
       preds: Array.from(card.querySelectorAll(".rt-pred")).map(readPred),
     };
   }

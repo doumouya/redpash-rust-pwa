@@ -164,19 +164,6 @@
   font-weight: 650;
 }
 
-/* Group-card AND/OR combo — wider variant centered in the card head.
-   Base .rt-seg is `inline-flex` sized to content (~6rem); the combo
-   variant takes 60% of the head width and centers via auto margins
-   (absorbs the parent's space-between). Buttons split the available
-   width 50/50 so the two pills are equal. */
-.rt-group-card-combo {
-  display: flex;
-  width: 60%;
-  margin: 0 auto;
-}
-.rt-group-card-combo button {
-  flex: 1;
-}
 
 /* Rail variant — full-width segmented toggle for a side rail. Two
    equal icon+label buttons; the rail is narrow so the type tightens.
@@ -287,60 +274,9 @@
 }
 .rt-pred-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
 
-/* filter group card */
-.rt-group-card {
-  margin-bottom: 0.375rem;
-  padding: 0.5625rem;
-  border-radius: 0.625rem;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-}
-.rt-group-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-.rt-group-card-del {
-  width: 1.625rem;
-  height: 1.625rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 0.375rem;
-  background: transparent;
-  color: var(--rp-text-mute);
-  cursor: pointer;
-  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
-}
-.rt-group-card-del i { font-size: 0.75rem; }
-.rt-group-card-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
-.rt-add-pred { margin-top: 0.125rem; }
-
-/* the AND/OR joiner shown between group cards */
-.rt-group-sep { display: flex; align-items: center; gap: 0.5rem; margin: 0.4375rem 0.125rem; }
-.rt-group-sep::before, .rt-group-sep::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--rp-border);
-}
-.rt-group-sep button {
-  height: 1.375rem;
-  padding: 0 0.8125rem;
-  border-radius: 6.1875rem;
-  border: 1px solid var(--rp-border);
-  background: var(--rp-surface);
-  color: var(--rp-accent-2);
-  font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.rt-group-sep button:hover { background: var(--rp-accent-soft); }
+/* filter group-card / add-pred / group-sep → collapsed onto the framework
+   rp-group-card* / rp-add-pred / rp-group-sep family (filter-panel.css);
+   byte-identical legacy removed (workspace.js emits rp-* now). */
 
 /* ── cleaning tools panel — status row ──────────────────────────
    Inline last-applied / error message at the top of the panel body.
