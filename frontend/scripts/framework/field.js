@@ -58,6 +58,7 @@ register("field", mountField);
 export function mountFieldEditable(host, opts = {}) {
   if (!host) return null;
   let value = opts.value == null ? "" : String(opts.value);
+  let editing = false;
   const placeholder = opts.placeholder || "—";
   const { el, control } = mountField(host, { label: opts.label });
   host.setAttribute("data-variant", "editable");
@@ -73,14 +74,27 @@ export function mountFieldEditable(host, opts = {}) {
     if (focus) btn.focus();
   }
   function enterEdit() {
-    if (typeof opts.edit !== "function") return;
+    if (editing || typeof opts.edit !== "function") return;
+    editing = true;
     host.setAttribute("data-editing", "");
     control.innerHTML = "";                 // hand the slot to the caller's editor
+    // Click outside the row closes edit mode. An editor's own blur fires only when
+    // focus moves to a focusable element, so a click on non-focusable chrome would
+    // otherwise strand the editor open — the bespoke pickers this de-cased had an
+    // equivalent document-level dismissal.
+    document.addEventListener("pointerdown", onOutside, true);
     opts.edit(control, commit, cancel);
   }
+  function onOutside(e) { if (!host.contains(e.target)) cancel(); }
   function commit(v) { if (v != null) value = String(v); finish(); }
   function cancel() { finish(); }
-  function finish() { host.removeAttribute("data-editing"); paintView(true); }
+  function finish() {
+    if (!editing) return;                   // idempotent — an editor's blur and onOutside can both fire
+    editing = false;
+    document.removeEventListener("pointerdown", onOutside, true);
+    host.removeAttribute("data-editing");
+    paintView(true);
+  }
 
   paintView(false);
   return {
