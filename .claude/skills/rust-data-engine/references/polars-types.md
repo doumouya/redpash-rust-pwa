@@ -16,14 +16,19 @@ type is erased — internally a `dyn SeriesTrait` wrapping a concrete `ChunkedAr
 `.dtype()`, `.len()`, `.null_count()`. To *do* anything element-wise you take the **typed view**:
 
 ```rust
-let s: &Series = df.column("price")?.as_materialized_series();
-for v in s.f64()?.into_iter() {        // .f64() downcasts Series -> &Float64Chunked; None = null
+let s: &Series = df.column("price")?;   // 0.43: column() returns PolarsResult<&Series> directly
+for v in s.f64()?.into_iter() {         // .f64() downcasts Series -> &Float64Chunked; None = null
     if let Some(x) = v { /* … */ }
 }
 let names = s2.str()?;                  // &StringChunked ; .i64() / .bool() / .datetime() likewise
 ```
 
-The crate uses `.str()` (~132×), `.f64()`, `.i64()` constantly — that downcast IS the idiom.
+(In polars 0.43.1 `DataFrame::column()` returns `&Series` and the typed accessors live on `Series` — there is no
+`Column` type and no `.as_materialized_series()`; that Series↔Column split is a later-polars feature. Source:
+`polars-core-0.43.1` `frame/mod.rs:1410`, `series/ops/downcast.rs`.)
+
+The crate leans on `.str()` (32×) — that downcast IS the idiom; `.f64()`/`.i64()`/`.bool()` appear where a
+numeric/boolean column needs element access.
 
 ## SeriesTrait — the dyn interface a Series erases to
 [docs.rs](https://docs.rs/polars/latest/polars/prelude/trait.SeriesTrait.html). The trait every column kind
@@ -38,17 +43,25 @@ one type. Iterate `into_iter() -> Option<T>` (the `Option` is the null). Typed a
 [`StringChunked`](https://docs.rs/polars/latest/polars/prelude/type.StringChunked.html) (`= ChunkedArray<StringType>`),
 [`UInt64Chunked`](https://docs.rs/polars/latest/polars/prelude/type.UInt64Chunked.html), `Int64Chunked`,
 `Float64Chunked`, `BooleanChunked`. Build one with `.into_iter().collect()` then `.into_series()` to erase it back.
+(Naming note: `Series::new` (via `NamedFrom`) takes the name as `PlSmallStr`, not `&str` — pass `"col".into()` or
+reuse `series.name().clone()`, the crate's pattern; a bare `&str` is a 0.43 signature mismatch.)
 
 ## AnyValue — the type-erased *value* (one cell)
 The value-level twin of `Series`: `series.get(i)? -> AnyValue`. `match` it (`AnyValue::Int64(n)`,
-`AnyValue::String(s)`, `AnyValue::Null`, …) or convert to an owned Rust value at a boundary (the crate's
-`av_to_owned` helper, e.g. `routes/group.rs:189`). Use `AnyValue` to move data out of the engine without a
-per-type struct — it's the JSON-boundary value (see `boundary.md`). Heavy in the crate (~72×).
+`AnyValue::Null`, …) — and mind that strings have **two** variants: `AnyValue::String(&str)` (borrowed) and
+`AnyValue::StringOwned(PlSmallStr)` (owned, what a `collect`/aggregation on a String column emits). A match that
+handles only `String` silently drops owned strings — the crate's `av_to_owned`-style code matches both
+(`AnyValue::StringOwned` is used 15× in `src`). Convert to an owned Rust value at a boundary (the `av_to_owned`
+helper, e.g. `routes/group.rs:189`). Use `AnyValue` to move data out of the engine without a per-type struct —
+it's the JSON-boundary value (see `boundary.md`). Heavy in the crate (~72×).
 
 ## DataType — the declared column type
-The column's type tag: `Boolean`, `Int64`, `Float64`, `String`, `Datetime`, `List(_)`, `Struct(_)`, `Object(name)`.
-Inference lives in the `dtype` module. `DataType::Object(name)` is the type-erased escape hatch among the typed
-variants — the Hybrid-C valve covered in the object-registry skill. ~62× in the crate.
+The column's type tag. The variants the crate actually uses: `String`, `Date`, `Datetime`, `Time`, `Boolean`,
+`Int64`, `Float64`, `Null` (plus `List(_)`/`Struct(_)`). Inference lives in the `dtype` module. polars 0.43 also
+defines `DataType::Object(&'static str, Option<Arc<ObjectRegistry>>)` (a 2-tuple, not `Object(name)`) — the
+type-erased escape hatch — but **this crate never uses it** (`DataType::Object` = 0× in `src`); it's the
+cross-skill Hybrid-C valve described in `rust-object-registry-design`, not a pattern the data crate exercises.
+`DataType` ~62× in the crate.
 
 ## std::any — the Rust mechanism underneath
 [std docs](https://doc.rust-lang.org/std/any/index.html). `Any` + `downcast_ref::<T>()` is the primitive that

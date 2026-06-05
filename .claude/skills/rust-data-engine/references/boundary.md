@@ -23,17 +23,27 @@ field-by-field manual marshaling. Inbound: `serde_json::from_str` into a `Vec<se
 (see `wasm::rows_to_df`), then build the `DataFrame`. Outbound: rows → `Vec<Map>` → `serde_json::to_string`.
 
 ## The wasm shim — JSON in, JSON out, same engine
-`wasm.rs` (`#[cfg(target_arch = "wasm32")]`) wraps the engine for the browser: `rows_to_df(rows_json: &str) ->
-DataFrame`, `apply_filter(rows_json, params_json) -> String`, `auto_clean(...)`. Its own doc says it best: *"a thin
-marshaling layer over JSON in / JSON out — they call the same engine functions the server calls, so the wasm
-binary's content == the server engine's content."* Rules:
+`wasm.rs` (`#[cfg(target_arch = "wasm32")]`) wraps the engine for the browser. The **7 `#[wasm_bindgen]` exports**
+are `start`, `parse_csv`, `parse_csv_compare`, `apply_filter`, `apply_sort`, `auto_clean`, `step_preview` — each
+returning `Result<String, JsValue>` (`rows_to_df`/`df_to_rows`/`df_metrics` are **private helpers**, not exports).
+Its own doc says it best: *"a thin marshaling layer over JSON in / JSON out — they call the same engine functions
+the server calls, so the wasm binary's content == the server engine's content."* Rules:
 
 - The wasm wrappers **only** marshal JSON ↔ `DataFrame` and call existing engine fns. No logic lives in `wasm.rs`.
-- The boundary is **JSON strings** (`String` in/out), not typed structs — so adding an operation is a new generic
-  wrapper, never a recompile-per-type. (This is the `wasm-bindgen` two-surface constraint from the object-registry
-  skill, applied: keep exports few + JSON-shaped.)
+- The boundary is **JSON strings** (`String` in / `Result<String, JsValue>` out), not typed structs — so adding an
+  operation is a new generic wrapper, never a recompile-per-type. (This is the `wasm-bindgen` two-surface constraint
+  from the object-registry skill, applied: keep exports few + JSON-shaped.)
 - `serde` + `serde_json` are the only marshaling; `console_error_panic_hook` (in `wasm::start`) surfaces panics as
   real `console.error`.
+
+**Trade-off (named honestly).** JSON-everything is *not* the "Rust and WebAssembly" book's headline-recommended
+boundary. The book tells you to **minimize serializing/copying** and to keep large, long-lived structures **inside
+wasm linear memory, exposed to JS as opaque handles** — JS calls exported fns on the handle and gets back only a
+small copyable result (e.g. return a `*const Cell` + width/height getters and let JS read linear memory via a typed
+array). RedPash deliberately takes the JSON-string boundary instead: it buys *one-engine-two-surfaces parity* (the
+wasm path runs the byte-identical server functions) and simplicity, paying one serialize/copy per call. That's the
+right call while per-call payloads are moderate; if a hot path ever shuttles large frames per call, the
+opaque-handle technique is the book's documented escape hatch.
 
 ## The pure-compute seam (why this is clean)
 No HTTP, no DB, no Axum in `data`. The `api` crate calls a `data::` function and serializes the result; `data`'s

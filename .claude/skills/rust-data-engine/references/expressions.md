@@ -23,25 +23,29 @@ for windows). The crate's `group_by` (Reports), `steps`, and `joins` modules are
 matching one before writing a new transform.
 
 ## LazyFrame vs DataFrame — and why lazy wins
-[`LazyFrame`] is a query plan; `DataFrame` is materialized rows. `parse` reads CSV straight into a `LazyFrame`
-(streaming — it never loads columns the plan discards). The discipline:
+[`LazyFrame`] is a query plan; `DataFrame` is materialized rows. `parse` reads CSV via `CsvReadOptions` +
+`into_reader_with_file_handle`, then `.lazy()` — so projection/predicate **pushdown** drops columns and rows the
+plan discards before they materialize. The discipline:
 
 - start lazy (`df.lazy()` or read lazily), express everything as `col()`/`Expr`,
 - `.collect()` once to get the `DataFrame` you serialize,
 - only go eager when an op genuinely needs materialized data (and then keep that window small).
 
-`.lazy()` appears `~22×` — staying lazy through the chain is the established pattern, not an optimization to bolt on.
+`.lazy()` appears `~22×` and `.collect()` `~122×` — staying lazy through the chain is the established pattern, not
+an optimization to bolt on. (Precise term: this is the optimizer's projection/predicate **pushdown**, not Polars'
+separate *streaming engine* — the crate uses ordinary `.collect()`, not a streaming sink.)
 
 ## `mode` and the op surface
 [docs.rs `mode`](https://docs.rs/polars/latest/polars/prelude/mode/index.html) — the statistical mode of a Series;
-representative of the many ready-made ops (`sum`/`mean`/`median`/`n_unique`/`value_counts`/`is_duplicated`/…). Before
-hand-rolling a reduction, check the prelude — Polars almost certainly ships it, vectorized.
+an *illustrative* stand-in (the crate doesn't call `mode` itself) for the many ready-made ops it does use
+(`sum`/`mean`/`median`/`n_unique`/`value_counts`/`is_duplicated`/…). Before hand-rolling a reduction, check the
+prelude — Polars almost certainly ships it, vectorized.
 
 ## CSV read internals
-[docs.rs `_csv_read_internal`](https://docs.rs/polars/latest/polars/prelude/_csv_read_internal/index.html) — the
-underscore marks it internal; the crate goes through the high-level `LazyCsvReader`/`parse` path. Reach into the
-internal reader only for a parsing concern the high-level API can't express (custom chunking, dtype overrides
-mid-stream); otherwise stay on the public reader.
+The crate's CSV entry point is `CsvReadOptions::default()…` + `.into_reader_with_file_handle(...)`
+(`parse/mod.rs`, `parse/sniff.rs`) — the eager-options reader, then `.lazy()`. It does **not** use `LazyCsvReader`
+(0× in `src`). Reach for a lower-level reader only for a parsing concern the options API can't express (custom
+chunking, dtype overrides mid-stream); otherwise stay on `CsvReadOptions`.
 
 ## Rule of thumb
 

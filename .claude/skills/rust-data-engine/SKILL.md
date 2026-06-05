@@ -28,9 +28,10 @@ reuse before you add.
 ## 1 · Load — detect, then parse lazily
 
 - `encoding` (chardetng) detects the byte encoding first; don't assume UTF-8.
-- `parse` reads CSV through a Polars **`LazyFrame`** (`.lazy()` appears ~22× in the crate) — streaming, so the
-  query optimizer prunes columns/rows before materializing. **Default to lazy**; only `.collect()` to a
-  `DataFrame` at the end. See [`references/expressions.md`](references/expressions.md).
+- `parse` reads CSV (via `CsvReadOptions` + `into_reader_with_file_handle`) through a Polars **`LazyFrame`**
+  (`.lazy()` ~22×) — the optimizer's projection/predicate **pushdown** prunes columns/rows before they materialize
+  (pushdown, not Polars' separate *streaming engine*). **Default to lazy**; only `.collect()` to a `DataFrame` at
+  the end. See [`references/expressions.md`](references/expressions.md).
 
 ## 2 · Shape — express with `col()`, collect once
 
@@ -55,17 +56,20 @@ This is the crate's center of gravity (`DataType` ~62×, `AnyValue` ~72×) and t
 ## 4 · Emit — cross the boundary as JSON
 
 - To leave the engine, convert `AnyValue` → an owned value (the `av_to_owned` pattern) and serialize with
-  **serde** — the server returns JSON; the wasm wrappers (`wasm.rs`: `rows_to_df`, `apply_filter`,
-  `auto_clean`) are a thin **JSON-in / JSON-out** shim over the *same* engine functions. Structured data crosses
-  as JSON, never as typed structs marshaled field-by-field. See [`references/boundary.md`](references/boundary.md).
+  **serde** — the server returns JSON; the wasm wrappers (`wasm.rs`'s 7 `#[wasm_bindgen]` exports — `parse_csv`,
+  `apply_filter`, `auto_clean`, … each `-> Result<String, JsValue>`) are a thin **JSON-in / JSON-out** shim over
+  the *same* engine functions. Structured data crosses as JSON, never as typed structs marshaled field-by-field.
+  See [`references/boundary.md`](references/boundary.md).
 
 ## Discipline (why the boundaries are where they are)
 
 - **Pure-compute only.** No HTTP, no DB in this crate — the `api` crate owns that. Keeps the engine testable +
   wasm-compilable. Errors wrap into the crate's `Error` for `api` to map to status codes.
-- **wasm32 `cfg`-gating.** Anything whose deps don't compile to wasm (e.g. `render` → `onig_sys`/`crossterm`) is
-  `#[cfg(not(target_arch = "wasm32"))]`; the wasm wrappers are `#[cfg(target_arch = "wasm32")]`. If you add a
-  module, decide its surface and gate accordingly (roadmap-webassembly.md).
+- **wasm32 `cfg`-gating.** Anything whose deps don't compile to `wasm32-unknown-unknown` is
+  `#[cfg(not(target_arch = "wasm32"))]`; the wasm wrappers are `#[cfg(target_arch = "wasm32")]`. The principled
+  checklist of what won't cross (from the "Rust and WebAssembly" book): C/system-library bindings (no system libs
+  in wasm), file/OS I/O, and threads/blocking — which is exactly why `render` (→ `onig_sys`/`crossterm`) is gated
+  out. If you add a module, decide its surface and gate accordingly.
 - **Reuse the module, don't reinvent.** A new transform almost always belongs in (or beside) an existing module.
 
 ## References
