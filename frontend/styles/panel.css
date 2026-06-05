@@ -1579,72 +1579,10 @@
   to   { transform: rotate(360deg); }
 }
 
-/* ── autocomplete atom (.rt-ac) ────────────────────────────────────
-   Focus-driven suggestion list anchored under an <input> via the
-   .rt-ac-wrap parent. Separate atom from .rt-dd (the toggle-click
-   dropdown bound by /scripts/dropdown.js) so the bindDropdown
-   document handler doesn't fight the autocomplete's focus/blur
-   semantics. Outside-click handling lives in autocomplete.js,
-   scoped to the wrap. */
-.rt-ac-wrap {
-  position: relative;
-  display: block;
-  min-width: 0;
-}
-.rt-ac-wrap > input {
-  width: 100%;
-}
-.rt-ac {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  right: 0;
-  max-height: 13.75rem;
-  overflow-y: auto;
-  z-index: 30;
-  display: none;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-border);
-  border-radius: 0.5rem;
-  box-shadow: var(--rp-shadow);
-  padding: 0.25rem;
-  font-size: 0.75rem;
-}
-.rt-ac.open { display: block; }
-.rt-ac-head {
-  padding: 0.25rem 0.375rem 0.375rem;
-  border-bottom: 1px solid var(--rp-border);
-  color: var(--rp-text-mute);
-  font-size: 0.6562rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.25rem;
-}
-.rt-ac-item {
-  padding: 0.3125rem 0.4375rem;
-  border-radius: 0.3125rem;
-  color: var(--rp-text);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7188rem;
-}
-.rt-ac-item:hover,
-.rt-ac-item.is-active {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
-.rt-ac-item.is-active {
-  outline: 1px solid var(--rp-accent-2);
-}
-.rt-ac-empty {
-  padding: 0.75rem;
-  text-align: center;
-  color: var(--rp-text-mute);
-  font-size: 0.7188rem;
-}
+/* autocomplete atom → collapsed onto the framework `rp-ac` family
+   (styles/framework/filter-panel.css, loaded via main.css). The
+   cases/home/monitoring/autocomplete JS now emits rp-ac* classes; the
+   legacy rt-ac twin was byte-identical (Verbatim) and is removed here. */
 
 /* chip-picker (in/not_in value input) → collapsed onto the framework
    `rp-chip-picker` family (styles/framework/filter-panel.css, loaded via

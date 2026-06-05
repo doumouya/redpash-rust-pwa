@@ -1580,7 +1580,7 @@ export default function home(app, { session: _session }) {
         const data = await api.get(endpoint + "?" + searchKey + "=" + encodeURIComponent(q) + "&size=10");
         const rows = data?.items || data?.rows || [];
         if (!rows.length) {
-          resultsEl.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
+          resultsEl.innerHTML = '<div class="rp-ac-empty">No matches.</div>';
         } else {
           resultsEl.innerHTML = rows.map((r) => {
             const label = r[labelKey] || r[ridKey] || "—";
@@ -1595,7 +1595,7 @@ export default function home(app, { session: _session }) {
         }
         resultsEl.hidden = false;
       } catch (err) {
-        resultsEl.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
+        resultsEl.innerHTML = '<div class="rp-ac-empty">Couldn’t search'
           + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
         resultsEl.hidden = false;
       }

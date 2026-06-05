@@ -1109,7 +1109,7 @@ export default function monitoring(app, { session }) {
       const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       if (!rows.length) {
-        results.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
+        results.innerHTML = '<div class="rp-ac-empty">No matches.</div>';
       } else {
         results.innerHTML = rows.map((u) => {
           const label = u.display_name || u.username || u.redpash_id;
@@ -1124,7 +1124,7 @@ export default function monitoring(app, { session }) {
       }
       results.hidden = false;
     } catch (err) {
-      results.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
+      results.innerHTML = '<div class="rp-ac-empty">Couldn’t search'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       results.hidden = false;
     }

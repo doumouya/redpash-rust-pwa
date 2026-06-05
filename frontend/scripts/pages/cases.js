@@ -1102,7 +1102,7 @@ export default function cases(app, { session }) {
             +   (sub ? '<span class="rp-user-picker-result-sub">' + esc(sub) + '</span>' : '')
             + '</div>';
         }).join("")
-      : '<div class="rt-ac-empty">No matches.</div>';
+      : '<div class="rp-ac-empty">No matches.</div>';
   }
   async function queryMentions(editor, token) {
     try {
@@ -1396,7 +1396,7 @@ export default function cases(app, { session }) {
       const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       if (!rows.length) {
-        sideAssigneeResults.innerHTML = '<div class="rt-ac-empty">No matches.</div>';
+        sideAssigneeResults.innerHTML = '<div class="rp-ac-empty">No matches.</div>';
       } else {
         sideAssigneeResults.innerHTML = rows.map((u) => {
           const label = u.display_name || u.username || u.redpash_id;
@@ -1410,7 +1410,7 @@ export default function cases(app, { session }) {
       }
       sideAssigneeResults.hidden = false;
     } catch (err) {
-      sideAssigneeResults.innerHTML = '<div class="rt-ac-empty">Couldn’t search'
+      sideAssigneeResults.innerHTML = '<div class="rp-ac-empty">Couldn’t search'
         + (err?.status ? " (" + err.status + ")" : "") + '.</div>';
       sideAssigneeResults.hidden = false;
     }

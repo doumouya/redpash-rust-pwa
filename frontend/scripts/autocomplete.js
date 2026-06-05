@@ -17,7 +17,7 @@
 //     Each picked value becomes a chip; backspace at empty input
 //     removes the last chip. Returns a control with read/write API.
 //
-// The dropdown element uses .rt-ac (separate from .rt-dd) so the
+// The dropdown element uses .rp-ac (separate from .rt-dd) so the
 // bindDropdown click-toggle handler in /scripts/dropdown.js doesn't
 // fight our focus-driven open/close. Outside-click handling lives
 // here, scoped to the wrap element.
@@ -110,7 +110,7 @@ export function attachAutocomplete(input, ctx) {
   list.addEventListener("mousedown", (e) => {
     // mousedown (not click) so the input's blur doesn't fire first
     // and close the list before the pick lands.
-    const item = e.target.closest(".rt-ac-item");
+    const item = e.target.closest(".rp-ac-item");
     if (!item) return;
     e.preventDefault();
     pick(item.dataset.value || "");
@@ -219,11 +219,11 @@ export function mountChipPicker(slot, ctx) {
 // ── internals ──────────────────────────────────────────────────────
 
 function ensureWrap(input) {
-  if (input.parentElement?.classList.contains("rt-ac-wrap")) {
+  if (input.parentElement?.classList.contains("rp-ac-wrap")) {
     return input.parentElement;
   }
   const w = document.createElement("span");
-  w.className = "rt-ac-wrap";
+  w.className = "rp-ac-wrap";
   input.parentNode.insertBefore(w, input);
   w.appendChild(input);
   return w;
@@ -231,31 +231,31 @@ function ensureWrap(input) {
 
 function makeList(wrap) {
   const el = document.createElement("div");
-  el.className = "rt-ac";
+  el.className = "rp-ac";
   wrap.appendChild(el);
   return el;
 }
 
 function renderList(list, suggestions, activeIdx, result) {
   if (!suggestions.length) {
-    list.innerHTML = '<div class="rt-ac-empty">No matching values.</div>';
+    list.innerHTML = '<div class="rp-ac-empty">No matching values.</div>';
     return;
   }
   const head = (result?.truncated || result?.total > suggestions.length)
-    ? '<div class="rt-ac-head">' + suggestions.length + ' of ' + result.total
+    ? '<div class="rp-ac-head">' + suggestions.length + ' of ' + result.total
         + (result.truncated ? '+ (capped)' : '') + '</div>'
     : '';
   list.innerHTML = head + suggestions.map((v, i) =>
-    '<div class="rt-ac-item' + (i === activeIdx ? ' is-active' : '')
+    '<div class="rp-ac-item' + (i === activeIdx ? ' is-active' : '')
     +     '" data-value="' + esc(v) + '">' + esc(v) + '</div>'
   ).join("");
 }
 
 function paintActive(list, idx) {
-  list.querySelectorAll(".rt-ac-item").forEach((el, i) => {
+  list.querySelectorAll(".rp-ac-item").forEach((el, i) => {
     el.classList.toggle("is-active", i === idx);
   });
   // Keep the active row in view.
-  const active = list.querySelector(".rt-ac-item.is-active");
+  const active = list.querySelector(".rp-ac-item.is-active");
   active?.scrollIntoView({ block: "nearest" });
 }
