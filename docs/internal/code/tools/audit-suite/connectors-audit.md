@@ -18,7 +18,12 @@ makes that fix **sticky** — it fails `sh tools/audit.sh` if any connector reac
 for the storage layer again, so the next connector can't quietly reintroduce the
 bypass.
 
-## What it scans
+## Public surface
+
+(What it scans + the rule it enforces — this audit has no exported API; its
+"surface" is the scan scope + verdict below.)
+
+### What it scans
 
 Every `.rs` file under `backend/crates/` or `connectors/` whose path is under
 `connectors/` **or** whose basename contains `loader` / `connector`
