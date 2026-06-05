@@ -71,6 +71,10 @@ Thumbs.db
 # audit.js + the dir's .gitkeep are the only committed artifacts.
 /tools/ui-snapshot-audit/snapshots/*.json
 
+# tools/page-verify/screens/ holds headless-browser screenshots written by
+# verify.js on each run (Playwright). Regenerated every run; never tracked.
+/tools/page-verify/screens/
+
 # css-parallel + css-usage write timestamped, full-report JSONs on every
 # run (~150KB / ~660KB). Generated artifacts — the audit.js is the source
 # of truth, so the reports stay out of history.
