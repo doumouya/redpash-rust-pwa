@@ -21,29 +21,30 @@
 //! crate can wire its routes today and the implementations land
 //! independently.
 
-pub mod encoding;
-pub mod parse;
-pub mod dtype;
 pub mod dedup;
-pub mod joins;
 pub mod distinct;
+pub mod dtype;
+pub mod encoding;
 pub mod group_by;
-pub mod steps;
+pub mod joins;
+pub mod parse;
 pub mod stats;
+pub mod steps;
 pub mod structure;
 // `render` is the Markdown / Maud / syntect path for `/api/docs` and
 // the report templates. Server-side only — its transitive deps
 // (`onig_sys`, `crossterm`) don't compile on wasm32-unknown-unknown.
 // See docs/internal/roadmap-webassembly.md §3 + §7.
+pub mod clean;
+pub mod export;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod render;
-pub mod export;
-pub mod clean;
 
-// `sql` — Polars-SQL execution substrate (`SQLContext`). Native-only: the
-// wasm32 polars build carries no `sql` feature yet (Phase 5 of the SQL-redtable
-// plan). See docs/internal/specs/sql-redtable/phase-0-coverage.md.
-#[cfg(not(target_arch = "wasm32"))]
+// `sql` — Polars-SQL execution substrate (`SQLContext`). Compiles on both
+// surfaces (SQL-redtable Phase 5): the wasm32 polars build now carries the
+// `sql` feature (Cargo.toml; safe because `default-features = false` keeps the
+// `fmt`→comfy-table→crossterm chain out). The browser runs read-only SQL over
+// the SAME engine via `wasm::run_sql`. See docs/internal/specs/sql-redtable/phase-0-coverage.md.
 pub mod sql;
 
 // `wasm` — Phase B wasm-bindgen wrappers (apply_filter / apply_sort /

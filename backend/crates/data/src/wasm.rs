@@ -464,3 +464,24 @@ pub fn detect_structure(bytes: &[u8]) -> Result<String, JsValue> {
     let flags = crate::structure::detect(bytes, &df);
     serde_json::to_string(&flags).map_err(|e| JsValue::from_str(&format!("structure serialize: {e}")))
 }
+
+/// Read-only SQL over named JSON row tables — the SheetWise console, client-side
+/// (SQL-redtable Phase 5). `tables_json` is an object `{ "name": [ {col: val, …}, … ], … }`
+/// mapping each table alias to its rows; `sql` is the query. The read-only allowlist
+/// (SELECT / WITH / set-ops; DDL/DML rejected) and the 500k-row result cap are enforced
+/// INSIDE `crate::sql::run_sql` — the IDENTICAL engine fn the server's `/api/files/:rid/sql`
+/// calls — so the browser and server run one SQL substrate, and bytes never leave the device.
+#[wasm_bindgen]
+pub fn run_sql(tables_json: &str, sql: &str) -> Result<String, JsValue> {
+    let map: serde_json::Map<String, Value> = serde_json::from_str(tables_json)
+        .map_err(|e| JsValue::from_str(&format!("tables parse: {e}")))?;
+    let mut tables = Vec::with_capacity(map.len());
+    for (name, rows) in map {
+        let df = rows_to_df(&rows.to_string())
+            .map_err(|e| JsValue::from_str(&format!("table '{name}': {e}")))?;
+        tables.push((name, df));
+    }
+    let out =
+        crate::sql::run_sql(tables, sql).map_err(|e| JsValue::from_str(&format!("sql: {e}")))?;
+    df_to_rows(&out).map_err(|e| JsValue::from_str(&e))
+}

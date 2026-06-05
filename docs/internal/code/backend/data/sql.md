@@ -26,7 +26,7 @@ own expression engine, sandboxed to the registered frames (no fs / network).
 
 - `is_read_only` is a conservative allowlist (must start with `SELECT`/`WITH`/`(`; no DDL/DML keyword token; single statement; comments + string-literal contents stripped before the scan so a keyword can hide in neither). Defense-in-depth, not the only guard — the SQLContext has no fs/network reach regardless.
 - What Polars 0.43 SQL actually runs is recorded in `docs/internal/specs/sql-redtable/phase-0-coverage.md`. Known-unsupported (route via expressions / rewrite in a later phase): window ranking/nav fns (ROW_NUMBER/RANK/LAG/LEAD/NTILE), INTERSECT/EXCEPT, ROLLUP/CUBE, HAVING-on-a-bare-aggregate, scalar subquery in the SELECT list, constant join conditions (`ON 1=1`).
-- Native-only (`#[cfg(not(target_arch = "wasm32"))]`): the wasm32 polars build has no `sql` feature until Phase 5.
+- **Both surfaces now (SQL-redtable Phase 5):** the wasm32 polars build carries the `sql` feature (`data/Cargo.toml`; safe because `default-features = false` keeps the `fmt`→comfy-table→crossterm chain out), and `pub mod sql` is no longer `wasm32`-gated. The browser runs read-only SQL over this SAME engine via `wasm::run_sql(tables_json, sql)` — bytes never leave the device.
 - Reproduce the coverage matrix: `cargo +stable run -p data --example sql_spike`.
 
 ## Related

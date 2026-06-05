@@ -35,6 +35,7 @@ the Phase B size measurement honest.
 - `pub fn detect_join_candidates` — function (overlap-scored column-pair candidates between two row sets)
 - `pub fn find_sentinels` — function (repeated placeholder/junk values + per-column counts)
 - `pub fn detect_structure` — function (raw-CSV structure diagnostics; takes RAW bytes, not rows)
+- `pub fn run_sql` — function (read-only SQL over named JSON tables; `tables_json` = `{"name":[rows…]}`, `sql` = query; SQL-redtable Phase 5)
 
 ## Drift-prone areas
 
@@ -42,6 +43,7 @@ the Phase B size measurement honest.
 - See the `//!` module documentation at the top of the source for the load-bearing invariants.
 - **Engine-completion exports (2026-06-05):** the six `apply_group_by` … `detect_structure` wrappers each call the IDENTICAL `crate::<module>` fn the `api` calls (group_by/dedup/distinct/joins/stats/structure), so server and edge stay one engine. Each added op pulls its code path into the .wasm — the +203 KB raw delta (12.32 → 12.53 MB; 3.54 MB gz) is the honest cost of "everything that could be wasm is wasm". A new wrapper is the same shape: `rows_to_df` → engine fn → `serde_json::to_string`/`df_to_rows`. `detect_structure` is the one that takes **raw bytes** (its byte-level line-ending/binary/delimiter checks need the original CSV, not parsed rows) — it re-parses internally.
 - **Parse cliff (follow-up, not yet built):** browser `parse_csv` is fine to ~19 MB (<1 s warm) but freezes the main thread and OOMs the wasm32 heap (~0.5–1 GB) past a few hundred MB. The ranked lifts (from the scope analysis): (1) move parse to the existing `engine.worker.js` Web Worker (UX: spinner not frozen tab), (2) stateful `Arc<DataFrame>` handles returning only the visible page instead of all rows, (3) chunked/streaming parse for the memory ceiling. None implemented here — these wrappers are the op-coverage milestone.
+- **`run_sql` / the SQL substrate (SQL-redtable Phase 5, 2026-06-05):** enabling the polars `sql` feature for wasm32 (`data/Cargo.toml`, safe because `default-features=false` keeps `fmt`→crossterm out) + un-gating `pub mod sql` made the full SheetWise SQL engine browser-callable. It is **heavier than the other ops**: the SQL parser + logical planner cost **+~0.86 MB gz (3.53 → 4.39 MB over-the-wire; +3.3 MB raw)** — a deliberate one-time-cached call (Em, 2026-06-05) for the zero-trust capstone. If first-load size becomes a measured problem on the low-bandwidth GTM, the escape valve is a **separate lazily-loaded `sql.wasm` module** (base engine stays ~3.5 MB; SQL downloads only when the console opens) — not built; documented as the next move if needed. The read-only allowlist + 500k cap live in `crate::sql::run_sql`, not the wrapper.
 
 ## Related
 

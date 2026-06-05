@@ -19,7 +19,7 @@ directly without spinning up a server.
 ## Public surface
 
 - `pub enum DataError` — enum
-- modules: `encoding` · `parse` · `dtype` · `dedup` · `joins` · `distinct` · `group_by` · `steps` · `stats` · `structure` · `export` · `clean` · `render` (native) · [`sql`](sql.md) (native) · `wasm` (wasm32)
+- modules: `encoding` · `parse` · `dtype` · `dedup` · `joins` · `distinct` · `group_by` · `steps` · `stats` · `structure` · `export` · `clean` · `render` (native) · [`sql`](sql.md) (both — Phase 5) · `wasm` (wasm32)
 
 ## Drift-prone areas
 
