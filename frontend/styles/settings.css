@@ -1,17 +1,17 @@
 /* ── settings ────────────────────────────────────────────────────
    Page-specific styles for /settings only. Inherits the page shell
    (.rp-page + .rp-page__section + .rp-page__row) from page.css and
-   .rt-btn from button.css. Owns the row hint, the sentinel chip
+   .rp-btn-icon from atoms.css. Owns the row hint, the sentinel chip
    list, the About brand row, and (2026-05-27) the 2-column
    rail+main layout that lets the page scale as more setting groups
    land. */
 
 /* ─── rail-page shell adaptation (2026-05-27) ──────────────────
    Settings migrated to the standard `.rp-shell` rail layout used by
-   Home / Monitoring / Workspace / Cases — same `.rt-nav` rail
+   Home / Monitoring / Workspace / Cases — same `.rp-rail` rail
    atom + `<main class="rp-main"><div class="rp-surface">` content
-   shell + the JS-populated grouped-tab rail body (rt-group +
-   rt-tab) from settings.js's mountSettingsRail. The rail visual
+   shell + the JS-populated grouped-tab rail body (rp-rail-group +
+   rp-rail-tab) from settings.js's mountSettingsRail. The rail visual
    itself lives in rail.css; this file owns the surface treatment
    and the section scroll-margin so the IntersectionObserver hits
    each section's heading at the right band.
@@ -361,13 +361,13 @@
 }
 
 /* Rail group hit-count badge — when a search is active, the existing
-   .rt-group-count badge switches to hit-count via the .is-hits class.
+   .rp-rail-group-count badge switches to hit-count via the .is-hits class.
    The .is-no-hits class on the group fades the whole group head so
    users see at a glance which groups have no matches. */
-.rt-group-count.is-hits {
+.rp-rail-group-count.is-hits {
   color: var(--rp-accent, var(--rp-text));
 }
-.rt-group.is-no-hits .rt-group-head {
+.rp-rail-group.is-no-hits .rp-rail-group-head {
   opacity: 0.55;
 }
 

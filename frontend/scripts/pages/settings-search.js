@@ -117,10 +117,10 @@ export function mountSearch(app) {
   function ensureRailIndex() {
     if (railIndex) return railIndex;
     railIndex = new Map();  // section-id → group-head element
-    app.querySelectorAll("#rpSetNavBody .rt-group").forEach((group) => {
-      const head = group.querySelector(".rt-group-head .rt-group-count");
+    app.querySelectorAll("#rpSetNavBody .rp-rail-group").forEach((group) => {
+      const head = group.querySelector(".rp-rail-group-head .rp-rail-group-count");
       if (!head) return;
-      group.querySelectorAll(".rt-tab").forEach((tab) => {
+      group.querySelectorAll(".rp-rail-tab").forEach((tab) => {
         railIndex.set(tab.dataset.key, head);
       });
     });
@@ -171,12 +171,12 @@ export function mountSearch(app) {
 
     // Rail badges: when active, show hit counts; when cleared,
     // restore the static tab count.
-    app.querySelectorAll("#rpSetNavBody .rt-group").forEach((group) => {
-      const badge = group.querySelector(".rt-group-head .rt-group-count");
+    app.querySelectorAll("#rpSetNavBody .rp-rail-group").forEach((group) => {
+      const badge = group.querySelector(".rp-rail-group-head .rp-rail-group-count");
       if (!badge) return;
       if (!active) {
         // Restore static count (tabs in this group).
-        const tabCount = group.querySelectorAll(".rt-tab").length;
+        const tabCount = group.querySelectorAll(".rp-rail-tab").length;
         badge.textContent = String(tabCount);
         badge.classList.remove("is-hits");
         group.classList.remove("is-no-hits");
@@ -184,7 +184,7 @@ export function mountSearch(app) {
       }
       // Sum hits across every tab in this group.
       let groupHits = 0;
-      group.querySelectorAll(".rt-tab").forEach((tab) => {
+      group.querySelectorAll(".rp-rail-tab").forEach((tab) => {
         groupHits += hitsBySection.get(tab.dataset.key) || 0;
       });
       badge.textContent = String(groupHits);

@@ -143,7 +143,7 @@ function renderBucket(bucket) {
     +       esc(bucket.page) + ' · ' + esc(bucket.label)
     +     '</span>'
     +     '<span class="rp-settings__hidden-bucket-count">' + bucket.items.length + '</span>'
-    +     '<button type="button" class="rt-btn rp-settings__hidden-restore-all"'
+    +     '<button type="button" class="rp-btn-icon rp-settings__hidden-restore-all"'
     +       ' data-pref="' + esc(bucket.prefName) + '">Restore all</button>'
     +   '</header>'
     +   '<ul class="rp-settings__hidden-list">' + items + '</ul>'

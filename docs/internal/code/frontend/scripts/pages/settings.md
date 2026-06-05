@@ -3,7 +3,7 @@ title: frontend/scripts/pages/settings.js
 source: ../../../../../frontend/scripts/pages/settings.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # settings.js
@@ -70,6 +70,15 @@ Non-pref rows kept inline (one section → array of HTML strings):
 
 ## Drift-prone areas
 
+- **Rail uses the framework `rp-rail*` atoms** (design-language rollout, 2026-06-05). The grouped
+  rail is JS-rendered in `mountSettingsRail` (`rp-rail-group*` / `rp-rail-tab*` string literals),
+  queried by `mountSettingsRail`'s delegation + `settings-search.js`'s hit-count index
+  (`.rp-rail-group`, `.rp-rail-group-head .rp-rail-group-count`, `.rp-rail-tab`), and the footer
+  mounts on `.rp-rail-footer`. **These three files move in lockstep** — a class rename in one without
+  the others silently breaks the rail scroll/switch or the search hit-count badge. Group `.expanded`
+  / tab `.active` stay plain (atom contracts); the `.is-hits` / `.is-no-hits` search-state classes +
+  their `settings.css` overrides (`.rp-rail-group-count.is-hits`, `.rp-rail-group.is-no-hits
+  .rp-rail-group-head`) migrated with them. Page buttons (font-stepper, About links) are `rp-btn-icon`.
 - **Adding a pref → one `registerPref()` call in `prefs.js`** (or the
   per-page module landing in step 6). Settings page auto-renders;
   zero edits here.

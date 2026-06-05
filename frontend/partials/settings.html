@@ -7,7 +7,7 @@
 
      Shell migration (2026-05-27): adopted the standard `.rp-shell`
      rail-page layout used by Home / Monitoring / Workspace / Cases —
-     left rail (`.rt-nav` with grouped tabs), main area
+     left rail (`.rp-rail` with grouped tabs), main area
      (`.rp-main > .rp-surface`). Settings is the only page where
      clicking a rail tab DOESN'T switch views — sections stay in a
      scrolling stack and the rail items are anchor links that jump
@@ -20,18 +20,18 @@
 
     <!-- ════ rail — grouped section index ════
          Populated by settings.js (SET_TABS / SET_GROUPS) so the
-         rt-group + rt-tab markup matches the canonical
-         home / monitoring rail exactly (collapsible groups,
+         rp-rail-group + rp-rail-tab markup matches the canonical
+         home / monitoring rp-rail exactly (collapsible groups,
          two-letter color marks, count badge). -->
-    <aside class="rt-nav" id="rpSetNav">
-      <div class="rt-nav-head">
-        <span class="rt-nav-title">Settings</span>
-        <button class="rt-btn" id="rpSetNavCollapse" type="button" title="Collapse">
+    <aside class="rp-rail" id="rpSetNav">
+      <div class="rp-rail-head">
+        <span class="rp-rail-title">Settings</span>
+        <button class="rp-btn-icon" id="rpSetNavCollapse" type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
         </button>
       </div>
-      <div class="rt-nav-body" id="rpSetNavBody"></div>
-      <div class="rt-nav-foot"><!-- rail footer nav mounted by settings.js --></div>
+      <div class="rp-rail-body" id="rpSetNavBody"></div>
+      <div class="rp-rail-footer"><!-- rail footer nav mounted by settings.js --></div>
     </aside>
 
     <!-- ════ main — section stack on one scroll surface ════

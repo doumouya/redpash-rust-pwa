@@ -3,7 +3,7 @@ title: frontend/scripts/pages/settings-search.js
 source: ../../../../../frontend/scripts/pages/settings-search.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # settings-search.js
@@ -16,6 +16,11 @@ pref row by label / hint / key / tags (80ms debounce); non-matching
 rows pick up `.is-dim` (40% opacity, kept in place so the user sees
 what they're filtering past); rail group badges switch from tab-count
 to hit-count while a query is active.
+
+> The rail hit-count index queries the framework rail atoms
+> (`#rpSetNavBody .rp-rail-group`, `.rp-rail-group-head .rp-rail-group-count`, `.rp-rail-tab`) — these
+> must match the class names `settings.js`'s `mountSettingsRail` emits (design-language rollout,
+> 2026-06-05). A rename in one without the other silently zeroes the hit-count badges.
 
 `/` focuses the search input from anywhere on the page (guarded so it
 doesn't hijack typing inside other inputs / textareas /

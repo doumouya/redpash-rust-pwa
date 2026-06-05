@@ -98,9 +98,9 @@ function fontStepperRow(spec) {
   return '<div class="rp-page__row" data-pref="' + spec.key + '">'
     + '<span class="rp-page__row-label">' + spec.label + hint + "</span>"
     + '<div class="rp-page__row-control rp-fontstep">'
-      + '<button type="button" class="rt-btn rp-fontstep__btn rp-fontstep__btn--dn" data-step="-1" title="Smaller text" aria-label="Decrease text size">A&minus;</button>'
+      + '<button type="button" class="rp-btn-icon rp-fontstep__btn rp-fontstep__btn--dn" data-step="-1" title="Smaller text" aria-label="Decrease text size">A&minus;</button>'
       + '<span class="rp-fontstep__preview" aria-hidden="true">Aa</span>'
-      + '<button type="button" class="rt-btn rp-fontstep__btn rp-fontstep__btn--up" data-step="1" title="Larger text" aria-label="Increase text size">A+</button>'
+      + '<button type="button" class="rp-btn-icon rp-fontstep__btn rp-fontstep__btn--up" data-step="1" title="Larger text" aria-label="Increase text size">A+</button>'
     + "</div>"
   + "</div>";
 }
@@ -175,9 +175,9 @@ const SECTION_EXTRAS = {
         + '<small class="rp-settings__hint" id="rp-settings-version">prerelease build</small>'
       + '</span>'
       + '<div class="rp-page__row-control">'
-        + '<a class="rt-btn" href="#/docs">Docs</a>'
-        + '<a class="rt-btn" href="#/docs?slug=vision">Vision</a>'
-        + '<a class="rt-btn" href="#/docs?slug=getting-started">Getting started</a>'
+        + '<a class="rp-btn-icon" href="#/docs">Docs</a>'
+        + '<a class="rp-btn-icon" href="#/docs?slug=vision">Vision</a>'
+        + '<a class="rp-btn-icon" href="#/docs?slug=getting-started">Getting started</a>'
       + '</div>'
     + '</div>',
   ],
@@ -239,8 +239,8 @@ function callPostMountHooks(app) {
 }
 
 // Rail data — section index, grouped to match the canonical
-// home / monitoring rail (rt-group with two-letter color marks +
-// rt-tab children). Tab-switch UX (Em 2026-05-28): each rt-tab
+// home / monitoring rail (rp-rail-group with two-letter color marks +
+// rp-rail-tab children). Tab-switch UX (Em 2026-05-28): each rp-rail-tab
 // click shows ONE section + hides the others — same affordance
 // as Home / Monitoring / Workspace, so a tab opens at its head
 // with the full surface available for that section's content.
@@ -284,7 +284,7 @@ const SET_TABS = [
 // Standard rail population — mirrors monitoring.js / home.js
 // renderGroup + renderTab. Tab-switch UX (Em 2026-05-28: "switching
 // the tabs just switch the content, and we have full screen
-// availability for each tabs"): each rt-tab click shows ONE section
+// availability for each tabs"): each rp-rail-tab click shows ONE section
 // + hides the others, URL hash sticks the choice. No scroll-spy /
 // IntersectionObserver — only the active section is visible at a
 // time, scrolling-stack is gone.
@@ -299,32 +299,32 @@ function mountSettingsRail(app) {
     const tabs = SET_TABS.filter((t) => t.group === g.name);
     if (!tabs.length) return "";
     const items = tabs.map((t) =>
-      '<button type="button" class="rt-tab" data-key="' + esc(t.key) + '">'
-      +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
-      +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
+      '<button type="button" class="rp-rail-tab" data-key="' + esc(t.key) + '">'
+      +   '<i class="' + esc(t.icon) + ' rp-rail-tab-icon"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(t.label) + '</span>'
       + '</button>').join("");
     return ''
-      + '<div class="rt-group expanded">'
-      +   '<button class="rt-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
-      +     '<span class="rt-group-mark" data-c="' + esc(g.color) + '">' + esc(g.mark) + '</span>'
-      +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
-      +     '<span class="rt-group-count">' + tabs.length + '</span>'
+      + '<div class="rp-rail-group expanded">'
+      +   '<button class="rp-rail-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
+      +     '<span class="rp-rail-group-mark" data-c="' + esc(g.color) + '">' + esc(g.mark) + '</span>'
+      +     '<span class="rp-rail-group-name">' + esc(g.name) + '</span>'
+      +     '<span class="rp-rail-group-count">' + tabs.length + '</span>'
       +   '</button>'
-      +   '<div class="rt-group-body">' + items + '</div>'
+      +   '<div class="rp-rail-group-body">' + items + '</div>'
       + '</div>';
   }).join("");
 
-  const items     = Array.from(body.querySelectorAll(".rt-tab"));
+  const items     = Array.from(body.querySelectorAll(".rp-rail-tab"));
   const sections  = Array.from(surface.querySelectorAll(".rp-page__section"));
   const validKeys = new Set(SET_TABS.map((t) => t.key));
 
   // ── collapse button + group-head toggle ───────────────────
   mountRailCollapse(nav, app.querySelector("#rpSetNavCollapse"));
   body.addEventListener("click", (e) => {
-    const head = e.target.closest(".rt-group-head");
+    const head = e.target.closest(".rp-rail-group-head");
     if (head) { head.parentElement.classList.toggle("expanded"); return; }
-    const tab = e.target.closest(".rt-tab");
+    const tab = e.target.closest(".rp-rail-tab");
     if (!tab) return;
     const key = tab.dataset.key;
     activate(key);
@@ -357,11 +357,11 @@ function mountSettingsRail(app) {
 
 export default async function settings(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "settings", session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "settings", session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "settings", session });
   renderFromRegistry(app);
   mountSettingsRail(app);
   // Search must mount AFTER the rail is built — it indexes
-  // `.rt-group-count` badges per section so hit-count updates know
+  // `.rp-rail-group-count` badges per section so hit-count updates know
   // where to land.
   mountSearch(app);
 

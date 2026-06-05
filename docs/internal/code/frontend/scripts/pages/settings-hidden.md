@@ -3,10 +3,13 @@ title: frontend/scripts/pages/settings-hidden.js
 source: ../../../../../frontend/scripts/pages/settings-hidden.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # settings-hidden.js
+
+> The "Restore all" bucket button is the `rp-btn-icon` atom (was `rt-btn`; design-language rollout,
+> 2026-06-05).
 
 ## Purpose
 
