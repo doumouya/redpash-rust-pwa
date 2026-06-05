@@ -70,15 +70,13 @@
 }
 
 /* ── designer / landing surface-state overrides (was chart.css / workspace.css) ─
-   The surface owns WHICH toolbar shows; these ancestor-scoped rules swap the data
-   toolbar for the designer toolbar in designer mode, and hide both in landing
-   mode. The companion .rp-pager / .rp-panel--* selectors are owned by their own
-   sheets; this sheet carries only the .rp-toolbar arm of each rule. */
-.rp-toolbar--designer { display: none; }
+   The surface owns WHICH toolbar shows; these ancestor-scoped rules hide the data
+   toolbar in designer + landing mode. The designer toolbar is the rp-dash-toolbar
+   component (framework/dashboards.css) — the canonical designer surface — which owns
+   its own is-designer-mode show; this sheet carries only the .rp-toolbar--data arm.
+   The companion .rp-pager / .rp-panel--* selectors are owned by their own sheets. */
 .rp-surface.is-designer-mode .rp-toolbar--data { display: none !important; }
-.rp-surface.is-designer-mode .rp-toolbar--designer { display: flex; }
-.rp-surface.is-landing-mode .rp-toolbar--data,
-.rp-surface.is-landing-mode .rp-toolbar--designer { display: none !important; }
+.rp-surface.is-landing-mode .rp-toolbar--data { display: none !important; }
 
 /* ── filter-applied indicator (was .rt-toolbar #filterToggle.has-filter) ──────
    accent-2 colour + a dot badge top-right when a filter is active. The legacy
@@ -164,15 +162,3 @@
   white-space: nowrap;
 }
 .rp-toolbar .rp-chip.rp-toolbar-selchip.show { display: inline-flex; }
-
-/* ── designer-mode breadcrumb title (was .rt-toolbar--designer .ds-title) ─────
-   The chart-name label, only in the --designer variant. */
-.rp-toolbar--designer .rp-toolbar-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--rp-text);
-}
-.rp-toolbar--designer .rp-toolbar-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
