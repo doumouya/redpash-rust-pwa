@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="/styles/main.css" />
 <style>
   /* SheetWise layout — composed on the semantic tokens (theme-agnostic). */
+  /* the `hidden` attr must beat element display rules (.sw-main uses display:grid) */
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--rp-bg); color: var(--rp-text);
          font: var(--rp-text-md)/1.5 var(--rp-font); -webkit-font-smoothing: antialiased; height: 100vh;
          display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
@@ -25,6 +27,36 @@
   .sw-themes button { appearance: none; border: 0; background: transparent; color: var(--rp-text-dim);
     font: 600 var(--rp-text-xs)/1 var(--rp-font); padding: .35rem .6rem; border-radius: var(--rp-radius-pill); cursor: pointer; }
   .sw-themes button[aria-pressed="true"] { background: var(--rp-surface); color: var(--rp-text); box-shadow: var(--rp-shadow); }
+  /* view switcher [SQL | Connectors] */
+  .sw-seg { display:flex; gap:2px; background:var(--rp-surface-2); padding:3px; border-radius:var(--rp-radius-pill); border:1px solid var(--rp-border); }
+  .sw-seg button { appearance:none; border:0; background:transparent; color:var(--rp-text-dim); font:600 var(--rp-text-xs)/1 var(--rp-font); padding:.35rem .8rem; border-radius:var(--rp-radius-pill); cursor:pointer; }
+  .sw-seg button[aria-pressed="true"] { background:var(--rp-surface); color:var(--rp-text); box-shadow:var(--rp-shadow); }
+  /* connectors view */
+  .sw-conn { overflow:auto; }
+  .sw-conn-wrap { max-width:62rem; margin:0 auto; padding:var(--rp-sp-6) var(--rp-sp-5); }
+  .sw-conn-h { font-family:var(--rp-font-display); font-weight:800; letter-spacing:-.02em; font-size:var(--rp-text-xl); margin:0; }
+  .sw-conn-sub-note { display:block; font-family:var(--rp-font); font-weight:400; font-size:var(--rp-text-sm); color:var(--rp-text-dim); margin-top:.35rem; }
+  .sw-conn-cards { display:flex; gap:var(--rp-sp-3); margin:var(--rp-sp-5) 0; flex-wrap:wrap; }
+  .sw-conn-card { display:flex; align-items:center; gap:.5rem; padding:.7rem 1rem; border:1px solid var(--rp-border); border-radius:var(--rp-radius-lg); background:var(--rp-surface); color:var(--rp-text); font:inherit; font-size:var(--rp-text-sm); cursor:pointer; box-shadow:var(--rp-shadow-card); }
+  .sw-conn-card:hover { border-color:var(--rp-accent); }
+  .sw-conn-card.is-active { border-color:var(--rp-accent); background:var(--rp-accent-soft); }
+  .sw-conn-card .nm { font-weight:600; }
+  .sw-conn-card .tag { font-size:var(--rp-text-xs); color:var(--rp-text-mute); background:var(--rp-surface-2); padding:1px .4rem; border-radius:5px; }
+  .sw-conn-panel { background:var(--rp-surface); border:1px solid var(--rp-border); border-radius:var(--rp-radius-lg); padding:var(--rp-sp-5); box-shadow:var(--rp-shadow-card); }
+  .sw-conn-h3 { font-size:var(--rp-text-lg); font-weight:700; margin:0 0 var(--rp-sp-4); }
+  .sw-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:var(--rp-sp-3); }
+  .sw-fl { display:grid; gap:.3rem; font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+  .sw-in { background:var(--rp-surface-2); border:1px solid var(--rp-border); border-radius:var(--rp-radius); color:var(--rp-text); font:inherit; font-size:var(--rp-text-sm); padding:.5rem .6rem; }
+  .sw-in:focus { outline:2px solid var(--rp-accent); outline-offset:1px; border-color:transparent; }
+  .sw-form-dest { display:flex; gap:var(--rp-sp-4); align-items:end; margin-top:var(--rp-sp-4); flex-wrap:wrap; }
+  .sw-chk { display:flex; align-items:center; gap:.4rem; font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+  .sw-form-actions { display:flex; align-items:center; gap:var(--rp-sp-3); margin-top:var(--rp-sp-4); }
+  .sw-form-msg { font-size:var(--rp-text-sm); color:var(--rp-text-dim); }
+  .sw-conn-note { color:var(--rp-text-mute); font-size:var(--rp-text-xs); line-height:1.5; margin:var(--rp-sp-4) 0 0; }
+  .sw-conn-list { display:flex; flex-direction:column; gap:2px; }
+  .sw-conn-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border:1px solid var(--rp-border); border-radius:var(--rp-radius); background:var(--rp-surface); font-size:var(--rp-text-sm); }
+  .sw-conn-row .k { font-size:var(--rp-text-xs); color:var(--rp-text-mute); background:var(--rp-surface-2); padding:1px .4rem; border-radius:5px; }
+  .sw-conn-row .sp2 { flex:1; }
 
   .sw-main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
   /* sidebar — tables + columns */
@@ -126,7 +158,10 @@
 <body>
   <div class="sw-top">
     <span class="sw-brand">Sheet<b>Wise</b></span>
-    <span class="hint mute" style="color:var(--rp-text-mute);font-size:var(--rp-text-xs)">SQL over your files</span>
+    <div class="sw-seg" id="swSeg" role="group" aria-label="View">
+      <button type="button" data-view="sql" aria-pressed="true">SQL</button>
+      <button type="button" data-view="connectors" aria-pressed="false">Connectors</button>
+    </div>
     <span class="sp"></span>
     <div class="sw-themes" role="group" aria-label="Theme">
       <button data-t="new-dark" aria-pressed="true">Dark</button>
@@ -135,7 +170,7 @@
     </div>
   </div>
 
-  <div class="sw-main">
+  <div class="sw-main" id="swViewSql">
     <aside class="sw-side" id="swSide">
       <h2>Sources <span class="sw-h2-note">read from</span></h2>
       <div id="swTables"><p class="mute" style="padding:.5rem;color:var(--rp-text-mute);font-size:var(--rp-text-sm)">Loading…</p></div>
@@ -177,6 +212,49 @@
           <div class="sw-pager" id="swPager"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="sw-conn" id="swViewConnectors" hidden>
+    <div class="sw-conn-wrap">
+      <h2 class="sw-conn-h">Connectors <span class="sw-conn-sub-note">pull external data into a CSV you can query — the live source is never touched</span></h2>
+      <div class="sw-conn-cards" id="swConnCards">
+        <button type="button" class="sw-conn-card is-active" data-conn="mysql"><span class="ico">🛢️</span><span class="nm">MySQL</span><span class="tag">sqlx</span></button>
+        <button type="button" class="sw-conn-card" data-conn="kafka"><span class="ico">⚡</span><span class="nm">Kafka Confluent</span><span class="tag">avro</span></button>
+        <button type="button" class="sw-conn-card" data-conn="csv"><span class="ico">📄</span><span class="nm">CSV upload</span><span class="tag">base</span></button>
+      </div>
+
+      <div class="sw-conn-panel" id="swConnMysql">
+        <h3 class="sw-conn-h3">New MySQL connector</h3>
+        <div class="sw-form-grid">
+          <label class="sw-fl">Host<input id="myHost" class="sw-in" value="127.0.0.1" /></label>
+          <label class="sw-fl">Port<input id="myPort" class="sw-in" value="3306" /></label>
+          <label class="sw-fl">User<input id="myUser" class="sw-in" value="root" /></label>
+          <label class="sw-fl">Password<input id="myPass" class="sw-in" type="password" /></label>
+          <label class="sw-fl">Database<input id="myDb" class="sw-in" placeholder="employees" /></label>
+          <label class="sw-fl">Table<input id="myTable" class="sw-in" placeholder="employees" /></label>
+        </div>
+        <div class="sw-form-dest">
+          <label class="sw-fl">Destination project<select id="myProj" class="sw-in"></select></label>
+          <label class="sw-chk"><input type="checkbox" id="myNewProj" /> New project — named after the database</label>
+        </div>
+        <div class="sw-form-actions">
+          <span class="sw-form-msg" id="myMsg"></span>
+          <span class="sp"></span>
+          <button class="sw-btn sw-btn--accent" id="myCreate">▶ Create &amp; Pull</button>
+        </div>
+        <p class="sw-conn-note">The table is copied to a CSV in your project; SheetWise SQL runs on that copy. The live MySQL is read-only — re-pull anytime.</p>
+      </div>
+
+      <div class="sw-conn-panel" id="swConnKafka" hidden>
+        <p class="sw-conn-note">Kafka Confluent is configured via its connector RC (<code>connectors/kafka-confluent-rc</code>) + the load runner; UI configuration lands here next. It produces a CSV the same way.</p>
+      </div>
+      <div class="sw-conn-panel" id="swConnCsv" hidden>
+        <p class="sw-conn-note">CSV is the base path — upload a file in the workspace and it appears in SheetWise <b>Sources</b> directly.</p>
+      </div>
+
+      <h3 class="sw-conn-h3" style="margin-top:var(--rp-sp-5)">Configured connectors</h3>
+      <div id="swConnList" class="sw-conn-list"><p class="sw-conn-note">None yet — create one above.</p></div>
     </div>
   </div>
 
@@ -369,6 +447,86 @@ async function run(sql) {
 }
 $('#swRun').addEventListener('click', () => run());
 $('#swSave').addEventListener('click', saveTarget);
+
+// ── view switcher: SQL ↔ Connectors ─────────────────────────────────────────
+let connLoaded = false;
+document.querySelectorAll('#swSeg button').forEach(b => b.addEventListener('click', () => {
+  const view = b.dataset.view;
+  document.querySelectorAll('#swSeg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  $('#swViewSql').hidden = view !== 'sql';
+  $('#swViewConnectors').hidden = view !== 'connectors';
+  if (view === 'connectors' && !connLoaded) { connLoaded = true; loadProjects(); loadConnectors(); }
+}));
+document.querySelectorAll('#swConnCards .sw-conn-card').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('#swConnCards .sw-conn-card').forEach(x => x.classList.toggle('is-active', x === c));
+  const k = c.dataset.conn;
+  $('#swConnMysql').hidden = k !== 'mysql';
+  $('#swConnKafka').hidden = k !== 'kafka';
+  $('#swConnCsv').hidden  = k !== 'csv';
+}));
+
+async function loadProjects() {
+  try {
+    const d = await api('/api/projects');
+    const items = d.items || (Array.isArray(d) ? d : []);
+    const sel = $('#myProj'); sel.textContent = '';
+    items.forEach(p => { const o = document.createElement('option'); o.value = p.redpash_id; o.textContent = p.name || p.redpash_id; sel.append(o); });
+    if (!items.length) $('#myNewProj').checked = true;
+  } catch (_) {}
+}
+async function loadConnectors() {
+  const host = $('#swConnList');
+  try {
+    const d = await api('/api/connectors');
+    const items = d.items || [];
+    if (!items.length) { host.innerHTML = '<p class="sw-conn-note">None yet — create one above.</p>'; return; }
+    host.textContent = '';
+    items.forEach(c => {
+      const row = document.createElement('div'); row.className = 'sw-conn-row';
+      const nm = document.createElement('span'); nm.textContent = c.name;
+      const k  = document.createElement('span'); k.className = 'k'; k.textContent = c.kind;
+      const sp = document.createElement('span'); sp.className = 'sp2';
+      const pull = document.createElement('button'); pull.className = 'sw-btn sw-btn--ghost'; pull.textContent = '▶ Pull';
+      pull.addEventListener('click', () => pullConnector(c.redpash_id, pull));
+      row.append(nm, k, sp, pull); host.append(row);
+    });
+  } catch (e) { host.innerHTML = '<p class="sw-conn-note">' + esc(e.message) + '</p>'; }
+}
+async function pullConnector(rid, btn) {
+  const prev = btn.textContent; btn.disabled = true; btn.textContent = '… Pulling';
+  try {
+    await api('/api/connectors/' + encodeURIComponent(rid) + '/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    btn.textContent = '✓ Pulled'; await refreshSources();
+    setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 1800);
+  } catch (e) { btn.textContent = '✗ failed'; console.error('pull', e); setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 2500); }
+}
+$('#myCreate').addEventListener('click', async () => {
+  const msg = $('#myMsg'); const btn = $('#myCreate');
+  const db = ($('#myDb').value || '').trim(), table = ($('#myTable').value || '').trim();
+  if (!db || !table) { msg.textContent = 'Database and table are required.'; return; }
+  btn.disabled = true; btn.textContent = '… Working'; msg.textContent = '';
+  try {
+    let projectId = $('#myProj').value;
+    if ($('#myNewProj').checked || !projectId) {
+      const p = await api('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: db }) });
+      projectId = p.redpash_id || (p.project && p.project.redpash_id);
+    }
+    const config = {
+      host: ($('#myHost').value || '127.0.0.1').trim(), port: Number($('#myPort').value) || 3306,
+      user: ($('#myUser').value || 'root').trim(), password: $('#myPass').value || '', database: db, table,
+    };
+    const con = await api('/api/connectors', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: db + '.' + table, project_id: projectId, kind: 'mysql', config }) });
+    msg.textContent = 'Created — pulling…';
+    try {
+      await api('/api/connectors/' + encodeURIComponent(con.redpash_id) + '/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      msg.textContent = `Pulled "${table}" → a CSV is now in your project. Switch to SQL to query it.`;
+      await refreshSources();
+    } catch (e) { msg.textContent = 'Connector created, but pull failed: ' + e.message; }
+    await loadConnectors();
+  } catch (e) { msg.textContent = 'Error: ' + e.message; }
+  finally { btn.disabled = false; btn.textContent = '▶ Create & Pull'; }
+});
 
 sync();
 loadFiles();

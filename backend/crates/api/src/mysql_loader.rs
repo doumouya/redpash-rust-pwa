@@ -100,7 +100,9 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     .fetch_all(&my)
     .await
     .context("read source schema (information_schema.columns)")?;
-    let columns: Vec<String> = col_rows.iter().map(|r| r.get::<String, _>("column_name")).collect();
+    // by index (the query selects exactly one column) — MySQL 8's information_schema
+    // returns the result column name case-folded, so a name lookup (`column_name`) misses.
+    let columns: Vec<String> = col_rows.iter().map(|r| r.get::<String, _>(0)).collect();
     if columns.is_empty() {
         anyhow::bail!("table {}.{} not found or has no columns", cfg.database, cfg.table);
     }
