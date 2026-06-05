@@ -39,6 +39,7 @@ import { esc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
 import { fmtAge, fmtTime, fmtClock, dayKey, dayLabel } from "/scripts/format.js";
+import { mountActivity } from "/scripts/framework/activity.js"; // rp-activity timeline
 
 // Case-state label vocabulary + done-window filter constants
 // extracted into `cases/labels.js` as slice 6 of the god-object
@@ -1924,18 +1925,17 @@ export default function cases(app, { session }) {
       + '</button>'
     ).join("");
   }
+  // The timeline itself is the shared rp-activity framework component
+  // (mountActivity); this page owns only the filter (ACTIVITY_PILLS) and
+  // hands it the filtered events. Empty-state copy stays filter-aware.
   function renderActivityList(activity) {
     if (!activityList) return;
     const pill = ACTIVITY_PILLS.find((p) => p.key === activityFilter) || ACTIVITY_PILLS[0];
     const filtered = activity.filter(pill.pred);
-    if (!filtered.length) {
-      const msg = activityFilter === "all"
-        ? "No activity yet."
-        : "No activity in this filter.";
-      activityList.innerHTML = '<p class="rt-empty rp-cases-empty">' + msg + '</p>';
-      return;
-    }
-    activityList.innerHTML = filtered.map(activityRow).join("");
+    const empty = activityFilter === "all"
+      ? "No activity yet."
+      : "No activity in this filter.";
+    mountActivity(activityList, { events: filtered, empty });
   }
 
   // Chat-bubble layout — own author right-aligned + accent-soft tint,
@@ -2020,18 +2020,6 @@ export default function cases(app, { session }) {
 
   // dayKey / dayLabel / fmtClock now imported from /scripts/format.js
   // (extracted 2026-05-25 per cases-UI review).
-
-  function activityRow(e) {
-    // Mirrors Monitoring's M-2 userActivityRow shape — same atom,
-    // different kind set. case_* events get a distinct chip per kind.
-    const kindLabel = (e.kind || "").replace(/^case_/, "").replace(/_/g, " ");
-    return ''
-      + '<div class="rp-cases-activity-item">'
-      +   '<span class="rp-cases-activity-time">' + esc(e.occurred_at ? fmtTime(e.occurred_at) : "—") + '</span>'
-      +   '<span class="rp-cases-activity-kind">' + esc(kindLabel || e.kind || "event") + '</span>'
-      +   '<span class="rp-cases-activity-message">' + esc(e.message || "") + '</span>'
-      + '</div>';
-  }
 
   async function patchCase(patch) {
     if (!currentDetailRid) return;
