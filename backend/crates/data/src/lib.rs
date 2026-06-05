@@ -40,6 +40,12 @@ pub mod render;
 pub mod export;
 pub mod clean;
 
+// `sql` — Polars-SQL execution substrate (`SQLContext`). Native-only: the
+// wasm32 polars build carries no `sql` feature yet (Phase 5 of the SQL-redtable
+// plan). See docs/internal/specs/sql-redtable/phase-0-coverage.md.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod sql;
+
 // `wasm` — Phase B wasm-bindgen wrappers (apply_filter / apply_sort /
 // auto_clean / step_preview). Only compiled for wasm32; the server
 // build doesn't see this module. See docs/internal/roadmap-webassembly.md §5.

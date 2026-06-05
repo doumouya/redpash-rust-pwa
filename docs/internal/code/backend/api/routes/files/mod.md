@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/files/mod.rs
 source: ../../../../../../../backend/crates/api/src/routes/files/mod.rs
 owner: Gus
 section: Internal · Code · backend · api · routes · files
-last modified date: 2026-05-31
+last modified date: 2026-06-05
 ---
 
 # mod.rs
@@ -43,6 +43,9 @@ steps on top of the freshly-parsed base.
   [`pipeline::upload_csv`](../../pipeline.md), shared with the Kafka loader and
   future connectors (CAS_A4448B94). The route keeps only the web-only bits: the
   `state.files` hot-frame cache + the `FileEnvelope` response.
+- `sql::execute` (`/:rid/sql`) — `file.view` on the primary file **and** every
+  extra table's `file_id` (each `require_view`). Query-only → view, not Admin.
+  See [sql.md](sql.md).
 
 ## Drift-prone areas
 

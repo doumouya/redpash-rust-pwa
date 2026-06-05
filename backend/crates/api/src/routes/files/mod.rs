@@ -38,6 +38,7 @@ use crate::{db, error::AppError, id, state::{AppState, FileEntry}};
 mod joins;
 mod meta;
 mod output;
+mod sql;
 mod state_ops;
 mod stats;
 
@@ -117,6 +118,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid/encoding", post(meta::set_encoding))
         .route("/:rid/dedup",    get(stats::dedup))
         .route("/:rid/joins",    get(joins::joins).post(joins::create_join))
+        .route("/:rid/sql",      post(sql::execute))
         .route("/:rid/snapshot",  post(output::snapshot))
         .route("/:rid/uniques",   get(stats::uniques))
         .route("/:rid/sentinels", get(stats::sentinels))

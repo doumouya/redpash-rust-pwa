@@ -3,7 +3,7 @@ title: backend/crates/data/src/lib.rs
 source: ../../../../../backend/crates/data/src/lib.rs
 owner: Gus
 section: Internal · Code · backend · data
-last modified date: 2026-05-30
+last modified date: 2026-06-05
 ---
 
 # lib.rs
@@ -19,6 +19,7 @@ directly without spinning up a server.
 ## Public surface
 
 - `pub enum DataError` — enum
+- modules: `encoding` · `parse` · `dtype` · `dedup` · `joins` · `distinct` · `group_by` · `steps` · `stats` · `structure` · `export` · `clean` · `render` (native) · [`sql`](sql.md) (native) · `wasm` (wasm32)
 
 ## Drift-prone areas
 
