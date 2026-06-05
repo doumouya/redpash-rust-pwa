@@ -763,7 +763,7 @@ export default function monitoring(app, { session }) {
     //   rp-list-composite (2 charts + 2×2 stats + 2 charts)
     //   listToolbarHTML (search / refresh / rows / cols / export / history)
     //   listPanel (the canonical rt-table with sortable headers)
-    //   rt-pager
+    //   rp-pager
     // The previous filter panel + rp-surface-body wrapper are gone —
     // Home doesn't have them, so neither does Monitoring. Future
     // per-tab filters land via spec.chipRows (the same path Home
@@ -787,7 +787,7 @@ export default function monitoring(app, { session }) {
       + compositeStripHTML(kpiTiles, stripCharts)
       + listToolbarHTML(toolbarSpec)
       + listPanel(viewSpec.columns)
-      + '<div class="rt-pager" id="rp-mon-list-pager"></div>';
+      + '<div class="rp-pager" id="rp-mon-list-pager"></div>';
 
     // ── chart mount (one path or the other, never both) ─────────
     // userInstances is hoisted to the outer scope so tab-switch +
@@ -912,7 +912,7 @@ export default function monitoring(app, { session }) {
     });
 
     view.querySelector("#rp-mon-list-pager").addEventListener("click", (e) => {
-      const btn = e.target.closest(".rt-pg[data-page]");
+      const btn = e.target.closest(".rp-pg[data-page]");
       if (!btn) return;
       const target = parseInt(btn.dataset.page, 10);
       if (!Number.isFinite(target) || target < 1 || target > listTotalPages || target === listPage) return;

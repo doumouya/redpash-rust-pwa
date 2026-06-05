@@ -39,7 +39,7 @@
 /* designer mode — hide everything data, show the designer toolbar
    and let the designer container own the body. */
 .rp-surface.is-designer-mode .rt-toolbar--data,
-.rp-surface.is-designer-mode .rt-pager,
+.rp-surface.is-designer-mode .rp-pager,
 .rp-surface.is-designer-mode .rt-panel--filter,
 .rp-surface.is-designer-mode .rt-panel--history,
 .rp-surface.is-designer-mode .rt-panel--tools {

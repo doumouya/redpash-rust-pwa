@@ -2141,7 +2141,7 @@ export default function home(app, { session: _session }) {
           : kpiStripHTML(kpiTiles) + chartsStripHTML(extraCharts))
       + (spec.toolbar ? listToolbarHTML(spec.toolbar) : "")
       + listPanel(spec.columns)
-      + '<div class="rt-pager" id="rp-home-list-pager"></div>'
+      + '<div class="rp-pager" id="rp-home-list-pager"></div>'
       // Hide/restore recovery host — paintHomeHiddenSection fills this
       // with a <details class="rt-hidden"> when getHomeHidden(tabKey)
       // is non-empty, else stays empty. Same atom set workspace + cases
@@ -2223,7 +2223,7 @@ export default function home(app, { session: _session }) {
 
     // Wire the pager click handler.
     view.querySelector("#rp-home-list-pager").addEventListener("click", (e) => {
-      const btn = e.target.closest(".rt-pg[data-page]");
+      const btn = e.target.closest(".rp-pg[data-page]");
       if (!btn) return;
       const target = parseInt(btn.dataset.page, 10);
       if (!Number.isFinite(target) || target < 1 || target > listTotalPages || target === listPage) return;

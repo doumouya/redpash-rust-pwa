@@ -59,7 +59,7 @@
 .rp-chip:hover { color: var(--rp-text); }
 .rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
 
-/* /home + /monitoring list-view pagers now use the canonical .rt-pager
+/* /home + /monitoring list-view pagers now use the canonical .rp-pager
    (pager.css) — same class as Workspace. Per [[naming-consistency]]
    2026-05-25 alignment; the previous .rp-list-pager rule was retired. */
 

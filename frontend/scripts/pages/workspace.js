@@ -2973,7 +2973,7 @@ export default function workspace(app, { session }) {
       let prev = 0;
       for (let i = 1; i <= last; i++) {
         if (!want.has(i)) continue;
-        if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
+        if (i - prev > 1) out.push('<span class="rp-pg-gap">…</span>');
         out.push(pgBtn(String(i), i, i === p, false));
         prev = i;
       }
@@ -2982,11 +2982,11 @@ export default function workspace(app, { session }) {
     pagesEl.innerHTML = out.join("");
   }
   function pgBtn(label, page, active, disabled) {
-    return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
+    return '<button class="rp-pg' + (active ? " active" : "") + '" type="button"'
       + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
   }
   pagesEl.addEventListener("click", (e) => {
-    const btn = e.target.closest(".rt-pg[data-page]");
+    const btn = e.target.closest(".rp-pg[data-page]");
     if (!btn) return;
     const target = parseInt(btn.dataset.page, 10);
     if (!Number.isFinite(target) || target < 1 || target > totalPages || target === currentPage) return;

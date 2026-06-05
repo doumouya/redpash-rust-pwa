@@ -17,7 +17,7 @@
      .rp-surface       (flex: 1, min-height: 0, flex column)
        → .rt-table-wrap  (flex: 1, min-height: 0, overflow: auto)
                          claims remaining height from table.css:13
-     → .rt-pager       (natural height, sits below the wrap)
+     → .rp-pager       (natural height, sits below the wrap)
    The previous rp-surface-body wrapper rule + the pager
    margin-top:auto safety-net are gone — both were workarounds
    for the filter-panel wrapper that's no longer in the render

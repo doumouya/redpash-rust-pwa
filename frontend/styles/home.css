@@ -13,7 +13,7 @@
            → composite-strip       (fixed-height)
            → .rt-toolbar           (fixed-height)
            → .rt-table-wrap        (flex: 1 — fills the rest)
-           → .rt-pager             (fixed-height) */
+           → .rp-pager             (fixed-height) */
 
 /* Inner padding on the surface — Em 2026-05-25 ask. 0.875rem matches
    the .rp-main padding on the outer side, so the content sits with a

@@ -664,7 +664,7 @@ export function wireListColumnsExport(view, opts) {
 // Single pager button. Disabled buttons drop the data-page attr so
 // the delegated click handler skips them naturally.
 export function pagerBtn(label, page, active, disabled) {
-  return '<button class="rt-pg' + (active ? " active" : "") + '" type="button"'
+  return '<button class="rp-pg' + (active ? " active" : "") + '" type="button"'
     + (disabled ? " disabled" : ' data-page="' + page + '"') + ">" + label + "</button>";
 }
 
@@ -687,8 +687,8 @@ export function setKpi(view, id, val) {
 //   pageSize?: number // rows-per-page (so we can compute the X–Y range)
 // }
 // Elides middle pages when totalPages > 7 (1, …, neighbours, …, N).
-// Emits the Workspace-parity shape: .rt-rows-info on the left (uses
-// `margin-right: auto` in pager.css to push the pages right) + .rt-pages
+// Emits the Workspace-parity shape: .rp-rows-info on the left (uses
+// `margin-right: auto` in pager.css to push the pages right) + .rp-pages
 // on the right. When the optional fields are absent, the rows-info
 // renders empty so the pages still anchor right via flex-end.
 export function renderListPager(view, pagerId, state) {
@@ -717,14 +717,14 @@ export function renderListPager(view, pagerId, state) {
     let prev = 0;
     for (let i = 1; i <= last; i++) {
       if (!want.has(i)) continue;
-      if (i - prev > 1) out.push('<span class="rt-pg-gap">…</span>');
+      if (i - prev > 1) out.push('<span class="rp-pg-gap">…</span>');
       out.push(pagerBtn(String(i), i, i === p, false));
       prev = i;
     }
   }
   out.push(pagerBtn("›", p + 1, false, p === last));
-  el.innerHTML = '<span class="rt-rows-info">' + esc(info) + '</span>'
-    + '<div class="rt-pages">' + out.join("") + '</div>';
+  el.innerHTML = '<span class="rp-rows-info">' + esc(info) + '</span>'
+    + '<div class="rp-pages">' + out.join("") + '</div>';
 }
 
 // ── chart lifecycle ─────────────────────────────────────────────

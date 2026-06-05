@@ -21,7 +21,7 @@
 .rp-surface.is-landing-mode .rt-toolbar--data,
 .rp-surface.is-landing-mode .rt-toolbar--designer,
 .rp-surface.is-landing-mode .rp-surface-body,
-.rp-surface.is-landing-mode .rt-pager {
+.rp-surface.is-landing-mode .rp-pager {
   display: none !important;
 }
 /* Landing mode → the surface is a 3-row overview (.rp-overview rows,

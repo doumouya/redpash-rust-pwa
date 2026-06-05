@@ -7,8 +7,8 @@
 //   - workspace.js renderPager()/pgBtn() — closure state, emitted only the
 //     pages into #wsPages (rows-info lived in a separate #wsRowsLabel).
 //   - list-page.js renderListPager()/pagerBtn() — took a {page,totalPages,
-//     total,shown,pageSize} state object, emitted BOTH the rt-rows-info span
-//     and the rt-pages div.
+//     total,shown,pageSize} state object, emitted BOTH the rp-rows-info span
+//     and the rp-pages div.
 // Both shared the SAME window+ellipsis algorithm (≤7 pages: show all; else
 // {1, last, p-1, p, p+1} with `…` gaps). mountPager keeps that algorithm
 // verbatim and emits the list-page.js shape (rows-info span + rp-pages div),
@@ -21,7 +21,7 @@
 //
 // Composes, not duplicates:
 //   - .rp-pager / .rp-rows-info / .rp-pages / .rp-pg / .rp-pg-gap (pager.css),
-//     ported verbatim from the rt-pager family.
+//     ported verbatim from the rp-pager family.
 "use strict";
 
 import { register } from "/scripts/framework/component-registry.js";
