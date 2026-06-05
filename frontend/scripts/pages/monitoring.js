@@ -47,7 +47,7 @@ import { chartsForTab } from "/scripts/charts/monitoring-bank.js";
 
 export default function monitoring(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "monitoring", session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "", session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "", session });
 
   const nav     = app.querySelector("#rpMonNav");
   const navBody = app.querySelector("#rpMonNavBody");
@@ -86,7 +86,7 @@ export default function monitoring(app, { session }) {
       title: "Events",
       endpoint: "/monitoring/events",
       useWindow: true,
-      // Object-form column specs (Em 2026-05-25) so the rt-table headers
+      // Object-form column specs (Em 2026-05-25) so the rp-table headers
       // render as sortable chevron-clicks like Home. `key` matches the
       // backend field for ?sort=. Backend support for /monitoring/events
       // ?sort= is queued for Gus — until it lands the chevron flips but
@@ -144,7 +144,7 @@ export default function monitoring(app, { session }) {
       row: (r) =>
         '<tr>'
         + '<td>' + fmtTime(r.ran_at) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(r.tool) + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(r.tool) + '</span></td>'
         + '<td>' + (r.git_sha ? '<code>' + esc(String(r.git_sha).slice(0, 7)) + '</code>' : "—") + '</td>'
         + '<td>' + esc(r.git_branch || "—") + '</td>'
         + '<td>' + summarizeStats(r.stats) + '</td>'
@@ -164,7 +164,7 @@ export default function monitoring(app, { session }) {
       row: (f) =>
         '<tr>'
         + '<td class="is-num">#' + f.run_id + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(f.tool) + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(f.tool) + '</span></td>'
         + '<td>' + esc(f.kind) + '</td>'
         + '<td>' + esc(f.finding_key) + '</td>'
         + '<td class="is-num">' + (f.severity != null ? f.severity : "—") + '</td>'
@@ -215,9 +215,9 @@ export default function monitoring(app, { session }) {
         '<tr>'
         + '<td>' + esc(s.file_filename) + '</td>'
         + '<td class="is-num">' + s.ordinal + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(s.kind) + '</span></td>'
-        + '<td>' + (s.applied ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
-                              : '<span class="rt-mono-pill">no</span>') + '</td>'
+        + '<td><span class="rp-mono-pill">' + esc(s.kind) + '</span></td>'
+        + '<td>' + (s.applied ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
+                              : '<span class="rp-mono-pill">no</span>') + '</td>'
         + '<td>' + fmtTime(s.created_at) + '</td>'
         + '</tr>',
     },
@@ -244,11 +244,11 @@ export default function monitoring(app, { session }) {
       row: (f) =>
         '<tr>'
         + '<td>' + esc(f.object || "—") + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(f.field || "—") + '</span></td>'
-        + '<td>' + (f.is_editable ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
-                                  : '<span class="rt-mono-pill">no</span>') + '</td>'
-        + '<td>' + (f.is_sortable ? '<span class="rt-mono-pill rt-tone--low">yes</span>'
-                                  : '<span class="rt-mono-pill">no</span>') + '</td>'
+        + '<td><span class="rp-mono-pill">' + esc(f.field || "—") + '</span></td>'
+        + '<td>' + (f.is_editable ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
+                                  : '<span class="rp-mono-pill">no</span>') + '</td>'
+        + '<td>' + (f.is_sortable ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
+                                  : '<span class="rp-mono-pill">no</span>') + '</td>'
         + '<td>' + accessChip(f.owner)  + '</td>'
         + '<td>' + accessChip(f.admin)  + '</td>'
         + '<td>' + accessChip(f.member) + '</td>'
@@ -280,7 +280,7 @@ export default function monitoring(app, { session }) {
       ],
       row: (t) => {
         const sev = (n, tone) => '<td class="is-num">'
-          + (n > 0 ? '<span class="rt-mono-pill ' + tone + '">' + n + '</span>' : '—')
+          + (n > 0 ? '<span class="rp-mono-pill ' + tone + '">' + n + '</span>' : '—')
           + '</td>';
         const diff = (n) => '<td class="is-num">'
           + (typeof n === 'number' ? (n > 0 ? '+' + n : String(n)) : '—')
@@ -288,12 +288,12 @@ export default function monitoring(app, { session }) {
         const f = t.findings || {};
         const d = t.diff || {};
         return '<tr>'
-          + '<td><span class="rt-mono-pill">' + esc(t.tool || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(t.tool || "—") + '</span></td>'
           + '<td>' + (t.ran_at ? fmtTime(t.ran_at) : '—') + '</td>'
           + '<td class="is-num">' + (f.total || 0) + '</td>'
-          + sev(f.high || 0, 'rt-tone--high')
-          + sev(f.med  || 0, 'rt-tone--mid')
-          + sev(f.low  || 0, 'rt-tone--low')
+          + sev(f.high || 0, 'rp-tone-high')
+          + sev(f.med  || 0, 'rp-tone-mid')
+          + sev(f.low  || 0, 'rp-tone-low')
           + diff(d.new)
           + diff(d.regressed)
           + diff(d.improved)
@@ -319,8 +319,8 @@ export default function monitoring(app, { session }) {
         + '<td class="is-num">' + (r.duration_ms != null ? r.duration_ms + 'ms' : '—') + '</td>'
         + '<td class="is-num">' + (r.rows != null ? r.rows : '—') + '</td>'
         + '<td>' + (r.status
-            ? '<span class="rt-mono-pill">error</span>'
-            : '<span class="rt-mono-pill rt-tone--low">ok</span>') + '</td>'
+            ? '<span class="rp-mono-pill">error</span>'
+            : '<span class="rp-mono-pill rp-tone-low">ok</span>') + '</td>'
         + '<td><code>' + esc(r.query_template) + '</code></td>'
         + '<td>' + esc(r.route || '—') + '</td>'
         + '</tr>',
@@ -400,7 +400,7 @@ export default function monitoring(app, { session }) {
   // ─── rail collapse + Monitoring ↔ Admin Console switcher ────
   mountRailCollapse(nav, app.querySelector("#rpMonNavCollapse"));
   // Same mechanism as Workspace's Data ↔ Dashboard (mountRailSeg →
-  // data-rail-view on .rt-nav → CSS hides the off-surface groups). The
+  // data-rail-view on .rp-rail → CSS hides the off-surface groups). The
   // Admin Console surface is platform-admin-only: a non-admin can't
   // select it (coerced back to "monitoring") and never sees the button
   // (CSS gate on .rp-mon-admin). CAS_274EDF3B.
@@ -427,28 +427,28 @@ export default function monitoring(app, { session }) {
 
   // ─── rail click delegation ───────────────────────────────────
   navBody.addEventListener("click", (e) => {
-    const head = e.target.closest(".rt-group-head");
-    if (head) { head.closest(".rt-group").classList.toggle("expanded"); return; }
+    const head = e.target.closest(".rp-rail-group-head");
+    if (head) { head.closest(".rp-rail-group").classList.toggle("expanded"); return; }
     // Hide × — declutters the rail (pref write + re-render), never a
     // data cut. Caught before the tab branch + returns per Invariant 2
     // so the click doesn't also activate the tab it's removing.
-    const hideBtn = e.target.closest(".rt-tab-close");
+    const hideBtn = e.target.closest(".rp-rail-tab-hide");
     if (hideBtn) {
       e.stopPropagation();
-      const tab = hideBtn.closest(".rt-tab");
+      const tab = hideBtn.closest(".rp-rail-tab");
       if (tab?.dataset.key) onHideTab(tab.dataset.key);
       return;
     }
     // Recovery item — restore the tab (drop from pref + re-render). The
     // body view is untouched; reapplyActive re-marks the live tab.
-    const restoreItem = e.target.closest(".rt-hidden-item");
+    const restoreItem = e.target.closest(".rp-rail-hidden-item");
     if (restoreItem?.dataset.key) {
       unhideTab(restoreItem.dataset.key);
       renderRail();
       reapplyActive();
       return;
     }
-    const tab = e.target.closest(".rt-tab");
+    const tab = e.target.closest(".rp-rail-tab");
     if (tab && tab.dataset.key) activate(tab.dataset.key);
   });
 
@@ -466,21 +466,21 @@ export default function monitoring(app, { session }) {
     let html = groups.map((g) => renderGroup(g, hidden)).join("");
     html += renderHiddenTabsSection();
     navBody.innerHTML = html;
-    navBody.querySelectorAll(".rt-group").forEach((g) => g.classList.add("expanded"));
+    navBody.querySelectorAll(".rp-rail-group").forEach((g) => g.classList.add("expanded"));
   }
   function renderGroup(g, hidden) {
     const tabs = MON_TABS.filter((t) => t.group === g.name && !hidden.has(t.key));
     // Whole group hidden → drop the section header too (no empty groups).
     if (!tabs.length) return "";
     return ''
-      + '<div class="rt-group" data-surface="' + esc(g.surface || "monitoring") + '">'
-      +   '<button class="rt-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rt-group-caret"></i>'
-      +     '<span class="rt-group-mark" data-c="' + g.color + '">' + g.mark + '</span>'
-      +     '<span class="rt-group-name">' + esc(g.name) + '</span>'
-      +     '<span class="rt-group-count">' + tabs.length + '</span>'
+      + '<div class="rp-rail-group" data-surface="' + esc(g.surface || "monitoring") + '">'
+      +   '<button class="rp-rail-group-head" type="button">'
+      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
+      +     '<span class="rp-rail-group-mark" data-c="' + g.color + '">' + g.mark + '</span>'
+      +     '<span class="rp-rail-group-name">' + esc(g.name) + '</span>'
+      +     '<span class="rp-rail-group-count">' + tabs.length + '</span>'
       +   '</button>'
-      +   '<div class="rt-group-body">' + tabs.map(renderTab).join("") + '</div>'
+      +   '<div class="rp-rail-group-body">' + tabs.map(renderTab).join("") + '</div>'
       + '</div>';
   }
   function renderTab(t) {
@@ -490,26 +490,26 @@ export default function monitoring(app, { session }) {
     // Hide × only on wired tabs — disabled tabs swallow child clicks, and
     // the "coming soon" placeholders are meant to stay visible anyway.
     return ''
-      + '<button class="rt-tab" type="button"' + attrs + '>'
-      +   '<i class="' + esc(t.icon) + ' rt-tab-icon"></i>'
-      +   '<span class="rt-tab-name">' + esc(t.label) + '</span>'
-      +   (t.wired ? '<span class="rt-tab-close" title="Hide from rail"><i class="bi bi-x"></i></span>' : '')
+      + '<button class="rp-rail-tab" type="button"' + attrs + '>'
+      +   '<i class="' + esc(t.icon) + ' rp-rail-tab-icon"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(t.label) + '</span>'
+      +   (t.wired ? '<span class="rp-rail-tab-hide" title="Hide from rail"><i class="bi bi-x"></i></span>' : '')
       + '</button>';
   }
   function renderHiddenTabsSection() {
     const hidden = getHiddenTabs();
     if (!hidden.length) return "";
     const items = hidden.map((h) =>
-      '<button class="rt-hidden-item" type="button" data-key="' + esc(h.key) + '">'
-      +   '<span class="rt-hidden-name">' + esc(h.label || h.key) + '</span>'
-      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      '<button class="rp-rail-hidden-item" type="button" data-key="' + esc(h.key) + '">'
+      +   '<span class="rp-rail-hidden-name">' + esc(h.label || h.key) + '</span>'
+      +   '<i class="bi bi-arrow-counterclockwise rp-rail-hidden-restore" title="Restore"></i>'
       + '</button>'
     ).join("");
-    return '<details class="rt-hidden">'
-      +   '<summary class="rt-hidden-summary">'
+    return '<details class="rp-rail-hidden">'
+      +   '<summary class="rp-rail-hidden-summary">'
       +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
       +   '</summary>'
-      +   '<div class="rt-hidden-body">' + items + '</div>'
+      +   '<div class="rp-rail-hidden-body">' + items + '</div>'
       + '</details>';
   }
   // First still-visible wired tab, preferring the default — used as the
@@ -521,7 +521,7 @@ export default function monitoring(app, { session }) {
   }
   function reapplyActive() {
     if (!activeTabKey) return;
-    navBody.querySelector('.rt-tab[data-key="' + cssEsc(activeTabKey) + '"]')?.classList.add("active");
+    navBody.querySelector('.rp-rail-tab[data-key="' + cssEsc(activeTabKey) + '"]')?.classList.add("active");
   }
   function onHideTab(key) {
     const meta = MON_TABS.find((t) => t.key === key);
@@ -543,8 +543,8 @@ export default function monitoring(app, { session }) {
     const tab = (requested && requested.wired)
       ? requested
       : MON_TABS.find((t) => t.key === MON_DEFAULT_TAB);
-    navBody.querySelectorAll(".rt-tab.active").forEach((t) => t.classList.remove("active"));
-    const btn = navBody.querySelector('.rt-tab[data-key="' + cssEsc(tab.key) + '"]');
+    navBody.querySelectorAll(".rp-rail-tab.active").forEach((t) => t.classList.remove("active"));
+    const btn = navBody.querySelector('.rp-rail-tab[data-key="' + cssEsc(tab.key) + '"]');
     if (btn) btn.classList.add("active");
     activeTabKey = tab.key;
     renderTabBody(tab);
@@ -565,7 +565,7 @@ export default function monitoring(app, { session }) {
     const clickable = r.request_id ? ' class="rp-mon-row-clickable" data-request-id="' + esc(r.request_id) + '"' : '';
     return '<tr' + clickable + '>'
       + '<td>' + fmtTime(r.at) + '</td>'
-      + '<td><span class="rt-mono-pill">' + esc(r.method) + '</span></td>'
+      + '<td><span class="rp-mono-pill">' + esc(r.method) + '</span></td>'
       + '<td class="is-num ' + statusBand(r.status) + '">' + r.status + '</td>'
       + '<td>' + esc(r.route) + '</td>'
       + '<td class="is-num">' + r.duration_ms + 'ms</td>'
@@ -595,7 +595,7 @@ export default function monitoring(app, { session }) {
       + '<div class="rp-modal-body" role="dialog" aria-modal="true" aria-labelledby="rp-mon-modal-title">'
       +   '<header class="rp-modal-head">'
       +     '<h3 id="rp-mon-modal-title" class="rp-modal-title">Request <code class="rp-mon-modal-id">' + esc(requestId) + '</code></h3>'
-      +     '<button type="button" class="rt-icon-btn rp-modal-close" aria-label="Close">' +
+      +     '<button type="button" class="rp-btn-icon rp-btn-icon--sq rp-modal-close" aria-label="Close">' +
                 '<i class="bi bi-x-lg"></i></button>'
       +   '</header>'
       +   '<div class="rp-modal-content" id="rp-mon-modal-content">'
@@ -654,7 +654,7 @@ export default function monitoring(app, { session }) {
     const reqLine = req
       ? '<section class="rp-mon-modal-request">'
         + '<div class="rp-mon-modal-request-row">'
-        +   '<span class="rt-mono-pill">' + esc(req.method || "?") + '</span>'
+        +   '<span class="rp-mono-pill">' + esc(req.method || "?") + '</span>'
         +   '<span class="is-num ' + statusBand(req.status) + '">' + (req.status || "?") + '</span>'
         +   '<span class="rp-mon-modal-route">' + esc(req.route || "—") + '</span>'
         +   '<span class="rp-mon-modal-meta">' + (req.duration_ms ?? "?") + 'ms · ' + fmtTime(req.at) + '</span>'
@@ -670,9 +670,9 @@ export default function monitoring(app, { session }) {
     return reqLine
       + '<section class="rp-mon-modal-timeline">'
       +   '<h4 class="rp-title">'
-      +     'Timeline <span class="rt-card-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
+      +     'Timeline <span class="rp-card-hint">' + events.length + ' event' + (events.length === 1 ? '' : 's') + '</span>'
       +   '</h4>'
-      +   '<table class="rt-table">'
+      +   '<table class="rp-table">'
       +     '<thead><tr><th>Time</th><th>Level</th><th>Kind</th><th>Message</th></tr></thead>'
       +     '<tbody>' + events.map(eventTimelineRow).join("") + '</tbody>'
       +   '</table>'
@@ -705,10 +705,10 @@ export default function monitoring(app, { session }) {
 
   function statusBand(status) {
     const code = status | 0;
-    if (code >= 500) return "rt-tone--high";
-    if (code >= 400) return "rt-tone--mid";
+    if (code >= 500) return "rp-tone-high";
+    if (code >= 400) return "rp-tone-mid";
     if (code >= 300) return "";
-    return "rt-tone--low";
+    return "rp-tone-low";
   }
 
   // ─── list-view tabs (Requests / Events / Runs / Findings / Steps) ─
@@ -762,7 +762,7 @@ export default function monitoring(app, { session }) {
     //   rp-chip-row (window chips for time-windowed tabs)
     //   rp-list-composite (2 charts + 2×2 stats + 2 charts)
     //   listToolbarHTML (search / refresh / rows / cols / export / history)
-    //   listPanel (the canonical rt-table with sortable headers)
+    //   listPanel (the canonical rp-table with sortable headers)
     //   rp-pager
     // The previous filter panel + rp-surface-body wrapper are gone —
     // Home doesn't have them, so neither does Monitoring. Future
@@ -849,9 +849,9 @@ export default function monitoring(app, { session }) {
     view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", (e) => {
       const icon = e.currentTarget.querySelector("i");
       if (icon) {
-        icon.classList.remove("rt-spinning");
+        icon.classList.remove("rp-toolbar-spin", "is-spinning");
         void icon.offsetWidth;
-        icon.classList.add("rt-spinning");
+        icon.classList.add("rp-toolbar-spin", "is-spinning");
       }
       fetchList(viewSpec);
     });
@@ -861,12 +861,12 @@ export default function monitoring(app, { session }) {
       const lbl = view.querySelector("#rp-list-toolbar-rows-label");
       if (lbl) lbl.textContent = raw + " rows";
       if (rowsDd) {
-        rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
+        rowsDd.querySelectorAll(".rp-menu-item").forEach((i) => {
           i.classList.remove("selected");
           const t = i.querySelector(".tick"); if (t) t.remove();
         });
-        const sel = rowsDd.querySelector('.rt-dd-item[data-rows="' + raw + '"]')
-          || rowsDd.querySelector('.rt-dd-item[data-rows="25"]');
+        const sel = rowsDd.querySelector('.rp-menu-item[data-rows="' + raw + '"]')
+          || rowsDd.querySelector('.rp-menu-item[data-rows="25"]');
         if (sel) {
           sel.classList.add("selected");
           sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
@@ -875,7 +875,7 @@ export default function monitoring(app, { session }) {
     }
     syncRowsLabel();
     rowsDd?.addEventListener("click", (e) => {
-      const item = e.target.closest(".rt-dd-item");
+      const item = e.target.closest(".rp-menu-item");
       if (!item) return;
       setPref("monitoring-rowsPerPage", item.dataset.rows);
       listPage = 1;
@@ -1025,9 +1025,9 @@ export default function monitoring(app, { session }) {
     userActivityPick = null;
     view.innerHTML = ''
       + headHTML("Per-user activity", "")
-      + '<section class="rt-card">'
+      + '<section class="rp-card">'
       +   '<div class="rp-mon-user-picker-shell">'
-      +     '<label for="rp-mon-user-input" class="rt-field-lbl">User</label>'
+      +     '<label for="rp-mon-user-input" class="rp-label">User</label>'
       +     '<div class="rp-user-picker-wrap">'
       +       '<input id="rp-mon-user-input" type="text" autocomplete="off" '
       +         'placeholder="Search by username, display name, or email…" />'
@@ -1038,12 +1038,12 @@ export default function monitoring(app, { session }) {
       +     '</span>'
       +   '</div>'
       + '</section>'
-      + '<section class="rt-card" id="rp-mon-user-activity" hidden>'
-      +   '<div class="rt-card-head">'
-      +     '<h3 class="rt-card-title" id="rp-mon-user-activity-title">Activity</h3>'
-      +     '<span class="rt-card-hint" id="rp-mon-user-activity-count">—</span>'
+      + '<section class="rp-card" id="rp-mon-user-activity" hidden>'
+      +   '<div class="rp-card-head">'
+      +     '<h3 class="rp-card-title" id="rp-mon-user-activity-title">Activity</h3>'
+      +     '<span class="rp-card-hint" id="rp-mon-user-activity-count">—</span>'
       +   '</div>'
-      +   '<table class="rt-table">'
+      +   '<table class="rp-table">'
       +     '<thead><tr><th>Time</th><th>Type</th><th>Detail</th><th class="is-num">Status / Level</th></tr></thead>'
       +     '<tbody id="rp-mon-user-activity-tbody"></tbody>'
       +   '</table>'
@@ -1231,9 +1231,9 @@ export default function monitoring(app, { session }) {
         : '';
       return '<tr' + clickable + '>'
         + '<td>' + fmtTime(item.at) + '</td>'
-        + '<td><span class="rt-mono-pill">REQ</span></td>'
+        + '<td><span class="rp-mono-pill">REQ</span></td>'
         + '<td>'
-        +   '<span class="rt-mono-pill">' + esc(item.kind) + '</span>'
+        +   '<span class="rp-mono-pill">' + esc(item.kind) + '</span>'
         +   ' <span class="rp-mon-modal-meta">' + (ctx.duration_ms ?? "?") + 'ms</span>'
         + '</td>'
         + '<td class="is-num ' + statusBand(status) + '">' + (item.summary || "?") + '</td>'
@@ -1251,7 +1251,7 @@ export default function monitoring(app, { session }) {
     const primary = '<tr' + (expandable ? ' class="rp-mon-row-expandable"' : '') + '>'
       + '<td>' + (expandable ? '<i class="bi bi-chevron-right rp-mon-row-caret"></i> ' : '')
         + fmtTime(item.at) + '</td>'
-      + '<td><span class="rt-mono-pill" title="' + esc(item.kind) + '">' + esc(meta.cat) + '</span></td>'
+      + '<td><span class="rp-mono-pill" title="' + esc(item.kind) + '">' + esc(meta.cat) + '</span></td>'
       + '<td>'
       +   '<i class="bi bi-' + esc(meta.icon) + ' rp-mon-act-icon"></i> '
       +   '<span class="rp-mon-act-label">' + esc(meta.label) + '</span>'
@@ -1390,8 +1390,8 @@ export default function monitoring(app, { session }) {
   }
 
   function catTablePanel() {
-    return '<section class="rt-card">'
-      + '<table class="rt-table">'
+    return '<section class="rp-card">'
+      + '<table class="rp-table">'
       +   '<thead><tr>'
       +     '<th>Name</th>'
       +     '<th>Parent</th>'
@@ -1446,8 +1446,8 @@ export default function monitoring(app, { session }) {
     return '<tr>'
       + '<td>' + (isChild ? "↳ " : "") + esc(c.name) + '</td>'
       + '<td>' + esc(parentName) + '</td>'
-      + '<td><span class="rt-mono-pill">' + esc(scope) + '</span></td>'
-      + '<td><span class="rt-mono-pill">' + esc(c.redpash_id) + '</span></td>'
+      + '<td><span class="rp-mono-pill">' + esc(scope) + '</span></td>'
+      + '<td><span class="rp-mono-pill">' + esc(c.redpash_id) + '</span></td>'
       + '<td>' + fmtTime(c.created_at) + '</td>'
       + '</tr>';
   }
@@ -1469,7 +1469,7 @@ export default function monitoring(app, { session }) {
       + '<td>' + esc(r.subsystem) + '</td>'
       + '<td>' + esc(r.phase) + '</td>'
       + '<td>' + esc(r.current_cost) + '</td>'
-      + '<td class="is-num ' + (r.tipped === true ? "rt-tone--high" : "") + '">'
+      + '<td class="is-num ' + (r.tipped === true ? "rp-tone-high" : "") + '">'
       +   fmtMeasurement(r.current_value, r.threshold_unit)
       + '</td>'
       + '<td class="is-num">' + fmtMeasurement(r.threshold_value, r.threshold_unit) + '</td>'
@@ -1487,8 +1487,8 @@ export default function monitoring(app, { session }) {
   }
 
   function optTablePanel() {
-    return '<section class="rt-card">'
-      + '<table class="rt-table">'
+    return '<section class="rp-card">'
+      + '<table class="rp-table">'
       +   '<thead><tr>'
       +     '<th>Subsystem</th>'
       +     '<th>Phase</th>'
@@ -1556,19 +1556,19 @@ export default function monitoring(app, { session }) {
   // = dim. Matches the backend's GET /api/admin/fields cell shape.
   function accessChip(value) {
     const v = String(value || "none").toLowerCase();
-    const tone = v === "write" ? "rt-tone--high"
-               : v === "read"  ? "rt-tone--mid"
+    const tone = v === "write" ? "rp-tone-high"
+               : v === "read"  ? "rp-tone-mid"
                : "rp-meta";
     if (v === "none" || v === "" || v === "—") return '<span class="rp-meta">—</span>';
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(v) + '</span>';
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(v) + '</span>';
   }
   function levelChip(level) {
     const v = String(level || "").toLowerCase();
-    const cls = v === "error" || v === "err" || v === "panic" ? "rt-tone--high"
-              : v === "warn"  || v === "warning"              ? "rt-tone--mid"
-              : v === "info"  || v === "debug" || v === "trace" ? "rt-tone--low"
+    const cls = v === "error" || v === "err" || v === "panic" ? "rp-tone-high"
+              : v === "warn"  || v === "warning"              ? "rp-tone-mid"
+              : v === "info"  || v === "debug" || v === "trace" ? "rp-tone-low"
               : "";
-    return '<span class="rt-mono-pill ' + cls + '">' + esc(level || "—") + '</span>';
+    return '<span class="rp-mono-pill ' + cls + '">' + esc(level || "—") + '</span>';
   }
   function summarizeStats(stats) {
     if (!stats || typeof stats !== "object") return "—";

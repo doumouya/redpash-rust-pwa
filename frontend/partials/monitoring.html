@@ -11,20 +11,20 @@
   <div class="rp-shell-body">
 
     <!-- ════ rail — static groups (REQUESTS + AUDITS) ════ -->
-    <aside class="rt-nav" id="rpMonNav">
-      <div class="rt-nav-head">
-        <span class="rt-nav-title">Telemetry</span>
-        <button class="rt-btn" id="rpMonNavCollapse" type="button" title="Collapse">
+    <aside class="rp-rail" id="rpMonNav">
+      <div class="rp-rail-head">
+        <span class="rp-rail-title">Telemetry</span>
+        <button class="rp-btn-icon" id="rpMonNavCollapse" type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
         </button>
       </div>
-      <!-- View switcher (reuses the .rt-seg--rail atom, same as Workspace's
+      <!-- View switcher (the rp-rail-views seg track, same as Workspace's
            Data ↔ Dashboard toggle). Flips the rail between SYSTEM
            observability groups and the Admin Console (org management).
            Persisted via `monitoring-railView`. The Admin Console button is
-           platform-admin-only — hidden on .rt-nav without .rp-mon-admin
+           platform-admin-only — hidden on .rp-rail without .rp-mon-admin
            (monitoring.js sets it once /api/me lands). CAS_274EDF3B. -->
-      <div class="rt-seg rt-seg--rail rt-nav-views" id="rpMonRailView">
+      <div class="rp-rail-views" id="rpMonRailView">
         <button type="button" class="is-active" data-rail-seg="monitoring"
                 title="System observability — requests, audits, optimization, activity">
           <i class="bi bi-activity"></i> Monitoring
@@ -34,8 +34,8 @@
           <i class="bi bi-sliders"></i> Admin Console
         </button>
       </div>
-      <div class="rt-nav-body" id="rpMonNavBody"></div>
-      <div class="rt-nav-foot"><!-- rail footer nav mounted by monitoring.js --></div>
+      <div class="rp-rail-body" id="rpMonNavBody"></div>
+      <div class="rp-rail-footer"><!-- rail footer nav mounted by monitoring.js --></div>
     </aside>
 
     <!-- ════ main — body view per active tab ════

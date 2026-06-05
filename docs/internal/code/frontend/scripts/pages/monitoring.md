@@ -3,14 +3,14 @@ title: frontend/scripts/pages/monitoring.js
 source: ../../../../../frontend/scripts/pages/monitoring.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-05-30
+last modified date: 2026-06-05
 ---
 
 # monitoring.js
 
 ## Purpose
 
-Monitoring — the system telemetry surface. Same shell pattern as Home (rail + body). The rail is split into two top-level surfaces by a `mountRailSeg` switcher (`#rpMonRailView`, `monitoring-railView` pref) — the same Data ↔ Dashboard mechanism Workspace uses (CAS_274EDF3B): **Monitoring** (system observability — REQUESTS / AUDITS / OPTIMIZATION / USERS / CATALOG) and **Admin Console** (org management — the ADMIN group, platform-admin-only). The switcher flips `data-rail-view` on `.rt-nav`; `rail.css` hides the off-surface groups (by `data-surface`, stamped per group in `renderGroup`). The Admin Console button is hidden until `/me` confirms `is_platform_admin` (`.rp-mon-admin` on the nav), and a non-admin's saved "admin" pref is coerced back to "monitoring".
+Monitoring — the system telemetry surface. Same shell pattern as Home (rail + body). The rail is split into two top-level surfaces by a `mountRailSeg` switcher (`#rpMonRailView`, `monitoring-railView` pref) — the same Data ↔ Dashboard mechanism Workspace uses (CAS_274EDF3B): **Monitoring** (system observability — REQUESTS / AUDITS / OPTIMIZATION / USERS / CATALOG) and **Admin Console** (org management — the ADMIN group, platform-admin-only). The switcher flips `data-rail-view` on `.rp-rail`; **monitoring.css**'s re-authored `rp-rail` composition rules hide the off-surface groups (by `data-surface`, stamped per group in `renderGroup`). The Admin Console button is hidden until `/me` confirms `is_platform_admin` (`.rp-mon-admin` on the nav), and a non-admin's saved "admin" pref is coerced back to "monitoring".
 
 ## Public surface
 
@@ -20,6 +20,16 @@ Monitoring — the system telemetry surface. Same shell pattern as Home (rail + 
 
 ## Drift-prone areas
 
+- **Design-language rollout — fully migrated to framework atoms (2026-06-05).** This page is
+  `rt-*`-clean (rail `rp-rail*`, tables `rp-table`, mono labels `rp-mono-pill`, severity `rp-tone-low/mid/high`
+  — note the **single** hyphen, was `rt-tone--*`, the rename trap — cards `rp-card*`, rows-dropdown `rp-menu-item`,
+  field label `rp-label`, modal-close `rp-btn-icon rp-btn-icon--sq`). Markup + the JS-rendered rail/tables move
+  in lockstep. The refresh **spinner** toggles `rp-toolbar-spin is-spinning` together (the framework split the
+  legacy single `.rt-spinning` class into base + state). The `data-rail-view` surface-filter + `.rp-mon-admin`
+  admin-gate composition rules were re-authored against `rp-rail` in **monitoring.css** (framework/rail.css defers
+  page-composition to the page). The list/redtable surface (`#rpMonView`) still emits `rt-*` — that's the shared
+  list-page/redtable lane, not this page. Active-tab highlight uses `.active` set in `activate()`; note the rail
+  tab does not always carry `.active` on first paint (pre-existing — verified identical before the migration).
 - Request-detail modal uses the shared rp-modal-* atom + --rp-modal-w width override.
 - The request-modal Timeline heading renders the `rp-title` atom inside
   `.rp-mon-modal-timeline` (sized by the `.rp-mon-modal-timeline .rp-title` context,

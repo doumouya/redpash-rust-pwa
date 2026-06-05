@@ -43,7 +43,6 @@
 @import "rail.css";      /* the rail nav (home + monitoring + workspace) */
 @import "toolbar.css";   /* .rt-toolbar + .rt-mode + .rt-search + .rt-pill + .rt-dd-* + .rt-sel-chip (the .rt-btn base lives in button.css) */
 @import "table.css";     /* .rt-table-wrap + .rt-table + .rt-table-state + .rt-status */
-@import "card.css";      /* .rt-card — generic glass card primitive (sibling of .rt-panel) */
 @import "panel.css";     /* .rt-panel — workspace slide-out side panels */
 @import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
 @import "sw-update.css"; /* service-worker update banner */
@@ -74,6 +73,7 @@
 @import "framework/menu.css";
 @import "framework/seg.css";
 @import "framework/panel.css";
+@import "framework/card.css";       /* rp-card — generic glass card primitive (sibling of rp-panel) */
 @import "framework/pager.css";
 @import "framework/redtable.css";
 @import "framework/field.css";

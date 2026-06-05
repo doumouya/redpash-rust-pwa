@@ -3,7 +3,7 @@ title: frontend/scripts/audit/snapshot.js
 source: ../../../../../frontend/scripts/audit/snapshot.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/audit
-last modified date: 2026-06-04
+last modified date: 2026-06-05
 ---
 
 # snapshot.js
@@ -21,7 +21,7 @@ When the SPA loads with ?audit=1, every page mount triggers captureSnapshot() �
 
 ## Drift-prone areas
 
-- Atom catalog (computed-style half) must stay in sync with frontend/styles/ foundation atoms; new atoms need adding here to be captured. The **class inventory** half is catalog-free — it captures whatever the DOM renders.
+- Atom catalog (computed-style half) must stay in sync with frontend/styles/ foundation atoms; new atoms need adding here to be captured. The **class inventory** half is catalog-free — it captures whatever the DOM renders. (2026-06-05: the catalog's `.rt-card` entry → `.rp-card` as monitoring migrated to the framework card atom + the legacy `card.css` retired; the remaining `rt-*` catalog entries — `rt-toolbar`/`rt-table-wrap`/`rt-btn` — track still-live legacy atoms.)
 - `classes`/`class_counts` are the new fields (v3); old snapshots lack them — ui-snapshot-audit defaults to `[]` (back-compat).
 - Virtualized lists (virtual-rows.js) mount only the ~visible window — the class SET is complete, but `class_counts` reflect only mounted rows.
 

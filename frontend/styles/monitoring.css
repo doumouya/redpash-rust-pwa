@@ -3,11 +3,12 @@
    (outer flex column, greeting, rail+body split, per-tab head, KPI
    strip) is shared with /home and lives in shell.css. The card
    surface used by the Optimization map + per-user activity panes
-   lives in card.css (.rt-card, .rt-card-head, .rt-card-title,
-   .rt-card-hint) — renamed from .rp-mon-panel 2026-05-25 per
-   [[naming-consistency]]. This file owns only the Monitoring-
-   specific atoms: modal chrome, page-content pills inside tables,
-   error-chain row expander. */
+   is the framework rp-card atom (framework/card.css: .rp-card,
+   .rp-card-head, .rp-card-title, .rp-card-hint) — migrated off the
+   legacy .rt-card in the design-language rollout. This file owns the
+   Monitoring-specific atoms: modal chrome, page-content pills inside
+   tables, error-chain row expander, + the rp-rail surface-filter
+   composition (end of file). */
 
 /* #rpMonView IS the rp-surface, mirroring Home's #rpHomeView.
    Padding matches Home so the chip-row / composite / toolbar /
@@ -37,11 +38,12 @@
   display: none;
 }
 
-/* Mono pill + tone modifiers moved to table.css as `.rt-mono-pill`
-   and `.rt-tone--{low,mid,high}` — those atoms now serve every page
-   that needs an inline mono label or severity-tinted text. Previous
-   selectors `.rt-table td .rp-mon-method` + `.rp-mon-err-*` removed
-   2026-05-25 (the cross-page audit caught the borrow). */
+/* Mono pill + tone modifiers are the framework atoms `.rp-mono-pill`
+   (atoms.css) + `.rp-tone-{low,mid,high}` (table.css) — monitoring.js
+   renders those directly (design-language rollout; was the legacy
+   `.rt-mono-pill` / `.rt-tone--*`). The page-prefixed `.rp-mon-method`
+   + `.rp-mon-err-*` selectors were removed 2026-05-25 (the cross-page
+   audit caught the borrow). */
 
 /* ── Composite strip — Monitoring's 5-cell version ───────────────
    Em 2026-05-25: "2 charts 20% each, 2 rows of 2 r-stats 10% width
@@ -260,7 +262,7 @@
   align-items: center;
   gap: 0.5rem;
 }
-.rp-mon-modal-timeline .rp-title .rt-card-hint {
+.rp-mon-modal-timeline .rp-title .rp-card-hint {
   font-size: 0.6562rem;
   font-weight: 500;
   text-transform: none;
@@ -284,5 +286,18 @@
 .rp-mon-user-hint {
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
+}
+
+/* ── rail surface-filter composition (CAS_274EDF3B — re-authored for rp-rail) ──
+   data-rail-view (set on .rp-rail by monitoring.js) hides the off-surface groups;
+   the Admin Console seg button is platform-admin-only (.rp-mon-admin, toggled once
+   /api/me lands). framework/rail.css defers these page-composition rules to the
+   page; ported from the legacy styles/rail.css rt-nav rules in the rollout. */
+.rp-rail[data-rail-view="monitoring"] .rp-rail-group[data-surface="admin"],
+.rp-rail[data-rail-view="admin"] .rp-rail-group[data-surface="monitoring"] {
+  display: none;
+}
+.rp-rail:not(.rp-mon-admin) #rpMonRailView [data-rail-seg="admin"] {
+  display: none;
 }
 
