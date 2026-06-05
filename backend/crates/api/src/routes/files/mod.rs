@@ -119,6 +119,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid/dedup",    get(stats::dedup))
         .route("/:rid/joins",    get(joins::joins).post(joins::create_join))
         .route("/:rid/sql",      post(sql::execute))
+        .route("/:rid/sql/materialize", post(sql::materialize))
         .route("/:rid/snapshot",  post(output::snapshot))
         .route("/:rid/uniques",   get(stats::uniques))
         .route("/:rid/sentinels", get(stats::sentinels))

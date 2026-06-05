@@ -10,14 +10,16 @@
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use polars::prelude::DataFrame;
 use serde::{Deserialize, Serialize};
-use shared::file::Row;
+use shared::file::{FileSummary, Row};
 use std::time::Instant;
 
-use crate::{error::AppError, state::AppState};
+use crate::{db, error::AppError, event, id, state::AppState};
+use super::FileEnvelope;
 
 /// The workspace file is always registered under this fixed alias, so the
 /// editor's default template is stable (`SELECT * FROM t`) and the
@@ -102,6 +104,114 @@ pub(super) async fn execute(
     let ms = started.elapsed().as_millis() as u32;
 
     Ok(Json(SqlPage { columns, rows, total, page, size, pages, ms }))
+}
+
+#[derive(Deserialize)]
+pub(super) struct MaterializeBody {
+    sql:    String,
+    #[serde(default)]
+    tables: Vec<TableBinding>,
+    /// Target table name → the new file's name (defaults to "sql_result").
+    name:   Option<String>,
+}
+
+/// POST /api/files/:rid/sql/materialize — run the SQL and write the result as a
+/// NEW project file (the **target** table), mirroring the joins materialize path
+/// (BlobGuard → compute → summarize/cleanness → CsvWriter → `insert_file` +
+/// audit event — the framework write, not raw storage). SheetWise's source→target
+/// write; the SQL connector later targets a DB table the same way.
+pub(super) async fn materialize(
+    State(state): State<AppState>,
+    headers:      axum::http::HeaderMap,
+    Path(rid):    Path<String>,
+    Json(body):   Json<MaterializeBody>,
+) -> Result<(StatusCode, Json<FileEnvelope>), AppError> {
+    let user = super::super::resolve_user_rid(&state, &headers).await?;
+    // Write gate: owner of the destination project (via :rid) — mirrors create_join.
+    crate::routes::ensure_owner(db::file_owner(&state.db, &rid).await, &user, "file", &rid)?;
+    for t in &body.tables {
+        crate::rbac::require_view(&state, &user, &t.file_id, "file").await?;
+    }
+
+    let primary = super::hydrate(&state, &rid).await?;
+    let project = primary.summary.project_redpash_id.clone();
+    let mut tables: Vec<(String, DataFrame)> =
+        vec![(PRIMARY_TABLE.to_string(), (*primary.frame).clone())];
+    for t in &body.tables {
+        let entry = super::hydrate(&state, &t.file_id).await?;
+        tables.push((t.name.clone(), (*entry.frame).clone()));
+    }
+
+    let sql = body.sql.clone();
+    let new_rid     = id::new("FIL");
+    let storage_rel = format!("files/{new_rid}.bin");
+    let abs_path    = state.file_path(&new_rid);
+    let path_for_blocking = abs_path.clone();
+    // Output written to disk before the DB row exists — guard the orphan.
+    let mut blob_guard = super::BlobGuard::arm(abs_path.clone());
+    let globals = db::list_global_sentinels(&state.db).await?;
+
+    let res = tokio::task::spawn_blocking(move || -> Result<_, data::DataError> {
+        let mut df = data::sql::run_sql(tables, &sql)?;
+        let h = df.height();
+        let w = df.width();
+        let columns = data::dtype::summarize(&df)?;
+        let cleanness = data::stats::cleanness(&df, &columns, &globals);
+        let fully_null = data::stats::count_fully_null_rows(&df);
+        let file = std::fs::File::create(&path_for_blocking).map_err(data::DataError::Io)?;
+        use polars::prelude::SerWriter;
+        polars::io::csv::write::CsvWriter::new(file)
+            .include_header(true)
+            .finish(&mut df)
+            .map_err(data::DataError::from)?;
+        Ok((columns, h, w, cleanness, fully_null))
+    })
+    .await
+    .map_err(|e| AppError::internal("sql", e.to_string()))?;
+    let (columns, h, w, cleanness, fully_null) = res.map_err(map_data_err)?;
+
+    let csv_size = tokio::fs::metadata(&abs_path).await
+        .map_err(|e| AppError::internal("io", format!("metadata: {e}")))?
+        .len();
+    let filename = body.name
+        .map(|s| data::parse::strip_upload_ext(&s).to_string())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "sql_result".into());
+
+    db::insert_file(
+        &state.db, &new_rid, &project, &filename, "utf-8",
+        h as u64, w as u32, csv_size, &storage_rel, &columns, cleanness,
+    ).await?;
+    blob_guard.disarm();
+
+    let now = chrono::Utc::now();
+    let summary = FileSummary {
+        redpash_id:         new_rid.clone(),
+        project_redpash_id: project,
+        filename:           filename.clone(),
+        display_name:       Some(filename),
+        file_type:          "csv".into(),
+        stage:              "new".into(),
+        row_count:          Some(h as u64),
+        col_count:          Some(w as u32),
+        file_size_bytes:    Some(csv_size),
+        cleanness_pct:      cleanness,
+        encoding:           Some("utf-8".into()),
+        delimiter:          Some(",".into()),
+        created_at:         now,
+        updated_at:         now,
+        fully_null_rows:    Some(fully_null),
+    };
+
+    event::info(&state.db, "file_sql_materialize", format!("materialized SQL → {new_rid}"))
+        .user(user.clone())
+        .context(serde_json::json!({
+            "file": new_rid.clone(), "source": rid.clone(),
+            "rows": h, "cols": w, "extra_tables": body.tables.len(),
+        }))
+        .send();
+
+    Ok((StatusCode::CREATED, Json(FileEnvelope { summary, columns, steps: vec![] })))
 }
 
 /// Map the compute-layer error onto an HTTP status. SQL syntax / unknown column

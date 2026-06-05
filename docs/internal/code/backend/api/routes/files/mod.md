@@ -46,6 +46,9 @@ steps on top of the freshly-parsed base.
 - `sql::execute` (`/:rid/sql`) — `file.view` on the primary file **and** every
   extra table's `file_id` (each `require_view`). Query-only → view, not Admin.
   See [sql.md](sql.md).
+- `sql::materialize` (`/:rid/sql/materialize`) — runs the SQL + writes the result
+  as a NEW project file (SheetWise source→target). `ensure_owner` on `:rid`
+  (write gate, mirrors `create_join`) + `require_view` on extra tables.
 
 ## Drift-prone areas
 

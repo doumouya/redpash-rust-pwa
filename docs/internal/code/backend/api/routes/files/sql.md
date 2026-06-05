@@ -18,16 +18,25 @@ SQL and hit the same path. Execution + the read-only allowlist live in
 `data::sql`; this handler does auth, hydration, the `spawn_blocking` hop, and
 result pagination.
 
+`POST /api/files/:rid/sql/materialize` — SheetWise's **source→target** write: run
+the SQL and persist the result as a NEW project file (the target table), mirroring
+the `joins::create_join` materialize path (BlobGuard → compute → summarize/cleanness
+→ CsvWriter → `db::insert_file` + audit event). The new file is immediately a
+queryable source. The SQL connector will target a DB table the same way.
+
 ## Public surface
 
-- `pub(super) async fn execute` — the route handler (mounted at `/:rid/sql` in [mod.rs](mod.md))
+- `pub(super) async fn execute` — query handler (mounted at `/:rid/sql` in [mod.rs](mod.md))
+- `pub(super) async fn materialize` — write-result-as-file handler (`/:rid/sql/materialize`)
 
 ## Gates
 
-- `file.view` on the primary file (`:rid`) **and** on every extra table's
-  `file_id` in the body (`require_view` each). Query-only → view, not Admin.
-  The read-only allowlist (`data::sql::is_read_only`) rejects DDL/DML before
-  execution; the SQLContext is sandboxed to the registered frames.
+- **execute** — `file.view` on the primary file (`:rid`) **and** on every extra
+  table's `file_id` (`require_view` each). Query-only → view, not Admin. The
+  read-only allowlist (`data::sql::is_read_only`) rejects DDL/DML before execution;
+  the SQLContext is sandboxed to the registered frames.
+- **materialize** — `ensure_owner` on `:rid` (it WRITES a new file to that file's
+  project — owner gate, mirroring `create_join`) + `require_view` on every extra table.
 
 ## Drift-prone areas
 
