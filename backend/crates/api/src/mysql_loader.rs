@@ -49,11 +49,23 @@ impl Cfg {
             Some(c) if !c.trim().is_empty() => c,
             _ => {
                 let host = s("host").unwrap_or_else(|| "127.0.0.1".into());
+                // v1 is localhost-only. ssl-mode=DISABLED (plaintext) is acceptable
+                // ONLY for loopback — a remote host over plaintext would leak the
+                // credentials + the data, so reject it until a sqlx TLS feature lands
+                // (then default to ssl-mode=REQUIRED). Guards the security finding.
+                let loopback = matches!(host.as_str(), "127.0.0.1" | "::1" | "localhost")
+                    || host.starts_with("127.");
+                if !loopback {
+                    anyhow::bail!(
+                        "MySQL connector v1 is localhost-only — host '{host}' is remote, which would \
+                         transport credentials + data in plaintext (ssl-mode=DISABLED). Enable a sqlx \
+                         TLS feature (runtime-tokio-rustls + tls-rustls) and ssl-mode=REQUIRED before \
+                         connecting to a remote MySQL."
+                    );
+                }
                 let port = cfg.get("port").and_then(|v| v.as_u64()).unwrap_or(3306);
                 let user = s("user").unwrap_or_else(|| "root".into());
                 let pass = s("password").unwrap_or_default();
-                // localhost v1: ssl-mode=DISABLED — sqlx has no TLS backend feature
-                // enabled, so a default local MySQL connects without negotiation.
                 format!("mysql://{user}:{pass}@{host}:{port}/{database}?ssl-mode=DISABLED")
             }
         };

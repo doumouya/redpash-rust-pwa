@@ -37,7 +37,10 @@ as strings (no per-type sqlx decode).
 - **No `db::insert_*`** — must route through `pipeline::upload_csv` (connectors-audit
   red otherwise). The `as_user`'s write-reach is re-checked there (caller_is_admin=false).
 - localhost v1 connection: `ssl-mode=DISABLED` (sqlx has no TLS backend feature
-  enabled). Add a sqlx TLS feature + drop the flag for non-localhost.
+  enabled) is allowed **only for loopback** hosts (127.0.0.1 / ::1 / localhost) —
+  `from_connection` **rejects a remote host** (it would transport creds + data in
+  plaintext). To support remote MySQL, enable a sqlx TLS feature
+  (`runtime-tokio-rustls` + `tls-rustls`) + default to `ssl-mode=REQUIRED`.
 - Table mode only (v1): the cast-all-to-CHAR needs the column list up front
   (information_schema). A raw-query mode is a follow-up.
 - Credentials live in the connector's `config` JSONB (localhost v1, plaintext) —
