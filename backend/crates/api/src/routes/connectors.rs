@@ -12,7 +12,7 @@
 //! `pipeline::upload_csv` applies at LOAD time — so you can only point a
 //! connection at a project you could upload to. Fail-closed (404, no leak).
 
-use axum::{extract::{Path, State}, http::{HeaderMap, StatusCode}, routing::get, Json, Router};
+use axum::{extract::{Path, State}, http::{HeaderMap, StatusCode}, routing::{get, post}, Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::{db, error::AppError, id, state::AppState};
@@ -24,6 +24,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/",     get(list).post(create))
         .route("/:rid", get(get_one))
+        .route("/:rid/sync", post(sync))
 }
 
 async fn list(
@@ -56,6 +57,10 @@ struct CreateConnectorBody {
     project_id:                 String,
     #[serde(default)] topic:    Option<String>,
     #[serde(default)] kind:     Option<String>,
+    /// Connector-specific config (JSONB) — e.g. MySQL `{ host, port, user,
+    /// password, database, table }`. localhost v1 stores it as-is; non-localhost
+    /// hardening = move secrets to the RC `.env` or encrypt at rest.
+    #[serde(default)] config:   Option<serde_json::Value>,
 }
 
 /// `POST /api/connectors` — create a connector pointing at a destination project.
@@ -101,9 +106,10 @@ async fn create(
 
     let topic = body.topic.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let kind  = body.kind.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("kafka");
+    let config = body.config.clone().unwrap_or_else(|| serde_json::json!({}));
 
     let rid = id::new("CON");
-    db::insert_connector(&state.db, &rid, project_id, name, kind, topic, &user, &user).await?;
+    db::insert_connector(&state.db, &rid, project_id, name, kind, topic, &user, &user, &config).await?;
 
     crate::event::info(&state.db, "connector_create", format!("created {kind} connector {name}"))
         .user(user.clone())
@@ -114,4 +120,44 @@ async fn create(
         .await?
         .ok_or_else(|| AppError::internal("internal", "connector vanished after insert"))?;
     Ok((StatusCode::CREATED, Json(conn)))
+}
+
+#[derive(Serialize)]
+struct SyncResult { file: String }
+
+/// `POST /api/connectors/:rid/sync` — run the connector's extract → CSV → a new
+/// project file ("Pull" in SheetWise). v1 wires **MySQL** (in-process sqlx — a
+/// quick SELECT, unlike Kafka's binary-mode consume). The caller needs ≥Member
+/// write-reach on the connector's destination project (same gate as create); the
+/// load is attributed to + re-checked against the connector's `as_user` by the
+/// pipeline. The live source is read-only (one SELECT) — the CSV is the copy.
+async fn sync(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<Json<SyncResult>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_grant(&state, &user, &conn.project_id, "project",
+        |g| g.effective().is_some_and(|r| r >= crate::rbac::Role::Member)).await?;
+
+    if conn.kind != "mysql" {
+        return Err(AppError::bad_request("unsupported",
+            format!("in-app sync is wired for kind 'mysql' only (got '{}')", conn.kind)));
+    }
+    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
+        .await
+        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+    let file = crate::mysql_loader::run(&state.db, state.data_dir.as_path(), &cfg)
+        .await
+        .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?;
+
+    crate::event::info(&state.db, "connector_sync", format!("synced connector {rid} → {file}"))
+        .user(user.clone())
+        .context(serde_json::json!({ "connector": rid, "file": file, "project": conn.project_id }))
+        .send();
+
+    Ok(Json(SyncResult { file }))
 }

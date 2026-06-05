@@ -93,6 +93,14 @@ function lineOf(text, idx) {
 
 function isConnector(relPath) {
   var base = path.basename(relPath).toLowerCase();
+  // The connector-REGISTRY management layer — the HTTP CRUD route
+  // (routes/connectors.rs) + its db data-layer (db/connectors.rs), both basename
+  // `connectors.rs` — legitimately CRUDs the `connectors` table itself
+  // (db::insert_connector is the connector's OWN config row, NOT file-data). It is
+  // not a LOADER/transport, so it's out of scope: this guard targets producers
+  // that could write FILE data past pipeline::upload_csv (the *_loader.rs files +
+  // the connectors/ RC packages).
+  if (base === 'connectors.rs') return false;
   return relPath.split(path.sep).includes('connectors')
       || /loader|connector/.test(base);
 }

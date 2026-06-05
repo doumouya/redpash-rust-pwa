@@ -3,7 +3,7 @@ title: tools/connectors-audit/audit.js
 source: ../../../../../tools/connectors-audit/audit.js
 owner: Torv
 section: Internal · Code · Tools · audit-suite
-last modified date: 2026-06-01
+last modified date: 2026-06-05
 ---
 
 # connectors-audit
@@ -25,6 +25,13 @@ Every `.rs` file under `backend/crates/` or `connectors/` whose path is under
 (`kafka_loader.rs` today; `*_loader.rs`, `*_connector.rs`, connector crates
 tomorrow). Name-based + broad on purpose: a new connector is caught the day it
 lands, no registry to maintain.
+
+**Excluded:** the connector-REGISTRY management layer — `routes/connectors.rs` +
+`db/connectors.rs` (both basename `connectors.rs`) — which legitimately CRUDs the
+`connectors` table itself (`db::insert_connector` is the connector's OWN config
+row, not file-data). It's not a loader/transport, so it's out of scope; the guard
+targets producers that could write FILE data past `pipeline::upload_csv` (the
+`*_loader.rs` files + the `connectors/` RC packages).
 
 ## The rule
 

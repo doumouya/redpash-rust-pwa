@@ -38,6 +38,9 @@ pub struct ConnectorLoadCfg {
     pub as_user:    String,
     pub topic:      Option<String>,
     pub kind:       String,
+    /// Connector-specific config (forward-compat JSONB) — e.g. the MySQL
+    /// connection `{ host, port, user, password, database, table }`.
+    pub config:     serde_json::Value,
 }
 
 fn row_to_summary(r: &sqlx::postgres::PgRow) -> ConnectorSummary {
@@ -66,12 +69,13 @@ pub async fn insert_connector(
     topic:      Option<&str>,
     as_user:    &str,
     created_by: &str,
+    config:     &serde_json::Value,
 ) -> sqlx::Result<()> {
     let mut tx = pool.begin().await?;
     super::register_entity(&mut *tx, rid, "connection").await?;
     sqlx::query(
-        "INSERT INTO connectors (redpash_id, project_id, name, kind, topic, as_user, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO connectors (redpash_id, project_id, name, kind, topic, as_user, created_by, config)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(rid)
     .bind(project_id)
@@ -80,6 +84,7 @@ pub async fn insert_connector(
     .bind(topic)
     .bind(as_user)
     .bind(created_by)
+    .bind(config)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -128,7 +133,7 @@ pub async fn get_connector(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Conn
 /// None if the connector doesn't exist (the loader fails loudly).
 pub async fn get_connector_load_cfg(pool: &PgPool, rid: &str) -> sqlx::Result<Option<ConnectorLoadCfg>> {
     let row = sqlx::query(
-        "SELECT project_id, as_user, topic, kind FROM connectors WHERE redpash_id = $1",
+        "SELECT project_id, as_user, topic, kind, config FROM connectors WHERE redpash_id = $1",
     )
     .bind(rid)
     .fetch_optional(pool)
@@ -138,5 +143,6 @@ pub async fn get_connector_load_cfg(pool: &PgPool, rid: &str) -> sqlx::Result<Op
         as_user:    r.get("as_user"),
         topic:      r.try_get("topic").ok(),
         kind:       r.get("kind"),
+        config:     r.try_get("config").unwrap_or_else(|_| serde_json::json!({})),
     }))
 }

@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/connectors.rs
 source: ../../../../../../backend/crates/api/src/routes/connectors.rs
 owner: Torv
 section: Internal · Code · backend · api · routes
-last modified date: 2026-06-04
+last modified date: 2026-06-05
 ---
 
 # connectors.rs
@@ -17,9 +17,10 @@ the data lands in**, and the loader reads that choice (Em 2026-06-04: "ask the
 user which project he wants to add the file").
 
 ```
-GET  /api/connectors        list the connectors the caller can reach
-POST /api/connectors        create one — body picks the destination project
-GET  /api/connectors/:rid   fetch one connector summary
+GET  /api/connectors            list the connectors the caller can reach
+POST /api/connectors            create one — body picks the destination project (+ config)
+GET  /api/connectors/:rid       fetch one connector summary
+POST /api/connectors/:rid/sync  run the extract → CSV → a new project file (SheetWise "Pull")
 ```
 
 ## Public surface
@@ -28,8 +29,11 @@ GET  /api/connectors/:rid   fetch one connector summary
 - `create` (POST `/`) — validates `name` + `project_id`, gates the caller to
   **≥Member write-reach** on the chosen project via `rbac::require_grant`
   (the same write-check `pipeline::upload_csv` applies at load), then
-  `db::insert_connector` (as_user = created_by = the caller) + a
-  `connector_create` event. Returns 201 + the `ConnectorSummary`.
+  `db::insert_connector` (as_user = created_by = the caller; + the connector-specific
+  `config` JSONB) + a `connector_create` event. Returns 201 + the `ConnectorSummary`.
+- `sync` (POST `/:rid/sync`) — runs the connector's extract → CSV → a new project
+  file ("Pull"). Same ≥Member write-reach gate as create; v1 wires **MySQL** only
+  (`mysql_loader::run`, in-process; kind≠mysql → 400). Returns `{ file }`.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
 - `get_one` (GET `/:rid`) — `db::get_connector` then `rbac::require_view` on the
   destination project (leak-free: unreachable reads as not-found).
@@ -48,9 +52,10 @@ GET  /api/connectors/:rid   fetch one connector summary
   by the loader (`get_connector_load_cfg`) and listed reach-scoped, so they live
   at the top-level `/connectors` (registered in `routes/mod.rs`). If they later
   move under a project prefix, the loader's resolve-by-id path must still work.
-- **The cluster creds are NOT in the body.** Only name/topic/project_id/kind. SASL
-  creds stay in the connector's `.env` for the RC; if they move into the
-  connection, add encryption-at-rest before accepting them here.
+- **Connector-specific `config` JSONB now rides the create body** (e.g. the MySQL
+  connection `{host,port,user,password,database,table}`). Kafka keeps its SASL
+  creds in the RC `.env`; MySQL v1 stores its connection in `config` — plaintext,
+  **localhost-only**; harden to `.env` / encrypt-at-rest before non-localhost.
 
 ## Related
 

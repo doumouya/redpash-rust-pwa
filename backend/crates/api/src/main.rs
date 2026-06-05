@@ -28,6 +28,7 @@ mod codec_registry;
 mod field_perms;
 mod field_validate;
 mod kafka_loader;
+mod mysql_loader;
 mod pipeline;
 mod redact;
 mod validate_expr;
