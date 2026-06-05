@@ -107,6 +107,8 @@
   <section class="sbx-section" data-page="settings"><h2>page — Settings, CONFIGURE-BY-EXAMPLE, ASSEMBLED from components (each pref beside a LIVE instance of the component it controls)</h2><div id="sbx-settings" style="height:48rem;border:1px dashed rgba(127,127,127,.4);border-radius:.4rem;overflow:auto;display:flex"></div></section>
   <section class="sbx-section" data-page="docs"><h2>docs</h2><div class="sbx-mount" id="sbx-docs"><span class="sbx-todo">TODO</span></div></section>
 
+  <section class="sbx-section"><h2>activity (rp-activity)</h2><div class="sbx-mount" id="sbx-activity" style="max-width:24rem"></div></section>
+
   <script type="module">
     import { list, get } from "/scripts/framework/component-registry.js";
     import "/scripts/framework/topbar.js";              // self-registers "topbar"
@@ -130,6 +132,7 @@
     import "/scripts/framework/redtable.js";            // "redtable" (B3.1 interactive data table)
     import "/scripts/framework/seg.js";                 // "seg" (segmented control)
     import "/scripts/framework/field.js";               // "field" (labeled row)
+    import "/scripts/framework/activity.js";            // "activity" (event timeline)
     import "/scripts/framework/badge.js";               // "badge" (soft-tint pill)
     import "/scripts/framework/select.js";              // "select" (form dropdown over menu)
     import "/scripts/framework/avatar-upload.js";       // "avatar-upload" (editable avatar)
@@ -578,6 +581,18 @@
       surface: {},
       mount: (el) => { const m = get("settings-config"); if (m) m(el); },
     });
+
+    // rp-activity — a representative case timeline: create / assign / status
+    // moves / comment / a long message / an actor-avatar row.
+    const mountActivity = get("activity");
+    if (mountActivity) mountActivity(document.getElementById("sbx-activity"), { events: [
+      { kind: "case_created",  occurred_at: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(), message: "opened the case" },
+      { kind: "case_assigned", occurred_at: new Date(Date.now() - 1000 * 60 * 60 * 25).toISOString(), message: "assigned to Aspen Lipshutz" },
+      { kind: "case_priority_set", occurred_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), message: "priority → Critical" },
+      { kind: "case_status_changed", occurred_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(), message: "moved to In Review" },
+      { kind: "case_comment", actor: { name: "Martin Rogers" }, occurred_at: new Date(Date.now() - 1000 * 60 * 40).toISOString(), message: "left a comment with a deliberately long body to exercise wrapping at the timeline body width" },
+      { kind: "case_status_changed", occurred_at: new Date(Date.now() - 1000 * 30).toISOString(), message: "moved to Done" },
+    ] });
 
     const names = list();
     document.getElementById("sbx-registry").innerHTML =

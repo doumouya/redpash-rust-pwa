@@ -77,6 +77,7 @@
 @import "framework/pager.css";
 @import "framework/redtable.css";
 @import "framework/field.css";
+@import "framework/activity.css";   /* rp-activity — event timeline (Cases/Monitoring) */
 @import "framework/badge.css";
 @import "framework/avatar-upload.css";
 @import "framework/profile-record.css";
