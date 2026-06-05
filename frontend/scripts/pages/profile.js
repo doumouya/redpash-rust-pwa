@@ -38,7 +38,7 @@ function mountProfileRail(app) {
 
   function activate(tabId) {
     panels.forEach((p) => { p.hidden = p.id !== tabId; });
-    body?.querySelectorAll(".rt-tab").forEach((t) =>
+    body?.querySelectorAll(".rp-rail-tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.profTarget === tabId));
     // Usage's ECharts bar can't compute size while its tab is hidden —
     // render it the first time the tab actually becomes visible.
@@ -50,9 +50,9 @@ function mountProfileRail(app) {
 
   if (body) {
     body.innerHTML = PROFILE_SECTIONS.map((s) =>
-      '<a class="rt-tab" href="#/profile" data-prof-target="' + esc(s.id) + '">'
-      +   '<i class="rt-tab-icon bi ' + s.icon + '"></i>'
-      +   '<span class="rt-tab-name">' + esc(s.label) + '</span>'
+      '<a class="rp-rail-tab" href="#/profile" data-prof-target="' + esc(s.id) + '">'
+      +   '<i class="rp-rail-tab-icon bi ' + s.icon + '"></i>'
+      +   '<span class="rp-rail-tab-name">' + esc(s.label) + '</span>'
       + '</a>'
     ).join("");
     body.addEventListener("click", (e) => {
@@ -117,7 +117,7 @@ const PROFILE_FORM_ROWS = [
     containerClass: "rp-profile__memberships",
     emptyClass: "rp-profile__memberships-empty",
   }),
-  // Use case — custom button class (rp-profile__opt, not rt-btn);
+  // Use case — custom button class (rp-profile__opt, not the rp-btn-icon atom);
   // group lacks data-pref (JS targets by id #rp-profile-use-case).
   '<div class="rp-page__row rp-page__row--col">'
     + '<span class="rp-page__row-label">Use case'
@@ -151,7 +151,7 @@ function renderForm(app) {
 
 export default async function profile(app, { session }) {
   mountTopbar(app.querySelector("#rp-topbar"), { active: "profile", session });
-  mountRailFooterNav(app.querySelector(".rt-nav-foot"), { active: "profile", session });
+  mountRailFooterNav(app.querySelector(".rp-rail-footer"), { active: "profile", session });
   mountProfileRail(app);
   renderForm(app);
 
