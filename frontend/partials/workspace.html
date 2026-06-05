@@ -81,70 +81,70 @@
 
         <!-- toolbar (data mode) — hidden when the surface is in
              designer mode (chart file open) -->
-        <div class="rt-toolbar rt-toolbar--data">
+        <div class="rp-toolbar rp-toolbar--data">
           <!-- Upload lives here (where files are worked) + on the landing (the
                empty state). Moved off the rail foot in the create-button
                consolidation (CAS_37B2E1BF). The hidden input is clicked
                programmatically from both the toolbar button and the landing CTA. -->
           <input type="file" id="wsUploadInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv" multiple hidden />
-          <button class="rt-btn rt-btn--glass" id="wsUpload" type="button" title="Upload a data file into the active project">
+          <button class="rp-btn-icon rp-btn-icon--glass" id="wsUpload" type="button" title="Upload a data file into the active project">
             <i class="bi bi-upload"></i><span>Upload</span>
           </button>
-          <span class="rt-toolbar-sep"></span>
-          <button class="rt-btn" id="wsFilterToggle" type="button" title="Filter panel">
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon" id="wsFilterToggle" type="button" title="Filter panel">
             <i class="bi bi-funnel"></i>
           </button>
           <div class="rp-search">
             <i class="bi bi-search"></i>
             <input type="search" id="wsRowSearch" placeholder="Search the file…" title="Server-side full-file search. Use the filter panel for column-specific predicates." />
           </div>
-          <span class="rt-toolbar-sep"></span>
-          <button class="rt-btn rt-mode" data-mode="edit" type="button" title="Edit mode"><i class="bi bi-pencil"></i></button>
-          <button class="rt-btn rt-mode" data-mode="select" type="button" title="Select mode"><i class="bi bi-check2-square"></i></button>
-          <button class="rt-btn rt-mode" data-mode="delete" type="button" title="Delete mode"><i class="bi bi-trash3"></i></button>
-          <span class="rt-toolbar-sep"></span>
-          <button class="rt-btn" id="wsUndo" type="button" disabled title="Undo last step"><i class="bi bi-arrow-return-left"></i></button>
-          <button class="rt-btn" id="wsRedo" type="button" disabled title="Redo next step"><i class="bi bi-arrow-return-right"></i></button>
-          <button class="rt-btn" id="wsRefresh" type="button" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
-          <button class="rt-btn is-active" id="wsRownum" type="button" title="Row numbers"><i class="bi bi-list-ol"></i></button>
-          <span class="rt-toolbar-sep"></span>
-          <div class="rt-dd-wrap">
-            <button class="rt-pill" data-dd="wsRowsDd" type="button" title="Rows per page">
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon rp-toolbar-mode" data-mode="edit" type="button" title="Edit mode"><i class="bi bi-pencil"></i></button>
+          <button class="rp-btn-icon rp-toolbar-mode" data-mode="select" type="button" title="Select mode"><i class="bi bi-check2-square"></i></button>
+          <button class="rp-btn-icon rp-toolbar-mode" data-mode="delete" type="button" title="Delete mode"><i class="bi bi-trash3"></i></button>
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon" id="wsUndo" type="button" disabled title="Undo last step"><i class="bi bi-arrow-return-left"></i></button>
+          <button class="rp-btn-icon" id="wsRedo" type="button" disabled title="Redo next step"><i class="bi bi-arrow-return-right"></i></button>
+          <button class="rp-btn-icon" id="wsRefresh" type="button" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+          <button class="rp-btn-icon is-active" id="wsRownum" type="button" title="Row numbers"><i class="bi bi-list-ol"></i></button>
+          <span class="rp-toolbar-sep"></span>
+          <div class="rp-menu-wrap">
+            <button class="rp-chip rp-toolbar-pill" data-dd="wsRowsDd" type="button" title="Rows per page">
               <span id="wsRowsLabel">25 rows</span>
-              <i class="bi bi-chevron-down chev"></i>
+              <i class="bi bi-chevron-down rp-toolbar-chev"></i>
             </button>
-            <div class="rt-dd" id="wsRowsDd">
-              <div class="rt-dd-item" data-rows="10">10 rows</div>
-              <div class="rt-dd-item selected" data-rows="25">25 rows <i class="bi bi-check2 tick"></i></div>
-              <div class="rt-dd-item" data-rows="50">50 rows</div>
-              <div class="rt-dd-item" data-rows="100">100 rows</div>
-              <div class="rt-dd-item" data-rows="250">250 rows</div>
-              <div class="rt-dd-item" data-rows="500">500 rows</div>
-              <div class="rt-dd-item" data-rows="1000">1k rows</div>
+            <div class="rp-menu" id="wsRowsDd">
+              <div class="rp-menu-item" data-rows="10">10 rows</div>
+              <div class="rp-menu-item selected" data-rows="25">25 rows <i class="bi bi-check2 rp-menu-tick"></i></div>
+              <div class="rp-menu-item" data-rows="50">50 rows</div>
+              <div class="rp-menu-item" data-rows="100">100 rows</div>
+              <div class="rp-menu-item" data-rows="250">250 rows</div>
+              <div class="rp-menu-item" data-rows="500">500 rows</div>
+              <div class="rp-menu-item" data-rows="1000">1k rows</div>
             </div>
           </div>
-          <div class="rt-dd-wrap">
-            <button class="rt-btn" data-dd="wsColsDd" type="button" title="Columns"><i class="bi bi-layout-three-columns"></i></button>
-            <div class="rt-dd" id="wsColsDd"><!-- dynamic — rebuilt when a file loads --></div>
+          <div class="rp-menu-wrap">
+            <button class="rp-btn-icon" data-dd="wsColsDd" type="button" title="Columns"><i class="bi bi-layout-three-columns"></i></button>
+            <div class="rp-menu" id="wsColsDd"><!-- dynamic — rebuilt when a file loads --></div>
           </div>
-          <span class="rt-sel-chip" id="wsSelChip" title="Clear selection">
+          <span class="rp-chip rp-toolbar-selchip" id="wsSelChip" title="Clear selection">
             <i class="bi bi-check2-square"></i><span id="wsSelCount">0</span>&nbsp;selected
           </span>
-          <span class="rt-toolbar-sep"></span>
-          <div class="rt-dd-wrap">
-            <button class="rt-btn" id="wsExport" data-dd="wsExportDd" type="button" disabled title="Export">
+          <span class="rp-toolbar-sep"></span>
+          <div class="rp-menu-wrap">
+            <button class="rp-btn-icon" id="wsExport" data-dd="wsExportDd" type="button" disabled title="Export">
               <i class="bi bi-download"></i>
             </button>
-            <div class="rt-dd" id="wsExportDd">
-              <div class="rt-dd-item" data-fmt="csv">Export as CSV</div>
-              <div class="rt-dd-item" data-fmt="xlsx">Export as Excel</div>
-              <div class="rt-dd-item" data-fmt="json">Export as JSON</div>
+            <div class="rp-menu" id="wsExportDd">
+              <div class="rp-menu-item" data-fmt="csv">Export as CSV</div>
+              <div class="rp-menu-item" data-fmt="xlsx">Export as Excel</div>
+              <div class="rp-menu-item" data-fmt="json">Export as JSON</div>
             </div>
           </div>
-          <button class="rt-btn" id="wsHistoryToggle" type="button" title="Step history">
+          <button class="rp-btn-icon" id="wsHistoryToggle" type="button" title="Step history">
             <i class="bi bi-clock-history"></i>
           </button>
-          <button class="rt-btn" id="wsToolsToggle" type="button" title="Tools panel">
+          <button class="rp-btn-icon" id="wsToolsToggle" type="button" title="Tools panel">
             <i class="bi bi-tools"></i>
           </button>
         </div>
@@ -157,12 +157,12 @@
             <i class="bi bi-bar-chart-line"></i> <span>Chart</span>
           </span>
           <span class="rt-toolbar-spacer"></span>
-          <button class="rt-btn rt-btn--glass" id="wsDesignerAddChart" type="button"
+          <button class="rp-btn-icon rp-btn-icon--glass" id="wsDesignerAddChart" type="button"
                   title="Create a new chart from the same source data file">
             <i class="bi bi-plus-lg"></i><span>Add chart</span>
           </button>
-          <span class="rt-toolbar-sep"></span>
-          <button class="rt-btn is-active" id="wsDesignerCfgToggle" type="button" title="Chart config">
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon is-active" id="wsDesignerCfgToggle" type="button" title="Chart config">
             <i class="bi bi-sliders"></i>
           </button>
         </div>
@@ -181,13 +181,13 @@
                     <i class="bi bi-bar-chart-line"></i> Report
                   </button>
                 </div>
-                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
               <div class="rt-panel-body">
                 <div class="rt-panel-tab is-active" data-tab="filter">
                   <span class="rt-field-lbl">Condition groups</span>
                   <div id="wsGroupList"></div>
-                  <button class="rt-btn rt-btn--glass rt-btn--block" id="wsAddGroup" type="button">
+                  <button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--block" id="wsAddGroup" type="button">
                     <i class="bi bi-plus-lg"></i> Add group
                   </button>
                 </div>
@@ -197,14 +197,14 @@
               </div>
               <div class="rt-panel-foot">
                 <div class="rt-panel-tab-foot is-active" data-tab="filter">
-                  <button class="rt-btn" id="wsClearFilter" type="button">Clear</button>
-                  <button class="rt-btn rt-btn--accent" id="wsApplyFilter" type="button">
+                  <button class="rp-btn-icon" id="wsClearFilter" type="button">Clear</button>
+                  <button class="rp-btn-icon rp-btn-icon--accent" id="wsApplyFilter" type="button">
                     <i class="bi bi-funnel"></i> Apply filter
                   </button>
                 </div>
                 <div class="rt-panel-tab-foot" data-tab="report" hidden>
-                  <button class="rt-btn" id="wsClearReport" type="button">Clear</button>
-                  <button class="rt-btn rt-btn--accent" id="wsApplyReport" type="button">
+                  <button class="rp-btn-icon" id="wsClearReport" type="button">Clear</button>
+                  <button class="rp-btn-icon rp-btn-icon--accent" id="wsApplyReport" type="button">
                     <i class="bi bi-play-fill"></i> Run preview
                   </button>
                 </div>
@@ -225,7 +225,7 @@
             <div class="rt-panel-inner">
               <div class="rt-panel-head">
                 <span class="rt-panel-title"><i class="bi bi-clock-history"></i> History</span>
-                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
               <div class="rt-panel-body" id="wsHistoryBody">
                 <p class="rt-empty rt-step-state">Open a file to see its step history.</p>
@@ -244,7 +244,7 @@
                     <i class="bi bi-link-45deg"></i> Joins
                   </button>
                 </div>
-                <button class="rt-btn rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
               <div class="rt-panel-body">
                 <div class="rt-panel-tab is-active" data-tab="clean" id="wsToolsCleanBody"><!-- tools.js mounts the columns-redtable + cleaning toolbar here --></div>

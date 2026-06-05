@@ -20,8 +20,12 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
 
 ## Drift-prone areas
 
-- **Design-language rollout — RAIL slice migrated to `rp-rail*` (2026-06-05); toolbar/panel/table/
-  designer slices PENDING.** The rail (projects→files tree) is JS-rendered with the full framework
+- **Design-language rollout — RAIL + TOOLBAR slices migrated (2026-06-05); panel/table/designer
+  PENDING.** Toolbar (data): `rt-toolbar--data`→`rp-toolbar--data`, `rt-toolbar-sep`→`rp-toolbar-sep`,
+  `rt-mode`→`rp-toolbar-mode`, `rt-pill`→`rp-chip rp-toolbar-pill` (+`.chev`→`rp-toolbar-chev`),
+  `rt-dd*`→`rp-menu*` (+`.tick`→`rp-menu-tick`), `rt-sel-chip`→`rp-chip rp-toolbar-selchip`, and
+  `rt-btn`→`rp-btn-icon` migrated **page-wide** (clean atom swap — no `.rt-toolbar .rt-btn` context
+  rule). The **designer** toolbar stays `rt-toolbar--designer` (its slice → `rp-dash-toolbar`). The rail (projects→files tree) is JS-rendered with the full framework
   family — `rp-rail`/`-head`/`-title`/`-body`/`-state`/`-footer`, `rp-rail-group*` (incl. `-hide`/
   `-rename`/`-name-editing`), `rp-rail-tab*` (incl. `-dot`/`-ghost*`/`-rename`/`-spinner`; close→
   **`rp-rail-tab-hide`**), `rp-rail-overview` (the pinned entry), `rp-rail-filter`/`-chips`,

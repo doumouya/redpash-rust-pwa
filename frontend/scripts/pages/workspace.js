@@ -68,7 +68,7 @@ export default function workspace(app, { session }) {
   const rowsInfo   = $("#wsRowsInfo");
   const selChip    = $("#wsSelChip");
   const selCount   = $("#wsSelCount");
-  const deleteBtn  = app.querySelector('.rt-mode[data-mode="delete"]');
+  const deleteBtn  = app.querySelector('.rp-toolbar-mode[data-mode="delete"]');
   const groupList  = $("#wsGroupList");
 
   // ─── state ─────────────────────────────────────────────────────
@@ -771,7 +771,7 @@ export default function workspace(app, { session }) {
       + '<section class="ws-landing-section rp-overview__mid">'
       +   '<div class="ws-landing-section-head">'
       +     '<h3 class="ws-landing-section-title">Recent projects</h3>'
-      +     '<button class="rt-btn rt-btn--glass" id="wsLandingUpload" type="button" title="Upload a data file into the active project">'
+      +     '<button class="rp-btn-icon rp-btn-icon--glass" id="wsLandingUpload" type="button" title="Upload a data file into the active project">'
       +       '<i class="bi bi-upload"></i><span>Upload</span></button>'
       +   '</div>'
       +   '<div class="ws-landing-grid">' + cards + '</div>'
@@ -1778,7 +1778,7 @@ export default function workspace(app, { session }) {
   // ─── columns dropdown — rebuilt per file ───────────────────────
   function rebuildColsDropdown(columns) {
     colsDd.innerHTML = columns.map((c, i) =>
-      '<label class="rt-dd-item"><input type="checkbox" class="rt-chk" data-col="'
+      '<label class="rp-menu-item"><input type="checkbox" class="rt-chk" data-col="'
       + (i + 3) + '" checked /> ' + esc(c.name) + '</label>'
     ).join("");
   }
@@ -1931,7 +1931,7 @@ export default function workspace(app, { session }) {
       + '<button class="rp-group-card-del" type="button" title="Remove group"><i class="bi bi-trash3"></i></button>'
       + "</div>"
       + '<div class="rt-pred-list"></div>'
-      + '<button class="rt-btn rt-btn--glass rt-btn--block rp-add-pred" type="button">'
+      + '<button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--block rp-add-pred" type="button">'
       + '<i class="bi bi-plus-lg"></i> Add condition</button>';
     card.querySelector(".rt-pred-list").appendChild(predRow());
     return card;
@@ -2164,7 +2164,7 @@ export default function workspace(app, { session }) {
   // we refetchPage() to pick it up (preserves sort/filter/page state,
   // unlike loadFile which would reset). Single-flight: stepInFlight
   // gates concurrent step posts to avoid out-of-order writes.
-  const modeBtns = $$(".rt-mode");
+  const modeBtns = $$(".rp-toolbar-mode");
   function setMode(btn) {
     const turnOn = !btn.classList.contains("is-active");
     modeBtns.forEach((b) => b.classList.remove("is-active"));
@@ -2298,7 +2298,7 @@ export default function workspace(app, { session }) {
   redoBtn.addEventListener("click", () => doUndoRedo("redo"));
 
   exportDd.addEventListener("click", (e) => {
-    const item = e.target.closest(".rt-dd-item");
+    const item = e.target.closest(".rp-menu-item");
     if (!item || !activeFileRid) return;
     const fmt = item.dataset.fmt || "csv";
     // Hidden <a download> triggers the browser's download flow; the
@@ -2929,7 +2929,7 @@ export default function workspace(app, { session }) {
   // pollute the wider browse sizes on those pages.
   syncRowsDropdown();
   $("#wsRowsDd").addEventListener("click", (e) => {
-    const item = e.target.closest(".rt-dd-item");
+    const item = e.target.closest(".rp-menu-item");
     if (!item) return;
     const raw = item.dataset.rows;
     setPref("workspace-rowsPerPage", raw);
@@ -2941,13 +2941,13 @@ export default function workspace(app, { session }) {
   });
   function syncRowsDropdown() {
     const raw = getPref("workspace-rowsPerPage");
-    $("#wsRowsDd").querySelectorAll(".rt-dd-item").forEach((i) => {
+    $("#wsRowsDd").querySelectorAll(".rp-menu-item").forEach((i) => {
       i.classList.remove("selected");
       const t = i.querySelector(".tick");
       if (t) t.remove();
     });
-    const sel = $("#wsRowsDd").querySelector('.rt-dd-item[data-rows="' + raw + '"]')
-      || $("#wsRowsDd").querySelector('.rt-dd-item[data-rows="' + DEFAULT_PAGE_SIZE + '"]');
+    const sel = $("#wsRowsDd").querySelector('.rp-menu-item[data-rows="' + raw + '"]')
+      || $("#wsRowsDd").querySelector('.rp-menu-item[data-rows="' + DEFAULT_PAGE_SIZE + '"]');
     if (sel) {
       sel.classList.add("selected");
       sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
