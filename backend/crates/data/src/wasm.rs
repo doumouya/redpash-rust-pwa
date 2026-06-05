@@ -370,3 +370,97 @@ pub fn parse_csv_compare(bytes: &[u8]) -> Result<String, JsValue> {
     })
     .to_string())
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Engine-completion exports — every remaining data-crate analysis op the
+// server calls directly, now browser-callable over the same JSON-in /
+// JSON-out shim ("everything that could be wasm is wasm": bring the
+// compute to the data — zero-trust governance, no server round-trip).
+// Each calls the IDENTICAL engine fn the api uses, so server and edge
+// stay the same engine byte-for-byte.
+// ─────────────────────────────────────────────────────────────────────
+
+/// Group-by + aggregation (Reports). `spec_json` deserializes to a
+/// `shared::report::ReportSpec` (group cols + aggregations + optional
+/// filter / sort / top_n / windows); returns the aggregated frame as JSON
+/// rows — the shape the server's report endpoint emits.
+#[wasm_bindgen]
+pub fn apply_group_by(rows_json: &str, spec_json: &str) -> Result<String, JsValue> {
+    let df = rows_to_df(rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let spec: shared::report::ReportSpec = serde_json::from_str(spec_json)
+        .map_err(|e| JsValue::from_str(&format!("spec parse: {e}")))?;
+    let out = crate::group_by::execute(&df, &spec)
+        .map_err(|e| JsValue::from_str(&format!("group_by: {e}")))?;
+    df_to_rows(&out).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Duplicate detection over the `by` key columns; returns a `DedupReport`
+/// (duplicate groups + counts), example rows capped at `max_rows`.
+#[wasm_bindgen]
+pub fn dedup_detect(rows_json: &str, by_json: &str, max_rows: usize) -> Result<String, JsValue> {
+    let df = rows_to_df(rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let by: Vec<String> = serde_json::from_str(by_json)
+        .map_err(|e| JsValue::from_str(&format!("by parse: {e}")))?;
+    let report = crate::dedup::detect(&df, &by, max_rows)
+        .map_err(|e| JsValue::from_str(&format!("dedup_detect: {e}")))?;
+    serde_json::to_string(&report).map_err(|e| JsValue::from_str(&format!("report serialize: {e}")))
+}
+
+/// Distinct values for one column with an optional case-insensitive
+/// substring filter (`q`; empty = no filter), capped at `limit`. Powers
+/// the filter-panel value autocomplete with no server call.
+#[wasm_bindgen]
+pub fn get_distinct_values(rows_json: &str, col: &str, q: &str, limit: usize) -> Result<String, JsValue> {
+    let df = rows_to_df(rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let needle = if q.is_empty() { None } else { Some(q) };
+    let result = crate::distinct::for_column(&df, col, needle, limit)
+        .map_err(|e| JsValue::from_str(&format!("distinct: {e}")))?;
+    let output = json!({
+        "values": result.values,
+        "total": result.total,
+        "truncated": result.truncated,
+    });
+    Ok(output.to_string())
+}
+
+/// Join-candidate detection between two row sets: overlap-scores every
+/// column pair, returns the `JoinCandidate`s scoring above `threshold`
+/// (0.0–1.0), capped at `max_results`.
+#[wasm_bindgen]
+pub fn detect_join_candidates(
+    this_rows_json: &str,
+    other_rows_json: &str,
+    threshold: f32,
+    max_results: usize,
+) -> Result<String, JsValue> {
+    let this_df = rows_to_df(this_rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let other_df = rows_to_df(other_rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let candidates = crate::joins::detect_pair(&this_df, &other_df, threshold, max_results)
+        .map_err(|e| JsValue::from_str(&format!("detect_pair: {e}")))?;
+    let candidates = serde_json::to_value(&candidates)
+        .map_err(|e| JsValue::from_str(&format!("candidates serialize: {e}")))?;
+    Ok(json!({ "candidates": candidates }).to_string())
+}
+
+/// Sentinel-value scan — repeated placeholder / junk values (plus any
+/// caller-supplied `extras`) across the grid, with per-column counts.
+#[wasm_bindgen]
+pub fn find_sentinels(rows_json: &str, extras_json: &str) -> Result<String, JsValue> {
+    let df = rows_to_df(rows_json).map_err(|e| JsValue::from_str(&e))?;
+    let extras: Vec<String> = serde_json::from_str(extras_json)
+        .map_err(|e| JsValue::from_str(&format!("extras parse: {e}")))?;
+    let items = stats::find_sentinels(&df, &extras);
+    serde_json::to_string(&items).map_err(|e| JsValue::from_str(&format!("sentinels serialize: {e}")))
+}
+
+/// Structure diagnostics (line-ending / binary / delimiter / ragged /
+/// header / type-drift suspicions). Takes the RAW CSV bytes — the
+/// byte-level checks need the original bytes, not parsed rows — parses
+/// them through the same engine, then runs `structure::detect(raw, &df)`.
+#[wasm_bindgen]
+pub fn detect_structure(bytes: &[u8]) -> Result<String, JsValue> {
+    let (df, _encoding, _rescue) = parse::from_csv_bytes_with_diag(bytes, None)
+        .map_err(|e| JsValue::from_str(&format!("parse: {e}")))?;
+    let flags = crate::structure::detect(bytes, &df);
+    serde_json::to_string(&flags).map_err(|e| JsValue::from_str(&format!("structure serialize: {e}")))
+}
