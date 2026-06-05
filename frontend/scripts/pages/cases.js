@@ -551,7 +551,7 @@ export default function cases(app, { session }) {
   }
 
   function casesTableHTML(rows) {
-    if (!rows.length) return '<p class="rt-empty rp-cases-ov-table-empty">No cases.</p>';
+    if (!rows.length) return '<p class="rp-empty rp-cases-ov-table-empty">No cases.</p>';
     const sorted = rows.slice().sort((a, b) =>
       String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
     const body = sorted.map((c) => {
@@ -589,7 +589,7 @@ export default function cases(app, { session }) {
       +     '<span class="rp-cases-col-count">0</span>'
       +   '</header>'
       +   '<div class="rp-cases-col-body">'
-      +     '<p class="rt-empty rp-cases-col-empty">' + esc(emptyText) + '</p>'
+      +     '<p class="rp-empty rp-cases-col-empty">' + esc(emptyText) + '</p>'
       +   '</div>'
       + '</section>';
   }
@@ -597,7 +597,7 @@ export default function cases(app, { session }) {
   function columnHTML(status, cards) {
     const body = cards.length
       ? cards.map(cardHTML).join("")
-      : '<p class="rt-empty rp-cases-col-empty">No cases.</p>';
+      : '<p class="rp-empty rp-cases-col-empty">No cases.</p>';
     // Done column gets the window chip-row above the cards so the
     // user can switch the cap without leaving the board.
     const head = status === "done" ? doneWindowChipsHTML("kanban") : "";
@@ -1497,8 +1497,8 @@ export default function cases(app, { session }) {
       ridEl.title = rid + " — click to copy";
     }
     if (titleEl) { titleEl.textContent = "Loading…"; titleEl.title = ""; }
-    if (commentsList) commentsList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading comments…</p>';
-    if (activityList) activityList.innerHTML = '<p class="rt-empty rp-cases-empty">Loading activity…</p>';
+    if (commentsList) commentsList.innerHTML = '<p class="rp-empty rp-cases-empty">Loading comments…</p>';
+    if (activityList) activityList.innerHTML = '<p class="rp-empty rp-cases-empty">Loading activity…</p>';
     try {
       const detail = await api.get("/cases/" + encodeURIComponent(rid));
       paintDetail(detail);
@@ -1730,7 +1730,7 @@ export default function cases(app, { session }) {
     if (hasComments && commentsList) {
       commentsList.innerHTML = comments.length
         ? commentsListHTML(comments)
-        : '<p class="rt-empty rp-cases-empty">No comments yet.</p>';
+        : '<p class="rp-empty rp-cases-empty">No comments yet.</p>';
     }
     if (hasActivity) renderActivityList(activity);
     // Pin to latest comment after the paint settles. requestAnimationFrame
