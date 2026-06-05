@@ -1,15 +1,18 @@
 /* Purpose: see doc for details.
  * Doc: docs/internal/code/frontend/scripts/dropdown.md */
 // dropdown.js — one delegated click handler for the [data-dd] +
-// .rt-dd dropdown atom. Replaces the mount-time $$([data-dd])
+// .rt-dd / .rp-menu dropdown atom. Replaces the mount-time $$([data-dd])
 // sweep in workspace.js (only caught statically-rendered buttons)
 // + the inline workaround we shipped in report.js when the
 // builder's dynamically-rendered buttons couldn't subscribe to
 // the workspace sweep.
 //
-// The atom:
+// The atom (design-language migration in flight — the mutex/outside-click
+// close targets BOTH the legacy .rt-dd panels (list-page, home) AND the
+// migrated framework .rp-menu panels (toolbar, report builder, multi-picker)
+// so both close correctly until the last rt-dd consumer adopts rp-menu):
 //   <button data-dd="myDdId">…</button>
-//   <div class="rt-dd" id="myDdId">…items…</div>
+//   <div class="rp-menu" id="myDdId">…items…</div>
 //
 // Behaviour:
 //   1. Click a trigger button → toggle that dropdown's `.open`
@@ -40,7 +43,7 @@ export function bindDropdown() {
       if (!dd) return;
       const wasOpen = dd.classList.contains("open");
       // Mutex — only one dropdown open at a time.
-      document.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open"));
+      document.querySelectorAll(".rt-dd.open, .rp-menu.open").forEach((d) => d.classList.remove("open"));
       dd.classList.toggle("open", !wasOpen);
       return;
     }
@@ -48,6 +51,6 @@ export function bindDropdown() {
     // close every open dropdown. The consumer's item handler ran
     // already (bubble phase fires children-first), so the close
     // is purely visual + state cleanup.
-    document.querySelectorAll(".rt-dd.open").forEach((d) => d.classList.remove("open"));
+    document.querySelectorAll(".rt-dd.open, .rp-menu.open").forEach((d) => d.classList.remove("open"));
   });
 }

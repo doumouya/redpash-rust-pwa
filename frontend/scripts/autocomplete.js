@@ -17,7 +17,7 @@
 //     Each picked value becomes a chip; backspace at empty input
 //     removes the last chip. Returns a control with read/write API.
 //
-// The dropdown element uses .rp-ac (separate from .rt-dd) so the
+// The dropdown element uses .rp-ac (separate from .rp-menu) so the
 // bindDropdown click-toggle handler in /scripts/dropdown.js doesn't
 // fight our focus-driven open/close. Outside-click handling lives
 // here, scoped to the wrap element.
@@ -131,7 +131,7 @@ export function attachAutocomplete(input, ctx) {
  * Replace `slot`'s content with a chip-picker. Picked values become
  * chips; the add-input runs autocomplete via column-index.
  *
- * @param {HTMLElement} slot           — typically a .rt-pred-val-slot
+ * @param {HTMLElement} slot           — typically a .rp-pred-val-slot
  * @param {{fileRid, colName, initialValues?: string[]}} ctx
  * @returns {{values: () => string[], add(v): void, clear(): void, detach(): void}}
  */
@@ -139,7 +139,7 @@ export function mountChipPicker(slot, ctx) {
   slot.innerHTML = ''
     + '<div class="rp-chip-picker">'
     +   '<div class="rp-chip-list"></div>'
-    +   '<input class="rp-chip-input rt-pred-val" type="text" placeholder="Add value…" />'
+    +   '<input class="rp-chip-input rp-pred-val" type="text" placeholder="Add value…" />'
     + '</div>';
 
   const picker = slot.querySelector(".rp-chip-picker");

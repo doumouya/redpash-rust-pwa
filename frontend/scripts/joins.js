@@ -50,24 +50,24 @@ export function mountJoins(panelBody, ctx) {
 
   function render() {
     if (loading) {
-      panelBody.innerHTML = '<p class="rt-empty rt-step-state">Detecting joins…</p>';
+      panelBody.innerHTML = '<p class="rp-empty rp-step-state">Detecting joins…</p>';
       return;
     }
     if (errorText) {
-      panelBody.innerHTML = '<p class="rt-empty rt-step-state">' + esc(errorText) + '</p>';
+      panelBody.innerHTML = '<p class="rp-empty rp-step-state">' + esc(errorText) + '</p>';
       return;
     }
     if (!candidates) {
-      panelBody.innerHTML = '<p class="rt-empty rt-step-state">Open a file to detect joins with siblings in the project.</p>';
+      panelBody.innerHTML = '<p class="rp-empty rp-step-state">Open a file to detect joins with siblings in the project.</p>';
       return;
     }
     const files = candidates.files || [];
     if (!files.length) {
-      panelBody.innerHTML = '<p class="rt-empty rt-step-state">No matching keys found in other files of this project.</p>';
+      panelBody.innerHTML = '<p class="rp-empty rp-step-state">No matching keys found in other files of this project.</p>';
       return;
     }
     panelBody.innerHTML =
-      '<p class="rt-join-intro">Join this file with another in the project. '
+      '<p class="rp-join-intro">Join this file with another in the project. '
       + 'Pick a candidate column pair below — pick multiple for a compound key.</p>'
       + files.map(renderFileCard).join("");
   }
@@ -84,15 +84,15 @@ export function mountJoins(panelBody, ctx) {
     const ridAttr = ' data-other-rid="' + esc(rid) + '"';
     const isApplying = applying === rid;
     return ''
-      + '<section class="rt-join-card"' + ridAttr + '>'
-      +   '<header class="rt-join-card__head">'
+      + '<section class="rp-join-card"' + ridAttr + '>'
+      +   '<header class="rp-join-card__head">'
       +     '<i class="bi bi-file-earmark-text"></i>'
-      +     '<span class="rt-join-card__title">' + esc(file.title || rid) + '</span>'
-      +     '<span class="rt-join-card__count">'
+      +     '<span class="rp-join-card__title">' + esc(file.title || rid) + '</span>'
+      +     '<span class="rp-join-card__count">'
       +       cands.length + ' candidate' + (cands.length === 1 ? '' : 's')
       +     '</span>'
       +   '</header>'
-      +   '<table class="rt-join-table">'
+      +   '<table class="rp-join-table">'
       +     '<thead><tr>'
       +       '<th class="is-pick"></th>'
       +       '<th class="is-strength" title="Overlap coefficient bucket"></th>'
@@ -104,29 +104,29 @@ export function mountJoins(panelBody, ctx) {
       +     '<tbody>' + shown.map((c) => renderCandRow(c, sel)).join("") + '</tbody>'
       +   '</table>'
       +   (hidden > 0
-          ? '<button class="rt-btn rt-btn--text rt-join-card__more" type="button">'
+          ? '<button class="rp-btn-icon rp-btn-icon--text rp-join-card__more" type="button">'
             + 'Show ' + hidden + ' more</button>'
           : '')
       +   (isOpen && cands.length > TOP_N
-          ? '<button class="rt-btn rt-btn--text rt-join-card__less" type="button">'
+          ? '<button class="rp-btn-icon rp-btn-icon--text rp-join-card__less" type="button">'
             + 'Show top ' + TOP_N + ' only</button>'
           : '')
-      +   '<footer class="rt-join-card__foot">'
-      +     '<span class="rt-join-card__hint">'
+      +   '<footer class="rp-join-card__foot">'
+      +     '<span class="rp-join-card__hint">'
       +       (nSel === 0
             ? 'Tick a row to join · multiple = compound key'
             : nSel === 1
               ? '1 key selected'
               : nSel + ' keys selected (compound join)')
       +     '</span>'
-      +     '<select class="rt-input rt-join-card__type" '
+      +     '<select class="rp-input rp-join-card__type" '
       +       (isApplying ? 'disabled ' : '') + 'aria-label="Join type">'
       +       renderJoinTypeOption("inner", "Inner", jt)
       +       renderJoinTypeOption("left",  "Left",  jt)
       +       renderJoinTypeOption("right", "Right", jt)
       +       renderJoinTypeOption("outer", "Outer", jt)
       +     '</select>'
-      +     '<button class="rt-btn rt-btn--accent rt-join-card__apply" type="button"'
+      +     '<button class="rp-btn-icon rp-btn-icon--accent rp-join-card__apply" type="button"'
       +       ((nSel === 0 || isApplying) ? ' disabled' : '') + '>'
       +       (isApplying
             ? '<i class="bi bi-arrow-repeat"></i> Joining…'
@@ -150,18 +150,18 @@ export function mountJoins(panelBody, ctx) {
     return ''
       + '<tr' + (isChecked ? ' class="is-picked"' : '') + '>'
       +   '<td class="is-pick">'
-      +     '<input type="checkbox" class="rt-join-pick" '
+      +     '<input type="checkbox" class="rp-join-pick" '
       +       'data-this-col="' + esc(c.this_col) + '" '
       +       'data-other-col="' + esc(c.other_col) + '"'
       +       (isChecked ? ' checked' : '') + '>'
       +   '</td>'
       +   '<td class="is-strength ' + dotsClass + '" '
       +     'title="overlap ' + (c.score || 0).toFixed(2) + '">' + dots + '</td>'
-      +   '<td><span class="rt-join-col">' + esc(c.this_col) + '</span></td>'
-      +   '<td><span class="rt-join-col">' + esc(c.other_col) + '</span></td>'
+      +   '<td><span class="rp-join-col">' + esc(c.this_col) + '</span></td>'
+      +   '<td><span class="rp-join-col">' + esc(c.other_col) + '</span></td>'
       +   '<td class="is-matches">'
       +     c.matches + ' of ' + c.this_uniques + ' base values match'
-      +     ' <span class="rt-join-meta">'
+      +     ' <span class="rp-join-meta">'
       +       '(other file has ' + c.other_uniques + ' unique)'
       +     '</span>'
       +   '</td>'
@@ -209,14 +209,14 @@ export function mountJoins(panelBody, ctx) {
   }
 
   function cardRid(node) {
-    return node?.closest(".rt-join-card")?.dataset.otherRid || null;
+    return node?.closest(".rp-join-card")?.dataset.otherRid || null;
   }
 
   // Click delegate — show more/less + Apply.
   panelBody.addEventListener("click", (e) => {
-    const moreBtn  = e.target.closest(".rt-join-card__more");
-    const lessBtn  = e.target.closest(".rt-join-card__less");
-    const applyBtn = e.target.closest(".rt-join-card__apply");
+    const moreBtn  = e.target.closest(".rp-join-card__more");
+    const lessBtn  = e.target.closest(".rp-join-card__less");
+    const applyBtn = e.target.closest(".rp-join-card__apply");
     if (moreBtn || lessBtn) {
       const rid = cardRid(moreBtn || lessBtn);
       if (!rid) return;
@@ -235,7 +235,7 @@ export function mountJoins(panelBody, ctx) {
   // is-picked + foot hint) instead of a full re-render so checkboxes
   // stay focused / responsive on rapid toggling.
   panelBody.addEventListener("change", (e) => {
-    const cb = e.target.closest(".rt-join-pick");
+    const cb = e.target.closest(".rp-join-pick");
     if (cb) {
       const rid = cardRid(cb);
       if (!rid) return;
@@ -248,7 +248,7 @@ export function mountJoins(panelBody, ctx) {
       updateCardFoot(rid);
       return;
     }
-    const sel = e.target.closest(".rt-join-card__type");
+    const sel = e.target.closest(".rp-join-card__type");
     if (sel) {
       const rid = cardRid(sel);
       if (rid) joinType[rid] = sel.value;
@@ -257,12 +257,12 @@ export function mountJoins(panelBody, ctx) {
 
   // In-place foot refresh — keeps checkbox state intact on toggle.
   function updateCardFoot(rid) {
-    const card = panelBody.querySelector('.rt-join-card[data-other-rid="' + cssEsc(rid) + '"]');
+    const card = panelBody.querySelector('.rp-join-card[data-other-rid="' + cssEsc(rid) + '"]');
     if (!card) return;
     const sel = selected[rid];
     const nSel = sel ? sel.size : 0;
-    const hint = card.querySelector(".rt-join-card__hint");
-    const apply = card.querySelector(".rt-join-card__apply");
+    const hint = card.querySelector(".rp-join-card__hint");
+    const apply = card.querySelector(".rp-join-card__apply");
     if (hint) {
       hint.textContent = nSel === 0
         ? "Tick a row to join · multiple = compound key"

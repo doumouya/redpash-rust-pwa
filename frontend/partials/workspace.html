@@ -170,10 +170,10 @@
         <!-- body — filter panel · table · tools panel -->
         <div class="rp-surface-body">
 
-          <aside class="rt-panel rt-panel--filter" id="wsFilterPanel">
-            <div class="rt-panel-inner">
-              <div class="rt-panel-head">
-                <div class="rt-panel-tabs rt-panel-tabs--pills" id="wsFilterTabs">
+          <aside class="rp-panel rp-panel-filter" id="wsFilterPanel">
+            <div class="rp-panel-inner">
+              <div class="rp-panel-head">
+                <div class="rp-panel-tabs rp-panel-tabs-pills" id="wsFilterTabs">
                   <button class="is-active" type="button" data-tab="filter" title="Filter source rows">
                     <i class="bi bi-funnel"></i> Filter
                   </button>
@@ -181,28 +181,28 @@
                     <i class="bi bi-bar-chart-line"></i> Report
                   </button>
                 </div>
-                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+                <button class="rp-btn-icon rp-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
-              <div class="rt-panel-body">
-                <div class="rt-panel-tab is-active" data-tab="filter">
-                  <span class="rt-field-lbl">Condition groups</span>
+              <div class="rp-panel-body">
+                <div class="rp-panel-tab is-active" data-tab="filter">
+                  <span class="rp-label">Condition groups</span>
                   <div id="wsGroupList"></div>
                   <button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--block" id="wsAddGroup" type="button">
                     <i class="bi bi-plus-lg"></i> Add group
                   </button>
                 </div>
-                <div class="rt-panel-tab" data-tab="report" id="wsReportBody" hidden>
+                <div class="rp-panel-tab" data-tab="report" id="wsReportBody" hidden>
                   <!-- report.js mounts the builder here -->
                 </div>
               </div>
-              <div class="rt-panel-foot">
-                <div class="rt-panel-tab-foot is-active" data-tab="filter">
+              <div class="rp-panel-foot">
+                <div class="rp-panel-tab-foot is-active" data-tab="filter">
                   <button class="rp-btn-icon" id="wsClearFilter" type="button">Clear</button>
                   <button class="rp-btn-icon rp-btn-icon--accent" id="wsApplyFilter" type="button">
                     <i class="bi bi-funnel"></i> Apply filter
                   </button>
                 </div>
-                <div class="rt-panel-tab-foot" data-tab="report" hidden>
+                <div class="rp-panel-tab-foot" data-tab="report" hidden>
                   <button class="rp-btn-icon" id="wsClearReport" type="button">Clear</button>
                   <button class="rp-btn-icon rp-btn-icon--accent" id="wsApplyReport" type="button">
                     <i class="bi bi-play-fill"></i> Run preview
@@ -221,22 +221,22 @@
             <div class="rt-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
 
-          <aside class="rt-panel rt-panel--history" id="wsHistoryPanel">
-            <div class="rt-panel-inner">
-              <div class="rt-panel-head">
-                <span class="rt-panel-title"><i class="bi bi-clock-history"></i> History</span>
-                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+          <aside class="rp-panel rp-panel-history" id="wsHistoryPanel">
+            <div class="rp-panel-inner">
+              <div class="rp-panel-head">
+                <span class="rp-panel-title"><i class="bi bi-clock-history"></i> History</span>
+                <button class="rp-btn-icon rp-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
-              <div class="rt-panel-body" id="wsHistoryBody">
-                <p class="rt-empty rt-step-state">Open a file to see its step history.</p>
+              <div class="rp-panel-body" id="wsHistoryBody">
+                <p class="rp-empty rp-step-state">Open a file to see its step history.</p>
               </div>
             </div>
           </aside>
 
-          <aside class="rt-panel rt-panel--tools" id="wsToolsPanel">
-            <div class="rt-panel-inner">
-              <div class="rt-panel-head">
-                <div class="rt-panel-tabs rt-panel-tabs--pills" id="wsToolsTabs">
+          <aside class="rp-panel rp-panel-tools" id="wsToolsPanel">
+            <div class="rp-panel-inner">
+              <div class="rp-panel-head">
+                <div class="rp-panel-tabs rp-panel-tabs-pills" id="wsToolsTabs">
                   <button class="is-active" type="button" data-tab="clean" title="Clean + transform this file's columns">
                     <i class="bi bi-tools"></i> Clean
                   </button>
@@ -244,12 +244,12 @@
                     <i class="bi bi-link-45deg"></i> Joins
                   </button>
                 </div>
-                <button class="rp-btn-icon rt-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
+                <button class="rp-btn-icon rp-panel-close" type="button"><i class="bi bi-x-lg"></i></button>
               </div>
-              <div class="rt-panel-body">
-                <div class="rt-panel-tab is-active" data-tab="clean" id="wsToolsCleanBody"><!-- tools.js mounts the columns-redtable + cleaning toolbar here --></div>
-                <div class="rt-panel-tab" data-tab="joins" id="wsToolsJoinsBody" hidden>
-                  <p class="rt-empty rt-step-state">Join this file with another file in the same project.</p>
+              <div class="rp-panel-body">
+                <div class="rp-panel-tab is-active" data-tab="clean" id="wsToolsCleanBody"><!-- tools.js mounts the columns-redtable + cleaning toolbar here --></div>
+                <div class="rp-panel-tab" data-tab="joins" id="wsToolsJoinsBody" hidden>
+                  <p class="rp-empty rp-step-state">Join this file with another file in the same project.</p>
                 </div>
               </div>
             </div>

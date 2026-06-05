@@ -8,8 +8,8 @@
 // typed value for that field; the parent tool config composes them
 // into the step params POSTed to /api/files/:rid/steps.
 //
-// All field rows reuse the filter panel's `rt-pred` family — no new
-// UI components, just BEM modifiers (`rt-pred--stack`, `rt-pred--inline`)
+// All field rows reuse the filter panel's `rp-pred` family — no new
+// UI components, just BEM modifiers (`rp-pred--stack`, `rp-pred--inline`)
 // on existing atoms. Source-of-truth for the BEM family is
 // `frontend/styles/panel.css`.
 //
@@ -24,9 +24,9 @@ import { esc } from "/scripts/dom.js";
 export const FIELDS = {
   column: ({ key, label, columns }) => ({
     html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<select class="rt-pred-col" data-key="' + esc(key) + '">'
+      '<div class="rp-pred rp-pred--stack">'
+      + '<label class="rp-pred-lbl">' + esc(label) + '</label>'
+      + '<select class="rp-pred-col" data-key="' + esc(key) + '">'
       +   columns.map((c) =>
             '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join("")
       + '</select>'
@@ -36,9 +36,9 @@ export const FIELDS = {
 
   enum: ({ key, label, options }) => ({
     html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<select class="rt-pred-op" data-key="' + esc(key) + '">'
+      '<div class="rp-pred rp-pred--stack">'
+      + '<label class="rp-pred-lbl">' + esc(label) + '</label>'
+      + '<select class="rp-pred-op" data-key="' + esc(key) + '">'
       +   options.map(([v, l]) =>
             '<option value="' + esc(v) + '">' + esc(l) + '</option>').join("")
       + '</select>'
@@ -48,9 +48,9 @@ export const FIELDS = {
 
   text: ({ key, label, placeholder }) => ({
     html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<input class="rt-pred-val" data-key="' + esc(key) + '"'
+      '<div class="rp-pred rp-pred--stack">'
+      + '<label class="rp-pred-lbl">' + esc(label) + '</label>'
+      + '<input class="rp-pred-val" data-key="' + esc(key) + '"'
       + (placeholder ? ' placeholder="' + esc(placeholder) + '"' : '') + ' />'
       + '</div>',
     read: (root) => root.querySelector('[data-key="' + key + '"]').value.trim(),
@@ -58,9 +58,9 @@ export const FIELDS = {
 
   boolean: ({ key, label }) => ({
     html:
-      '<div class="rt-pred rt-pred--inline">'
-      + '<label class="rt-pred-lbl">'
-      +   '<input type="checkbox" class="rt-chk" data-key="' + esc(key) + '" /> ' + esc(label)
+      '<div class="rp-pred rp-pred--inline">'
+      + '<label class="rp-pred-lbl">'
+      +   '<input type="checkbox" class="rp-redtable-chk" data-key="' + esc(key) + '" /> ' + esc(label)
       + '</label>'
       + '</div>',
     read: (root) => root.querySelector('[data-key="' + key + '"]').checked,
@@ -70,11 +70,11 @@ export const FIELDS = {
   // Returns the array of checked column names (or [] if none).
   multicolumn: ({ key, label, columns }) => ({
     html:
-      '<div class="rt-pred rt-pred--stack">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<div class="rt-pred-multi" data-key="' + esc(key) + '">'
+      '<div class="rp-pred rp-pred--stack">'
+      + '<label class="rp-pred-lbl">' + esc(label) + '</label>'
+      + '<div class="rp-pred-multi" data-key="' + esc(key) + '">'
       +   columns.map((c) =>
-            '<label class="rt-dd-item"><input type="checkbox" class="rt-chk" value="'
+            '<label class="rp-menu-item"><input type="checkbox" class="rp-redtable-chk" value="'
               + esc(c.name) + '" /> ' + esc(c.name) + '</label>').join("")
       + '</div>'
       + '</div>',
@@ -90,16 +90,16 @@ export const FIELDS = {
   // "add your own" input; `read` collects the ticked chips + typed values.
   sentinels: ({ key, label }) => ({
     html:
-      '<div class="rt-pred rt-pred--stack rt-sentinel-pick" data-key="' + esc(key) + '">'
-      + '<label class="rt-pred-lbl">' + esc(label) + '</label>'
-      + '<div class="rt-sentinel-found" data-sentinel-found>'
-      +   '<span class="rt-sentinel-scanning">Scanning this file…</span>'
+      '<div class="rp-pred rp-pred--stack rp-sentinel-pick" data-key="' + esc(key) + '">'
+      + '<label class="rp-pred-lbl">' + esc(label) + '</label>'
+      + '<div class="rp-sentinel-found" data-sentinel-found>'
+      +   '<span class="rp-sentinel-scanning">Scanning this file…</span>'
       + '</div>'
-      + '<input class="rt-pred-val rt-sentinel-add" data-sentinel-add'
+      + '<input class="rp-pred-val rp-sentinel-add" data-sentinel-add'
       +   ' placeholder="add your own — comma-separated (remembered in Settings)" />'
       + '</div>',
     read: (root) => {
-      const wrap = root.querySelector('.rt-sentinel-pick[data-key="' + key + '"]');
+      const wrap = root.querySelector('.rp-sentinel-pick[data-key="' + key + '"]');
       if (!wrap) return [];
       const picked = Array.from(
         wrap.querySelectorAll('input[type="checkbox"][data-sentinel-val]:checked')

@@ -758,7 +758,7 @@ export default function workspace(app, { session }) {
       .slice(0, 8);
     const cards = recent.length
       ? recent.map(landingCard).join("")
-      : '<p class="rt-empty">No projects yet — use the Upload button to add your first data file.</p>';
+      : '<p class="rp-empty">No projects yet — use the Upload button to add your first data file.</p>';
     landing.innerHTML = ''
       + '<div class="rp-overview__hero">'
       +   heroStripHTML(
@@ -784,7 +784,7 @@ export default function workspace(app, { session }) {
     requestAnimationFrame(() => landingCharts.resize());
   }
   function wsProjectsTableHTML(projects) {
-    if (!projects.length) return '<p class="rt-empty ws-landing-table-empty">No projects.</p>';
+    if (!projects.length) return '<p class="rp-empty ws-landing-table-empty">No projects.</p>';
     const sorted = projects.slice()
       .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
     const body = sorted.map((p) => {
@@ -1712,7 +1712,7 @@ export default function workspace(app, { session }) {
     const sel     = absIdx != null && selectedRows.has(absIdx);
     const ce      = table.classList.contains("mode-edit") ? ' contenteditable="true"' : "";
     return '<tr' + idxAttr + (sel ? ' class="is-selected"' : "") + '>'
-      + '<td class="col-chk"><input type="checkbox" class="rt-chk"' + (sel ? " checked" : "") + ' /></td>'
+      + '<td class="col-chk"><input type="checkbox" class="rp-redtable-chk"' + (sel ? " checked" : "") + ' /></td>'
       + '<td class="col-n col-rownum">' + (i + 1) + '</td>'
       + renderColumns.map((c, ci) => {
           const v = row[ci];
@@ -1727,7 +1727,7 @@ export default function workspace(app, { session }) {
     renderColumns = columns;
     selectedRows.clear();   // selection is per-page; a fresh render starts clean
     thead.innerHTML = '<tr>'
-      + '<th class="col-chk"><input type="checkbox" class="rt-chk" id="wsSelectAll" /></th>'
+      + '<th class="col-chk"><input type="checkbox" class="rp-redtable-chk" id="wsSelectAll" /></th>'
       + '<th class="col-rownum">#</th>'
       + columns.map((c, i) =>
           '<th class="sortable" data-sort="' + (i + 3) + '"'
@@ -1778,7 +1778,7 @@ export default function workspace(app, { session }) {
   // ─── columns dropdown — rebuilt per file ───────────────────────
   function rebuildColsDropdown(columns) {
     colsDd.innerHTML = columns.map((c, i) =>
-      '<label class="rp-menu-item"><input type="checkbox" class="rt-chk" data-col="'
+      '<label class="rp-menu-item"><input type="checkbox" class="rp-redtable-chk" data-col="'
       + (i + 3) + '" checked /> ' + esc(c.name) + '</label>'
     ).join("");
   }
@@ -1834,32 +1834,32 @@ export default function workspace(app, { session }) {
   function valueInputHTML(op, meta) {
     const kind = valueKindFor(op, meta);
     if (kind === "none") {
-      return '<input class="rt-pred-val" type="hidden" />';
+      return '<input class="rp-pred-val" type="hidden" />';
     }
     if (kind === "number") {
-      return '<input class="rt-pred-val" type="number" step="any" placeholder="value" />';
+      return '<input class="rp-pred-val" type="number" step="any" placeholder="value" />';
     }
     if (kind === "date") {
-      return '<input class="rt-pred-val" type="date" placeholder="YYYY-MM-DD" />';
+      return '<input class="rp-pred-val" type="date" placeholder="YYYY-MM-DD" />';
     }
     if (kind === "list") {
-      return '<input class="rt-pred-val" type="text" placeholder="a, b, c (comma-separated)" />';
+      return '<input class="rp-pred-val" type="text" placeholder="a, b, c (comma-separated)" />';
     }
     if (kind === "range-number") {
-      return '<span class="rt-pred-range">'
-        + '<input class="rt-pred-val rt-pred-val-a" type="number" step="any" placeholder="min" />'
-        + '<span class="rt-pred-range-sep">to</span>'
-        + '<input class="rt-pred-val rt-pred-val-b" type="number" step="any" placeholder="max" />'
+      return '<span class="rp-pred-range">'
+        + '<input class="rp-pred-val rp-pred-val-a" type="number" step="any" placeholder="min" />'
+        + '<span class="rp-pred-range-sep">to</span>'
+        + '<input class="rp-pred-val rp-pred-val-b" type="number" step="any" placeholder="max" />'
         + '</span>';
     }
     if (kind === "range-date") {
-      return '<span class="rt-pred-range">'
-        + '<input class="rt-pred-val rt-pred-val-a" type="date" />'
-        + '<span class="rt-pred-range-sep">to</span>'
-        + '<input class="rt-pred-val rt-pred-val-b" type="date" />'
+      return '<span class="rp-pred-range">'
+        + '<input class="rp-pred-val rp-pred-val-a" type="date" />'
+        + '<span class="rp-pred-range-sep">to</span>'
+        + '<input class="rp-pred-val rp-pred-val-b" type="date" />'
         + '</span>';
     }
-    return '<input class="rt-pred-val" type="text" placeholder="value" />';
+    return '<input class="rp-pred-val" type="text" placeholder="value" />';
   }
 
   function predRow() {
@@ -1868,16 +1868,16 @@ export default function workspace(app, { session }) {
     const ops       = opsForColumn(firstMeta);
     const firstOp   = ops[0]?.[0] || "eq";
     const d = document.createElement("div");
-    d.className = "rt-pred";
+    d.className = "rp-pred";
     d.innerHTML =
-      '<select class="rt-pred-col">'
+      '<select class="rp-pred-col">'
       + filterCols.map((c) => '<option value="' + c[0] + '">' + esc(c[1]) + "</option>").join("")
       + "</select>"
-      + '<select class="rt-pred-op">'
+      + '<select class="rp-pred-op">'
       + opSelectHTML(firstMeta, firstOp)
       + "</select>"
-      + '<span class="rt-pred-val-slot">' + valueInputHTML(firstOp, firstMeta) + '</span>'
-      + '<button class="rt-pred-del" type="button" title="Remove condition"><i class="bi bi-x"></i></button>';
+      + '<span class="rp-pred-val-slot">' + valueInputHTML(firstOp, firstMeta) + '</span>'
+      + '<button class="rp-pred-del" type="button" title="Remove condition"><i class="bi bi-x"></i></button>';
     // Wire the value-input slot — autocomplete for single-value ops,
     // chip-picker for in/not_in. No-op for numeric/date/between/null
     // ops (free input is right; nothing to suggest).
@@ -1893,14 +1893,14 @@ export default function workspace(app, { session }) {
   const SINGLE_VALUE_AC_OPS = new Set(["eq", "neq", "contains", "not_contains", "starts_with", "ends_with"]);
   const LIST_OPS            = new Set(["in", "not_in"]);
   function wireValueSlot(pred) {
-    const opSel = pred.querySelector(".rt-pred-op");
+    const opSel = pred.querySelector(".rp-pred-op");
     const op = opSel?.value || "eq";
-    const slot = pred.querySelector(".rt-pred-val-slot");
+    const slot = pred.querySelector(".rp-pred-val-slot");
     if (!slot) return;
     const ctx = {
       fileRid: () => activeFileRid,
       colName: () => {
-        const colSel = pred.querySelector(".rt-pred-col");
+        const colSel = pred.querySelector(".rp-pred-col");
         const idx = Number(colSel?.value);
         return filterCols.find((c) => c[0] === idx)?.[1] || null;
       },
@@ -1913,7 +1913,7 @@ export default function workspace(app, { session }) {
       return;
     }
     if (SINGLE_VALUE_AC_OPS.has(op)) {
-      const input = slot.querySelector(".rt-pred-val");
+      const input = slot.querySelector(".rp-pred-val");
       if (input && input.type !== "hidden") attachAutocomplete(input, ctx);
     }
     // Other ops (numeric / date / between / null) — no wiring; the
@@ -1924,16 +1924,16 @@ export default function workspace(app, { session }) {
     card.className = "rp-group-card";
     card.innerHTML =
       '<div class="rp-group-card-head">'
-      + '<div class="rt-seg rp-group-card-combo">'
+      + '<div class="rp-seg rp-group-card-combo">'
       + '<button type="button" class="is-active" data-combo="AND">AND</button>'
       + '<button type="button" data-combo="OR">OR</button>'
       + "</div>"
       + '<button class="rp-group-card-del" type="button" title="Remove group"><i class="bi bi-trash3"></i></button>'
       + "</div>"
-      + '<div class="rt-pred-list"></div>'
+      + '<div class="rp-pred-list"></div>'
       + '<button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--block rp-add-pred" type="button">'
       + '<i class="bi bi-plus-lg"></i> Add condition</button>';
-    card.querySelector(".rt-pred-list").appendChild(predRow());
+    card.querySelector(".rp-pred-list").appendChild(predRow());
     return card;
   }
   function renderSeps() {
@@ -1951,9 +1951,9 @@ export default function workspace(app, { session }) {
   $("#wsAddGroup").addEventListener("click", () => { if (filterCols.length) addGroup(); });
 
   groupList.addEventListener("click", (e) => {
-    if (e.target.closest(".rt-pred-del")) { e.target.closest(".rt-pred").remove(); return; }
+    if (e.target.closest(".rp-pred-del")) { e.target.closest(".rp-pred").remove(); return; }
     if (e.target.closest(".rp-add-pred")) {
-      e.target.closest(".rp-group-card").querySelector(".rt-pred-list").appendChild(predRow());
+      e.target.closest(".rp-group-card").querySelector(".rp-pred-list").appendChild(predRow());
       return;
     }
     if (e.target.closest(".rp-group-card-del")) {
@@ -1974,19 +1974,19 @@ export default function workspace(app, { session }) {
     }
   });
   groupList.addEventListener("change", (e) => {
-    const pred = e.target.closest(".rt-pred");
+    const pred = e.target.closest(".rp-pred");
     if (!pred) return;
     // Column changed → dtype may have changed → rebuild the op
     // dropdown (drop ops that don't apply) + the value slot. Keep
     // the currently-selected op if still valid; otherwise default
     // to the first op of the new dtype.
-    if (e.target.classList.contains("rt-pred-col")) {
+    if (e.target.classList.contains("rp-pred-col")) {
       const meta = filterColMeta(e.target.value);
-      const opSel = pred.querySelector(".rt-pred-op");
+      const opSel = pred.querySelector(".rp-pred-op");
       const ops = opsForColumn(meta);
       const wantOp = ops.find((o) => o[0] === opSel.value)?.[0] || ops[0]?.[0] || "eq";
       opSel.innerHTML = opSelectHTML(meta, wantOp);
-      const slot = pred.querySelector(".rt-pred-val-slot");
+      const slot = pred.querySelector(".rp-pred-val-slot");
       slot._chipCtrl = null;
       slot.innerHTML = valueInputHTML(wantOp, meta);
       wireValueSlot(pred);
@@ -1994,9 +1994,9 @@ export default function workspace(app, { session }) {
     }
     // Op changed → swap the value-input slot if the value-kind
     // shifted (text → number, single → range, etc.).
-    if (e.target.classList.contains("rt-pred-op")) {
-      const meta = filterColMeta(pred.querySelector(".rt-pred-col").value);
-      const slot = pred.querySelector(".rt-pred-val-slot");
+    if (e.target.classList.contains("rp-pred-op")) {
+      const meta = filterColMeta(pred.querySelector(".rp-pred-col").value);
+      const slot = pred.querySelector(".rp-pred-val-slot");
       slot._chipCtrl = null;
       slot.innerHTML = valueInputHTML(e.target.value, meta);
       wireValueSlot(pred);
@@ -2012,7 +2012,7 @@ export default function workspace(app, { session }) {
   function readGroup(card) {
     return {
       combo: card.querySelector(".rp-group-card-combo .is-active").dataset.combo,
-      preds: Array.from(card.querySelectorAll(".rt-pred")).map(readPred),
+      preds: Array.from(card.querySelectorAll(".rp-pred")).map(readPred),
     };
   }
   // Read a predicate row → a normalized intermediate shape. Range ops
@@ -2022,25 +2022,25 @@ export default function workspace(app, { session }) {
   // unchanged — predToLeaf is the validator that drops incomplete
   // predicates.
   function readPred(p) {
-    const op = p.querySelector(".rt-pred-op").value;
-    const col = +p.querySelector(".rt-pred-col").value;
+    const op = p.querySelector(".rp-pred-op").value;
+    const col = +p.querySelector(".rp-pred-col").value;
     if (op === "between") {
-      const a = p.querySelector(".rt-pred-val-a")?.value.trim() || "";
-      const b = p.querySelector(".rt-pred-val-b")?.value.trim() || "";
+      const a = p.querySelector(".rp-pred-val-a")?.value.trim() || "";
+      const b = p.querySelector(".rp-pred-val-b")?.value.trim() || "";
       return { col, op, val: [a, b] };
     }
     if (op === "in" || op === "not_in") {
-      const slot = p.querySelector(".rt-pred-val-slot");
+      const slot = p.querySelector(".rp-pred-val-slot");
       const chips = slot?._chipCtrl?.values() || [];
       // Fall back to comma-split if the chip-picker isn't mounted
       // (e.g. user typed in plain input and op flipped to in/not_in
       // before the picker rendered). Defensive — shouldn't normally
       // hit since wireValueSlot mounts the picker synchronously.
       if (chips.length > 0) return { col, op, val: chips };
-      const raw = p.querySelector(".rt-pred-val")?.value.trim() || "";
+      const raw = p.querySelector(".rp-pred-val")?.value.trim() || "";
       return { col, op, val: raw };
     }
-    return { col, op, val: p.querySelector(".rt-pred-val")?.value.trim() || "" };
+    return { col, op, val: p.querySelector(".rp-pred-val")?.value.trim() || "" };
   }
   $("#wsApplyFilter").addEventListener("click", () => {
     activeFilter = buildFilterNode();
@@ -2144,7 +2144,7 @@ export default function workspace(app, { session }) {
     syncSel();
   });
   tbody.addEventListener("change", (e) => {
-    if (!e.target.classList.contains("rt-chk")) return;
+    if (!e.target.classList.contains("rp-redtable-chk")) return;
     const tr = e.target.closest("tr");
     const idx = parseInt(tr?.dataset.idx, 10);
     if (!Number.isFinite(idx)) return;
@@ -2335,11 +2335,11 @@ export default function workspace(app, { session }) {
     const body = $("#wsHistoryBody");
     if (!body) return;
     if (!activeFileRid) {
-      body.innerHTML = '<p class="rt-empty rt-step-state">Open a file to see its step history.</p>';
+      body.innerHTML = '<p class="rp-empty rp-step-state">Open a file to see its step history.</p>';
       return;
     }
     if (!activeSteps.length) {
-      body.innerHTML = '<p class="rt-empty rt-step-state">No steps applied yet.</p>';
+      body.innerHTML = '<p class="rp-empty rp-step-state">No steps applied yet.</p>';
       return;
     }
     // Server returns steps in ordinal order; show newest first so the
@@ -2351,13 +2351,13 @@ export default function workspace(app, { session }) {
     const undone = step.applied === false;
     const params = fmtStepParams(step.params);
     return ''
-      + '<div class="rt-step' + (undone ? ' is-undone' : '') + '">'
-      +   '<span class="rt-step-ord">' + (step.ordinal != null ? step.ordinal : "—") + '</span>'
-      +   '<span class="rt-step-body">'
-      +     '<span class="rt-step-kind">' + esc(step.kind || "—") + '</span>'
-      +     (params ? '<span class="rt-step-params">' + esc(params) + '</span>' : '')
+      + '<div class="rp-step' + (undone ? ' is-undone' : '') + '">'
+      +   '<span class="rp-step-ord">' + (step.ordinal != null ? step.ordinal : "—") + '</span>'
+      +   '<span class="rp-step-body">'
+      +     '<span class="rp-step-kind">' + esc(step.kind || "—") + '</span>'
+      +     (params ? '<span class="rp-step-params">' + esc(params) + '</span>' : '')
       +   '</span>'
-      +   '<span class="rt-step-time">' + fmtRelTime(step.created_at) + '</span>'
+      +   '<span class="rp-step-time">' + fmtRelTime(step.created_at) + '</span>'
       + '</div>';
   }
   // Short summary of step.params — first three key=value pairs, each
@@ -2398,7 +2398,7 @@ export default function workspace(app, { session }) {
       btn.classList.toggle("is-active", open);
     };
     btn.addEventListener("click", () => set(!panel.classList.contains("open")));
-    panel.querySelector(".rt-panel-close").addEventListener("click", () => set(false));
+    panel.querySelector(".rp-panel-close").addEventListener("click", () => set(false));
   }
   bindPanel("#wsFilterToggle", "#wsFilterPanel");
 
@@ -2420,14 +2420,14 @@ export default function workspace(app, { session }) {
   }
   RIGHT_PANELS.forEach((p) => {
     $(p.btn).addEventListener("click", () => toggleRightPanel(p));
-    $(p.panel).querySelector(".rt-panel-close").addEventListener("click", () => {
+    $(p.panel).querySelector(".rp-panel-close").addEventListener("click", () => {
       $(p.panel).classList.remove("open");
       $(p.btn).classList.remove("is-active");
     });
   });
 
   // ─── tools panel — Clean tab (parameterised, one factory + 15 configs) ─
-  // The Tools panel now hosts two tabs via .rt-panel-tabs in the head
+  // The Tools panel now hosts two tabs via .rp-panel-tabs in the head
   // (same atom as the filter panel's Filter|Report split — see panel.css
   // L720-L753). Clean = the cleaning columns-redtable (this mount); Joins
   // = sibling-file join picker (mounted just below, also eagerly).
@@ -2518,8 +2518,8 @@ export default function workspace(app, { session }) {
         el.classList.toggle("is-active", match);
       } else {
         el.hidden = !match;
-        if (el.classList.contains("rt-panel-tab")
-            || el.classList.contains("rt-panel-tab-foot")) {
+        if (el.classList.contains("rp-panel-tab")
+            || el.classList.contains("rp-panel-tab-foot")) {
           el.classList.toggle("is-active", match);
         }
       }
@@ -2548,7 +2548,7 @@ export default function workspace(app, { session }) {
       const match = el.dataset.tab === tab;
       if (el.tagName === "BUTTON" && el.parentElement?.id === "wsToolsTabs") {
         el.classList.toggle("is-active", match);
-      } else if (el.classList.contains("rt-panel-tab")) {
+      } else if (el.classList.contains("rp-panel-tab")) {
         el.hidden = !match;
         el.classList.toggle("is-active", match);
       }

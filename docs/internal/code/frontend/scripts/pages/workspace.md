@@ -20,8 +20,19 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
 
 ## Drift-prone areas
 
-- **Design-language rollout — RAIL + TOOLBAR slices migrated (2026-06-05); panel/table/designer
-  PENDING.** Toolbar (data): `rt-toolbar--data`→`rp-toolbar--data`, `rt-toolbar-sep`→`rp-toolbar-sep`,
+- **Design-language rollout — RAIL + TOOLBAR + PANEL slices migrated (2026-06-05); table/designer
+  PENDING.** PANEL slice (CAS_B747F2B6): the filter/history/tools panels + report-builder + joins
+  migrated `rt-*`→`rp-*` across workspace.js/tools.js/joins.js/report.js/autocomplete.js/tools/fields.js
+  + partials/workspace.html + panel.css. The generic panel chrome (`rp-panel*`, `rp-pred*`, `rp-seg`,
+  `rp-tool-columns*`, `rp-step-preview*`, `rp-menu*`) now resolves to the framework atoms
+  (`framework/{panel,filter-panel,seg,tools-panel,menu}.css`); panel.css keeps only the
+  workspace-unique survivors (step-history, report-builder, joins, sentinels, tool-status, the
+  predicate measure/inline overrides). 134 byte-equivalent framework dups were pruned from panel.css
+  (`tools/css-twin-verify`). `rt-step-state` became a real `rp-step-state` atom (atoms.css, a modifier
+  composing `rp-empty`). **Cascade note:** the measure-row overrides compound `.rp-pred.rp-report-measure`
+  (specificity 0,0,2,1) to beat the framework's now-unguarded `.rp-pred > .rp-pred-col`. The shared
+  `dropdown.js` close-selector was extended to `.rt-dd.open, .rp-menu.open` (the report/multi-picker
+  dropdowns are `rp-menu` now). Toolbar (data): `rt-toolbar--data`→`rp-toolbar--data`, `rt-toolbar-sep`→`rp-toolbar-sep`,
   `rt-mode`→`rp-toolbar-mode`, `rt-pill`→`rp-chip rp-toolbar-pill` (+`.chev`→`rp-toolbar-chev`),
   `rt-dd*`→`rp-menu*` (+`.tick`→`rp-menu-tick`), `rt-sel-chip`→`rp-chip rp-toolbar-selchip`, and
   `rt-btn`→`rp-btn-icon` migrated **page-wide** (clean atom swap — no `.rt-toolbar .rt-btn` context
@@ -32,12 +43,11 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
   `rp-rail-views` (the Data/Dashboards seg track — `rt-seg--rail` collapsed into it), `rp-search`.
   Markup + the render/drag/hide/rename JS move in lockstep. The shared rail helpers (`rail-controls.js`
   `mountRailCollapse`/`mountRailSeg`, `rail-footer.js`) are **ref/`[data-rail-seg]`-attribute based** —
-  they didn't need changing. **Still `rt-*` (later slices, all OUTSIDE `.rp-rail`):** the data/designer
-  toolbars (`rt-toolbar*`/`rt-mode`/`rt-pill`/`rt-dd*`/`rt-sel-chip` + their `rt-btn`), the filter/
-  history/tools panels (`rt-panel*`, the panel `rt-btn`, the report-builder `rt-seg`), the redtable
-  (`rt-table*`), and the designer surface (`rt-designer` → the canonical `rp-dash-*`, gated by nothing
-  now). `rt-step-state` (step-history empty marker) → resolve as a styleless hook composing `rp-empty`
-  when the tools/panel slice lands.
+  they didn't need changing. **Still `rt-*` (later slices):** the **redtable** (`rt-table*` → slice 4,
+  `rp-redtable`, the highest-risk core grid), the **designer** surface + its toolbar (`rt-designer`,
+  `rt-toolbar--designer`/`-spacer` → slice 5, `rp-dash-*`), the virtual-rows spacer (`rt-vrow-spacer`),
+  the hide-restore UI (`rt-hidden*`), and a generic spinner state (`rt-spinning`). These were held
+  back verbatim by the panel-slice rename's `--leave=table,designer,toolbar,vrow,hidden,spinning`.
 
 - **One context-aware rail-foot create button (CAS_37B2E1BF, 2026-06-04):** the rail
   foot's three buttons (Upload / New dashboard / New project) collapsed into a single

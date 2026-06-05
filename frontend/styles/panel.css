@@ -1,98 +1,17 @@
-/* ── panel (rt-panel) ────────────────────────────────────────────
-   The two side panels inside the redtable surface — filter (left)
-   and tools (right). Both slide open from 0 width. */
-
-.rt-panel {
-  width: 0;
-  flex-shrink: 0;
-  overflow: hidden;
-  background: var(--rp-surface-2);
-  transition: width 0.18s var(--rp-ease);
-}
-.rt-panel.open { width: 15.625rem; }
-.rt-panel--filter.open  { border-right: 1px solid var(--rp-border); }
-.rt-panel--tools.open   { border-left: 1px solid var(--rp-border); }
-.rt-panel--history.open { border-left: 1px solid var(--rp-border); }
-.rt-panel-inner {
-  width: 15.625rem;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  transition: width 0.18s var(--rp-ease);
-}
-
-/* The tools panel hosts the columns-redtable surface (architecture/
-   columns-redtable.md). The class is set at mount time so the panel
-   widens to 35vw as soon as #wsToolsToggle opens it — no second
-   toggle, no swap. The picker + form-swap (.has-form, .rt-tool-list,
-   .rt-tool-form) were retired in Slice H. Width matched to the
-   filter panel's report-mode width for visual symmetry — both wide
-   panels share the same viewport budget. */
-.rt-panel--tools.has-columns.open { width: 35vw; }
-.rt-panel--tools.has-columns .rt-panel-inner { width: 35vw; }
-
-/* Filter panel runs at 35vw whenever it's open — matches the tools
-   panel's columns-mode width for visual symmetry. Both wide panels
-   share the same viewport budget regardless of which inner tab is
-   active. Previously the filter panel narrowed to 15.625rem when the
-   Filter tab was selected (only widening on the Report tab via
-   .has-report), but that broke the pill-tab strip's apparent size
-   (Em 2026-05-27 — "symmetry is the key"). */
-.rt-panel--filter.open { width: 35vw; }
-.rt-panel--filter .rt-panel-inner { width: 35vw; }
-
-.rt-panel-head {
-  flex-shrink: 0;
-  height: 2.625rem;
-  padding: 0 0.375rem 0 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--rp-border);
-}
-.rt-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 0.4375rem;
-  font-size: 0.7812rem;
-  font-weight: 600;
-  color: var(--rp-text);
-}
-.rt-panel-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
-.rt-panel-body { flex: 1; overflow-y: auto; padding: 0.75rem; }
-.rt-panel-foot {
-  flex-shrink: 0;
-  padding: 0.625rem 0.75rem;
-  display: flex;
-  gap: 0.375rem;
-  border-top: 1px solid var(--rp-border);
-}
-.rt-panel-foot .rt-btn--accent { flex: 1; }
-
-.rt-field-lbl {
-  display: block;
-  margin: 0.875rem 0 0.4375rem;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
-.rt-panel-body .rt-field-lbl:first-child { margin-top: 0; }
-.rt-panel-sect {
-  display: block;
-  margin-bottom: 0.5625rem;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-}
+/* panel.css — workspace-page-unique panel content.
+   The generic panel chrome (rp-panel/-head/-body/-tabs, the rp-pred filter
+   row, rp-seg, rp-tool-columns cleaning surface, rp-step-preview) lives in
+   framework/{panel,filter-panel,seg,tools-panel,menu}.css; this sheet keeps
+   only what's unique to the workspace panels: the step-history list, the
+   report-builder (questions / measures / windows / top-N / preview / matrix),
+   the joins cards, the sentinel chips, the tool-status row, and the predicate
+   measure/inline overrides that sit on top of the framework atom. Migrated
+   rt-*→rp-* + framework duplicates pruned 2026-06-05 (CAS_B747F2B6). */
 
 /* ── step history — list rows inside the history panel ──────────
    activeSteps from the file envelope render here. Applied steps =
    solid; undone steps (sitting on the redo stack) = dimmed. */
-.rt-step {
+.rp-step {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
@@ -100,23 +19,23 @@
   border-bottom: 1px solid var(--rp-border);
   transition: opacity 0.14s var(--rp-ease);
 }
-.rt-step:last-child { border-bottom: 0; }
-.rt-step.is-undone { opacity: 0.4; }
-.rt-step-ord {
+.rp-step:last-child { border-bottom: 0; }
+.rp-step.is-undone { opacity: 0.4; }
+.rp-step-ord {
   flex-shrink: 0;
   min-width: 1.375rem;
   font-variant-numeric: tabular-nums;
   font-size: 0.75rem;
   color: var(--rp-text-mute);
 }
-.rt-step-body { flex: 1; min-width: 0; }
-.rt-step-kind {
+.rp-step-body { flex: 1; min-width: 0; }
+.rp-step-kind {
   display: block;
   font-size: 0.7812rem;
   font-weight: 600;
   color: var(--rp-text);
 }
-.rt-step-params {
+.rp-step-params {
   display: block;
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.6875rem;
@@ -126,153 +45,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rt-step-time {
+.rp-step-time {
   flex-shrink: 0;
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
-/* Centered + muted from `.rt-empty` (shell.css); only the
-   step-history block-padding + slightly larger text stays. */
-.rt-step-state {
-  padding: 0.5rem 0.25rem;
-  font-size: 0.7812rem;
-}
-
-/* AND/OR segmented toggle */
-.rt-seg {
-  display: inline-flex;
-  padding: 0.125rem;
-  border-radius: 0.5rem;
-  background: var(--rp-hover);
-  border: 1px solid var(--rp-border);
-}
-.rt-seg button {
-  height: 1.5rem;
-  padding: 0 0.875rem;
-  border: 0;
-  border-radius: 0.375rem;
-  background: transparent;
-  color: var(--rp-text-dim);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-.rt-seg button.is-active {
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font-weight: 650;
-}
-
-
-/* Rail variant — full-width segmented toggle for a side rail. Two
-   equal icon+label buttons; the rail is narrow so the type tightens.
-   Shared by the Cases source switcher (Internal/External) and the
-   Workspace view switcher (Data/Dashboards). Page sheets add only
-   their own placement (margin) on top. */
-.rt-seg--rail {
-  display: flex;
-  width: 100%;
-}
-.rt-seg--rail button {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0 0.375rem;
-  font-size: 0.6875rem;
-}
-.rt-seg--rail button i { font-size: 0.75rem; }
 
 /* filter predicate row — 15.625rem filter panel, two-row layout:
    Row 1: column-select | op-select | delete-btn
    Row 2: value-slot (spans full width — fits comma-lists / two-input
           ranges / wide date pickers without squeezing col+op). */
-/* 20-track grid so the two rows can have different ratios:
-     Row 1 — `col` spans 10/20 (50%), `op` spans 10/20 (50%).
-     Row 2 — `val-slot` spans 17/20 (85%), `del` spans 3/20 (15%).
-   Same visual order as before (col / op stacked above val / del),
-   just with del moved off row 1 to sit alongside val on row 2.
-   Em's framing 2026-05-27: "make rt-pred-val take 85% so we can
-   fit rt-pred-del on the same line". */
-.rt-pred {
-  display: grid;
-  grid-template-columns: repeat(20, 1fr);
-  gap: 0.3125rem;
-  margin-bottom: 0.5rem;
-  padding: 0.375rem;
-  border: 1px solid var(--rp-border);
-  border-radius: 0.375rem;
-}
-/* Grid-column placements are scoped to the predicate variant only —
-   the .rt-report-measure modifier uses a different 4-track grid
-   (1fr auto 1fr auto) where these 20-track positions don't apply.
-   With the :not() guard, measure-row children auto-place onto the
-   measure grid (fn → col 1, of → col 2, col → col 3, del → col 4,
-   alias → row 2 spanning via .rt-report-measure .rt-pred-val). */
-.rt-pred:not(.rt-report-measure) > .rt-pred-col { grid-column: 1 / span 10; }
-.rt-pred:not(.rt-report-measure) > .rt-pred-op  { grid-column: 11 / span 10; }
-.rt-pred:not(.rt-report-measure) .rt-pred-val-slot { grid-column: 1 / span 17; }
-.rt-pred:not(.rt-report-measure) > .rt-pred-del { grid-column: 18 / span 3; justify-self: stretch; }
-.rt-pred select, .rt-pred input {
-  height: 1.875rem;
-  padding: 0 0.4375rem;
-  min-width: 0;
-  width: 100%;
-  border: 1px solid var(--rp-border);
-  border-radius: 0.4375rem;
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.7812rem;
-  outline: 0;
-}
-.rt-pred select:focus, .rt-pred input:focus { border-color: var(--rp-accent-2); }
-.rt-pred input:disabled { opacity: 0.45; }
-.rt-pred select optgroup {
-  color: var(--rp-text-mute);
-  font-size: 0.6875rem;
-  font-style: normal;
-}
-.rt-pred select option {
-  color: var(--rp-text);
-  font-size: 0.7812rem;
-}
-.rt-pred-val-slot {
-  /* grid-column placement on the 20-track grid is set above next to
-     the .rt-pred container rule (spans 17/20 = 85%). */
-  min-width: 0;                    /* allow nested inputs to shrink */
-}
-.rt-pred-val-slot:empty { display: none; }
-/* Hidden inputs (presence ops) collapse the row 2 visually. */
-.rt-pred-val-slot:has(input[type="hidden"]) { display: none; }
-/* Two-input range (between) — min | "to" | max. */
-.rt-pred-range {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 0.3125rem;
-  align-items: center;
-}
-.rt-pred-range-sep {
-  font-size: 0.6875rem;
-  color: var(--rp-text-mute);
-  text-align: center;
-}
-.rt-pred-del {
-  width: 100%;                /* fill the 3/20 = 15% grid cell on row 2 */
-  height: 1.875rem;           /* match select/input height for alignment */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 0.4375rem;
-  background: transparent;
-  color: var(--rp-text-mute);
-  cursor: pointer;
-  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
-}
-.rt-pred-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
 
 /* filter group-card / add-pred / group-sep → collapsed onto the framework
    rp-group-card* / rp-add-pred / rp-group-sep family (filter-panel.css);
@@ -280,9 +63,9 @@
 
 /* ── cleaning tools panel — status row ──────────────────────────
    Inline last-applied / error message at the top of the panel body.
-   The columns-redtable surface (.rt-tool-columns) sits below it. */
+   The columns-redtable surface (.rp-tool-columns) sits below it. */
 
-.rt-tool-status {
+.rp-tool-status {
   margin-bottom: 0.625rem;
   padding: 0.4375rem 0.625rem;
   border-radius: 0.5rem;
@@ -291,35 +74,18 @@
   border: 1px solid var(--rp-border);
   color: var(--rp-text-dim);
 }
-.rt-tool-status[data-kind="ok"]   { color: var(--rp-ok);   border-color: var(--rp-ok); }
-.rt-tool-status[data-kind="warn"] { color: var(--rp-warn); border-color: var(--rp-warn); }
-.rt-tool-status[data-kind="err"]  { color: var(--rp-accent); border-color: var(--rp-accent); }
+.rp-tool-status[data-kind="ok"]   { color: var(--rp-ok);   border-color: var(--rp-ok); }
+.rp-tool-status[data-kind="warn"] { color: var(--rp-warn); border-color: var(--rp-warn); }
+.rp-tool-status[data-kind="err"]  { color: var(--rp-accent); border-color: var(--rp-accent); }
 
-/* `rt-pred--stack` — label-on-top variant of the filter row.
-   The base `rt-pred` is a 1fr/1fr/auto grid for the filter panel;
-   tools forms need each field on its own row with a label above. */
-.rt-pred--stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  grid-template-columns: none;
-  margin-bottom: 0.625rem;
-}
-.rt-pred--stack select,
-.rt-pred--stack input { width: 100%; }
-.rt-pred-lbl {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--rp-text-mute);
-}
-.rt-pred--inline {
+.rp-pred--inline {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   grid-template-columns: none;
   margin-bottom: 0.625rem;
 }
-.rt-pred--inline .rt-pred-lbl {
+.rp-pred--inline .rp-pred-lbl {
   display: flex;
   align-items: center;
   gap: 0.375rem;
@@ -329,7 +95,7 @@
 }
 
 /* multi-column picker — vertical scroll list of dd-items */
-.rt-pred-multi {
+.rp-pred-multi {
   max-height: 8.75rem;
   overflow-y: auto;
   padding: 0.25rem;
@@ -337,500 +103,21 @@
   border-radius: 0.4375rem;
   background: var(--rp-surface);
 }
-.rt-pred-multi .rt-dd-item {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.375rem;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
 
-/* ghost button — outline-only, used for the back chevron */
-.rt-btn--ghost {
-  background: transparent;
-  color: var(--rp-text-mute);
-  border: 1px solid transparent;
-}
-.rt-btn--ghost:hover { color: var(--rp-text); background: var(--rp-hover); }
-
-/* busy state — applied to the apply button while POST is in flight */
-.rt-btn.is-busy { opacity: 0.6; pointer-events: none; }
-.rt-btn.is-busy i.bi-play-fill { animation: rt-spin 0.8s linear infinite; }
-@keyframes rt-spin {
+.rp-btn-icon.is-busy i.bi-play-fill { animation: rp-spin 0.8s linear infinite; }
+@keyframes rp-spin {
   to { transform: rotate(360deg); }
-}
-
-/* ── columns view ────────────────────────────────────────────────
-   The single surface inside the tools panel (architecture/
-   columns-redtable.md). Rows = ColumnMeta[]; toolbar = global +
-   selected action groups; cells = read or edit (Name → rename,
-   Datatype → cast with preview). */
-.rt-tool-columns {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.rt-tool-columns-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.7188rem;
-  color: var(--rp-text-mute);
-}
-.rt-tool-columns-meta b { color: var(--rp-text); font-weight: 650; }
-
-/* Fully-null-rows pill — shown in the meta strip only when the
-   summary has fully-null rows to drop. The only row-level action
-   on the columns surface (everything else is column-scoped). */
-.rt-tool-columns-fullynull {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3125rem;
-  height: 1.375rem;
-  padding: 0 0.5625rem;
-  margin-left: 0.125rem;
-  border-radius: 6.1875rem;
-  border: 1px solid var(--rp-warn);
-  background: rgba(249, 226, 175, 0.10);
-  color: var(--rp-warn);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.rt-tool-columns-fullynull i { font-size: 0.6875rem; }
-.rt-tool-columns-fullynull b { color: var(--rp-warn); font-weight: 700; }
-.rt-tool-columns-fullynull:hover {
-  background: rgba(249, 226, 175, 0.20);
-}
-.rt-tool-columns-fullynull.is-busy { opacity: 0.6; cursor: progress; }
-.rt-tool-columns-tablewrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--rp-border);
-  border-radius: 0.5rem;
-  background: var(--rp-surface);
-}
-.rt-tool-columns-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-.rt-tool-columns-table th,
-.rt-tool-columns-table td {
-  padding: 0.375rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--rp-border);
-  white-space: nowrap;
-}
-.rt-tool-columns-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--rp-surface-2);
-  color: var(--rp-text-mute);
-  font-weight: 600;
-  font-size: 0.6562rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  z-index: 1;
-}
-.rt-tool-columns-table tbody tr:last-child td { border-bottom: 0; }
-.rt-tool-columns-table tbody tr:hover { background: var(--rp-hover); }
-.rt-tool-columns-table td.is-num { text-align: right; }
-.rt-tool-columns-table td.is-num.is-warn-mid  { color: var(--rp-warn); }
-.rt-tool-columns-table td.is-num.is-warn-high { color: var(--rp-accent); font-weight: 600; }
-.rt-tool-columns-table td.is-muted { color: var(--rp-text-mute); }
-.rt-tool-columns-table td.is-name { font-weight: 600; color: var(--rp-text); }
-.rt-tool-columns-table td.is-sample {
-  max-width: 13.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--rp-text-dim);
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-}
-.rt-col-sniff {
-  display: inline-block;
-  margin-left: 0.25rem;
-  color: var(--rp-warn);
-  font-size: 0.6875rem;
-  cursor: help;
 }
 
 /* ── columns toolbar (Slice B — global actions) ─────────────────
    Horizontal strip of action buttons above the columns table. The
    "Global" label clarifies the mode for the first cut; later
    slices add select / edit groups beside it. */
-/* Columns toolbar — composes the .rt-toolbar atom (toolbar.css) so it
-   reads like the page's data toolbar: a search box + icon-only .rt-btn
-   actions, divided by .rt-toolbar-sep, closed off by a bottom border.
-   The 13 actions + search overflow one row at the panel's width, so
-   this override lets it wrap (the atom assumes a fixed 3rem row). */
-.rt-tool-columns-toolbar {
-  height: auto;
-  min-height: 3rem;
-  flex-wrap: wrap;
-  row-gap: 0.375rem;
-  padding-top: 0.375rem;
-  padding-bottom: 0.375rem;
-  margin-bottom: 0.5rem;
-}
-/* The .rt-search atom keeps its flex:1 here, so the column filter
-   fills row 1 like the page's data toolbar; enabled actions sit to its
-   right. Forces a wrap: a zero-height 100%-basis item ends row 1, so
-   the locked actions (and the trailing selection chip) drop to row 2. */
-.rt-tool-columns-toolbar-break { flex-basis: 100%; height: 0; }
-.rt-tool-columns-nomatch {
-  text-align: center;
-  padding: 1.25rem 0.5rem;
-  color: var(--rp-text-mute);
-  font-size: 0.7812rem;
-}
-
-/* ── columns modal sheet — in-panel form for dialog actions ─────
-   Sits between the toolbar and the table; renders one or more
-   FIELDS rows + Apply/Cancel foot. Designed in
-   architecture/columns-redtable.md as "small in-panel form (not a
-   full overlay)" — keeps the file context visible underneath. */
-.rt-tool-columns-sheet {
-  margin-bottom: 0.5rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--rp-accent-2);
-  border-radius: 0.5rem;
-  background: var(--rp-accent-soft);
-}
-.rt-tool-columns-sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.375rem;
-}
-.rt-tool-columns-sheet-title {
-  display: flex;
-  align-items: center;
-  gap: 0.4375rem;
-  font-size: 0.7812rem;
-  font-weight: 650;
-  color: var(--rp-text);
-}
-.rt-tool-columns-sheet-title i { color: var(--rp-accent-2); }
-/* Shape provided by `.rt-icon-btn` (button.css). */
-.rt-tool-columns-sheet-blurb {
-  margin: 0 0 0.5rem;
-  font-size: 0.7188rem;
-  color: var(--rp-text-mute);
-  line-height: 1.4;
-}
-.rt-tool-columns-sheet-body { display: flex; flex-direction: column; }
-.rt-tool-columns-sheet-body .rt-pred { margin-bottom: 0.5rem; }
-.rt-tool-columns-sheet-body .rt-pred:last-child { margin-bottom: 0; }
-.rt-tool-columns-sheet-foot {
-  display: flex;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--rp-border);
-}
-.rt-tool-columns-sheet-foot .rt-btn--accent { flex: 1; }
 
 /* ── select-mode toolbar additions (Slice C) ────────────────────
-   Select actions sit after a .rt-toolbar-sep; each goes disabled when
+   Select actions sit after a .rp-toolbar-sep; each goes disabled when
    the selection size is wrong for it. A selection chip on the right
    shows the count and offers a one-click clear. */
-/* These actions only work on a selection, so their disabled state must
-   read as clearly LOCKED (not just slightly dimmed) until enough
-   columns are picked — the base .rt-btn:disabled 0.4 opacity is too
-   faint on a lone icon. Stronger fade + lock cursor so the "select
-   columns first" gate is obvious at a glance. */
-.rt-tool-columns-toolbar button[data-select-kind]:disabled {
-  opacity: 0.28;
-  cursor: not-allowed;
-}
-.rt-tool-columns-selchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 1.625rem;
-  margin-left: auto;
-  padding: 0 0.25rem 0 0.625rem;
-  border-radius: 6.1875rem;
-  border: 1px solid var(--rp-border);
-  background: var(--rp-surface);
-  color: var(--rp-text-mute);
-  font-size: 0.7188rem;
-}
-.rt-tool-columns-selchip i { font-size: 0.75rem; }
-.rt-tool-columns-selchip b { color: var(--rp-text-mute); font-weight: 650; }
-.rt-tool-columns-selchip.is-active {
-  border-color: var(--rp-accent-2);
-  background: var(--rp-accent-soft);
-  color: var(--rp-text);
-}
-.rt-tool-columns-selchip.is-active b,
-.rt-tool-columns-selchip.is-active i { color: var(--rp-accent-2); }
-/* Shape from `.rt-icon-btn` + `--sm` (button.css). Hover tinted
-   red-soft + accent text since clearing IS the destructive action;
-   atom hover (mute → text) gets overridden here. */
-.rt-tool-columns-selchip-clear:hover {
-  background: rgba(243, 139, 168, 0.18);
-  color: var(--rp-accent);
-}
-.rt-tool-columns-selchip-clear i { font-size: 0.75rem; }
-
-/* Checkbox column on the columns table. Narrow, centered, and a
-   selected row gets a subtle accent tint so the picked set is
-   visible at a glance even when scrolled. */
-.rt-tool-columns-table th.is-check,
-.rt-tool-columns-table td.is-check {
-  width: 1.75rem;
-  text-align: center;
-  padding-left: 0.5rem;
-  padding-right: 0.25rem;
-}
-.rt-tool-columns-table tr.is-selected td { background: var(--rp-accent-soft); }
-.rt-tool-columns-table tr.is-selected td.is-name { color: var(--rp-accent-2); }
-.rt-tool-columns-table input.rt-col-check,
-.rt-tool-columns-table input.rt-col-check-all {
-  cursor: pointer;
-  margin: 0;
-}
-
-/* ── select-sheet "Acting on" chips strip (Slice D) ─────────────
-   When a sheet opens from the Selected toolbar group, it shows
-   the picked columns as chips so the user can see exactly what
-   the form will run against. Horizontal-scrolls for large
-   selections rather than wrapping into a wall of text. */
-.rt-tool-columns-sheet-chips {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  margin: -0.125rem 0 0.625rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px dashed var(--rp-border);
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-.rt-tool-columns-sheet-chips-lbl {
-  flex-shrink: 0;
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--rp-text-mute);
-  padding-right: 0.25rem;
-}
-.rt-tool-columns-sheet-chip {
-  flex-shrink: 0;
-  padding: 0.125rem 0.5rem;
-  border-radius: 6.1875rem;
-  background: var(--rp-surface);
-  border: 1px solid var(--rp-accent-2);
-  color: var(--rp-accent-2);
-  font-size: 0.7188rem;
-  font-weight: 600;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-}
-
-/* ── editable Name cell (Slice F) ───────────────────────────────
-   Click the Name cell to swap it for an inline input → Enter
-   commits a rename_column step. Hover affordance hints the
-   action without a pencil icon (keeps the row light). */
-.rt-tool-columns-table td.is-name.is-editable {
-  cursor: text;
-  position: relative;
-}
-.rt-tool-columns-table td.is-name.is-editable:hover {
-  background: var(--rp-hover);
-  outline: 1px dashed var(--rp-border);
-  outline-offset: -1px;
-}
-.rt-tool-columns-table td.is-name.is-editing {
-  padding-top: 0.125rem;
-  padding-bottom: 0.125rem;
-}
-.rt-col-name-input {
-  width: 100%;
-  height: 1.625rem;
-  padding: 0 0.4375rem;
-  border: 1px solid var(--rp-accent-2);
-  border-radius: 0.375rem;
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  outline: 0;
-}
-.rt-col-name-input:focus {
-  border-color: var(--rp-accent-2);
-  box-shadow: 0 0 0 0.125rem var(--rp-accent-soft);
-}
-
-/* ── editable Datatype cell (Slice G) ───────────────────────────
-   Click swaps the dtype text for a <select> of target types;
-   picking triggers /cast-preview. Hover/focus mirrors the Name
-   cell's affordance for visual consistency. */
-.rt-tool-columns-table td.is-dtype.is-editable {
-  cursor: pointer;
-}
-.rt-tool-columns-table td.is-dtype.is-editable:hover {
-  background: var(--rp-hover);
-  outline: 1px dashed var(--rp-border);
-  outline-offset: -1px;
-}
-.rt-tool-columns-table td.is-dtype.is-editing {
-  padding-top: 0.125rem;
-  padding-bottom: 0.125rem;
-}
-.rt-col-dtype-select {
-  width: 100%;
-  height: 1.625rem;
-  padding: 0 0.375rem;
-  border: 1px solid var(--rp-accent-2);
-  border-radius: 0.375rem;
-  background: var(--rp-surface);
-  color: var(--rp-text);
-  font: inherit;
-  font-size: 0.75rem;
-  outline: 0;
-}
-.rt-col-dtype-select:focus {
-  box-shadow: 0 0 0 0.125rem var(--rp-accent-soft);
-}
-
-/* Cast-confirm sheet — uses the warn vocab (not the accent-soft
-   one the regular sheet uses) so the destructive cost reads
-   distinctly from a routine action. */
-.rt-tool-columns-sheet.rt-cast-confirm {
-  border-color: var(--rp-warn);
-  background: rgba(249, 226, 175, 0.10);
-}
-.rt-tool-columns-sheet.rt-cast-confirm .rt-tool-columns-sheet-title i {
-  color: var(--rp-warn);
-}
-.rt-tool-columns-sheet.rt-cast-confirm .rt-tool-columns-sheet-blurb b {
-  color: var(--rp-warn);
-}
-
-/* Step-preview panel — the generic "preview before apply" diff. Reads as
-   informational (accent-2 / blue) to set it apart from the cast-confirm
-   warn vocab; the Before|After table colour-codes old vs new cell values. */
-.rt-tool-columns-sheet.rt-step-preview {
-  border-color: var(--rp-accent-2);
-  background: var(--rp-accent-soft);
-}
-.rt-tool-columns-sheet.rt-step-preview .rt-tool-columns-sheet-title i {
-  color: var(--rp-accent-2);
-}
-.rt-step-preview-summary b { color: var(--rp-text); }
-.rt-step-preview-tablewrap {
-  max-height: 16rem;
-  overflow: auto;
-  margin-top: 0.5rem;
-}
-.rt-step-preview-table td.rt-step-preview-col { color: var(--rp-text-dim); }
-.rt-step-preview-table .rt-step-preview-before,
-.rt-step-preview-table .rt-step-preview-after {
-  white-space: normal;
-  word-break: break-word;
-}
-.rt-step-preview-table .rt-step-preview-before {
-  color: var(--rp-text-dim);
-  text-decoration: line-through;
-  text-decoration-color: var(--rp-accent);
-}
-.rt-step-preview-table .rt-step-preview-after { color: var(--rp-ok); }
-.rt-step-preview-null { color: var(--rp-text-dim); font-style: italic; }
-
-/* ── filter panel — tab strip in the head ───────────────────────
-   Filter / Report tabs share the panel head; clicking a tab swaps
-   the body + foot sections (.rt-panel-tab / .rt-panel-tab-foot).
-   The strip replaces the single .rt-panel-title text — same width
-   budget. */
-.rt-panel-tabs {
-  display: flex;
-  gap: 0.125rem;
-  height: 100%;
-  margin-right: auto;
-}
-.rt-panel-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 100%;
-  padding: 0 0.625rem;
-  border: 0;
-  border-bottom: 0.125rem solid transparent;
-  background: transparent;
-  color: var(--rp-text-mute);
-  font: inherit;
-  font-size: 0.7812rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.12s var(--rp-ease), border-color 0.12s var(--rp-ease);
-}
-.rt-panel-tabs button:hover { color: var(--rp-text); }
-.rt-panel-tabs button.is-active {
-  color: var(--rp-text);
-  border-bottom-color: var(--rp-accent-2);
-}
-.rt-panel-tabs button i { font-size: 0.8125rem; color: var(--rp-accent-2); }
-
-/* Pill variant — Bootstrap nav-pills look (Em's ask 2026-05-25).
-   Each tab is a rounded pill in a tinted track; active fills with
-   accent. Used in the Workspace's filter panel where the two tabs
-   (Filter / Report) read as a switcher, not navigation. Add the
-   `--pills` modifier alongside `.rt-panel-tabs` to opt in.
-
-   80% width, centered in the head — the close button gets pulled
-   out of flex flow via the :has() rule below so the strip truly
-   centers across the head's full width, not just the space the
-   close button leaves. */
-.rt-panel-tabs--pills {
-  width: 80%;
-  height: auto;                         /* override base height: 100% */
-  margin: 0 auto;
-  padding: 0.25rem;
-  gap: 0.25rem;
-  background: var(--rp-surface-2);
-  border: 1px solid var(--rp-border);
-  border-radius: 999rem;
-}
-.rt-panel-head:has(.rt-panel-tabs--pills) {
-  position: relative;
-}
-.rt-panel-head:has(.rt-panel-tabs--pills) .rt-panel-close {
-  position: absolute;
-  right: 0.375rem;
-  top: 50%;
-  transform: translateY(-50%);
-}
-.rt-panel-tabs--pills button {
-  flex: 1;
-  height: auto;                         /* override base button height: 100% */
-  padding: 0.375rem 0.875rem;
-  border-radius: 999rem;
-  border-bottom: 0;                     /* drop the underline accent */
-  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
-}
-.rt-panel-tabs--pills button:hover:not(.is-active) {
-  background: var(--rp-hover);
-  color: var(--rp-text);
-}
-.rt-panel-tabs--pills button.is-active {
-  background: var(--rp-accent-2);
-  color: var(--rp-bg);
-  border-bottom-color: transparent;
-}
-.rt-panel-tabs--pills button.is-active i {
-  color: var(--rp-bg);                  /* override base icon color */
-}
-.rt-panel-tab[hidden],
-.rt-panel-tab-foot[hidden] { display: none; }
 
 /* ── report builder (C1) ────────────────────────────────────────
    Two sections inside the Report tab body: Group by (chip picker)
@@ -838,7 +125,7 @@
    renders inline below the builder so the user sees the result
    without losing the source-data table. Windows + Top-N land as
    extra sections (no rewires). */
-.rt-report-status {
+.rp-report-status {
   margin-bottom: 0.625rem;
   padding: 0.4375rem 0.625rem;
   border-radius: 0.5rem;
@@ -847,11 +134,11 @@
   border: 1px solid var(--rp-border);
   color: var(--rp-text-dim);
 }
-.rt-report-status[data-kind="err"] { color: var(--rp-accent); border-color: var(--rp-accent); }
+.rp-report-status[data-kind="err"] { color: var(--rp-accent); border-color: var(--rp-accent); }
 
-.rt-report-sect { margin-bottom: 0.875rem; }
-.rt-report-sect:last-child { margin-bottom: 0; }
-.rt-report-empty {
+.rp-report-sect { margin-bottom: 0.875rem; }
+.rp-report-sect:last-child { margin-bottom: 0; }
+.rp-report-empty {
   margin: 0.25rem 0 0.5rem;
   font-size: 0.7188rem;
   color: var(--rp-text-mute);
@@ -863,8 +150,8 @@
    for the Report tab — reads as English, not SQL. Measures =
    aggregations, breakdowns = group_by; same state shape under
    the hood. Power features (pivot, windows, top-N, show
-   toggles) live behind <details class="rt-report-advanced">. */
-.rt-report-question {
+   toggles) live behind <details class="rp-report-advanced">. */
+.rp-report-question {
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -872,13 +159,13 @@
   margin-bottom: 0.875rem;
   border-bottom: 1px solid var(--rp-border);
 }
-.rt-report-q-line {
+.rp-report-q-line {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.375rem 0.625rem;
 }
-.rt-report-q-label {
+.rp-report-q-label {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -887,21 +174,21 @@
   padding-top: 0.4375rem;
   min-width: 4.5rem;
 }
-.rt-report-q-measures,
-.rt-report-q-breakdowns {
+.rp-report-q-measures,
+.rp-report-q-breakdowns {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
   flex: 1;
   min-width: 0;
 }
-.rt-report-q-hint {
+.rp-report-q-hint {
   font-size: 0.7188rem;
   color: var(--rp-text-mute);
   font-style: italic;
   padding: 0.25rem 0;
 }
-.rt-report-default-hint {
+.rp-report-default-hint {
   margin: 0 0 0 4.875rem;       /* aligns with the measure row */
   font-size: 0.6875rem;
   color: var(--rp-text-mute);
@@ -910,44 +197,50 @@
 
 /* Measure row — a structural twin of a filter predicate row
    (Em 2026-06-01: "closer UI to Predicates"). It reuses the canonical
-   .rt-pred 20-track grid AS-IS (no grid-template-columns override) and
-   the .rt-pred select / .rt-pred input / .rt-pred-del chrome; the only
+   .rp-pred 20-track grid AS-IS (no grid-template-columns override) and
+   the .rp-pred select / .rp-pred input / .rp-pred-del chrome; the only
    measure-specific rules below SWAP the fn/col placement so the
    aggregation fn sits LEFT and the column RIGHT (the predicate places
-   col left / op right — here fn=.rt-pred-op is the left field):
+   col left / op right — here fn=.rp-pred-op is the left field):
      Row 1 — [fn ▾]            [col ▾]      (50 / 50, like col | op)
      Row 2 — [rename.........] [×]          (alias 85% | del 15%, like
                                              the predicate's value | del)
-   `width: 100%` claims the full parent flex track (the .rt-report-q-
-   measures flex container wraps, so measure rows stack when > 1). The
-   `.rt-pred:not(.rt-report-measure)` guards on the canonical placements
-   (top of file) keep those from applying here, so these win cleanly. */
-.rt-report-measure { width: 100%; }
-.rt-report-measure > .rt-pred-op  { grid-column: 1 / span 10;  grid-row: 1; }
-.rt-report-measure > .rt-pred-col { grid-column: 11 / span 10; grid-row: 1; }
-.rt-report-measure > .rt-pred-val { grid-column: 1 / span 17;  grid-row: 2; }
-.rt-report-measure > .rt-pred-del { grid-column: 18 / span 3;  grid-row: 2; justify-self: stretch; }
-/* `.rt-report-measure-of` retired 2026-06-01 — the inline "of"
+   `width: 100%` claims the full parent flex track (the .rp-report-q-
+   measures flex container wraps, so measure rows stack when > 1).
+   CASCADE: the canonical placement now lives in framework/filter-panel.css
+   as the UNGUARDED `.rp-pred > .rp-pred-col` (panel.css's old
+   `:not(.rp-report-measure)` guards retired with the rt-→rp- migration —
+   the framework owns the predicate atom). framework loads AFTER panel.css
+   (main.css order), so these overrides compound `.rp-pred` onto the measure
+   modifier (`.rp-pred.rp-report-measure`, specificity 0,0,2,1) to beat the
+   framework's 0,0,1,1 regardless of source order — without the bump the
+   measure grid would silently clobber. */
+.rp-report-measure { width: 100%; }
+.rp-pred.rp-report-measure > .rp-pred-op  { grid-column: 1 / span 10;  grid-row: 1; }
+.rp-pred.rp-report-measure > .rp-pred-col { grid-column: 11 / span 10; grid-row: 1; }
+.rp-pred.rp-report-measure > .rp-pred-val { grid-column: 1 / span 17;  grid-row: 2; }
+.rp-pred.rp-report-measure > .rp-pred-del { grid-column: 18 / span 3;  grid-row: 2; justify-self: stretch; }
+/* `.rp-report-measure-of` retired 2026-06-01 — the inline "of"
    connector was dropped when the measure row converged onto the
    predicate layout (a predicate row has no connector between its two
    selects). The fn dropdown already names the aggregation. */
-/* `.rt-report-fn` / `.rt-report-col` / `.rt-report-alias` rules
-   retired 2026-05-27 — the .rt-pred select / .rt-pred input rules at
+/* `.rp-report-fn` / `.rp-report-col` / `.rp-report-alias` rules
+   retired 2026-05-27 — the .rp-pred select / .rp-pred input rules at
    the top of this file now cover both panels' form-field treatment
    (border + surface bg + standard padding + height). The classes
    are gone from the HTML too; if a third panel needs the inline-
-   text variant later, ship it as a .rt-pred--variant modifier. */
+   text variant later, ship it as a .rp-pred--variant modifier. */
 
 /* Advanced disclosure — native <details> wrapping pivot / windows /
    top-N / show toggles. Custom summary chrome (caret + label +
    muted hint listing what's inside). Caret rotates 90° on [open]. */
-.rt-report-advanced {
+.rp-report-advanced {
   border: 1px solid var(--rp-border);
   border-radius: 0.4375rem;
   background: var(--rp-surface-2);
   margin-top: 0.625rem;
 }
-.rt-report-advanced-summary {
+.rp-report-advanced-summary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -961,16 +254,16 @@
   color: var(--rp-text-mute);
   user-select: none;
 }
-.rt-report-advanced-summary::-webkit-details-marker { display: none; }
-.rt-report-advanced-summary:hover { color: var(--rp-text); }
-.rt-report-advanced-caret {
+.rp-report-advanced-summary::-webkit-details-marker { display: none; }
+.rp-report-advanced-summary:hover { color: var(--rp-text); }
+.rp-report-advanced-caret {
   font-size: 0.6875rem;
   transition: transform 0.15s var(--rp-ease);
 }
-.rt-report-advanced[open] .rt-report-advanced-caret {
+.rp-report-advanced[open] .rp-report-advanced-caret {
   transform: rotate(90deg);
 }
-.rt-report-advanced-hint {
+.rp-report-advanced-hint {
   font-size: 0.625rem;
   color: var(--rp-text-mute);
   text-transform: none;
@@ -978,18 +271,18 @@
   font-weight: 400;
   margin-left: auto;
 }
-.rt-report-advanced-body {
+.rp-report-advanced-body {
   padding: 0.625rem 0.75rem 0.75rem;
   border-top: 1px solid var(--rp-border);
 }
 
-.rt-report-chips {
+.rp-report-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3125rem;
   margin: 0.375rem 0 0.5rem;
 }
-.rt-report-chip {
+.rp-report-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -1002,7 +295,7 @@
   font-weight: 600;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.rt-report-chip-del {
+.rp-report-chip-del {
   width: 1.125rem;
   height: 1.125rem;
   display: inline-flex;
@@ -1014,32 +307,32 @@
   color: var(--rp-accent-2);
   cursor: pointer;
 }
-.rt-report-chip-del:hover { background: rgba(243, 139, 168, 0.18); color: var(--rp-accent); }
-.rt-report-chip-del i { font-size: 0.6875rem; }
+.rp-report-chip-del:hover { background: rgba(243, 139, 168, 0.18); color: var(--rp-accent); }
+.rp-report-chip-del i { font-size: 0.6875rem; }
 
 /* Pivot-column chip — same shape as the group-by chip, mauve accent
    so the second-axis grouping reads as visually distinct. */
-.rt-report-chip--pivot {
+.rp-report-chip--pivot {
   border-color: var(--rp-accent);
   color: var(--rp-accent);
 }
-.rt-report-chip--pivot .rt-report-chip-del { color: var(--rp-accent); }
+.rp-report-chip--pivot .rp-report-chip-del { color: var(--rp-accent); }
 
-.rt-report-add { margin-top: 0.25rem; }
+.rp-report-add { margin-top: 0.25rem; }
 
-.rt-report-aggs {
+.rp-report-aggs {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   margin: 0.375rem 0 0.5rem;
 }
-.rt-report-agg {
+.rp-report-agg {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr auto;
   gap: 0.3125rem;
 }
-.rt-report-agg select,
-.rt-report-agg input {
+.rp-report-agg select,
+.rp-report-agg input {
   height: 1.75rem;
   padding: 0 0.4375rem;
   min-width: 0;
@@ -1051,10 +344,10 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rt-report-agg select:focus,
-.rt-report-agg input:focus { border-color: var(--rp-accent-2); }
-.rt-report-add-agg,
-.rt-report-add-window {
+.rp-report-agg select:focus,
+.rp-report-agg input:focus { border-color: var(--rp-accent-2); }
+.rp-report-add-agg,
+.rp-report-add-window {
   width: 100%;
   justify-content: center;
 }
@@ -1063,13 +356,13 @@
    has alias / fn / col / [%] / delete on the first line; value-fn
    kinds get a second line with order_by + offset; the third line
    carries the partition-by chip toggles. */
-.rt-report-windows {
+.rp-report-windows {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   margin: 0.375rem 0 0.5rem;
 }
-.rt-report-window {
+.rp-report-window {
   padding: 0.5rem;
   border: 1px solid var(--rp-border);
   border-radius: 0.5rem;
@@ -1078,14 +371,14 @@
   flex-direction: column;
   gap: 0.375rem;
 }
-.rt-report-window-row {
+.rp-report-window-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr auto auto;
   gap: 0.3125rem;
   align-items: center;
 }
-.rt-report-window-row input[type="text"],
-.rt-report-window-row select {
+.rp-report-window-row input[type="text"],
+.rp-report-window-row select {
   height: 1.75rem;
   padding: 0 0.4375rem;
   min-width: 0;
@@ -1097,9 +390,9 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rt-report-window-row input:focus,
-.rt-report-window-row select:focus { border-color: var(--rp-accent-2); }
-.rt-report-window-pct {
+.rp-report-window-row input:focus,
+.rp-report-window-row select:focus { border-color: var(--rp-accent-2); }
+.rp-report-window-pct {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -1107,14 +400,14 @@
   color: var(--rp-text-mute);
   cursor: pointer;
 }
-.rt-report-window-pct input { margin: 0; }
-.rt-report-window-value {
+.rp-report-window-pct input { margin: 0; }
+.rp-report-window-value {
   display: flex;
   align-items: center;
   gap: 0.375rem;
   font-size: 0.7188rem;
 }
-.rt-report-window-value select {
+.rp-report-window-value select {
   flex: 1;
   height: 1.625rem;
   padding: 0 0.4375rem;
@@ -1125,7 +418,7 @@
   font: inherit;
   font-size: 0.75rem;
 }
-.rt-report-window-value input[type="number"] {
+.rp-report-window-value input[type="number"] {
   width: 3.5rem;
   height: 1.625rem;
   padding: 0 0.375rem;
@@ -1136,14 +429,14 @@
   font: inherit;
   font-size: 0.75rem;
 }
-.rt-report-window-parts {
+.rp-report-window-parts {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   flex-wrap: wrap;
   font-size: 0.6875rem;
 }
-.rt-report-part-chip {
+.rp-report-part-chip {
   height: 1.375rem;
   padding: 0 0.5625rem;
   border: 1px solid var(--rp-border);
@@ -1155,27 +448,27 @@
   cursor: pointer;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.rt-report-part-chip:hover { border-color: var(--rp-accent-2); color: var(--rp-text); }
-.rt-report-part-chip.is-on {
+.rp-report-part-chip:hover { border-color: var(--rp-accent-2); color: var(--rp-text); }
+.rp-report-part-chip.is-on {
   background: var(--rp-accent-soft);
   border-color: var(--rp-accent-2);
   color: var(--rp-accent-2);
   font-weight: 600;
 }
-.rt-report-muted {
+.rp-report-muted {
   color: var(--rp-text-mute);
   font-size: 0.6875rem;
 }
 
 /* Undo / redo strip (C4) — compact icon buttons at the top of the
    builder. Keyboard (Ctrl/Cmd+Z, Ctrl/Cmd+Y) is the primary access. */
-.rt-report-undo-strip {
+.rp-report-undo-strip {
   display: flex;
   justify-content: center;
   gap: 0.25rem;
   margin-bottom: 0.625rem;
 }
-.rt-report-undo-strip button {
+.rp-report-undo-strip button {
   width: 1.75rem;
   height: 1.625rem;
   padding: 0;
@@ -1183,19 +476,19 @@
   align-items: center;
   justify-content: center;
 }
-.rt-report-undo-strip button:disabled { opacity: 0.35; cursor: not-allowed; }
-.rt-report-undo-strip button i { font-size: 0.8125rem; }
+.rp-report-undo-strip button:disabled { opacity: 0.35; cursor: not-allowed; }
+.rp-report-undo-strip button i { font-size: 0.8125rem; }
 
 /* Top-N (C3) — keep top/bottom N rows per partition. */
-.rt-report-topn { margin-top: 0.5rem; }
-.rt-report-topn-row {
+.rp-report-topn { margin-top: 0.5rem; }
+.rp-report-topn-row {
   display: flex;
   align-items: center;
   gap: 0.375rem;
   margin-bottom: 0.375rem;
   font-size: 0.7188rem;
 }
-.rt-report-topn-row input[type="number"] {
+.rp-report-topn-row input[type="number"] {
   width: 3.5rem;
   height: 1.625rem;
   padding: 0 0.375rem;
@@ -1207,7 +500,7 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rt-report-topn-row select {
+.rp-report-topn-row select {
   height: 1.625rem;
   padding: 0 0.4375rem;
   border: 1px solid var(--rp-border);
@@ -1218,18 +511,18 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rt-report-topn-row select[data-topn-key="order_by"] { flex: 1; }
-.rt-report-topn-row input:focus,
-.rt-report-topn-row select:focus { border-color: var(--rp-accent-2); }
+.rp-report-topn-row select[data-topn-key="order_by"] { flex: 1; }
+.rp-report-topn-row input:focus,
+.rp-report-topn-row select:focus { border-color: var(--rp-accent-2); }
 
 /* Show toggles (C2) — show_details / show_subtotals / show_total. */
-.rt-report-show-row {
+.rp-report-show-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.875rem;
   margin-top: 0.25rem;
 }
-.rt-report-show-toggle {
+.rp-report-show-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
@@ -1237,46 +530,46 @@
   color: var(--rp-text);
   cursor: pointer;
 }
-.rt-report-show-toggle input { margin: 0; }
+.rp-report-show-toggle input { margin: 0; }
 
 /* sample preview table — capped rows + grand-total row */
-.rt-report-preview {
+.rp-report-preview {
   margin-top: 0.875rem;
   padding-top: 0.875rem;
   border-top: 1px solid var(--rp-border);
 }
-.rt-report-preview-head {
+.rp-report-preview-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.375rem;
 }
-.rt-report-preview-meta {
+.rp-report-preview-meta {
   font-size: 0.7188rem;
   color: var(--rp-text-mute);
 }
-.rt-report-preview-meta b { color: var(--rp-text); font-weight: 650; }
-.rt-report-preview-wrap {
+.rp-report-preview-meta b { color: var(--rp-text); font-weight: 650; }
+.rp-report-preview-wrap {
   max-height: 20rem;
   overflow: auto;
   border: 1px solid var(--rp-border);
   border-radius: 0.5rem;
   background: var(--rp-surface);
 }
-.rt-report-preview-table {
+.rp-report-preview-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
-.rt-report-preview-table th,
-.rt-report-preview-table td {
+.rp-report-preview-table th,
+.rp-report-preview-table td {
   padding: 0.3125rem 0.5rem;
   text-align: left;
   border-bottom: 1px solid var(--rp-border);
   white-space: nowrap;
 }
-.rt-report-preview-table thead th {
+.rp-report-preview-table thead th {
   position: sticky;
   top: 0;
   background: var(--rp-surface-2);
@@ -1287,17 +580,17 @@
   letter-spacing: 0.04em;
   z-index: 1;
 }
-.rt-report-preview-table thead th[data-sort] { cursor: pointer; user-select: none; }
-.rt-report-preview-table thead th[data-sort]:hover {
+.rp-report-preview-table thead th[data-sort] { cursor: pointer; user-select: none; }
+.rp-report-preview-table thead th[data-sort]:hover {
   color: var(--rp-text);
   background: var(--rp-hover);
 }
-.rt-report-sort-arrow {
+.rp-report-sort-arrow {
   color: var(--rp-accent-2);
   font-size: 0.5625rem;
   margin-left: 0.125rem;
 }
-.rt-report-sort-chain {
+.rp-report-sort-chain {
   display: inline-block;
   min-width: 0.875rem;
   height: 0.875rem;
@@ -1311,18 +604,18 @@
   text-align: center;
   line-height: 0.875rem;
 }
-.rt-report-preview-table td.is-num { text-align: right; }
-.rt-report-preview-table tr.is-total td {
+.rp-report-preview-table td.is-num { text-align: right; }
+.rp-report-preview-table tr.is-total td {
   background: var(--rp-accent-soft);
   font-weight: 700;
   border-top: 1px solid var(--rp-accent-2);
 }
-.rt-report-preview-table .is-muted { color: var(--rp-text-mute); }
+.rp-report-preview-table .is-muted { color: var(--rp-text-mute); }
 
 /* Matrix mode (C5) — pivoted cross-tab. Row totals + grand-total
    row+col reuse the .is-total / .is-num atoms; an extra accent on
    the row-total column makes the totals strip easy to read. */
-.rt-report-matrix-table td.rt-report-matrix-rowtotal {
+.rp-report-matrix-table td.rp-report-matrix-rowtotal {
   font-weight: 700;
   background: var(--rp-hover);
 }
@@ -1330,15 +623,15 @@
    (one per measure), and `position: sticky; bottom: 0` would pin all K
    to the same edge so they stack and bleed over the last body rows.
    The foot sits at the table bottom and scrolls into view normally. */
-.rt-report-matrix-table tfoot tr.is-total td {
+.rp-report-matrix-table tfoot tr.is-total td {
   background: var(--rp-accent-soft);
   font-weight: 700;
   border-top: 1px solid var(--rp-accent-2);
 }
 /* Multi-measure matrix (CAS_AF836C82 #1) — each row value spans K
    measure sub-rows; the measure name lives in its own column. */
-.rt-report-matrix-table .rt-report-matrix-measure,
-.rt-report-matrix-table th.rt-report-matrix-measure-h {
+.rp-report-matrix-table .rp-report-matrix-measure,
+.rp-report-matrix-table th.rp-report-matrix-measure-h {
   color: var(--rp-text-mute);
   font-size: 0.6875rem;
   font-weight: 400;
@@ -1347,10 +640,10 @@
 }
 /* The row-dim cells span their measure sub-rows — anchor them to the
    top so the value reads against its first measure. */
-.rt-report-matrix-table tbody td[rowspan] { vertical-align: top; }
+.rp-report-matrix-table tbody td[rowspan] { vertical-align: top; }
 /* A hairline between row groups (the first measure sub-row of each
    row value) so the K-row blocks read as units. */
-.rt-report-matrix-table tbody tr.rt-report-matrix-rowstart > td {
+.rp-report-matrix-table tbody tr.rp-report-matrix-rowstart > td {
   border-top: 1px solid var(--rp-border);
 }
 
@@ -1361,20 +654,20 @@
    with the join-type dropdown + Apply button. Layout matches the
    Tools panel's existing cleaning surface — same card chrome, same
    table density. */
-.rt-join-intro {
+.rp-join-intro {
   margin: 0 0.25rem 0.625rem;
   color: var(--rp-text-mute);
   font-size: 0.75rem;
   line-height: 1.45;
 }
-.rt-join-card {
+.rp-join-card {
   margin-bottom: 0.75rem;
   border: 1px solid var(--rp-border);
   border-radius: 0.5rem;
   background: var(--rp-surface);
   overflow: hidden;
 }
-.rt-join-card__head {
+.rp-join-card__head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1383,15 +676,15 @@
   border-bottom: 1px solid var(--rp-border);
   font-size: 0.7812rem;
 }
-.rt-join-card__head i { color: var(--rp-accent-2); }
-.rt-join-card__title  { font-weight: 600; color: var(--rp-text); flex: 1 1 auto; }
-.rt-join-card__count  { color: var(--rp-text-mute); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
-.rt-join-table {
+.rp-join-card__head i { color: var(--rp-accent-2); }
+.rp-join-card__title  { font-weight: 600; color: var(--rp-text); flex: 1 1 auto; }
+.rp-join-card__count  { color: var(--rp-text-mute); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.rp-join-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.75rem;
 }
-.rt-join-table thead th {
+.rp-join-table thead th {
   padding: 0.375rem 0.5rem;
   text-align: left;
   font-size: 0.625rem;
@@ -1402,20 +695,20 @@
   font-weight: 600;
   white-space: nowrap;
 }
-.rt-join-table tbody tr { border-bottom: 1px solid var(--rp-border); }
-.rt-join-table tbody tr:last-child { border-bottom: 0; }
-.rt-join-table tbody td { padding: 0.375rem 0.5rem; vertical-align: top; }
-.rt-join-table td.is-strength {
+.rp-join-table tbody tr { border-bottom: 1px solid var(--rp-border); }
+.rp-join-table tbody tr:last-child { border-bottom: 0; }
+.rp-join-table tbody td { padding: 0.375rem 0.5rem; vertical-align: top; }
+.rp-join-table td.is-strength {
   width: 2.25rem;
   text-align: center;
   font-size: 0.6875rem;
   letter-spacing: 1px;
   color: var(--rp-text-mute);
 }
-.rt-join-table td.is-strength.is-strong { color: var(--rp-ok); }
-.rt-join-table td.is-strength.is-medium { color: var(--rp-accent-2); }
-.rt-join-table td.is-strength.is-weak   { color: var(--rp-text-mute); }
-.rt-join-col {
+.rp-join-table td.is-strength.is-strong { color: var(--rp-ok); }
+.rp-join-table td.is-strength.is-medium { color: var(--rp-accent-2); }
+.rp-join-table td.is-strength.is-weak   { color: var(--rp-text-mute); }
+.rp-join-col {
   display: inline-block;
   padding: 1px 0.375rem;
   border-radius: 0.25rem;
@@ -1424,13 +717,13 @@
   font-size: 0.7188rem;
   color: var(--rp-text);
 }
-.rt-join-table td.is-matches {
+.rp-join-table td.is-matches {
   color: var(--rp-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.rt-join-meta { color: var(--rp-text-mute); font-size: 0.6875rem; }
-.rt-join-table td.is-samples {
+.rp-join-meta { color: var(--rp-text-mute); font-size: 0.6875rem; }
+.rp-join-table td.is-samples {
   color: var(--rp-text-mute);
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.6875rem;
@@ -1439,8 +732,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rt-join-card__more,
-.rt-join-card__less {
+.rp-join-card__more,
+.rp-join-card__less {
   display: block;
   width: 100%;
   padding: 0.375rem;
@@ -1452,29 +745,29 @@
   text-align: center;
   cursor: pointer;
 }
-.rt-join-card__more:hover,
-.rt-join-card__less:hover { background: var(--rp-hover); }
+.rp-join-card__more:hover,
+.rp-join-card__less:hover { background: var(--rp-hover); }
 
 /* row pick checkbox + selected-row tint */
-.rt-join-table th.is-pick,
-.rt-join-table td.is-pick {
+.rp-join-table th.is-pick,
+.rp-join-table td.is-pick {
   width: 1.75rem;
   text-align: center;
   padding-right: 0;
 }
-.rt-join-pick {
+.rp-join-pick {
   width: 0.875rem;
   height: 0.875rem;
   accent-color: var(--rp-accent-2);
   cursor: pointer;
 }
-.rt-join-table tr.is-picked { background: var(--rp-accent-soft); }
-.rt-join-table tr.is-picked .rt-join-col { background: var(--rp-surface); }
+.rp-join-table tr.is-picked { background: var(--rp-accent-soft); }
+.rp-join-table tr.is-picked .rp-join-col { background: var(--rp-surface); }
 
 /* per-card foot — hint + join-type dropdown + Apply button. Three
    cells on one line; the hint flexes to fill so the controls stay
    pinned to the right. */
-.rt-join-card__foot {
+.rp-join-card__foot {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1482,12 +775,12 @@
   border-top: 1px solid var(--rp-border);
   background: var(--rp-hover);
 }
-.rt-join-card__hint {
+.rp-join-card__hint {
   flex: 1 1 auto;
   color: var(--rp-text-mute);
   font-size: 0.7188rem;
 }
-.rt-join-card__type {
+.rp-join-card__type {
   height: 1.75rem;
   padding: 0 0.5rem;
   border: 1px solid var(--rp-border);
@@ -1497,20 +790,20 @@
   font-size: 0.75rem;
   cursor: pointer;
 }
-.rt-join-card__apply {
+.rp-join-card__apply {
   height: 1.75rem;
   padding: 0 0.75rem;
   font-size: 0.75rem;
 }
-.rt-join-card__apply[disabled] {
+.rp-join-card__apply[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.rt-join-card__apply .bi-arrow-repeat {
-  animation: rt-join-spin 0.9s linear infinite;
+.rp-join-card__apply .bi-arrow-repeat {
+  animation: rp-join-spin 0.9s linear infinite;
   display: inline-block;
 }
-@keyframes rt-join-spin {
+@keyframes rp-join-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
@@ -1518,22 +811,22 @@
 /* autocomplete atom → collapsed onto the framework `rp-ac` family
    (styles/framework/filter-panel.css, loaded via main.css). The
    cases/home/monitoring/autocomplete JS now emits rp-ac* classes; the
-   legacy rt-ac twin was byte-identical (Verbatim) and is removed here. */
+   legacy rp-ac twin was byte-identical (Verbatim) and is removed here. */
 
 /* chip-picker (in/not_in value input) → collapsed onto the framework
    `rp-chip-picker` family (styles/framework/filter-panel.css, loaded via
-   main.css). autocomplete.js now emits rp-* classes; the legacy rt-* twin
+   main.css). autocomplete.js now emits rp-* classes; the legacy rp-* twin
    was byte-identical and is removed here. */
 
 /* Sentinel picker — Fix-invalid scan-and-pick chips (tools.js). Junk
    values found in the file (+ the known set) as tick-able chips. */
-.rt-sentinel-found {
+.rp-sentinel-found {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
   margin: 0.25rem 0 0.5rem;
 }
-.rt-sentinel-chip {
+.rp-sentinel-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -1544,9 +837,9 @@
   cursor: pointer;
   user-select: none;
 }
-.rt-sentinel-chip.is-on { background: var(--rp-accent-soft); border-color: var(--rp-accent); }
-.rt-sentinel-chip-n { color: var(--rp-text-mute); font-variant-numeric: tabular-nums; }
-.rt-sentinel-known-lbl {
+.rp-sentinel-chip.is-on { background: var(--rp-accent-soft); border-color: var(--rp-accent); }
+.rp-sentinel-chip-n { color: var(--rp-text-mute); font-variant-numeric: tabular-nums; }
+.rp-sentinel-known-lbl {
   flex-basis: 100%;
   margin-top: 0.25rem;
   color: var(--rp-text-mute);
@@ -1554,7 +847,7 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.rt-sentinel-scanning,
-.rt-sentinel-clean,
-.rt-sentinel-err { color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
-.rt-sentinel-add { margin-top: 0.25rem; }
+.rp-sentinel-scanning,
+.rp-sentinel-clean,
+.rp-sentinel-err { color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
+.rp-sentinel-add { margin-top: 0.25rem; }

@@ -78,12 +78,12 @@ export function mountReport(panelBody, ctx) {
 
   // ── containers ────────────────────────────────────────────────────
   const statusEl = document.createElement("div");
-  statusEl.className = "rt-report-status";
+  statusEl.className = "rp-report-status";
   statusEl.hidden = true;
   const builderEl = document.createElement("div");
-  builderEl.className = "rt-report-builder";
+  builderEl.className = "rp-report-builder";
   const previewEl = document.createElement("div");
-  previewEl.className = "rt-report-preview";
+  previewEl.className = "rp-report-preview";
   previewEl.hidden = true;
 
   panelBody.innerHTML = "";
@@ -99,7 +99,7 @@ export function mountReport(panelBody, ctx) {
   function renderBuilder() {
     const cols = ctx.columns() || [];
     if (!cols.length) {
-      builderEl.innerHTML = '<p class="rt-report-empty">Open a file to build a report.</p>';
+      builderEl.innerHTML = '<p class="rp-report-empty">Open a file to build a report.</p>';
       return;
     }
     builderEl.innerHTML =
@@ -116,15 +116,15 @@ export function mountReport(panelBody, ctx) {
   function renderQuestionSection(cols) {
     // ── measures (aggregations) ────────────────────────────────────
     const measureRows = aggregations.map((a, i) => {
-      // fn (.rt-pred-op) + col (.rt-pred-col) are the two row-1 selects
+      // fn (.rp-pred-op) + col (.rp-pred-col) are the two row-1 selects
       // — same atoms as a filter predicate's col/op pair. Reads
       // "[Sum] [price]"; the fn label carries the aggregation verb.
-      const fnSelect = '<select class="rt-pred-op" data-key="fn">'
+      const fnSelect = '<select class="rp-pred-op" data-key="fn">'
         + AGG_FNS.map(([v, l]) =>
             '<option value="' + esc(v) + '"'
             + (v === a.fn ? ' selected' : '') + '>' + esc(l) + '</option>').join('')
         + '</select>';
-      const colSelect = '<select class="rt-pred-col" data-key="col">'
+      const colSelect = '<select class="rp-pred-col" data-key="col">'
         + cols.map((c) =>
             '<option value="' + esc(c.name) + '"'
             + (c.name === a.col ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('')
@@ -135,46 +135,46 @@ export function mountReport(panelBody, ctx) {
       //   Row 1 — [fn ▾]  [col ▾]   (two selects, 50/50, like col|op)
       //   Row 2 — [rename.................]  [×]   (alias 85% | del 15%,
       //            like the predicate's value | delete)
-      // It reuses the canonical `.rt-pred` 20-track grid (no bespoke
-      // grid-template-columns); panel.css `.rt-report-measure` only
-      // SWAPS the fn(.rt-pred-op)/col(.rt-pred-col) placement so the
+      // It reuses the canonical `.rp-pred` 20-track grid (no bespoke
+      // grid-template-columns); panel.css `.rp-report-measure` only
+      // SWAPS the fn(.rp-pred-op)/col(.rp-pred-col) placement so the
       // aggregation fn sits LEFT and the column RIGHT ("Sum" | "price").
       // The inline "of" connector was dropped for predicate fidelity —
       // the fn dropdown already labels the aggregation. DOM order =
-      // visual/tab order: fn → col → alias → del. `.rt-report-measure`
-      // stays as the layout hook + JS selector; `.rt-report-agg` is the
+      // visual/tab order: fn → col → alias → del. `.rp-report-measure`
+      // stays as the layout hook + JS selector; `.rp-report-agg` is the
       // legacy alias the change/input handlers delegate on (kept so the
       // wiring works without rewires). See docs/internal/processes/
       // replicable-feature-pattern.md — same UI concept = one class set.
-      return '<div class="rt-pred rt-report-measure rt-report-agg" data-i="' + i + '">'
+      return '<div class="rp-pred rp-report-measure rp-report-agg" data-i="' + i + '">'
         + fnSelect
         + colSelect
-        + '<input class="rt-pred-val" data-key="alias" type="text"'
+        + '<input class="rp-pred-val" data-key="alias" type="text"'
         + '  placeholder="rename (optional)" value="' + esc(a.alias || "") + '" />'
-        + '<button class="rt-pred-del" type="button" data-agg-del="' + i + '"'
+        + '<button class="rp-pred-del" type="button" data-agg-del="' + i + '"'
         + '  title="Remove measure"><i class="bi bi-x-lg"></i></button>'
         + '</div>';
     }).join('');
     const measuresEmpty = !aggregations.length
-      ? '<p class="rt-report-default-hint">By default, this counts rows in each group.</p>'
+      ? '<p class="rp-report-default-hint">By default, this counts rows in each group.</p>'
       : '';
 
     // ── breakdowns (group_by) ──────────────────────────────────────
     const breakdownChips = groupBy.map((name) =>
-      '<span class="rt-report-chip">'
+      '<span class="rp-report-chip">'
       +   esc(name)
-      +   '<button class="rt-report-chip-del" type="button" data-group-del="'
+      +   '<button class="rp-report-chip-del" type="button" data-group-del="'
       +     esc(name) + '" title="Remove"><i class="bi bi-x"></i></button>'
       + '</span>').join('');
     const breakdownAvail = cols.filter((c) => !groupBy.includes(c.name));
     const breakdownAdd = breakdownAvail.length
-      ? '<div class="rt-dd-wrap rt-report-add">'
-        + '<button class="rt-btn rt-btn--glass rt-btn--sm" type="button" data-dd="rtReportGroupDd">'
+      ? '<div class="rp-menu-wrap rp-report-add">'
+        + '<button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--sm" type="button" data-dd="rtReportGroupDd">'
         +   '<i class="bi bi-plus-lg"></i> breakdown'
         + '</button>'
-        + '<div class="rt-dd" id="rtReportGroupDd">'
+        + '<div class="rp-menu" id="rtReportGroupDd">'
         +   breakdownAvail.map((c) =>
-              '<div class="rt-dd-item" data-group-add="' + esc(c.name) + '">'
+              '<div class="rp-menu-item" data-group-add="' + esc(c.name) + '">'
               + esc(c.name) + '</div>').join('')
         + '</div>'
         + '</div>'
@@ -185,19 +185,19 @@ export function mountReport(panelBody, ctx) {
     // to compute over it, which mirrors how the user thinks about
     // the question. The measures-empty hint stays under the
     // measures line where it's contextual.
-    return '<section class="rt-report-question">'
-      +    '<div class="rt-report-q-line">'
-      +      '<span class="rt-report-q-label">For each</span>'
-      +      '<div class="rt-report-q-breakdowns">'
-      +        (breakdownChips || '<span class="rt-report-q-hint">no breakdown — one grand row</span>')
+    return '<section class="rp-report-question">'
+      +    '<div class="rp-report-q-line">'
+      +      '<span class="rp-report-q-label">For each</span>'
+      +      '<div class="rp-report-q-breakdowns">'
+      +        (breakdownChips || '<span class="rp-report-q-hint">no breakdown — one grand row</span>')
       +        breakdownAdd
       +      '</div>'
       +    '</div>'
-      +    '<div class="rt-report-q-line">'
-      +      '<span class="rt-report-q-label">Show me</span>'
-      +      '<div class="rt-report-q-measures">'
+      +    '<div class="rp-report-q-line">'
+      +      '<span class="rp-report-q-label">Show me</span>'
+      +      '<div class="rp-report-q-measures">'
       +        measureRows
-      +        '<button class="rt-btn rt-btn--glass rt-btn--sm rt-report-add-agg" type="button">'
+      +        '<button class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--sm rp-report-add-agg" type="button">'
       +          '<i class="bi bi-plus-lg"></i> measure'
       +        '</button>'
       +      '</div>'
@@ -211,13 +211,13 @@ export function mountReport(panelBody, ctx) {
   // the group count; Show toggles which result frames materialise.
   // All four wired exactly as before — just folded behind disclosure.
   function renderAdvancedSection(cols) {
-    return '<details class="rt-report-advanced">'
-      +    '<summary class="rt-report-advanced-summary">'
-      +      '<i class="bi bi-chevron-right rt-report-advanced-caret"></i>'
+    return '<details class="rp-report-advanced">'
+      +    '<summary class="rp-report-advanced-summary">'
+      +      '<i class="bi bi-chevron-right rp-report-advanced-caret"></i>'
       +      'Advanced'
-      +      '<span class="rt-report-advanced-hint">pivot · windows · top-N · show</span>'
+      +      '<span class="rp-report-advanced-hint">pivot · windows · top-N · show</span>'
       +    '</summary>'
-      +    '<div class="rt-report-advanced-body">'
+      +    '<div class="rp-report-advanced-body">'
       +      renderPivotSection(cols)
       +      renderWindowsSection()
       +      renderTopNSection()
@@ -230,11 +230,11 @@ export function mountReport(panelBody, ctx) {
   // shortcuts (Ctrl/Cmd+Z, Ctrl/Cmd+Y) are the primary access; the
   // buttons make the affordance discoverable.
   function renderUndoStrip() {
-    return '<div class="rt-report-undo-strip">'
-      + '<button class="rt-btn rt-btn--glass rt-report-undo-btn" type="button"'
+    return '<div class="rp-report-undo-strip">'
+      + '<button class="rp-btn-icon rp-btn-icon--glass rp-report-undo-btn" type="button"'
       +   ' title="Undo (Ctrl/Cmd+Z)" disabled>'
       +   '<i class="bi bi-arrow-return-left"></i></button>'
-      + '<button class="rt-btn rt-btn--glass rt-report-redo-btn" type="button"'
+      + '<button class="rp-btn-icon rp-btn-icon--glass rp-report-redo-btn" type="button"'
       +   ' title="Redo (Ctrl/Cmd+Y)" disabled>'
       +   '<i class="bi bi-arrow-return-right"></i></button>'
       + '</div>';
@@ -261,29 +261,29 @@ export function mountReport(panelBody, ctx) {
   // already in group_by or pivot) appear in the dropdown.
   function renderPivotSection(cols) {
     const chips = pivotBy.map((name) =>
-      '<span class="rt-report-chip rt-report-chip--pivot">'
+      '<span class="rp-report-chip rp-report-chip--pivot">'
       +   esc(name)
-      +   '<button class="rt-report-chip-del" type="button" data-pivot-del="'
+      +   '<button class="rp-report-chip-del" type="button" data-pivot-del="'
       +     esc(name) + '" title="Remove"><i class="bi bi-x"></i></button>'
       + '</span>').join('');
     const available = cols.filter((c) => !groupBy.includes(c.name) && !pivotBy.includes(c.name));
     const addDd = available.length
-      ? '<div class="rt-dd-wrap rt-report-add">'
-        + '<button class="rt-btn rt-btn--glass" type="button" data-dd="rtReportPivotDd">'
+      ? '<div class="rp-menu-wrap rp-report-add">'
+        + '<button class="rp-btn-icon rp-btn-icon--glass" type="button" data-dd="rtReportPivotDd">'
         +   '<i class="bi bi-plus-lg"></i> Add column'
         + '</button>'
-        + '<div class="rt-dd" id="rtReportPivotDd">'
+        + '<div class="rp-menu" id="rtReportPivotDd">'
         +   available.map((c) =>
-              '<div class="rt-dd-item" data-pivot-add="' + esc(c.name) + '">'
+              '<div class="rp-menu-item" data-pivot-add="' + esc(c.name) + '">'
               + esc(c.name) + '</div>').join('')
         + '</div>'
         + '</div>'
-      : '<p class="rt-report-empty">Every remaining column is either grouped or pivoted.</p>';
-    return '<section class="rt-report-sect">'
-      +    '<span class="rt-field-lbl">Pivot columns <span class="rt-report-muted">— matrix mode</span></span>'
+      : '<p class="rp-report-empty">Every remaining column is either grouped or pivoted.</p>';
+    return '<section class="rp-report-sect">'
+      +    '<span class="rp-label">Pivot columns <span class="rp-report-muted">— matrix mode</span></span>'
       +    (pivotBy.length
-            ? '<div class="rt-report-chips">' + chips + '</div>'
-            : '<p class="rt-report-empty">No pivot — preview shows a flat subtotals table.</p>')
+            ? '<div class="rp-report-chips">' + chips + '</div>'
+            : '<p class="rp-report-empty">No pivot — preview shows a flat subtotals table.</p>')
       +    addDd
       +    '</section>';
   }
@@ -313,52 +313,52 @@ export function mountReport(panelBody, ctx) {
       const partSet = new Set(w.partition_by || []);
       const partChips = groupBy.length
         ? groupBy.map((g) =>
-            '<button type="button" class="rt-report-part-chip'
+            '<button type="button" class="rp-report-part-chip'
             + (partSet.has(g) ? ' is-on' : '')
             + '" data-window-part="' + esc(g) + '" data-i="' + i + '">'
             + esc(g) + '</button>').join('')
-        : '<span class="rt-report-muted">(none — global window)</span>';
-      return '<div class="rt-report-window" data-i="' + i + '">'
-        + '<div class="rt-report-window-row">'
-        +   '<input class="rt-pred-val" data-wkey="alias" type="text"'
+        : '<span class="rp-report-muted">(none — global window)</span>';
+      return '<div class="rp-report-window" data-i="' + i + '">'
+        + '<div class="rp-report-window-row">'
+        +   '<input class="rp-pred-val" data-wkey="alias" type="text"'
         +     ' placeholder="alias" value="' + esc(w.alias || "") + '" />'
-        +   '<select class="rt-pred-op" data-wkey="fn">' + fnOpts(fn) + '</select>'
-        +   '<select class="rt-pred-col" data-wkey="col">' + colOpts(w.col || "") + '</select>'
+        +   '<select class="rp-pred-op" data-wkey="fn">' + fnOpts(fn) + '</select>'
+        +   '<select class="rp-pred-col" data-wkey="col">' + colOpts(w.col || "") + '</select>'
         +   (isVal
               ? ''
-              : '<label class="rt-report-window-pct" title="Divide by partition total ×100">'
+              : '<label class="rp-report-window-pct" title="Divide by partition total ×100">'
                 + '<input type="checkbox" data-wkey="as_percent"'
                 + (w.as_percent ? ' checked' : '') + ' /> %</label>')
-        +   '<button class="rt-pred-del" type="button" data-window-del="' + i + '"'
+        +   '<button class="rp-pred-del" type="button" data-window-del="' + i + '"'
         +     ' title="Remove window"><i class="bi bi-x-lg"></i></button>'
         + '</div>'
         + (isVal
-            ? '<div class="rt-report-window-value">'
-              + '<span class="rt-report-muted">order by</span>'
-              + '<select class="rt-pred-col" data-wkey="order_by">'
+            ? '<div class="rp-report-window-value">'
+              + '<span class="rp-report-muted">order by</span>'
+              + '<select class="rp-pred-col" data-wkey="order_by">'
               +   '<option value="">— pick —</option>'
               +   subCols.map((c) =>
                     '<option value="' + esc(c) + '"'
                     + (c === w.order_by ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
               + '</select>'
               + (needOff
-                  ? '<span class="rt-report-muted">offset</span>'
+                  ? '<span class="rp-report-muted">offset</span>'
                     + '<input type="number" min="1" step="1" data-wkey="offset"'
                     + ' value="' + Number(w.offset || 1) + '" />'
                   : '')
               + '</div>'
             : '')
-        + '<div class="rt-report-window-parts">'
-        +   '<span class="rt-report-muted">partition by:</span> ' + partChips
+        + '<div class="rp-report-window-parts">'
+        +   '<span class="rp-report-muted">partition by:</span> ' + partChips
         + '</div>'
         + '</div>';
     }).join('');
-    return '<section class="rt-report-sect">'
-      +    '<span class="rt-field-lbl">Windows</span>'
+    return '<section class="rp-report-sect">'
+      +    '<span class="rp-label">Windows</span>'
       +    (windows.length
-            ? '<div class="rt-report-windows">' + rows + '</div>'
-            : '<p class="rt-report-empty">No windows — useful for "% of partition" or running totals.</p>')
-      +    '<button class="rt-btn rt-btn--glass rt-report-add-window" type="button">'
+            ? '<div class="rp-report-windows">' + rows + '</div>'
+            : '<p class="rp-report-empty">No windows — useful for "% of partition" or running totals.</p>')
+      +    '<button class="rp-btn-icon rp-btn-icon--glass rp-report-add-window" type="button">'
       +      '<i class="bi bi-plus-lg"></i> Add window'
       +    '</button>'
       +    '</section>';
@@ -372,20 +372,20 @@ export function mountReport(panelBody, ctx) {
     const partSet = new Set(topN?.partition_by || []);
     const partChips = groupBy.length
       ? groupBy.map((g) =>
-          '<button type="button" class="rt-report-part-chip'
+          '<button type="button" class="rp-report-part-chip'
           + (partSet.has(g) ? ' is-on' : '')
           + '" data-topn-part="' + esc(g) + '">'
           + esc(g) + '</button>').join('')
-      : '<span class="rt-report-muted">(none — global top N)</span>';
+      : '<span class="rp-report-muted">(none — global top N)</span>';
     const enableRow =
-      '<label class="rt-report-show-toggle">'
+      '<label class="rp-report-show-toggle">'
       + '<input type="checkbox" data-topn-enable'
       + (topN ? ' checked' : '') + ' /> Enable</label>';
     if (!topN) {
-      return '<section class="rt-report-sect">'
-        + '<span class="rt-field-lbl">Top N</span>'
-        + '<div class="rt-report-show-row">' + enableRow + '</div>'
-        + '<p class="rt-report-empty">Keep the top (or bottom) N rows per partition — useful for "top 5 per group" reports.</p>'
+      return '<section class="rp-report-sect">'
+        + '<span class="rp-label">Top N</span>'
+        + '<div class="rp-report-show-row">' + enableRow + '</div>'
+        + '<p class="rp-report-empty">Keep the top (or bottom) N rows per partition — useful for "top 5 per group" reports.</p>'
         + '</section>';
     }
     const colOpts = subCols.length
@@ -393,23 +393,23 @@ export function mountReport(panelBody, ctx) {
           '<option value="' + esc(c) + '"'
           + (c === topN.order_by ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
       : '<option value="">(define a group-by or aggregation first)</option>';
-    return '<section class="rt-report-sect">'
-      + '<span class="rt-field-lbl">Top N</span>'
-      + '<div class="rt-report-show-row">' + enableRow + '</div>'
-      + '<div class="rt-report-topn">'
-      +   '<div class="rt-report-topn-row">'
-      +     '<span class="rt-report-muted">keep</span>'
+    return '<section class="rp-report-sect">'
+      + '<span class="rp-label">Top N</span>'
+      + '<div class="rp-report-show-row">' + enableRow + '</div>'
+      + '<div class="rp-report-topn">'
+      +   '<div class="rp-report-topn-row">'
+      +     '<span class="rp-report-muted">keep</span>'
       +     '<input type="number" min="1" step="1" data-topn-key="n"'
       +       ' value="' + Number(topN.n || 5) + '" />'
       +     '<select data-topn-key="direction">'
       +       '<option value="desc"' + (topN.direction === "desc" ? ' selected' : '') + '>top</option>'
       +       '<option value="asc"'  + (topN.direction === "asc"  ? ' selected' : '') + '>bottom</option>'
       +     '</select>'
-      +     '<span class="rt-report-muted">by</span>'
+      +     '<span class="rp-report-muted">by</span>'
       +     '<select data-topn-key="order_by">' + colOpts + '</select>'
       +   '</div>'
-      +   '<div class="rt-report-window-parts">'
-      +     '<span class="rt-report-muted">partition by:</span> ' + partChips
+      +   '<div class="rp-report-window-parts">'
+      +     '<span class="rp-report-muted">partition by:</span> ' + partChips
       +   '</div>'
       + '</div>'
       + '</section>';
@@ -420,13 +420,13 @@ export function mountReport(panelBody, ctx) {
   // for dashboards), but the preview omits them.
   function renderShowSection() {
     const toggle = (key, on, label, title) =>
-      '<label class="rt-report-show-toggle" title="' + esc(title) + '">'
+      '<label class="rp-report-show-toggle" title="' + esc(title) + '">'
       + '<input type="checkbox" data-show-key="' + key + '"'
       + (on ? ' checked' : '') + ' /> ' + esc(label)
       + '</label>';
-    return '<section class="rt-report-sect rt-report-show">'
-      +    '<span class="rt-field-lbl">Show</span>'
-      +    '<div class="rt-report-show-row">'
+    return '<section class="rp-report-sect rp-report-show">'
+      +    '<span class="rp-label">Show</span>'
+      +    '<div class="rp-report-show-row">'
       +      toggle("show_subtotals", showSubtotals, "Subtotals",
                     "One row per group with the aggregations")
       +      toggle("show_total",     showTotal,     "Grand total",
@@ -446,7 +446,7 @@ export function mountReport(panelBody, ctx) {
     const sub = page.subtotals;
     if (!sub || !sub.rows?.length) {
       previewEl.hidden = false;
-      previewEl.innerHTML = '<p class="rt-report-empty">No rows in this preview.</p>';
+      previewEl.innerHTML = '<p class="rp-report-empty">No rows in this preview.</p>';
       return;
     }
     // Matrix mode — group_by × pivotBy. The backend returns long-
@@ -467,10 +467,10 @@ export function mountReport(panelBody, ctx) {
       + sub.columns.map((c) => {
           const i = sortIdx(c);
           const arrow = i === -1 ? ''
-            : sortList[i].dir === "desc" ? ' <span class="rt-report-sort-arrow">▼</span>'
-            : ' <span class="rt-report-sort-arrow">▲</span>';
+            : sortList[i].dir === "desc" ? ' <span class="rp-report-sort-arrow">▼</span>'
+            : ' <span class="rp-report-sort-arrow">▲</span>';
           const chip = sortList.length > 1 && i >= 0
-            ? ' <span class="rt-report-sort-chain">' + (i + 1) + '</span>' : '';
+            ? ' <span class="rp-report-sort-chain">' + (i + 1) + '</span>' : '';
           return '<th data-sort="' + esc(c) + '" title="Click to sort; shift-click to chain">'
             + esc(c) + arrow + chip + '</th>';
         }).join('')
@@ -493,19 +493,19 @@ export function mountReport(panelBody, ctx) {
       + '</tbody>';
     previewEl.hidden = false;
     previewEl.innerHTML =
-        '<div class="rt-report-preview-head">'
-      +   '<span class="rt-report-preview-meta">'
+        '<div class="rp-report-preview-head">'
+      +   '<span class="rp-report-preview-meta">'
       +     '<b>' + sub.total + '</b> group' + (sub.total === 1 ? '' : 's')
       +     ' · ' + page.ms + ' ms'
       +   '</span>'
       + '</div>'
-      + '<div class="rt-report-preview-wrap">'
-      +   '<table class="rt-table rt-report-preview-table">'
+      + '<div class="rp-report-preview-wrap">'
+      +   '<table class="rt-table rp-report-preview-table">'
       +     head + body
       +   '</table>'
       + '</div>'
       + (more
-          ? '<p class="rt-report-empty">' + more + ' more group'
+          ? '<p class="rp-report-empty">' + more + ' more group'
             + (more === 1 ? '' : 's') + ' not shown.</p>'
           : '');
     // Click-to-sort on preview headers — bound once per render since
@@ -605,7 +605,7 @@ export function mountReport(panelBody, ctx) {
 
     const headerCells = [
       ...groupBy.map((d) => '<th>' + esc(d) + '</th>'),
-      '<th class="rt-report-matrix-measure-h">Measure</th>',
+      '<th class="rp-report-matrix-measure-h">Measure</th>',
       ...colKeys.map((ck) => '<th class="is-num">' + colLabel(ck) + '</th>'),
       ...(totalsOn ? ['<th class="is-num">Total</th>'] : []),
     ].join('');
@@ -624,9 +624,9 @@ export function mountReport(panelBody, ctx) {
         const rowTot = totalsOn
           ? numCell(rollup(metricFns[j], colKeys.map((ck) => (cellMap.get(rk + "␞" + ck) || [])[j])))
           : '';
-        return '<tr' + (j === 0 ? ' class="rt-report-matrix-rowstart"' : '') + '>'
+        return '<tr' + (j === 0 ? ' class="rp-report-matrix-rowstart"' : '') + '>'
           + dimCells
-          + '<td class="rt-report-matrix-measure">' + esc(alias) + '</td>'
+          + '<td class="rp-report-matrix-measure">' + esc(alias) + '</td>'
           + valCells + rowTot + '</tr>';
       }).join('');
     }).join('');
@@ -639,17 +639,17 @@ export function mountReport(panelBody, ctx) {
           const colTots = colKeys.map((ck) =>
             numCell(rollup(metricFns[j], rowKeys.map((rk) => (cellMap.get(rk + "␞" + ck) || [])[j])))).join('');
           const grand = page.total ? page.total[dimCount + j] : null;
-          return '<tr class="is-total' + (j === 0 ? ' rt-report-matrix-rowstart' : '') + '">'
+          return '<tr class="is-total' + (j === 0 ? ' rp-report-matrix-rowstart' : '') + '">'
             + label
-            + '<td class="rt-report-matrix-measure">' + esc(alias) + '</td>'
+            + '<td class="rp-report-matrix-measure">' + esc(alias) + '</td>'
             + colTots + numCell(grand) + '</tr>';
         }).join('') + '</tfoot>'
       : '';
 
     const metricsLabel = metricCols.length ? metricCols.map((m) => esc(m)).join(', ') : 'value';
     return ''
-      + '<div class="rt-report-preview-head">'
-      +   '<span class="rt-report-preview-meta">'
+      + '<div class="rp-report-preview-head">'
+      +   '<span class="rp-report-preview-meta">'
       +     '<b>' + rowKeys.length + '</b> row' + (rowKeys.length === 1 ? '' : 's')
       +     ' × <b>' + colKeys.length + '</b> col' + (colKeys.length === 1 ? '' : 's')
       +     ' · ' + metricCols.length + ' measure' + (metricCols.length === 1 ? '' : 's')
@@ -657,8 +657,8 @@ export function mountReport(panelBody, ctx) {
       +     ' · ' + page.ms + ' ms'
       +   '</span>'
       + '</div>'
-      + '<div class="rt-report-preview-wrap">'
-      +   '<table class="rt-table rt-report-preview-table rt-report-matrix-table">'
+      + '<div class="rp-report-preview-wrap">'
+      +   '<table class="rt-table rp-report-preview-table rp-report-matrix-table">'
       +     '<thead><tr>' + headerCells + '</tr></thead>'
       +     '<tbody>' + body + '</tbody>'
       +     foot
@@ -684,7 +684,7 @@ export function mountReport(panelBody, ctx) {
       }
       // Dropdown auto-closes via the global click handler in
       // dropdown.js — the item click bubbles to document which
-      // closes every open .rt-dd. No manual close needed here.
+      // closes every open .rp-menu. No manual close needed here.
       return;
     }
     const delBtn = e.target.closest("[data-group-del]");
@@ -716,13 +716,13 @@ export function mountReport(panelBody, ctx) {
       renderBuilder(); previewSoon();
       return;
     }
-    if (e.target.closest(".rt-report-add-agg")) {
+    if (e.target.closest(".rp-report-add-agg")) {
       aggregations.push({ col: "*", fn: "count", alias: "" });
       renderBuilder(); previewSoon();
       return;
     }
     // ── windows ────────────────────────────────────────────────────
-    if (e.target.closest(".rt-report-add-window")) {
+    if (e.target.closest(".rp-report-add-window")) {
       windows.push({
         alias:        "win" + (windows.length + 1),
         fn:           "sum",
@@ -755,8 +755,8 @@ export function mountReport(panelBody, ctx) {
       return;
     }
     // ── undo / redo ──────────────────────────────────────────────
-    if (e.target.closest(".rt-report-undo-btn")) { doUndo(); return; }
-    if (e.target.closest(".rt-report-redo-btn")) { doRedo(); return; }
+    if (e.target.closest(".rp-report-undo-btn")) { doUndo(); return; }
+    if (e.target.closest(".rp-report-redo-btn")) { doRedo(); return; }
     // ── top-N ────────────────────────────────────────────────────
     const topnPart = e.target.closest("[data-topn-part]");
     if (topnPart && topN) {
@@ -772,7 +772,7 @@ export function mountReport(panelBody, ctx) {
   // Field changes propagate to the spec live; the live-preview fires
   // on every commit (change events; input events for free-text only).
   builderEl.addEventListener("change", (e) => {
-    const aggRow = e.target.closest(".rt-report-agg");
+    const aggRow = e.target.closest(".rp-report-agg");
     if (aggRow) {
       const i = +aggRow.dataset.i;
       if (!aggregations[i]) return;
@@ -787,7 +787,7 @@ export function mountReport(panelBody, ctx) {
       }
       return;
     }
-    const winRow = e.target.closest(".rt-report-window");
+    const winRow = e.target.closest(".rp-report-window");
     if (winRow) {
       const i = +winRow.dataset.i;
       const w = windows[i];
@@ -843,13 +843,13 @@ export function mountReport(panelBody, ctx) {
     }
   });
   builderEl.addEventListener("input", (e) => {
-    const aggRow = e.target.closest(".rt-report-agg");
+    const aggRow = e.target.closest(".rp-report-agg");
     if (aggRow && e.target.dataset.key === "alias") {
       aggregations[+aggRow.dataset.i].alias = e.target.value;
       previewSoon();
       return;
     }
-    const winRow = e.target.closest(".rt-report-window");
+    const winRow = e.target.closest(".rp-report-window");
     if (winRow && e.target.dataset.wkey === "alias") {
       windows[+winRow.dataset.i].alias = e.target.value;
       previewSoon();
@@ -861,7 +861,7 @@ export function mountReport(panelBody, ctx) {
   // user is typing into a text/number input — let the browser's
   // native undo handle the field text.
   document.addEventListener("keydown", (e) => {
-    if (!panelBody.closest(".rt-panel--filter.has-report")) return;
+    if (!panelBody.closest(".rp-panel-filter.has-report")) return;
     const tag = e.target.tagName;
     const inText = (tag === "INPUT" && /^(text|search|number|)$/i.test(e.target.type || ""))
                 || tag === "TEXTAREA";
@@ -1020,8 +1020,8 @@ export function mountReport(panelBody, ctx) {
     applySnap(redoStack.pop());
   }
   function renderUndoButtons() {
-    const undoBtn = builderEl.querySelector(".rt-report-undo-btn");
-    const redoBtn = builderEl.querySelector(".rt-report-redo-btn");
+    const undoBtn = builderEl.querySelector(".rp-report-undo-btn");
+    const redoBtn = builderEl.querySelector(".rp-report-redo-btn");
     if (undoBtn) undoBtn.disabled = !undoStack.length;
     if (redoBtn) redoBtn.disabled = !redoStack.length;
   }

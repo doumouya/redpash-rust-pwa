@@ -12,8 +12,8 @@
 // Conventions:
 //   - Same noun (`tool`) appears on the wire as the step `kind` so the
 //     JS↔Rust crossing names line up (js-rust-boundary.md).
-//   - All field rows reuse the filter panel's `rt-pred` family — no new
-//     UI components, just BEM modifiers (`rt-pred--lbl`) on existing.
+//   - All field rows reuse the filter panel's `rp-pred` family — no new
+//     UI components, just BEM modifiers (`rp-pred--lbl`) on existing.
 //   - Apply hits POST /api/files/:rid/steps; the server returns
 //     { summary, columns, steps, last_op } so the table re-renders
 //     directly from the response — no extra round-trip.
@@ -88,14 +88,14 @@ export function mountTools(panelBody, ctx) {
   // (the picker + form retired in Slice H); .has-columns goes on the
   // panel root at mount so the natural #wsToolsToggle opens it at 50vw.
   const statusEl = document.createElement("div");
-  statusEl.className = "rt-tool-status";
+  statusEl.className = "rp-tool-status";
   statusEl.hidden = true;
   const columnsEl = document.createElement("div");
-  columnsEl.className = "rt-tool-columns";
+  columnsEl.className = "rp-tool-columns";
 
   panelBody.innerHTML = "";
   panelBody.append(statusEl, columnsEl);
-  panelBody.closest(".rt-panel")?.classList.add("has-columns");
+  panelBody.closest(".rp-panel")?.classList.add("has-columns");
 
   // ── columns view ───────────────────────────────────────────────────
   // The full columns-redtable per architecture/columns-redtable.md.
@@ -126,7 +126,7 @@ export function mountTools(panelBody, ctx) {
       editingName  = null;
       editingDtype = null;
       castConfirm  = null;
-      columnsEl.innerHTML = '<p class="rt-empty rt-step-state">Open a file to see its columns.</p>';
+      columnsEl.innerHTML = '<p class="rp-empty rp-step-state">Open a file to see its columns.</p>';
       return;
     }
     // The live column set drives both the stale-edit-target guards and
@@ -158,7 +158,7 @@ export function mountTools(panelBody, ctx) {
       const uniqPct   = c.unique_pct == null ? null : Math.max(0, Math.min(100, c.unique_pct));
       const sample    = c.sample == null ? "" : String(c.sample);
       const sniff     = c.semantic_dtype && c.dtype && c.semantic_dtype !== c.dtype
-                          ? ' <span class="rt-col-sniff" title="Sniffed as ' + esc(c.semantic_dtype)
+                          ? ' <span class="rp-col-sniff" title="Sniffed as ' + esc(c.semantic_dtype)
                             + ' — stored as ' + esc(c.dtype) + '">⚠</span>'
                           : '';
       const checked   = selectedCols.has(c.name);
@@ -168,7 +168,7 @@ export function mountTools(panelBody, ctx) {
       // resolve back to the column name without walking the row.
       const nameCell  = isEditing
         ? '<td class="is-name is-editing" data-col="' + esc(c.name) + '">'
-          + '<input class="rt-col-name-input" type="text" value="' + esc(c.name) + '"'
+          + '<input class="rp-col-name-input" type="text" value="' + esc(c.name) + '"'
           + ' data-orig="' + esc(c.name) + '" autocomplete="off" spellcheck="false" /></td>'
         : '<td class="is-name is-editable" data-col="' + esc(c.name) + '"'
           + ' title="Click to rename">' + esc(c.name) + '</td>';
@@ -177,7 +177,7 @@ export function mountTools(panelBody, ctx) {
       const isEditingDtype = editingDtype === c.name;
       const dtypeCell = isEditingDtype
         ? '<td class="is-dtype is-editing" data-col="' + esc(c.name) + '">'
-          + '<select class="rt-col-dtype-select" data-orig="' + esc(c.dtype || "") + '">'
+          + '<select class="rp-col-dtype-select" data-orig="' + esc(c.dtype || "") + '">'
           +   DTYPE_OPTIONS.map(([v, l]) =>
                 '<option value="' + esc(v) + '"'
                 + (v === c.dtype ? ' selected' : '') + '>'
@@ -187,7 +187,7 @@ export function mountTools(panelBody, ctx) {
           + ' title="Click to change type">'
           + esc(c.dtype || "—") + sniff + '</td>';
       return '<tr data-name="' + esc(c.name) + '"' + (checked ? ' class="is-selected"' : '') + '>'
-        + '<td class="is-check"><input type="checkbox" class="rt-chk rt-col-check"'
+        + '<td class="is-check"><input type="checkbox" class="rp-redtable-chk rp-col-check"'
         +   ' data-col="' + esc(c.name) + '"' + (checked ? ' checked' : '') + ' /></td>'
         + '<td class="is-num is-muted">' + (i + 1) + '</td>'
         + nameCell
@@ -198,7 +198,7 @@ export function mountTools(panelBody, ctx) {
         + '<td class="is-sample" title="' + esc(sample) + '">' + esc(sample) + '</td>'
         + '</tr>';
     }).join("")
-      || '<tr><td colspan="8" class="rt-tool-columns-nomatch">No columns match “' + esc(colFilter) + '”.</td></tr>';
+      || '<tr><td colspan="8" class="rp-tool-columns-nomatch">No columns match “' + esc(colFilter) + '”.</td></tr>';
     // Fully-null-rows pill — row-level cleanup that uses cross-column
     // info. Surfaces only when there's something to drop; clicking
     // fires a filter_rows step that KEEPS rows where any column is
@@ -206,15 +206,15 @@ export function mountTools(panelBody, ctx) {
     // see steps.rs's filter_rows arm.
     const fullyNull = summary?.fully_null_rows;
     const fullyNullPill = fullyNull != null && fullyNull > 0
-      ? ' · <button class="rt-tool-columns-fullynull" type="button"'
+      ? ' · <button class="rp-tool-columns-fullynull" type="button"'
         + ' title="Drop every row where every column is null">'
         + '<i class="bi bi-trash3"></i> Drop <b>' + fullyNull + '</b> fully-null row'
         + (fullyNull === 1 ? '' : 's')
         + '</button>'
       : '';
     columnsEl.innerHTML =
-        '<div class="rt-tool-columns-head">'
-      +   '<span class="rt-tool-columns-meta">'
+        '<div class="rp-tool-columns-head">'
+      +   '<span class="rp-tool-columns-meta">'
       +     '<b>' + cols.length + '</b> column' + (cols.length === 1 ? '' : 's')
       +     (total != null ? ' · <b>' + total + '</b> row' + (total === 1 ? '' : 's') : '')
       +     fullyNullPill
@@ -224,10 +224,10 @@ export function mountTools(panelBody, ctx) {
       + (activeSheet ? renderColumnsSheet(cols) : '')
       + (castConfirm ? renderCastConfirm() : '')
       + (stepPreview ? renderStepPreview() : '')
-      + '<div class="rt-tool-columns-tablewrap">'
-      +   '<table class="rt-table rt-tool-columns-table">'
+      + '<div class="rp-tool-columns-tablewrap">'
+      +   '<table class="rt-table rp-tool-columns-table">'
       +     '<thead><tr>'
-      +       '<th class="is-check"><input type="checkbox" class="rt-chk rt-col-check-all"'
+      +       '<th class="is-check"><input type="checkbox" class="rp-redtable-chk rp-col-check-all"'
       +         (allSelected ? ' checked' : '') + ' /></th>'
       +       '<th>#</th><th>Name</th><th>Type</th>'
       +       '<th class="is-num">Nulls</th><th class="is-num">% Null</th>'
@@ -237,13 +237,13 @@ export function mountTools(panelBody, ctx) {
       +   '</table>'
       + '</div>';
     // Header checkbox indeterminate state can't be set via HTML attr.
-    const head = columnsEl.querySelector(".rt-col-check-all");
+    const head = columnsEl.querySelector(".rp-col-check-all");
     if (head) head.indeterminate = someSelected;
     // Auto-focus + select the editing input so the user can immediately
     // type the new name. requestAnimationFrame avoids the focus being
     // stolen back by the originating click event.
     if (editingName) {
-      const input = columnsEl.querySelector(".rt-col-name-input");
+      const input = columnsEl.querySelector(".rp-col-name-input");
       if (input) {
         requestAnimationFrame(() => { input.focus(); input.select(); });
       }
@@ -287,26 +287,26 @@ export function mountTools(panelBody, ctx) {
       const known = res.known || [];
       const seen  = new Set(items.map((i) => i.canonical || i.value));
       const chip  = (val, count, on) =>
-        '<label class="rt-sentinel-chip' + (on ? " is-on" : "") + '">'
-        + '<input type="checkbox" class="rt-chk" data-sentinel-val="' + esc(val) + '"'
+        '<label class="rp-sentinel-chip' + (on ? " is-on" : "") + '">'
+        + '<input type="checkbox" class="rp-redtable-chk" data-sentinel-val="' + esc(val) + '"'
         + (on ? " checked" : "") + " /> "
-        + '<span class="rt-sentinel-chip-val">' + esc(val) + "</span>"
-        + (count != null ? '<span class="rt-sentinel-chip-n">×' + count + "</span>" : "")
+        + '<span class="rp-sentinel-chip-val">' + esc(val) + "</span>"
+        + (count != null ? '<span class="rp-sentinel-chip-n">×' + count + "</span>" : "")
         + "</label>";
       let html = items.map((i) => chip(i.value, i.total, true)).join("");
       const others = known.filter((k) => !seen.has(k));
       if (others.length) {
-        html += '<div class="rt-sentinel-known-lbl">also known</div>'
+        html += '<div class="rp-sentinel-known-lbl">also known</div>'
           + others.map((k) => chip(k, null, false)).join("");
       }
       host.innerHTML = html
-        || '<span class="rt-sentinel-clean">No junk values found — this file looks clean.</span>';
+        || '<span class="rp-sentinel-clean">No junk values found — this file looks clean.</span>';
     } catch (e) {
       // Surface the real failure (api.js attaches err.status / err.body) so a
       // 404/500 reads as itself, not a vague "couldn't scan" — honest errors.
       const why = e && e.status ? " (HTTP " + e.status + ")" : "";
       const msg = (e && e.body && (e.body.error || e.body.message)) || "";
-      host.innerHTML = '<span class="rt-sentinel-err">Couldn’t scan this file' + esc(why)
+      host.innerHTML = '<span class="rp-sentinel-err">Couldn’t scan this file' + esc(why)
         + (msg ? " — " + esc(msg) : "") + '. Type the junk values below instead.</span>';
     }
   }
@@ -326,7 +326,7 @@ export function mountTools(panelBody, ctx) {
       const label   = tool.label + (a.hasSheet ? '…' : '');
       const tip     = reason && reason !== tool.label ? label + ' — ' + reason : label;
       return { enabled, html:
-        '<button class="rt-btn" type="button"'
+        '<button class="rp-btn-icon" type="button"'
         + ' data-action-kind="' + esc(a.kind) + '"'
         + (enabled ? '' : ' disabled')
         + ' title="' + esc(tip) + '">'
@@ -353,7 +353,7 @@ export function mountTools(panelBody, ctx) {
         title = a.label + ' — select ≤' + a.max + ' column' + (a.max === 1 ? '' : 's') + ' (currently ' + selCount + ').';
       }
       return { enabled, html:
-        '<button class="rt-btn" type="button"'
+        '<button class="rp-btn-icon" type="button"'
         + ' data-select-kind="' + esc(a.kind) + '"'
         + (enabled ? '' : ' disabled')
         + ' title="' + esc(title) + '">'
@@ -366,26 +366,26 @@ export function mountTools(panelBody, ctx) {
     // Visually muted when nothing is picked so it doesn't shout
     // "0 selected" at the user constantly.
     const chip =
-      '<span class="rt-tool-columns-selchip' + (selCount ? ' is-active' : '') + '"'
+      '<span class="rp-tool-columns-selchip' + (selCount ? ' is-active' : '') + '"'
       + (selCount ? ' title="Click to clear selection"' : '') + '>'
       +   '<i class="bi bi-check2-square"></i>'
       +   '<b>' + selCount + '</b> selected'
-      +   (selCount ? '<button class="rt-icon-btn rt-icon-btn--sm rt-tool-columns-selchip-clear" type="button"'
+      +   (selCount ? '<button class="rp-btn-icon rp-btn-icon--sq rp-btn-icon--sm rp-tool-columns-selchip-clear" type="button"'
                       + ' title="Clear selection"><i class="bi bi-x"></i></button>' : '')
       + '</span>';
     // Row 1: a full-width search + every enabled (actionable) button.
     // Row 2 (after a 100%-basis break): the locked buttons, with the
     // selection chip pinned to the far end — so "needs a selection" sits
     // visibly below what you can do now, and the chip anchors the corner.
-    return '<div class="rt-toolbar rt-tool-columns-toolbar">'
-      +    '<div class="rt-search">'
+    return '<div class="rp-toolbar rp-tool-columns-toolbar">'
+      +    '<div class="rp-search">'
       +      '<i class="bi bi-search"></i>'
       +      '<input type="search" data-col-search placeholder="Filter columns…"'
       +        ' autocomplete="off" spellcheck="false" value="' + esc(colFilter) + '" />'
       +    '</div>'
-      +    '<span class="rt-toolbar-sep"></span>'
+      +    '<span class="rp-toolbar-sep"></span>'
       +    enabledHtml
-      +    '<span class="rt-tool-columns-toolbar-break"></span>'
+      +    '<span class="rp-tool-columns-toolbar-break"></span>'
       +    disabledHtml
       +    chip
       +    '</div>';
@@ -414,35 +414,35 @@ export function mountTools(panelBody, ctx) {
       return { field: f, html: built.html, read: built.read };
     });
     const chips = isSelect
-      ? '<div class="rt-tool-columns-sheet-chips" title="Columns this action will run on, in file order">'
-        + '<span class="rt-tool-columns-sheet-chips-lbl">Acting on</span>'
+      ? '<div class="rp-tool-columns-sheet-chips" title="Columns this action will run on, in file order">'
+        + '<span class="rp-tool-columns-sheet-chips-lbl">Acting on</span>'
         + pickedInOrder().map((n) =>
-            '<span class="rt-tool-columns-sheet-chip">' + esc(n) + '</span>').join('')
+            '<span class="rp-tool-columns-sheet-chip">' + esc(n) + '</span>').join('')
         + '</div>'
       : '';
-    return '<div class="rt-tool-columns-sheet">'
-      +    '<div class="rt-tool-columns-sheet-head">'
-      +      '<span class="rt-tool-columns-sheet-title">'
+    return '<div class="rp-tool-columns-sheet">'
+      +    '<div class="rp-tool-columns-sheet-head">'
+      +      '<span class="rp-tool-columns-sheet-title">'
       +        '<i class="bi ' + esc(activeSheet.icon) + '"></i> '
       +        esc((isSelect && sheetCfg) ? sheetCfg.label : activeSheet.label)
       +      '</span>'
-      +      '<button class="rt-icon-btn rt-tool-columns-sheet-close" type="button"'
+      +      '<button class="rp-btn-icon rp-btn-icon--sq rp-tool-columns-sheet-close" type="button"'
       +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
       +    '</div>'
       +    (activeSheet.blurb
-            ? '<p class="rt-tool-columns-sheet-blurb">' + esc(activeSheet.blurb) + '</p>'
+            ? '<p class="rp-tool-columns-sheet-blurb">' + esc(activeSheet.blurb) + '</p>'
             : '')
       +    chips
-      +    '<div class="rt-tool-columns-sheet-body">'
+      +    '<div class="rp-tool-columns-sheet-body">'
       +      sheetFields.map((r) => r.html).join('')
       +    '</div>'
-      +    '<div class="rt-tool-columns-sheet-foot">'
-      +      '<button class="rt-btn rt-tool-columns-sheet-cancel" type="button">Cancel</button>'
-      +      '<button class="rt-btn rt-tool-columns-sheet-preview" type="button"'
+      +    '<div class="rp-tool-columns-sheet-foot">'
+      +      '<button class="rp-btn-icon rp-tool-columns-sheet-cancel" type="button">Cancel</button>'
+      +      '<button class="rp-btn-icon rp-tool-columns-sheet-preview" type="button"'
       +        ' title="See what this will change before applying">'
       +        '<i class="bi bi-eye"></i> Preview'
       +      '</button>'
-      +      '<button class="rt-btn rt-btn--accent rt-tool-columns-sheet-apply" type="button">'
+      +      '<button class="rp-btn-icon rp-btn-icon--accent rp-tool-columns-sheet-apply" type="button">'
       +        '<i class="bi bi-play-fill"></i> Apply'
       +      '</button>'
       +    '</div>'
@@ -495,7 +495,7 @@ export function mountTools(panelBody, ctx) {
       return;
     }
     // Selection chip — clear the lot.
-    if (e.target.closest(".rt-tool-columns-selchip-clear")) {
+    if (e.target.closest(".rp-tool-columns-selchip-clear")) {
       selectedCols.clear();
       renderColumnsView();
       return;
@@ -504,7 +504,7 @@ export function mountTools(panelBody, ctx) {
     // least one column is not_null (i.e. drops rows where every column
     // is null). No new step kind; reuses filter_rows with a flat OR
     // of `{column, op: "not_null"}` predicates over every column.
-    const fullyBtn = e.target.closest(".rt-tool-columns-fullynull");
+    const fullyBtn = e.target.closest(".rp-tool-columns-fullynull");
     if (fullyBtn) {
       const cols = ctx.columns() || [];
       if (!cols.length) return;
@@ -516,12 +516,12 @@ export function mountTools(panelBody, ctx) {
       return;
     }
     // Sheet controls.
-    if (e.target.closest(".rt-tool-columns-sheet-cancel")
-        || e.target.closest(".rt-tool-columns-sheet-close")) {
+    if (e.target.closest(".rp-tool-columns-sheet-cancel")
+        || e.target.closest(".rp-tool-columns-sheet-close")) {
       closeSheet();
       return;
     }
-    const applyBtn = e.target.closest(".rt-tool-columns-sheet-apply");
+    const applyBtn = e.target.closest(".rp-tool-columns-sheet-apply");
     if (applyBtn) {
       if (!activeSheet) return;
       const { steps, typedSentinels } = buildSheetSteps();
@@ -540,7 +540,7 @@ export function mountTools(panelBody, ctx) {
     // Preview — same step list as Apply, but dry-run each against the
     // current frame (POST /steps/preview, no persist) and show the merged
     // before/after diff. The user then commits or backs out from the panel.
-    const previewBtn = e.target.closest(".rt-tool-columns-sheet-preview");
+    const previewBtn = e.target.closest(".rp-tool-columns-sheet-preview");
     if (previewBtn) {
       if (!activeSheet) return;
       const { steps, typedSentinels } = buildSheetSteps();
@@ -569,7 +569,7 @@ export function mountTools(panelBody, ctx) {
     // Step-preview panel controls. Apply commits the previewed steps;
     // Back / close returns to the columns view (re-open the tool to retry —
     // the diff captured exactly the steps Apply will run, so they can't drift).
-    const spApply = e.target.closest(".rt-step-preview-apply");
+    const spApply = e.target.closest(".rp-step-preview-apply");
     if (spApply && stepPreview) {
       const { steps, typedSentinels } = stepPreview;
       stepPreview = null;
@@ -579,8 +579,8 @@ export function mountTools(panelBody, ctx) {
       rememberSentinels(typedSentinels);
       return;
     }
-    if ((e.target.closest(".rt-step-preview-back")
-         || e.target.closest(".rt-step-preview-close")) && stepPreview) {
+    if ((e.target.closest(".rp-step-preview-back")
+         || e.target.closest(".rp-step-preview-close")) && stepPreview) {
       stepPreview = null;
       renderColumnsView();
       return;
@@ -602,7 +602,7 @@ export function mountTools(panelBody, ctx) {
   // toggles work too. The header checkbox toggles every row; row clicks
   // mutate selectedCols by column name (stable across re-orders).
   columnsEl.addEventListener("change", (e) => {
-    const head = e.target.closest(".rt-col-check-all");
+    const head = e.target.closest(".rp-col-check-all");
     if (head) {
       const cols = ctx.columns() || [];
       if (head.checked) cols.forEach((c) => selectedCols.add(c.name));
@@ -610,7 +610,7 @@ export function mountTools(panelBody, ctx) {
       renderColumnsView();
       return;
     }
-    const row = e.target.closest(".rt-col-check");
+    const row = e.target.closest(".rp-col-check");
     if (row) {
       const name = row.dataset.col;
       if (row.checked) selectedCols.add(name);
@@ -626,14 +626,14 @@ export function mountTools(panelBody, ctx) {
   // with no step. A duplicate name surfaces the server's 400 via the
   // existing status row.
   columnsEl.addEventListener("click", (e) => {
-    const cell = e.target.closest(".rt-tool-columns-table td.is-name.is-editable");
+    const cell = e.target.closest(".rp-tool-columns-table td.is-name.is-editable");
     if (!cell || editingName) return;
     editingName = cell.dataset.col || null;
     if (editingName) renderColumnsView();
   });
 
   columnsEl.addEventListener("keydown", (e) => {
-    const input = e.target.closest(".rt-col-name-input");
+    const input = e.target.closest(".rp-col-name-input");
     if (!input) return;
     if (e.key === "Enter")      { e.preventDefault(); commitNameEdit(input); }
     else if (e.key === "Escape") { e.preventDefault(); cancelNameEdit(); }
@@ -642,7 +642,7 @@ export function mountTools(panelBody, ctx) {
   // focusout commits — guarded by the editingName check so the
   // re-render from a commit doesn't double-fire.
   columnsEl.addEventListener("focusout", (e) => {
-    const input = e.target.closest(".rt-col-name-input");
+    const input = e.target.closest(".rp-col-name-input");
     if (input && editingName) commitNameEdit(input);
   });
 
@@ -666,14 +666,14 @@ export function mountTools(panelBody, ctx) {
   // cast fires immediately. Otherwise a confirm sheet shows the cost
   // (would_null + sample source values) before the destructive apply.
   columnsEl.addEventListener("click", (e) => {
-    const cell = e.target.closest(".rt-tool-columns-table td.is-dtype.is-editable");
+    const cell = e.target.closest(".rp-tool-columns-table td.is-dtype.is-editable");
     if (!cell || editingDtype) return;
     editingDtype = cell.dataset.col || null;
     if (editingDtype) renderColumnsView();
   });
 
   columnsEl.addEventListener("change", async (e) => {
-    const select = e.target.closest(".rt-col-dtype-select");
+    const select = e.target.closest(".rp-col-dtype-select");
     if (!select || !editingDtype) return;
     const from = select.dataset.orig;
     const to   = select.value;
@@ -684,7 +684,7 @@ export function mountTools(panelBody, ctx) {
   });
 
   columnsEl.addEventListener("keydown", (e) => {
-    const select = e.target.closest(".rt-col-dtype-select");
+    const select = e.target.closest(".rp-col-dtype-select");
     if (!select) return;
     if (e.key === "Escape") {
       e.preventDefault();
@@ -695,13 +695,13 @@ export function mountTools(panelBody, ctx) {
 
   // Cast confirm sheet — close/cancel re-render; apply fires the cast.
   columnsEl.addEventListener("click", async (e) => {
-    if (e.target.closest(".rt-cast-confirm-close")
-        || e.target.closest(".rt-cast-confirm-cancel")) {
+    if (e.target.closest(".rp-cast-confirm-close")
+        || e.target.closest(".rp-cast-confirm-cancel")) {
       castConfirm = null;
       renderColumnsView();
       return;
     }
-    const applyBtn = e.target.closest(".rt-cast-confirm-apply");
+    const applyBtn = e.target.closest(".rp-cast-confirm-apply");
     if (!applyBtn || !castConfirm) return;
     const { column, dtype } = castConfirm;
     castConfirm = null;
@@ -844,30 +844,30 @@ export function mountTools(panelBody, ctx) {
     if (!castConfirm) return '';
     const { column, dtype, total, would_null, samples } = castConfirm;
     const dtypeLbl = (DTYPE_OPTIONS.find((o) => o[0] === dtype) || [dtype, dtype])[1];
-    return '<div class="rt-tool-columns-sheet rt-cast-confirm">'
-      +    '<div class="rt-tool-columns-sheet-head">'
-      +      '<span class="rt-tool-columns-sheet-title">'
+    return '<div class="rp-tool-columns-sheet rp-cast-confirm">'
+      +    '<div class="rp-tool-columns-sheet-head">'
+      +      '<span class="rp-tool-columns-sheet-title">'
       +        '<i class="bi bi-exclamation-triangle"></i> '
       +        'Cast ' + esc(column) + ' → ' + esc(dtypeLbl)
       +      '</span>'
-      +      '<button class="rt-btn rt-btn--ghost rt-cast-confirm-close" type="button"'
+      +      '<button class="rp-btn-icon rp-btn-icon--ghost rp-cast-confirm-close" type="button"'
       +        ' title="Cancel"><i class="bi bi-x-lg"></i></button>'
       +    '</div>'
-      +    '<p class="rt-tool-columns-sheet-blurb">'
+      +    '<p class="rp-tool-columns-sheet-blurb">'
       +      '<b>' + would_null + '</b> of ' + total + ' cell'
       +      (total === 1 ? '' : 's') + ' won\'t parse and will become null. '
       +      'Use <i>Fix invalid</i> first if you\'d rather clean the source values.'
       +    '</p>'
       +    (samples.length
-            ? '<div class="rt-tool-columns-sheet-chips" title="Sample source values that would be nulled">'
-              + '<span class="rt-tool-columns-sheet-chips-lbl">Examples</span>'
-              + samples.map((s) => '<span class="rt-tool-columns-sheet-chip">'
+            ? '<div class="rp-tool-columns-sheet-chips" title="Sample source values that would be nulled">'
+              + '<span class="rp-tool-columns-sheet-chips-lbl">Examples</span>'
+              + samples.map((s) => '<span class="rp-tool-columns-sheet-chip">'
                   + esc(s) + '</span>').join('')
               + '</div>'
             : '')
-      +    '<div class="rt-tool-columns-sheet-foot">'
-      +      '<button class="rt-btn rt-cast-confirm-cancel" type="button">Cancel</button>'
-      +      '<button class="rt-btn rt-btn--accent rt-cast-confirm-apply" type="button">'
+      +    '<div class="rp-tool-columns-sheet-foot">'
+      +      '<button class="rp-btn-icon rp-cast-confirm-cancel" type="button">Cancel</button>'
+      +      '<button class="rp-btn-icon rp-btn-icon--accent rp-cast-confirm-apply" type="button">'
       +        '<i class="bi bi-play-fill"></i> Apply cast'
       +      '</button>'
       +    '</div>'
@@ -904,34 +904,34 @@ export function mountTools(panelBody, ctx) {
 
     // Stringified cell values: null → ∅, empty string → (empty), else escaped.
     const fmtCell = (v) => v == null
-      ? '<span class="rt-step-preview-null">∅</span>'
-      : (v === '' ? '<span class="rt-step-preview-null">(empty)</span>' : esc(v));
+      ? '<span class="rp-step-preview-null">∅</span>'
+      : (v === '' ? '<span class="rp-step-preview-null">(empty)</span>' : esc(v));
     const table = d.sample?.length
-      ? '<div class="rt-tool-columns-tablewrap rt-step-preview-tablewrap">'
-        + '<table class="rt-table rt-step-preview-table">'
+      ? '<div class="rp-tool-columns-tablewrap rp-step-preview-tablewrap">'
+        + '<table class="rt-table rp-step-preview-table">'
         + '<thead><tr><th>Column</th><th class="is-num">Row</th><th>Before</th><th>After</th></tr></thead>'
         + '<tbody>'
         + d.sample.map((s) =>
-            '<tr><td class="rt-step-preview-col">' + esc(s.column) + '</td>'
+            '<tr><td class="rp-step-preview-col">' + esc(s.column) + '</td>'
             + '<td class="is-num">' + (s.row + 1) + '</td>'
-            + '<td class="rt-step-preview-before">' + fmtCell(s.before) + '</td>'
-            + '<td class="rt-step-preview-after">'  + fmtCell(s.after)  + '</td></tr>').join('')
+            + '<td class="rp-step-preview-before">' + fmtCell(s.before) + '</td>'
+            + '<td class="rp-step-preview-after">'  + fmtCell(s.after)  + '</td></tr>').join('')
         + '</tbody></table></div>'
       : '';
 
-    return '<div class="rt-tool-columns-sheet rt-step-preview">'
-      +    '<div class="rt-tool-columns-sheet-head">'
-      +      '<span class="rt-tool-columns-sheet-title">'
+    return '<div class="rp-tool-columns-sheet rp-step-preview">'
+      +    '<div class="rp-tool-columns-sheet-head">'
+      +      '<span class="rp-tool-columns-sheet-title">'
       +        '<i class="bi bi-eye"></i> Preview: ' + esc(stepPreview.label)
       +      '</span>'
-      +      '<button class="rt-icon-btn rt-step-preview-close" type="button"'
+      +      '<button class="rp-btn-icon rp-btn-icon--sq rp-step-preview-close" type="button"'
       +        ' title="Back"><i class="bi bi-x-lg"></i></button>'
       +    '</div>'
-      +    '<p class="rt-tool-columns-sheet-blurb rt-step-preview-summary">' + summary + '</p>'
+      +    '<p class="rp-tool-columns-sheet-blurb rp-step-preview-summary">' + summary + '</p>'
       +    table
-      +    '<div class="rt-tool-columns-sheet-foot">'
-      +      '<button class="rt-btn rt-step-preview-back" type="button">Back</button>'
-      +      '<button class="rt-btn rt-btn--accent rt-step-preview-apply" type="button"'
+      +    '<div class="rp-tool-columns-sheet-foot">'
+      +      '<button class="rp-btn-icon rp-step-preview-back" type="button">Back</button>'
+      +      '<button class="rp-btn-icon rp-btn-icon--accent rp-step-preview-apply" type="button"'
       +        (noChange ? ' disabled' : '') + '>'
       +        '<i class="bi bi-check2"></i> Apply'
       +      '</button>'
