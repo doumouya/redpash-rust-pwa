@@ -26,6 +26,33 @@
 .rp-field[data-variant="stack"] { flex-direction: column; align-items: stretch; gap: 0.375rem; }
 .rp-field[data-variant="stack"] .rp-field-control { width: 100%; }
 
+/* editable — the control is a click-to-edit value button (rp-field-editable,
+   field.js); clicking hands the slot to a caller-mounted editor. Built on the
+   two-tier --rp-* tokens so it themes for free. */
+.rp-field-value {
+  max-width: 14rem;            /* cap + ellipsis for long values without shrinking the base control */
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1875rem var(--rp-sp-2);
+  margin: -0.1875rem calc(var(--rp-sp-2) * -1);
+  border: 1px solid transparent;
+  border-radius: var(--rp-radius);
+  background: transparent;
+  color: var(--rp-text);
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease);
+}
+.rp-field-value:hover { background: var(--rp-hover); border-color: var(--rp-border); }
+.rp-field-value:focus-visible { outline: 2px solid var(--rp-accent-2); outline-offset: 1px; }
+.rp-field-value[data-empty] { color: var(--rp-text-mute); }
+.rp-field[data-editing] .rp-field-control { width: 12rem; max-width: 60%; }
+
 /* a section of fields inside a surface */
 .rp-field-group { display: flex; flex-direction: column; }
 .rp-field-group-title {

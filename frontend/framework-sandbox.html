@@ -530,6 +530,23 @@
         mount: (s) => ["accent", "ok", "warn", "soon", "neutral"].forEach((t) => { const b = document.createElement("span"); s.appendChild(b); mountBadge(b, { label: t, tone: t }); }) });
       mountField(row(), { label: "Picture", hint: "Upload a profile picture",
         mount: (s) => mountAvatarUpload(s, { name: "Emmanuel D.", onFile: (f) => console.log("[sandbox] avatar file", f.name) }) });
+      // rp-field-editable — click the value to edit; the caller mounts the editor.
+      const mountFieldEditable = get("field-editable");
+      if (mountFieldEditable) {
+        mountFieldEditable(row(), { label: "Priority", value: "Critical", edit: (slot, commit, cancel) => {
+          const sel = document.createElement("select"); sel.className = "rp-input";
+          ["Low", "Medium", "High", "Critical"].forEach((o) => { const op = document.createElement("option"); op.value = op.textContent = o; if (o === "Critical") op.selected = true; sel.appendChild(op); });
+          slot.appendChild(sel); sel.focus();
+          sel.addEventListener("change", () => commit(sel.value));
+          sel.addEventListener("blur", () => cancel());
+        } });
+        mountFieldEditable(row(), { label: "Assignee", placeholder: "— unassigned —", edit: (slot, commit, cancel) => {
+          const inp = document.createElement("input"); inp.className = "rp-input"; inp.placeholder = "Search people…";
+          slot.appendChild(inp); inp.focus();
+          inp.addEventListener("keydown", (e) => { if (e.key === "Enter") commit(inp.value); else if (e.key === "Escape") cancel(); });
+          inp.addEventListener("blur", () => setTimeout(cancel, 100));
+        } });
+      }
     })();
 
     // PAGE-ASSEMBLY PROOF — Profile = the User RECORD page (Em's reframe): rail-shell

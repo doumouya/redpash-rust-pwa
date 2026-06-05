@@ -3,7 +3,7 @@ title: frontend/scripts/framework/field.js
 source: ../../../../../../frontend/scripts/framework/field.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-04
+last modified date: 2026-06-05
 ---
 
 # framework/field.js — labeled field row
@@ -21,6 +21,13 @@ CAS_37B2E1BF). CSS: `styles/framework/field.css`.
   `host` becomes the `.rp-field`; `mount(slot)` fills the control slot (compose any
   component), or `html` for a static control string; `stack:true` puts a full-width
   control below the label (text inputs / previews). Self-registers as `"field"`.
+- `mountFieldEditable(host, { label?, value?, placeholder?, edit? })` → `{ el, set, value }`.
+  The inline-editable variant: the control is a click-to-edit **value button**; clicking
+  (Enter / Space) enters edit mode and hands the control slot to the caller's
+  `edit(slot, commit, cancel)` (mount a `select` / `menu` / user-picker), and `commit(v)`
+  writes the value back + returns to view mode. Sets `data-variant="editable"` (and
+  `data-editing` while open). Self-registers as `"field-editable"`. De-cased from the
+  Cases sidebar's inline-editable property rows so any record view reuses the pattern.
 
 ## How it works
 

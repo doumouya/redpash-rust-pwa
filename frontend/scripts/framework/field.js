@@ -40,3 +40,54 @@ export function mountField(host, opts = {}) {
 }
 
 register("field", mountField);
+
+/**
+ * Editable field row: label + a click-to-edit **value button**. In view mode
+ * the value renders as a button; clicking (or Enter/Space) enters edit mode and
+ * hands the control slot to the caller's `edit(slot, commit, cancel)` — which
+ * mounts whatever editor fits (a `select`, a `menu`, a user-picker). Calling
+ * `commit(newValue)` writes it back and returns to view mode; `cancel()` returns
+ * without change. Composes `rp-field` (the row) — the inline-editable property
+ * pattern de-cased from the Cases sidebar so any record view reuses it.
+ *
+ * @param {Element} host
+ * @param {{ label?:string, value?:string, placeholder?:string,
+ *           edit?:(slot:Element, commit:(v:string)=>void, cancel:()=>void)=>void }} [opts]
+ * @returns {{ el:Element, set:(v:string)=>void, value:()=>string }}
+ */
+export function mountFieldEditable(host, opts = {}) {
+  if (!host) return null;
+  let value = opts.value == null ? "" : String(opts.value);
+  const placeholder = opts.placeholder || "—";
+  const { el, control } = mountField(host, { label: opts.label });
+  host.setAttribute("data-variant", "editable");
+
+  function paintView(focus) {
+    control.innerHTML =
+        '<button type="button" class="rp-field-value" aria-haspopup="true"'
+      + (value ? '' : ' data-empty="1"')
+      + ' aria-label="' + esc((opts.label || "") + ": " + (value || placeholder)) + '">'
+      + esc(value || placeholder) + '</button>';
+    const btn = control.querySelector(".rp-field-value");
+    btn.addEventListener("click", enterEdit, { once: true });
+    if (focus) btn.focus();
+  }
+  function enterEdit() {
+    if (typeof opts.edit !== "function") return;
+    host.setAttribute("data-editing", "");
+    control.innerHTML = "";                 // hand the slot to the caller's editor
+    opts.edit(control, commit, cancel);
+  }
+  function commit(v) { if (v != null) value = String(v); finish(); }
+  function cancel() { finish(); }
+  function finish() { host.removeAttribute("data-editing"); paintView(true); }
+
+  paintView(false);
+  return {
+    el,
+    set(v) { value = v == null ? "" : String(v); paintView(false); },
+    value: () => value,
+  };
+}
+
+register("field-editable", mountFieldEditable);
