@@ -172,3 +172,31 @@ pub async fn delete_connector(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     .await?;
     Ok(res.rows_affected() > 0)
 }
+
+/// Persist an incremental-pull high-watermark into the connector's `config` JSONB.
+/// SURGICAL by design: it replaces only the `incremental` subtree (merging in
+/// `last_watermark`), never the whole `config` — a blind overwrite would clobber the
+/// `host` / `ssl_mode` / `schema` keys that BOTH loaders read in `from_connection`.
+/// The `||` merge keeps `incremental.column` (and any other incremental keys); the
+/// `COALESCE`s seed an empty object if `config` / `config.incremental` is absent.
+/// Returns `true` if a connector row matched. Shared by every loader that supports
+/// incremental pull (mysql + postgres). NB: row-atomic but not compare-and-set — two
+/// racing syncs of one connector can regress the watermark (re-pull a delta), which is
+/// acceptable for v1 operator-triggered sync; CAS on the old value is the hardening.
+pub async fn set_connector_watermark(pool: &PgPool, rid: &str, last_value: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query(
+        "UPDATE connectors \
+            SET config = jsonb_set( \
+                COALESCE(config, '{}'::jsonb), \
+                '{incremental}', \
+                COALESCE(config -> 'incremental', '{}'::jsonb) \
+                    || jsonb_build_object('last_watermark', $2::text), \
+                true) \
+          WHERE redpash_id = $1",
+    )
+    .bind(rid)
+    .bind(last_value)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}

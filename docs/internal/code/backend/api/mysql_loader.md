@@ -33,7 +33,7 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - `pub struct Cfg` (holds `opts: MySqlConnectOptions` + database/table/project/as_user)
   + `Cfg::from_connection(pool, CON_id)` — reads the `connectors` row (kind=`mysql`;
   destination project + as_user; `config` JSONB = `{host, port, user, password,
-  database, table, ssl_mode?, ssl_ca?, columns?, where?}`). Builds connect options from the discrete
+  database, table, ssl_mode?, ssl_ca?, columns?, where?, incremental?}`). Builds connect options from the discrete
   components (never a format!'d URL); the legacy `conn` full-URL key is **rejected**
   (SSRF). `ssl_mode` (via `connectors_core::parse_ssl_mode`; default loopback→PREFERRED,
   remote→REQUIRED) maps through `mysql_ssl_mode()` → `.ssl_mode(..)`, and an optional
@@ -43,6 +43,18 @@ buffering); and a decode error is **surfaced, never swallowed**.
   session) → list columns + `DATA_TYPE` (information_schema) → **column pushdown**
   (`select_columns`) → type-aware `SELECT` → stream rows → CSV → `pipeline::upload_csv`
   → returns the new file rid.
+- **Incremental high-watermark pull** (`config.incremental = {column, last_watermark?}`,
+  `struct Incremental`). When set, run() appends `AND (col > ?)` to the composed WHERE —
+  the watermark **value is BOUND** (`?`), the column is `qi`-quoted + existence-checked
+  against the FULL introspection (it need not be among the pulled `columns`). First pull
+  (no `last_watermark`) omits the predicate (full load that seeds the watermark). After a
+  **successful** upload of a **non-empty** delta, run() re-queries `MAX(col)` over the same
+  predicate and persists it via `db::set_connector_watermark` (surgical `jsonb_set` of
+  `config.incremental.last_watermark`). Advancing only post-upload means a failed upload
+  never skips rows. Caveats: the watermark column should be **temporal or auto-increment**
+  (text comparison must be monotone — a non-padded numeric string sorts lexicographically
+  wrong); two concurrent syncs can regress the watermark (row-atomic, not compare-and-set)
+  — both acceptable for v1 operator-triggered sync, documented for hardening.
 - `sanitize_where(raw)` — validates the optional `config.where` predicate pushdown.
   `config.where` is an **operator-trust boundary**, not an injection-safe input: the
   operator already chose the source table + the (least-privilege) creds the read runs

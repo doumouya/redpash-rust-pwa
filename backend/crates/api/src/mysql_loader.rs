@@ -35,8 +35,20 @@ pub struct Cfg {
     pub table:       String,
     pub columns:     Option<Vec<String>>, // config.columns — pull only these (None = all); existence-checked in run()
     pub where_sql:   Option<String>,      // config.where — operator-supplied WHERE predicate (guarded; see sanitize_where)
+    pub incremental: Option<Incremental>, // config.incremental — high-watermark delta pull
+    pub connector_rid: String,            // the CON_ rid — for the incremental watermark write-back
     pub project_rid: String,
     pub as_user:     String,
+}
+
+/// Incremental high-watermark pull. `column` is the monotonic watermark column
+/// (a temporal or auto-increment id — text-comparison ordering must be monotone);
+/// `last_watermark` is the highest value pulled so far (None = first pull = full load).
+/// run() appends `AND (col > ?)` (value BOUND) and, after a non-empty pull, persists
+/// the new MAX(col) via `db::connectors::set_connector_watermark`.
+pub struct Incremental {
+    pub column: String,
+    pub last_watermark: Option<String>,
 }
 
 /// Map the engine-agnostic `connectors_core::SslMode` to the sqlx `MySqlSslMode`.
@@ -88,6 +100,26 @@ impl Cfg {
             Some(raw) => sanitize_where(&raw)?,
             None => None,
         };
+        // Optional incremental high-watermark pull: `config.incremental = {column,
+        // last_watermark?}`. Present-but-malformed is an error (not a silent full pull).
+        let incremental = match cfg.get("incremental") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(v) => {
+                let o = v.as_object().ok_or_else(|| {
+                    anyhow::anyhow!("connector config: 'incremental' must be an object {{column, last_watermark?}}")
+                })?;
+                let column = o
+                    .get("column")
+                    .and_then(|c| c.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("connector config: 'incremental.column' is required"))?
+                    .to_string();
+                let last_watermark =
+                    o.get("last_watermark").and_then(|w| w.as_str()).map(str::to_string);
+                Some(Incremental { column, last_watermark })
+            }
+        };
         // SECURITY (SSRF): build connect options from DISCRETE components — NEVER a
         // format!'d `mysql://user:pass@host/…` URL, where a crafted user/pass can
         // smuggle a different host through the userinfo. The legacy `conn` full-URL
@@ -125,7 +157,17 @@ impl Cfg {
         if let Some(ca) = s("ssl_ca").filter(|c| !c.trim().is_empty()) {
             opts = opts.ssl_ca(ca); // CA bundle path for VERIFY_CA / VERIFY_IDENTITY
         }
-        Ok(Self { opts, database, table, columns, where_sql, project_rid: c.project_id, as_user: c.as_user })
+        Ok(Self {
+            opts,
+            database,
+            table,
+            columns,
+            where_sql,
+            incremental,
+            connector_rid: connection_id.to_string(),
+            project_rid: c.project_id,
+            as_user: c.as_user,
+        })
     }
 }
 
@@ -315,6 +357,18 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     if columns.is_empty() {
         anyhow::bail!("table {}.{} not found or has no columns", cfg.database, cfg.table);
     }
+    // Incremental watermark column must exist in the SOURCE table — checked against the
+    // FULL introspection (before column pushdown): the watermark column need not be
+    // among the pulled columns.
+    if let Some(incr) = &cfg.incremental {
+        let want = incr.column.to_ascii_lowercase();
+        if !columns.iter().any(|(n, _)| n.to_ascii_lowercase() == want) {
+            anyhow::bail!(
+                "connector config: incremental.column '{}' not found in {}.{}",
+                incr.column, cfg.database, cfg.table
+            );
+        }
+    }
     // Column pushdown (existence-checked, ordinal order preserved) — see select_columns.
     let columns = select_columns(columns, &cfg.columns)
         .with_context(|| format!("column pushdown for {}.{}", cfg.database, cfg.table))?;
@@ -332,20 +386,39 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    // Predicate pushdown: an operator-supplied WHERE, parenthesized so a future
-    // incremental-watermark predicate can AND onto it safely (see sanitize_where).
+    // Predicate pushdown: compose the operator WHERE (config.where — concatenated under
+    // the operator-trust boundary) with the incremental watermark predicate
+    // (config.incremental — value BOUND, never concatenated). Both optional; ANDed;
+    // each parenthesized. On the FIRST incremental pull (no last_watermark) the
+    // watermark predicate is omitted = a full load that seeds the watermark.
     let from = format!("{}.{}", qi(&cfg.database), qi(&cfg.table));
-    let where_sql = match &cfg.where_sql {
-        Some(w) => format!(" WHERE ({w})"),
-        None => String::new(),
+    let mut preds: Vec<String> = Vec::new();
+    if let Some(w) = &cfg.where_sql {
+        preds.push(format!("({w})"));
+    }
+    let mut watermark_bind: Option<&str> = None;
+    if let Some(incr) = &cfg.incremental {
+        if let Some(wm) = &incr.last_watermark {
+            preds.push(format!("({} > ?)", qi(&incr.column)));
+            watermark_bind = Some(wm);
+        }
+    }
+    let where_sql = if preds.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", preds.join(" AND "))
     };
     let sql = format!("SELECT {select_list} FROM {from}{where_sql}");
 
     // Dry-run a configured predicate so a bad clause is a clean error BEFORE the pull
     // streams (LIMIT 0 fetches no rows). Skipped when there's no WHERE.
-    if cfg.where_sql.is_some() {
-        sqlx::query(&format!("SELECT 1 FROM {from}{where_sql} LIMIT 0"))
-            .fetch_optional(&mut my)
+    if !preds.is_empty() {
+        let dry = format!("SELECT 1 FROM {from}{where_sql} LIMIT 0");
+        let mut q = sqlx::query(&dry);
+        if let Some(wm) = watermark_bind {
+            q = q.bind(wm);
+        }
+        q.fetch_optional(&mut my)
             .await
             .map_err(|e| anyhow::anyhow!("connector config: 'where' clause is invalid: {e}"))?;
     }
@@ -357,7 +430,11 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
 
     // Stream rows (bounded memory — no full-table `fetch_all`). Every projected
     // column decodes as Option<String>; a decode error is SURFACED, never swallowed.
-    let mut stream = sqlx::query(&sql).fetch(&mut my);
+    let mut query = sqlx::query(&sql);
+    if let Some(wm) = watermark_bind {
+        query = query.bind(wm);
+    }
+    let mut stream = query.fetch(&mut my);
     let mut rows = 0usize;
     while let Some(row) = stream
         .try_next()
@@ -387,6 +464,30 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     )
     .await
     .map_err(|e| anyhow::anyhow!("upload to project: {}", e.message))?;
+
+    // Incremental write-back — ONLY after a successful upload and a non-empty delta.
+    // Re-query MAX(watermark) over the same predicate (robust to the pushed-down column
+    // subset; the watermark column may not be projected) and persist it. An empty delta
+    // leaves the watermark unchanged, so the next pull re-checks from the same point.
+    // (Advancing only post-upload means a failed upload never skips rows next time.)
+    if let Some(incr) = &cfg.incremental {
+        if rows > 0 {
+            let max_sql = format!("SELECT CAST(MAX({}) AS CHAR) FROM {from}{where_sql}", qi(&incr.column));
+            let mut mq = sqlx::query(&max_sql);
+            if let Some(wm) = watermark_bind {
+                mq = mq.bind(wm);
+            }
+            let row = mq.fetch_one(&mut my).await.context("read incremental high-watermark")?;
+            let new_wm: Option<String> = row.try_get(0).context("decode incremental high-watermark")?;
+            if let Some(new_wm) = new_wm {
+                crate::db::set_connector_watermark(pool, &cfg.connector_rid, &new_wm)
+                    .await
+                    .context("persist incremental high-watermark")?;
+                tracing::info!(connector = %cfg.connector_rid, column = %incr.column,
+                    watermark = %new_wm, "mysql-load: incremental watermark advanced");
+            }
+        }
+    }
 
     tracing::info!(file = %outcome.rid, rows, cols = columns.len(),
         project = %cfg.project_rid, table = %cfg.table, "mysql-load: loaded");

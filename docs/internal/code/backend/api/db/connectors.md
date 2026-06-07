@@ -3,7 +3,7 @@ title: backend/crates/api/src/db/connectors.rs
 source: ../../../../../../backend/crates/api/src/db/connectors.rs
 owner: Torv
 section: Internal · Code · backend · api · db
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # connectors.rs
@@ -41,6 +41,14 @@ load time (`pipeline::upload_csv`) — the same write-reach check a UI upload us
 - `pub fn delete_connector` — `DELETE FROM entities` type-guarded to a `connectors`
   row, so the subtype cascades off the registry FK and a non-connector id is a no-op
   (`false`). Mirrors `delete_project`. Route gates on Admin+ reach.
+- `pub fn set_connector_watermark` — persists an incremental-pull high-watermark into
+  `config`. **Surgical**: `jsonb_set` replaces only the `incremental` subtree (merging
+  in `last_watermark` via `||`), NEVER the whole `config` — a blind overwrite would
+  clobber the `host` / `ssl_mode` / `schema` keys both loaders read in `from_connection`.
+  Shared by every loader that supports incremental pull (mysql + postgres). Row-atomic
+  but not compare-and-set (a concurrent-sync race can regress the watermark — acceptable
+  v1, CAS is the hardening). Called by `mysql_loader::run` after a successful non-empty
+  delta pull.
 
 ## Drift-prone areas
 
@@ -66,3 +74,4 @@ load time (`pipeline::upload_csv`) — the same write-reach check a UI upload us
 - [db/projects.rs](projects.md) — the `insert_project` pattern this mirrors + the `list_projects` reach.
 - [db/entities.rs](entities.md) — `register_entity` / `delete_entity`.
 - [kafka_loader.rs](../kafka_loader.md) — `Cfg::from_connection` reads `get_connector_load_cfg`.
+- [mysql_loader.rs](../mysql_loader.md) — reads `get_connector_load_cfg`; calls `set_connector_watermark` after an incremental delta pull.
