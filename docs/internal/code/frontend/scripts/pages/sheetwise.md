@@ -46,8 +46,14 @@ this rebuild deletes that family and **composes framework components** —
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
   table materializes via `POST …/sql/materialize`.
 - **New connector:** `openNewConnectorModal` → `openModal` (modal.js) with the MySQL
-  fields + a destination-project picker (the `connection-setup.js` pattern) →
-  `POST /api/projects` (new-project path) + `POST /api/connectors` + `…/sync`.
+  fields — host/port/user/password, an **SSL mode** select (`SSL_MODE_OPTIONS`;
+  Required is first = the secure-by-default selection), database/table — + a
+  destination-project picker (the `connection-setup.js` pattern). `ssl_mode` rides the
+  `config` JSONB (default `"required"`), read by `mysql_loader::Cfg::from_connection`;
+  the host hint notes remote needs SSL ≥ Required. Flow: `POST /api/projects`
+  (new-project path) + `POST /api/connectors` + `…/sync`. The Settings facet shows a
+  note that host / DB / SSL mode editing + a connection test arrive with the
+  connector-config endpoint (deferred — config isn't in the list payload).
 
 ## Drift-prone areas
 

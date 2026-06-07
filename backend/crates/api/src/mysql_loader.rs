@@ -36,20 +36,72 @@ pub struct Cfg {
     pub as_user:     String,
 }
 
-/// Loopback-only host gate (v1 is plaintext ssl-mode=DISABLED). Accepts
-/// `localhost` + any loopback IP literal (127.0.0.0/8, ::1); rejects hostnames
-/// like `127.evil.com` / `127.0.0.1.attacker.com` that the old
-/// `host.starts_with("127.")` check let through (SSRF #1).
+/// Is this host loopback? Accepts `localhost` + any loopback IP literal
+/// (127.0.0.0/8, ::1) — NOT hostnames like `127.evil.com` /
+/// `127.0.0.1.attacker.com` that the old `host.starts_with("127.")` check let
+/// through (SSRF #1). One input to `host_tls_gate`: loopback may use any ssl_mode
+/// (plaintext never leaves the box); a remote host must encrypt.
 fn is_loopback_host(host: &str) -> bool {
     host == "localhost"
         || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
 }
 
+/// Parse a config `ssl_mode` string → `MySqlSslMode`. Anything unknown → REQUIRED
+/// (the safe encrypting default), so a typo never silently downgrades to plaintext.
+fn parse_ssl_mode(s: &str) -> MySqlSslMode {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "disabled" => MySqlSslMode::Disabled,
+        "preferred" => MySqlSslMode::Preferred,
+        "verify_ca" | "verify-ca" => MySqlSslMode::VerifyCa,
+        "verify_identity" | "verify-identity" => MySqlSslMode::VerifyIdentity,
+        _ => MySqlSslMode::Required,
+    }
+}
+
+/// Block link-local / cloud-metadata IPs (IPv4 169.254.0.0/16 — incl. the
+/// 169.254.169.254 metadata endpoint — and IPv6 fe80::/10): never a real DB host
+/// and a classic SSRF pivot, refused even over TLS. Hostnames pass here
+/// (resolution-time rebinding is a v2 concern; the v1 metadata vector is the IP literal).
+fn is_blocked_host(host: &str) -> bool {
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(v4)) => v4.is_link_local(),
+        Ok(std::net::IpAddr::V6(v6)) => (v6.segments()[0] & 0xffc0) == 0xfe80,
+        Err(_) => false,
+    }
+}
+
+/// The host/TLS admission gate — the single security-load-bearing decision for a
+/// connector target. Two rules:
+///  1. link-local / cloud-metadata hosts are refused **always** (even over TLS) — an
+///     SSRF pivot, never a real DB.
+///  2. a **remote** host must **encrypt** (ssl_mode ≥ REQUIRED) — PREFERRED / DISABLED
+///     can transport credentials + data in plaintext, so they stay loopback-only
+///     (plaintext on loopback never leaves the box). REQUIRED encrypts without a cert
+///     check; VERIFY_CA / VERIFY_IDENTITY also validate the server certificate.
+fn host_tls_gate(host: &str, ssl_mode: MySqlSslMode) -> Result<()> {
+    if is_blocked_host(host) {
+        anyhow::bail!("host '{host}' is a link-local / metadata address — refused (SSRF guard).");
+    }
+    let encrypted = matches!(
+        ssl_mode,
+        MySqlSslMode::Required | MySqlSslMode::VerifyCa | MySqlSslMode::VerifyIdentity
+    );
+    if !is_loopback_host(host) && !encrypted {
+        anyhow::bail!(
+            "remote MySQL host '{host}' requires ssl_mode>=required (got {ssl_mode:?}) — \
+             plaintext would leak credentials + data over the wire. Use ssl_mode=required \
+             (or verify_ca / verify_identity), or connect via loopback."
+        );
+    }
+    Ok(())
+}
+
 impl Cfg {
     /// Build from a persisted connection (CON_… rid). Destination (project +
-    /// as_user) is the user's choice on the `connectors` row; the MySQL
-    /// connection lives in that row's `config` JSONB (localhost v1) as either
-    /// `{ conn, database, table }` or `{ host, port, user, password, database, table }`.
+    /// as_user) is the user's choice on the `connectors` row; the MySQL connection
+    /// lives in that row's `config` JSONB as `{ host, port, user, password, database,
+    /// table, ssl_mode?, ssl_ca? }` (loopback or remote-over-TLS — see `host_tls_gate`).
+    /// The legacy `conn` full-URL key is rejected (SSRF).
     pub async fn from_connection(pool: &PgPool, connection_id: &str) -> Result<Self> {
         let c = crate::db::get_connector_load_cfg(pool, connection_id)
             .await
@@ -69,31 +121,37 @@ impl Cfg {
         // host vector. Host must be a true loopback (SSRF #1 — the old
         // `starts_with("127.")` let `127.evil.com` through). v1 is plaintext
         // (ssl-mode=DISABLED), safe only on loopback; remote needs a sqlx TLS feature.
+        // The legacy `conn` full-URL key stays rejected (SSRF — unbounded host vector).
         if s("conn").map(|c| !c.trim().is_empty()).unwrap_or(false) {
             anyhow::bail!(
-                "MySQL connector v1 does not accept a pre-built `conn` URL — configure \
-                 host / port / user / password / database (loopback only)."
+                "MySQL connector does not accept a pre-built `conn` URL — configure \
+                 host / port / user / password / database (+ optional ssl_mode)."
             );
         }
         let host = s("host").unwrap_or_else(|| "127.0.0.1".into());
-        if !is_loopback_host(&host) {
-            anyhow::bail!(
-                "MySQL connector v1 is localhost-only — host '{host}' is not a loopback \
-                 address. Plaintext ssl-mode=DISABLED would leak credentials + data over \
-                 the wire; use 127.0.0.1 / ::1 / localhost. Remote needs a sqlx TLS \
-                 feature (runtime-tokio-rustls + tls-rustls) + ssl-mode=REQUIRED."
-            );
-        }
+        // ssl_mode: explicit from config, else loopback→PREFERRED (works whether or not the
+        // local server has TLS), remote→REQUIRED (no plaintext fallback to a remote host).
+        let ssl_mode = match s("ssl_mode").as_deref() {
+            Some(m) => parse_ssl_mode(m),
+            None if is_loopback_host(&host) => MySqlSslMode::Preferred,
+            None => MySqlSslMode::Required,
+        };
+        // The one security-load-bearing admission decision (see host_tls_gate): block
+        // link-local / metadata hosts always + require encryption for any remote target.
+        host_tls_gate(&host, ssl_mode)?;
         let port = u16::try_from(cfg.get("port").and_then(|v| v.as_u64()).unwrap_or(3306)).unwrap_or(3306);
         let user = s("user").unwrap_or_else(|| "root".into());
         let pass = s("password").unwrap_or_default();
-        let opts = MySqlConnectOptions::new()
+        let mut opts = MySqlConnectOptions::new()
             .host(&host)
             .port(port)
             .username(&user)
             .password(&pass)
             .database(&database)
-            .ssl_mode(MySqlSslMode::Disabled);
+            .ssl_mode(ssl_mode);
+        if let Some(ca) = s("ssl_ca").filter(|c| !c.trim().is_empty()) {
+            opts = opts.ssl_ca(ca); // CA bundle path for VERIFY_CA / VERIFY_IDENTITY
+        }
         Ok(Self { opts, database, table, project_rid: c.project_id, as_user: c.as_user })
     }
 }
@@ -432,5 +490,85 @@ mod tests {
         assert_eq!(csv_field(Some("a\0b")), "ab");
         assert_eq!(csv_field(Some("\0\0")), "");
         assert_eq!(csv_field(Some("x\0,y")), "\"x,y\"");
+    }
+
+    #[test]
+    fn loopback_host_detection() {
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("::1"));
+        assert!(is_loopback_host("localhost"));
+        assert!(is_loopback_host("127.7.7.7")); // all of 127.0.0.0/8 is loopback
+        assert!(!is_loopback_host("10.0.0.5"));
+        assert!(!is_loopback_host("db.internal.example.com"));
+        assert!(!is_loopback_host("169.254.169.254"));
+    }
+
+    #[test]
+    fn blocks_link_local_and_metadata_hosts() {
+        // IPv4 link-local 169.254.0.0/16 — incl. the cloud-metadata endpoint
+        assert!(is_blocked_host("169.254.169.254"));
+        assert!(is_blocked_host("169.254.0.1"));
+        // IPv6 link-local fe80::/10
+        assert!(is_blocked_host("fe80::1"));
+        assert!(is_blocked_host("febf::1")); // top of the /10 still matches
+        // legitimate hosts pass through (the host gate handles loopback-vs-remote)
+        assert!(!is_blocked_host("127.0.0.1"));
+        assert!(!is_blocked_host("10.0.0.5"));
+        assert!(!is_blocked_host("::1"));
+        assert!(!is_blocked_host("fec0::1")); // site-local, not link-local
+        assert!(!is_blocked_host("db.example.com")); // hostnames pass (v1 vector is the IP literal)
+    }
+
+    #[test]
+    fn parse_ssl_mode_unknown_defaults_to_required() {
+        assert!(matches!(parse_ssl_mode("disabled"), MySqlSslMode::Disabled));
+        assert!(matches!(parse_ssl_mode("preferred"), MySqlSslMode::Preferred));
+        assert!(matches!(parse_ssl_mode("required"), MySqlSslMode::Required));
+        assert!(matches!(parse_ssl_mode("verify_ca"), MySqlSslMode::VerifyCa));
+        assert!(matches!(parse_ssl_mode("verify-ca"), MySqlSslMode::VerifyCa)); // dash form
+        assert!(matches!(parse_ssl_mode("VERIFY_IDENTITY"), MySqlSslMode::VerifyIdentity)); // case-insensitive
+        // a typo must never silently downgrade to plaintext — unknown → Required
+        assert!(matches!(parse_ssl_mode("garbage"), MySqlSslMode::Required));
+        assert!(matches!(parse_ssl_mode(""), MySqlSslMode::Required));
+    }
+
+    #[test]
+    fn host_tls_gate_loopback_any_mode_remote_must_encrypt() {
+        // loopback admits any mode — plaintext on loopback never leaves the box
+        assert!(host_tls_gate("127.0.0.1", MySqlSslMode::Disabled).is_ok());
+        assert!(host_tls_gate("127.0.0.1", MySqlSslMode::Preferred).is_ok());
+        assert!(host_tls_gate("localhost", MySqlSslMode::Required).is_ok());
+        assert!(host_tls_gate("::1", MySqlSslMode::Disabled).is_ok());
+        // remote must encrypt (>= Required)
+        assert!(host_tls_gate("db.example.com", MySqlSslMode::Required).is_ok());
+        assert!(host_tls_gate("10.0.0.5", MySqlSslMode::VerifyIdentity).is_ok());
+        assert!(host_tls_gate("10.0.0.5", MySqlSslMode::Disabled).is_err()); // plaintext off-box
+        assert!(host_tls_gate("db.example.com", MySqlSslMode::Preferred).is_err()); // can fall back to plaintext
+        // link-local / metadata refused even with the strongest TLS
+        assert!(host_tls_gate("169.254.169.254", MySqlSslMode::VerifyIdentity).is_err());
+        assert!(host_tls_gate("fe80::1", MySqlSslMode::Required).is_err());
+    }
+
+    // Live TLS proof against the local MySQL bench (8.4, redpash/redpash, self-signed
+    // cert). Ignored by default — needs the bench up; run with:
+    //   cargo test -p api mysql_tls_live -- --ignored --nocapture
+    // Asserts our sqlx + rustls path actually negotiates TLS (non-empty Ssl_cipher) at
+    // ssl_mode=REQUIRED — the mode the remote gate now allows off-loopback.
+    #[tokio::test]
+    #[ignore]
+    async fn mysql_tls_live_required_negotiates() {
+        let opts = MySqlConnectOptions::new()
+            .host("127.0.0.1")
+            .port(3306)
+            .username("redpash")
+            .password("redpash")
+            .ssl_mode(MySqlSslMode::Required);
+        let mut my = connect_pinned(&opts).await.expect("TLS connect to bench");
+        let cipher: String = sqlx::query("SHOW SESSION STATUS LIKE 'Ssl_cipher'")
+            .fetch_one(&mut my)
+            .await
+            .expect("Ssl_cipher status")
+            .get::<String, _>(1);
+        assert!(!cipher.is_empty(), "expected an active TLS cipher, got empty (plaintext)");
     }
 }

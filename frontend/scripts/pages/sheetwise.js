@@ -36,6 +36,17 @@ const CONNECTOR_FACETS = {
 const facetsForKind = (kind) => CONNECTOR_FACETS[kind] || CONNECTOR_FACETS.mysql;
 const KIND_MARK = { mysql: "#89b4fa", kafka: "#fab387", csv: "#a6e3a1" };
 
+// SSL-mode ladder (MySQL 8.4 "Using Encrypted Connections"). Required is first =
+// the browser-selected default → secure-by-default. The backend enforces remote ≥
+// Required; Preferred / Disabled stay loopback-only (they can send plaintext).
+const SSL_MODE_OPTIONS = [
+  { value: "required",        label: "Required — encrypted (default)" },
+  { value: "verify_ca",       label: "Verify CA — encrypted + CA-validated" },
+  { value: "verify_identity", label: "Verify identity — encrypted + hostname-validated" },
+  { value: "preferred",       label: "Preferred — encrypt if available (loopback only)" },
+  { value: "disabled",        label: "Disabled — plaintext (loopback only)" },
+];
+
 export default function sheetwise(app, { session }) {
   const $ = (s) => app.querySelector(s);
 
@@ -341,7 +352,7 @@ export default function sheetwise(app, { session }) {
       + settingRow("Connection id", conn.redpash_id)
       + '</div>'
       + '<p class="rp-sw-facet-note">Rename or delete this connector from the ✎ / ✕ on its rail header. '
-      + 'Host / database details + a connection test arrive with the connector-config endpoint.</p>';
+      + 'Host / database / SSL mode + a connection test arrive with the connector-config endpoint.</p>';
   }
 
   // Pull one table → CSV (sync with a {table} override), then jump to SQL.
@@ -388,10 +399,13 @@ export default function sheetwise(app, { session }) {
     openModal({
       title: "New MySQL connector", submitLabel: "Create & Pull", submitIcon: "bi-database-add",
       fields: [
-        { key: "host", label: "Host", placeholder: "127.0.0.1" },
+        { key: "host", label: "Host", placeholder: "127.0.0.1",
+          hint: "Loopback (127.0.0.1) or a remote host. A remote host needs SSL mode ≥ Required — plaintext is refused off-loopback." },
         { key: "port", label: "Port", placeholder: "3306" },
         { key: "user", label: "User", placeholder: "root" },
         { key: "password", label: "Password", type: "password" },
+        { key: "ssl_mode", label: "SSL mode", type: "select", options: SSL_MODE_OPTIONS,
+          hint: "Required encrypts the link (default). Verify CA / identity also validate the server cert. Preferred / Disabled are loopback-only." },
         { key: "database", label: "Database", required: true, placeholder: "employees" },
         { key: "table", label: "Table", required: true, placeholder: "employees" },
         { key: "project_id", label: "Destination project", type: "select", options: projectOptions,
@@ -408,6 +422,7 @@ export default function sheetwise(app, { session }) {
         const config = {
           host: (v.host || "127.0.0.1").trim(), port: Number(v.port) || 3306,
           user: (v.user || "root").trim(), password: v.password || "", database: db, table,
+          ssl_mode: v.ssl_mode || "required",
         };
         const con = await api("/api/connectors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: db + "." + table, project_id: projectId, kind: "mysql", config }) });
         try { await api("/api/connectors/" + encodeURIComponent(con.redpash_id) + "/sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (_) { /* created; pull can be retried from the rail */ }

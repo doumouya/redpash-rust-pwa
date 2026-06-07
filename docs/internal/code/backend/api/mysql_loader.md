@@ -33,8 +33,11 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - `pub struct Cfg` (holds `opts: MySqlConnectOptions` + database/table/project/as_user)
   + `Cfg::from_connection(pool, CON_id)` — reads the `connectors` row (kind=`mysql`;
   destination project + as_user; `config` JSONB = `{host, port, user, password,
-  database, table}`). Builds connect options from the discrete components (never a
-  format!'d URL); the legacy `conn` full-URL key is **rejected** in v1 (SSRF).
+  database, table, ssl_mode?, ssl_ca?}`). Builds connect options from the discrete
+  components (never a format!'d URL); the legacy `conn` full-URL key is **rejected**
+  (SSRF). `ssl_mode` (via `parse_ssl_mode`; default loopback→PREFERRED, remote→REQUIRED)
+  sets `.ssl_mode(..)`, and an optional `ssl_ca` path sets `.ssl_ca(..)` for VERIFY_CA /
+  VERIFY_IDENTITY. The host/TLS admission decision is `host_tls_gate` (see below).
 - `pub async fn run(pool, data_dir, &Cfg) -> Result<String>` — connect (pinned
   session) → list columns + `DATA_TYPE` (information_schema) → type-aware `SELECT`
   → stream rows → CSV → `pipeline::upload_csv` → returns the new file rid.
@@ -56,17 +59,26 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - **No `db::insert_*`** — must route through `pipeline::upload_csv` (connectors-audit
   red otherwise). The `as_user`'s write-reach is re-checked there (caller_is_admin=false).
 - **SSRF-hardened connection build (CAS_EC3FF660, 2026-06-07).** Two HIGH SSRF
-  fixes: (1) the loopback gate is `is_loopback_host` — `host=="localhost"` OR an
+  fixes: (1) the loopback test is `is_loopback_host` — `host=="localhost"` OR an
   IP literal that `is_loopback()` — NOT the old `starts_with("127.")`, which let
   `127.evil.com` through. (2) connect options are built from discrete components
   via `MySqlConnectOptions::new().host().port().username().password().database()
-  .ssl_mode(Disabled)` + `connect_with`, NEVER a `format!("mysql://{user}:{pass}@…")`
+  .ssl_mode(..)` + `connect_with`, NEVER a `format!("mysql://{user}:{pass}@…")`
   URL — a crafted user/pass could otherwise smuggle a different host through the
   userinfo. The pre-built `conn` URL key is rejected (unbounded host vector).
-  `ssl-mode=DISABLED` is plaintext, so loopback-only stands until a sqlx TLS
-  feature (`runtime-tokio-rustls` + `tls-rustls`) + `ssl-mode=REQUIRED` lands for
-  remote MySQL. Re-check the host right before connect if hostnames are ever
-  accepted (DNS-rebinding) — v1 is IP-literal/localhost only, so it's moot now.
+- **Remote + TLS (Slice A, 2026-06-07).** The connector reaches remote MySQL over
+  TLS now that the sqlx `tls-rustls-ring` backend is on (`backend/Cargo.toml`).
+  The "loopback-only" rule is replaced by **`host_tls_gate(host, ssl_mode)`**, the
+  single admission decision: (a) link-local / cloud-metadata IPs (169.254.0.0/16
+  incl. `169.254.169.254`; IPv6 fe80::/10, via `is_blocked_host`) are refused
+  **always — even over TLS** (an SSRF pivot, never a real DB); (b) a **remote** host
+  must **encrypt** (`ssl_mode ≥ REQUIRED`) — PREFERRED / DISABLED can send plaintext
+  so they stay loopback-only. `parse_ssl_mode` defaults an unknown / typo'd mode to
+  REQUIRED (never a silent downgrade). The gate + `parse_ssl_mode` + `is_blocked_host`
+  + `is_loopback_host` are pure and unit-tested; a `#[ignore]`d live test
+  (`mysql_tls_live_required_negotiates`) proves the rustls path actually negotiates
+  TLS against the bench. Hostnames pass `is_blocked_host` (the v1 metadata vector is
+  the IP literal); re-resolve + re-check at connect if DNS-rebinding becomes a concern.
 - **Type-aware projection lives in `project_expr`** — the ONE place MySQL's type
   surface is mapped. Add a type there; never branch in `run`. `is_recognized`
   `warn!`s an unmapped type so a new MySQL type surfaces instead of silently
