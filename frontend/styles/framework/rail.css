@@ -159,6 +159,10 @@
   font-size: 0.5938rem;
   font-weight: 700;
   color: var(--rp-bg);
+  /* mountRail sets `--mark:<color>` inline (hex / var(--rp-…)); the `[data-c]`
+     variants below override it for the name-keyed palette. Fallback keeps an
+     uncolored mark visible rather than transparent. */
+  background: var(--mark, var(--rp-surface-2));
 }
 .rp-rail-group-mark[data-c="blue"]  { background: var(--rp-info); }
 .rp-rail-group-mark[data-c="mauve"] { background: var(--rp-mauve); }

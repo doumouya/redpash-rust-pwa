@@ -29,10 +29,14 @@ bug (runbook CAS_3BCD6727): with no opposite surface to toggle to, there's no ec
   `getSource()` = the **picked** project CSV; `getSourceFiles()` = **all** project CSVs (the
   per-tile source dropdown); `onSaved` / `onDashboardSaveUnavailable`. Each chart tile carries its
   own `source_file_id`, so a multi-tile dashboard mixes sources freely.
-- Rail: projects → their chart/dashboard files (`loadProjects`/`projectGroup`/`loadFilesForGroup`/
-  `fileTab`), search + ownership filter, group-expand + file-open delegator. **New dashboard**
-  (rail foot) + **Add chart** (designer toolbar — promotes a standalone chart to a real dashboard,
-  then appends a widget from the picked source).
+- Rail: the framework **`mountRail`** component (D0', 2026-06-07 — same component as
+  admin-console/sheetwise/database). The page holds a groups data-model
+  (`cachedProjects` + `filesByGroup` + `expanded`) and re-renders via
+  `rail.setGroups(buildGroups())`; `mountRail` owns the markup, collapse, search/chips
+  wiring, and the **New dashboard** footer. Handlers: `on.tab`→`loadFile`,
+  `on.groupToggle`→lazy-load + `refreshSources`, `on.create`→`createDashboard`. **Add
+  chart** (designer toolbar) promotes a standalone chart to a real dashboard, then
+  appends a widget from the picked source.
 - Open paths: a chart (`CHT_*`) loads wrapped as a synthetic 1-widget dashboard (`chartAsDashboard`);
   a dashboard loads its multi-tile spec. Both via `/api/charts/:rid` / `/api/dashboards/:rid`.
 - **`?source=<FIL_rid>` deep-link (D2 bridge).** The Workspace per-row "Visualize" glyph navigates
@@ -43,10 +47,13 @@ bug (runbook CAS_3BCD6727): with no opposite surface to toggle to, there's no ec
 
 ## Drift-prone areas
 
-- **v1 deliberately does NOT duplicate Workspace's full rail apparatus** (rename / hide / upload /
-  deep-link). The proven-common rail core is being extracted (D0') into `framework/project-rail.js`
-  that both this page and Workspace compose; this page is the second consumer that reveals that
-  shared surface. Until then, keep the rail markup here in lockstep with Workspace's `rp-rail-*`.
+- **D0' adopted `mountRail`, not a new `project-rail.js`.** The map (2026-06-07) found
+  `framework/rail.js` already IS the canonical rail (admin/sheetwise/database use it), so
+  a 3rd module would have been parallel-class debt. This page composes `mountRail`; the
+  rail markup is no longer hand-built here. The **groups data-model** is the contract: a
+  re-render is `rail.setGroups(buildGroups())`, never DOM surgery. `mountRail` re-renders
+  the whole body on `setGroups`, so expanded state lives in the `expanded` Set (synced in
+  `on.groupToggle`) and loaded files in `filesByGroup` — both feed `buildGroups`.
 - **Source = a project CSV, not the active file.** The picker sets `sourceCache` (`getSource`);
   `refreshSources(projRid)` rebuilds the project CSV list + defaults to its first CSV. SheetWise /
   connector outputs need **no special-casing** — they're `file_type='csv'`.

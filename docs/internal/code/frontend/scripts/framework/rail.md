@@ -35,12 +35,15 @@ hand-builds with `rt-nav-*`/`rt-group-*`/`rt-tab-*`.
 | `search` | `{ placeholder, onInput(q) }` | `rp-rail-filter` > `rp-search` atom |
 | `chips` / `onChip` | `[{value,label,active}]` / fn | `rp-rail-chips` > `rp-chip` atom |
 | `overview` / `onOverview` | `{label,icon,active}` / fn | `rp-rail-overview` pinned tab |
-| `groups` | `[{id,name,mark,count,collapsed,renamable,hidable,addLabel,tabs:[…]}]` | `rp-rail-group` + `rp-rail-tab` |
+| `groups` | `[{id,name,mark,initials,count,collapsed,renamable,hidable,addLabel,tabs:[…]}]` | `rp-rail-group` + `rp-rail-tab` |
 | `hidden` | `[{title,items:[{id,kind,name,meta}]}]` | `rp-rail-hidden` `<details>` |
 | `footer` | `{upload:{label},create:{label},nav:{active,session}}` | `rp-rail-footer` + `rp-rail-footer-nav` |
-| `on` | `{tab,tabRename,tabHide,groupToggle,groupRename,groupHide,groupAdd,restore,upload,create}` | event handlers |
+| `on` | `{tab,tabRename,tabHide,groupToggle,groupRename,groupHide,groupAdd,restore,upload,create, …custom}` | event handlers |
 
-A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy, renamable, hidable }`.
+A tab takes `{ id, name, icon, dot, actions, ghost:'active'|'done'|'failed', active, busy, renamable, hidable }`.
+- `mark` = any CSS colour (hex / `var(--rp-…)`); the group square fills with it (CSS `background: var(--mark)`) and shows `initials` (or 2 letters derived from `name`).
+- `dot` = a **state class** (`"is-clean"`/`"is-warn"`/`"is-dirty"`), not a colour — composes `.rp-rail-tab-dot.<class>`.
+- `actions` = extra per-row glyph buttons `[{ action, icon, title, cls? }]`; each routes by its `action` name through `on[action](tabId, groupId)` (the delegator's default case). Workspace's per-row "Visualize" (`→ #/dashboard?source=`) is the first user.
 
 ## How it works
 
@@ -55,9 +58,13 @@ A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy
 - **Search is one atom**: the filter box is the `rp-search` atom in the `.rp-rail`
   context (a plain filter — no results dropdown; that part is omni-specific).
 - All dynamic content is escaped via `esc()` — same XSS-safe pattern as
-  [omni.js](omni.md); no new surface. (`--mark`/`--dot` go into a `style=` attr;
+  [omni.js](omni.md); no new surface. (`--mark` goes into a `style=` attr;
   `esc()` neutralises the quote so the attribute can't break out, and a CSS
-  custom-property value can't execute script.)
+  custom-property value can't execute script. The dot is a class token, also escaped.)
+- **Generic action dispatch**: any `data-rail-action` not in the explicit switch
+  falls through to `on[action]?.(tabId, groupId)`, so a page adds a per-row (or
+  per-group) action just by listing it in a tab's `actions` + the matching `on{}`
+  handler — no edit to the component. Keeps the rail open-ended.
 
 ## Drift-prone areas
 
@@ -79,9 +86,23 @@ A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy
   after render), matching [rail-footer.js](../rail-footer.md) — both compose the
   same [footer-utilities.js](footer-utilities.md), so the two footer paths can't
   drift.
-- **Cutover pending**: live pages still build their own `rt-nav-*` rails. At
-  cutover, each page becomes a config-supplier; Cases' `rp-cases-rail-board`
-  folds into `rp-rail-overview` then.
+- **Mark/dot render fix (D0', 2026-06-07)**: `groupHTML` emitted the mark as
+  `style="--mark:…"` with an **empty** span, and `tabHTML` emitted the dot as
+  `style="--dot:…"` — but `rail.css` styled the mark only via `[data-c="…"]` and the
+  dot only via `.is-clean/.is-warn/.is-dirty`. So every `mountRail` mark rendered as a
+  *blank colourless square* and a dot would be invisible (latent — page-verify checks
+  classes/console, not the mark's background colour). Fixed by (a) `rail.css`
+  `.rp-rail-group-mark { background: var(--mark, …) }` (the `[data-c]` variants still
+  override for the name-keyed palette), (b) `groupHTML` filling the mark with
+  `initials` (or 2 letters from `name`), (c) `tabHTML` emitting the dot as the
+  `.is-*` class. This repaired admin-console + sheetwise marks too.
+- **Studio adoption (D0', 2026-06-07)**: `dashboard.js` migrated off its hand-built
+  rail onto `mountRail` (a groups data-model + `setGroups`), joining admin-console /
+  sheetwise / database. `workspace.js` is the next (rich) adopter — it drives the
+  per-row `actions` (Visualize), `hidden` recovery, rename, and `overview` pinned tab.
+- **Cutover pending**: a couple of pages (workspace until its D0' lands, cases) still
+  build their own rails. At cutover each becomes a config-supplier; Cases'
+  `rp-cases-rail-board` folds into `rp-rail-overview` then.
 - The two helpers it composes live OUTSIDE `framework/` (`rail-controls.js`);
   they were deduped before the framework existed and stay class-agnostic.
 

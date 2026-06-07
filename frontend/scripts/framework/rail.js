@@ -34,15 +34,22 @@ import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/foo
 //   onChip      : (value) => void
 //   overview    : { label, icon, active }       → rp-rail-overview (pinned tab)
 //   onOverview  : () => void
-//   groups      : [{ id, name, mark, count, collapsed, renamable, hidable,
-//                    addLabel, tabs:[{ id, name, icon, dot, ghost, active,
-//                    busy, renamable, hidable }] }]
+//   groups      : [{ id, name, mark, initials, count, collapsed, renamable,
+//                    hidable, addLabel, tabs:[{ id, name, icon, dot, actions,
+//                    ghost, active, busy, renamable, hidable }] }]
+//                 mark = any CSS color (hex / var(--rp-…)); the group square
+//                 fills with it + shows `initials` (or 2 letters derived from
+//                 name). tab `dot` = a STATE CLASS ("is-clean"/"is-warn"/
+//                 "is-dirty"), not a color. tab `actions` = extra per-row glyph
+//                 buttons [{ action, icon, title, cls? }] routed via on[action].
 //   hidden      : [{ title, items:[{ id, kind, name, meta }] }]
 //   footer      : { upload:{label}, create:{label}, nav:{ active, session } }
 //   on          : { tab, tabRename, tabHide, groupToggle, groupRename,
-//                    groupHide, groupAdd, restore, upload, create }
+//                    groupHide, groupAdd, restore, upload, create, …custom }
 // Every handler receives the relevant id(s); the builder owns the DOM, the
-// caller owns what each action *does*.
+// caller owns what each action *does*. Any data-rail-action not in the switch
+// below dispatches to on[action](tabId, groupId) — so a page adds a per-row
+// action (e.g. "visualize") by listing it in a tab's `actions` + on{}.
 
 // Cross-app UTILITY destinations only. Docs moved into the Support & Docs app
 // topbar (Slice C, 2026-06-07) — it's a content page, reached via the launcher,
@@ -135,6 +142,9 @@ export function mountRail(host, config = {}) {
       case "restore":      e.preventDefault(); on.restore?.(el.dataset.restoreId, el.dataset.restoreKind); return;
       case "upload":       on.upload?.(); return;
       case "create":       on.create?.(); return;
+      // Custom per-row / per-group actions (e.g. workspace's "visualize"):
+      // listed in a tab's `actions`, dispatched by action name to on[action].
+      default:             e.stopPropagation(); on[action]?.(tabId, groupId); return;
     }
   });
 
@@ -208,10 +218,16 @@ function overviewHTML(c) {
     + '</button></div>';
 }
 
+function markInitials(g) {
+  if (g.initials) return g.initials;
+  return ((g.name || "?").trim().split(/\s+/).map((w) => w[0]).join("") || "?")
+    .slice(0, 2).toUpperCase();
+}
+
 function groupHTML(g) {
   const head = '<div class="rp-rail-group-head" data-rail-action="group-toggle">'
     + '<i class="rp-rail-group-caret bi bi-chevron-right"></i>'
-    + (g.mark ? '<span class="rp-rail-group-mark" style="--mark:' + esc(g.mark) + '"></span>' : "")
+    + (g.mark ? '<span class="rp-rail-group-mark" style="--mark:' + esc(g.mark) + '">' + esc(markInitials(g)) + '</span>' : "")
     + '<span class="rp-rail-group-name">' + esc(g.name || "") + '</span>'
     + (Number.isFinite(g.count) ? '<span class="rp-rail-group-count">' + g.count + '</span>' : "")
     + (g.renamable ? '<button class="rp-btn-icon rp-rail-group-rename" data-rail-action="group-rename" title="Rename"><i class="bi bi-pencil"></i></button>' : "")
@@ -235,12 +251,20 @@ function tabHTML(t) {
         : t.ghost === "done" ? " rp-rail-tab-ghost-done"
         : t.ghost === "failed" ? " rp-rail-tab-ghost-failed" : "")
     : "";
+  // Per-row action glyphs (e.g. workspace's "Visualize" → #/dashboard?source=).
+  // Each { action, icon, title, cls? } is a hover-fade rp-btn-icon whose
+  // data-rail-action routes through on[action] (default dispatch above).
+  const actions = (t.actions || []).map((a) =>
+    '<button class="rp-btn-icon rp-rail-tab-' + esc(a.cls || a.action) + '" data-rail-action="'
+    + esc(a.action) + '" title="' + esc(a.title || "") + '"><i class="bi ' + esc(a.icon || "") + '"></i></button>'
+  ).join("");
   return '<button type="button" class="rp-rail-tab' + (t.active ? " active" : "")
     + (t.busy ? " is-busy" : "") + ghost + '" data-rail-action="tab" data-tab-id="' + esc(t.id ?? "") + '">'
     + '<i class="rp-rail-tab-icon bi ' + esc(t.icon || "bi-file-earmark") + '"></i>'
     + '<span class="rp-rail-tab-name">' + esc(t.name || "") + '</span>'
+    + actions
     + (t.busy ? '<span class="rp-rail-tab-spinner"></span>' : "")
-    + (t.dot ? '<span class="rp-rail-tab-dot" style="--dot:' + esc(t.dot) + '"></span>' : "")
+    + (t.dot ? '<span class="rp-rail-tab-dot ' + esc(t.dot) + '"></span>' : "")
     + (t.renamable ? '<button class="rp-btn-icon rp-rail-tab-rename" data-rail-action="tab-rename" title="Rename"><i class="bi bi-pencil"></i></button>' : "")
     + (t.hidable ? '<button class="rp-btn-icon rp-rail-tab-hide" data-rail-action="tab-hide" title="Hide"><i class="bi bi-x"></i></button>' : "")
     + '</button>';

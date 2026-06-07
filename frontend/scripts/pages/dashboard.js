@@ -11,51 +11,46 @@
 // ctx-polymorphic (getSource = the picked CSV, getSourceFiles = all project CSVs;
 // each chart tile carries its own source_file_id).
 //
-// v1 scope: browse + open + create charts/dashboards from a picked source. The
-// rail's rename/hide/upload/deep-link apparatus is deliberately NOT duplicated
-// here — the proven-common rail core gets extracted (D0') into a shared module
-// that both this page and Workspace compose; this page is the second consumer
-// that reveals that shared surface.
+// D0' (2026-06-07): the rail is the framework `mountRail` component (the same one
+// admin-console / sheetwise / database use) — this page no longer hand-builds the
+// projects→files tree. The page holds a groups data-model (cachedProjects +
+// filesByGroup + expanded) and re-renders via rail.setGroups(buildGroups());
+// mountRail owns the markup, collapse, search/chips wiring, and footer.
 
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
-import { mountRailFooterNav } from "/scripts/rail-footer.js";
-import { mountRailCollapse } from "/scripts/rail-controls.js";
+import { mountRail } from "/scripts/framework/rail.js";
 import { mountDesigner } from "/scripts/designer.js";
 import { getPref } from "/scripts/prefs.js";
-import { esc, cssEsc } from "/scripts/dom.js";
+import { esc } from "/scripts/dom.js";
 
-const STAGE_DOT   = { new: "is-dirty", clean: "is-warn", design: "is-clean", publish: "is-clean" };
-const MARK_COLORS = ["blue", "mauve", "teal", "peach"];
+const STAGE_DOT = { new: "is-dirty", clean: "is-warn", design: "is-clean", publish: "is-clean" };
+// Group-mark colours as CSS tokens (mountRail fills the mark square via --mark).
+const MARK_COLORS = ["var(--rp-info)", "var(--rp-mauve)", "var(--rp-teal)", "var(--rp-peach)"];
 
 export default function dashboard(app, { session }) {
   const $ = (s) => app.querySelector(s);
   const meRid = session?.redpash_id || "";
 
-  // Topbar derives the Studio app from active="dashboard" via apps.js appForPage
-  // (Slice A). Footer nav (Docs/Settings/theme/sign-out) coexists with the
-  // rail-foot create button — mountRailFooterNav only manages .rp-rail-footer-nav.
+  // Topbar derives the Studio app from active="dashboard" via apps.js appForPage.
   mountTopbar($("#rp-topbar"), { active: "dashboard", session });
-  mountRailFooterNav($(".rp-rail-footer"), { active: "", session });
 
   // ─── refs ───────────────────────────────────────────────────────
-  const nav         = $("#dashNav");
-  const navBody     = $("#dashNavBody");
   const designerEl  = $("#dashDesigner");
   const sourceLabel = $("#dashSourceLabel");
   const sourceDd    = $("#dashSourceDd");
   const statusEl    = $("#dashStatus");
 
-  mountRailCollapse(nav, $("#dashNavCollapse"));
-
   // ─── state ──────────────────────────────────────────────────────
-  let cachedProjects     = [];
-  let groupColorIdx      = 0;
+  let cachedProjects     = [];                              // /projects roster
+  const filesByGroup     = new Map();                       // projRid → tabs[] (lazy)
+  const expanded         = new Set();                       // expanded group rids
   let focusedProjectRid  = null;
   let activeFileRid      = null;
   let designerCtrl       = null;
-  let sourceCache        = { rid: null, columns: [] };       // the PICKED source CSV → getSource()
-  let projectSourceFiles = { projRid: null, files: [] };     // ALL project CSVs → getSourceFiles()
+  let creating           = false;                           // New-dashboard in-flight guard
+  let sourceCache        = { rid: null, columns: [] };      // the PICKED source CSV → getSource()
+  let projectSourceFiles = { projRid: null, files: [] };    // ALL project CSVs → getSourceFiles()
   let railSearchQ        = "";
   let ownerFilter        = "all";
 
@@ -68,16 +63,111 @@ export default function dashboard(app, { session }) {
     if (i) i.className = mode === "dashboard" ? "bi bi-grid-1x2" : "bi bi-bar-chart-line";
   }
 
+  // ─── rail (framework component — same as admin/sheetwise/database) ──
+  const rail = mountRail($("#dashNav"), {
+    title: "Dashboards",
+    collapsible: true,
+    search: { placeholder: "Search projects…", onInput: (q) => { railSearchQ = q; refreshRail(); } },
+    chips: [
+      { value: "all",      label: "All", active: true },
+      { value: "personal", label: "Personal" },
+      { value: "shared",   label: "Shared" },
+      { value: "company",  label: "Company" },
+    ],
+    onChip: (v) => {
+      ownerFilter = v;
+      rail.el.querySelectorAll(".rp-rail-chips .rp-chip").forEach((c) => c.classList.toggle("is-active", c.dataset.chip === v));
+      refreshRail();
+    },
+    groups: [],
+    footer: { create: { label: "New dashboard" }, nav: { active: "", session } },
+    on: {
+      tab: (tabId) => loadFile(tabId),
+      groupToggle: (groupId, collapsed) => {
+        if (collapsed) expanded.delete(groupId); else expanded.add(groupId);
+        focusedProjectRid = groupId;
+        if (!collapsed) { loadFilesForGroup(groupId); refreshSources(groupId); }
+      },
+      create: () => createDashboard(),
+    },
+  });
+
+  // ─── rail data-model → mountRail groups ────────────────────────
+  function ownershipTokens(p) {
+    const t = [p.owner_id === meRid ? "personal" : "shared"];
+    if (p.company_id) t.push("company");
+    return t;
+  }
+  function matchesFilters(p) {
+    const ownerOk = ownerFilter === "all" || ownershipTokens(p).includes(ownerFilter);
+    const q = railSearchQ.trim().toLowerCase();
+    const nameOk = !q || (p.name || "").toLowerCase().includes(q);
+    return ownerOk && nameOk;
+  }
+  function buildGroups() {
+    let ci = 0;
+    return cachedProjects.filter(matchesFilters).map((p) => {
+      const id   = p.redpash_id;
+      const tabs = (filesByGroup.get(id) || []).map((f) => ({
+        id:   f.redpash_id,
+        name: f.display_name || f.filename || "(unnamed)",
+        icon: f.file_type === "dashboard" ? "bi-grid-1x2" : "bi-bar-chart-line",
+        dot:  STAGE_DOT[f.stage] || "is-clean",
+        active: f.redpash_id === activeFileRid,
+      }));
+      return {
+        id, name: p.name,
+        mark: MARK_COLORS[(ci++) % MARK_COLORS.length],
+        // Before a group is expanded its file list isn't loaded — show the
+        // server's roster count; once loaded, the rendered (chart/dashboard) count.
+        count: filesByGroup.has(id) ? tabs.length : (p.file_count || 0),
+        collapsed: !expanded.has(id),
+        tabs,
+      };
+    });
+  }
+  function refreshRail() { rail?.setGroups(buildGroups()); }
+
+  // Lazy-load a group's chart/dashboard files on first expand, then re-render.
+  async function loadFilesForGroup(rid) {
+    if (!rid || filesByGroup.has(rid)) return;
+    try {
+      const data = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
+      filesByGroup.set(rid, (data?.items || []).filter((f) => f.file_type === "chart" || f.file_type === "dashboard"));
+    } catch { filesByGroup.set(rid, []); }
+    refreshRail();
+  }
+
+  async function loadProjects() {
+    try {
+      const data = await api.get("/projects");
+      cachedProjects = data?.items || [];
+    } catch (err) {
+      setStatus("Couldn’t load projects" + (err.status ? " (" + err.status + ")" : "") + ".");
+      rail?.setGroups([]);
+      return;
+    }
+    // Seed a focused/expanded group (a #/dashboard?source= deep-link may have
+    // pre-set focusedProjectRid; else the default/first project).
+    if (!focusedProjectRid) {
+      const def = cachedProjects.find((p) => p.is_default) || cachedProjects[0];
+      focusedProjectRid = def?.redpash_id || null;
+    }
+    if (focusedProjectRid) expanded.add(focusedProjectRid);
+    refreshRail();
+    if (focusedProjectRid) { await loadFilesForGroup(focusedProjectRid); await refreshSources(focusedProjectRid); }
+  }
+
   // ─── designer (mounted UNCHANGED — already ctx-polymorphic) ─────
   if (designerEl) {
     designerCtrl = mountDesigner(designerEl, {
       getSource:      () => sourceCache,             // the picked project CSV
       getSourceFiles: () => projectSourceFiles.files, // all project CSVs (per-tile dropdown)
       onSaved: (saved) => {
-        if (!saved) { setStatus("Chart deleted."); loadProjects(); return; }
+        if (!saved) { setStatus("Chart deleted."); reloadFocusedGroup(); return; }
         setStatus("Saved · " + (saved.title || "untitled"));
         setTitle(saved.title || "Untitled");
-        loadProjects(); // a save can change the rail stage dot / add a row
+        reloadFocusedGroup(); // a save can change the rail stage dot / add a row
       },
       onDashboardSaveUnavailable: () => {
         setStatus("Open or create a dashboard to save a multi-chart layout — a single chart saves via its own tile.");
@@ -107,12 +197,6 @@ export default function dashboard(app, { session }) {
       console.warn("[dashboard] addChart failed:", err);
       setStatus("Add chart failed: " + (err?.body?.message || err?.message || "see console"));
     } finally { btn.disabled = false; }
-  });
-
-  // ─── rail-foot — New dashboard ─────────────────────────────────
-  $("#dashCreate")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget; btn.disabled = true;
-    try { await createDashboard(); } finally { btn.disabled = false; }
   });
 
   // ─── source picker — the project-wide CSV list (the core of Slice D) ──
@@ -161,117 +245,6 @@ export default function dashboard(app, { session }) {
     } catch { /* keep prior cache */ }
   }
 
-  // ─── rail — projects → their charts + dashboards ───────────────
-  async function loadProjects() {
-    try {
-      const data = await api.get("/projects");
-      cachedProjects = data?.items || [];
-      renderRail(cachedProjects);
-    } catch (err) {
-      navBody.setAttribute("aria-busy", "false");
-      navBody.innerHTML = '<div class="rp-rail-state">Couldn’t load projects'
-        + (err.status ? " (" + err.status + ")" : "") + ".</div>";
-    }
-  }
-  function renderRail(items) {
-    navBody.setAttribute("aria-busy", "false");
-    groupColorIdx = 0;
-    if (!items.length) { navBody.innerHTML = '<div class="rp-rail-state">No projects yet.</div>'; return; }
-    navBody.innerHTML = items.map(projectGroup).join("");
-    applyRailFilters();
-    // Expand the focused project (a #/dashboard?source= deep-link sets it)
-    // or the default/first group for context + seed the source picker.
-    const focused = focusedProjectRid
-      && navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
-    const first = focused
-      || navBody.querySelector('.rp-rail-group[data-default="1"]')
-      || navBody.querySelector(".rp-rail-group");
-    if (first) {
-      first.classList.add("expanded");
-      if (!focusedProjectRid) focusedProjectRid = first.dataset.rid || null;
-      loadFilesForGroup(first);
-      refreshSources(first.dataset.rid);
-    }
-  }
-  function projectGroup(p) {
-    const c = MARK_COLORS[(groupColorIdx++) % MARK_COLORS.length];
-    const initials = ((p.name || "?").trim().split(/\s+/).map((w) => w[0]).join("") || "?").slice(0, 2).toUpperCase();
-    const ownership = [p.owner_id === meRid ? "personal" : "shared"];
-    if (p.company_id) ownership.push("company");
-    return '<div class="rp-rail-group" data-rid="' + esc(p.redpash_id) + '"'
-      + ' data-ownership="' + ownership.join(" ") + '"' + (p.is_default ? ' data-default="1"' : '') + '>'
-      +   '<button class="rp-rail-group-head" type="button">'
-      +     '<i class="bi bi-chevron-down rp-rail-group-caret"></i>'
-      +     '<span class="rp-rail-group-mark" data-c="' + c + '">' + esc(initials) + '</span>'
-      +     '<span class="rp-rail-group-name">' + esc(p.name) + '</span>'
-      +     '<span class="rp-rail-group-count">' + (p.file_count || 0) + '</span>'
-      +   '</button>'
-      +   '<div class="rp-rail-group-body" aria-busy="false"></div>'
-      + '</div>';
-  }
-  async function loadFilesForGroup(group) {
-    if (!group || group.dataset.filesLoaded === "1") return;
-    const body = group.querySelector(".rp-rail-group-body");
-    const rid  = group.dataset.rid;
-    body.setAttribute("aria-busy", "true");
-    body.innerHTML = '<div class="rp-rail-state">Loading…</div>';
-    try {
-      const data  = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
-      const items = (data?.items || []).filter((f) => f.file_type === "chart" || f.file_type === "dashboard");
-      body.innerHTML = items.length ? items.map(fileTab).join("")
-        : '<div class="rp-rail-state">No charts or dashboards yet.</div>';
-      group.dataset.filesLoaded = "1";
-      const badge = group.querySelector(":scope > .rp-rail-group-head .rp-rail-group-count");
-      if (badge) badge.textContent = String(items.length);
-    } catch {
-      body.innerHTML = '<div class="rp-rail-state">Couldn’t load files.</div>';
-    } finally { body.setAttribute("aria-busy", "false"); }
-  }
-  function fileTab(f) {
-    const dot  = STAGE_DOT[f.stage] || "is-clean";
-    const name = f.display_name || f.filename || "(unnamed)";
-    const icon = f.file_type === "dashboard" ? "bi-grid-1x2" : "bi-bar-chart-line";
-    return '<button class="rp-rail-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
-      +   '<i class="bi ' + icon + ' rp-rail-tab-icon"></i>'
-      +   '<span class="rp-rail-tab-name">' + esc(name) + '</span>'
-      +   '<span class="rp-rail-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
-      + '</button>';
-  }
-  // Client-side render-time filter (search + ownership) — toggles group
-  // visibility, never the data source.
-  function applyRailFilters() {
-    const q = railSearchQ.trim().toLowerCase();
-    navBody.querySelectorAll(".rp-rail-group").forEach((g) => {
-      const tokens  = (g.dataset.ownership || "").split(/\s+/).filter(Boolean);
-      const ownerOk = ownerFilter === "all" || tokens.includes(ownerFilter);
-      const name    = (g.querySelector(".rp-rail-group-name")?.textContent || "").toLowerCase();
-      g.hidden = !(ownerOk && (!q || name.includes(q)));
-    });
-  }
-
-  // rail delegator — open a file, or expand/collapse a project group
-  navBody.addEventListener("click", (e) => {
-    const tab = e.target.closest(".rp-rail-tab");
-    if (tab) { loadFile(tab.dataset.rid); return; }
-    const head = e.target.closest(".rp-rail-group-head");
-    if (head) {
-      const group = head.closest(".rp-rail-group");
-      const expanded = group.classList.toggle("expanded");
-      focusedProjectRid = group.dataset.rid || focusedProjectRid;
-      if (expanded) { loadFilesForGroup(group); refreshSources(group.dataset.rid); }
-    }
-  });
-
-  // rail search + ownership pills
-  $("#dashRailSearch")?.addEventListener("input", (e) => { railSearchQ = e.target.value || ""; applyRailFilters(); });
-  $("#dashOwnerFilter")?.addEventListener("click", (e) => {
-    const chip = e.target.closest("[data-owner]");
-    if (!chip) return;
-    ownerFilter = chip.dataset.owner || "all";
-    $("#dashOwnerFilter").querySelectorAll(".rp-chip").forEach((c) => c.classList.toggle("is-active", c === chip));
-    applyRailFilters();
-  });
-
   // ─── open an existing chart / dashboard ────────────────────────
   // A standalone chart renders wrapped as a synthetic 1-widget dashboard
   // (redpash_id=null) — designer.js + the Add-chart promote path recognise it.
@@ -302,6 +275,7 @@ export default function dashboard(app, { session }) {
         setTitle(dash?.title || "Untitled dashboard", "dashboard");
         designerCtrl?.load({ type: "dashboard", dashboard: dash });
       }
+      refreshRail(); // re-highlight the active tab
     } catch (err) {
       console.warn("[dashboard] loadFile failed:", err);
       activeFileRid = null;
@@ -312,28 +286,37 @@ export default function dashboard(app, { session }) {
   // ─── create flows ──────────────────────────────────────────────
   function activeProjectRid() {
     return focusedProjectRid
-      || navBody.querySelector('.rp-rail-group[data-default="1"]')?.dataset?.rid
-      || navBody.querySelector(".rp-rail-group")?.dataset?.rid
+      || cachedProjects.find((p) => p.is_default)?.redpash_id
+      || cachedProjects[0]?.redpash_id
       || null;
   }
+  // Invalidate the focused group's file cache + reload the roster so a freshly
+  // created/saved chart or dashboard row appears in the rail.
+  async function reloadFocusedGroup() {
+    if (focusedProjectRid) filesByGroup.delete(focusedProjectRid);
+    await loadProjects();
+  }
   async function createDashboard() {
-    const projRid = activeProjectRid();
-    if (!projRid) { setStatus("New dashboard: open or create a project first."); return; }
+    if (creating) return;
+    creating = true;
     try {
+      const projRid = activeProjectRid();
+      if (!projRid) { setStatus("New dashboard: open or create a project first."); return; }
       const created = await api.post("/dashboards", {
         project_redpash_id: projRid,
         title: "Untitled dashboard",
         spec: { template_id: "free", widgets: [] },
       });
       const newRid = created?.redpash_id;
-      const group = navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(projRid) + '"]');
-      if (group) delete group.dataset.filesLoaded; // force re-list so the new row shows
+      filesByGroup.delete(projRid);     // force the group to re-list
+      expanded.add(projRid);
+      focusedProjectRid = projRid;
       await loadProjects();
       if (newRid) { activeFileRid = null; await loadFile(newRid); }
     } catch (err) {
       console.warn("[dashboard] New dashboard failed:", err);
       setStatus("New dashboard failed — see console.");
-    }
+    } finally { creating = false; }
   }
   // Append a chart (from the picked source) to the open REAL dashboard.
   async function addChartToOpenDashboard() {
@@ -347,7 +330,7 @@ export default function dashboard(app, { session }) {
       spec: { kind: defaultKind, group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
     });
     await designerCtrl?.addChartWidget?.(chart);
-    loadProjects(); // the new CHT_ appears in the rail
+    reloadFocusedGroup(); // the new CHT_ appears in the rail
     return true;
   }
   // Promote a standalone chart (synthetic wrapper) into a real dashboard
@@ -365,6 +348,9 @@ export default function dashboard(app, { session }) {
     });
     const newRid = created?.redpash_id;
     if (!newRid) return null;
+    filesByGroup.delete(projRid);
+    expanded.add(projRid);
+    focusedProjectRid = projRid;
     await loadProjects();
     activeFileRid = null;
     await loadFile(newRid);
@@ -389,8 +375,6 @@ export default function dashboard(app, { session }) {
       } catch { /* unknown rid — fall through to the default pick */ }
     }
     await loadProjects();
-    // renderRail's source-seed is fire-and-forget; re-load the focused
-    // project's CSV list here so the pre-pick lands deterministically.
     if (wantSource && focusedProjectRid) {
       await refreshSources(focusedProjectRid);
       if (projectSourceFiles.files.some((f) => f.rid === wantSource)) await setSource(wantSource);
