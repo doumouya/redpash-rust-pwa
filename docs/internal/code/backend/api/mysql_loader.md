@@ -35,9 +35,10 @@ buffering); and a decode error is **surfaced, never swallowed**.
   destination project + as_user; `config` JSONB = `{host, port, user, password,
   database, table, ssl_mode?, ssl_ca?}`). Builds connect options from the discrete
   components (never a format!'d URL); the legacy `conn` full-URL key is **rejected**
-  (SSRF). `ssl_mode` (via `parse_ssl_mode`; default loopback→PREFERRED, remote→REQUIRED)
-  sets `.ssl_mode(..)`, and an optional `ssl_ca` path sets `.ssl_ca(..)` for VERIFY_CA /
-  VERIFY_IDENTITY. The host/TLS admission decision is `host_tls_gate` (see below).
+  (SSRF). `ssl_mode` (via `connectors_core::parse_ssl_mode`; default loopback→PREFERRED,
+  remote→REQUIRED) maps through `mysql_ssl_mode()` → `.ssl_mode(..)`, and an optional
+  `ssl_ca` path sets `.ssl_ca(..)` for VERIFY_CA / VERIFY_IDENTITY. The host/TLS
+  admission decision is `connectors_core::host_gate` (see Drift-prone areas).
 - `pub async fn run(pool, data_dir, &Cfg) -> Result<String>` — connect (pinned
   session) → list columns + `DATA_TYPE` (information_schema) → type-aware `SELECT`
   → stream rows → CSV → `pipeline::upload_csv` → returns the new file rid.
@@ -68,17 +69,22 @@ buffering); and a decode error is **surfaced, never swallowed**.
   userinfo. The pre-built `conn` URL key is rejected (unbounded host vector).
 - **Remote + TLS (Slice A, 2026-06-07).** The connector reaches remote MySQL over
   TLS now that the sqlx `tls-rustls-ring` backend is on (`backend/Cargo.toml`).
-  The "loopback-only" rule is replaced by **`host_tls_gate(host, ssl_mode)`**, the
-  single admission decision: (a) link-local / cloud-metadata IPs (169.254.0.0/16
-  incl. `169.254.169.254`; IPv6 fe80::/10, via `is_blocked_host`) are refused
-  **always — even over TLS** (an SSRF pivot, never a real DB); (b) a **remote** host
-  must **encrypt** (`ssl_mode ≥ REQUIRED`) — PREFERRED / DISABLED can send plaintext
-  so they stay loopback-only. `parse_ssl_mode` defaults an unknown / typo'd mode to
-  REQUIRED (never a silent downgrade). The gate + `parse_ssl_mode` + `is_blocked_host`
-  + `is_loopback_host` are pure and unit-tested; a `#[ignore]`d live test
-  (`mysql_tls_live_required_negotiates`) proves the rustls path actually negotiates
-  TLS against the bench. Hostnames pass `is_blocked_host` (the v1 metadata vector is
-  the IP literal); re-resolve + re-check at connect if DNS-rebinding becomes a concern.
+  The "loopback-only" rule is replaced by a host/TLS admission gate: a **remote** host
+  must **encrypt** (`ssl_mode ≥ REQUIRED`) — PREFERRED / DISABLED can send plaintext so
+  they stay loopback-only — and link-local / cloud-metadata hosts are refused **always,
+  even over TLS**. An `#[ignore]`d live test (`mysql_tls_live_required_negotiates`)
+  proves the rustls path actually negotiates TLS against the bench.
+- **Gate delegated to `connectors_core` (Slice A2, 2026-06-07 — CAS_A0BDFCED / runbook
+  0012).** The admission gate + `ssl_mode` parse no longer live here: `from_connection`
+  calls **`connectors_core::{parse_ssl_mode, is_loopback_host, host_gate}`** (the ONE
+  reviewed copy shared with `postgres_loader`), and `mysql_ssl_mode()` maps the
+  engine-agnostic `connectors_core::SslMode` → `MySqlSslMode` for the sqlx option. This
+  closed a class of SSRF **encoding bypasses** the local Slice-A gate missed —
+  IPv4-mapped (`::ffff:169.254.169.254`), IPv4-compatible, NAT64 (`64:ff9b::…`),
+  zoned (`fe80::1%eth0`), trailing-dot, and `0.0.0.0`/`::` — because the core classifies
+  the address the kernel routes to, not the textual form. Add SSRF/ssl rules in
+  `connectors_core`, never re-fork them here. The `conn` full-URL key is still rejected
+  + connect options still built from discrete components (no `format!`'d URL).
 - **Type-aware projection lives in `project_expr`** — the ONE place MySQL's type
   surface is mapped. Add a type there; never branch in `run`. `is_recognized`
   `warn!`s an unmapped type so a new MySQL type surfaces instead of silently
