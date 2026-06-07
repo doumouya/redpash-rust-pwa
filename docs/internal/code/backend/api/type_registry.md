@@ -31,14 +31,19 @@ Spec: [specs/type-definition](../../specs/type-definition.md) §4.1 (CAS_0FBF301
 
 ## Public surface
 
-- `pub fn builtin_types() -> Vec<TypeDefinition>` — all 7 membership-bearing
-  builtin types (company / project / case / team / file / chart / dashboard),
-  cells = perm_class defaults.
-- `pub fn builtin_type(type_id: &str) -> Option<TypeDefinition>` — one by `type`
-  id, or `None` if it isn't a builtin.
+After CAS_0FBF301F Stage 1 this module is the TypeDefinition **assembler only** —
+the data moved to `type_definitions` and loads via [type_cache](type_cache.md).
+`builtin_types()` / `builtin_type()` / `builtin_meta()` were DELETED.
 
-Private: `builtin_meta()` (the per-type identity/ui_hints table), `humanize()`
-(key → label), `field_to_def()` (FieldRow → FieldDef), `build_one()`.
+- `pub(crate) fn build_one(meta: &TypeMeta, registry: &[FieldRow]) ->
+  TypeDefinition` — assemble one TypeDefinition (identity + ui_hints + fields +
+  relationships). **Reused by the cache** to build the grid TypeDefinitions from
+  the seeded rows, so the wire shape is identical whether a type is a builtin or
+  a future custom type.
+- `pub(crate) struct TypeMeta` — code shape for one type's identity/ui-hints; the
+  cache fills it from `type_definitions` rows.
+
+Private: `humanize()` (key → label), `field_to_def()` (FieldRow → FieldDef).
 
 ## Drift-prone areas
 
@@ -50,8 +55,9 @@ Private: `builtin_meta()` (the per-type identity/ui_hints table), `humanize()`
   referenced by `rel` (e.g. `case.assignee → user`) but not itself grid-served
   in v1 — same boundary [field_perms](field_perms.md) draws. If `user` gains a
   field grid, add it to both.
-- **`ui_hints` are hand-authored** (rail icon, default columns/sort). When a
-  type gains/loses a field that's a default column, update `builtin_meta()`.
+- **`ui_hints` are seeded** (rail icon, default columns/sort) in
+  `type_definitions`. When a type gains/loses a field that's a default column,
+  ship a migration updating the seeded row.
 - **`label` is humanized from the key** (`redpash_id` → "Redpash ID"). A custom
   type can carry an explicit label instead; builtins derive it.
 - `render` / `data_*` render-rules are left `None` for builtins in v1 — the FE

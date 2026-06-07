@@ -8,13 +8,7 @@
 //! Rust (`FieldRow::from_parts`), never stored, so the seed can't drift.
 //! Doc: docs/internal/code/backend/api/type_cache.md
 
-// Staged surface (object-registry Stage 1·C2): the cache loads + is held on
-// AppState; its read methods wire in at C3 (consumer redirects + the deletion
-// of the code-side registries). Same build-ready pattern as codec_registry /
-// validate_rules.
-#![allow(dead_code)]
-
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use shared::type_def::TypeDefinition;
 use sqlx::types::Json;
@@ -33,12 +27,20 @@ pub struct ScopeRoles {
 /// The loaded, immutable type registry. Held as `Arc<TypeDefCache>` on
 /// `AppState`; Stage 3 swaps it via `ArcSwap` on `register_type`.
 pub struct TypeDefCache {
+    /// ALL field rows (every type incl. `connection`), in (type-ordinal,
+    /// field-ordinal) order. `require_fields` reads this; `/admin/fields` reads
+    /// the grid-served subset (`grid_rows`).
     rows:           Vec<FieldRow>,
+    /// grid-served type_ids — the subset shown in `/admin/types` + `/admin/fields`
+    /// (excludes the rel-only `user` + the internal `connection`).
+    grid:           HashSet<&'static str>,
+    /// Prebuilt TypeDefinitions for the GRID-served types only, in ordinal order
+    /// (byte-identical to the legacy `builtin_types()`).
     type_defs:      Vec<TypeDefinition>,
     scope_roles:    HashMap<&'static str, ScopeRoles>,
-    /// rid prefix (with trailing `_`, e.g. `"TEM_"`) → type_id. Ordered so a
-    /// shared builtin prefix resolves to its canonical type (`FIL_` → `file`,
-    /// not `dashboard`), matching the legacy `object_kind` behaviour.
+    /// rid prefix (with trailing `_`, e.g. `"TEM_"`) → type_id, in type-ordinal
+    /// order so a shared builtin prefix resolves to its canonical type
+    /// (`FIL_` → `file`, lower ordinal than `dashboard`).
     prefix_to_type: Vec<(&'static str, &'static str)>,
 }
 
@@ -72,8 +74,10 @@ impl TypeDefCache {
         // ── type_fields → FieldRow (authoring order) ──
         let field_rows: Vec<(String, String, String, String, bool, Json<Vec<String>>, Option<String>, bool)> =
             sqlx::query_as(
-                "SELECT type_id, field, data_type, perm_class, is_sortable, options, rel_type, rel_multi \
-                   FROM type_fields ORDER BY type_id, ordinal",
+                "SELECT tf.type_id, tf.field, tf.data_type, tf.perm_class, tf.is_sortable, \
+                        tf.options, tf.rel_type, tf.rel_multi \
+                   FROM type_fields tf JOIN type_definitions td ON td.type_id = tf.type_id \
+                   ORDER BY td.ordinal, tf.ordinal",
             )
             .fetch_all(pool)
             .await?;
@@ -93,38 +97,50 @@ impl TypeDefCache {
             ));
         }
 
-        // ── type_definitions → TypeMeta + prefix map ──
-        // `dashboard` last so the shared `FIL_` resolves to `file` (first-wins).
-        let def_rows: Vec<(String, String, String, String, Option<String>, Json<Vec<String>>, Option<String>)> =
+        // ── type_definitions → TypeMeta + grid set + prefix map (ordinal order;
+        //    `file` (ord 4) precedes `dashboard` (ord 6) so the shared `FIL_`
+        //    resolves to `file`) ──
+        let def_rows: Vec<(String, String, String, String, Option<String>, Json<Vec<String>>, Option<String>, bool)> =
             sqlx::query_as(
                 "SELECT type_id, rid_prefix, display_name, display_name_plural, rail_icon, \
-                        default_columns, default_sort \
-                   FROM type_definitions ORDER BY (type_id = 'dashboard'), type_id",
+                        default_columns, default_sort, grid_served \
+                   FROM type_definitions ORDER BY ordinal",
             )
             .fetch_all(pool)
             .await?;
-        let mut metas: Vec<TypeMeta> = Vec::with_capacity(def_rows.len());
+        let mut metas: Vec<(TypeMeta, bool)> = Vec::with_capacity(def_rows.len());
+        let mut grid: HashSet<&'static str> = HashSet::new();
         let mut prefix_to_type: Vec<(&'static str, &'static str)> = Vec::new();
-        for (type_id, rid_prefix, display_name, display_name_plural, rail_icon, default_columns, default_sort) in def_rows {
+        for (type_id, rid_prefix, display_name, display_name_plural, rail_icon, default_columns, default_sort, grid_served) in def_rows {
             let tid = intr.intern(&type_id);
             let pfx = intr.intern(&rid_prefix);
             if !prefix_to_type.iter().any(|(p, _)| *p == pfx) {
                 prefix_to_type.push((pfx, tid));
             }
-            metas.push(TypeMeta {
-                type_id:             tid,
-                rid_prefix:          pfx,
-                display_name:        intr.intern(&display_name),
-                display_name_plural: intr.intern(&display_name_plural),
-                rail_icon:           intr.intern(rail_icon.as_deref().unwrap_or("")),
-                default_columns:     intr.intern_slice(&default_columns.0),
-                default_sort:        intr.intern(default_sort.as_deref().unwrap_or("")),
-            });
+            if grid_served {
+                grid.insert(tid);
+            }
+            metas.push((
+                TypeMeta {
+                    type_id:             tid,
+                    rid_prefix:          pfx,
+                    display_name:        intr.intern(&display_name),
+                    display_name_plural: intr.intern(&display_name_plural),
+                    rail_icon:           intr.intern(rail_icon.as_deref().unwrap_or("")),
+                    default_columns:     intr.intern_slice(&default_columns.0),
+                    default_sort:        intr.intern(default_sort.as_deref().unwrap_or("")),
+                },
+                grid_served,
+            ));
         }
 
-        // ── prebuild the TypeDefinitions (perm_class-default cells; the
+        // ── prebuild the GRID-served TypeDefinitions (ordinal order; the
         //    /admin/types handler overlays field_permissions overrides on read) ──
-        let type_defs: Vec<TypeDefinition> = metas.iter().map(|m| build_one(m, &rows)).collect();
+        let type_defs: Vec<TypeDefinition> = metas
+            .iter()
+            .filter(|(_, grid_served)| *grid_served)
+            .map(|(m, _)| build_one(m, &rows))
+            .collect();
 
         // ── type_scope_roles → per-scope allow-lists + default ──
         let role_rows: Vec<(String, String, bool, bool)> = sqlx::query_as(
@@ -154,16 +170,25 @@ impl TypeDefCache {
 
         tracing::info!(
             types  = metas.len(),
+            grid   = grid.len(),
             fields = rows.len(),
             scopes = scope_roles.len(),
             "type registry loaded",
         );
-        Ok(Self { rows, type_defs, scope_roles, prefix_to_type })
+        Ok(Self { rows, grid, type_defs, scope_roles, prefix_to_type })
     }
 
-    /// The flat field catalog (the `default_registry()` replacement).
+    /// The full field catalog — every type incl. `connection` (the
+    /// `default_registry()` replacement for `require_fields`).
     pub fn rows(&self) -> &[FieldRow] {
         &self.rows
+    }
+
+    /// The grid-served field rows — the `/admin/fields` subset (excludes the
+    /// rel-only `user` + the internal `connection`). Byte-identical to the
+    /// legacy `default_registry()` output.
+    pub fn grid_rows(&self) -> Vec<FieldRow> {
+        self.rows.iter().filter(|r| self.grid.contains(r.object)).cloned().collect()
     }
 
     /// The catalog row for one `(object, field)` — the `find_default` replacement.
@@ -197,5 +222,39 @@ impl TypeDefCache {
             .find(|(p, _)| *p == prefix)
             .map(|(_, t)| *t)
             .unwrap_or("unknown")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cache_with_prefixes(pairs: &[(&'static str, &'static str)]) -> TypeDefCache {
+        TypeDefCache {
+            rows:           Vec::new(),
+            grid:           HashSet::new(),
+            type_defs:      Vec::new(),
+            scope_roles:    HashMap::new(),
+            prefix_to_type: pairs.to_vec(),
+        }
+    }
+
+    /// object_kind is registry-driven (CAS_0FBF301F Stage 1). Pins the FIXED
+    /// behaviour vs the legacy hardcoded `rbac::object_kind`: teams mint `TEM_`
+    /// (legacy matched `"TEAM"` → "unknown"); connectors `CON_` now dispatch;
+    /// `FIL_` resolves to `file` (dashboards share it). Unknown → default-denied.
+    #[test]
+    fn object_kind_is_registry_driven() {
+        let c = cache_with_prefixes(&[
+            ("CAS_", "case"), ("USR_", "user"), ("TEM_", "team"),
+            ("CON_", "connection"), ("FIL_", "file"), ("CMP_", "company"),
+        ]);
+        assert_eq!(c.object_kind("CAS_x"), "case");
+        assert_eq!(c.object_kind("USR_x"), "user");
+        assert_eq!(c.object_kind("TEM_x"), "team");        // FIXED (was "unknown")
+        assert_eq!(c.object_kind("CON_x"), "connection");  // FIXED (was "unknown")
+        assert_eq!(c.object_kind("FIL_x"), "file");        // dashboards share FIL_
+        assert_eq!(c.object_kind("ZZZ_x"), "unknown");
+        assert_eq!(c.object_kind("nounderscore"), "unknown");
     }
 }

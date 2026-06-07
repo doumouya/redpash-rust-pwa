@@ -65,16 +65,19 @@ reaches + the shared DTO shapes.
   `is_overridden` (set during the GET merge). `apply_override(role, perm)`
   overlays a cell; `default_for(role)` reads the pre-override default (PUT revert
   check). `editor` / `options` / `rel` are omitted from JSON when empty.
-- `pub fn default_registry` — the full static catalog (60 rows across the 7
-  membership-bearing object types), built via the `fld(object, field, data_type,
-  perm_class)` builder (chains `.nosort()` / `.opts()` / `.rel()`); cells +
-  default editor derive from `data_type` + `perm_class`.
-- `pub fn find_default(object, field)` — the catalog row for one field, for the
-  PUT handler's validation + revert check **and the `cases` PATCH `status` enum
-  gate** (CAS_0FBF301F Stage 0 — registry-driven validation replacing the inline
-  `matches!`; see the module test `case_status_drives_registry_validation`).
+- **The field catalog moved to DATA (CAS_0FBF301F Stage 1):** `default_registry`
+  / `find_default` / the `fld` builder + `.nosort()`/`.opts()`/`.rel()` were
+  DELETED — the 60 rows now live in `type_fields` and load into
+  [type_cache](type_cache.md) (`TypeDefCache`), which re-derives each `FieldRow`
+  through `from_parts` (the same `fld` derivation). `find_default` is now
+  `state.type_cache.find_default`; `require_fields` reads `state.type_cache.rows()`.
+- `pub(crate) FieldRow::from_parts(object, field, data_type, perm_class,
+  is_sortable, options, rel)` — reconstruct a row from stored inputs (the cache
+  load path); per-role cells + default editor + `is_editable` derive from
+  `(data_type, perm_class)`, never stored, so the seed can't drift.
+- `pub PermClass::from_str` — parse the stored wire string back to the enum.
 - `pub async fn require_fields(state, caller, object_rid, object_type, &fields)`
-  — the field-level write gate (slice 3); see above.
+  — the field-level write gate (slice 3); reads the catalog via the cache.
 
 ## perm_class → per-role cells (the derivation)
 

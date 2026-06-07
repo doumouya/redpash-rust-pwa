@@ -161,11 +161,6 @@ impl FieldRow {
             _ => None,
         }
     }
-    // ── builder modifiers (default_registry authoring) ──
-    fn nosort(mut self) -> Self { self.is_sortable = false; self }
-    fn opts(mut self, o: &[&'static str]) -> Self { self.options = o.to_vec(); self }
-    fn rel(mut self, ty: &'static str, multi: bool) -> Self { self.rel = Some(Rel { ty, multi }); self }
-
     /// Reconstruct a row from stored inputs (the TypeDefCache load path) — the
     /// SAME derivation as `fld()`: the per-role cells + default editor +
     /// is_editable come from `(data_type, perm_class)`, never stored, so the
@@ -214,110 +209,6 @@ fn default_editor(data_type: &str, pc: PermClass) -> Option<&'static str> {
     })
 }
 
-/// Field builder — derives the per-role cells + is_editable + default editor.
-/// Sortable by default; chain `.nosort()` / `.opts()` / `.rel()`.
-fn fld(object: &'static str, field: &'static str, data_type: &'static str, pc: PermClass) -> FieldRow {
-    let [owner, admin, member, viewer] = pc.cells();
-    FieldRow {
-        object,
-        field,
-        is_editable: !matches!(pc, PermClass::Readonly),
-        is_sortable: true,
-        data_type,
-        editor: default_editor(data_type, pc),
-        options: Vec::new(),
-        perm_class: pc,
-        rel: None,
-        owner,
-        admin,
-        member,
-        viewer,
-        is_overridden: false,
-    }
-}
-
-/// Look up the catalog row (defaults) for an `(object, field)`.
-pub fn find_default(object: &str, field: &str) -> Option<FieldRow> {
-    default_registry().into_iter().find(|r| r.object == object && r.field == field)
-}
-
-/// The default field registry — the 5 builtin membership-object types' fields.
-/// Per-role perms derive from `perm_class`; the existing /admin/fields perms are
-/// preserved exactly (Standard=WWRR, Collaborative=WWWR, OwnerGrade=WRRR,
-/// Personal=WNNN, Readonly=RRRR). Builtin = "built-in custom objects" (spec Q5).
-pub fn default_registry() -> Vec<FieldRow> {
-    use PermClass::{Collaborative, OwnerGrade, Personal, Readonly, Standard};
-    vec![
-        // ── company ──────────────────────────────────────────────────────
-        fld("company", "name", "string", Standard),
-        fld("company", "slug", "string", Standard),
-        fld("company", "avatar_url", "string", Standard).nosort(),
-        fld("company", "redpash_id", "rid", Readonly).nosort(),
-        fld("company", "member_count", "int", Readonly),
-        fld("company", "created_at", "datetime", Readonly),
-        // ── project ──────────────────────────────────────────────────────
-        fld("project", "name", "string", Standard),
-        fld("project", "description", "markdown", Standard).nosort(),
-        fld("project", "status", "enum", Standard).opts(&["draft", "active", "archived"]),
-        fld("project", "is_default", "boolean", OwnerGrade),
-        fld("project", "owner", "rid", OwnerGrade).rel("user", false),
-        fld("project", "company", "rid", OwnerGrade).rel("company", false),
-        fld("project", "redpash_id", "rid", Readonly).nosort(),
-        fld("project", "stage", "string", Readonly),
-        fld("project", "file_count", "int", Readonly),
-        fld("project", "created_at", "datetime", Readonly),
-        fld("project", "updated_at", "datetime", Readonly),
-        // ── case ─────────────────────────────────────────────────────────
-        fld("case", "title", "string", Collaborative),
-        fld("case", "description", "markdown", Collaborative).nosort(),
-        fld("case", "status", "enum", Collaborative).opts(&["backlog", "todo", "in_progress", "in_review", "done"]),
-        fld("case", "priority", "enum", Collaborative).opts(&["low", "medium", "high", "critical"]),
-        fld("case", "type", "enum", Collaborative).opts(&["bug", "feature", "task", "epic"]),
-        fld("case", "assignee", "rid", Collaborative).rel("user", false),
-        fld("case", "category", "rid", Collaborative).rel("case_category", false),
-        fld("case", "error_message", "string", Standard).nosort(),
-        fld("case", "project", "rid", Standard).rel("project", false),
-        fld("case", "company", "rid", Standard).rel("company", false),
-        fld("case", "redpash_id", "rid", Readonly).nosort(),
-        fld("case", "reporter_id", "rid", Readonly).rel("user", false),
-        fld("case", "created_at", "datetime", Readonly),
-        fld("case", "updated_at", "datetime", Readonly),
-        // ── team ─────────────────────────────────────────────────────────
-        fld("team", "name", "string", Standard),
-        fld("team", "company_id", "rid", OwnerGrade).rel("company", false),
-        fld("team", "kind", "enum", OwnerGrade).opts(&["team", "department"]),
-        fld("team", "redpash_id", "rid", Readonly).nosort(),
-        fld("team", "member_count", "int", Readonly),
-        fld("team", "created_at", "datetime", Readonly),
-        // ── file ─────────────────────────────────────────────────────────
-        fld("file", "display_name", "string", Standard),
-        fld("file", "encoding", "string", Standard).nosort(),
-        fld("file", "delimiter", "string", Standard).nosort(),
-        fld("file", "project", "rid", Standard).rel("project", false),
-        fld("file", "redpash_id", "rid", Readonly).nosort(),
-        fld("file", "filename", "string", Readonly),
-        fld("file", "stage", "string", Readonly),
-        fld("file", "row_count", "int", Readonly),
-        fld("file", "created_at", "datetime", Readonly),
-        // ── chart ────────────────────────────────────────────────────────
-        fld("chart", "title", "string", Standard),
-        fld("chart", "spec", "json", Standard).nosort(),
-        fld("chart", "source_file_id", "rid", Standard).rel("file", false),
-        fld("chart", "project", "rid", Standard).rel("project", false),
-        fld("chart", "redpash_id", "rid", Readonly).nosort(),
-        fld("chart", "created_at", "datetime", Readonly),
-        // ── dashboard ────────────────────────────────────────────────────
-        fld("dashboard", "title", "string", Standard),
-        fld("dashboard", "description", "markdown", Standard).nosort(),
-        fld("dashboard", "spec", "json", Standard).nosort(),
-        fld("dashboard", "folder", "string", Standard),
-        fld("dashboard", "is_public", "boolean", Standard),
-        fld("dashboard", "is_favorite", "boolean", Personal),
-        fld("dashboard", "redpash_id", "rid", Readonly).nosort(),
-        fld("dashboard", "created_at", "datetime", Readonly),
-    ]
-}
-
 fn db_err(e: sqlx::Error) -> AppError {
     AppError::internal("db", e.to_string())
 }
@@ -356,7 +247,7 @@ pub async fn require_fields(
     .fetch_all(&state.db)
     .await
     .map_err(db_err)?;
-    let registry = default_registry();
+    let registry = state.type_cache.rows();
     for f in fields {
         let mut perm = registry
             .iter()
@@ -388,18 +279,18 @@ fn forbidden(msg: &'static str) -> AppError {
 mod tests {
     use super::*;
 
-    /// Stage 0 (CAS_0FBF301F): the `case.status` PATCH gate reads its enum +
-    /// options from the field catalog, not a hardcoded `matches!`. Pin that the
-    /// registry row exists with the expected shape, and that the validator —
-    /// driven by it — accepts a valid status and rejects an invalid one with
-    /// `rule_code = data_type`.
+    /// Stage 0/1 (CAS_0FBF301F): the `case.status` field's enum + options drive
+    /// validation (no hardcoded `matches!`). Reconstruct the field via
+    /// `from_parts` (the cache load path) + prove the validator accepts a valid
+    /// status and rejects an invalid one with `rule_code = data_type`.
     #[test]
-    fn case_status_drives_registry_validation() {
-        let def = find_default("case", "status").expect("case.status in registry");
+    fn case_status_field_drives_validation() {
+        let def = FieldRow::from_parts(
+            "case", "status", "enum", PermClass::Collaborative, true,
+            vec!["backlog", "todo", "in_progress", "in_review", "done"], None,
+        );
         assert_eq!(def.data_type, "enum");
-        for s in ["backlog", "todo", "in_progress", "in_review", "done"] {
-            assert!(def.options.contains(&s), "status option {s} missing from registry");
-        }
+        assert_eq!(def.editor, Some("chip-enum"));
 
         let ok = crate::validate_rules::validate_value(
             def.data_type, &def.options, "status", &[],

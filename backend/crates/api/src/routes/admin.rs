@@ -1331,7 +1331,7 @@ async fn list_fields(
     if !crate::rbac::is_platform_admin(&state, &caller).await? {
         return Err(AppError::not_found("not_found", "fields"));
     }
-    let mut rows = crate::field_perms::default_registry();
+    let mut rows = state.type_cache.grid_rows();
     // Overlay the sparse field_permissions overrides → served matrix is
     // defaults ⊕ overrides (CAS_C4219F2B slice 2).
     let overrides: Vec<(String, String, String, String)> = sqlx::query_as(
@@ -1387,7 +1387,7 @@ async fn put_field(
     }
     let perm = crate::field_perms::Perm::from_str(&body.permission)
         .ok_or_else(|| AppError::bad_request("invalid", "permission must be write, read or none"))?;
-    let def = crate::field_perms::find_default(&body.object, &body.field)
+    let def = state.type_cache.find_default(&body.object, &body.field)
         .ok_or_else(|| AppError::not_found("not_found", "unknown object/field"))?;
     if !def.is_editable && perm == crate::field_perms::Perm::Write {
         return Err(AppError::bad_request("read_only", "this field is read-only — it can't be granted write"));
@@ -1419,7 +1419,7 @@ async fn put_field(
         .send();
 
     // Return the merged row (all current overrides for this object/field applied).
-    let mut row = def;
+    let mut row = def.clone();
     let ovs: Vec<(String, String)> = sqlx::query_as(
         "SELECT role, permission FROM field_permissions WHERE object_type = $1 AND field = $2",
     )
@@ -1484,7 +1484,7 @@ async fn list_types(
     if !crate::rbac::is_platform_admin(&state, &caller).await? {
         return Err(AppError::not_found("not_found", "types"));
     }
-    let mut types = crate::type_registry::builtin_types();
+    let mut types = state.type_cache.type_defs().to_vec();
     let overrides = fetch_field_overrides(&state).await?;
     for t in &mut types {
         overlay_overrides(t, &overrides);
@@ -1503,7 +1503,7 @@ async fn get_type(
     if !crate::rbac::is_platform_admin(&state, &caller).await? {
         return Err(AppError::not_found("not_found", "types"));
     }
-    let mut td = crate::type_registry::builtin_type(&type_id)
+    let mut td = state.type_cache.type_def(&type_id).cloned()
         .ok_or_else(|| AppError::not_found("not_found", "unknown type"))?;
     let overrides = fetch_field_overrides(&state).await?;
     overlay_overrides(&mut td, &overrides);
@@ -1735,7 +1735,9 @@ async fn patch_user_role(
 
     // ── org_role: role in the user's primary company membership ──────────────
     if let Some(new_role) = body.org_role.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        if !COMPANY_ROLES.contains(&new_role) {
+        let company_ok = state.type_cache.scope_roles("company")
+            .is_some_and(|sr| sr.roles.contains(&new_role));
+        if !company_ok {
             return Err(AppError::bad_request("invalid", "org_role must be one of: owner, admin, member"));
         }
         let (company, cur, ctx) = top_company_membership(&state.db, &rid)
@@ -1850,34 +1852,8 @@ async fn delete_company(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Per-scope role allow-lists. The SQL CHECK constraint is the
-/// safety net; this is the public contract used to validate the
-/// request body before the INSERT (cleaner 400 than letting the CHECK
-/// surface as a 500). The unified `memberships` table CHECK is
-/// owner/admin/member/viewer; these per-scope allow-lists narrow it.
-/// (Project `collaborator` was migrated to `member` in the consolidation.)
-const PROJECT_ROLES: &[&str] = &["owner", "member", "viewer"];
-const COMPANY_ROLES: &[&str] = &["owner", "admin", "member"];
-const CASE_ROLES:    &[&str] = &["owner", "member", "viewer"];
-const TEAM_ROLES:    &[&str] = &["owner", "admin", "member"];
-
-// context_role is free-text in schema but bounded at the API boundary
-// per scope so a typo doesn't silently create a new "category" (e.g.
-// 'reporter' vs 'Reporter') — same discipline as PROJECT_ROLES.
-// Empty/None is always allowed (the field is optional).
-const PROJECT_CONTEXT_ROLES: &[&str] = &[
-    "Project Owner", "Project Manager", "Data Analyst", "Reviewer",
-];
-const COMPANY_CONTEXT_ROLES: &[&str] = &[
-    "CEO", "CTO", "Operations Lead", "HR Generalist", "Support Engineer",
-    "Engineer", "Manager", "Founder", "Investor",
-];
-const CASE_CONTEXT_ROLES:    &[&str] = &[
-    "Reporter", "Case Owner", "Watcher", "Assignee",
-];
-const TEAM_CONTEXT_ROLES:    &[&str] = &[
-    "Team Manager", "Team Lead", "Team Member",
-];
+// Per-scope role allow-lists (system + context) now live in `type_scope_roles`,
+// read via `state.type_cache.scope_roles(scope)` (object-registry Stage 1).
 
 #[derive(Deserialize)]
 struct CreateMembershipBody {
@@ -1919,16 +1895,11 @@ async fn create_membership(
     if scope_id.is_empty() || user_id.is_empty() {
         return Err(AppError::bad_request("invalid", "scope_id and user_id are required"));
     }
-    let (role_allow, ctx_allow, role_default) = match scope {
-        "project" => (PROJECT_ROLES, PROJECT_CONTEXT_ROLES, "viewer"),
-        "company" => (COMPANY_ROLES, COMPANY_CONTEXT_ROLES, "member"),
-        "case"    => (CASE_ROLES,    CASE_CONTEXT_ROLES,    "member"),
-        "team"    => (TEAM_ROLES,    TEAM_CONTEXT_ROLES,    "member"),
-        _ => return Err(AppError::bad_request(
-            "invalid",
-            "scope must be one of: project, company, case, team",
-        )),
-    };
+    let sr = state.type_cache.scope_roles(scope).ok_or_else(|| AppError::bad_request(
+        "invalid",
+        "scope must be one of: project, company, case, team",
+    ))?;
+    let (role_allow, ctx_allow, role_default) = (&sr.roles, &sr.context_roles, sr.default_role);
     // Default per migration column-default (viewer / member). The SQL
     // DEFAULT would handle this if we omitted the column, but binding
     // explicitly keeps the audit event accurate.

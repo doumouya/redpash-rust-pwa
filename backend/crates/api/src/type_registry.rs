@@ -9,7 +9,7 @@
 
 use shared::type_def::{FieldDef, FieldRel, RelationshipDef, TypeDefinition, UIHints};
 
-use crate::field_perms::{default_registry, FieldRow};
+use crate::field_perms::FieldRow;
 
 /// Code-defined identity + presentation hints for one builtin type. Fields +
 /// relationships come from the field registry; this is everything that ISN'T a
@@ -24,57 +24,6 @@ pub(crate) struct TypeMeta {
     pub(crate) rail_icon:           &'static str,
     pub(crate) default_columns:     &'static [&'static str],
     pub(crate) default_sort:        &'static str,
-}
-
-/// The 7 membership-bearing builtin types (the ones the field registry grids).
-/// `user` is a subject referenced by `rel` (e.g. case.assignee → user) but is
-/// not itself grid-served in v1 — same boundary `field_perms` draws.
-fn builtin_meta() -> &'static [TypeMeta] {
-    &[
-        TypeMeta {
-            type_id: "company", rid_prefix: "CMP_",
-            display_name: "Company", display_name_plural: "Companies",
-            rail_icon: "bi-building",
-            default_columns: &["name", "slug", "member_count"], default_sort: "name",
-        },
-        TypeMeta {
-            type_id: "project", rid_prefix: "PRJ_",
-            display_name: "Project", display_name_plural: "Projects",
-            rail_icon: "bi-folder",
-            default_columns: &["name", "status", "stage", "file_count"], default_sort: "name",
-        },
-        TypeMeta {
-            type_id: "case", rid_prefix: "CAS_",
-            display_name: "Case", display_name_plural: "Cases",
-            rail_icon: "bi-card-list",
-            default_columns: &["title", "status", "priority", "assignee"], default_sort: "updated_at",
-        },
-        TypeMeta {
-            type_id: "team", rid_prefix: "TEM_",
-            display_name: "Team", display_name_plural: "Teams",
-            rail_icon: "bi-people",
-            default_columns: &["name", "kind", "member_count"], default_sort: "name",
-        },
-        TypeMeta {
-            type_id: "file", rid_prefix: "FIL_",
-            display_name: "File", display_name_plural: "Files",
-            rail_icon: "bi-file-earmark-spreadsheet",
-            default_columns: &["display_name", "stage", "row_count"], default_sort: "display_name",
-        },
-        TypeMeta {
-            type_id: "chart", rid_prefix: "CHT_",
-            display_name: "Chart", display_name_plural: "Charts",
-            rail_icon: "bi-bar-chart",
-            default_columns: &["title", "source_file_id"], default_sort: "title",
-        },
-        TypeMeta {
-            // shares FIL_ with file — reported truthfully, flagged in the doc.
-            type_id: "dashboard", rid_prefix: "FIL_",
-            display_name: "Dashboard", display_name_plural: "Dashboards",
-            rail_icon: "bi-grid-1x2",
-            default_columns: &["title", "folder", "is_public"], default_sort: "title",
-        },
-    ]
 }
 
 /// "display_name" → "Display name", "redpash_id" → "Redpash ID". Sentence-case,
@@ -162,16 +111,4 @@ pub(crate) fn build_one(m: &TypeMeta, registry: &[FieldRow]) -> TypeDefinition {
             chip_render:     Default::default(),
         }),
     }
-}
-
-/// All builtin TypeDefinitions (perm_class-default cells; no overrides applied).
-pub fn builtin_types() -> Vec<TypeDefinition> {
-    let registry = default_registry();
-    builtin_meta().iter().map(|m| build_one(m, &registry)).collect()
-}
-
-/// One builtin TypeDefinition by `type` id, or `None` if not a builtin type.
-pub fn builtin_type(type_id: &str) -> Option<TypeDefinition> {
-    let registry = default_registry();
-    builtin_meta().iter().find(|m| m.type_id == type_id).map(|m| build_one(m, &registry))
 }

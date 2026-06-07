@@ -55,12 +55,24 @@ Stage-2 generic handler and Stage-3 `register_type` read.
   Registry-driven, so it **fixes** the legacy `TEM_`/`TEAM` mis-dispatch and
   adds `CON_`→connection; the shared `FIL_` resolves to `file` (canonical).
 
+## Grid vs internal types
+
+`type_definitions` holds 9 rows but only **7 are grid-served** (ordinal 0–6:
+company/project/case/team/file/chart/dashboard). `user` (rel-only subject) and
+`connection` (the Stage-2 generic-handler proof catalog) exist for the
+`entities.type` FK but are NOT grid-served — `type_defs()` / `grid_rows()` exclude
+them, so `/admin/types` + `/admin/fields` stay byte-identical to the legacy
+output. `rows()` (all) feeds `require_fields`; `object_kind` uses every prefix.
+
 ## Staged state
 
-C2 (this slice): the cache loads + is held on `AppState`, `#![allow(dead_code)]`
-on the read methods. C3 redirects the consumers (removing the allow) + deletes
-the code-side registries; C4/parity proves `/admin/types` + `/admin/fields` stay
-byte-identical.
+C2: cache loads + held on `AppState`. **C3 (done):** consumers redirected
+(`require_fields` / `/admin/fields` → `grid_rows`; `/admin/types` → `type_defs`;
+`create_membership` / `put_field` → `scope_roles`; `rbac::object_kind` →
+`object_kind`), the code-side registries (`default_registry` / `builtin_meta` /
+`builtin_types` / `builtin_type` / the admin role const arrays) DELETED, and
+`/admin/types` + `/admin/fields` proven byte-identical (code-driven vs
+cache-driven diff). Migration `20260607000001` adds `ordinal` + `grid_served`.
 
 ## Related
 

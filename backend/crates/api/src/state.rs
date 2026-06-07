@@ -72,9 +72,7 @@ pub struct AppState {
     pub internal_company_id: Arc<Option<String>>,
     /// The data-driven type registry (type_definitions/type_fields/
     /// type_scope_roles), loaded once after migrate. Replaces the code-side
-    /// field/type/role registries (object-registry Stage 1). Read methods wire
-    /// in at C3 — staged-surface allow until then.
-    #[allow(dead_code)]
+    /// field/type/role registries (object-registry Stage 1).
     pub type_cache:          Arc<crate::type_cache::TypeDefCache>,
 }
 

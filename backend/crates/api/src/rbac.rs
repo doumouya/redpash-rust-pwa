@@ -16,6 +16,8 @@
 //! handler-facing gates (dev_user bypasses as the dev-mode platform admin).
 
 use sqlx::PgPool;
+
+use crate::type_cache::TypeDefCache;
 use std::collections::BTreeMap;
 
 use crate::{error::AppError, state::AppState};
@@ -367,27 +369,13 @@ impl Action {
     }
 }
 
-/// Canonical object TYPE from a redpash_id prefix (the contract's grant keys use
-/// these). PK-anchored — never a name. Unknown prefix → `"unknown"` (fails the
-/// grant check, so a new type is default-denied until the contract grants it).
-pub fn object_kind(rid: &str) -> &'static str {
-    match rid.split('_').next().unwrap_or("") {
-        "CAS"  => "case",
-        "PRJ"  => "project",
-        "FIL"  => "file",
-        "CHT"  => "chart",
-        "DSH"  => "dashboard",
-        "USR"  => "user",
-        "CMP"  => "company",
-        "TEAM" => "team",
-        _      => "unknown",
-    }
-}
-
 /// The object's company (to load that company's contract) — itself if it IS a
-/// company, else the cascade scope (case/project/file → company).
-async fn company_of(pool: &PgPool, object: &str) -> sqlx::Result<Option<String>> {
-    if object_kind(object) == "company" {
+/// company, else the cascade scope (case/project/file → company). `object_kind`
+/// is registry-driven (the `TypeDefCache`), so a new type resolves without a
+/// code edit (object-registry Stage 1; this also fixes the legacy `TEM_`/`TEAM`
+/// + adds `CON_` mis-dispatch — see type_cache::object_kind).
+async fn company_of(cache: &TypeDefCache, pool: &PgPool, object: &str) -> sqlx::Result<Option<String>> {
+    if cache.object_kind(object) == "company" {
         return Ok(Some(object.to_string()));
     }
     sqlx::query_scalar(
@@ -437,9 +425,9 @@ pub async fn require_action(
     if is_platform_admin(state, caller).await? {
         return Ok(());
     }
-    let object_type = object_kind(object);
+    let object_type = state.type_cache.object_kind(object);
     let grant   = resolve_grant(&state.db, caller, object).await?;
-    let company = company_of(&state.db, object).await?;
+    let company = company_of(&state.type_cache, &state.db, object).await?;
     let contract = match &company {
         Some(c) => load_contract(&state.db, c).await?,
         None    => None,
@@ -491,15 +479,6 @@ mod contract_tests {
         assert!(c.is_company_owner("USR_o"));
         assert!(c.grants.is_empty());
         assert!(!c.allows(&["TEAM_eng".into()], "case", "r"));
-    }
-
-    #[test]
-    fn object_kind_maps_rid_prefixes() {
-        assert_eq!(object_kind("CAS_x"), "case");
-        assert_eq!(object_kind("USR_x"), "user");
-        assert_eq!(object_kind("TEAM_x"), "team");
-        assert_eq!(object_kind("FIL_x"), "file");
-        assert_eq!(object_kind("ZZZ_x"), "unknown");
     }
 
     #[test]

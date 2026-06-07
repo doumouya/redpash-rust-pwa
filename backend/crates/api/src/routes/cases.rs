@@ -309,7 +309,7 @@ async fn patch(
         // `matches!` — so a new status (or a custom object's enum field) needs no
         // edit here. Replaces the old inline check; the codec gate returns
         // rule_code `data_type` on a bad value (same 400-before-write intent).
-        let def = crate::field_perms::find_default("case", "status")
+        let def = state.type_cache.find_default("case", "status")
             .ok_or_else(|| AppError::internal("registry", "case.status missing from field registry"))?;
         let value = serde_json::Value::String(s.to_string());
         let mut sib = crate::validate_rules::Row::new();
