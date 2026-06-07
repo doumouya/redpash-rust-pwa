@@ -301,3 +301,8 @@
   display: none;
 }
 
+
+/* Hide the admin rail segment for non-platform-admins — monitoring.js adds .rp-mon-admin
+   to the rail when /api/me.is_platform_admin. Folded from the legacy rail.css; the dead
+   .rt-nav selector updated to the migrated .rp-rail. */
+.rp-rail:not(.rp-mon-admin) #rpMonRailView [data-rail-seg="admin"] { display: none; }

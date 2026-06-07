@@ -35,19 +35,19 @@ export function mountRailFooterNav(footEl, { active = "", session = null } = {})
   if (!footEl) return;
   // Idempotent — a re-mount (page re-render) replaces the prior cluster
   // rather than stacking a second one.
-  footEl.querySelector(".rp-rail-footnav")?.remove();
+  footEl.querySelector(".rp-rail-footer-nav")?.remove();
 
   const initials = initialsOf(session);
   const items = FOOTER_NAV.map((n) => {
     const isActive = n.id === active ? " is-active" : "";
     if (n.avatar) {
-      return '<a class="rp-rail-footnav-item rp-rail-footnav-avatar' + isActive + '" '
+      return '<a class="rp-rail-footer-nav-item rp-rail-footer-nav-avatar' + isActive + '" '
         + 'href="' + n.hash + '" title="' + esc(n.label) + '">' + esc(initials) + '</a>';
     }
-    return '<a class="rp-rail-footnav-item' + isActive + '" '
+    return '<a class="rp-rail-footer-nav-item' + isActive + '" '
       + 'href="' + n.hash + '" title="' + esc(n.label) + '"><i class="bi ' + n.icon + '"></i></a>';
   }).join("");
 
   footEl.insertAdjacentHTML("beforeend",
-    '<div class="rp-rail-footnav" role="navigation" aria-label="Utility">' + items + '</div>');
+    '<div class="rp-rail-footer-nav" role="navigation" aria-label="Utility">' + items + '</div>');
 }

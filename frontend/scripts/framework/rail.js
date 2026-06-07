@@ -16,7 +16,7 @@
 // The footer (upload / create / footer-nav) is part of the rail component here:
 // the live split into rail-footer.js was a 2026-05-28 relocation artifact; the
 // framework re-unifies the rail as one self-contained component (legacy
-// rail-footer.js + rp-rail-footnav retire at the shell cutover).
+// rail-footer.js + rp-rail-footer-nav retire at the shell cutover).
 "use strict";
 
 import { register } from "/scripts/framework/component-registry.js";
