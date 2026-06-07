@@ -1,38 +1,22 @@
 /* Purpose: see doc for details.
  * Doc: docs/internal/code/frontend/scripts/topbar.md */
-// Topbar — the shared chrome for the authed pages (home, Workspace).
+// Topbar — the shared chrome for the authed pages.
 //
-// One component, one button pattern: brand · omnibox · nav + theme +
-// sign-out + avatar. A page drops <header id="rp-topbar"></header> into
-// its partial and its script calls mountTopbar(el, { active, session });
-// `active` names which nav entry is the current page. There is exactly
-// one topbar — every authed page renders the identical thing.
+// Multi-app model: the topbar is APP-SCOPED. A page calls
+// mountTopbar(el, { active, session }); `active` names the current page, and the
+// topbar DERIVES which app owns that page (apps.js `appForPage`) and renders only
+// that app's nav + the launcher (app-switcher). Pages don't pass an `app` — the
+// topbar self-determines it, so adding/moving a page is a one-line edit in apps.js
+// and never touches a page's mountTopbar call.
 //
-// NAV is the closed list of the app's authed pages. Entries marked
-// `parked: true` render as a disabled button (an honest "coming soon",
-// not a broken link); wiring lands when the page does, by dropping the
-// `parked` flag from the entry — no other topbar edit needed.
+// brand · omnibox · [launcher | app pages] + theme + sign-out. Utility pages
+// (profile / settings — rail-footer destinations) belong to no app → appForPage
+// falls back to the Home app, so their topbar is just the launcher.
 
 import { api } from "/scripts/api.js";
-import { toggleTheme, currentTheme } from "/scripts/theme.js";
 import { esc } from "/scripts/dom.js";
-
-// Primary page nav. Settings / Docs / Profile moved to the rail
-// footer (rail-footer.js) 2026-05-28 — the topbar carries the primary
-// surfaces + theme + sign-out; the utility destinations live at the
-// bottom of every railed page's rail. Profile's avatar moved with it.
-const NAV = [
-  { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
-  { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
-  { id: "sheetwise",  hash: "#/sheetwise",  icon: "bi-database",    label: "SheetWise" },
-  { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
-  // Monitoring (system observability + Admin Console) is platform-admin
-  // only — never rendered in the topbar for members / viewers (CAS_274EDF3B).
-  // The route guard in main.js is the companion (a non-admin deep-linking
-  // #/monitoring is bounced home); both read /me.is_platform_admin, and the
-  // backend /monitoring/* + /admin/* endpoints are the real auth.
-  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring", admin: true },
-];
+import { appForPage } from "/scripts/framework/apps.js";
+import { appSwitcherHTML } from "/scripts/framework/app-switcher.js";
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's
 // life, not once per topbar mount.
@@ -58,6 +42,11 @@ function greetingFor(session) {
 export function mountTopbar(host, { active = "", session = null } = {}) {
   if (!host) return;
   host.className = "rp-topbar";
+  // The app that owns this page → render only its nav (apps.js). Utility pages
+  // (profile / settings) fall back to the Home app, so their topbar is just the
+  // launcher. Theme toggle + sign-out moved to the rail footer (2026-06-07, Em) —
+  // they're app-independent utilities; the topbar carries only nav + the launcher.
+  const app = appForPage(active);
   host.innerHTML =
       '<a class="rp-brand" href="#/home" title="Home">'
     +   '<span class="rp-brand-mark"></span>'
@@ -69,39 +58,12 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     +   '<kbd class="rp-omni-kbd">Ctrl K</kbd>'
     + '</div>'
     + '<nav class="rp-topbar-actions">'
-    +   NAV.filter((n) => !n.admin || session?.is_platform_admin).map((n) => n.parked
-          ? '<button class="rp-btn-icon" type="button" disabled title="' + n.label + ' — coming soon">'
-            + '<i class="bi ' + n.icon + '"></i></button>'
-          : '<a class="rp-btn-icon' + (n.id === active ? ' is-active' : '') + '"'
-            + ' href="' + n.hash + '" title="' + n.label + '"><i class="bi ' + n.icon + '"></i></a>'
+    +   appSwitcherHTML({ session, activeAppId: app.id })
+    +   app.pages.map((p) =>
+          '<a class="rp-btn-icon' + (p.id === active ? ' is-active' : '') + '"'
+          + ' href="' + esc(p.hash) + '" title="' + esc(p.label) + '"><i class="bi ' + esc(p.icon) + '"></i></a>'
         ).join('')
-    +   '<button class="rp-btn-icon" type="button" data-act="theme" title="Toggle theme">'
-    +     '<i class="bi bi-sun"></i></button>'
-    +   '<button class="rp-btn-icon" type="button" data-act="signout" title="Sign out">'
-    +     '<i class="bi bi-box-arrow-right"></i></button>'
     + '</nav>';
-
-  // theme toggle — the icon shows the CURRENT theme so it stays
-  // tightly aligned with the Settings page's Appearance row
-  // (Dark ↔ moon-stars, Light ↔ sun) per Em 2026-05-28. Previously
-  // the icon advertised "what the click switches TO" which inverted
-  // the icon meaning against the same picker in Settings — confusing
-  // when both surfaces are visible together.
-  const themeBtn = host.querySelector('[data-act="theme"]');
-  const paintTheme = () => {
-    themeBtn.querySelector("i").className =
-      currentTheme() === "light" ? "bi bi-sun" : "bi bi-moon-stars";
-  };
-  paintTheme();
-  themeBtn.addEventListener("click", () => { toggleTheme(); paintTheme(); });
-
-  // sign out
-  host.querySelector('[data-act="signout"]').addEventListener("click", async () => {
-    try { await api.post("/auth/logout"); }
-    catch { /* idempotent — clear the client session regardless */ }
-    location.hash = "#/login";
-    location.reload();
-  });
 
   // omnisearch — wires the input to GET /api/search (Gus's 778d2dd).
   // Topbar is remounted per page, so dropdown state resets between

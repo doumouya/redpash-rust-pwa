@@ -1,10 +1,10 @@
 /* Purpose: see doc for details.
  * Doc: docs/internal/code/frontend/scripts/rail-footer.md */
-// Rail footer nav — the shared utility cluster (Docs / Settings /
-// Profile) that lives at the bottom of every railed page's
-// `.rp-rail-footer`. Relocated out of the topbar 2026-05-28 (Em): the
-// topbar keeps the primary page nav + theme + sign-out; these three
-// "utility" destinations move to the rail foot, VS-Code / Slack style.
+// Rail footer nav — the shared utility cluster (Docs / Settings / theme /
+// sign-out / Profile) that lives at the bottom of every railed page's
+// `.rp-rail-footer`. Docs/Settings/Profile relocated off the topbar 2026-05-28;
+// theme-toggle + sign-out joined them 2026-06-07 (Em — declutter the per-app
+// topbar). VS-Code / Slack style: utilities at the bottom of the rail.
 //
 // One component, mounted by each railed page's script:
 //   mountRailFooterNav(footEl, { active, session })
@@ -15,6 +15,7 @@
 // top divider so the two concerns read distinctly.
 
 import { esc } from "/scripts/dom.js";
+import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/footer-utilities.js";
 
 const FOOTER_NAV = [
   { id: "docs",     hash: "#/docs",     icon: "bi-book-half", label: "Docs" },
@@ -38,16 +39,22 @@ export function mountRailFooterNav(footEl, { active = "", session = null } = {})
   footEl.querySelector(".rp-rail-footer-nav")?.remove();
 
   const initials = initialsOf(session);
-  const items = FOOTER_NAV.map((n) => {
+  // Links (Docs / Settings), then the theme + sign-out actions, then the Profile
+  // avatar last (the "you" anchor). The avatar is split out so the action buttons
+  // sit between the destinations and the identity mark.
+  const links = FOOTER_NAV.filter((n) => !n.avatar).map((n) => {
     const isActive = n.id === active ? " is-active" : "";
-    if (n.avatar) {
-      return '<a class="rp-rail-footer-nav-item rp-rail-footer-nav-avatar' + isActive + '" '
-        + 'href="' + n.hash + '" title="' + esc(n.label) + '">' + esc(initials) + '</a>';
-    }
     return '<a class="rp-rail-footer-nav-item' + isActive + '" '
       + 'href="' + n.hash + '" title="' + esc(n.label) + '"><i class="bi ' + n.icon + '"></i></a>';
   }).join("");
+  const profile = FOOTER_NAV.find((n) => n.avatar);
+  const avatar = profile
+    ? '<a class="rp-rail-footer-nav-item rp-rail-footer-nav-avatar' + (profile.id === active ? " is-active" : "") + '" '
+      + 'href="' + profile.hash + '" title="' + esc(profile.label) + '">' + esc(initials) + '</a>'
+    : "";
 
   footEl.insertAdjacentHTML("beforeend",
-    '<div class="rp-rail-footer-nav" role="navigation" aria-label="Utility">' + items + '</div>');
+    '<div class="rp-rail-footer-nav" role="navigation" aria-label="Utility">'
+    + links + footerUtilitiesHTML() + avatar + '</div>');
+  wireFooterUtilities(footEl.querySelector(".rp-rail-footer-nav"));
 }

@@ -22,6 +22,7 @@
 import { register } from "/scripts/framework/component-registry.js";
 import { esc } from "/scripts/dom.js";
 import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
+import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/footer-utilities.js";
 
 // ── config shape (every section optional) ───────────────────────────────────
 //   title       : string                       → rp-rail-title
@@ -133,6 +134,9 @@ export function mountRail(host, config = {}) {
       case "create":       on.create?.(); return;
     }
   });
+
+  // Theme + sign-out actions in the footer (shared with rail-footer.js).
+  wireFooterUtilities(host.querySelector(".rp-rail-footer-nav"));
 
   return {
     el: host,
@@ -273,16 +277,21 @@ function footerHTML(c) {
 function footerNavHTML(nav) {
   if (!nav) return "";
   const initials = initialsOf(nav.session);
-  const items = FOOTER_NAV.map((n) => {
+  // Links (Docs / Settings) → theme + sign-out actions (shared footer-utilities,
+  // moved off the topbar 2026-06-07) → Profile avatar last. Wired by mountRail
+  // via wireFooterUtilities(host).
+  const links = FOOTER_NAV.filter((n) => !n.avatar).map((n) => {
     const isActive = n.id === nav.active ? " is-active" : "";
-    if (n.avatar) {
-      return '<a class="rp-rail-footer-nav-item rp-rail-footer-nav-avatar' + isActive + '" '
-        + 'href="' + n.hash + '" title="' + esc(n.label) + '">' + esc(initials) + '</a>';
-    }
     return '<a class="rp-rail-footer-nav-item' + isActive + '" '
       + 'href="' + n.hash + '" title="' + esc(n.label) + '"><i class="bi ' + n.icon + '"></i></a>';
   }).join("");
-  return '<div class="rp-rail-footer-nav" role="navigation" aria-label="Utility">' + items + '</div>';
+  const profile = FOOTER_NAV.find((n) => n.avatar);
+  const avatar = profile
+    ? '<a class="rp-rail-footer-nav-item rp-rail-footer-nav-avatar' + (profile.id === nav.active ? " is-active" : "") + '" '
+      + 'href="' + profile.hash + '" title="' + esc(profile.label) + '">' + esc(initials) + '</a>'
+    : "";
+  return '<div class="rp-rail-footer-nav" role="navigation" aria-label="Utility">'
+    + links + footerUtilitiesHTML() + avatar + '</div>';
 }
 
 // ── inline rename — swaps the name span for an input, commits on Enter/blur ──

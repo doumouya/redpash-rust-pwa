@@ -3,7 +3,7 @@ title: frontend/scripts/framework/rail.js
 source: ../../../../../../frontend/scripts/framework/rail.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # framework/rail.js — Rail component (B1)
@@ -74,6 +74,11 @@ A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy
   `rp-rail-footnav`); the framework re-unifies it as part of the rail
   (`rp-rail-footer-nav`). The legacy file + the `footnav` name retire at the
   shell cutover — until then the two coexist (the framework twin, like topbar/omni).
+  Since 2026-06-07 `mountRail`'s footer also carries the shared **theme-toggle +
+  sign-out** (`footerUtilitiesHTML()` in the markup + `wireFooterUtilities(host)`
+  after render), matching [rail-footer.js](../rail-footer.md) — both compose the
+  same [footer-utilities.js](footer-utilities.md), so the two footer paths can't
+  drift.
 - **Cutover pending**: live pages still build their own `rt-nav-*` rails. At
   cutover, each page becomes a config-supplier; Cases' `rp-cases-rail-board`
   folds into `rp-rail-overview` then.
@@ -85,4 +90,5 @@ A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy
 - [framework/rail.css](../../../styles/framework/rail.md) — the rail's CSS (incl. the `rp-rail-views` seg, ported from `rt-seg--rail`).
 - [rail-controls.js](../rail-controls.md) — collapse + seg behaviors it composes.
 - [rail-footer.js](../rail-footer.md) — the legacy footer nav it supersedes.
+- [footer-utilities.js](footer-utilities.md) — the shared theme/sign-out the footer composes.
 - [component-registry](component-registry.md) · [framework index](index.md).

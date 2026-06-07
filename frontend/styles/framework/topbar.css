@@ -47,3 +47,54 @@
 }
 
 .rp-topbar-actions { justify-self: end; display: flex; align-items: center; gap: 0.125rem; }
+
+/* ── app-switcher launcher (.rp-menu data-variant="launcher") — "My Services" ──
+   Composes the .rp-menu atom (menu.css owns wrap / panel / item); this block
+   styles only the launcher variant: the app tiles (icon block + name + sub) + a
+   thin separator so the launcher leads the nav cluster. One framework class per
+   element — the variant hangs off the wrap's [data-variant="launcher"] ancestor,
+   never a second class on the wrap/menu/item. */
+.rp-menu-wrap[data-variant="launcher"] {
+  margin-inline-end: 0.25rem;
+  padding-inline-end: 0.25rem;
+  border-inline-end: 1px solid var(--rp-border);
+}
+.rp-menu-wrap[data-variant="launcher"] .rp-menu { min-width: 16rem; }
+.rp-menu-wrap[data-variant="launcher"] .rp-menu-item {
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.5625rem;
+  text-decoration: none;
+}
+.rp-launcher-head {
+  padding: 0.25rem 0.5625rem 0.4375rem;
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rp-launcher-app-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+}
+.rp-menu-wrap[data-variant="launcher"] .rp-menu-item.selected .rp-launcher-app-icon {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent);
+}
+.rp-launcher-app-text { display: flex; flex-direction: column; min-width: 0; }
+.rp-launcher-app-name { font-weight: 600; font-size: var(--rp-text-sm); color: var(--rp-text); }
+.rp-launcher-app-sub {
+  font-size: var(--rp-text-xs);
+  color: var(--rp-text-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

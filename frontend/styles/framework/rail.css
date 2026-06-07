@@ -465,6 +465,12 @@
   text-decoration: none;
   font-size: 0.9375rem;
   transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+  /* shared by <a> links + <button> actions (theme / sign-out) — reset the
+     button chrome so both render identically. */
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
 .rp-rail-footer-nav-item:hover { background: var(--rp-hover); color: var(--rp-text); }
 .rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-accent); }
