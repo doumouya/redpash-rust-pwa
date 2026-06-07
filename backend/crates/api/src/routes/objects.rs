@@ -1,0 +1,301 @@
+//! Purpose: the generic object resource — `/api/objects/:type[/:rid]` CRUD over
+//! the polymorphic `entity_data` (JSONB) store. ONE handler for every
+//! TypeDefinition-declared custom type: declaring a type (Stage 3
+//! `register_type`) gives it full CRUD + RBAC + audit + field validation with
+//! zero new code (object-registry Stage 2, CAS_0FBF301F). Builtins keep their
+//! typed tables + bespoke routes (Hybrid-C storage); only custom types route
+//! here. Gating reuses the type-agnostic `rbac::resolve_grant` + `require_fields`;
+//! validation reuses `validate_rules::validate_value` off the type's catalog.
+//! Doc: docs/internal/code/backend/api/routes/objects.md
+
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::routing::get;
+use axum::{Json, Router};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use sqlx::types::Json as SqlxJson;
+
+use crate::error::AppError;
+use crate::rbac::Role;
+use crate::state::AppState;
+use crate::validate_rules::Row;
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/:type", get(list).post(create))
+        .route("/:type/:rid", get(get_one).patch(patch).delete(delete_one))
+}
+
+#[derive(Serialize)]
+struct ObjectView {
+    #[serde(rename = "type")]
+    type_id: String,
+    rid:     String,
+    owner:   String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope_parent: Option<String>,
+    data:    Value,
+}
+
+#[derive(Deserialize)]
+struct CreateBody {
+    #[serde(default)]
+    data: Map<String, Value>,
+    scope_parent_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PatchBody {
+    #[serde(default)]
+    data: Map<String, Value>,
+}
+
+/// 404 if `type_id` isn't a registered type (leak-free — same shape as an
+/// unknown object).
+fn require_type(state: &AppState, type_id: &str) -> Result<(), AppError> {
+    if state.type_cache.is_type(type_id) {
+        Ok(())
+    } else {
+        Err(AppError::not_found("not_found", format!("unknown type {type_id}")))
+    }
+}
+
+/// Validate each provided field against the type's catalog (`data_type` +
+/// options), with `row` carrying the merged current+proposed values for
+/// cross-field rules. A field not in the catalog is a 400.
+fn validate_fields(
+    state:   &AppState,
+    type_id: &str,
+    data:    &Map<String, Value>,
+    row:     &Row,
+) -> Result<(), AppError> {
+    for (field, value) in data {
+        let def = state
+            .type_cache
+            .find_default(type_id, field)
+            .ok_or_else(|| AppError::bad_request("unknown_field", format!("{type_id} has no field {field}")))?;
+        let outcome =
+            crate::validate_rules::validate_value(def.data_type, &def.options, field, &[], value, row);
+        if let Some(v) = outcome.errors.first() {
+            let kind = if v.rule_code == "data_type" { "data_type" } else { "invalid" };
+            return Err(AppError::bad_request(kind, v.message.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// `POST /api/objects/:type` — create a custom object. Validates the body fields
+/// against the type catalog, then (one tx) registers the entity, inserts the
+/// `entity_data` row, and auto-grants the creator an `owner` membership so RBAC
+/// resolves without the scope cascade. 404 unknown type.
+async fn create(
+    State(state):  State<AppState>,
+    headers:       HeaderMap,
+    Path(type_id): Path<String>,
+    Json(body):    Json<CreateBody>,
+) -> Result<(StatusCode, Json<ObjectView>), AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    require_type(&state, &type_id)?;
+
+    let merged: Row = body.data.clone().into_iter().collect();
+    validate_fields(&state, &type_id, &body.data, &merged)?;
+
+    let prefix = state
+        .type_cache
+        .rid_prefix(&type_id)
+        .ok_or_else(|| AppError::internal("registry", "type missing rid_prefix"))?;
+    let rid = crate::id::new(prefix.trim_end_matches('_'));
+    let data_val = Value::Object(body.data);
+
+    let mut tx = state.db.begin().await?;
+    crate::db::register_entity(&mut *tx, &rid, &type_id).await?;
+    sqlx::query(
+        "INSERT INTO entity_data (object_id, type_id, owner_id, scope_parent_id, data) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&rid)
+    .bind(&type_id)
+    .bind(&caller)
+    .bind(&body.scope_parent_id)
+    .bind(&data_val)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role, context_role) \
+         VALUES ($1, $2, 'owner', '')",
+    )
+    .bind(&rid)
+    .bind(&caller)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    crate::event::info(&state.db, format!("{type_id}_create"), format!("created {type_id} {rid}"))
+        .user(caller.clone())
+        .context(serde_json::json!({ "type": type_id, "rid": rid }))
+        .send();
+
+    Ok((
+        StatusCode::CREATED,
+        Json(ObjectView { type_id, rid, owner: caller, scope_parent: body.scope_parent_id, data: data_val }),
+    ))
+}
+
+/// `GET /api/objects/:type/:rid` — one object. `case.view`-equivalent: any reach
+/// (the resolver). 404 on a type mismatch or no reach (leak-free).
+async fn get_one(
+    State(state):        State<AppState>,
+    headers:             HeaderMap,
+    Path((type_id, rid)): Path<(String, String)>,
+) -> Result<Json<ObjectView>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    require_type(&state, &type_id)?;
+    let row = load(&state, &type_id, &rid).await?;
+    crate::rbac::require_view(&state, &caller, &rid, &type_id).await?;
+    Ok(Json(row))
+}
+
+/// `PATCH /api/objects/:type/:rid` — merge field changes. Coarse gate (member+ on
+/// the object) → field-level `require_fields` → `validate_value` per changed
+/// field (merging stored values for cross-field rules) → JSONB merge.
+async fn patch(
+    State(state):        State<AppState>,
+    headers:             HeaderMap,
+    Path((type_id, rid)): Path<(String, String)>,
+    Json(body):          Json<PatchBody>,
+) -> Result<Json<ObjectView>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    require_type(&state, &type_id)?;
+    let current = load(&state, &type_id, &rid).await?;
+
+    crate::rbac::require_grant(&state, &caller, &rid, &type_id, |g| {
+        g.effective().is_some_and(|r| r >= Role::Member)
+    })
+    .await?;
+    let fields: Vec<&str> = body.data.keys().map(String::as_str).collect();
+    crate::field_perms::require_fields(&state, &caller, &rid, &type_id, &fields).await?;
+
+    // Merge stored + proposed for cross-field rules, then validate.
+    let mut merged_map = match current.data {
+        Value::Object(m) => m,
+        _ => Map::new(),
+    };
+    let row: Row = merged_map
+        .clone()
+        .into_iter()
+        .chain(body.data.clone())
+        .collect();
+    validate_fields(&state, &type_id, &body.data, &row)?;
+
+    for (k, v) in body.data {
+        merged_map.insert(k, v);
+    }
+    let data_val = Value::Object(merged_map);
+    sqlx::query("UPDATE entity_data SET data = $1, updated_at = now() WHERE object_id = $2")
+        .bind(&data_val)
+        .bind(&rid)
+        .execute(&state.db)
+        .await?;
+
+    crate::event::info(&state.db, format!("{type_id}_update"), format!("updated {type_id} {rid}"))
+        .user(caller)
+        .context(serde_json::json!({ "type": type_id, "rid": rid }))
+        .send();
+
+    Ok(Json(ObjectView {
+        type_id,
+        rid,
+        owner: current.owner,
+        scope_parent: current.scope_parent,
+        data: data_val,
+    }))
+}
+
+/// `DELETE /api/objects/:type/:rid` — admin+ on the object. Deletes the entity
+/// (cascades `entity_data`) + the object's memberships, in one tx.
+async fn delete_one(
+    State(state):        State<AppState>,
+    headers:             HeaderMap,
+    Path((type_id, rid)): Path<(String, String)>,
+) -> Result<StatusCode, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    require_type(&state, &type_id)?;
+    let _ = load(&state, &type_id, &rid).await?; // 404 if missing / type mismatch
+    crate::rbac::require_grant(&state, &caller, &rid, &type_id, |g| {
+        g.effective().is_some_and(|r| r >= Role::Admin)
+    })
+    .await?;
+
+    let mut tx = state.db.begin().await?;
+    sqlx::query("DELETE FROM memberships WHERE object_redpash_id = $1")
+        .bind(&rid)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM entities WHERE id = $1")
+        .bind(&rid)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    crate::event::warn(&state.db, format!("{type_id}_delete"), format!("deleted {type_id} {rid}"))
+        .user(caller)
+        .context(serde_json::json!({ "type": type_id, "rid": rid }))
+        .send();
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/objects/:type` — the caller's reachable objects of the type.
+/// Stage 2 = DIRECT membership only (the scope cascade lands in Stage 3); a
+/// platform admin sees all.
+async fn list(
+    State(state):  State<AppState>,
+    headers:       HeaderMap,
+    Path(type_id): Path<String>,
+) -> Result<Json<Vec<ObjectView>>, AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    require_type(&state, &type_id)?;
+    let admin = crate::rbac::is_platform_admin(&state, &caller).await?;
+    let rows: Vec<(String, String, Option<String>, SqlxJson<Value>)> = sqlx::query_as(
+        "SELECT ed.object_id, ed.owner_id, ed.scope_parent_id, ed.data \
+           FROM entity_data ed \
+          WHERE ed.type_id = $1 \
+            AND ($2 OR EXISTS ( \
+                SELECT 1 FROM memberships m \
+                 WHERE m.object_redpash_id = ed.object_id AND m.member_redpash_id = $3)) \
+          ORDER BY ed.created_at",
+    )
+    .bind(&type_id)
+    .bind(admin)
+    .bind(&caller)
+    .fetch_all(&state.db)
+    .await?;
+    let items = rows
+        .into_iter()
+        .map(|(rid, owner, scope_parent, data)| ObjectView {
+            type_id: type_id.clone(),
+            rid,
+            owner,
+            scope_parent,
+            data: data.0,
+        })
+        .collect();
+    Ok(Json(items))
+}
+
+/// Load one object's `entity_data` row → `ObjectView`, enforcing the type
+/// matches (404 leak-free on miss / mismatch).
+async fn load(state: &AppState, type_id: &str, rid: &str) -> Result<ObjectView, AppError> {
+    let row: Option<(String, String, Option<String>, SqlxJson<Value>)> = sqlx::query_as(
+        "SELECT type_id, owner_id, scope_parent_id, data FROM entity_data WHERE object_id = $1",
+    )
+    .bind(rid)
+    .fetch_optional(&state.db)
+    .await?;
+    let (rtype, owner, scope_parent, data) =
+        row.ok_or_else(|| AppError::not_found("not_found", format!("{type_id} {rid}")))?;
+    if rtype != type_id {
+        return Err(AppError::not_found("not_found", format!("{type_id} {rid}")));
+    }
+    Ok(ObjectView { type_id: rtype, rid: rid.to_string(), owner, scope_parent, data: data.0 })
+}

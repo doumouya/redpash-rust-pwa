@@ -34,6 +34,9 @@ pub struct TypeDefCache {
     /// grid-served type_ids — the subset shown in `/admin/types` + `/admin/fields`
     /// (excludes the rel-only `user` + the internal `connection`).
     grid:           HashSet<&'static str>,
+    /// EVERY type_id → its rid_prefix (incl. non-grid + custom). The generic
+    /// `/api/objects/:type` handler resolves + mints rids against this.
+    types:          HashMap<&'static str, &'static str>,
     /// Prebuilt TypeDefinitions for the GRID-served types only, in ordinal order
     /// (byte-identical to the legacy `builtin_types()`).
     type_defs:      Vec<TypeDefinition>,
@@ -110,10 +113,12 @@ impl TypeDefCache {
             .await?;
         let mut metas: Vec<(TypeMeta, bool)> = Vec::with_capacity(def_rows.len());
         let mut grid: HashSet<&'static str> = HashSet::new();
+        let mut types: HashMap<&'static str, &'static str> = HashMap::new();
         let mut prefix_to_type: Vec<(&'static str, &'static str)> = Vec::new();
         for (type_id, rid_prefix, display_name, display_name_plural, rail_icon, default_columns, default_sort, grid_served) in def_rows {
             let tid = intr.intern(&type_id);
             let pfx = intr.intern(&rid_prefix);
+            types.insert(tid, pfx);
             if !prefix_to_type.iter().any(|(p, _)| *p == pfx) {
                 prefix_to_type.push((pfx, tid));
             }
@@ -175,7 +180,7 @@ impl TypeDefCache {
             scopes = scope_roles.len(),
             "type registry loaded",
         );
-        Ok(Self { rows, grid, type_defs, scope_roles, prefix_to_type })
+        Ok(Self { rows, grid, types, type_defs, scope_roles, prefix_to_type })
     }
 
     /// The full field catalog — every type incl. `connection` (the
@@ -211,6 +216,16 @@ impl TypeDefCache {
         self.scope_roles.get(scope)
     }
 
+    /// Is `type_id` a known type (any — grid, internal, or custom)?
+    pub fn is_type(&self, type_id: &str) -> bool {
+        self.types.contains_key(type_id)
+    }
+
+    /// The rid prefix (with trailing `_`) for a type — for minting object ids.
+    pub fn rid_prefix(&self, type_id: &str) -> Option<&'static str> {
+        self.types.get(type_id).copied()
+    }
+
     /// Canonical object type from a rid prefix (the registry-driven
     /// `rbac::object_kind` — `TEM_`→team, `CON_`→connection fixed; `FIL_`→file
     /// canonical; unknown prefix → `"unknown"`, default-denied).
@@ -233,6 +248,7 @@ mod tests {
         TypeDefCache {
             rows:           Vec::new(),
             grid:           HashSet::new(),
+            types:          HashMap::new(),
             type_defs:      Vec::new(),
             scope_roles:    HashMap::new(),
             prefix_to_type: pairs.to_vec(),

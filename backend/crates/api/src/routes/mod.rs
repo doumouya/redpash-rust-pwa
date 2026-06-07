@@ -56,6 +56,7 @@ mod health;
 mod admin;
 mod me;
 mod members;
+mod objects;
 mod metrics;
 mod monitoring;
 mod pagination;
@@ -264,6 +265,7 @@ pub fn router(state: AppState) -> Router {
             .layer(axum::middleware::from_fn_with_state(admin_gate_state, require_platform_admin_mw)))
         .nest("/search",     search::routes())
         .nest("/demo",       demo::routes())
+        .nest("/objects",    objects::routes())
         .nest("/docs",       docs::routes())
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))

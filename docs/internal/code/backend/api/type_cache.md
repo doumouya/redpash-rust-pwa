@@ -54,6 +54,9 @@ Stage-2 generic handler and Stage-3 `register_type` read.
 - `object_kind(rid)` — rid-prefix → type_id (replaces `rbac::object_kind`).
   Registry-driven, so it **fixes** the legacy `TEM_`/`TEAM` mis-dispatch and
   adds `CON_`→connection; the shared `FIL_` resolves to `file` (canonical).
+- `is_type(id)` / `rid_prefix(id)` — existence + rid prefix for ANY type
+  (grid/internal/custom); the generic `/api/objects` handler resolves + mints
+  rids against these (Stage 2).
 
 ## Grid vs internal types
 
