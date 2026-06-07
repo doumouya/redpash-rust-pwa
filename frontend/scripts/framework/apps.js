@@ -30,6 +30,7 @@ export const APPS = [
     id: "studio", name: "Studio", icon: "bi-easel", landing: "#/workspace",
     pages: [
       { id: "workspace", hash: "#/workspace", icon: "bi-stars",    label: "Workspace" },
+      { id: "dashboard", hash: "#/dashboard", icon: "bi-bar-chart", label: "Dashboard" },
       { id: "sheetwise", hash: "#/sheetwise", icon: "bi-database",  label: "SheetWise" },
     ],
   },

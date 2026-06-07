@@ -26,6 +26,7 @@ const ROUTES = {
   "/login":      { partial: "/partials/login.html",      script: "/scripts/pages/login.js",      auth: false },
   "/home":       { partial: "/partials/home.html",       script: "/scripts/pages/home.js",       auth: true  },
   "/workspace":  { partial: "/partials/workspace.html",  script: "/scripts/pages/workspace.js",  auth: true  },
+  "/dashboard":  { partial: "/partials/dashboard.html",  script: "/scripts/pages/dashboard.js",  auth: true  },
   "/sheetwise":  { partial: "/partials/sheetwise.html",  script: "/scripts/pages/sheetwise.js",  auth: true  },
   "/cases":      { partial: "/partials/cases.html",      script: "/scripts/pages/cases.js",      auth: true  },
   "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true, admin: true },

@@ -1,0 +1,96 @@
+<!-- Dashboard — the standalone chart + dashboard designer (Studio app, Slice D).
+     Split out of the Workspace page's Data↔Dashboards toggle: this page owns
+     the designer surface only. Its rail lists the project's charts + dashboards;
+     its SOURCE for new charts is a project-wide CSV picker (any project CSV,
+     including SheetWise materialized results + connector pulls) — NOT a single
+     active Workspace file. The designer (designer.js) is mounted unchanged: it's
+     already ctx-polymorphic (getSource / getSourceFiles + per-tile source_file_id). -->
+<section class="rp-shell rp-shell--wide">
+  <header id="rp-topbar"></header>
+
+  <div class="rp-shell-body">
+
+    <!-- ════ rail — projects + their charts/dashboards, lazy-loaded ════ -->
+    <aside class="rp-rail" id="dashNav">
+      <div class="rp-rail-head">
+        <span class="rp-rail-title">Dashboards</span>
+        <button class="rp-btn-icon" id="dashNavCollapse" type="button" title="Collapse">
+          <i class="bi bi-chevron-double-left"></i>
+        </button>
+      </div>
+      <!-- Rail filter zone — name search + ownership pills (client-side,
+           render-time; toggle project-group visibility, never the data source).
+           Same atoms as the Workspace/Cases rails. -->
+      <div class="rp-rail-filter">
+        <div class="rp-search">
+          <i class="bi bi-search"></i>
+          <input type="search" id="dashRailSearch" placeholder="Search projects…" autocomplete="off" />
+        </div>
+        <div class="rp-rail-chips" id="dashOwnerFilter" role="group" aria-label="Project ownership filter">
+          <button type="button" class="rp-chip is-active" data-owner="all">All</button>
+          <button type="button" class="rp-chip" data-owner="personal" title="Projects you own">Personal</button>
+          <button type="button" class="rp-chip" data-owner="shared" title="Projects shared with you by others">Shared</button>
+          <button type="button" class="rp-chip" data-owner="company" title="Company-scoped projects">Company</button>
+        </div>
+      </div>
+      <div class="rp-rail-body" id="dashNavBody" aria-busy="true">
+        <div class="rp-rail-state">Loading projects…</div>
+      </div>
+      <div class="rp-rail-footer">
+        <button class="rp-btn-icon rp-btn-icon--glass" id="dashCreate" type="button"
+                title="New dashboard in the focused project">
+          <i class="bi bi-grid-1x2"></i><span>New dashboard</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ════ main — the designer surface ════ -->
+    <main class="rp-main">
+      <div class="rp-surface" id="dashSurface">
+
+        <!-- landing — the default surface when nothing is open (bare #/dashboard,
+             no deep-link). Recent charts/dashboards + an empty-state nudge.
+             .is-landing-mode (dashboard.css) hides the designer toolbar + shell. -->
+        <div class="ws-landing" id="dashLanding"></div>
+
+        <!-- designer toolbar — title + the project-CSV SOURCE picker (seeds new
+             charts; per-tile override lives in the builder's Data section) +
+             Add chart + config toggle. -->
+        <div class="rp-dash-toolbar">
+          <span class="rp-title" id="dashTitle">
+            <i class="bi bi-bar-chart-line"></i> <span>Designer</span>
+          </span>
+          <span class="rp-dash-muted" id="dashStatus"></span>
+          <span class="rp-dash-toolbar-spacer"></span>
+          <!-- project-wide CSV source picker — the core of Slice D. Lists every
+               CSV in the project (uploads + SheetWise outputs + connector pulls).
+               New charts draw from the picked source; existing tiles keep their own. -->
+          <div class="rp-menu-wrap" id="dashSourceWrap" title="Data source for new charts">
+            <button class="rp-chip rp-toolbar-pill" data-dd="dashSourceDd" type="button">
+              <i class="bi bi-database"></i>
+              <span id="dashSourceLabel">No data file</span>
+              <i class="bi bi-chevron-down rp-toolbar-chev"></i>
+            </button>
+            <div class="rp-menu" id="dashSourceDd"><!-- dynamic — project CSVs --></div>
+          </div>
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon rp-btn-icon--glass" id="dashAddChart" type="button"
+                  title="Add a chart from the selected source to the open dashboard">
+            <i class="bi bi-plus-lg"></i><span>Add chart</span>
+          </button>
+          <span class="rp-toolbar-sep"></span>
+          <button class="rp-btn-icon is-active" id="dashCfgToggle" type="button" title="Chart config">
+            <i class="bi bi-sliders"></i>
+          </button>
+        </div>
+
+        <!-- the designer canvas + accordion mount here (designer.js, unchanged) -->
+        <div class="rp-surface-body">
+          <div class="rp-dash-shell" id="dashDesigner"><!-- designer.js mounts the canvas + accordion; its own empty state shows until a chart/dashboard loads --></div>
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+</section>
