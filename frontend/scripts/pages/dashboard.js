@@ -67,7 +67,11 @@ export default function dashboard(app, { session }) {
   const rail = mountRail($("#dashNav"), {
     title: "Dashboards",
     collapsible: true,
-    search: { placeholder: "Search projects…", onInput: (q) => { railSearchQ = q; refreshRail(); } },
+    search: { placeholder: "Search charts + projects…", onInput: (q) => {
+      railSearchQ = q;
+      refreshRail();                                   // instant: filter loaded files + project names
+      if (q.trim()) ensureAllFilesLoaded().then(refreshRail); // then fill in not-yet-loaded groups
+    } },
     chips: [
       { value: "all",      label: "All", active: true },
       { value: "personal", label: "Personal" },
@@ -98,17 +102,21 @@ export default function dashboard(app, { session }) {
     if (p.company_id) t.push("company");
     return t;
   }
-  function matchesFilters(p) {
-    const ownerOk = ownerFilter === "all" || ownershipTokens(p).includes(ownerFilter);
-    const q = railSearchQ.trim().toLowerCase();
-    const nameOk = !q || (p.name || "").toLowerCase().includes(q);
-    return ownerOk && nameOk;
-  }
+  // Rail search is file-AWARE: a group shows if its project name matches OR any of
+  // its charts/dashboards match. A file-only match shows the group expanded with
+  // just the matching files. Colour keyed to the unfiltered roster index (stable).
   function buildGroups() {
-    let ci = 0;
-    return cachedProjects.filter(matchesFilters).map((p) => {
-      const id   = p.redpash_id;
-      const tabs = (filesByGroup.get(id) || []).map((f) => ({
+    const q = railSearchQ.trim().toLowerCase();
+    const colorOf = new Map(cachedProjects.map((p, i) => [p.redpash_id, MARK_COLORS[i % MARK_COLORS.length]]));
+    return cachedProjects.map((p) => {
+      const id = p.redpash_id;
+      if (ownerFilter !== "all" && !ownershipTokens(p).includes(ownerFilter)) return null;
+      const nameMatch = !q || (p.name || "").toLowerCase().includes(q);
+      const files = filesByGroup.get(id) || [];
+      const matchFiles = q ? files.filter((f) => (f.display_name || f.filename || "").toLowerCase().includes(q)) : files;
+      if (q && !nameMatch && !matchFiles.length) return null;     // no project- or file-match → hide
+      const shown = (q && !nameMatch) ? matchFiles : files;       // file-only match → show just the hits
+      const tabs = shown.map((f) => ({
         id:   f.redpash_id,
         name: f.display_name || f.filename || "(unnamed)",
         icon: f.file_type === "dashboard" ? "bi-grid-1x2" : "bi-bar-chart-line",
@@ -117,16 +125,24 @@ export default function dashboard(app, { session }) {
       }));
       return {
         id, name: p.name,
-        mark: MARK_COLORS[(ci++) % MARK_COLORS.length],
-        // Before a group is expanded its file list isn't loaded — show the
-        // server's roster count; once loaded, the rendered (chart/dashboard) count.
+        mark: colorOf.get(id),
+        // Roster count until the files load; the shown count once loaded.
         count: filesByGroup.has(id) ? tabs.length : (p.file_count || 0),
-        collapsed: !expanded.has(id),
+        collapsed: q ? false : !expanded.has(id),                  // expand matches while searching
         tabs,
       };
-    });
+    }).filter(Boolean);
   }
-  function refreshRail() { rail?.setGroups(buildGroups()); }
+  function refreshRail() {
+    const groups = buildGroups();
+    // Searched to nothing (but projects exist) → "no match" feedback, not a blank rail.
+    let emptyText = "";
+    if (!groups.length && cachedProjects.length) {
+      const q = railSearchQ.trim();
+      emptyText = q ? "No files or projects match “" + q + "”." : "No projects in this filter.";
+    }
+    rail?.setGroups(groups, [], emptyText);
+  }
 
   // Lazy-load a group's chart/dashboard files on first expand, then re-render.
   async function loadFilesForGroup(rid) {
@@ -136,6 +152,20 @@ export default function dashboard(app, { session }) {
       filesByGroup.set(rid, (data?.items || []).filter((f) => f.file_type === "chart" || f.file_type === "dashboard"));
     } catch { filesByGroup.set(rid, []); }
     refreshRail();
+  }
+
+  // File-aware search needs every project's files; load any not-yet-loaded group
+  // (concurrently, quietly) so a query matches charts/dashboards in collapsed
+  // projects too. Idempotent — only fetches groups missing from filesByGroup.
+  async function ensureAllFilesLoaded() {
+    const missing = cachedProjects.filter((p) => !filesByGroup.has(p.redpash_id));
+    if (!missing.length) return;
+    await Promise.all(missing.map(async (p) => {
+      try {
+        const data = await api.get("/projects/" + encodeURIComponent(p.redpash_id) + "/files");
+        filesByGroup.set(p.redpash_id, (data?.items || []).filter((f) => f.file_type === "chart" || f.file_type === "dashboard"));
+      } catch { filesByGroup.set(p.redpash_id, []); }
+    }));
   }
 
   async function loadProjects() {

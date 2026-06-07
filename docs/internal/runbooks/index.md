@@ -278,3 +278,10 @@ Every entry follows the same five headings:
   per-tab affordances emitted as `rp-btn-icon` nested `<button>`s (oversized, invalid) — fixed by
   bare `<span>`s like Monitoring/cases. Lesson: an UNEXERCISED framework path is a latent trap;
   adopting a shared component on a richer page is a verification event.
+- [0021 — Rail search returned nothing for an exact file name (project-only match); made file-aware](0021-rail-search-file-aware.md) —
+  **Done 2026-06-07.** Post-D0' the rail's `buildGroups` matched the query against project names
+  only, so typing an exact file/chart name emptied the rail (Em, both Workspace + Dashboard).
+  Fix: file-aware `buildGroups` (group shows on project-name OR file-name match; file-only match
+  shows the group expanded with just the hits) + a global `ensureAllFilesLoaded()` so files inside
+  not-yet-expanded groups also match. Lesson: search over a lazily-hydrated list must hydrate the
+  whole collection first — otherwise it silently covers only the loaded slice.

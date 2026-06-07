@@ -44,6 +44,7 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
 - Mounts Tools panel + Filter panel + Report builder eagerly.
 - Joins tab eager-mounted (2026-05-29).
 - Rail = the framework `mountRail` component (D0'); the page is a config-supplier + groups data-model (`buildGroups`/`buildHidden`/`refreshRail`). Per-row "Visualize" glyph (mountRail `actions` → `on.visualize`) deep-links a CSV to `#/dashboard?source=<rid>`; rail-foot "New Project" (`footer.create` → `on.create` → `newProject`).
+- **Rail search is file-aware** (2026-06-07): `buildGroups` matches the query against project names AND data-file names — a file-only match shows that group expanded with just the matching files; `search.onInput` calls `ensureAllFilesLoaded()` so files in not-yet-expanded groups also match (global). The data-only filter (`f.file_type !== "chart"/"dashboard"`), hidden-file filter, ghost-upload tabs, and per-row Visualize actions are all preserved across the search path.
 
 ## Drift-prone areas
 

@@ -111,7 +111,7 @@ export default function workspace(app, { session }) {
   // Rail filter state — both ephemeral per visit (no pref): a deep-link
   // into a project must never be hidden by a stale persisted filter.
   // ownerFilter ∈ {all, personal, shared, company}; railSearchQ matches
-  // project names. Filtering happens in buildGroups (matchesFilters), not DOM.
+  // project AND file names (file-aware). Filtering happens in buildGroups, not DOM.
   let ownerFilter      = "all";
   let railSearchQ      = "";
   let cachedProjects   = []; // last /projects roster — feeds the rail + landing
@@ -228,7 +228,14 @@ export default function workspace(app, { session }) {
   const railConfig = {
     title: "Projects",
     collapsible: true,
-    search: { placeholder: "Search projects…", onInput: (q) => { railSearchQ = q; refreshRail(); } },
+    // File-aware search: re-render immediately on the loaded groups, then load
+    // the rest of the groups' file lists so a file name inside a collapsed group
+    // also matches (global, not just the expanded projects).
+    search: { placeholder: "Search files + projects…", onInput: (q) => {
+      railSearchQ = q;
+      refreshRail();
+      if (q.trim()) ensureAllFilesLoaded().then(refreshRail);
+    } },
     chips: [
       { value: "all",      label: "All", active: true },
       { value: "personal", label: "Personal" },
@@ -273,38 +280,41 @@ export default function workspace(app, { session }) {
     if (p.company_id) t.push("company");
     return t;
   }
-  function matchesFilters(p) {
-    const ownerOk = ownerFilter === "all" || ownershipTokens(p).includes(ownerFilter);
-    const q = railSearchQ.trim().toLowerCase();
-    return ownerOk && (!q || (p.name || "").toLowerCase().includes(q));
-  }
+  // Rail search is file-AWARE: a group shows if its project name matches OR any of
+  // its DATA files match. A file-only match shows the group expanded with just the
+  // matching files. Mark colour keyed to the unfiltered roster index (stable across
+  // filtering). Ownership chip is AND-ed with the query.
   function buildGroups() {
+    const q = railSearchQ.trim().toLowerCase();
     const hiddenProjSet = new Set(getHidden(HIDDEN_PROJECTS_KEY).map((x) => x.rid));
     const hiddenFileSet = new Set(getHidden(HIDDEN_FILES_KEY).map((x) => x.rid));
-    // Mark colour keyed to the project's position in the UNFILTERED roster, so a
-    // search/owner filter doesn't reshuffle the surviving projects' colours.
     const colorOf = new Map(cachedProjects.map((p, i) => [p.redpash_id, MARK_TOKENS[i % MARK_TOKENS.length]]));
     return cachedProjects
       .filter((p) => !hiddenProjSet.has(p.redpash_id))
-      .filter(matchesFilters)
       .map((p) => {
         const id = p.redpash_id;
+        if (ownerFilter !== "all" && !ownershipTokens(p).includes(ownerFilter)) return null;
+        const nameMatch = !q || (p.name || "").toLowerCase().includes(q);
         // DATA files only — charts/dashboards live on #/dashboard (D2).
-        const fileTabs = (filesByGroup.get(id) || [])
-          .filter((f) => !hiddenFileSet.has(f.redpash_id) && f.file_type !== "chart" && f.file_type !== "dashboard")
-          .map((f) => ({
-            id: f.redpash_id,
-            name: f.display_name || f.filename || "(unnamed)",
-            icon: "bi-filetype-csv",
-            dot: STAGE_DOT[f.stage] || "is-dirty",
-            renamable: true, hidable: true,
-            active: f.redpash_id === activeFileRid,
-            actions: [{ action: "visualize", cls: "visualize", icon: "bi-bar-chart-line", title: "Visualize — chart this file in the designer" }],
-          }));
+        const dataFiles = (filesByGroup.get(id) || [])
+          .filter((f) => !hiddenFileSet.has(f.redpash_id) && f.file_type !== "chart" && f.file_type !== "dashboard");
+        const matchFiles = q ? dataFiles.filter((f) => (f.display_name || f.filename || "").toLowerCase().includes(q)) : dataFiles;
+        if (q && !nameMatch && !matchFiles.length) return null;     // no project- or file-match → hide
+        const shown = (q && !nameMatch) ? matchFiles : dataFiles;   // file-only match → show just the hits
+        const fileTabs = shown.map((f) => ({
+          id: f.redpash_id,
+          name: f.display_name || f.filename || "(unnamed)",
+          icon: "bi-filetype-csv",
+          dot: STAGE_DOT[f.stage] || "is-dirty",
+          renamable: true, hidable: true,
+          active: f.redpash_id === activeFileRid,
+          actions: [{ action: "visualize", cls: "visualize", icon: "bi-bar-chart-line", title: "Visualize — chart this file in the designer" }],
+        }));
         // In-flight upload placeholders: state "queued"|"active"|"done"|"failed"
         // (all truthy → the dimmed rp-rail-tab-ghost base; "active" shimmers).
         // A failed ghost carries its error message as the tab title (hover).
-        const ghostTabs = (uploadGhosts.get(id) || []).map((g) => ({
+        // Hidden during a file-only search (they're not search hits).
+        const ghostTabs = (q && !nameMatch) ? [] : (uploadGhosts.get(id) || []).map((g) => ({
           id: g.tmpId, name: g.name, icon: "bi-arrow-up-circle",
           ghost: g.state, busy: g.state === "active", title: g.title || "",
         }));
@@ -312,13 +322,14 @@ export default function workspace(app, { session }) {
           id, name: p.name,
           mark: colorOf.get(id),
           // file_count (roster approximation) until the group's files load,
-          // then the real (data-file) tab count.
-          count: filesByGroup.has(id) ? fileTabs.length : (p.file_count || 0),
-          collapsed: !expanded.has(id),
+          // then the real (shown) tab count.
+          count: filesByGroup.has(id) ? (fileTabs.length + ghostTabs.length) : (p.file_count || 0),
+          collapsed: q ? false : !expanded.has(id),                 // expand matches while searching
           renamable: true, hidable: true,
           tabs: [...fileTabs, ...ghostTabs],
         };
-      });
+      })
+      .filter(Boolean);
   }
   function buildHidden() {
     const hp = getHidden(HIDDEN_PROJECTS_KEY);
@@ -336,7 +347,7 @@ export default function workspace(app, { session }) {
     let emptyText = "";
     if (!groups.length && cachedProjects.length) {
       const q = railSearchQ.trim();
-      emptyText = q ? "No projects match “" + q + "”." : "No projects in this filter.";
+      emptyText = q ? "No files or projects match “" + q + "”." : "No projects in this filter.";
     }
     rail.setGroups(groups, buildHidden(), emptyText);
   }
@@ -781,6 +792,21 @@ export default function workspace(app, { session }) {
       prewarmGroupFiles(items);
     } catch { filesByGroup.set(rid, []); }
     refreshRail();
+  }
+
+  // Rail search is GLOBAL — to match files inside not-yet-expanded groups, load
+  // every group's file list once (concurrently). No prewarm here (we only need
+  // names to match); the per-group lazy-load still prewarms on real expand.
+  async function ensureAllFilesLoaded() {
+    const pending = cachedProjects.filter((p) => !filesByGroup.has(p.redpash_id));
+    if (!pending.length) return;
+    await Promise.all(pending.map(async (p) => {
+      const rid = p.redpash_id;
+      try {
+        const data = await api.get("/projects/" + encodeURIComponent(rid) + "/files");
+        filesByGroup.set(rid, data?.items || []);
+      } catch { filesByGroup.set(rid, []); }
+    }));
   }
 
   // Open a freshly-created file (upload result / join output): re-fetch the

@@ -33,7 +33,11 @@ bug (runbook CAS_3BCD6727): with no opposite surface to toggle to, there's no ec
   admin-console/sheetwise/database). The page holds a groups data-model
   (`cachedProjects` + `filesByGroup` + `expanded`) and re-renders via
   `rail.setGroups(buildGroups())`; `mountRail` owns the markup, collapse, search/chips
-  wiring, and the **New dashboard** footer. Handlers: `on.tab`→`loadFile`,
+  wiring, and the **New dashboard** footer. **Rail search is file-aware** (2026-06-07):
+  `buildGroups` matches the query against project names AND chart/dashboard names — a file-only
+  match shows that group expanded with just the hits; `search.onInput` calls `ensureAllFilesLoaded()`
+  so files inside not-yet-expanded groups also match (global, not just loaded groups). Handlers:
+  `on.tab`→`loadFile`,
   `on.groupToggle`→lazy-load + `refreshSources`, `on.create`→`createDashboard`. **Add
   chart** (designer toolbar) promotes a standalone chart to a real dashboard, then
   appends a widget from the picked source.
