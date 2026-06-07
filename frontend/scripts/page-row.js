@@ -36,7 +36,7 @@ function rowOpen(spec) {
 }
 
 function btnHTML(opt) {
-  const cls   = 'rt-btn';
+  const cls   = 'rp-btn-icon';
   const title = opt.title ? ' title="' + esc(opt.title) + '"' : '';
   const icon  = opt.icon  ? '<i class="bi bi-' + esc(opt.icon) + '"></i> ' : '';
   return '<button class="' + cls + '" type="button" data-value="'
@@ -78,10 +78,10 @@ export function actionsRow(spec) {
     const icon  = a.icon  ? '<i class="bi bi-' + esc(a.icon)  + '"></i> ' : '';
     const title = a.title ? ' title="' + esc(a.title) + '"' : '';
     if (a.kind === "a") {
-      return '<a class="rt-btn" href="' + esc(a.href || "#") + '"' + title
+      return '<a class="rp-btn-icon" href="' + esc(a.href || "#") + '"' + title
         + (a.id ? ' id="' + esc(a.id) + '"' : '') + '>' + icon + esc(a.label) + '</a>';
     }
-    return '<button class="rt-btn" type="button"'
+    return '<button class="rp-btn-icon" type="button"'
       + (a.id ? ' id="' + esc(a.id) + '"' : '') + title + '>'
       + icon + esc(a.label) + '</button>';
   };

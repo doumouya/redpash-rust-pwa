@@ -19,7 +19,7 @@
 //
 // Composes shared atoms — does NOT redefine them:
 //   • rp-title for tile titles (text role; the tile-scoped clamp lives in CSS).
-//   • rp-btn-icon + --accent (A1) for the config-panel Save CTA (was rt-btn--accent);
+//   • rp-btn-icon + --accent (A1) for the config-panel Save CTA (was rp-btn-icon--accent);
 //     rp-dash-config-save is the sizing modifier on top.
 //   • rp-empty (A9) for the no-tiles state, + a .rp-dash-grid > .rp-empty context override.
 //   • config-panel form controls (label/input) are deferred to the cutover (render-first).

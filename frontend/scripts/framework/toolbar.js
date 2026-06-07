@@ -13,7 +13,7 @@
 // subset toolbar without forking templates ([[display-none-per-page]] in code).
 //
 // Composes, not duplicates:
-//   - rp-btn-icon / --glass / --accent (atoms.css A1) — every button (was rt-btn).
+//   - rp-btn-icon / --glass / --accent (atoms.css A1) — every button (was rp-btn-icon).
 //   - rp-search (atoms.css A3) — the search box (was rt-search; already an atom).
 //   - rp-chip (atoms.css A4) — the rows pill + selection chip, via the .rp-toolbar
 //     context overrides (.rp-toolbar-pill / .rp-toolbar-selchip in toolbar.css).

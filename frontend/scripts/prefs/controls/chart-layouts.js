@@ -126,7 +126,7 @@ export function postMount(app, spec) {
           +   esc(c.source?.pointer || "(no field)")
           + '</span>'
           + (customised
-              ? '<button class="rt-btn rp-settings__mon-chart-x" type="button" data-idx="' + i + '" title="Remove">×</button>'
+              ? '<button class="rp-btn-icon rp-settings__mon-chart-x" type="button" data-idx="' + i + '" title="Remove">×</button>'
               : '<span class="rp-settings__mon-chart-default" title="Default chart — customise to remove">default</span>')
           + '</li>').join("")
       : '<li class="rp-settings__mon-empty">No charts. Add one or reset to defaults.</li>';
@@ -134,9 +134,9 @@ export function postMount(app, spec) {
       + '<div class="rp-settings__mon-tabs">' + tabs + '</div>'
       + '<ul class="rp-settings__mon-charts-list">' + items + '</ul>'
       + '<div class="rp-settings__mon-actions">'
-      +   '<button class="rt-btn rp-settings__mon-add" type="button"><i class="bi bi-plus-circle"></i> Add chart</button>'
+      +   '<button class="rp-btn-icon rp-settings__mon-add" type="button"><i class="bi bi-plus-circle"></i> Add chart</button>'
       +   (customised
-            ? '<button class="rt-btn rp-settings__mon-reset" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset to defaults</button>'
+            ? '<button class="rp-btn-icon rp-settings__mon-reset" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset to defaults</button>'
             : '')
       + '</div>';
   }
@@ -218,15 +218,15 @@ function openAddChartModal(tabKey, cfg, onAdd) {
     + '<div class="rp-settings-chart-modal-body">'
     +   '<header class="rp-settings-chart-modal-head">'
     +     '<h3>Add chart to <em>' + esc(tabLabel) + '</em></h3>'
-    +     '<button type="button" class="rt-btn rp-settings-chart-modal-close" aria-label="Close">×</button>'
+    +     '<button type="button" class="rp-btn-icon rp-settings-chart-modal-close" aria-label="Close">×</button>'
     +   '</header>'
     +   '<div class="rp-settings-chart-modal-grid">'
     +     '<div class="rp-settings-chart-modal-preview" id="rp-settings-chart-preview"></div>'
     +     '<aside class="ds-config rp-settings-chart-modal-builder" id="rp-settings-chart-builder"></aside>'
     +   '</div>'
     +   '<footer class="rp-settings-chart-modal-foot">'
-    +     '<button type="button" class="rt-btn rp-settings-chart-modal-cancel">Cancel</button>'
-    +     '<button type="button" class="rt-btn rt-btn--accent rp-settings-chart-modal-add">Add to ' + esc(surfaceLabel) + '</button>'
+    +     '<button type="button" class="rp-btn-icon rp-settings-chart-modal-cancel">Cancel</button>'
+    +     '<button type="button" class="rp-btn-icon rp-btn-icon--accent rp-settings-chart-modal-add">Add to ' + esc(surfaceLabel) + '</button>'
     +   '</footer>'
     + '</div>';
   document.body.appendChild(modal);

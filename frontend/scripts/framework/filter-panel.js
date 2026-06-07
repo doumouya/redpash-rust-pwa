@@ -16,7 +16,7 @@
 //     close). The filter content mounts into the returned body + foot.
 //   - rp-seg / rp-seg--combo (framework/seg.css) — the per-group AND/OR combo.
 //   - rp-btn-icon (+ --glass/--block/--accent) (atoms.css) — Add-group,
-//     Add-condition, Clear, Apply buttons (legacy .rt-btn = rp-btn-icon verbatim;
+//     Add-condition, Clear, Apply buttons (legacy .rp-btn-icon = rp-btn-icon verbatim;
 //     the foot's Apply stretch is panel.css's .rp-panel-foot .rp-btn-icon--accent).
 //   - rp-input shape — the value <input> uses the .rp-pred input base (filter-
 //     panel.css), which mirrors the rp-input atom for the predicate row.
@@ -153,7 +153,7 @@ export function mountFilterPanel(host, config = {}) {
   const addGroupBtn = body.querySelector(".rp-add-group");
 
   // ── 3. mount Clear / Apply INTO the panel foot ─────────────────────────────
-  // The foot buttons compose the rp-btn-icon atom (legacy .rt-btn = rp-btn-icon
+  // The foot buttons compose the rp-btn-icon atom (legacy .rp-btn-icon = rp-btn-icon
   // verbatim) + its modifiers — Clear is the bare icon-button, Apply adds
   // --accent, which the panel.css `.rp-panel-foot .rp-btn-icon--accent { flex:1 }`
   // rule stretches to fill the foot.

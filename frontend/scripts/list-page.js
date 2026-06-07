@@ -244,7 +244,7 @@ export function listToolbarHTML(spec) {
   // (no filter panel) don't render an orphan button.
   if (s.filter) {
     parts.push(
-      '<button class="rt-btn" id="rp-list-toolbar-filter" type="button" '
+      '<button class="rp-btn-icon" id="rp-list-toolbar-filter" type="button" '
       +   'title="Filter panel"><i class="bi bi-funnel"></i></button>',
     );
   }
@@ -267,11 +267,11 @@ export function listToolbarHTML(spec) {
     const enable = (key) => (typeof s.modes === "object" ? !!m[key] : false);
     const dis = (key) => enable(key) ? "" : " disabled";
     parts.push(
-      '<button class="rt-btn rt-mode" data-mode="edit"   type="button" '
+      '<button class="rp-btn-icon rt-mode" data-mode="edit"   type="button" '
       +   'title="Edit mode"' + dis("edit") + '><i class="bi bi-pencil"></i></button>',
-      '<button class="rt-btn rt-mode" data-mode="select" type="button" '
+      '<button class="rp-btn-icon rt-mode" data-mode="select" type="button" '
       +   'title="Select mode"' + dis("select") + '><i class="bi bi-check2-square"></i></button>',
-      '<button class="rt-btn rt-mode" data-mode="delete" type="button" '
+      '<button class="rp-btn-icon rt-mode" data-mode="delete" type="button" '
       +   'title="Delete mode"' + dis("delete") + '><i class="bi bi-trash3"></i></button>',
       '<span class="rt-toolbar-sep"></span>',
     );
@@ -280,9 +280,9 @@ export function listToolbarHTML(spec) {
   // undo / redo — list views don't model step history; render disabled,
   // matching workspace.html's no-file natural state.
   parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-undo" type="button" disabled '
+    '<button class="rp-btn-icon" id="rp-list-toolbar-undo" type="button" disabled '
     +   'title="No history on list views"><i class="bi bi-arrow-return-left"></i></button>',
-    '<button class="rt-btn" id="rp-list-toolbar-redo" type="button" disabled '
+    '<button class="rp-btn-icon" id="rp-list-toolbar-redo" type="button" disabled '
     +   'title="No history on list views"><i class="bi bi-arrow-return-right"></i></button>',
   );
 
@@ -293,7 +293,7 @@ export function listToolbarHTML(spec) {
   // entities by name, not by sequential row index — a rownum column
   // is page-noise for that frame.
   parts.push(
-    '<button class="rt-btn" id="rp-list-toolbar-refresh" type="button" '
+    '<button class="rp-btn-icon" id="rp-list-toolbar-refresh" type="button" '
     +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
     '<span class="rt-toolbar-sep"></span>',
   );
@@ -321,7 +321,7 @@ export function listToolbarHTML(spec) {
   // columns dropdown — disabled stub matching #wsColsDd's no-file state.
   parts.push(
     '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-cols-dd" type="button" '
+    + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-cols-dd" type="button" '
     +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
     + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- columns picker — next slice --></div>'
     + '</div>',
@@ -341,7 +341,7 @@ export function listToolbarHTML(spec) {
   // the wire-up only needs the click handler.
   parts.push(
     '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-export-dd" type="button" '
+    + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-export-dd" type="button" '
     +   'title="Export" disabled><i class="bi bi-download"></i></button>'
     + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
     +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
@@ -358,7 +358,7 @@ export function listToolbarHTML(spec) {
   // the dd body + enables the button when actionLog is non-empty.
   parts.push(
     '<div class="rt-dd-wrap">'
-    + '<button class="rt-btn" data-dd="rp-list-toolbar-history-dd" type="button" '
+    + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-history-dd" type="button" '
     +   'title="Session history" disabled><i class="bi bi-clock-history"></i></button>'
     + '<div class="rt-dd" id="rp-list-toolbar-history-dd">'
     +   '<div class="rt-dd-item rp-meta">No actions yet</div>'

@@ -2,7 +2,7 @@
    Doc: docs/internal/code/frontend/scripts/framework/seg.md */
 // ── Segmented control (framework, CAS_37B2E1BF — form-control set) ───────────
 // The JS builder the rp-seg CSS atom lacked. mountSeg renders a 2+-option pill
-// switcher with single-select + onChange — replacing the hand-rolled .rt-btn
+// switcher with single-select + onChange — replacing the hand-rolled .rp-btn-icon
 // pref clusters across Settings, and folding On/Off toggles in as a 2-option
 // seg (no separate toggle atom). The CSS is owned by styles/framework/seg.css
 // (rp-seg base + --rail variant); this module is behaviour only — it does NOT

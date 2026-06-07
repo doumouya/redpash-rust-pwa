@@ -5,7 +5,7 @@
 // home-create, settings-chart, monitoring). The CSS atom (.rp-modal-*) already
 // lives in styles/modal.css and is already rp- compliant + loaded by main.css —
 // so this is a JS-only component that COMPOSES those classes + the rp-btn-icon /
-// rp-btn atoms (the legacy markup used rt-icon-btn / rt-btn in the dialog; the
+// rp-btn atoms (the legacy markup used rp-btn-icon--sq / rp-btn-icon in the dialog; the
 // framework version uses the atoms).
 //
 // Two entry points share one markup builder:

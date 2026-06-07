@@ -22,8 +22,8 @@
 //     the .is-editing ring (all in head.css, never a duplicate class).
 //   - rp-btn-icon--sq atom variant (atoms.css) for BOTH the delete <button> and
 //     the close <a> — the --sq variant is the 1.75rem SQUARE shape (the legacy
-//     .rt-icon-btn the delete/close actually used; the rp-btn-icon base is the
-//     wider .rt-btn pill). The destructive-hover tint on delete is a .rp-head
+//     .rp-btn-icon--sq the delete/close actually used; the rp-btn-icon base is the
+//     wider .rp-btn-icon pill). The destructive-hover tint on delete is a .rp-head
 //     context override (head.css), not a new class.
 "use strict";
 

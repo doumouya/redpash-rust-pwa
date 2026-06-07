@@ -140,7 +140,7 @@ export function mountToolsPanel(host, config = {}) {
       + "</span></div>";
   }
 
-  // A single action button (rt-btn → rp-btn-icon). data-tp-action routes it; the
+  // A single action button (rp-btn-icon → rp-btn-icon). data-tp-action routes it; the
   // kind + scope ride along so the one delegated handler can dispatch.
   function actionBtn(a, scope) {
     const disabled = a.disabled ? " disabled" : "";

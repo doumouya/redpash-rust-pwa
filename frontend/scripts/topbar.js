@@ -70,14 +70,14 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     + '</div>'
     + '<nav class="rp-topbar-actions">'
     +   NAV.filter((n) => !n.admin || session?.is_platform_admin).map((n) => n.parked
-          ? '<button class="rt-btn" type="button" disabled title="' + n.label + ' — coming soon">'
+          ? '<button class="rp-btn-icon" type="button" disabled title="' + n.label + ' — coming soon">'
             + '<i class="bi ' + n.icon + '"></i></button>'
-          : '<a class="rt-btn' + (n.id === active ? ' is-active' : '') + '"'
+          : '<a class="rp-btn-icon' + (n.id === active ? ' is-active' : '') + '"'
             + ' href="' + n.hash + '" title="' + n.label + '"><i class="bi ' + n.icon + '"></i></a>'
         ).join('')
-    +   '<button class="rt-btn" type="button" data-act="theme" title="Toggle theme">'
+    +   '<button class="rp-btn-icon" type="button" data-act="theme" title="Toggle theme">'
     +     '<i class="bi bi-sun"></i></button>'
-    +   '<button class="rt-btn" type="button" data-act="signout" title="Sign out">'
+    +   '<button class="rp-btn-icon" type="button" data-act="signout" title="Sign out">'
     +     '<i class="bi bi-box-arrow-right"></i></button>'
     + '</nav>';
 

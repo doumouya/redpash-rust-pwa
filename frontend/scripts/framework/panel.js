@@ -11,7 +11,7 @@
 //
 // Composes, not duplicates:
 //   - rp-btn-icon atom for the close button (the legacy .rt-panel-close was a
-//     .rt-btn = rp-btn-icon verbatim; this component only POSITIONS it via CSS).
+//     .rp-btn-icon = rp-btn-icon verbatim; this component only POSITIONS it via CSS).
 //   - the rp-panel-* shell CSS (styles/framework/panel.css).
 // The head is EITHER a single rp-panel-title (history-style) OR a rp-panel-tabs
 // strip (filter / tools); supply `tabs` to get the strip, `title` for the text.

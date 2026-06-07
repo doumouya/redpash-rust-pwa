@@ -647,7 +647,7 @@ export default function cases(app, { session }) {
       +   '<div class="rp-cases-card-foot">'
       +     '<span class="rp-cases-card-assignee">' + assignee + '</span>'
       +     '<span class="rp-cases-card-age">' + esc(age) + '</span>'
-      +     '<button class="rt-icon-btn rt-icon-btn--sm rp-cases-card-cycle" type="button" title="' + esc(cycleLabel) + '">'
+      +     '<button class="rp-btn-icon--sq rp-btn-icon--sm rp-cases-card-cycle" type="button" title="' + esc(cycleLabel) + '">'
       +       '<i class="bi bi-chevron-right"></i>'
       +     '</button>'
       +   '</div>'
@@ -1423,8 +1423,8 @@ export default function cases(app, { session }) {
       + '<div class="rp-cases-side-desc-input" contenteditable="true" '
       +    'data-placeholder="Steps to reproduce, context, expected behavior…"></div>'
       + '<div class="rp-cases-side-desc-actions">'
-      +   '<button type="button" class="rt-btn" data-act="cancel">Cancel</button>'
-      +   '<button type="button" class="rt-btn rt-btn--accent" data-act="save">Save</button>'
+      +   '<button type="button" class="rp-btn-icon" data-act="cancel">Cancel</button>'
+      +   '<button type="button" class="rp-btn-icon rp-btn-icon--accent" data-act="save">Save</button>'
       + '</div>';
     sideDescBody.insertAdjacentElement("afterend", form);
     const ed = form.querySelector(".rp-cases-side-desc-input");
@@ -1983,8 +1983,8 @@ export default function cases(app, { session }) {
     form.innerHTML = ''
       + '<div class="rp-cases-comment-edit-input" contenteditable="true"></div>'
       + '<div class="rp-cases-comment-edit-actions">'
-      +   '<button type="button" class="rt-btn rp-cases-comment-edit-cancel">Cancel</button>'
-      +   '<button type="button" class="rt-btn rt-btn--accent rp-cases-comment-edit-save">Save</button>'
+      +   '<button type="button" class="rp-btn-icon rp-cases-comment-edit-cancel">Cancel</button>'
+      +   '<button type="button" class="rp-btn-icon rp-btn-icon--accent rp-cases-comment-edit-save">Save</button>'
       + '</div>';
     bodyEl.insertAdjacentElement("afterend", form);
     const ed = form.querySelector(".rp-cases-comment-edit-input");

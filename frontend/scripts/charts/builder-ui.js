@@ -91,7 +91,7 @@ export function mountBuilder(el, ctx) {
   el.innerHTML = ''
     + '<div class="ds-config-head">'
     +   '<span class="ds-config-title"><i class="bi bi-sliders"></i> Chart</span>'
-    +   '<button class="ds-config-save rt-btn rt-btn--accent" type="button" disabled>'
+    +   '<button class="ds-config-save rp-btn-icon rp-btn-icon--accent" type="button" disabled>'
     +     '<i class="bi bi-save"></i> Save'
     +   '</button>'
     + '</div>'
