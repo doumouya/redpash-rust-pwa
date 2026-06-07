@@ -39,14 +39,16 @@ this rebuild deletes that family and **composes framework components** —
     connector (`groupToggle`) opens its **first** facet for the kind
     (`facetsForKind(kind)[0]` — SQL → Tables, Kafka → Pulls; never a facet the kafka
     backend would reject).
-  - **Facet surface router** (`renderFacet` → `#swConnFacet`): **Tables**
-    (`GET /:rid/tables` → browse + per-table Pull via `pullTable` = `sync {table}`;
-    click a table name → Schema), **Schema** (`GET /:rid/schema?table=` → columns +
-    types + projection strategy), **Pulls** (the connector's project files via
-    `/api/files`), **Settings** (summary info + a **Test connection** button →
-    `POST /:rid/test` → `mysql_loader::probe`, result in `#swConnTestStat`
-    `.is-ok`/`.is-err`; host/db editing still lands with the config endpoint). The
-    guidance (`#swConnGuide`) shows until a facet is open.
+  - **Facet surface router** (`renderFacet` → `#swConnFacet`). Each facet's data renders
+    through the **canonical `mountSimpleTable`** (`framework/table.js`, `rp-table` — the
+    same read-only+row-click table cases-overview / profile use), NOT a bespoke row family:
+    **Tables** (`GET /:rid/tables` → cols Table / Rows / Type; row-click → Schema),
+    **Schema** (`GET /:rid/schema?table=` → cols Column / Type / Null / Key / Projection,
+    finally column-aligned; the **Pull** button sits in `rp-sw-facet-foot`), **Pulls**
+    (the connector's `/api/files`; row-click opens the file in SQL), **Settings** (a
+    Field/Value table + the **Test connection** button → `POST /:rid/test`, result in
+    `#swConnTestStat` `.is-ok`/`.is-err`). The guidance (`#swConnGuide`) shows until a
+    facet is open.
 - **SQL surface:** `mountEditorCode` (the editor; Run/Clear are `rp-btn-icon` in its
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
@@ -84,12 +86,19 @@ this rebuild deletes that family and **composes framework components** —
 - **The editor is the one genuine page-content surface — but it's a COMPONENT now**
   (`framework/editor-code.js`, `rp-editor*`/`rp-tok-*`), not a `sw-*` re-skin. Language
   is parameterized (`language: "sql"`); the highlighter is cosmetic (non-executing).
-- **No page-private classes.** Everything is `rp-*` (framework) or `rp-sw-*`
-  (positioning only). The `tools/uniformity-audit` guard fails the build if a `sw-*`
-  (or any unsanctioned family) reappears — see [uniformity-audit](../../../tools/uniformity-audit/audit.md).
+- **No page-private classes — compose the framework COMPONENT, don't hand-roll markup.**
+  The connector facets used to hand-build a bespoke `rp-sw-facet-row` / `-list` / `-name` /
+  `-meta` / `-proj` flex-table (misaligned columns — the same parallel-class leak as the
+  retired `sw-*` family, just hidden in JS). They now compose `mountSimpleTable` (`rp-table`).
+  `rp-sw-*` is positioning ONLY (`-view`/`-editbar`/`-foot`/`-conn-*`/`-facet`/`-facet-head`/
+  `-facet-foot`/`-facet-note`/`-facet-table` slot). Before authoring any table/list, reach
+  for a `framework/mount*`; the `tools/uniformity-audit` guard fails on a new unsanctioned
+  family — see [uniformity-audit](../../../tools/uniformity-audit/audit.md).
 - **Dynamic redtable columns:** each query has a different column set, so `renderResult`
-  re-mounts `mountRedTable` into `#swGrid` rather than calling `setColumns` — simplest
-  correct path for fully-variable result shapes.
+  re-mounts `mountRedTable` into `#swGrid` (passing `id: "swTable"` so the built
+  `<table class="rp-redtable rp-table" id="swTable">` matches Workspace's `wsTable` and
+  page tweaks scope under `#swTable`) rather than calling `setColumns` — simplest correct
+  path for fully-variable result shapes.
 
 ## Related
 

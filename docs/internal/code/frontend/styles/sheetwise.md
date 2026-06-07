@@ -27,9 +27,15 @@ replaced is gone — the editor styling moved to `framework/editor-code.css`.
   (stat readout · target-name input · save · pager). `.rp-sw-stat.is-ok` /
   `.is-err` color the Settings "Test connection" result (`--rp-ok` / `--rp-danger`).
 - `.rp-sw-conn` / `-conn-guide` — the connectors guidance empty-state centering.
-- `.rp-sw-conn-add` / `-conn-btn` / `-conn-logo` — the two engine-specific "Add a
-  connector" buttons (each with its brand logo from `icons/connectors/`); a flex row of
-  shadow-card buttons with a 3rem contained logo + label, accent hover.
+- `.rp-sw-conn-add` / `-conn-btn` / `-conn-logo` — the engine-specific "Add a connector"
+  buttons (each with its brand logo from `icons/connectors/`); a flex row of shadow-card
+  buttons with a 3rem contained logo + label, accent hover.
+- `.rp-sw-facet` (host) / `-facet-head` / `-facet-foot` / `-facet-note` / `-facet-table` —
+  the connector facet surface. The facet DATA renders through the canonical
+  `mountSimpleTable` (`rp-table`) into the `.rp-sw-facet-table` slot (`min-width:0` so the
+  flex child scrolls the table); the bespoke `rp-sw-facet-row` / `-list` / `-name` /
+  `-meta` / `-proj` flex-table family is **retired** (it misaligned columns + was a
+  parallel-class leak). `-head`/`-foot`/`-note` are pure positioning around the table.
 
 ## Drift-prone areas
 

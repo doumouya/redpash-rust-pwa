@@ -112,8 +112,10 @@ export function mountRedTable(host, config = {}) {
 
   // ── DOM scaffold — host = .rp-table-wrap, table = .rp-redtable.rp-table ─────
   host.classList.add("rp-table-wrap");
+  // Optional `config.id` sets the id ON THE TABLE (not the wrap host) so a page can
+  // ID-scope its own tweaks (e.g. #swTable), parity with the hand-built wsTable.
   host.innerHTML =
-    '<table class="rp-redtable rp-table">'
+    '<table class="rp-redtable rp-table"' + (config.id ? ' id="' + config.id + '"' : "") + ">"
     + "<thead></thead>"
     + '<tbody id="' + CELL_EDITOR_TBODY_ID + '"></tbody>'
     + "</table>";

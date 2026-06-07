@@ -18,6 +18,7 @@ import { mountTopbar } from "/scripts/topbar.js";
 import { mountRail } from "/scripts/framework/rail.js";
 import { mountEditorCode } from "/scripts/framework/editor-code.js";
 import { mountRedTable } from "/scripts/framework/redtable.js";
+import { mountSimpleTable } from "/scripts/framework/table.js";
 import { mountPager } from "/scripts/framework/pager.js";
 import { mountChipRow } from "/scripts/framework/chip-row.js";
 import { openModal } from "/scripts/framework/modal.js";
@@ -248,6 +249,7 @@ export default function sheetwise(app, { session }) {
     state.total = p.total; state.pages = p.pages; state.page = p.page; state.size = p.size;
     // dynamic columns per query → re-mount the redtable each result
     mountRedTable($("#swGrid"), {
+      id: "swTable", // id ON THE TABLE → parity with Workspace's wsTable; SheetWise tweaks under #swTable
       columns: p.columns.map((c, i) => ({ key: String(i), label: c })),
       rows: p.rows,
       getCell: (row, _col, i) => (row[i] === null ? "∅" : row[i]),
@@ -285,8 +287,6 @@ export default function sheetwise(app, { session }) {
 
   // ── facet surface router — renders the active connector facet into #swConnFacet ──
   const facetHead = (icon, html) => '<div class="rp-sw-facet-head"><i class="bi ' + icon + '"></i> ' + html + '</div>';
-  const settingRow = (k, v) => '<div class="rp-sw-facet-row"><span class="rp-sw-facet-name">'
-    + esc(k) + '</span><span class="rp-sw-facet-meta">' + esc(v) + '</span></div>';
 
   function renderFacet(connId, facet) {
     const conn = state.connectors.find((c) => c.redpash_id === connId);
@@ -302,25 +302,30 @@ export default function sheetwise(app, { session }) {
     else renderTablesFacet(host, conn);
   }
 
+  // Browse the source tables → click a row to inspect its Schema (where Pull lives).
   async function renderTablesFacet(host, conn) {
     host.innerHTML = facetHead("bi-table", "Tables in <b>" + esc(conn.name) + "</b>") + '<p class="rp-empty">Loading…</p>';
     try {
       const items = (await api("/api/connectors/" + encodeURIComponent(conn.redpash_id) + "/tables")).items || [];
-      if (!items.length) { host.querySelector(".rp-empty").textContent = "No tables in this database."; return; }
-      host.innerHTML = facetHead("bi-table", items.length + " tables in <b>" + esc(conn.name) + "</b>")
-        + '<div class="rp-sw-facet-list">' + items.map((t) =>
-            '<div class="rp-sw-facet-row" data-table="' + esc(t.name) + '">'
-            + '<button type="button" class="rp-sw-facet-name" data-act="schema" title="View schema"><i class="bi bi-table"></i>' + esc(t.name) + '</button>'
-            + '<span class="rp-sw-facet-meta">' + (t.rows != null ? "≈" + Number(t.rows).toLocaleString() + " rows" : "")
-              + (t.kind && t.kind !== "BASE TABLE" ? " · " + esc(t.kind) : "") + '</span>'
-            + '<button type="button" class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--sm" data-act="pull" title="Pull this table → CSV"><i class="bi bi-download"></i></button>'
-            + '</div>').join("") + '</div>';
-      host.querySelectorAll(".rp-sw-facet-row").forEach((row) => {
-        const table = row.dataset.table;
-        row.querySelector('[data-act="schema"]').addEventListener("click", () => { state.schemaTable = table; renderFacet(conn.redpash_id, "schema"); });
-        row.querySelector('[data-act="pull"]').addEventListener("click", (e) => pullTable(conn.redpash_id, table, e.currentTarget));
+      host.innerHTML = facetHead("bi-table", items.length + " tables in <b>" + esc(conn.name) + "</b>") + '<div class="rp-sw-facet-table"></div>';
+      mountSimpleTable(host.querySelector(".rp-sw-facet-table"), {
+        columns: [
+          { key: "name", label: "Table" },
+          { key: "rows", label: "Rows", kind: "num" },
+          { key: "kind", label: "Type" },
+        ],
+        rows: items.map((t) => ({
+          rid: t.name,
+          name: t.name,
+          rows: t.rows != null ? "≈" + Number(t.rows).toLocaleString() : "",
+          kind: t.kind && t.kind !== "BASE TABLE" ? t.kind : "",
+        })),
+        empty: "No tables in this database.",
+        onRowClick: (table) => { state.schemaTable = table; renderFacet(conn.redpash_id, "schema"); },
       });
-    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't list tables — " + e.message; }
+    } catch (e) {
+      host.innerHTML = facetHead("bi-table", "Tables") + '<p class="rp-empty">Couldn\'t list tables — ' + esc(e.message) + '</p>';
+    }
   }
 
   async function renderSchemaFacet(host, conn) {
@@ -329,17 +334,30 @@ export default function sheetwise(app, { session }) {
     host.innerHTML = facetHead("bi-diagram-3", "Schema · <b>" + esc(table) + "</b>") + '<p class="rp-empty">Loading…</p>';
     try {
       const cols = (await api("/api/connectors/" + encodeURIComponent(conn.redpash_id) + "/schema?table=" + encodeURIComponent(table))).items || [];
-      if (!cols.length) { host.querySelector(".rp-empty").textContent = "No columns."; return; }
       host.innerHTML = facetHead("bi-diagram-3", esc(table) + " · " + cols.length + " columns")
-        + '<div class="rp-sw-facet-list">' + cols.map((c) =>
-            '<div class="rp-sw-facet-row">'
-            + '<span class="rp-sw-facet-name">' + esc(c.name) + (c.key === "PRI" ? ' <i class="bi bi-key" title="primary key"></i>' : "") + '</span>'
-            + '<span class="rp-sw-facet-meta">' + esc(c.data_type) + (c.nullable ? "" : " · not null")
-              + (c.projection && c.projection !== "text" ? ' · <span class="rp-sw-facet-proj">→ ' + esc(c.projection) + '</span>' : "") + '</span>'
-            + '</div>').join("") + '</div>'
+        + '<div class="rp-sw-facet-table"></div>'
         + '<div class="rp-sw-facet-foot"><button type="button" class="rp-btn-icon rp-btn-icon--accent" id="swSchemaPull"><i class="bi bi-download"></i><span>Pull ' + esc(table) + '</span></button></div>';
+      mountSimpleTable(host.querySelector(".rp-sw-facet-table"), {
+        columns: [
+          { key: "name", label: "Column" },
+          { key: "data_type", label: "Type" },
+          { key: "nullable", label: "Null" },
+          { key: "key", label: "Key" },
+          { key: "projection", label: "Projection" },
+        ],
+        rows: cols.map((c) => ({
+          name: c.name,
+          data_type: c.data_type,
+          nullable: c.nullable ? "" : "NOT NULL",
+          key: c.key || "",
+          projection: c.projection && c.projection !== "text" ? "→ " + c.projection : "",
+        })),
+        empty: "No columns.",
+      });
       host.querySelector("#swSchemaPull").addEventListener("click", (e) => pullTable(conn.redpash_id, table, e.currentTarget));
-    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't read schema — " + e.message; }
+    } catch (e) {
+      host.innerHTML = facetHead("bi-diagram-3", "Schema") + '<p class="rp-empty">Couldn\'t read schema — ' + esc(e.message) + '</p>';
+    }
   }
 
   async function renderPullsFacet(host, conn) {
@@ -347,34 +365,43 @@ export default function sheetwise(app, { session }) {
     try {
       const files = ((await api("/api/files")).items || [])
         .filter((f) => f.project_id === conn.project_id && String(f.redpash_id).startsWith("FIL_"));
-      if (!files.length) { host.querySelector(".rp-empty").textContent = "No files in this connector's project yet — pull a table from Tables."; return; }
-      host.innerHTML = facetHead("bi-download", files.length + " files in this connector's project")
-        + '<div class="rp-sw-facet-list">' + files.map((f) =>
-            '<div class="rp-sw-facet-row" data-rid="' + esc(f.redpash_id) + '">'
-            + '<button type="button" class="rp-sw-facet-name" data-act="open" title="Open in SQL"><i class="bi bi-file-earmark-spreadsheet"></i>' + esc(f.filename) + '</button>'
-            + '<span class="rp-sw-facet-meta">' + (f.row_count != null ? Number(f.row_count).toLocaleString() + " rows" : "") + '</span>'
-            + '</div>').join("") + '</div>';
-      host.querySelectorAll('[data-act="open"]').forEach((b) => b.addEventListener("click", async () => {
-        const rid = b.closest("[data-rid]").dataset.rid;
-        rail.seg.set("sql"); await refreshSources(); selectTable(rid, true);
-      }));
-    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't list files — " + e.message; }
+      host.innerHTML = facetHead("bi-download", files.length + " files in this connector's project") + '<div class="rp-sw-facet-table"></div>';
+      mountSimpleTable(host.querySelector(".rp-sw-facet-table"), {
+        columns: [
+          { key: "filename", label: "File" },
+          { key: "rows", label: "Rows", kind: "num" },
+        ],
+        rows: files.map((f) => ({
+          rid: f.redpash_id,
+          filename: f.filename,
+          rows: f.row_count != null ? Number(f.row_count).toLocaleString() : "",
+        })),
+        empty: "No files in this connector's project yet — pull a table from Tables.",
+        onRowClick: (rid) => { rail.seg.set("sql"); refreshSources().then(() => selectTable(rid, true)); },
+      });
+    } catch (e) {
+      host.innerHTML = facetHead("bi-download", "Pulled files") + '<p class="rp-empty">Couldn\'t list files — ' + esc(e.message) + '</p>';
+    }
   }
 
   function renderSettingsFacet(host, conn) {
     host.innerHTML = facetHead("bi-gear", "Settings")
-      + '<div class="rp-sw-facet-list">'
-      + settingRow("Name", conn.name)
-      + settingRow("Kind", conn.kind || "—")
-      + settingRow("Destination project", conn.project_id || "—")
-      + settingRow("Connection id", conn.redpash_id)
-      + '</div>'
+      + '<div class="rp-sw-facet-table"></div>'
       + '<div class="rp-sw-facet-foot">'
       +   '<button class="rp-btn rp-btn--glass" id="swConnTest" type="button"><i class="bi bi-plug"></i> Test connection</button>'
       +   '<span class="rp-sw-stat" id="swConnTestStat" role="status" aria-live="polite"></span>'
       + '</div>'
       + '<p class="rp-sw-facet-note">Rename or delete this connector from the ✎ / ✕ on its rail header. '
       + 'Host / database / SSL mode editing arrives with the connector-config endpoint.</p>';
+    mountSimpleTable(host.querySelector(".rp-sw-facet-table"), {
+      columns: [{ key: "field", label: "Field" }, { key: "value", label: "Value" }],
+      rows: [
+        { field: "Name", value: conn.name },
+        { field: "Kind", value: conn.kind || "—" },
+        { field: "Destination project", value: conn.project_id || "—" },
+        { field: "Connection id", value: conn.redpash_id },
+      ],
+    });
     const btn = host.querySelector("#swConnTest");
     const stat = host.querySelector("#swConnTestStat");
     btn.addEventListener("click", async () => {

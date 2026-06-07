@@ -3,7 +3,7 @@ title: frontend/scripts/framework/redtable.js
 source: ../../../../../../frontend/scripts/framework/redtable.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-04
+last modified date: 2026-06-07
 ---
 
 # framework/redtable.js — Converged RedTable component (B3.1)
@@ -52,6 +52,7 @@ Part of the framework extraction (CAS_37B2E1BF); converges the
 | `virtual` | `{ rowHeight, overscan }` | ON ⇒ compose `createVirtualRows`; OFF ⇒ render all rows |
 | `empty` | string | no-rows placeholder (composes the `rp-empty` atom) |
 | `getCell` | `(row,col,i) => any` | override the per-cell value read |
+| `id` | string | optional id set ON the built `<table>` (not the wrap host) so a page can ID-scope tweaks (e.g. SheetWise `id:"swTable"` → `#swTable`, parity with Workspace's `wsTable`). Default: no id |
 
 A column takes `{ key, label, kind, sortable, editable, editKey, editor,
 options, render, rel, requiresAdmin, placeholder, trunc, prefix, hidden, align,
