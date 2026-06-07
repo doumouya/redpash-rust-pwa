@@ -131,22 +131,30 @@ async fn create(
 #[derive(Serialize)]
 struct SyncResult { file: String }
 
+/// Server-side hard cap on a Kafka bounded pull — keeps a synchronous /sync from
+/// being asked to consume an unbounded batch (a request worker / client timeout risk).
+const KAFKA_MAX_RECORDS_CAP: usize = 5000;
+
 #[derive(Deserialize, Default)]
 struct SyncBody {
     /// Pull a SPECIFIC table instead of the connector's configured default (the
     /// Tables-facet browse → pull-any-table flow). Empty/absent = configured table.
     #[serde(default)] table: Option<String>,
+    /// Kafka only: cap the bounded consume for this pull (clamped to
+    /// KAFKA_MAX_RECORDS_CAP server-side). Absent = the connector's configured default.
+    #[serde(default)] max_records: Option<usize>,
 }
 
 #[derive(Deserialize)]
 struct SchemaQuery { table: String }
 
 /// `POST /api/connectors/:rid/sync` — run the connector's extract → CSV → a new
-/// project file ("Pull" in SheetWise). v1 wires **MySQL** (in-process sqlx — a
-/// quick SELECT, unlike Kafka's binary-mode consume). The caller needs ≥Member
-/// write-reach on the connector's destination project (same gate as create); the
-/// load is attributed to + re-checked against the connector's `as_user` by the
-/// pipeline. The live source is read-only (one SELECT) — the CSV is the copy.
+/// project file ("Pull" in SheetWise). Wires **MySQL** + **PostgreSQL** (in-process
+/// sqlx SELECT) + **Kafka** (a BOUNDED rskafka consume, capped by
+/// `KAFKA_MAX_RECORDS_CAP`). The caller needs ≥Member write-reach on the connector's
+/// destination project (same gate as create); the load is attributed to + re-checked
+/// against the connector's `as_user` by the pipeline. The SQL source is read-only (one
+/// SELECT) — the CSV is the copy; the kafka consume reads earliest→high-watermark.
 async fn sync(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -160,10 +168,13 @@ async fn sync(
     crate::rbac::require_grant(&state, &user, &conn.project_id, "project",
         |g| g.effective().is_some_and(|r| r >= crate::rbac::Role::Member)).await?;
 
-    // optional {table} override — pull any table the user picked in the Tables facet
-    let table_override = body.and_then(|Json(b)| b.table).filter(|t| !t.trim().is_empty());
-    // Dispatch by connector kind (mysql + postgres wired — additive; the shared loader
-    // registry is the connectors_core co-design). Both loaders' run() return the file rid.
+    // Body knobs: {table} override (SQL Tables-facet pull-any-table) + {max_records}
+    // (kafka bounded-consume cap). Both optional.
+    let SyncBody { table, max_records } = body.map(|Json(b)| b).unwrap_or_default();
+    let table_override = table.filter(|t| !t.trim().is_empty());
+    // Dispatch by connector kind (mysql + postgres + kafka wired — additive; the shared
+    // loader registry is the connectors_core co-design). Each loader's run() yields the
+    // file rid (kafka: Option — None when 0 records consumed).
     let dd = state.data_dir.as_path();
     let file = match conn.kind.as_str() {
         "mysql" => {
@@ -180,8 +191,19 @@ async fn sync(
             crate::postgres_loader::run(&state.db, dd, &cfg).await
                 .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?
         }
+        "kafka" => {
+            let mut cfg = crate::kafka_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            // Bounded consume — clamp the requested cap so a synchronous /sync can't be
+            // asked for an unbounded batch (≤ KAFKA_MAX_RECORDS_CAP).
+            if let Some(n) = max_records { cfg.max_records = n.clamp(1, KAFKA_MAX_RECORDS_CAP); }
+            crate::kafka_loader::run(&state.db, dd, &cfg).await
+                .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?
+                .ok_or_else(|| AppError::bad_request("connector_sync",
+                    "kafka: no records consumed from the topic — nothing loaded".to_string()))?
+        }
         other => return Err(AppError::bad_request("unsupported",
-            format!("in-app sync is wired for kind 'mysql'/'postgres' (got '{other}')"))),
+            format!("in-app sync is wired for kind 'mysql'/'postgres'/'kafka' (got '{other}')"))),
     };
 
     crate::event::info(&state.db, "connector_sync", format!("synced connector {rid} → {file}"))

@@ -22,7 +22,7 @@ POST   /api/connectors            create one — body picks the destination proj
 GET    /api/connectors/:rid       fetch one connector summary
 PATCH  /api/connectors/:rid       rename (manage = Admin+ on its project)
 DELETE /api/connectors/:rid       delete (Admin+; the row cascades via the registry)
-POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (Pull); body {table?} pulls a specific table
+POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (Pull); mysql/postgres/kafka; body {table?} (SQL) / {max_records?} (kafka, capped)
 GET    /api/connectors/:rid/tables   list the source DB's tables (Tables facet; VIEW-gated)
 GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + projection (Schema facet; VIEW-gated)
 POST   /api/connectors/:rid/test     probe the source connection — connect + SELECT 1 (Settings "Test connection"; VIEW-gated)
@@ -38,11 +38,14 @@ POST   /api/connectors/:rid/test     probe the source connection — connect + S
   `config` JSONB) + a `connector_create` event. Returns 201 + the `ConnectorSummary`.
 - `sync` (POST `/:rid/sync`) — runs the connector's extract → CSV → a new project
   file ("Pull"). Same ≥Member write-reach gate as create; **dispatches by `kind`**
-  — `mysql` → `mysql_loader::run`, `postgres` → `postgres_loader::run` (both
-  in-process; other kinds → 400). Optional body `{table}` pulls a SPECIFIC table (the
-  Tables-facet browse → pull-any-table) instead of the connector's default.
-  Returns `{ file }`. (The dispatch is additive; the open loader **registry** is the
-  shared `connectors_core` co-design with the SQL-connector lane.)
+  — `mysql` → `mysql_loader::run`, `postgres` → `postgres_loader::run` (in-process
+  sqlx SELECT), `kafka` → `kafka_loader::run` (a BOUNDED rskafka consume; `run`
+  returns `Option` → `None` (0 records) maps to a clean 400 "nothing loaded"). Other
+  kinds → 400. Body knobs: `{table}` pulls a SPECIFIC SQL table (Tables-facet browse);
+  `{max_records}` caps a kafka pull, **clamped server-side to `KAFKA_MAX_RECORDS_CAP`
+  (5000)** so a synchronous request can't be asked for an unbounded batch. Returns
+  `{ file }`. (Dispatch is additive; the open loader **registry** is the shared
+  `connectors_core` co-design.)
 - `tables` (GET `/:rid/tables`) — list the source DB's tables (`mysql`/`postgres`
   `list_tables`) for the **Tables** sub-tab. **VIEW**-gated. Returns `{ items }`
   (the `{name,rows,kind}` shape is serde-identical across loaders).
