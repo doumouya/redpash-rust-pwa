@@ -56,7 +56,11 @@ of silently assuming; `::text` still extracts it.
   the guard is bypassed), `statement_timeout`, a `LIMIT` cap, and subquery-wrapping (blocks
   statement-chaining). Rows render via `to_jsonb` (any column type displays) with column
   ORDER taken from `describe` (jsonb keys come back sorted); SQL NULL → `None` (distinct from
-  empty string). This is the console VIEW path — NOT the faithful CSV-extraction `run`.
+  empty string). `describe` runs **before** the transaction on purpose — a bad-SQL describe
+  then surfaces the REAL Postgres error (unknown relation/column) instead of aborting the txn
+  and masking it as "current transaction is aborted" behind the follow-up fetch (runbook 0018).
+  Cross-schema **query** works (schema-qualified SQL); cross-schema **browse** is single-schema
+  per the connector config. This is the console VIEW path — NOT the faithful CSV-extraction `run`.
 - `qi` (double-quote identifier), `csv_field` (RFC-4180 + NUL strip), `TableInfo`, `ColInfo`.
 
 ## Drift-prone areas

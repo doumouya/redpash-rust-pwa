@@ -303,7 +303,7 @@ pub async fn probe(cfg: &Cfg) -> Result<()> {
 /// via `to_jsonb`, so any column type displays without knowing the shape up front. A SQL NULL
 /// comes back as `None` (distinct from an empty string — the console shows the NULL-vs-empty
 /// distinction the CSV path can't).
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct QueryResult {
     pub columns:   Vec<String>,
     pub rows:      Vec<Vec<Option<String>>>,
@@ -322,15 +322,25 @@ pub async fn query(cfg: &Cfg, sql: &str, limit: i64) -> Result<QueryResult> {
     guard_select(sql)?;
     let cap = limit.clamp(1, 1000);
     let mut pg = connect_pinned(&cfg.opts).await?;
+
+    // Column ORDER from the query's described result — `to_jsonb` keys come back sorted, so
+    // they can't carry the SELECT-list order. describe = Parse+Describe (no execution, no
+    // writes), run BEFORE the transaction on purpose: a bad-SQL describe (unknown relation /
+    // column) then surfaces the REAL Postgres error to the admin, instead of aborting the txn
+    // and getting masked as "current transaction is aborted" behind the follow-up fetch — the
+    // dogfood bug (runbook 0018). The READ-ONLY txn below is still the execution guarantee.
+    let ordered_cols: Vec<String> = (&mut pg)
+        .describe(sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("query failed: {e}"))?
+        .columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+
     pg.execute("BEGIN").await.context("query: begin")?;
     pg.execute("SET TRANSACTION READ ONLY").await.context("query: read only")?;
     pg.execute("SET LOCAL statement_timeout = '30s'").await.context("query: statement_timeout")?;
-
-    // Column ORDER from the query's described result — `to_jsonb` keys come back sorted, so
-    // they can't carry the SELECT-list order. describe = Parse+Describe (no execution), safe.
-    let ordered_cols: Vec<String> = (&mut pg).describe(sql).await
-        .map(|d| d.columns().iter().map(|c| c.name().to_string()).collect())
-        .unwrap_or_default();
 
     // One extra row detects truncation; to_jsonb renders each row as a JSON object.
     let wrapped = format!("SELECT to_jsonb(_q) AS _row FROM ({sql}) AS _q LIMIT {}", cap + 1);
@@ -600,5 +610,12 @@ mod tests {
         let p = query(&cfg, "SELECT redpash_id, spec FROM project_files WHERE spec IS NOT NULL LIMIT 3", 10)
             .await.expect("query jsonb spec");
         eprintln!("DOGFOOD jsonb cols={:?} rows={}", p.columns, p.rows.len());
+        // cross-schema query works (audit.* is a second schema in our DB)
+        query(&cfg, "SELECT id FROM audit.run LIMIT 1", 10).await.expect("cross-schema audit.run");
+        // regression (runbook 0018): a bad query surfaces the REAL Postgres error, NOT the
+        // masked "current transaction is aborted" that the post-BEGIN describe used to produce.
+        let err = query(&cfg, "SELECT * FROM does_not_exist_xyz", 10).await.unwrap_err().to_string();
+        assert!(err.contains("does not exist"), "expected real relation error, got: {err}");
+        assert!(!err.contains("transaction is aborted"), "error was masked: {err}");
     }
 }
