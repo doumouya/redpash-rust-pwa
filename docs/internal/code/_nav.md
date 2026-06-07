@@ -12,9 +12,9 @@ generated block — run `node tools/doc-gen/gen.js --code-nav`.
 
 <!-- doc-gen:code-nav START — generated from the code/ doc tree; do not hand-edit -->
 Generated 2026-06-07 — every atomic doc under `code/`, the per-file
-survival layer (246 docs). Links are relative to `code/`.
+survival layer (247 docs). Links are relative to `code/`.
 
-### backend (104)
+### backend (105)
 
 **backend/api/bin/**
 - [audit_distincts.md](backend/api/bin/audit_distincts.md)
@@ -78,6 +78,7 @@ survival layer (246 docs). Links are relative to `code/`.
 - [metrics.md](backend/api/routes/metrics.md)
 - [mod.md](backend/api/routes/mod.md)
 - [monitoring.md](backend/api/routes/monitoring.md)
+- [objects.md](backend/api/routes/objects.md)
 - [pagination.md](backend/api/routes/pagination.md)
 - [projects.md](backend/api/routes/projects.md)
 - [search.md](backend/api/routes/search.md)

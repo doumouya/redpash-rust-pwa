@@ -228,6 +228,19 @@ function genSchema(args) {
   var contractPath = path.join(__dirname, 'schema.contract.json');
   fs.writeFileSync(contractPath, JSON.stringify({ generatedAt: stamp, source: 'live-db introspection', tables: contract }, null, 2));
 
+  // If the out dir has an index.md (the canonical db/schemas/ landing), splice a
+  // generated object list into it so the per-object docs are navigable + pass the
+  // doc-coverage unindexed check via their section index (not a hand-edited redmap).
+  var idxFile = path.join(outDir, 'index.md');
+  if (fs.existsSync(idxFile)) {
+    var IL = ['Generated ' + stamp + ' — ' + keys.length + ' objects from the live schema.', ''];
+    keys.forEach(function (k) {
+      var b = byKey[k]; var f = b.schema + '.' + b.table + '.md';
+      IL.push('- [`' + b.schema + '.' + b.table + '`](' + f + ')');
+    });
+    fs.writeFileSync(idxFile, spliceRegion(fs.readFileSync(idxFile, 'utf8'), 'schema:objects', IL.join('\n')));
+  }
+
   console.log('doc-gen schema');
   console.log('──────────────');
   console.log('source:   live DB (' + redact(dsn) + ')');
@@ -407,13 +420,84 @@ function genCodeNav() {
   console.log('docs indexed: ' + docs.length + ' → ' + path.relative(ROOT, file));
 }
 
+/* ── kind=api (the REST surface — consumes the route extractor) ────────────── */
+/* doc-gen never re-implements the route parse — it CONSUMES tools/lib/rust-routes.js
+   (the one extractor the seam / rbac / api-doc audits share). Emits the full route
+   table (grouped by resource) into rest-api/index.md's generated region + a contract. */
+function genApi() {
+  var rr = require('../lib/rust-routes');
+  var routes = rr.rustRoutes(ROOT);
+  var stamp = new Date().toISOString().slice(0, 10);
+  var byRes = {};
+  routes.forEach(function (r) {
+    var seg = r.path.split('/')[2] || '(root)';
+    (byRes[seg] = byRes[seg] || []).push(r);
+  });
+  var L = [];
+  L.push('Generated ' + stamp + ' from the axum route tree (`tools/lib/rust-routes.js`) — '
+    + routes.length + ' routes. `gate` = the platform-admin nest-layer gate.');
+  L.push('');
+  Object.keys(byRes).sort().forEach(function (res) {
+    L.push('### `/api/' + res + '` (' + byRes[res].length + ')');
+    L.push('');
+    L.push('| method | path | handler | gate | source |');
+    L.push('|--------|------|---------|------|--------|');
+    byRes[res].forEach(function (r) {
+      L.push('| ' + r.method + ' | `' + esc(r.path) + '` | `' + esc(r.handler || '?')
+        + '` | ' + (r.rbac && r.rbac.hint ? r.rbac.hint : '') + ' | `' + esc(r.file) + ':' + r.line + '` |');
+    });
+    L.push('');
+  });
+  var file = path.join(ROOT, 'docs', 'internal', 'rest-api', 'index.md');
+  fs.writeFileSync(file, spliceRegion(fs.readFileSync(file, 'utf8'), 'api:index', L.join('\n')));
+  fs.writeFileSync(path.join(__dirname, 'api.contract.json'),
+    JSON.stringify({ generatedAt: stamp, source: 'axum routes (rust-routes.js)', routes: routes }, null, 2));
+  console.log('doc-gen api\n──────────');
+  console.log('routes: ' + routes.length + ' → ' + path.relative(ROOT, file));
+}
+
+/* ── kind=pages (the shipped page inventory) ──────────────────────────────── */
+/* Parses the ROUTES object literal in frontend/scripts/main.js (the single
+   registry of shipped pages) → the page inventory region in pages/index.md.
+   Per-page rail tabs stay hand-written in each pages/<page>.md (built inline
+   in the page scripts, not a single data array — described from the source). */
+function genPages() {
+  var stamp = new Date().toISOString().slice(0, 10);
+  var mainTxt = fs.readFileSync(path.join(ROOT, 'frontend', 'scripts', 'main.js'), 'utf8');
+  var block = (mainTxt.match(/const ROUTES = \{([\s\S]*?)\n\};/) || [])[1] || '';
+  var rowRe = /"(\/[^"]+)":\s*\{([^}]*)\}/g, m, rows = [];
+  while ((m = rowRe.exec(block))) {
+    var spec = m[2];
+    rows.push({
+      path: m[1],
+      script: ((spec.match(/script:\s*"([^"]+)"/) || [])[1] || '').replace(/^\/scripts\//, ''),
+      auth: /auth:\s*true/.test(spec),
+      admin: /admin:\s*true/.test(spec),
+    });
+  }
+  var L = [];
+  L.push('Generated ' + stamp + ' from `frontend/scripts/main.js` ROUTES — the shipped page registry.');
+  L.push('');
+  L.push('| route | page script | auth | admin-gated |');
+  L.push('|-------|-------------|------|-------------|');
+  rows.forEach(function (r) {
+    L.push('| `' + r.path + '` | `' + esc(r.script) + '` | ' + (r.auth ? 'yes' : 'no') + ' | ' + (r.admin ? 'yes' : '—') + ' |');
+  });
+  var file = path.join(ROOT, 'docs', 'internal', 'pages', 'index.md');
+  fs.writeFileSync(file, spliceRegion(fs.readFileSync(file, 'utf8'), 'pages:index', L.join('\n')));
+  console.log('doc-gen pages\n─────────────');
+  console.log('pages: ' + rows.length + ' → ' + path.relative(ROOT, file));
+}
+
 /* ── dispatcher ───────────────────────────────────────────────────────────── */
 function main() {
   var args = process.argv.slice(2);
   if (args.indexOf('--components') >= 0) return genComponents(args);
   if (args.indexOf('--code-nav') >= 0) return genCodeNav();
+  if (args.indexOf('--api') >= 0) return genApi();
+  if (args.indexOf('--pages') >= 0) return genPages();
   if (args.indexOf('--schema') >= 0) return genSchema(args);
-  die('usage: node tools/doc-gen/gen.js --schema [<table>] | --components | --code-nav  [--out <dir>]');
+  die('usage: node tools/doc-gen/gen.js --schema [<table>] | --api | --pages | --components | --code-nav  [--out <dir>]');
 }
 
 main();

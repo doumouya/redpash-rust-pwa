@@ -49,6 +49,16 @@ from the one source.
   per-file **survival layer** navigable (the fix for "266 atomic docs linked from no index");
   `doc-coverage-audit`'s `unindexed_internal_doc` check reads `_nav.md` for the `code/` subtree,
   so the generator owns that catalog instead of a hand-edited redmap.
+- `--api` — **kind=api**: CONSUMES `tools/lib/rust-routes.js` (never re-implements the parse) and
+  writes the full `/api` route table (method · path · handler · gate · source, grouped by
+  resource) into `docs/internal/rest-api/index.md`'s region + `tools/doc-gen/api.contract.json`.
+- `--pages` — **kind=pages**: parses the `ROUTES` literal in `frontend/scripts/main.js` (the
+  shipped-page registry) → the page-inventory region in `docs/internal/pages/index.md` (route ·
+  script · auth · admin-gated). Per-page rail tabs stay hand-written in each `pages/<page>.md`
+  (built inline in the page scripts, not a single data array).
+- `--schema --out docs/internal/db/schemas` — writes per-object schema docs into the canonical
+  `db/schemas/` home AND splices a generated object list into `db/schemas/index.md` (so the
+  per-object docs are navigable via their section index).
 
 ## How it works (schema phase)
 

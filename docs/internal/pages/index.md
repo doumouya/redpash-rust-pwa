@@ -25,7 +25,19 @@ inventory** so the tab/route lists can't drift from what's shipped.
 ## Page inventory (generated)
 
 <!-- doc-gen:pages:index START -->
-_(generated — run `node tools/doc-gen/gen.js --pages`)_
+Generated 2026-06-07 from `frontend/scripts/main.js` ROUTES — the shipped page registry.
+
+| route | page script | auth | admin-gated |
+|-------|-------------|------|-------------|
+| `/login` | `pages/login.js` | no | — |
+| `/home` | `pages/home.js` | yes | — |
+| `/workspace` | `pages/workspace.js` | yes | — |
+| `/sheetwise` | `pages/sheetwise.js` | yes | — |
+| `/cases` | `pages/cases.js` | yes | — |
+| `/monitoring` | `pages/monitoring.js` | yes | yes |
+| `/profile` | `pages/profile.js` | yes | — |
+| `/settings` | `pages/settings.js` | yes | — |
+| `/docs` | `pages/docs.js` | yes | — |
 <!-- doc-gen:pages:index END -->
 
 ## The shipped pages

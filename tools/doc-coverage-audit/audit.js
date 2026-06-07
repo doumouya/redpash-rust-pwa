@@ -482,6 +482,15 @@ if (exists(path.join(ROOT, 'docs', 'internal'))) {
 // against, so the generator owns that index and this check reads it.
 var redmapText  = readFileSafe(path.join(ROOT, 'docs', 'internal', 'redmap.md')) || '';
 var codeNavText = readFileSafe(path.join(ROOT, 'docs', 'internal', 'code', '_nav.md')) || '';
+// A doc is also "indexed" if its own section's index.md lists it by basename —
+// every spine section (pages/, db/schemas/, rest-api/, db/rbac/, …) is its own
+// nav, so the structure is self-indexing instead of duplicating a catalog into
+// redmap (the "absorb the catalog" anti-pattern).
+function dirIndexLists(absDocPath) {
+  if (path.basename(absDocPath) === 'index.md') return false;
+  var t = readFileSafe(path.join(path.dirname(absDocPath), 'index.md'));
+  return !!t && t.indexOf(path.basename(absDocPath)) !== -1;
+}
 walk(path.join(ROOT, 'docs', 'internal'),
      function (f) { return f.endsWith('.md'); })
   .forEach(function (f) {
@@ -497,6 +506,8 @@ walk(path.join(ROOT, 'docs', 'internal'),
         indexed = codeNavText.indexOf(fromCode) !== -1;
       }
     }
+    // spine docs: indexed by their own section's index.md.
+    if (!indexed) indexed = dirIndexLists(f);
     if (!indexed) {
       findings.push({
         kind: 'unindexed_internal_doc',
