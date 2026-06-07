@@ -22,13 +22,14 @@ The Slice A registry maps each app to **today's** pages (no page-splits yet):
 | App | `id` | RBAC | Pages |
 |---|---|---|---|
 | Home | `home` | — | (none — the "My Services" grid IS the page) |
-| Studio | `studio` | — | Workspace · SheetWise |
+| Studio | `studio` | — | Workspace · Dashboard · SheetWise |
 | Admin | `admin` | `admin:true` → `is_platform_admin` | Monitoring · Admin Console |
 | Support & Docs | `support` | — | Docs · Cases |
 
 Later slices add new pages in place (a one-line edit to the relevant `pages`
 array): Admin got `admin-console` (**Slice B**, 2026-06-07 — split out of Monitoring)
-and gets `database` next; Studio gets `dashboard` (**Slice D**).
+and gets `database` next; Studio got `dashboard` (**Slice D / D1**, 2026-06-07 — the standalone
+chart + dashboard designer page, split out of Workspace; Workspace loses its Dashboards toggle in D2).
 
 ## Public surface
 

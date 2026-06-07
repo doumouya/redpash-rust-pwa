@@ -12,7 +12,7 @@ generated block — run `node tools/doc-gen/gen.js --code-nav`.
 
 <!-- doc-gen:code-nav START — generated from the code/ doc tree; do not hand-edit -->
 Generated 2026-06-07 — every atomic doc under `code/`, the per-file
-survival layer (252 docs). Links are relative to `code/`.
+survival layer (259 docs). Links are relative to `code/`.
 
 ### backend (108)
 
@@ -156,7 +156,7 @@ survival layer (252 docs). Links are relative to `code/`.
 - [type_def.md](backend/shared/type_def.md)
 - [user.md](backend/shared/user.md)
 
-### frontend (95)
+### frontend (102)
 
 **frontend/scripts/**
 - [api.md](frontend/scripts/api.md)
@@ -187,6 +187,8 @@ survival layer (252 docs). Links are relative to `code/`.
 
 **frontend/scripts/framework/**
 - [activity.md](frontend/scripts/framework/activity.md)
+- [app-switcher.md](frontend/scripts/framework/app-switcher.md)
+- [apps.md](frontend/scripts/framework/apps.md)
 - [avatar-upload.md](frontend/scripts/framework/avatar-upload.md)
 - [badge.md](frontend/scripts/framework/badge.md)
 - [cell-editor.md](frontend/scripts/framework/cell-editor.md)
@@ -204,6 +206,7 @@ survival layer (252 docs). Links are relative to `code/`.
 - [editor-text.md](frontend/scripts/framework/editor-text.md)
 - [field.md](frontend/scripts/framework/field.md)
 - [filter-panel.md](frontend/scripts/framework/filter-panel.md)
+- [footer-utilities.md](frontend/scripts/framework/footer-utilities.md)
 - [head.md](frontend/scripts/framework/head.md)
 - [menu.md](frontend/scripts/framework/menu.md)
 - [modal.md](frontend/scripts/framework/modal.md)
@@ -233,12 +236,15 @@ survival layer (252 docs). Links are relative to `code/`.
 - [page-row.md](frontend/scripts/page-row.md)
 
 **frontend/scripts/pages/**
+- [admin-console.md](frontend/scripts/pages/admin-console.md)
 - [cases.md](frontend/scripts/pages/cases.md)
 
 **frontend/scripts/pages/cases/**
 - [labels.md](frontend/scripts/pages/cases/labels.md)
 
 **frontend/scripts/pages/**
+- [dashboard.md](frontend/scripts/pages/dashboard.md)
+- [database.md](frontend/scripts/pages/database.md)
 - [docs.md](frontend/scripts/pages/docs.md)
 - [home.md](frontend/scripts/pages/home.md)
 
@@ -289,6 +295,9 @@ survival layer (252 docs). Links are relative to `code/`.
 - [topbar.md](frontend/scripts/topbar.md)
 - [virtual-rows.md](frontend/scripts/virtual-rows.md)
 - [wasm-engine.md](frontend/scripts/wasm-engine.md)
+
+**frontend/styles/**
+- [admin.md](frontend/styles/admin.md)
 
 **frontend/styles/framework/**
 - [activity.md](frontend/styles/framework/activity.md)

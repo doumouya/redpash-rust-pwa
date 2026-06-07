@@ -32,3 +32,5 @@ Hash-based SPA router. Each route names a partial (HTML fetched into #app) and a
 - [Frontend pillar landing](../../index.md)
 - [pages/sheetwise.js](pages/sheetwise.md) — the `/sheetwise` route (added 2026-06-05;
   replaced the standalone `frontend/sheetwise.html`).
+- [pages/dashboard.js](pages/dashboard.md) — the `/dashboard` route (added 2026-06-07,
+  Slice D / D1; the standalone chart + dashboard designer split out of the Workspace page).
