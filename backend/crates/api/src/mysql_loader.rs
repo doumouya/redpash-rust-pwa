@@ -34,6 +34,7 @@ pub struct Cfg {
     pub database:    String,
     pub table:       String,
     pub columns:     Option<Vec<String>>, // config.columns — pull only these (None = all); existence-checked in run()
+    pub where_sql:   Option<String>,      // config.where — operator-supplied WHERE predicate (guarded; see sanitize_where)
     pub project_rid: String,
     pub as_user:     String,
 }
@@ -79,6 +80,14 @@ impl Cfg {
             .get("columns")
             .and_then(|v| v.as_array())
             .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect::<Vec<_>>());
+        // Optional predicate pushdown: `config.where` is an operator-supplied WHERE
+        // boolean expression. This is an OPERATOR-TRUST boundary, not an injection-safe
+        // input (the operator already configures the table + creds the pull runs under);
+        // sanitize_where applies defense-in-depth guards (no `;` / comments / over-length).
+        let where_sql = match s("where") {
+            Some(raw) => sanitize_where(&raw)?,
+            None => None,
+        };
         // SECURITY (SSRF): build connect options from DISCRETE components — NEVER a
         // format!'d `mysql://user:pass@host/…` URL, where a crafted user/pass can
         // smuggle a different host through the userinfo. The legacy `conn` full-URL
@@ -116,7 +125,7 @@ impl Cfg {
         if let Some(ca) = s("ssl_ca").filter(|c| !c.trim().is_empty()) {
             opts = opts.ssl_ca(ca); // CA bundle path for VERIFY_CA / VERIFY_IDENTITY
         }
-        Ok(Self { opts, database, table, columns, project_rid: c.project_id, as_user: c.as_user })
+        Ok(Self { opts, database, table, columns, where_sql, project_rid: c.project_id, as_user: c.as_user })
     }
 }
 
@@ -167,6 +176,30 @@ fn select_columns(
     let wantset: std::collections::HashSet<String> =
         want.iter().map(|w| w.to_ascii_lowercase()).collect();
     Ok(all.into_iter().filter(|(n, _)| wantset.contains(&n.to_ascii_lowercase())).collect())
+}
+
+/// Validate the optional `config.where` predicate. Trims; empty → `None` (no filter).
+/// `config.where` is an OPERATOR-TRUST boundary — the operator already chose the table
+/// and the (least-privilege) creds the read runs under, so an arbitrary boolean
+/// predicate is by design, not an injection bug. These are defense-in-depth guards,
+/// not a sandbox: reject the tokens that escalate one predicate into multiple
+/// statements / comments (`;`, `--`, `/* */`) and cap the length. run() additionally
+/// dry-runs the clause (`… WHERE (<expr>) LIMIT 0`) so a syntax error is a clean 400.
+fn sanitize_where(raw: &str) -> Result<Option<String>> {
+    let w = raw.trim();
+    if w.is_empty() {
+        return Ok(None);
+    }
+    if w.len() > 4096 {
+        anyhow::bail!("connector config: 'where' is too long (>4096 chars)");
+    }
+    if w.contains(';') {
+        anyhow::bail!("connector config: 'where' must be a single boolean expression (no ';')");
+    }
+    if w.contains("--") || w.contains("/*") || w.contains("*/") {
+        anyhow::bail!("connector config: 'where' must not contain SQL comments");
+    }
+    Ok(Some(w.to_string()))
 }
 
 /// Render strategy for a column, chosen by its INFORMATION_SCHEMA `DATA_TYPE`,
@@ -299,7 +332,23 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let sql = format!("SELECT {select_list} FROM {}.{}", qi(&cfg.database), qi(&cfg.table));
+    // Predicate pushdown: an operator-supplied WHERE, parenthesized so a future
+    // incremental-watermark predicate can AND onto it safely (see sanitize_where).
+    let from = format!("{}.{}", qi(&cfg.database), qi(&cfg.table));
+    let where_sql = match &cfg.where_sql {
+        Some(w) => format!(" WHERE ({w})"),
+        None => String::new(),
+    };
+    let sql = format!("SELECT {select_list} FROM {from}{where_sql}");
+
+    // Dry-run a configured predicate so a bad clause is a clean error BEFORE the pull
+    // streams (LIMIT 0 fetches no rows). Skipped when there's no WHERE.
+    if cfg.where_sql.is_some() {
+        sqlx::query(&format!("SELECT 1 FROM {from}{where_sql} LIMIT 0"))
+            .fetch_optional(&mut my)
+            .await
+            .map_err(|e| anyhow::anyhow!("connector config: 'where' clause is invalid: {e}"))?;
+    }
 
     // Header.
     let mut csv = String::new();
@@ -488,6 +537,18 @@ mod tests {
         assert!(select_columns(all(), &Some(vec!["id".into(), "nope".into()])).is_err());
         // explicit empty list -> Err (omit to pull all)
         assert!(select_columns(all(), &Some(vec![])).is_err());
+    }
+
+    #[test]
+    fn sanitize_where_guards_and_trims() {
+        assert_eq!(sanitize_where("  ").unwrap(), None); // blank -> None (no filter)
+        assert_eq!(sanitize_where("id > 5").unwrap(), Some("id > 5".to_string()));
+        assert_eq!(sanitize_where("  status = 'a'  ").unwrap(), Some("status = 'a'".to_string()));
+        // defense-in-depth rejections (NOT the trust boundary, but block the obvious escalations)
+        assert!(sanitize_where("1=1; DROP TABLE x").is_err()); // statement separator
+        assert!(sanitize_where("1=1 -- c").is_err()); // line comment
+        assert!(sanitize_where("1=1 /* c */").is_err()); // block comment
+        assert!(sanitize_where(&"x".repeat(5000)).is_err()); // over-length
     }
 
     #[test]

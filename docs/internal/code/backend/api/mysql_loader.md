@@ -33,7 +33,7 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - `pub struct Cfg` (holds `opts: MySqlConnectOptions` + database/table/project/as_user)
   + `Cfg::from_connection(pool, CON_id)` — reads the `connectors` row (kind=`mysql`;
   destination project + as_user; `config` JSONB = `{host, port, user, password,
-  database, table, ssl_mode?, ssl_ca?, columns?}`). Builds connect options from the discrete
+  database, table, ssl_mode?, ssl_ca?, columns?, where?}`). Builds connect options from the discrete
   components (never a format!'d URL); the legacy `conn` full-URL key is **rejected**
   (SSRF). `ssl_mode` (via `connectors_core::parse_ssl_mode`; default loopback→PREFERRED,
   remote→REQUIRED) maps through `mysql_ssl_mode()` → `.ssl_mode(..)`, and an optional
@@ -43,6 +43,15 @@ buffering); and a decode error is **surfaced, never swallowed**.
   session) → list columns + `DATA_TYPE` (information_schema) → **column pushdown**
   (`select_columns`) → type-aware `SELECT` → stream rows → CSV → `pipeline::upload_csv`
   → returns the new file rid.
+- `sanitize_where(raw)` — validates the optional `config.where` predicate pushdown.
+  `config.where` is an **operator-trust boundary**, not an injection-safe input: the
+  operator already chose the source table + the (least-privilege) creds the read runs
+  under, so an arbitrary boolean predicate is by design. `sanitize_where` trims (empty →
+  no filter) and applies **defense-in-depth** guards — reject `;`, `--`, `/* */`, cap
+  length 4096 — then run() appends `WHERE (<expr>)` (parenthesized for incremental
+  composition) and **dry-runs** it (`SELECT 1 … WHERE (<expr>) LIMIT 0`) so a syntax
+  error is a clean error before the pull streams. NOTE: a per-pull `where` override must
+  not be accepted from a non-admin sync caller (deferred — FE exposure is Admin-gated).
 - `select_columns(all, want)` — applies the optional `config.columns` pushdown:
   `None` = all columns; else keep only the requested ones in **ordinal** order,
   case-insensitively, **existence-checked against the live introspection** (an unknown
