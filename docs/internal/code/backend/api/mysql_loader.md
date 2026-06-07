@@ -43,8 +43,12 @@ buffering); and a decode error is **surfaced, never swallowed**.
   session) → list columns + `DATA_TYPE` (information_schema) → type-aware `SELECT`
   → stream rows → CSV → `pipeline::upload_csv` → returns the new file rid.
 - `project_expr(col, data_type)` / `is_recognized(data_type)` — the single
-  type→strategy map (extend here, never branch in `run`); an unrecognized type
-  extracts via `CAST AS CHAR` and is `warn!`-logged.
+  type→strategy map (extend here, never branch in `run`): spatial → EWKT
+  (`CONCAT('SRID=',ST_SRID,';',ST_AsText)`), binary → `HEX`, `bit` → unsigned-int
+  text, **`float` → `CAST(CAST(.. AS DOUBLE) AS CHAR)`** (full precision), everything
+  else → `CAST AS CHAR`. Every arm yields a STRING (run() decodes each column as
+  `Option<String>`). An unrecognized type extracts via the `CAST AS CHAR` default and
+  is `warn!`-logged.
 - **Introspection (the connector sub-tabs — Tables / Schema facets):**
   - `connect_pinned(opts)` — the shared secure-connect + SESSION-pin helper; `run`
     + both readers use it (one secure path, no format!'d URL).
@@ -89,6 +93,21 @@ buffering); and a decode error is **surfaced, never swallowed**.
   surface is mapped. Add a type there; never branch in `run`. `is_recognized`
   `warn!`s an unmapped type so a new MySQL type surfaces instead of silently
   mangling (`CAST AS CHAR` is the safe default).
+- **Type-fidelity contract (Slice B, 2026-06-07 — CAS_A968E1D0 / runbook
+  CAS_A968E1D0…-mysql-typefidelity).** Empirical bench audit closed two **silent
+  data-loss** gaps: **FLOAT** rendered ~6 sig digits via direct `CAST AS CHAR` (can't
+  round-trip binary32) → now `CAST(CAST(.. AS DOUBLE) AS CHAR)`; **spatial** `ST_AsText`
+  dropped the SRID (SRID=4326 ≡ SRID=0) → now EWKT `CONCAT('SRID=',ST_SRID,';',ST_AsText)`.
+  Remaining losses are **storage-layer, NOT projection-recoverable** — documented as a
+  contract, not bugs: **JSON** is emitted MySQL-normalized (object keys reordered, dup
+  keys dropped at INSERT, `:`/`,` spacing) — exact-byte/hash/signature consumers must not
+  assume input bytes; **CHAR(N)** trailing spaces are stripped on read (PAD SPACE) — use
+  VARCHAR/TEXT if trailing space is data; **BIT** emits the integer value (declared width
+  not preserved); **SET** emits members in definition order; **TIMESTAMP** is rendered
+  in UTC (session-pinned). FLOAT→DOUBLE and spatial→EWKT are unit-tested + bench-verified
+  (`0.3333333432674408` vs `0.333333`; `SRID=4326;…` vs `SRID=0;…`). DOUBLE stays on the
+  default arm (faithful except a narrow DBL_MIN-subnormal edge). VECTOR (MySQL 9) is
+  unprobed — deferred; the open-ended default arm still extracts it.
 - **Session pins are SESSION scope only** (utf8mb4 / `time_zone='+00:00'` /
   `sql_mode`) — never `GLOBAL`/`PERSIST`; the source's global state is never
   mutated. Pinning is what makes a pull reproducible across servers; only the

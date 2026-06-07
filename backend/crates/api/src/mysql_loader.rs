@@ -138,17 +138,33 @@ fn project_expr(col: &str, data_type: &str) -> String {
     let q = qi(col);
     match data_type {
         // Spatial: stored as internal geometry/WKB — `CAST AS CHAR` would emit raw
-        // bytes (invalid UTF-8). ST_AsText gives Well-Known Text, e.g. "POINT(1 2)".
+        // bytes (invalid UTF-8). Emit EWKT — `SRID=<n>;<WKT>` — so the spatial
+        // reference system survives: plain ST_AsText DROPS the SRID, collapsing e.g.
+        // SRID=4326 and SRID=0 (identical coords) to byte-identical text. CONCAT of a
+        // NULL geometry is NULL -> empty CSV field. (Note: 4326 WKT axis order is
+        // long-lat in ST_AsText output even though MySQL stores 4326 lat-long.)
         "geometry" | "point" | "linestring" | "polygon" | "multipoint" | "multilinestring"
-        | "multipolygon" | "geometrycollection" => format!("ST_AsText({q}) AS {q}"),
+        | "multipolygon" | "geometrycollection" => {
+            format!("CONCAT('SRID=', ST_SRID({q}), ';', ST_AsText({q})) AS {q}")
+        }
         // Binary: not UTF-8 — HEX keeps every byte losslessly as ASCII hex.
         "binary" | "varbinary" | "tinyblob" | "blob" | "mediumblob" | "longblob" => {
             format!("HEX({q}) AS {q}")
         }
         // BIT: a bitfield — render its unsigned integer value as text.
         "bit" => format!("CAST(CAST({q} AS UNSIGNED) AS CHAR) AS {q}"),
+        // FLOAT (binary32): a direct CAST AS CHAR renders only ~6 significant digits —
+        // too few to round-trip the 24-bit mantissa (a value-dependent SILENT
+        // truncation). Widen to DOUBLE first (exact: every f32 is an f64), then to
+        // CHAR, so it serializes at full shortest-round-trippable precision. The outer
+        // CAST AS CHAR is required because run() decodes every column as Option<String>.
+        "float" => format!("CAST(CAST({q} AS DOUBLE) AS CHAR) AS {q}"),
         // Numeric / temporal / char / text / enum / set / json (and any unknown
         // type): CAST AS CHAR is faithful text under the pinned utf8mb4 + UTC session.
+        // Storage-layer fidelity contract (NOT recoverable by any projection) is
+        // documented in the atomic doc: JSON is MySQL-normalized (keys reordered, dup
+        // keys dropped at insert), CHAR trailing spaces are stripped (use VARCHAR/TEXT),
+        // BIT width / SET definition-order are representational, TIMESTAMP is UTC.
         _ => format!("CAST({q} AS CHAR) AS {q}"),
     }
 }
@@ -313,7 +329,7 @@ pub struct ColInfo {
     pub data_type: String,
     pub nullable: bool,
     pub key: String,        // "" | "PRI" | "UNI" | "MUL"
-    pub projection: String, // how run() extracts it: "WKT" | "HEX" | "int" | "text"
+    pub projection: String, // how run() extracts it: "EWKT" | "HEX" | "int" | "double" | "text"
 }
 
 /// The label for how `project_expr` renders a column type — surfaced in the Schema
@@ -321,9 +337,10 @@ pub struct ColInfo {
 fn projection_label(data_type: &str) -> &'static str {
     match data_type {
         "geometry" | "point" | "linestring" | "polygon" | "multipoint" | "multilinestring"
-        | "multipolygon" | "geometrycollection" => "WKT",
+        | "multipolygon" | "geometrycollection" => "EWKT",
         "binary" | "varbinary" | "tinyblob" | "blob" | "mediumblob" | "longblob" => "HEX",
         "bit" => "int",
+        "float" => "double",
         _ => "text",
     }
 }
@@ -392,10 +409,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn projects_spatial_as_wkt() {
-        assert_eq!(project_expr("location", "geometry"), "ST_AsText(`location`) AS `location`");
-        assert_eq!(project_expr("p", "point"), "ST_AsText(`p`) AS `p`");
-        assert_eq!(project_expr("g", "geometrycollection"), "ST_AsText(`g`) AS `g`");
+    fn projects_spatial_as_ewkt_with_srid() {
+        // EWKT (SRID=<n>;<WKT>) so SRID survives — plain ST_AsText drops it.
+        assert_eq!(
+            project_expr("location", "geometry"),
+            "CONCAT('SRID=', ST_SRID(`location`), ';', ST_AsText(`location`)) AS `location`"
+        );
+        assert_eq!(
+            project_expr("p", "point"),
+            "CONCAT('SRID=', ST_SRID(`p`), ';', ST_AsText(`p`)) AS `p`"
+        );
+    }
+
+    #[test]
+    fn projects_float_via_double_for_precision() {
+        // A direct CAST AS CHAR truncates binary32 to ~6 sig digits; widen via DOUBLE.
+        assert_eq!(project_expr("ratio", "float"), "CAST(CAST(`ratio` AS DOUBLE) AS CHAR) AS `ratio`");
+        // DOUBLE stays on the default arm — CAST AS CHAR is already full precision.
+        assert_eq!(project_expr("d", "double"), "CAST(`d` AS CHAR) AS `d`");
     }
 
     #[test]

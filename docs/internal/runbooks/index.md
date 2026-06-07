@@ -233,3 +233,14 @@ Every entry follows the same five headings:
   `no-cache` ≠ `no-store` — `no-cache` keeps the 304 fast-path, only
   forcing revalidation; reach for it over `no-store` when an upstream
   already supports conditional requests.
+- [CAS_A968E1D0 — MySQL connector silent data loss: FLOAT truncation + spatial SRID drop](CAS_A968E1D0F8E6421A8129F9DDF274DA63-mysql-typefidelity.md) —
+  **Resolved 2026-06-07** (CAS_A968E1D0F8E6421A8129F9DDF274DA63). An empirical MySQL 8.4.9
+  bench audit of `mysql_loader::project_expr` found two silent-data-loss gaps: FLOAT via
+  `CAST AS CHAR` shows only ~6 sig digits (can't round-trip binary32) → now
+  `CAST(CAST(.. AS DOUBLE) AS CHAR)`; spatial `ST_AsText` drops the SRID (4326 ≡ 0) → now
+  EWKT `CONCAT('SRID=',ST_SRID,';',ST_AsText)`. Storage-layer losses no projection can
+  recover were documented as a contract (JSON MySQL-normalized, CHAR trailing-space stripped,
+  BIT width, SET definition-order, TIMESTAMP UTC). Verified live: `0.3333333432674408` vs
+  `0.333333`; `SRID=4326;…` vs `SRID=0;…`. Discipline rule: every projection arm must end in
+  a string type (CHAR/HEX/CONCAT) — `run()` decodes columns as `Option<String>`; a bench
+  mysql-CLI audit hides this because the CLI prints every type as text.
