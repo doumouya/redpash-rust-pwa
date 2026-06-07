@@ -36,14 +36,17 @@ GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + pro
   `db::insert_connector` (as_user = created_by = the caller; + the connector-specific
   `config` JSONB) + a `connector_create` event. Returns 201 + the `ConnectorSummary`.
 - `sync` (POST `/:rid/sync`) — runs the connector's extract → CSV → a new project
-  file ("Pull"). Same ≥Member write-reach gate as create; v1 wires **MySQL** only
-  (`mysql_loader::run`, in-process; kind≠mysql → 400). Optional body `{table}` pulls
-  a SPECIFIC table (the Tables-facet browse → pull-any-table) instead of the
-  connector's configured default. Returns `{ file }`.
-- `tables` (GET `/:rid/tables`) — list the source DB's tables (`mysql_loader::list_tables`)
-  for the **Tables** sub-tab. **VIEW**-gated (read introspection, like `get_one`); mysql only.
+  file ("Pull"). Same ≥Member write-reach gate as create; **dispatches by `kind`**
+  — `mysql` → `mysql_loader::run`, `postgres` → `postgres_loader::run` (both
+  in-process; other kinds → 400). Optional body `{table}` pulls a SPECIFIC table (the
+  Tables-facet browse → pull-any-table) instead of the connector's default.
+  Returns `{ file }`. (The dispatch is additive; the open loader **registry** is the
+  shared `connectors_core` co-design with the SQL-connector lane.)
+- `tables` (GET `/:rid/tables`) — list the source DB's tables (`mysql`/`postgres`
+  `list_tables`) for the **Tables** sub-tab. **VIEW**-gated. Returns `{ items }`
+  (the `{name,rows,kind}` shape is serde-identical across loaders).
 - `schema` (GET `/:rid/schema?table=`) — one table's columns + types + projection
-  strategy (`describe_table`) for the **Schema** sub-tab. VIEW-gated; mysql only.
+  strategy (`mysql`/`postgres` `describe_table`) for the **Schema** sub-tab. VIEW-gated.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
 - `get_one` (GET `/:rid`) — `db::get_connector` then `rbac::require_view` on the
   destination project (leak-free: unreachable reads as not-found).

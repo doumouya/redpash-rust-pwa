@@ -136,10 +136,6 @@ struct SyncBody {
     #[serde(default)] table: Option<String>,
 }
 
-#[derive(Serialize)]
-struct TablesResult { items: Vec<crate::mysql_loader::TableInfo> }
-#[derive(Serialize)]
-struct SchemaResult { items: Vec<crate::mysql_loader::ColInfo> }
 #[derive(Deserialize)]
 struct SchemaQuery { table: String }
 
@@ -162,20 +158,29 @@ async fn sync(
     crate::rbac::require_grant(&state, &user, &conn.project_id, "project",
         |g| g.effective().is_some_and(|r| r >= crate::rbac::Role::Member)).await?;
 
-    if conn.kind != "mysql" {
-        return Err(AppError::bad_request("unsupported",
-            format!("in-app sync is wired for kind 'mysql' only (got '{}')", conn.kind)));
-    }
-    let mut cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
     // optional {table} override — pull any table the user picked in the Tables facet
-    if let Some(Json(b)) = body {
-        if let Some(t) = b.table.filter(|t| !t.trim().is_empty()) { cfg.table = t; }
-    }
-    let file = crate::mysql_loader::run(&state.db, state.data_dir.as_path(), &cfg)
-        .await
-        .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?;
+    let table_override = body.and_then(|Json(b)| b.table).filter(|t| !t.trim().is_empty());
+    // Dispatch by connector kind (mysql + postgres wired — additive; the shared loader
+    // registry is the connectors_core co-design). Both loaders' run() return the file rid.
+    let dd = state.data_dir.as_path();
+    let file = match conn.kind.as_str() {
+        "mysql" => {
+            let mut cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            if let Some(t) = table_override { cfg.table = t; }
+            crate::mysql_loader::run(&state.db, dd, &cfg).await
+                .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?
+        }
+        "postgres" => {
+            let mut cfg = crate::postgres_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            if let Some(t) = table_override { cfg.table = t; }
+            crate::postgres_loader::run(&state.db, dd, &cfg).await
+                .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?
+        }
+        other => return Err(AppError::bad_request("unsupported",
+            format!("in-app sync is wired for kind 'mysql'/'postgres' (got '{other}')"))),
+    };
 
     crate::event::info(&state.db, "connector_sync", format!("synced connector {rid} → {file}"))
         .user(user.clone())
@@ -192,23 +197,33 @@ async fn tables(
     State(state): State<AppState>,
     headers:      HeaderMap,
     Path(rid):    Path<String>,
-) -> Result<Json<TablesResult>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let conn = db::get_connector(&state.db, &rid)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
     crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
-    if conn.kind != "mysql" {
-        return Err(AppError::bad_request("unsupported",
-            format!("table listing is wired for kind 'mysql' only (got '{}')", conn.kind)));
-    }
-    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
-    let items = crate::mysql_loader::list_tables(&cfg)
-        .await
-        .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
-    Ok(Json(TablesResult { items }))
+    // Identical {name,rows,kind} wire shape for both loaders → serialize either's
+    // TableInfo (the structs are per-loader but serde-identical).
+    let items = match conn.kind.as_str() {
+        "mysql" => {
+            let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            let t = crate::mysql_loader::list_tables(&cfg).await
+                .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+            serde_json::to_value(t).unwrap_or_default()
+        }
+        "postgres" => {
+            let cfg = crate::postgres_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            let t = crate::postgres_loader::list_tables(&cfg).await
+                .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+            serde_json::to_value(t).unwrap_or_default()
+        }
+        other => return Err(AppError::bad_request("unsupported",
+            format!("table listing is wired for kind 'mysql'/'postgres' (got '{other}')"))),
+    };
+    Ok(Json(serde_json::json!({ "items": items })))
 }
 
 /// `GET /api/connectors/:rid/schema?table=X` — columns + types (+ the loader's
@@ -218,23 +233,31 @@ async fn schema(
     headers:      HeaderMap,
     Path(rid):    Path<String>,
     Query(q):     Query<SchemaQuery>,
-) -> Result<Json<SchemaResult>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let conn = db::get_connector(&state.db, &rid)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
     crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
-    if conn.kind != "mysql" {
-        return Err(AppError::bad_request("unsupported",
-            format!("schema is wired for kind 'mysql' only (got '{}')", conn.kind)));
-    }
-    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
-        .await
-        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
-    let items = crate::mysql_loader::describe_table(&cfg, &q.table)
-        .await
-        .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
-    Ok(Json(SchemaResult { items }))
+    let items = match conn.kind.as_str() {
+        "mysql" => {
+            let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            let c = crate::mysql_loader::describe_table(&cfg, &q.table).await
+                .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+            serde_json::to_value(c).unwrap_or_default()
+        }
+        "postgres" => {
+            let cfg = crate::postgres_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            let c = crate::postgres_loader::describe_table(&cfg, &q.table).await
+                .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+            serde_json::to_value(c).unwrap_or_default()
+        }
+        other => return Err(AppError::bad_request("unsupported",
+            format!("schema is wired for kind 'mysql'/'postgres' (got '{other}')"))),
+    };
+    Ok(Json(serde_json::json!({ "items": items })))
 }
 
 #[derive(Deserialize)]
