@@ -70,7 +70,7 @@ pub fn routes() -> Router<AppState> {
         .route("/rbac",              get(rbac_resolve))
         .route("/audit-catalog",     get(audit_catalog))
         .route("/fields",            get(list_fields).put(put_field))
-        .route("/types",             get(list_types))
+        .route("/types",             get(list_types).post(register_type))
         .route("/types/:type",       get(get_type))
 }
 
@@ -1508,6 +1508,126 @@ async fn get_type(
     let overrides = fetch_field_overrides(&state).await?;
     overlay_overrides(&mut td, &overrides);
     Ok(Json(td))
+}
+
+#[derive(Deserialize)]
+struct RegisterFieldBody {
+    field:       String,
+    data_type:   String,
+    perm_class:  Option<String>,
+    is_sortable: Option<bool>,
+    #[serde(default)]
+    options:     Vec<String>,
+    rel_type:    Option<String>,
+    #[serde(default)]
+    rel_multi:   bool,
+}
+
+#[derive(Deserialize)]
+struct RegisterTypeBody {
+    type_id:             String,
+    rid_prefix:          String,
+    display_name:        String,
+    display_name_plural: Option<String>,
+    rail_icon:           Option<String>,
+    #[serde(default)]
+    default_columns:     Vec<String>,
+    default_sort:        Option<String>,
+    grid_served:         Option<bool>,
+    #[serde(default)]
+    fields:              Vec<RegisterFieldBody>,
+}
+
+/// `POST /api/admin/types` — **register_type**: declare a custom object type.
+/// Validates (type_id new, rid_prefix free, perm_classes valid) then inserts the
+/// `type_definitions` + `type_fields` rows in one tx. The TypeDefCache picks the
+/// type up on its next load (restart); a live hot-swap is a follow-on. Once
+/// loaded, the generic `/api/objects/:type` handler serves it with zero more code
+/// (object-registry Stage 3, CAS_0FBF301F). Platform-admin gated.
+async fn register_type(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Json(body):   Json<RegisterTypeBody>,
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let caller = super::resolve_user_rid(&state, &headers).await?;
+    if !crate::rbac::is_platform_admin(&state, &caller).await? {
+        return Err(AppError::not_found("not_found", "types"));
+    }
+    let type_id    = body.type_id.trim().to_lowercase();
+    let rid_prefix = body.rid_prefix.trim().to_uppercase();
+    if type_id.is_empty() || rid_prefix.is_empty() {
+        return Err(AppError::bad_request("invalid", "type_id and rid_prefix are required"));
+    }
+    if state.type_cache.is_type(&type_id) {
+        return Err(AppError::conflict("conflict", format!("type {type_id} already exists")));
+    }
+    // rid_prefix must not collide with an existing (builtin or custom) prefix.
+    if state.type_cache.object_kind(&format!("{rid_prefix}X")) != "unknown" {
+        return Err(AppError::bad_request("invalid", format!("rid_prefix {rid_prefix} is already in use")));
+    }
+    for f in &body.fields {
+        let pc = f.perm_class.as_deref().unwrap_or("standard");
+        if crate::field_perms::PermClass::from_str(pc).is_none() {
+            return Err(AppError::bad_request("invalid", format!("unknown perm_class {pc} on field {}", f.field)));
+        }
+    }
+    let json_arr = |v: &[String]| serde_json::Value::Array(
+        v.iter().map(|s| serde_json::Value::String(s.clone())).collect(),
+    );
+    let next_ord: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(ordinal), -1) + 1 FROM type_definitions")
+        .fetch_one(&state.db).await?;
+
+    let mut tx = state.db.begin().await?;
+    // The cache check above catches a LOADED duplicate; the DB unique constraints
+    // (type_id PK + the partial rid_prefix index) catch a same-session one the
+    // stale cache can't see → map 23505 to a clean 409.
+    let td_insert = sqlx::query(
+        "INSERT INTO type_definitions \
+           (type_id, rid_prefix, display_name, display_name_plural, rail_icon, \
+            default_columns, default_sort, is_builtin, ordinal, grid_served) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,$8,$9)",
+    )
+    .bind(&type_id).bind(&rid_prefix).bind(&body.display_name)
+    .bind(body.display_name_plural.as_deref().unwrap_or(&body.display_name))
+    .bind(&body.rail_icon)
+    .bind(json_arr(&body.default_columns))
+    .bind(&body.default_sort)
+    .bind(next_ord)
+    .bind(body.grid_served.unwrap_or(true))
+    .execute(&mut *tx).await;
+    if let Err(sqlx::Error::Database(ref e)) = td_insert {
+        if e.code().as_deref() == Some("23505") {
+            return Err(AppError::conflict("conflict", format!("type {type_id} or prefix {rid_prefix} already exists")));
+        }
+    }
+    td_insert?;
+    for (i, f) in body.fields.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO type_fields \
+               (type_id, field, ordinal, data_type, perm_class, is_sortable, options, rel_type, rel_multi) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        )
+        .bind(&type_id).bind(&f.field).bind(i as i32)
+        .bind(&f.data_type)
+        .bind(f.perm_class.as_deref().unwrap_or("standard"))
+        .bind(f.is_sortable.unwrap_or(true))
+        .bind(json_arr(&f.options))
+        .bind(&f.rel_type).bind(f.rel_multi)
+        .execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+
+    crate::event::info(&state.db, "type_register", format!("registered type {type_id}"))
+        .user(caller)
+        .context(serde_json::json!({ "type_id": type_id, "rid_prefix": rid_prefix, "fields": body.fields.len() }))
+        .send();
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({
+        "type_id":    type_id,
+        "rid_prefix": rid_prefix,
+        "fields":     body.fields.len(),
+        "note":       "type registered; live after the next cache load (restart)",
+    }))))
 }
 
 /// `GET /api/admin/audit-catalog` — the static-audit half of the Admin Console

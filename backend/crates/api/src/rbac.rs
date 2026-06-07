@@ -102,6 +102,7 @@ cascade_scopes(oid) AS (
     UNION SELECT p.company_id
             FROM project_files f JOIN projects p ON p.redpash_id = f.project_redpash_id
            WHERE f.redpash_id = $2
+    UNION SELECT scope_parent_id     FROM entity_data   WHERE object_id  = $2
 ),
 ranked(object_redpash_id, rank) AS (
     SELECT object_redpash_id,
@@ -163,6 +164,7 @@ cascade_scopes(oid) AS (
     UNION SELECT p.company_id
             FROM project_files f JOIN projects p ON p.redpash_id = f.project_redpash_id
            WHERE f.redpash_id = $2
+    UNION SELECT scope_parent_id     FROM entity_data   WHERE object_id  = $2
 )
 SELECT m.object_redpash_id, m.member_redpash_id, m.role, m.context_role,
        CASE WHEN m.object_redpash_id = $2 THEN 'direct' ELSE 'scope' END AS reach
