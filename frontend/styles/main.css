@@ -37,7 +37,6 @@
 @import "base.css";      /* reset + document defaults + brand text */
 
 /* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
-@import "panel.css";     /* rp-* workspace-unique panel content: step-history, report-builder, joins, sentinels (generic chrome → framework/{panel,filter-panel,tools-panel}.css) */
 @import "sw-update.css"; /* service-worker update banner */
 
 /* ── 2.5 framework atoms + components — the rp-* layer (CAS_37B2E1BF) ─────
