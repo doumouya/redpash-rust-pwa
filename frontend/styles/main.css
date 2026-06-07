@@ -41,7 +41,6 @@
 @import "user-picker.css"; /* shared user-picker atom — search input + dropdown */
 @import "topbar.css";    /* brand · omnibox · actions */
 @import "rail.css";      /* the rail nav (home + monitoring + workspace) */
-@import "toolbar.css";   /* .rt-toolbar + .rt-mode + .rt-search + .rt-pill + .rt-dd-* + .rt-sel-chip (the .rt-btn base lives in button.css) */
 @import "table.css";     /* .rt-table-wrap + .rt-table + .rt-table-state + .rt-status */
 @import "panel.css";     /* rp-* workspace-unique panel content: step-history, report-builder, joins, sentinels (generic chrome → framework/{panel,filter-panel,tools-panel}.css) */
 @import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
@@ -99,4 +98,3 @@
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 @import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
 @import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
-@import "chart.css";     /* the redtable body when a chart file is open */
