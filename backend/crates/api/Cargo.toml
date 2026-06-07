@@ -56,6 +56,8 @@ webpki-roots       = "1"      # CA roots for the Kafka TLS config
 regex              = "1"       # `pattern` ValidateRule (CAS_C7AEBE83). Already in-tree (via polars);
                                # RE2-style linear-time matching = no ReDoS — the safe choice vs a hand-rolled backtracker.
 base64             = "0.22"   # /api/demo/avro-decode: decode adversarial payloads
+ring               = "0.17"   # AES-256-GCM for connector secret-at-rest (secrets.rs). Already in-tree (rustls).
+zeroize            = "1"       # wipe plaintext key material from the heap on drop (secrets.rs master key + create-path secret). In-tree.
 
 dotenvy            = { workspace = true }
 tracing            = { workspace = true }
