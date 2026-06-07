@@ -77,6 +77,10 @@ buffering); and a decode error is **surfaced, never swallowed**.
   else → `CAST AS CHAR`. Every arm yields a STRING (run() decodes each column as
   `Option<String>`). An unrecognized type extracts via the `CAST AS CHAR` default and
   is `warn!`-logged.
+- `pub async fn probe(&Cfg) -> Result<()>` — the "Test connection" action: reuses
+  `connect_pinned` (so the SSRF/TLS gate already ran in `from_connection`) + `SELECT 1`.
+  Read-only; proves creds + host + TLS without pulling data. Surfaced at
+  `POST /api/connectors/:rid/test`.
 - **Introspection (the connector sub-tabs — Tables / Schema facets):**
   - `connect_pinned(opts)` — the shared secure-connect + SESSION-pin helper; `run`
     + both readers use it (one secure path, no format!'d URL).

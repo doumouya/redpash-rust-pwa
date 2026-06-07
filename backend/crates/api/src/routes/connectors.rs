@@ -6,6 +6,7 @@
 //!   GET    /:rid    fetch one connector summary
 //!   PATCH  /:rid    rename a connector (manage = Admin+ on its project)
 //!   DELETE /:rid    delete a connector (Admin+; the row cascades via the registry)
+//!   POST   /:rid/test   probe the source connection (VIEW; connect + SELECT 1)
 //!
 //! This is the framework half of connector-through-framework: instead of the
 //! `load.sh` env hardcode, the user creates a connection (picking which project
@@ -29,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid/sync", post(sync))
         .route("/:rid/tables", get(tables))
         .route("/:rid/schema", get(schema))
+        .route("/:rid/test", post(test_connection))
 }
 
 async fn list(
@@ -258,6 +260,35 @@ async fn schema(
             format!("schema is wired for kind 'mysql'/'postgres' (got '{other}')"))),
     };
     Ok(Json(serde_json::json!({ "items": items })))
+}
+
+/// `POST /api/connectors/:rid/test` — probe the source connection (the Settings
+/// "Test connection" action). Read-only: connect + `SELECT 1` (the loader's `probe`,
+/// which reuses the secure connect path, so the SSRF/TLS gate runs). VIEW-gated like
+/// the other introspection reads; leak-free 404. A standalone handler (not folded
+/// into the sync/tables/schema match) so it composes additively. MySQL wired;
+/// postgres falls through to "unsupported" until `postgres_loader::probe` lands.
+async fn test_connection(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
+    match conn.kind.as_str() {
+        "mysql" => {
+            let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            crate::mysql_loader::probe(&cfg).await
+                .map_err(|e| AppError::bad_request("connector_test", e.to_string()))?;
+        }
+        other => return Err(AppError::bad_request("unsupported",
+            format!("connection test is wired for kind 'mysql' (got '{other}')"))),
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]

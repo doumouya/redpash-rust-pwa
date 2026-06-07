@@ -3,7 +3,7 @@ title: frontend/styles/sheetwise.css
 source: ../../../../../frontend/styles/sheetwise.css
 owner: Torv
 section: Internal · Code · Frontend · styles
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # styles/sheetwise.css
@@ -24,7 +24,8 @@ replaced is gone — the editor styling moved to `framework/editor-code.css`.
 - `.rp-sw-editbar` — padding around the column chip-row + the `rp-editor` card.
 - `.rp-sw-err` — the one-off result error banner (page content, not an atom role).
 - `.rp-sw-foot` / `-foot-sp` / `-stat` / `-target-in` — the result footer row
-  (stat readout · target-name input · save · pager).
+  (stat readout · target-name input · save · pager). `.rp-sw-stat.is-ok` /
+  `.is-err` color the Settings "Test connection" result (`--rp-ok` / `--rp-danger`).
 - `.rp-sw-conn` / `-conn-guide` — the connectors guidance empty-state centering.
 
 ## Drift-prone areas

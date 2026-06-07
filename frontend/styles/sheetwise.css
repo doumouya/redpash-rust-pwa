@@ -35,6 +35,8 @@
 }
 .rp-sw-foot-sp { flex: 1; }
 .rp-sw-stat { color: var(--rp-text-mute); font-size: var(--rp-text-xs); }
+.rp-sw-stat.is-ok { color: var(--rp-ok); }
+.rp-sw-stat.is-err { color: var(--rp-danger); }
 .rp-sw-target-in { width: 11rem; flex-shrink: 0; }
 
 /* the redtable result fills the gap between the editor zone and the footer. */

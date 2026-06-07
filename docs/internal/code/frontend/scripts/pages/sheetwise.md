@@ -3,7 +3,7 @@ title: frontend/scripts/pages/sheetwise.js
 source: ../../../../../frontend/scripts/pages/sheetwise.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · pages
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # pages/sheetwise.js
@@ -41,8 +41,10 @@ this rebuild deletes that family and **composes framework components** —
     (`GET /:rid/tables` → browse + per-table Pull via `pullTable` = `sync {table}`;
     click a table name → Schema), **Schema** (`GET /:rid/schema?table=` → columns +
     types + projection strategy), **Pulls** (the connector's project files via
-    `/api/files`), **Settings** (summary info; host/db + test land with the config
-    endpoint). The guidance (`#swConnGuide`) shows until a facet is open.
+    `/api/files`), **Settings** (summary info + a **Test connection** button →
+    `POST /:rid/test` → `mysql_loader::probe`, result in `#swConnTestStat`
+    `.is-ok`/`.is-err`; host/db editing still lands with the config endpoint). The
+    guidance (`#swConnGuide`) shows until a facet is open.
 - **SQL surface:** `mountEditorCode` (the editor; Run/Clear are `rp-btn-icon` in its
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-

@@ -353,8 +353,29 @@ export default function sheetwise(app, { session }) {
       + settingRow("Destination project", conn.project_id || "—")
       + settingRow("Connection id", conn.redpash_id)
       + '</div>'
+      + '<div class="rp-sw-facet-foot">'
+      +   '<button class="rp-btn rp-btn--glass" id="swConnTest" type="button"><i class="bi bi-plug"></i> Test connection</button>'
+      +   '<span class="rp-sw-stat" id="swConnTestStat" role="status" aria-live="polite"></span>'
+      + '</div>'
       + '<p class="rp-sw-facet-note">Rename or delete this connector from the ✎ / ✕ on its rail header. '
-      + 'Host / database / SSL mode + a connection test arrive with the connector-config endpoint.</p>';
+      + 'Host / database / SSL mode editing arrives with the connector-config endpoint.</p>';
+    const btn = host.querySelector("#swConnTest");
+    const stat = host.querySelector("#swConnTestStat");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      stat.className = "rp-sw-stat";
+      stat.textContent = "Testing…";
+      try {
+        await api("/api/connectors/" + encodeURIComponent(conn.redpash_id) + "/test", { method: "POST" });
+        stat.className = "rp-sw-stat is-ok";
+        stat.textContent = "✓ Connected";
+      } catch (e) {
+        stat.className = "rp-sw-stat is-err";
+        stat.textContent = "✕ " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   // Pull one table → CSV (sync with a {table} override), then jump to SQL.

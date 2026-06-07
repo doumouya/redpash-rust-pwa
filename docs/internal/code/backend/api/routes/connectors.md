@@ -25,6 +25,7 @@ DELETE /api/connectors/:rid       delete (Admin+; the row cascades via the regis
 POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (Pull); body {table?} pulls a specific table
 GET    /api/connectors/:rid/tables   list the source DB's tables (Tables facet; VIEW-gated)
 GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + projection (Schema facet; VIEW-gated)
+POST   /api/connectors/:rid/test     probe the source connection — connect + SELECT 1 (Settings "Test connection"; VIEW-gated)
 ```
 
 ## Public surface
@@ -45,6 +46,11 @@ GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + pro
 - `tables` (GET `/:rid/tables`) — list the source DB's tables (`mysql`/`postgres`
   `list_tables`) for the **Tables** sub-tab. **VIEW**-gated. Returns `{ items }`
   (the `{name,rows,kind}` shape is serde-identical across loaders).
+- `test_connection` (POST `/:rid/test`) — probe the source connection for the Settings
+  **Test connection** action: `db::get_connector` → `require_view` → `mysql_loader::probe`
+  (connect + `SELECT 1`). A standalone handler (NOT folded into the sync/tables/schema
+  match) so it composes additively. **VIEW**-gated; returns `{ ok: true }`. MySQL wired;
+  postgres falls through to "unsupported" until `postgres_loader::probe` lands.
 - `schema` (GET `/:rid/schema?table=`) — one table's columns + types + projection
   strategy (`mysql`/`postgres` `describe_table`) for the **Schema** sub-tab. VIEW-gated.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
