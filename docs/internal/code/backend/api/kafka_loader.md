@@ -105,7 +105,14 @@ is visible.
   decoded (nothing loaded — the sync handler maps that to a clear "no records" response,
   not a file). The CLI mode discards it.
 
-Private: `consume_raw` (rskafka SASL_SSL fetch from one partition).
+- `pub async fn probe(cfg) -> Result<()>` — the "Test connection" action
+  (`POST /api/connectors/:rid/test`): reuses `build_client` + `list_topics`, verifies
+  `cfg.topic` is visible to the creds, **consumes no records** (the kafka analogue of
+  mysql's `SELECT 1`).
+
+Private: `build_client` (the single-copy SASL_SSL + mandatory-TLS rskafka client build,
+shared by `consume_raw` + `probe` — never fork the fail-closed TLS path);
+`consume_raw` (rskafka fetch across the topic's partitions, earliest→high-watermark).
 
 ## Drift-prone areas
 

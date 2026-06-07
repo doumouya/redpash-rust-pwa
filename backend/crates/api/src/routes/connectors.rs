@@ -288,8 +288,9 @@ async fn schema(
 /// "Test connection" action). Read-only: connect + `SELECT 1` (the loader's `probe`,
 /// which reuses the secure connect path, so the SSRF/TLS gate runs). VIEW-gated like
 /// the other introspection reads; leak-free 404. A standalone handler (not folded
-/// into the sync/tables/schema match) so it composes additively. MySQL + postgres
-/// wired (each loader's `probe` = secure connect + `SELECT 1`).
+/// into the sync/tables/schema match) so it composes additively. MySQL + postgres +
+/// kafka wired (each loader's `probe` = secure connect + a no-op check: SQL `SELECT 1`,
+/// kafka `list_topics` + topic-visible).
 async fn test_connection(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -313,8 +314,14 @@ async fn test_connection(
             crate::postgres_loader::probe(&cfg).await
                 .map_err(|e| AppError::bad_request("connector_test", e.to_string()))?;
         }
+        "kafka" => {
+            let cfg = crate::kafka_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            crate::kafka_loader::probe(&cfg).await
+                .map_err(|e| AppError::bad_request("connector_test", e.to_string()))?;
+        }
         other => return Err(AppError::bad_request("unsupported",
-            format!("connection test is wired for kind 'mysql'/'postgres' (got '{other}')"))),
+            format!("connection test is wired for kind 'mysql'/'postgres'/'kafka' (got '{other}')"))),
     }
     Ok(Json(serde_json::json!({ "ok": true })))
 }

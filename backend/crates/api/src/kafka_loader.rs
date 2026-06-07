@@ -231,17 +231,14 @@ type RawRecord = (Vec<u8>, BTreeMap<String, Vec<u8>>);
 /// offset (data is spread across partitions; offset 0 is out-of-range once
 /// retention has pruned). Returns `(value, headers)` per record; decode is the
 /// caller's (codec_avro), keyed off the version header. Live-cluster path.
-async fn consume_raw(cfg: &Cfg) -> Result<Vec<RawRecord>> {
-    use rskafka::client::{
-        partition::{OffsetAt, UnknownTopicHandling},
-        ClientBuilder, Credentials, SaslConfig,
-    };
+/// Build the rskafka client — SASL_SSL with **mandatory TLS** (fail-closed: SASL
+/// PLAIN sends creds in cleartext, so it MUST ride TLS; there is no plaintext
+/// fallback). Single-copy of the secure-connect path, shared by `consume_raw` +
+/// `probe` so a forked connect can't drift from the fail-closed TLS guarantee.
+async fn build_client(cfg: &Cfg) -> Result<rskafka::client::Client> {
+    use rskafka::client::{ClientBuilder, Credentials, SaslConfig};
     use std::sync::Arc;
 
-    // TLS is MANDATORY here: SASL PLAIN sends the credentials in cleartext, so it
-    // must ride TLS (Confluent Cloud = SASL_SSL). Fail-closed — there is NO
-    // plaintext fallback; if the TLS config can't be built, the run errors out
-    // rather than leaking creds over the wire.
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
@@ -252,7 +249,7 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<RawRecord>> {
     .with_root_certificates(roots)
     .with_no_client_auth();
 
-    let client = ClientBuilder::new(vec![cfg.bootstrap.clone()])
+    ClientBuilder::new(vec![cfg.bootstrap.clone()])
         .tls_config(Arc::new(tls))
         .sasl_config(SaslConfig::Plain(Credentials::new(
             cfg.sasl_user.clone(),
@@ -260,7 +257,26 @@ async fn consume_raw(cfg: &Cfg) -> Result<Vec<RawRecord>> {
         )))
         .build()
         .await
-        .context("kafka connect")?;
+        .context("kafka connect")
+}
+
+/// Connection probe for the "Test connection" action — connect (the shared
+/// `build_client`, mandatory TLS) + verify the configured topic is visible to the
+/// credentials, WITHOUT consuming any records. The kafka analogue of mysql's
+/// `SELECT 1`; surfaced at `POST /api/connectors/:rid/test`.
+pub async fn probe(cfg: &Cfg) -> Result<()> {
+    let client = build_client(cfg).await?;
+    let topics = client.list_topics().await.context("list topics")?;
+    if !topics.iter().any(|t| t.name == cfg.topic) {
+        anyhow::bail!("topic {} not visible to these credentials", cfg.topic);
+    }
+    Ok(())
+}
+
+async fn consume_raw(cfg: &Cfg) -> Result<Vec<RawRecord>> {
+    use rskafka::client::partition::{OffsetAt, UnknownTopicHandling};
+
+    let client = build_client(cfg).await?;
 
     // Discover the topic's partitions — the JLR messages are spread across
     // them, so a single-partition fetch (the old partition-0 default) finds

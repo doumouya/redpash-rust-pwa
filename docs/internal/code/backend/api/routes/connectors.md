@@ -53,7 +53,8 @@ POST   /api/connectors/:rid/test     probe the source connection — connect + S
   **Test connection** action: `db::get_connector` → `require_view` → the loader's `probe`
   (connect + `SELECT 1`). A standalone handler (NOT folded into the sync/tables/schema
   match) so it composes additively. **VIEW**-gated; returns `{ ok: true }`. MySQL +
-  postgres wired (each loader's `probe`).
+  postgres + kafka wired (each loader's `probe`; kafka = `list_topics` + topic-visible,
+  no consume).
 - `schema` (GET `/:rid/schema?table=`) — one table's columns + types + projection
   strategy (`mysql`/`postgres` `describe_table`) for the **Schema** sub-tab. VIEW-gated.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
