@@ -105,7 +105,7 @@
   background: var(--rp-surface-2);
 }
 .rp-rail-chips .rp-chip.is-active {
-  background: var(--rp-info);
+  background: var(--rp-accent);
   color: var(--rp-bg);
 }
 
@@ -467,7 +467,7 @@
   transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
 }
 .rp-rail-footer-nav-item:hover { background: var(--rp-hover); color: var(--rp-text); }
-.rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-info); }
+.rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-accent); }
 /* Profile avatar — initials chip rather than an icon. */
 .rp-rail-footer-nav-avatar {
   font-size: 0.625rem;
@@ -479,8 +479,8 @@
 }
 .rp-rail-footer-nav-avatar.is-active {
   background: var(--rp-accent-soft);
-  border-color: var(--rp-info);
-  color: var(--rp-info);
+  border-color: var(--rp-accent);
+  color: var(--rp-accent);
 }
 /* Compact rail — center the cluster as it wraps to a column. */
 .rp-rail.compact .rp-rail-footer-nav { justify-content: center; }

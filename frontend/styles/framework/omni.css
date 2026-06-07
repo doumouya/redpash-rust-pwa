@@ -80,7 +80,7 @@
 .rp-search-result i { color: var(--rp-text-mute); font-size: 0.875rem; flex-shrink: 0; }
 .rp-search-result:hover,
 .rp-search-result.is-active { background: var(--rp-accent-soft); }
-.rp-search-result.is-active i { color: var(--rp-info); }
+.rp-search-result.is-active i { color: var(--rp-accent); }
 .rp-search-result-label {
   flex: 1;
   min-width: 0;
@@ -208,7 +208,7 @@
 .rp-omni-result.is-active {
   background: var(--rp-accent-soft);
 }
-.rp-omni-result.is-active i { color: var(--rp-info); }
+.rp-omni-result.is-active i { color: var(--rp-accent); }
 .rp-omni-result-label {
   flex: 1;
   min-width: 0;

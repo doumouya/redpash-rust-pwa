@@ -58,7 +58,7 @@
   padding-right: 0.25rem;
 }
 .rp-tool-columns-table tr.is-selected td { background: var(--rp-accent-soft); }
-.rp-tool-columns-table tr.is-selected td.is-name { color: var(--rp-info); }
+.rp-tool-columns-table tr.is-selected td.is-name { color: var(--rp-accent); }
 
 /* column drag-reorder (vertical row drag) — the manager rows ARE the handles.
    The redtable's .is-drop-before/after draw VERTICAL bars on a TH (horizontal
@@ -276,7 +276,7 @@
   color: var(--rp-text);
 }
 .rp-tool-columns-selchip.is-active b,
-.rp-tool-columns-selchip.is-active i { color: var(--rp-info); }
+.rp-tool-columns-selchip.is-active i { color: var(--rp-accent); }
 .rp-tool-columns-selchip-clear:hover {
   background: color-mix(in srgb, var(--rp-accent) 18%, transparent);
   color: var(--rp-accent);
