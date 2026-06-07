@@ -33,15 +33,22 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - `pub struct Cfg` (holds `opts: MySqlConnectOptions` + database/table/project/as_user)
   + `Cfg::from_connection(pool, CON_id)` — reads the `connectors` row (kind=`mysql`;
   destination project + as_user; `config` JSONB = `{host, port, user, password,
-  database, table, ssl_mode?, ssl_ca?}`). Builds connect options from the discrete
+  database, table, ssl_mode?, ssl_ca?, columns?}`). Builds connect options from the discrete
   components (never a format!'d URL); the legacy `conn` full-URL key is **rejected**
   (SSRF). `ssl_mode` (via `connectors_core::parse_ssl_mode`; default loopback→PREFERRED,
   remote→REQUIRED) maps through `mysql_ssl_mode()` → `.ssl_mode(..)`, and an optional
   `ssl_ca` path sets `.ssl_ca(..)` for VERIFY_CA / VERIFY_IDENTITY. The host/TLS
   admission decision is `connectors_core::host_gate` (see Drift-prone areas).
 - `pub async fn run(pool, data_dir, &Cfg) -> Result<String>` — connect (pinned
-  session) → list columns + `DATA_TYPE` (information_schema) → type-aware `SELECT`
-  → stream rows → CSV → `pipeline::upload_csv` → returns the new file rid.
+  session) → list columns + `DATA_TYPE` (information_schema) → **column pushdown**
+  (`select_columns`) → type-aware `SELECT` → stream rows → CSV → `pipeline::upload_csv`
+  → returns the new file rid.
+- `select_columns(all, want)` — applies the optional `config.columns` pushdown:
+  `None` = all columns; else keep only the requested ones in **ordinal** order,
+  case-insensitively, **existence-checked against the live introspection** (an unknown
+  name or an empty list errors). Pure + unit-tested; run() applies it to the introspected
+  list so the select list only ever emits qi-quoted introspected names — a bogus/injected
+  config name is rejected, never concatenated into SQL.
 - `project_expr(col, data_type)` / `is_recognized(data_type)` — the single
   type→strategy map (extend here, never branch in `run`): spatial → EWKT
   (`CONCAT('SRID=',ST_SRID,';',ST_AsText)`), binary → `HEX`, `bit` → unsigned-int

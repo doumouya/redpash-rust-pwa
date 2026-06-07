@@ -33,6 +33,7 @@ pub struct Cfg {
     pub opts:        MySqlConnectOptions, // built from discrete components (never a format!'d URL)
     pub database:    String,
     pub table:       String,
+    pub columns:     Option<Vec<String>>, // config.columns — pull only these (None = all); existence-checked in run()
     pub project_rid: String,
     pub as_user:     String,
 }
@@ -70,6 +71,14 @@ impl Cfg {
         let s = |k: &str| cfg.get(k).and_then(serde_json::Value::as_str).map(str::to_string);
         let database = s("database").ok_or_else(|| anyhow::anyhow!("connector config: 'database' required"))?;
         let table    = s("table").ok_or_else(|| anyhow::anyhow!("connector config: 'table' required"))?;
+        // Optional column pushdown: pull only `config.columns` (a JSON array of names).
+        // Absent → None → pull every column. The names are NOT trusted here — run()
+        // validates each against the live introspection + only emits the qi-quoted
+        // introspected name, so a bogus/injected entry can never reach the SQL.
+        let columns = cfg
+            .get("columns")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect::<Vec<_>>());
         // SECURITY (SSRF): build connect options from DISCRETE components — NEVER a
         // format!'d `mysql://user:pass@host/…` URL, where a crafted user/pass can
         // smuggle a different host through the userinfo. The legacy `conn` full-URL
@@ -107,7 +116,7 @@ impl Cfg {
         if let Some(ca) = s("ssl_ca").filter(|c| !c.trim().is_empty()) {
             opts = opts.ssl_ca(ca); // CA bundle path for VERIFY_CA / VERIFY_IDENTITY
         }
-        Ok(Self { opts, database, table, project_rid: c.project_id, as_user: c.as_user })
+        Ok(Self { opts, database, table, columns, project_rid: c.project_id, as_user: c.as_user })
     }
 }
 
@@ -129,6 +138,35 @@ fn csv_field(s: Option<&str>) -> String {
     } else {
         v.into_owned()
     }
+}
+
+/// Apply the optional column pushdown to the introspected `(name, data_type)` list.
+/// `want = None` keeps every column; otherwise keeps only the requested columns in
+/// ORDINAL order, case-insensitively. Pure (no SQL): run() applies it to the LIVE
+/// introspection, so a name that isn't a real column is rejected HERE and the select
+/// list only ever emits the qi-quoted introspected name — a bogus/injected entry can
+/// never reach the query. An empty list is an error (omit `columns` to pull all).
+fn select_columns(
+    all: Vec<(String, String)>,
+    want: &Option<Vec<String>>,
+) -> Result<Vec<(String, String)>> {
+    let Some(want) = want else { return Ok(all) };
+    if want.is_empty() {
+        anyhow::bail!("connector config: 'columns' is an empty list — omit it to pull all columns");
+    }
+    let have: std::collections::HashSet<String> =
+        all.iter().map(|(n, _)| n.to_ascii_lowercase()).collect();
+    let missing: Vec<&str> = want
+        .iter()
+        .filter(|w| !have.contains(&w.to_ascii_lowercase()))
+        .map(String::as_str)
+        .collect();
+    if !missing.is_empty() {
+        anyhow::bail!("connector config: columns {missing:?} not found in source table");
+    }
+    let wantset: std::collections::HashSet<String> =
+        want.iter().map(|w| w.to_ascii_lowercase()).collect();
+    Ok(all.into_iter().filter(|(n, _)| wantset.contains(&n.to_ascii_lowercase())).collect())
 }
 
 /// Render strategy for a column, chosen by its INFORMATION_SCHEMA `DATA_TYPE`,
@@ -244,6 +282,9 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     if columns.is_empty() {
         anyhow::bail!("table {}.{} not found or has no columns", cfg.database, cfg.table);
     }
+    // Column pushdown (existence-checked, ordinal order preserved) — see select_columns.
+    let columns = select_columns(columns, &cfg.columns)
+        .with_context(|| format!("column pushdown for {}.{}", cfg.database, cfg.table))?;
 
     // Type-aware projection: faithful, UTF-8-safe text for every column. Identifiers
     // are backtick-quoted (binds are values-only).
@@ -427,6 +468,26 @@ mod tests {
         assert_eq!(project_expr("ratio", "float"), "CAST(CAST(`ratio` AS DOUBLE) AS CHAR) AS `ratio`");
         // DOUBLE stays on the default arm — CAST AS CHAR is already full precision.
         assert_eq!(project_expr("d", "double"), "CAST(`d` AS CHAR) AS `d`");
+    }
+
+    #[test]
+    fn select_columns_existence_checked_ordinal_order() {
+        let all = || {
+            vec![
+                ("id".to_string(), "int".to_string()),
+                ("Name".to_string(), "varchar".to_string()),
+                ("ts".to_string(), "datetime".to_string()),
+            ]
+        };
+        // None -> every column, unchanged
+        assert_eq!(select_columns(all(), &None).unwrap(), all());
+        // subset kept in ORDINAL order (not request order), case-insensitive match
+        let got = select_columns(all(), &Some(vec!["ts".into(), "NAME".into()])).unwrap();
+        assert_eq!(got.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), vec!["Name", "ts"]);
+        // unknown column -> Err (never silently dropped)
+        assert!(select_columns(all(), &Some(vec!["id".into(), "nope".into()])).is_err());
+        // explicit empty list -> Err (omit to pull all)
+        assert!(select_columns(all(), &Some(vec![])).is_err());
     }
 
     #[test]
