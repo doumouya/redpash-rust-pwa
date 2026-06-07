@@ -30,8 +30,10 @@ this rebuild deletes that family and **composes framework components** —
     Targets (materialized results). The active file's columns render as a
     `mountChipRow`; a chip click → `editor.insertAtCaret(name)`.
   - **Connectors view: each connector is its OWN retractable `rp-rail-group`** (db
-    mark), and its **sub-tabs are the kind's facets** (`CONNECTOR_FACETS`,
-    open-ended per kind; MySQL = Tables / Schema / Pulls / Settings). Rename/delete
+    mark, `KIND_MARK` per engine), and its **sub-tabs are the kind's facets**
+    (`CONNECTOR_FACETS`, open-ended per kind; MySQL + PostgreSQL share `SQL_FACETS` =
+    Tables / Schema / Pulls / Settings, since the backend dispatches on `conn.kind`).
+    Rename/delete
     ride the group affordances (`groupRename`→`PATCH`, `groupHide`→`DELETE` with a
     confirm); `groupAdd`/footer create → `openNewConnectorModal`. Expanding a
     connector (`groupToggle`) opens its **Tables** facet.
@@ -45,15 +47,19 @@ this rebuild deletes that family and **composes framework components** —
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
   table materializes via `POST …/sql/materialize`.
-- **New connector:** `openNewConnectorModal` → `openModal` (modal.js) with the MySQL
-  fields — host/port/user/password, an **SSL mode** select (`SSL_MODE_OPTIONS`;
-  Required is first = the secure-by-default selection), database/table — + a
-  destination-project picker (the `connection-setup.js` pattern). `ssl_mode` rides the
-  `config` JSONB (default `"required"`), read by `mysql_loader::Cfg::from_connection`;
-  the host hint notes remote needs SSL ≥ Required. Flow: `POST /api/projects`
-  (new-project path) + `POST /api/connectors` + `…/sync`. The Settings facet shows a
-  note that host / DB / SSL mode editing + a connection test arrive with the
-  connector-config endpoint (deferred — config isn't in the list payload).
+- **New connector:** `openNewConnectorModal` → `openModal` (modal.js) with an
+  **Engine** picker (`mysql` / `postgres`), host/port/user/password, an **SSL mode**
+  select (`SSL_MODE_OPTIONS`; Required is first = the secure-by-default selection),
+  database, a **schema** field (PostgreSQL-only — defaults to `public`; MySQL ignores
+  it), table, and a destination-project picker (the `connection-setup.js` pattern).
+  `onSubmit` posts `{ kind, config }` — `config` carries `ssl_mode` (default
+  `"required"`, read by both loaders) and, for postgres, `schema`; the port/user
+  defaults flip on the engine (3306/`root` vs 5432/`postgres`). The Tables/Schema/Pulls
+  facets are kind-agnostic (backend dispatches on `conn.kind`), so postgres connectors
+  use the same surface. Flow: `POST /api/projects` (new-project path) +
+  `POST /api/connectors` + `…/sync`. The Settings facet notes that host / DB / SSL mode
+  editing + a connection test arrive with the connector-config endpoint (deferred —
+  config isn't in the list payload).
 
 ## Drift-prone areas
 
