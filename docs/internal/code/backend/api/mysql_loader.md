@@ -3,7 +3,7 @@ title: backend/crates/api/src/mysql_loader.rs
 source: ../../../../../backend/crates/api/src/mysql_loader.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # mysql_loader.rs
@@ -30,9 +30,11 @@ buffering); and a decode error is **surfaced, never swallowed**.
 
 ## Public surface
 
-- `pub struct Cfg` + `Cfg::from_connection(pool, CON_id)` — reads the `connectors`
-  row (kind=`mysql`; destination project + as_user; `config` JSONB = the MySQL
-  connection `{conn | host/port/user/password, database, table}`).
+- `pub struct Cfg` (holds `opts: MySqlConnectOptions` + database/table/project/as_user)
+  + `Cfg::from_connection(pool, CON_id)` — reads the `connectors` row (kind=`mysql`;
+  destination project + as_user; `config` JSONB = `{host, port, user, password,
+  database, table}`). Builds connect options from the discrete components (never a
+  format!'d URL); the legacy `conn` full-URL key is **rejected** in v1 (SSRF).
 - `pub async fn run(pool, data_dir, &Cfg) -> Result<String>` — connect (pinned
   session) → list columns + `DATA_TYPE` (information_schema) → type-aware `SELECT`
   → stream rows → CSV → `pipeline::upload_csv` → returns the new file rid.
@@ -44,11 +46,18 @@ buffering); and a decode error is **surfaced, never swallowed**.
 
 - **No `db::insert_*`** — must route through `pipeline::upload_csv` (connectors-audit
   red otherwise). The `as_user`'s write-reach is re-checked there (caller_is_admin=false).
-- localhost v1 connection: `ssl-mode=DISABLED` (sqlx has no TLS backend feature
-  enabled) is allowed **only for loopback** hosts (127.0.0.1 / ::1 / localhost) —
-  `from_connection` **rejects a remote host** (it would transport creds + data in
-  plaintext). To support remote MySQL, enable a sqlx TLS feature
-  (`runtime-tokio-rustls` + `tls-rustls`) + default to `ssl-mode=REQUIRED`.
+- **SSRF-hardened connection build (CAS_EC3FF660, 2026-06-07).** Two HIGH SSRF
+  fixes: (1) the loopback gate is `is_loopback_host` — `host=="localhost"` OR an
+  IP literal that `is_loopback()` — NOT the old `starts_with("127.")`, which let
+  `127.evil.com` through. (2) connect options are built from discrete components
+  via `MySqlConnectOptions::new().host().port().username().password().database()
+  .ssl_mode(Disabled)` + `connect_with`, NEVER a `format!("mysql://{user}:{pass}@…")`
+  URL — a crafted user/pass could otherwise smuggle a different host through the
+  userinfo. The pre-built `conn` URL key is rejected (unbounded host vector).
+  `ssl-mode=DISABLED` is plaintext, so loopback-only stands until a sqlx TLS
+  feature (`runtime-tokio-rustls` + `tls-rustls`) + `ssl-mode=REQUIRED` lands for
+  remote MySQL. Re-check the host right before connect if hostnames are ever
+  accepted (DNS-rebinding) — v1 is IP-literal/localhost only, so it's moot now.
 - **Type-aware projection lives in `project_expr`** — the ONE place MySQL's type
   surface is mapped. Add a type there; never branch in `run`. `is_recognized`
   `warn!`s an unmapped type so a new MySQL type surfaces instead of silently

@@ -21,6 +21,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use futures_util::TryStreamExt;
+use sqlx::mysql::{MySqlConnectOptions, MySqlSslMode};
 use sqlx::{Connection, Executor, PgPool, Row};
 
 use crate::pipeline;
@@ -28,11 +29,20 @@ use crate::pipeline;
 /// Source connection + table, plus the user-chosen destination (project +
 /// as_user) read from the `connectors` row.
 pub struct Cfg {
-    pub conn:        String, // mysql://user:pass@host:port/db
+    pub opts:        MySqlConnectOptions, // built from discrete components (never a format!'d URL)
     pub database:    String,
     pub table:       String,
     pub project_rid: String,
     pub as_user:     String,
+}
+
+/// Loopback-only host gate (v1 is plaintext ssl-mode=DISABLED). Accepts
+/// `localhost` + any loopback IP literal (127.0.0.0/8, ::1); rejects hostnames
+/// like `127.evil.com` / `127.0.0.1.attacker.com` that the old
+/// `host.starts_with("127.")` check let through (SSRF #1).
+fn is_loopback_host(host: &str) -> bool {
+    host == "localhost"
+        || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
 }
 
 impl Cfg {
@@ -52,31 +62,39 @@ impl Cfg {
         let s = |k: &str| cfg.get(k).and_then(serde_json::Value::as_str).map(str::to_string);
         let database = s("database").ok_or_else(|| anyhow::anyhow!("connector config: 'database' required"))?;
         let table    = s("table").ok_or_else(|| anyhow::anyhow!("connector config: 'table' required"))?;
-        let conn = match s("conn") {
-            Some(c) if !c.trim().is_empty() => c,
-            _ => {
-                let host = s("host").unwrap_or_else(|| "127.0.0.1".into());
-                // v1 is localhost-only. ssl-mode=DISABLED (plaintext) is acceptable
-                // ONLY for loopback — a remote host over plaintext would leak the
-                // credentials + the data, so reject it until a sqlx TLS feature lands
-                // (then default to ssl-mode=REQUIRED). Guards the security finding.
-                let loopback = matches!(host.as_str(), "127.0.0.1" | "::1" | "localhost")
-                    || host.starts_with("127.");
-                if !loopback {
-                    anyhow::bail!(
-                        "MySQL connector v1 is localhost-only — host '{host}' is remote, which would \
-                         transport credentials + data in plaintext (ssl-mode=DISABLED). Enable a sqlx \
-                         TLS feature (runtime-tokio-rustls + tls-rustls) and ssl-mode=REQUIRED before \
-                         connecting to a remote MySQL."
-                    );
-                }
-                let port = cfg.get("port").and_then(|v| v.as_u64()).unwrap_or(3306);
-                let user = s("user").unwrap_or_else(|| "root".into());
-                let pass = s("password").unwrap_or_default();
-                format!("mysql://{user}:{pass}@{host}:{port}/{database}?ssl-mode=DISABLED")
-            }
-        };
-        Ok(Self { conn, database, table, project_rid: c.project_id, as_user: c.as_user })
+        // SECURITY (SSRF): build connect options from DISCRETE components — NEVER a
+        // format!'d `mysql://user:pass@host/…` URL, where a crafted user/pass can
+        // smuggle a different host through the userinfo (SSRF #2). The legacy `conn`
+        // full-URL config key is rejected: unused by the live flow and an unbounded
+        // host vector. Host must be a true loopback (SSRF #1 — the old
+        // `starts_with("127.")` let `127.evil.com` through). v1 is plaintext
+        // (ssl-mode=DISABLED), safe only on loopback; remote needs a sqlx TLS feature.
+        if s("conn").map(|c| !c.trim().is_empty()).unwrap_or(false) {
+            anyhow::bail!(
+                "MySQL connector v1 does not accept a pre-built `conn` URL — configure \
+                 host / port / user / password / database (loopback only)."
+            );
+        }
+        let host = s("host").unwrap_or_else(|| "127.0.0.1".into());
+        if !is_loopback_host(&host) {
+            anyhow::bail!(
+                "MySQL connector v1 is localhost-only — host '{host}' is not a loopback \
+                 address. Plaintext ssl-mode=DISABLED would leak credentials + data over \
+                 the wire; use 127.0.0.1 / ::1 / localhost. Remote needs a sqlx TLS \
+                 feature (runtime-tokio-rustls + tls-rustls) + ssl-mode=REQUIRED."
+            );
+        }
+        let port = u16::try_from(cfg.get("port").and_then(|v| v.as_u64()).unwrap_or(3306)).unwrap_or(3306);
+        let user = s("user").unwrap_or_else(|| "root".into());
+        let pass = s("password").unwrap_or_default();
+        let opts = MySqlConnectOptions::new()
+            .host(&host)
+            .port(port)
+            .username(&user)
+            .password(&pass)
+            .database(&database)
+            .ssl_mode(MySqlSslMode::Disabled);
+        Ok(Self { opts, database, table, project_rid: c.project_id, as_user: c.as_user })
     }
 }
 
@@ -152,7 +170,7 @@ fn is_recognized(data_type: &str) -> bool {
 pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     // One connection, pinned to a deterministic, faithful session — SESSION scope
     // only (never GLOBAL/PERSIST: the source's global state is never mutated).
-    let mut my = sqlx::MySqlConnection::connect(&cfg.conn).await.context("connect to MySQL source")?;
+    let mut my = sqlx::MySqlConnection::connect_with(&cfg.opts).await.context("connect to MySQL source")?;
     my.execute("SET NAMES utf8mb4").await.context("session pin: SET NAMES utf8mb4")?;
     my.execute("SET SESSION time_zone = '+00:00'").await.context("session pin: time_zone")?;
     my.execute("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'").await.context("session pin: sql_mode")?;
