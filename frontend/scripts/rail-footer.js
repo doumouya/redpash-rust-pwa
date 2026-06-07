@@ -17,12 +17,14 @@
 import { esc } from "/scripts/dom.js";
 import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/footer-utilities.js";
 
+// Cross-app UTILITY destinations only. Docs moved into the Support & Docs app
+// topbar (Slice C, 2026-06-07) — content page, reached via the launcher, not a
+// global footer link. Settings + theme/sign-out (footer-utilities) + Profile stay.
 const FOOTER_NAV = [
-  { id: "docs",     hash: "#/docs",     icon: "bi-book-half", label: "Docs" },
-  { id: "settings", hash: "#/settings", icon: "bi-gear",      label: "Settings" },
+  { id: "settings", hash: "#/settings", icon: "bi-gear", label: "Settings" },
   // Profile renders as an avatar (initials) rather than an icon — same
   // "this is you" read the topbar avatar used to carry.
-  { id: "profile",  hash: "#/profile",  avatar: true,         label: "Profile" },
+  { id: "profile",  hash: "#/profile",  avatar: true,    label: "Profile" },
 ];
 
 function initialsOf(session) {

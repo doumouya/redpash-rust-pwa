@@ -10,11 +10,13 @@ last modified date: 2026-06-07
 
 ## Purpose
 
-Rail footer nav — the shared utility cluster living at the bottom of every railed
-page's `.rp-rail-footer` (VS-Code / Slack style). The cluster now carries, in
-order: **Docs / Settings** links → **theme-toggle + sign-out** → **Profile**
-avatar. Docs/Settings/Profile relocated off the topbar 2026-05-28; theme-toggle +
-sign-out joined them 2026-06-07 (Em — declutter the per-app topbar). The theme +
+Rail footer nav — the shared CROSS-APP UTILITY cluster living at the bottom of
+every railed page's `.rp-rail-footer` (VS-Code / Slack style). The cluster carries,
+in order: **Settings** link → **theme-toggle + sign-out** → **Profile** avatar.
+Settings/Profile relocated off the topbar 2026-05-28; theme-toggle + sign-out
+joined them 2026-06-07 (Em — declutter the per-app topbar). **Docs moved OUT**
+2026-06-07 (Slice C) — it's a Support & Docs app page (topbar), reached via the
+launcher, not a global footer link; the footer is utilities only now. The theme +
 sign-out actions are the shared
 [footer-utilities](framework/footer-utilities.md) (same render + wire helpers the
 [framework/rail.js](framework/rail.md) footer uses), so the two footer paths can't
@@ -29,10 +31,9 @@ drift.
 
 ## How it works
 
-- **Links → actions → avatar.** Docs/Settings render as `.rp-rail-footer-nav-item`
-  links; `footerUtilitiesHTML()` injects the theme + sign-out buttons between the
-  destinations and the Profile avatar (the "you" anchor); `wireFooterUtilities`
-  binds them.
+- **Link → actions → avatar.** Settings renders as a `.rp-rail-footer-nav-item`
+  link; `footerUtilitiesHTML()` injects the theme + sign-out buttons between it and
+  the Profile avatar (the "you" anchor); `wireFooterUtilities` binds them.
 - **Appended, not clobbering.** The cluster is appended to the foot so it coexists
   with page-specific create actions (New case / Upload / etc.).
 

@@ -44,11 +44,14 @@ import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/foo
 // Every handler receives the relevant id(s); the builder owns the DOM, the
 // caller owns what each action *does*.
 
+// Cross-app UTILITY destinations only. Docs moved into the Support & Docs app
+// topbar (Slice C, 2026-06-07) — it's a content page, reached via the launcher,
+// not a global footer link. The footer carries Settings + the theme/sign-out
+// actions (footer-utilities) + Profile.
 const FOOTER_NAV = [
-  { id: "docs",     hash: "#/docs",     icon: "bi-book-half", label: "Docs" },
-  { id: "settings", hash: "#/settings", icon: "bi-gear",      label: "Settings" },
+  { id: "settings", hash: "#/settings", icon: "bi-gear", label: "Settings" },
   // Profile renders as an avatar (initials) — the "this is you" read.
-  { id: "profile",  hash: "#/profile",  avatar: true,         label: "Profile" },
+  { id: "profile",  hash: "#/profile",  avatar: true,    label: "Profile" },
 ];
 
 function initialsOf(session) {
