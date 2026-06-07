@@ -30,8 +30,11 @@ is small — verified faithful on live PG 18.4:
 | everything else | `"c"::text` | numeric **exact**, json/jsonb verbatim, arrays `{…}`, uuid, boolean, inet/cidr/macaddr, ranges `[1,5)`, **enum → label**, built-in geometric, all date/time |
 
 Session is pinned **`SET TIME ZONE 'UTC'`** (timestamptz → UTC, verified `+02`→`+00`) +
-**`SET bytea_output = 'hex'`**, SESSION scope only (the source's global state is never
-mutated). `is_recognized` (incl. array `_*` udt_names) logs an unfamiliar type instead
+**`SET bytea_output = 'hex'`** + **`SET extra_float_digits = 3`** (max-precision text so
+`real`/`double precision` `::text` round-trips exactly — the float-fidelity analog of the
+mysql FLOAT→DOUBLE fix; PG ≥12 already defaults to shortest-round-trippable, the pin makes
+it independent of the source's setting), SESSION scope only (the source's global state is
+never mutated). `is_recognized` (incl. array `_*` udt_names) logs an unfamiliar type instead
 of silently assuming; `::text` still extracts it.
 
 ## Public surface (mirrors `mysql_loader`)
@@ -47,6 +50,13 @@ of silently assuming; `::text` still extracts it.
 - `probe(&Cfg) -> Result<()>` — the "Test connection" action (`POST /:rid/test`): reuses
   `connect_pinned` (gate already ran in `from_connection`) + `SELECT 1`. Mirror of
   `mysql_loader::probe`.
+- `query(&Cfg, sql, limit) -> QueryResult` — the **Admin DB Console** ad-hoc **read-only**
+  SELECT (`POST /:rid/query`, platform-admin gated). Defense in depth: `guard_select`
+  (single SELECT/WITH), a **`READ ONLY` transaction** (Postgres refuses any write/DDL even if
+  the guard is bypassed), `statement_timeout`, a `LIMIT` cap, and subquery-wrapping (blocks
+  statement-chaining). Rows render via `to_jsonb` (any column type displays) with column
+  ORDER taken from `describe` (jsonb keys come back sorted); SQL NULL → `None` (distinct from
+  empty string). This is the console VIEW path — NOT the faithful CSV-extraction `run`.
 - `qi` (double-quote identifier), `csv_field` (RFC-4180 + NUL strip), `TableInfo`, `ColInfo`.
 
 ## Drift-prone areas

@@ -31,6 +31,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid/tables", get(tables))
         .route("/:rid/schema", get(schema))
         .route("/:rid/test", post(test_connection))
+        .route("/:rid/query", post(run_query))
 }
 
 async fn list(
@@ -342,6 +343,54 @@ async fn test_connection(
             format!("connection test is wired for kind 'mysql'/'postgres'/'kafka' (got '{other}')"))),
     }
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct QueryBody {
+    sql:                   String,
+    #[serde(default)] limit: Option<i64>,
+}
+
+/// `POST /api/connectors/:rid/query` — run an admin's ad-hoc **read-only** SELECT against
+/// the connected DB and return rows for the Admin DB Console. **Platform-admin only** (the
+/// SQL console is powerful) layered on the connector's project VIEW; a non-admin gets a
+/// leak-free 404 (matches the `/admin` + `/monitoring` boundary). Every statement is audited
+/// (`events` kind=`db_query`). Postgres-only in v1. The read-only safety lives in
+/// `postgres_loader::query` (SELECT-only guard + READ-ONLY txn + statement_timeout + LIMIT
+/// cap + subquery wrap). The write side (SQL console push) is a separate, role-gated slice.
+async fn run_query(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+    Json(body):   Json<QueryBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
+    // The ad-hoc SQL console is platform-admin power — leak-free 404 on deny.
+    if !crate::rbac::is_platform_admin(&state, &user).await? {
+        return Err(AppError::not_found("not_found", format!("connector {rid}")));
+    }
+    let result = match conn.kind.as_str() {
+        "postgres" => {
+            let cfg = crate::postgres_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            crate::postgres_loader::query(&cfg, &body.sql, body.limit.unwrap_or(200)).await
+                .map_err(|e| AppError::bad_request("query_failed", e.to_string()))?
+        }
+        other => return Err(AppError::bad_request("unsupported",
+            format!("the DB-console query is wired for kind 'postgres' (got '{other}')"))),
+    };
+    // Audit every statement: the connector, the SQL, the row count.
+    crate::event::info(&state.db, "db_query", format!("DB console query on '{}'", conn.name))
+        .context(serde_json::json!({
+            "connector": rid, "sql": body.sql,
+            "rows": result.rows.len(), "truncated": result.truncated,
+        }))
+        .send();
+    Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
 #[derive(Deserialize)]

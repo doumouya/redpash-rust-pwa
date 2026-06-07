@@ -27,7 +27,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use futures_util::TryStreamExt;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use sqlx::{Connection, Executor, PgPool, Row};
+use sqlx::{Column, Connection, Executor, PgPool, Row};
 
 use crate::connectors_core;
 use crate::pipeline;
@@ -298,6 +298,99 @@ pub async fn probe(cfg: &Cfg) -> Result<()> {
     Ok(())
 }
 
+/// One ad-hoc read-only query result for the Admin DB Console — columns + rows of display
+/// text. This is the console VIEW path (not the faithful CSV-extraction `run`): values render
+/// via `to_jsonb`, so any column type displays without knowing the shape up front. A SQL NULL
+/// comes back as `None` (distinct from an empty string — the console shows the NULL-vs-empty
+/// distinction the CSV path can't).
+#[derive(serde::Serialize)]
+pub struct QueryResult {
+    pub columns:   Vec<String>,
+    pub rows:      Vec<Vec<Option<String>>>,
+    pub truncated: bool, // the row cap clipped the result
+}
+
+/// Execute an admin's ad-hoc **read-only** SELECT and return up to `limit` rows. Defense in
+/// depth (PG18-grounded):
+///  1. only a single statement starting with SELECT/WITH is accepted (`guard_select`);
+///  2. it runs inside a `READ ONLY` transaction — Postgres itself refuses any write/DDL even
+///     if the guard is bypassed;
+///  3. `statement_timeout` bounds runtime; the result is `LIMIT`-capped;
+///  4. wrapping as a subquery blocks statement-chaining (a subquery is one SELECT).
+/// The route is platform-admin gated + audits the statement.
+pub async fn query(cfg: &Cfg, sql: &str, limit: i64) -> Result<QueryResult> {
+    guard_select(sql)?;
+    let cap = limit.clamp(1, 1000);
+    let mut pg = connect_pinned(&cfg.opts).await?;
+    pg.execute("BEGIN").await.context("query: begin")?;
+    pg.execute("SET TRANSACTION READ ONLY").await.context("query: read only")?;
+    pg.execute("SET LOCAL statement_timeout = '30s'").await.context("query: statement_timeout")?;
+
+    // Column ORDER from the query's described result — `to_jsonb` keys come back sorted, so
+    // they can't carry the SELECT-list order. describe = Parse+Describe (no execution), safe.
+    let ordered_cols: Vec<String> = (&mut pg).describe(sql).await
+        .map(|d| d.columns().iter().map(|c| c.name().to_string()).collect())
+        .unwrap_or_default();
+
+    // One extra row detects truncation; to_jsonb renders each row as a JSON object.
+    let wrapped = format!("SELECT to_jsonb(_q) AS _row FROM ({sql}) AS _q LIMIT {}", cap + 1);
+    let fetched = sqlx::query(&wrapped).fetch_all(&mut pg).await;
+    let _ = pg.execute("ROLLBACK").await; // read-only — always roll back
+    let fetched = fetched.map_err(|e| anyhow::anyhow!("query failed: {e}"))?;
+
+    let mut columns: Vec<String> = ordered_cols;
+    let mut rows: Vec<Vec<Option<String>>> = Vec::with_capacity(fetched.len());
+    for r in &fetched {
+        let obj: serde_json::Value = r.try_get("_row").context("decode row json")?;
+        let map = obj.as_object();
+        if columns.is_empty() {
+            if let Some(m) = map { columns = m.keys().cloned().collect(); } // fallback: sorted jsonb keys
+        }
+        let row = columns
+            .iter()
+            .map(|c| map.and_then(|m| m.get(c)).and_then(|v| if v.is_null() { None } else { Some(json_cell(v)) }))
+            .collect();
+        rows.push(row);
+    }
+    let truncated = rows.len() > cap as usize;
+    rows.truncate(cap as usize);
+    Ok(QueryResult { columns, rows, truncated })
+}
+
+/// Reject anything that is not a single read-only query. The READ-ONLY transaction is the
+/// real guarantee; this is the friendly early error: the statement must begin with SELECT or
+/// WITH after stripping leading line (`--`) / block (`/* */`) comments + whitespace.
+fn guard_select(sql: &str) -> Result<()> {
+    let mut s = sql.trim_start();
+    loop {
+        if let Some(rest) = s.strip_prefix("--") {
+            s = rest.splitn(2, '\n').nth(1).unwrap_or("").trim_start();
+        } else if let Some(rest) = s.strip_prefix("/*") {
+            s = rest.splitn(2, "*/").nth(1).unwrap_or("").trim_start();
+        } else {
+            break;
+        }
+    }
+    let head: String = s.chars().take(6).flat_map(char::to_lowercase).collect();
+    if head.starts_with("select") || head.starts_with("with") {
+        Ok(())
+    } else {
+        anyhow::bail!("only read-only SELECT / WITH queries are allowed in the DB console")
+    }
+}
+
+/// Render a `to_jsonb` value to a display cell. Strings unquoted; numbers/bools as text;
+/// nested arrays/objects as compact JSON. SQL NULL is handled as `None` by the caller.
+fn json_cell(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
 /// Connect with the secure options + pin the SESSION (UTC / bytea hex) — shared by
 /// `run` + the introspection readers so every path uses the SAME secure connection
 /// (no format!'d URL) and the same faithful session.
@@ -305,6 +398,12 @@ async fn connect_pinned(opts: &PgConnectOptions) -> Result<sqlx::PgConnection> {
     let mut pg = sqlx::PgConnection::connect_with(opts).await.context("connect to Postgres source")?;
     pg.execute("SET TIME ZONE 'UTC'").await.context("session pin: time zone UTC")?;
     pg.execute("SET bytea_output = 'hex'").await.context("session pin: bytea_output hex")?;
+    // Float fidelity: `extra_float_digits = 3` forces the maximum-precision text output for
+    // real/double precision so `::text` round-trips exactly (a value-faithful extraction, the
+    // Postgres analog of the mysql connector's FLOAT→DOUBLE fix). PG ≥12 already defaults to a
+    // shortest-round-trippable representation, but pinning it explicitly makes the guarantee
+    // independent of the source server's `extra_float_digits` setting. SESSION scope only.
+    pg.execute("SET extra_float_digits = 3").await.context("session pin: extra_float_digits")?;
     Ok(pg)
 }
 
@@ -448,5 +547,58 @@ mod tests {
         assert_eq!(csv_field(Some("he \"q\"")), "\"he \"\"q\"\"\"");
         assert_eq!(csv_field(None), "");
         assert_eq!(csv_field(Some("a\0b")), "ab");
+    }
+
+    #[test]
+    fn guard_accepts_read_only_rejects_writes() {
+        assert!(guard_select("SELECT 1").is_ok());
+        assert!(guard_select("  select * from users").is_ok());
+        assert!(guard_select("WITH t AS (SELECT 1) SELECT * FROM t").is_ok());
+        assert!(guard_select("-- a comment\nSELECT 1").is_ok());
+        assert!(guard_select("/* block */ select 1").is_ok());
+        assert!(guard_select("UPDATE users SET x=1").is_err());
+        assert!(guard_select("DELETE FROM users").is_err());
+        assert!(guard_select("DROP TABLE users").is_err());
+        assert!(guard_select("INSERT INTO users VALUES (1)").is_err());
+        assert!(guard_select("TRUNCATE users").is_err());
+        assert!(guard_select("").is_err());
+    }
+
+    #[test]
+    fn json_cell_renders_scalars_and_nested() {
+        use serde_json::json;
+        assert_eq!(json_cell(&json!("hi")), "hi");
+        assert_eq!(json_cell(&json!(42)), "42");
+        assert_eq!(json_cell(&json!(true)), "true");
+        assert_eq!(json_cell(&json!({"a":1})), "{\"a\":1}");
+        assert_eq!(json_cell(&json!([1, 2])), "[1,2]");
+    }
+
+    /// Dogfood: run the read-only console query against our OWN app DB. Needs the live
+    /// app Postgres at 127.0.0.1:5433. Run explicitly: `cargo test -p api -- --ignored dogfood`.
+    #[tokio::test]
+    #[ignore]
+    async fn dogfood_query_our_own_db() {
+        let opts = PgConnectOptions::new()
+            .host("127.0.0.1").port(5433)
+            .username("mansa").password("mansa")
+            .database("redpash_prerelease")
+            .ssl_mode(PgSslMode::Prefer);
+        let cfg = Cfg {
+            opts, database: "redpash_prerelease".into(), schema: "public".into(),
+            table: "users".into(), project_rid: String::new(), as_user: String::new(),
+        };
+        // a real read query against our own data
+        let r = query(&cfg, "SELECT redpash_id, username, role FROM users ORDER BY username LIMIT 5", 10)
+            .await.expect("query our own users");
+        eprintln!("DOGFOOD cols={:?} rows={} truncated={}", r.columns, r.rows.len(), r.truncated);
+        assert!(r.columns.iter().any(|c| c == "username"));
+        assert!(!r.rows.is_empty());
+        // the read-only guard refuses a write
+        assert!(query(&cfg, "DELETE FROM users", 10).await.is_err());
+        // JSONB round-trips through to_jsonb (a heavy-JSONB table)
+        let p = query(&cfg, "SELECT redpash_id, spec FROM project_files WHERE spec IS NOT NULL LIMIT 3", 10)
+            .await.expect("query jsonb spec");
+        eprintln!("DOGFOOD jsonb cols={:?} rows={}", p.columns, p.rows.len());
     }
 }

@@ -26,7 +26,14 @@ POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file
 GET    /api/connectors/:rid/tables   list the source DB's tables (Tables facet; VIEW-gated)
 GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + projection (Schema facet; VIEW-gated)
 POST   /api/connectors/:rid/test     probe the source connection — connect + SELECT 1 (Settings "Test connection"; VIEW-gated)
+POST   /api/connectors/:rid/query    run an ad-hoc READ-ONLY SELECT (Admin DB Console; PLATFORM-ADMIN-gated, audited; postgres v1)
 ```
+
+`run_query` (POST `/:rid/query`) — the Admin **DB Console**'s ad-hoc SELECT. Layered on the
+connector's project VIEW + a **platform-admin** check (leak-free 404 on deny — the SQL console
+is admin power); postgres-only in v1 → `postgres_loader::query` (read-only txn + statement_timeout
++ LIMIT + guard). Every statement is audited (`events` kind=`db_query`: connector, sql, rows). The
+write side (SQL-console push) is a separate role-gated slice.
 
 ## Public surface
 
