@@ -93,3 +93,4 @@
 @import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 @import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
 @import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
+@import "admin.css";     /* /database (+ Admin app) — the DB console (rp-dbc-*) + denied placeholder */
