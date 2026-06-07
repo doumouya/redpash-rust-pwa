@@ -14,11 +14,11 @@
 //   3. Click anywhere else → close every open panel (outside-click).
 //
 // TWIN PATTERN: this framework delegate keys off `.rp-menu` ONLY. The legacy
-// bindDropdown (dropdown.js) keeps driving the live `.rt-dd` panels until the
+// bindDropdown (dropdown.js) keeps driving the live `.rp-menu` panels until the
 // shell cutover — the two coexist as separate delegates (the framework one runs
 // in the sandbox + post-cutover). At cutover, main.js swaps the panel markup to
 // `.rp-menu` AND the boot call from bindDropdown() to bindMenu() together, so
-// bindMenu never needs to reference `.rt-dd` (no legacy class in framework/).
+// bindMenu never needs to reference `.rp-menu` (no legacy class in framework/).
 // Idempotent (module-level singleton): bindMenu() can be called repeatedly.
 "use strict";
 

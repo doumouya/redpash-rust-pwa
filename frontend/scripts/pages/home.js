@@ -1982,7 +1982,7 @@ export default function home(app, { session: _session }) {
       if (!btn || !dd) return;
       if (actionLog.length === 0) {
         btn.setAttribute("disabled", "");
-        dd.innerHTML = '<div class="rt-dd-item rp-meta">No actions yet</div>';
+        dd.innerHTML = '<div class="rp-menu-item rp-meta">No actions yet</div>';
         return;
       }
       btn.removeAttribute("disabled");
@@ -1992,7 +1992,7 @@ export default function home(app, { session: _session }) {
       const recent = actionLog.slice(-50).reverse();
       dd.innerHTML = recent.map((e) => {
         const t = e.when.toLocaleTimeString();
-        return '<div class="rt-dd-item rp-meta">'
+        return '<div class="rp-menu-item rp-meta">'
           + '<span style="opacity:0.6;margin-right:0.5rem">' + esc(t) + '</span>'
           + esc(e.label)
           + '</div>';
@@ -2279,12 +2279,12 @@ export default function home(app, { session: _session }) {
         const lbl = view.querySelector("#rp-list-toolbar-rows-label");
         if (lbl) lbl.textContent = raw + " rows";
         if (rowsDd) {
-          rowsDd.querySelectorAll(".rt-dd-item").forEach((i) => {
+          rowsDd.querySelectorAll(".rp-menu-item").forEach((i) => {
             i.classList.remove("selected");
             const t = i.querySelector(".tick"); if (t) t.remove();
           });
-          const sel = rowsDd.querySelector('.rt-dd-item[data-rows="' + raw + '"]')
-            || rowsDd.querySelector('.rt-dd-item[data-rows="25"]');
+          const sel = rowsDd.querySelector('.rp-menu-item[data-rows="' + raw + '"]')
+            || rowsDd.querySelector('.rp-menu-item[data-rows="25"]');
           if (sel) {
             sel.classList.add("selected");
             sel.insertAdjacentHTML("beforeend", ' <i class="bi bi-check2 tick"></i>');
@@ -2293,7 +2293,7 @@ export default function home(app, { session: _session }) {
       }
       syncRowsLabel();
       rowsDd?.addEventListener("click", (e) => {
-        const item = e.target.closest(".rt-dd-item");
+        const item = e.target.closest(".rp-menu-item");
         if (!item) return;
         setPref("home-rowsPerPage", item.dataset.rows);
         listPage = 1;

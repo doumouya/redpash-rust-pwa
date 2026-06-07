@@ -300,30 +300,30 @@ export function listToolbarHTML(spec) {
 
   // rows-per-page pill — wired to the rowsPerPageHome pref.
   parts.push(
-    '<div class="rt-dd-wrap">'
+    '<div class="rp-menu-wrap">'
     + '<button class="rt-pill" data-dd="rp-list-toolbar-rows-dd" type="button" '
     +   'title="Rows per page">'
     +   '<span id="rp-list-toolbar-rows-label">25 rows</span>'
     +   '<i class="bi bi-chevron-down chev"></i>'
     + '</button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-rows-dd">'
-    +   '<div class="rt-dd-item" data-rows="10">10 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="25">25 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="50">50 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="100">100 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="250">250 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="500">500 rows</div>'
-    +   '<div class="rt-dd-item" data-rows="1000">1k rows</div>'
+    + '<div class="rp-menu" id="rp-list-toolbar-rows-dd">'
+    +   '<div class="rp-menu-item" data-rows="10">10 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="25">25 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="50">50 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="100">100 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="250">250 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="500">500 rows</div>'
+    +   '<div class="rp-menu-item" data-rows="1000">1k rows</div>'
     + '</div>'
     + '</div>',
   );
 
   // columns dropdown — disabled stub matching #wsColsDd's no-file state.
   parts.push(
-    '<div class="rt-dd-wrap">'
+    '<div class="rp-menu-wrap">'
     + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-cols-dd" type="button" '
     +   'title="Columns" disabled><i class="bi bi-layout-three-columns"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-cols-dd"><!-- columns picker — next slice --></div>'
+    + '<div class="rp-menu" id="rp-list-toolbar-cols-dd"><!-- columns picker — next slice --></div>'
     + '</div>',
   );
 
@@ -340,13 +340,13 @@ export function listToolbarHTML(spec) {
   // lands (CSV first, XLSX/JSON next). Menu items declare data-fmt so
   // the wire-up only needs the click handler.
   parts.push(
-    '<div class="rt-dd-wrap">'
-    + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-export-dd" type="button" '
+    '<div class="rp-menu-wrap">'
+    + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-exporp-menu" type="button" '
     +   'title="Export" disabled><i class="bi bi-download"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-export-dd">'
-    +   '<div class="rt-dd-item" data-fmt="csv">Export as CSV</div>'
-    +   '<div class="rt-dd-item" data-fmt="json">Export as JSON</div>'
-    +   '<div class="rt-dd-item" data-fmt="xlsx" title="Needs backend round-trip — coming soon">'
+    + '<div class="rp-menu" id="rp-list-toolbar-exporp-menu">'
+    +   '<div class="rp-menu-item" data-fmt="csv">Export as CSV</div>'
+    +   '<div class="rp-menu-item" data-fmt="json">Export as JSON</div>'
+    +   '<div class="rp-menu-item" data-fmt="xlsx" title="Needs backend round-trip — coming soon">'
     +     'Export as Excel <span class="rp-meta">(soon)</span>'
     +   '</div>'
     + '</div>'
@@ -357,11 +357,11 @@ export function listToolbarHTML(spec) {
   // user has performed on the active tab. renderListBody populates
   // the dd body + enables the button when actionLog is non-empty.
   parts.push(
-    '<div class="rt-dd-wrap">'
+    '<div class="rp-menu-wrap">'
     + '<button class="rp-btn-icon" data-dd="rp-list-toolbar-history-dd" type="button" '
     +   'title="Session history" disabled><i class="bi bi-clock-history"></i></button>'
-    + '<div class="rt-dd" id="rp-list-toolbar-history-dd">'
-    +   '<div class="rt-dd-item rp-meta">No actions yet</div>'
+    + '<div class="rp-menu" id="rp-list-toolbar-history-dd">'
+    +   '<div class="rp-menu-item rp-meta">No actions yet</div>'
     + '</div>'
     + '</div>',
   );
@@ -429,14 +429,14 @@ export function wireListColumnsExport(view, opts) {
     btn.title = "Show / hide columns";
     dd.innerHTML = columns.map((c) => {
       const visible = !hiddenCols.has(colKey(c));
-      return '<div class="rt-dd-item' + (visible ? " selected" : "") + '" data-col-key="'
+      return '<div class="rp-menu-item' + (visible ? " selected" : "") + '" data-col-key="'
         + esc(colKey(c)) + '">' + esc(colLabel(c))
         + (visible ? '<i class="bi bi-check2 tick"></i>' : "") + '</div>';
     }).join("");
   }
 
   view.querySelector("#rp-list-toolbar-cols-dd")?.addEventListener("click", (e) => {
-    const item = e.target.closest(".rt-dd-item[data-col-key]");
+    const item = e.target.closest(".rp-menu-item[data-col-key]");
     if (!item) return;
     const key = item.dataset.colKey;
     if (hiddenCols.has(key)) hiddenCols.delete(key);
@@ -639,10 +639,10 @@ export function wireListColumnsExport(view, opts) {
     downloadBlob(JSON.stringify(out, null, 2), "application/json", name + "-" + stamp() + ".json");
   }
 
-  const exportBtn = view.querySelector('[data-dd="rp-list-toolbar-export-dd"]');
+  const exportBtn = view.querySelector('[data-dd="rp-list-toolbar-exporp-menu"]');
   if (exportBtn) { exportBtn.removeAttribute("disabled"); exportBtn.title = "Export current page"; }
-  view.querySelector("#rp-list-toolbar-export-dd")?.addEventListener("click", (e) => {
-    const item = e.target.closest(".rt-dd-item[data-fmt]");
+  view.querySelector("#rp-list-toolbar-exporp-menu")?.addEventListener("click", (e) => {
+    const item = e.target.closest(".rp-menu-item[data-fmt]");
     if (!item) return;
     switch (item.dataset.fmt) {
       case "csv":  exportCsv();  break;
