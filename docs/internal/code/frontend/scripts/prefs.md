@@ -120,7 +120,10 @@ clears the database side.
   (`dark`/`light` catppuccin aliases + `new-dark`/`new-light` +
   `catppuccin-mocha`/`catppuccin-latte`, 2026-06-05). Its `values` list
   is in lockstep with `theme.js`'s `THEMES` set, `index.html`'s pre-paint
-  validator, and the palette blocks in `tokens.css`.
+  validator, and the palette blocks in `tokens.css`. Its `default` is
+  **`new-dark`** (the new identity switched on 2026-06-07) and its
+  `control` is **`theme-swatch`** (the swatch-grid picker — a live
+  per-theme preview card per option, `prefs/controls/theme-swatch.js`).
 
 ## Settings v2 rollout reference
 

@@ -7,13 +7,16 @@
        Theme-independent; authored once.
      • Palette tier (one block per theme) — colours + glass + elevation,
        re-mapped onto the SAME `--rp-*` names so every component reads one
-       stable API and only the values swap per `html[data-theme]`.
+       stable API and only the values swap per theme. Each block is keyed
+       on BOTH `html[data-theme="X"]` (the document theme) AND a scoped
+       `[data-rp-theme="X"]` alias, so a nested element (e.g. a Settings
+       theme-swatch preview card) can render a DIFFERENT theme than the
+       active document — one source of truth, no duplicated palettes.
 
-   Themes:  dark / catppuccin-mocha  (== today's default — zero-visual)
-            light / catppuccin-latte (== today's light  — zero-visual)
-            new-dark / new-light      (the new RedPash identity)
-   The new identity is selectable now; it becomes the default once the
-   component rework lands (see the design-language plan).
+   Themes:  new-dark / new-light      (the RedPash identity — new-dark is
+                                        the app DEFAULT since 2026-06-07)
+            dark / catppuccin-mocha   (the Catppuccin Mocha palette)
+            light / catppuccin-latte  (the Catppuccin Latte palette)
    ───────────────────────────────────────────────────────────────── */
 
 /* ── Structure tier — theme-agnostic ───────────────────────────────── */
@@ -60,7 +63,9 @@
    what differs. ─────────────────────────────────────────────────────── */
 :root,
 html[data-theme="dark"],
-html[data-theme="catppuccin-mocha"] {
+html[data-theme="catppuccin-mocha"],
+[data-rp-theme="dark"],
+[data-rp-theme="catppuccin-mocha"] {
   color-scheme: dark;
 
   --rp-bg:        #11111b;  /* crust   — topbar · rail · page gutter */
@@ -102,7 +107,9 @@ html[data-theme="catppuccin-mocha"] {
 /* ── Catppuccin Latte — the `light` alias (zero-visual: identical to the
    pre-reset `html[data-theme="light"]`). ───────────────────────────── */
 html[data-theme="light"],
-html[data-theme="catppuccin-latte"] {
+html[data-theme="catppuccin-latte"],
+[data-rp-theme="light"],
+[data-rp-theme="catppuccin-latte"] {
   color-scheme: light;
 
   --rp-bg:        #e6e9ef;  /* mantle */
@@ -141,7 +148,8 @@ html[data-theme="catppuccin-latte"] {
 
 /* ── NEW IDENTITY · New Dark — confident RedPash red on calm slate.
    Defines the FULL colour set (the universal fallback is Mocha). ────── */
-html[data-theme="new-dark"] {
+html[data-theme="new-dark"],
+[data-rp-theme="new-dark"] {
   color-scheme: dark;
 
   --rp-bg:        #0c0d10;
@@ -179,7 +187,8 @@ html[data-theme="new-dark"] {
 }
 
 /* ── NEW IDENTITY · New Light — board-grade clean light. ───────────── */
-html[data-theme="new-light"] {
+html[data-theme="new-light"],
+[data-rp-theme="new-light"] {
   color-scheme: light;
 
   --rp-bg:        #fafafb;

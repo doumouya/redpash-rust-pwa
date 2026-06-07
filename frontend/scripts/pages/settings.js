@@ -50,6 +50,10 @@ import { mountHidden } from "/scripts/pages/settings-hidden.js";
 // of this file). Module shape: { render(spec), postMount(app, spec) }
 // — same shape every future deferred-mount control follows.
 import * as chartLayouts from "/scripts/prefs/controls/chart-layouts.js";
+// Settings v2 — theme-swatch control. The general-theme picker: a grid
+// of live per-theme preview cards (replaces the dark↔light onoff). Same
+// { render, postMount } module shape as chart-layouts.
+import * as themeSwatch from "/scripts/prefs/controls/theme-swatch.js";
 
 // Server-side pref keys read on mount. Distinct from the registered
 // pref keys in prefs.js — these come from /me, not the local registry.
@@ -69,6 +73,7 @@ const CONTROLS = {
   segmented: { render: (spec) => prefRow(prefRowSpecFromPref(spec)) },
   stepper:   { render: fontStepperRow, postMount: wireFontStepper },
   "chart-layouts": chartLayouts,
+  "theme-swatch":  themeSwatch,
 };
 
 function prefRowSpecFromPref(spec) {

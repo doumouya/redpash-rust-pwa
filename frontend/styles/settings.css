@@ -476,3 +476,93 @@
   color: var(--rp-text);
   background: var(--rp-surface-3, var(--rp-surface));
 }
+
+/* ── Theme swatch control (GENERAL · Appearance > Theme) ───────────
+   The general-theme picker — a grid of cards, one per theme, each a
+   LIVE mini-preview of its own palette. Each card's preview carries
+   `data-rp-theme="X"`, a scope alias in tokens.css that re-declares
+   THAT theme's `--rp-*` locally, so a card shows its own colours
+   regardless of the active theme — one source of truth, no duplicated
+   palette here. This sheet owns only layout + the selected ring.
+   Control JS: scripts/prefs/controls/theme-swatch.js. Canonical
+   `--rp-border` (not the dead `--rp-line` the older rows above use). */
+.rp-theme-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--rp-sp-3);
+}
+.rp-theme-swatch-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-2);
+  text-align: start;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  cursor: pointer;
+  transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
+}
+.rp-theme-swatch-card:hover { border-color: var(--rp-text-mute); }
+.rp-theme-swatch-card:focus-visible {
+  outline: 2px solid var(--rp-accent-2);
+  outline-offset: 2px;
+}
+.rp-theme-swatch-card[aria-checked="true"] {
+  border-color: var(--rp-accent);
+  box-shadow: 0 0 0 1px var(--rp-accent);
+}
+/* the live preview — a mini "page": bg field + accent top bar + a
+   lifted surface block + an accent dot. The card's data-rp-theme scope
+   resolves these `--rp-*` to its own theme. */
+.rp-theme-swatch-preview {
+  position: relative;
+  height: 3.5rem;
+  overflow: hidden;
+  background: var(--rp-bg);
+  border: 1px solid var(--rp-border);
+  border-radius: calc(var(--rp-radius) - 4px);
+}
+.rp-theme-swatch-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 0.5rem;
+  background: var(--rp-accent);
+}
+.rp-theme-swatch-surf {
+  position: absolute;
+  inset: 1.1rem 0.4rem 0.4rem;
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 0.25rem;
+}
+.rp-theme-swatch-dot {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.5rem;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--rp-accent);
+}
+.rp-theme-swatch-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-2);
+}
+.rp-theme-swatch-name {
+  font-size: var(--rp-text-sm);
+  font-weight: 600;
+  color: var(--rp-text);
+}
+.rp-theme-swatch-check {
+  flex: 0 0 auto;
+  color: var(--rp-accent);
+  font-size: 1rem;
+  opacity: 0;
+}
+.rp-theme-swatch-card[aria-checked="true"] .rp-theme-swatch-check {
+  opacity: 1;
+}

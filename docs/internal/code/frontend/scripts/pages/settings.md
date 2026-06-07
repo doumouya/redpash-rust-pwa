@@ -49,7 +49,9 @@ function renderFromRegistry(app) {
 Spec → row dispatch:
 
 - `control: "onoff"` / `"segmented"` → `prefRow` (button-group).
-- `control: "chart-layouts"` → step 4.
+- `control: "stepper"` → `fontStepperRow` + `wireFontStepper` (A− / A+).
+- `control: "chart-layouts"` → `prefs/controls/chart-layouts.js` (deferred-mount picker, step 4).
+- `control: "theme-swatch"` → `prefs/controls/theme-swatch.js` (the `general-theme` picker — a grid of live per-theme preview cards).
 - Specs without `section` skip rendering (e.g. `workspaceRailView`,
   `casesDoneWindow` — read by their page but not surfaced as a
   Settings row).

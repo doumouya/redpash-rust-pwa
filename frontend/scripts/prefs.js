@@ -131,16 +131,21 @@ const ON_OFF_OPTIONS = [
 // reflection (and CSS) is unchanged.
 registerPref({
   key: "general-theme", group: "GENERAL", section: "set-appearance",
-  control: "onoff", label: "Theme",
-  // light/dark are the catppuccin aliases (today's default — zero-visual);
-  // the four named themes are the design-language reset (2026-06-05). The
-  // visible toggle stays dark↔light until the new identity is switched on
-  // as the default; the named themes are valid + settable now (preview).
+  control: "theme-swatch", label: "Theme",
+  // The selectable themes. new-dark/new-light are the RedPash
+  // design-language identity (2026-06-05); new-dark is the app DEFAULT
+  // as of 2026-06-07 (the new identity switched on). dark/light are the
+  // Catppuccin Mocha/Latte palettes. The `values` enum keeps the
+  // explicit catppuccin-* aliases settable for back-compat; the
+  // theme-swatch picker surfaces the 4 named `options` as live preview
+  // cards (prefs/controls/theme-swatch.js).
   values: ["light", "dark", "new-dark", "new-light", "catppuccin-mocha", "catppuccin-latte"],
-  default: "dark", attr: "theme",
+  default: "new-dark", attr: "theme",
   options: [
-    { value: "dark",  label: "Dark",  icon: "moon-stars" },
-    { value: "light", label: "Light", icon: "sun" },
+    { value: "new-dark",  label: "New Dark"         },
+    { value: "new-light", label: "New Light"        },
+    { value: "dark",      label: "Catppuccin Mocha" },
+    { value: "light",     label: "Catppuccin Latte" },
   ],
   tags: ["appearance"],
   migrateFrom: ["theme"],

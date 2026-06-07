@@ -39,7 +39,10 @@
                   function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
       var fs = rp(["rp-pref-general-fontSize", "rp-pref-fontSize", "rp-font-size"],
                   function (v) { return v === "sm" || v === "md" || v === "lg"; });
-      if (t)  d.dataset.theme    = t;
+      // No stored theme → New Dark, the app default (prefs.js
+      // general-theme). Set it here too so the FIRST paint is New Dark,
+      // not the tokens.css `:root` Catppuccin-Mocha fallback.
+      d.dataset.theme = t || "new-dark";
       if (dn) d.dataset.density  = dn;
       if (fs) d.dataset.fontSize = fs;
     } catch (e) {}
