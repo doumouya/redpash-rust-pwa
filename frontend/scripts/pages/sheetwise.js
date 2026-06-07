@@ -21,6 +21,20 @@ import { mountRedTable } from "/scripts/framework/redtable.js";
 import { mountPager } from "/scripts/framework/pager.js";
 import { mountChipRow } from "/scripts/framework/chip-row.js";
 import { openModal } from "/scripts/framework/modal.js";
+import { esc } from "/scripts/dom.js";
+
+// Connector sub-tab (facet) set, declared PER KIND — open-ended like the codec /
+// type registries; MySQL is the template, a future kind registers its own facets.
+const CONNECTOR_FACETS = {
+  mysql: [
+    { id: "tables",   label: "Tables",   icon: "bi-table" },
+    { id: "schema",   label: "Schema",   icon: "bi-diagram-3" },
+    { id: "pulls",    label: "Pulls",    icon: "bi-download" },
+    { id: "settings", label: "Settings", icon: "bi-gear" },
+  ],
+};
+const facetsForKind = (kind) => CONNECTOR_FACETS[kind] || CONNECTOR_FACETS.mysql;
+const KIND_MARK = { mysql: "#89b4fa", kafka: "#fab387", csv: "#a6e3a1" };
 
 export default function sheetwise(app, { session }) {
   const $ = (s) => app.querySelector(s);
@@ -30,6 +44,7 @@ export default function sheetwise(app, { session }) {
   const state = {
     view: "sql", files: [], activeRid: null, targets: [],
     connectors: [], connLoaded: false,
+    activeConnector: null, activeFacet: null, schemaTable: null,
     page: 1, size: 50, total: 0, pages: 1, lastSql: "",
   };
 
@@ -78,12 +93,14 @@ export default function sheetwise(app, { session }) {
       onChange: switchView,
     },
     groups: sqlGroups(),
-    footer: { nav: { active: "", session } },
+    footer: { create: { label: "New connector" }, nav: { active: "", session } },
     on: {
       tab: onRailTab,
-      tabRename: onRailTabRename,
-      tabHide: onRailTabHide,
-      groupAdd: () => openNewConnectorModal(),
+      groupToggle: onConnToggle,                          // expand a connector → show its Tables
+      groupRename: (id, next) => renameConnector(id, next), // connector groups only (renamable)
+      groupHide: (id) => deleteConnector(id),               // connector groups only (hidable)
+      groupAdd: () => openNewConnectorModal(),              // the empty-state "New connector"
+      create: () => openNewConnectorModal(),                // footer "New connector"
     },
   });
 
@@ -102,15 +119,24 @@ export default function sheetwise(app, { session }) {
       { id: "targets", name: "Targets", count: targets.length, tabs: targets },
     ];
   }
+  // Each connector is its OWN retractable group; its sub-tabs are the kind's facets
+  // (Tables/Schema/Pulls/Settings). Rename/delete ride the group affordances.
   function connGroups() {
-    return [{
-      id: "connectors", name: "Connectors", count: state.connectors.length,
-      addLabel: "New connector",
-      tabs: state.connectors.map((c) => ({
-        id: c.redpash_id, name: c.name, icon: "bi-database",
-        renamable: true, hidable: true,
+    if (!state.connectors.length) {
+      return [{ id: "__empty", name: "Connectors", addLabel: "New connector", tabs: [] }];
+    }
+    return state.connectors.map((c) => ({
+      id: c.redpash_id,
+      name: c.name,
+      mark: KIND_MARK[c.kind],
+      renamable: true, hidable: true,
+      collapsed: c.redpash_id !== state.activeConnector,
+      tabs: facetsForKind(c.kind).map((f) => ({
+        id: c.redpash_id + "::" + f.id,
+        name: f.label, icon: f.icon,
+        active: state.activeFacet === c.redpash_id + "::" + f.id,
       })),
-    }];
+    }));
   }
   function refreshRail() { rail.setGroups(state.view === "sql" ? sqlGroups() : connGroups()); }
 
@@ -120,16 +146,28 @@ export default function sheetwise(app, { session }) {
     $("#swViewSql").hidden = v !== "sql";
     $("#swViewConnectors").hidden = v !== "connectors";
     refreshRail();
-    if (v === "connectors" && !state.connLoaded) { state.connLoaded = true; loadConnectors(); }
+    if (v === "connectors") {
+      if (!state.connLoaded) { state.connLoaded = true; loadConnectors(); }
+      const hasFacet = !!state.activeFacet;        // show the open facet, else the guidance
+      $("#swConnGuide").hidden = hasFacet;
+      $("#swConnFacet").hidden = !hasFacet;
+    }
   }
 
   // ── rail interactions ──
   function onRailTab(tabId, groupId) {
-    if (groupId === "connectors") { pullConnector(tabId); return; }
-    selectTable(tabId, groupId === "targets"); // targets re-select + autorun
+    if (groupId === "sources") { selectTable(tabId, false); return; }
+    if (groupId === "targets") { selectTable(tabId, true); return; }
+    // connectors view: a facet tab "CON_…::<facet>"
+    const sep = tabId.indexOf("::");
+    if (sep > 0) renderFacet(tabId.slice(0, sep), tabId.slice(sep + 2));
   }
-  function onRailTabRename(tabId, next) { if (state.view === "connectors") renameConnector(tabId, next); }
-  function onRailTabHide(tabId) { if (state.view === "connectors") deleteConnector(tabId); }
+  // Expanding a connector group selects it + shows its Tables facet by default.
+  function onConnToggle(connId, collapsed) {
+    if (collapsed || connId === "__empty") return;
+    state.activeConnector = connId;
+    renderFacet(connId, "tables");
+  }
 
   // ════ SQL view — sources, columns, run, materialize ════
   async function loadFiles() {
@@ -207,7 +245,7 @@ export default function sheetwise(app, { session }) {
     } finally { btn.disabled = false; }
   }
 
-  // ════ Connectors view — list (rail tabs) + pull / rename / delete / create ════
+  // ════ Connectors view — each connector a group; facets render in the surface ════
   async function loadConnectors() {
     try {
       const d = await api("/api/connectors");
@@ -215,15 +253,112 @@ export default function sheetwise(app, { session }) {
       if (state.view === "connectors") refreshRail();
     } catch (e) { setErr(e.message); }
   }
-  async function pullConnector(rid) {
-    setErr("");
-    try {
-      await api("/api/connectors/" + encodeURIComponent(rid) + "/sync",
-        { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-      await refreshSources();
-      rail.seg.set("sql");                                    // jump to SQL — the CSV is now a source
-    } catch (e) { setErr("Pull failed — " + e.message); }
+
+  // ── facet surface router — renders the active connector facet into #swConnFacet ──
+  const facetHead = (icon, html) => '<div class="rp-sw-facet-head"><i class="bi ' + icon + '"></i> ' + html + '</div>';
+  const settingRow = (k, v) => '<div class="rp-sw-facet-row"><span class="rp-sw-facet-name">'
+    + esc(k) + '</span><span class="rp-sw-facet-meta">' + esc(v) + '</span></div>';
+
+  function renderFacet(connId, facet) {
+    const conn = state.connectors.find((c) => c.redpash_id === connId);
+    if (!conn) return;
+    state.activeConnector = connId;
+    state.activeFacet = connId + "::" + facet;
+    $("#swConnGuide").hidden = true;
+    const host = $("#swConnFacet"); host.hidden = false;
+    rail.setGroups(connGroups());                 // reflect the active facet tab + keep this connector expanded
+    if (facet === "schema") renderSchemaFacet(host, conn);
+    else if (facet === "pulls") renderPullsFacet(host, conn);
+    else if (facet === "settings") renderSettingsFacet(host, conn);
+    else renderTablesFacet(host, conn);
   }
+
+  async function renderTablesFacet(host, conn) {
+    host.innerHTML = facetHead("bi-table", "Tables in <b>" + esc(conn.name) + "</b>") + '<p class="rp-empty">Loading…</p>';
+    try {
+      const items = (await api("/api/connectors/" + encodeURIComponent(conn.redpash_id) + "/tables")).items || [];
+      if (!items.length) { host.querySelector(".rp-empty").textContent = "No tables in this database."; return; }
+      host.innerHTML = facetHead("bi-table", items.length + " tables in <b>" + esc(conn.name) + "</b>")
+        + '<div class="rp-sw-facet-list">' + items.map((t) =>
+            '<div class="rp-sw-facet-row" data-table="' + esc(t.name) + '">'
+            + '<button type="button" class="rp-sw-facet-name" data-act="schema" title="View schema"><i class="bi bi-table"></i>' + esc(t.name) + '</button>'
+            + '<span class="rp-sw-facet-meta">' + (t.rows != null ? "≈" + Number(t.rows).toLocaleString() + " rows" : "")
+              + (t.kind && t.kind !== "BASE TABLE" ? " · " + esc(t.kind) : "") + '</span>'
+            + '<button type="button" class="rp-btn-icon rp-btn-icon--glass rp-btn-icon--sm" data-act="pull" title="Pull this table → CSV"><i class="bi bi-download"></i></button>'
+            + '</div>').join("") + '</div>';
+      host.querySelectorAll(".rp-sw-facet-row").forEach((row) => {
+        const table = row.dataset.table;
+        row.querySelector('[data-act="schema"]').addEventListener("click", () => { state.schemaTable = table; renderFacet(conn.redpash_id, "schema"); });
+        row.querySelector('[data-act="pull"]').addEventListener("click", (e) => pullTable(conn.redpash_id, table, e.currentTarget));
+      });
+    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't list tables — " + e.message; }
+  }
+
+  async function renderSchemaFacet(host, conn) {
+    const table = state.schemaTable;
+    if (!table) { host.innerHTML = facetHead("bi-diagram-3", "Schema") + '<p class="rp-empty">Pick a table in <b>Tables</b> to view its columns.</p>'; return; }
+    host.innerHTML = facetHead("bi-diagram-3", "Schema · <b>" + esc(table) + "</b>") + '<p class="rp-empty">Loading…</p>';
+    try {
+      const cols = (await api("/api/connectors/" + encodeURIComponent(conn.redpash_id) + "/schema?table=" + encodeURIComponent(table))).items || [];
+      if (!cols.length) { host.querySelector(".rp-empty").textContent = "No columns."; return; }
+      host.innerHTML = facetHead("bi-diagram-3", esc(table) + " · " + cols.length + " columns")
+        + '<div class="rp-sw-facet-list">' + cols.map((c) =>
+            '<div class="rp-sw-facet-row">'
+            + '<span class="rp-sw-facet-name">' + esc(c.name) + (c.key === "PRI" ? ' <i class="bi bi-key" title="primary key"></i>' : "") + '</span>'
+            + '<span class="rp-sw-facet-meta">' + esc(c.data_type) + (c.nullable ? "" : " · not null")
+              + (c.projection && c.projection !== "text" ? ' · <span class="rp-sw-facet-proj">→ ' + esc(c.projection) + '</span>' : "") + '</span>'
+            + '</div>').join("") + '</div>'
+        + '<div class="rp-sw-facet-foot"><button type="button" class="rp-btn-icon rp-btn-icon--accent" id="swSchemaPull"><i class="bi bi-download"></i><span>Pull ' + esc(table) + '</span></button></div>';
+      host.querySelector("#swSchemaPull").addEventListener("click", (e) => pullTable(conn.redpash_id, table, e.currentTarget));
+    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't read schema — " + e.message; }
+  }
+
+  async function renderPullsFacet(host, conn) {
+    host.innerHTML = facetHead("bi-download", "Pulled files") + '<p class="rp-empty">Loading…</p>';
+    try {
+      const files = ((await api("/api/files")).items || [])
+        .filter((f) => f.project_id === conn.project_id && String(f.redpash_id).startsWith("FIL_"));
+      if (!files.length) { host.querySelector(".rp-empty").textContent = "No files in this connector's project yet — pull a table from Tables."; return; }
+      host.innerHTML = facetHead("bi-download", files.length + " files in this connector's project")
+        + '<div class="rp-sw-facet-list">' + files.map((f) =>
+            '<div class="rp-sw-facet-row" data-rid="' + esc(f.redpash_id) + '">'
+            + '<button type="button" class="rp-sw-facet-name" data-act="open" title="Open in SQL"><i class="bi bi-file-earmark-spreadsheet"></i>' + esc(f.filename) + '</button>'
+            + '<span class="rp-sw-facet-meta">' + (f.row_count != null ? Number(f.row_count).toLocaleString() + " rows" : "") + '</span>'
+            + '</div>').join("") + '</div>';
+      host.querySelectorAll('[data-act="open"]').forEach((b) => b.addEventListener("click", async () => {
+        const rid = b.closest("[data-rid]").dataset.rid;
+        rail.seg.set("sql"); await refreshSources(); selectTable(rid, true);
+      }));
+    } catch (e) { const p = host.querySelector(".rp-empty"); if (p) p.textContent = "Couldn't list files — " + e.message; }
+  }
+
+  function renderSettingsFacet(host, conn) {
+    host.innerHTML = facetHead("bi-gear", "Settings")
+      + '<div class="rp-sw-facet-list">'
+      + settingRow("Name", conn.name)
+      + settingRow("Kind", conn.kind || "—")
+      + settingRow("Destination project", conn.project_id || "—")
+      + settingRow("Connection id", conn.redpash_id)
+      + '</div>'
+      + '<p class="rp-sw-facet-note">Rename or delete this connector from the ✎ / ✕ on its rail header. '
+      + 'Host / database details + a connection test arrive with the connector-config endpoint.</p>';
+  }
+
+  // Pull one table → CSV (sync with a {table} override), then jump to SQL.
+  async function pullTable(connId, table, btn) {
+    const prev = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    try {
+      await api("/api/connectors/" + encodeURIComponent(connId) + "/sync",
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ table }) });
+      btn.innerHTML = '<i class="bi bi-check2"></i>';
+      await refreshSources();
+      setTimeout(() => rail.seg.set("sql"), 450);            // the pulled CSV is now a source
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i>'; btn.title = "Pull failed — " + e.message;
+      setTimeout(() => { btn.innerHTML = prev; btn.title = "Pull this table → CSV"; }, 2600);
+    }
+  }
+
   // Rename / delete hit PATCH / DELETE /api/connectors/:rid (Admin+ gated server-side).
   async function renameConnector(rid, next) {
     try {
@@ -234,9 +369,12 @@ export default function sheetwise(app, { session }) {
     } catch (e) { setErr("Rename failed — " + e.message); loadConnectors(); }
   }
   async function deleteConnector(rid) {
+    const c = state.connectors.find((x) => x.redpash_id === rid);
+    if (!window.confirm('Delete connector "' + (c ? c.name : rid) + '"? The CSVs already pulled into the project stay.')) return;
     try {
       await api("/api/connectors/" + encodeURIComponent(rid), { method: "DELETE" });
       state.connectors = state.connectors.filter((x) => x.redpash_id !== rid);
+      if (state.activeConnector === rid) { state.activeConnector = null; state.activeFacet = null; $("#swConnFacet").hidden = true; $("#swConnGuide").hidden = false; }
       refreshRail();
     } catch (e) { setErr("Delete failed — " + e.message); loadConnectors(); }
   }

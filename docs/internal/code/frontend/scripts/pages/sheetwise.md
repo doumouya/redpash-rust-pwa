@@ -29,10 +29,18 @@ this rebuild deletes that family and **composes framework components** —
   - **SQL view groups:** Sources (files → `rp-rail-tab`, click = `selectTable`) +
     Targets (materialized results). The active file's columns render as a
     `mountChipRow`; a chip click → `editor.insertAtCaret(name)`.
-  - **Connectors view group:** each connector is a `rp-rail-tab` (db icon) —
-    click = pull (`…/sync` → CSV lands in Sources → jump to SQL), rename via the
-    tab pencil (`PATCH /api/connectors/:rid`), delete via the tab hide (`DELETE`);
-    `addLabel`/the guidance button → `openNewConnectorModal`.
+  - **Connectors view: each connector is its OWN retractable `rp-rail-group`** (db
+    mark), and its **sub-tabs are the kind's facets** (`CONNECTOR_FACETS`,
+    open-ended per kind; MySQL = Tables / Schema / Pulls / Settings). Rename/delete
+    ride the group affordances (`groupRename`→`PATCH`, `groupHide`→`DELETE` with a
+    confirm); `groupAdd`/footer create → `openNewConnectorModal`. Expanding a
+    connector (`groupToggle`) opens its **Tables** facet.
+  - **Facet surface router** (`renderFacet` → `#swConnFacet`): **Tables**
+    (`GET /:rid/tables` → browse + per-table Pull via `pullTable` = `sync {table}`;
+    click a table name → Schema), **Schema** (`GET /:rid/schema?table=` → columns +
+    types + projection strategy), **Pulls** (the connector's project files via
+    `/api/files`), **Settings** (summary info; host/db + test land with the config
+    endpoint). The guidance (`#swConnGuide`) shows until a facet is open.
 - **SQL surface:** `mountEditorCode` (the editor; Run/Clear are `rp-btn-icon` in its
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-

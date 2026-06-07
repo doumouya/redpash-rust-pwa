@@ -41,6 +41,15 @@ buffering); and a decode error is **surfaced, never swallowed**.
 - `project_expr(col, data_type)` / `is_recognized(data_type)` — the single
   type→strategy map (extend here, never branch in `run`); an unrecognized type
   extracts via `CAST AS CHAR` and is `warn!`-logged.
+- **Introspection (the connector sub-tabs — Tables / Schema facets):**
+  - `connect_pinned(opts)` — the shared secure-connect + SESSION-pin helper; `run`
+    + both readers use it (one secure path, no format!'d URL).
+  - `pub async fn list_tables(&Cfg) -> Vec<TableInfo>` — `information_schema.tables`
+    for the connector's DB (name · `n_rows` estimate · kind BASE TABLE/VIEW). NB
+    `rows` is RESERVED in MySQL 8 → the count is aliased `n_rows`.
+  - `pub async fn describe_table(&Cfg, table) -> Vec<ColInfo>` — one table's columns
+    (name · data_type · nullable · key · `projection` strategy via `projection_label`).
+  - `TableInfo` / `ColInfo` (serde) — the JSON the routes return.
 
 ## Drift-prone areas
 

@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/connectors.rs
 source: ../../../../../../backend/crates/api/src/routes/connectors.rs
 owner: Torv
 section: Internal · Code · backend · api · routes
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # connectors.rs
@@ -22,7 +22,9 @@ POST   /api/connectors            create one — body picks the destination proj
 GET    /api/connectors/:rid       fetch one connector summary
 PATCH  /api/connectors/:rid       rename (manage = Admin+ on its project)
 DELETE /api/connectors/:rid       delete (Admin+; the row cascades via the registry)
-POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (SheetWise "Pull")
+POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file (Pull); body {table?} pulls a specific table
+GET    /api/connectors/:rid/tables   list the source DB's tables (Tables facet; VIEW-gated)
+GET    /api/connectors/:rid/schema   ?table= — a table's columns + types + projection (Schema facet; VIEW-gated)
 ```
 
 ## Public surface
@@ -35,7 +37,13 @@ POST   /api/connectors/:rid/sync  run the extract → CSV → a new project file
   `config` JSONB) + a `connector_create` event. Returns 201 + the `ConnectorSummary`.
 - `sync` (POST `/:rid/sync`) — runs the connector's extract → CSV → a new project
   file ("Pull"). Same ≥Member write-reach gate as create; v1 wires **MySQL** only
-  (`mysql_loader::run`, in-process; kind≠mysql → 400). Returns `{ file }`.
+  (`mysql_loader::run`, in-process; kind≠mysql → 400). Optional body `{table}` pulls
+  a SPECIFIC table (the Tables-facet browse → pull-any-table) instead of the
+  connector's configured default. Returns `{ file }`.
+- `tables` (GET `/:rid/tables`) — list the source DB's tables (`mysql_loader::list_tables`)
+  for the **Tables** sub-tab. **VIEW**-gated (read introspection, like `get_one`); mysql only.
+- `schema` (GET `/:rid/schema?table=`) — one table's columns + types + projection
+  strategy (`describe_table`) for the **Schema** sub-tab. VIEW-gated; mysql only.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).
 - `get_one` (GET `/:rid`) — `db::get_connector` then `rbac::require_view` on the
   destination project (leak-free: unreachable reads as not-found).

@@ -37,16 +37,18 @@
           </div>
         </div>
 
-        <!-- ════ view 2 — Connectors (guidance; the connector list lives in the rail) ════ -->
+        <!-- ════ view 2 — Connectors (each connector = a rail group; its facets render here) ════ -->
         <div class="rp-sw-view rp-sw-conn" id="swViewConnectors" hidden>
-          <div class="rp-empty rp-sw-conn-guide">
+          <div class="rp-empty rp-sw-conn-guide" id="swConnGuide">
             <i class="bi bi-database-add"></i>
             <p>Pull an external database into a CSV you can query — the live source is
-               never touched. Pick a connector in the rail, or create one.</p>
+               never touched. Expand a connector in the rail for its
+               <b>Tables / Schema / Pulls / Settings</b>, or create one.</p>
             <button class="rp-btn-icon rp-btn-icon--accent" id="swConnNew" type="button">
               <i class="bi bi-plus-lg"></i><span>New connector</span>
             </button>
           </div>
+          <div class="rp-sw-facet" id="swConnFacet" hidden></div>   <!-- active connector facet renders here -->
         </div>
 
       </div>

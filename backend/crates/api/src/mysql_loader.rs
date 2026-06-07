@@ -170,10 +170,7 @@ fn is_recognized(data_type: &str) -> bool {
 pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     // One connection, pinned to a deterministic, faithful session — SESSION scope
     // only (never GLOBAL/PERSIST: the source's global state is never mutated).
-    let mut my = sqlx::MySqlConnection::connect_with(&cfg.opts).await.context("connect to MySQL source")?;
-    my.execute("SET NAMES utf8mb4").await.context("session pin: SET NAMES utf8mb4")?;
-    my.execute("SET SESSION time_zone = '+00:00'").await.context("session pin: time_zone")?;
-    my.execute("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'").await.context("session pin: sql_mode")?;
+    let mut my = connect_pinned(&cfg.opts).await?;
 
     // Provenance + safety: log the source server profile (and the limits a big
     // pull could hit). Best-effort — never fails the load.
@@ -275,6 +272,106 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     tracing::info!(file = %outcome.rid, rows, cols = columns.len(),
         project = %cfg.project_rid, table = %cfg.table, "mysql-load: loaded");
     Ok(outcome.rid)
+}
+
+/// Connect with the secure options + pin the SESSION (utf8mb4 / UTC / known
+/// sql_mode) — shared by `run` + the introspection readers so every path uses the
+/// SAME secure connection (no format!'d URL) and the same faithful session.
+async fn connect_pinned(opts: &MySqlConnectOptions) -> Result<sqlx::MySqlConnection> {
+    let mut my = sqlx::MySqlConnection::connect_with(opts).await.context("connect to MySQL source")?;
+    my.execute("SET NAMES utf8mb4").await.context("session pin: SET NAMES utf8mb4")?;
+    my.execute("SET SESSION time_zone = '+00:00'").await.context("session pin: time_zone")?;
+    my.execute("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'").await.context("session pin: sql_mode")?;
+    Ok(my)
+}
+
+/// A table in the connected database — the connector's "Tables" facet.
+#[derive(serde::Serialize)]
+pub struct TableInfo {
+    pub name: String,
+    pub rows: Option<i64>, // information_schema estimate (NULL for views / some engines)
+    pub kind: String,      // "BASE TABLE" | "VIEW"
+}
+
+/// A column + the loader's faithful-extraction strategy — the "Schema" facet.
+#[derive(serde::Serialize)]
+pub struct ColInfo {
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub key: String,        // "" | "PRI" | "UNI" | "MUL"
+    pub projection: String, // how run() extracts it: "WKT" | "HEX" | "int" | "text"
+}
+
+/// The label for how `project_expr` renders a column type — surfaced in the Schema
+/// facet so the user sees the faithful-extraction strategy (geometry → WKT, etc.).
+fn projection_label(data_type: &str) -> &'static str {
+    match data_type {
+        "geometry" | "point" | "linestring" | "polygon" | "multipoint" | "multilinestring"
+        | "multipolygon" | "geometrycollection" => "WKT",
+        "binary" | "varbinary" | "tinyblob" | "blob" | "mediumblob" | "longblob" => "HEX",
+        "bit" => "int",
+        _ => "text",
+    }
+}
+
+/// List the tables in the connector's database (information_schema.tables). The
+/// `table_name` / `table_type` metadata columns are CAST AS CHAR (MySQL 8 reports
+/// them as BLOB; sqlx won't decode BLOB as String); `table_rows` CAST AS SIGNED.
+pub async fn list_tables(cfg: &Cfg) -> Result<Vec<TableInfo>> {
+    let mut my = connect_pinned(&cfg.opts).await?;
+    // `rows` is RESERVED in MySQL 8 (window functions) — alias the count `n_rows`.
+    let rows = sqlx::query(
+        "SELECT CAST(table_name AS CHAR) AS name, CAST(table_rows AS SIGNED) AS n_rows, \
+         CAST(table_type AS CHAR) AS kind \
+         FROM information_schema.tables WHERE table_schema = ? ORDER BY table_name",
+    )
+    .bind(&cfg.database)
+    .fetch_all(&mut my)
+    .await
+    .context("list information_schema.tables")?;
+    Ok(rows
+        .iter()
+        .map(|r| TableInfo {
+            name: r.get::<String, _>("name"),
+            rows: r.try_get::<Option<i64>, _>("n_rows").unwrap_or(None),
+            kind: r.try_get::<String, _>("kind").unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Describe a table's columns + the loader's projection strategy per column
+/// (information_schema.columns). `table` is any table in the connected database —
+/// the Schema facet can inspect a table without pulling it.
+pub async fn describe_table(cfg: &Cfg, table: &str) -> Result<Vec<ColInfo>> {
+    let mut my = connect_pinned(&cfg.opts).await?;
+    let rows = sqlx::query(
+        "SELECT CAST(column_name AS CHAR) AS name, CAST(data_type AS CHAR) AS data_type, \
+         CAST(is_nullable AS CHAR) AS nullable, CAST(column_key AS CHAR) AS col_key \
+         FROM information_schema.columns WHERE table_schema = ? AND table_name = ? \
+         ORDER BY ordinal_position",
+    )
+    .bind(&cfg.database)
+    .bind(table)
+    .fetch_all(&mut my)
+    .await
+    .context("read information_schema.columns")?;
+    if rows.is_empty() {
+        anyhow::bail!("table {}.{} not found or has no columns", cfg.database, table);
+    }
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let dt = r.get::<String, _>("data_type").to_ascii_lowercase();
+            ColInfo {
+                projection: projection_label(&dt).to_string(),
+                name: r.get::<String, _>("name"),
+                nullable: r.try_get::<String, _>("nullable").map(|s| s == "YES").unwrap_or(true),
+                key: r.try_get::<String, _>("col_key").unwrap_or_default(),
+                data_type: dt,
+            }
+        })
+        .collect())
 }
 
 #[cfg(test)]

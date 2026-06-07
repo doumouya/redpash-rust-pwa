@@ -40,8 +40,20 @@
 /* the redtable result fills the gap between the editor zone and the footer. */
 .rp-sw-view #swGrid { flex: 1; min-height: 0; }
 
-/* connectors guidance — centered empty-state in the surface (the connector list
-   lives in the rail). rp-empty owns the muted text; this only centers + sizes. */
-.rp-sw-conn { align-items: center; justify-content: center; }
-.rp-sw-conn-guide { max-width: 32rem; display: flex; flex-direction: column; align-items: center; gap: var(--rp-sp-4); padding: var(--rp-sp-6); }
+/* connectors view — the guidance centers itself (margin auto in the flex column);
+   the active connector facet fills + scrolls. The connector list lives in the rail
+   (one retractable group per connector); facets render in #swConnFacet. */
+.rp-sw-conn-guide { margin: auto; max-width: 32rem; display: flex; flex-direction: column; align-items: center; gap: var(--rp-sp-4); padding: var(--rp-sp-6); text-align: center; }
 .rp-sw-conn-guide i { font-size: 2rem; color: var(--rp-text-mute); }
+
+.rp-sw-facet { flex: 1; min-height: 0; overflow: auto; padding: var(--rp-sp-5); }
+.rp-sw-facet-head { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: var(--rp-text-sm); color: var(--rp-text); margin-bottom: var(--rp-sp-4); }
+.rp-sw-facet-head i { color: var(--rp-text-mute); }
+.rp-sw-facet-list { display: flex; flex-direction: column; gap: 2px; }
+.rp-sw-facet-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid var(--rp-border); border-radius: var(--rp-radius); background: var(--rp-surface); font-size: var(--rp-text-sm); }
+.rp-sw-facet-name { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0; background: transparent; border: 0; color: var(--rp-text); font: inherit; font-size: var(--rp-text-sm); cursor: pointer; text-align: left; }
+button.rp-sw-facet-name:hover { color: var(--rp-accent); }
+.rp-sw-facet-meta { margin-left: auto; color: var(--rp-text-mute); font-size: var(--rp-text-xs); }
+.rp-sw-facet-proj { color: var(--rp-info); }
+.rp-sw-facet-foot { margin-top: var(--rp-sp-4); display: flex; gap: var(--rp-sp-3); }
+.rp-sw-facet-note { margin-top: var(--rp-sp-4); color: var(--rp-text-mute); font-size: var(--rp-text-xs); line-height: 1.5; }

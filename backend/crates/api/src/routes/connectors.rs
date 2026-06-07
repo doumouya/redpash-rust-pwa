@@ -14,7 +14,7 @@
 //! `pipeline::upload_csv` applies at LOAD time — so you can only point a
 //! connection at a project you could upload to. Fail-closed (404, no leak).
 
-use axum::{extract::{Path, State}, http::{HeaderMap, StatusCode}, routing::{get, post}, Json, Router};
+use axum::{extract::{Path, Query, State}, http::{HeaderMap, StatusCode}, routing::{get, post}, Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::{db, error::AppError, id, state::AppState};
@@ -27,6 +27,8 @@ pub fn routes() -> Router<AppState> {
         .route("/",     get(list).post(create))
         .route("/:rid", get(get_one).patch(rename).delete(remove))
         .route("/:rid/sync", post(sync))
+        .route("/:rid/tables", get(tables))
+        .route("/:rid/schema", get(schema))
 }
 
 async fn list(
@@ -127,6 +129,20 @@ async fn create(
 #[derive(Serialize)]
 struct SyncResult { file: String }
 
+#[derive(Deserialize, Default)]
+struct SyncBody {
+    /// Pull a SPECIFIC table instead of the connector's configured default (the
+    /// Tables-facet browse → pull-any-table flow). Empty/absent = configured table.
+    #[serde(default)] table: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TablesResult { items: Vec<crate::mysql_loader::TableInfo> }
+#[derive(Serialize)]
+struct SchemaResult { items: Vec<crate::mysql_loader::ColInfo> }
+#[derive(Deserialize)]
+struct SchemaQuery { table: String }
+
 /// `POST /api/connectors/:rid/sync` — run the connector's extract → CSV → a new
 /// project file ("Pull" in SheetWise). v1 wires **MySQL** (in-process sqlx — a
 /// quick SELECT, unlike Kafka's binary-mode consume). The caller needs ≥Member
@@ -137,6 +153,7 @@ async fn sync(
     State(state): State<AppState>,
     headers:      HeaderMap,
     Path(rid):    Path<String>,
+    body:         Option<Json<SyncBody>>,
 ) -> Result<Json<SyncResult>, AppError> {
     let user = super::resolve_user_rid(&state, &headers).await?;
     let conn = db::get_connector(&state.db, &rid)
@@ -149,9 +166,13 @@ async fn sync(
         return Err(AppError::bad_request("unsupported",
             format!("in-app sync is wired for kind 'mysql' only (got '{}')", conn.kind)));
     }
-    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
+    let mut cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
         .await
         .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+    // optional {table} override — pull any table the user picked in the Tables facet
+    if let Some(Json(b)) = body {
+        if let Some(t) = b.table.filter(|t| !t.trim().is_empty()) { cfg.table = t; }
+    }
     let file = crate::mysql_loader::run(&state.db, state.data_dir.as_path(), &cfg)
         .await
         .map_err(|e| AppError::bad_request("connector_sync", e.to_string()))?;
@@ -162,6 +183,58 @@ async fn sync(
         .send();
 
     Ok(Json(SyncResult { file }))
+}
+
+/// `GET /api/connectors/:rid/tables` — list the tables in the connector's source
+/// database (the Tables facet). Read-only introspection, gated by VIEW reach on
+/// the destination project (same as `get_one`; leak-free 404). MySQL only (v1).
+async fn tables(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+) -> Result<Json<TablesResult>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
+    if conn.kind != "mysql" {
+        return Err(AppError::bad_request("unsupported",
+            format!("table listing is wired for kind 'mysql' only (got '{}')", conn.kind)));
+    }
+    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
+        .await
+        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+    let items = crate::mysql_loader::list_tables(&cfg)
+        .await
+        .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+    Ok(Json(TablesResult { items }))
+}
+
+/// `GET /api/connectors/:rid/schema?table=X` — columns + types (+ the loader's
+/// projection strategy) of one table in the source DB (the Schema facet). VIEW-gated.
+async fn schema(
+    State(state): State<AppState>,
+    headers:      HeaderMap,
+    Path(rid):    Path<String>,
+    Query(q):     Query<SchemaQuery>,
+) -> Result<Json<SchemaResult>, AppError> {
+    let user = super::resolve_user_rid(&state, &headers).await?;
+    let conn = db::get_connector(&state.db, &rid)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found", format!("connector {rid}")))?;
+    crate::rbac::require_view(&state, &user, &conn.project_id, "project").await?;
+    if conn.kind != "mysql" {
+        return Err(AppError::bad_request("unsupported",
+            format!("schema is wired for kind 'mysql' only (got '{}')", conn.kind)));
+    }
+    let cfg = crate::mysql_loader::Cfg::from_connection(&state.db, &rid)
+        .await
+        .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+    let items = crate::mysql_loader::describe_table(&cfg, &q.table)
+        .await
+        .map_err(|e| AppError::bad_request("connector_introspect", e.to_string()))?;
+    Ok(Json(SchemaResult { items }))
 }
 
 #[derive(Deserialize)]
