@@ -32,11 +32,13 @@ this rebuild deletes that family and **composes framework components** —
   - **Connectors view: each connector is its OWN retractable `rp-rail-group`** (db
     mark, `KIND_MARK` per engine), and its **sub-tabs are the kind's facets**
     (`CONNECTOR_FACETS`, open-ended per kind; MySQL + PostgreSQL share `SQL_FACETS` =
-    Tables / Schema / Pulls / Settings, since the backend dispatches on `conn.kind`).
-    Rename/delete
+    Tables / Schema / Pulls / Settings; **Kafka uses `KAFKA_FACETS` = Pulls / Settings
+    only** — a topic stream has no queryable catalog). Rename/delete
     ride the group affordances (`groupRename`→`PATCH`, `groupHide`→`DELETE` with a
     confirm); `groupAdd`/footer create → `openNewConnectorModal`. Expanding a
-    connector (`groupToggle`) opens its **Tables** facet.
+    connector (`groupToggle`) opens its **first** facet for the kind
+    (`facetsForKind(kind)[0]` — SQL → Tables, Kafka → Pulls; never a facet the kafka
+    backend would reject).
   - **Facet surface router** (`renderFacet` → `#swConnFacet`): **Tables**
     (`GET /:rid/tables` → browse + per-table Pull via `pullTable` = `sync {table}`;
     click a table name → Schema), **Schema** (`GET /:rid/schema?table=` → columns +
@@ -49,14 +51,17 @@ this rebuild deletes that family and **composes framework components** —
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
   table materializes via `POST …/sql/materialize`.
-- **New connector:** the connectors-guide CTA is **two engine-specific Add buttons,
-  each with its brand logo** (`#swConnNewPg` 🐘 PostgreSQL, `#swConnNewMy` 🐬 MySQL —
-  `frontend/icons/connectors/{postgres,mysql}.png`). Each calls
-  `openNewConnectorModal(kind)`, which is **engine-aware**: given a `kind` it LOCKS the
-  engine (no Engine picker; title "New <Engine> connector"; port/user defaults from
-  `ENGINE_META` = 3306/`root` vs 5432/`postgres`; the **schema** field shows only for
-  postgres). Called with no `kind` (the rail's generic add) it falls back to showing the
-  **Engine** picker. Other fields: host, an **SSL mode** select (`SSL_MODE_OPTIONS`,
+- **New connector:** the connectors-guide CTA is **three engine-specific Add buttons,
+  each with its brand logo** (`#swConnNewPg` 🐘 PostgreSQL, `#swConnNewMy` 🐬 MySQL,
+  `#swConnNewKa` Kafka — `frontend/icons/connectors/{postgres,mysql,kafka}.png`). Each
+  calls `openNewConnectorModal(kind)`, which is **engine-aware**: given a SQL `kind` it
+  LOCKS the engine (no Engine picker; title "New <Engine> connector"; port/user defaults
+  from `ENGINE_META`; the **schema** field shows only for postgres). **`kind==="kafka"`
+  takes a separate branch** — a STREAM, not a SQL engine — with fields **topic +
+  bootstrap servers + destination project** (no host/db/table/ssl_mode; SASL_SSL is
+  fixed; cluster creds come from the connector `.env` until K-3's encrypted SASL config);
+  `onSubmit` posts `{kind:"kafka", topic, config:{bootstrap, security_protocol:"SASL_SSL"}}`.
+  Called with no `kind` (the rail's generic add) it falls back to the **Engine** picker. Other fields: host, an **SSL mode** select (`SSL_MODE_OPTIONS`,
   Required-first = secure default), password, database, table, destination-project picker
   (the `connection-setup.js` pattern). `onSubmit` posts `{ kind, config }` — `config`
   carries `ssl_mode` (default `"required"`, read by both loaders) and, for postgres,

@@ -34,13 +34,19 @@ const SQL_FACETS = [
   { id: "pulls",    label: "Pulls",    icon: "bi-download" },
   { id: "settings", label: "Settings", icon: "bi-gear" },
 ];
-const CONNECTOR_FACETS = { mysql: SQL_FACETS, postgres: SQL_FACETS };
+// Kafka has no queryable catalog (it's a topic STREAM, not tables) — Pulls + Settings.
+const KAFKA_FACETS = [
+  { id: "pulls",    label: "Pulls",    icon: "bi-download" },
+  { id: "settings", label: "Settings", icon: "bi-gear" },
+];
+const CONNECTOR_FACETS = { mysql: SQL_FACETS, postgres: SQL_FACETS, kafka: KAFKA_FACETS };
 const facetsForKind = (kind) => CONNECTOR_FACETS[kind] || SQL_FACETS;
 const KIND_MARK = { mysql: "#89b4fa", postgres: "#cba6f7", kafka: "#fab387", csv: "#a6e3a1" };
 // Per-engine display + connect defaults, keyed by the engine-specific Add buttons.
 const ENGINE_META = {
   mysql:    { label: "MySQL", port: 3306, user: "root" },
   postgres: { label: "PostgreSQL", port: 5432, user: "postgres" },
+  kafka:    { label: "Kafka", bootstrap: "localhost:29092" },
 };
 
 // SSL-mode ladder (MySQL 8.4 "Using Encrypted Connections"). Required is first =
@@ -98,6 +104,7 @@ export default function sheetwise(app, { session }) {
   $("#swSave").addEventListener("click", saveTarget);
   $("#swConnNewPg").addEventListener("click", () => openNewConnectorModal("postgres"));
   $("#swConnNewMy").addEventListener("click", () => openNewConnectorModal("mysql"));
+  $("#swConnNewKa").addEventListener("click", () => openNewConnectorModal("kafka"));
 
   // ════ rail (framework component) — toggle + per-view groups ════
   const rail = mountRail($("#swRail"), {
@@ -181,11 +188,14 @@ export default function sheetwise(app, { session }) {
     const sep = tabId.indexOf("::");
     if (sep > 0) renderFacet(tabId.slice(0, sep), tabId.slice(sep + 2));
   }
-  // Expanding a connector group selects it + shows its Tables facet by default.
+  // Expanding a connector group selects it + opens its FIRST facet (SQL → Tables,
+  // kafka → Pulls — kafka has no Tables/Schema, so never default to a facet its
+  // backend would reject).
   function onConnToggle(connId, collapsed) {
     if (collapsed || connId === "__empty") return;
     state.activeConnector = connId;
-    renderFacet(connId, "tables");
+    const conn = state.connectors.find((c) => c.redpash_id === connId);
+    renderFacet(connId, facetsForKind(conn && conn.kind)[0].id);
   }
 
   // ════ SQL view — sources, columns, run, materialize ════
@@ -427,8 +437,38 @@ export default function sheetwise(app, { session }) {
     const eng = ENGINE_META[kind]; // undefined → generic (Engine picker shown)
     let projects = [];
     try { projects = (await api("/api/projects")).items || []; } catch (_) { /* empty → new-project path */ }
-    const projectOptions = [{ value: "", label: "＋ New project (named after the database)" }]
+    const projectOptions = [{ value: "", label: "＋ New project (auto-named)" }]
       .concat(projects.map((p) => ({ value: p.redpash_id, label: p.name || p.redpash_id })));
+    // Kafka is a STREAM, not a SQL engine: a topic + bootstrap, no host/db/table. SASL
+    // creds come from the connector .env for now (K-3 adds encrypted SASL config fields).
+    if (kind === "kafka") {
+      openModal({
+        title: "New Kafka connector", submitLabel: "Create & Pull", submitIcon: "bi-database-add",
+        fields: [
+          { key: "topic", label: "Topic", required: true, placeholder: "orders.v1" },
+          { key: "bootstrap", label: "Bootstrap servers", required: true, placeholder: eng.bootstrap,
+            hint: "host:port of the Kafka brokers (Confluent Cloud or local). TLS (SASL_SSL) is mandatory; cluster credentials come from the connector .env for now." },
+          { key: "project_id", label: "Destination project", type: "select", options: projectOptions,
+            hint: "Where the consumed records land as a CSV — RBAC-checked exactly like a file upload." },
+        ],
+        onSubmit: async (v) => {
+          const topic = (v.topic || "").trim();
+          const bootstrap = (v.bootstrap || "").trim();
+          if (!topic) throw new Error("Topic is required.");
+          if (!bootstrap) throw new Error("Bootstrap servers are required.");
+          let projectId = v.project_id;
+          if (!projectId) {
+            const p = await api("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: topic }) });
+            projectId = p.redpash_id || (p.project && p.project.redpash_id);
+          }
+          const config = { bootstrap, security_protocol: "SASL_SSL" };
+          const con = await api("/api/connectors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "kafka." + topic, project_id: projectId, kind: "kafka", topic, config }) });
+          try { await api("/api/connectors/" + encodeURIComponent(con.redpash_id) + "/sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (_) { /* created; pull can be retried from the rail */ }
+          state.connLoaded = false; loadConnectors(); refreshSources();
+        },
+      });
+      return;
+    }
     const fields = [];
     if (!eng) {
       fields.push({ key: "kind", label: "Engine", type: "select", options: [
