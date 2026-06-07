@@ -24,9 +24,11 @@ use serde_json::json;
 use crate::error::AppError;
 use crate::state::AppState;
 
-// docs/ sits beside frontend/ — same relative base as the ServeDir mounts
-// in mod.rs (server runs with the repo's `backend/` as CWD).
-const DOCS_DIR: &str = "../docs";
+// docs/internal/ sits beside frontend/ — same relative base as the ServeDir
+// mounts in mod.rs (server runs with the repo's `backend/` as CWD). The /docs
+// reader now serves the rebuilt INTERNAL doc tree; the public tier was folded
+// in (CAS_701CF65E — "only internal docs").
+const DOCS_DIR: &str = "../docs/internal";
 
 pub fn routes() -> Router<AppState> {
     Router::new()

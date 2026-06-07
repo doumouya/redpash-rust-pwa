@@ -12,7 +12,9 @@ last modified date: 2026-06-03
 
 Verifies the hand-written API documentation against the code. The axum routes
 in `backend/crates/api/src/routes/` are the single source of truth; the
-`docs/api/*.md` contract pages drift from them. This tool extracts both sides
+`docs/internal/rest-api/*.md` per-resource pages can drift from them (the route
+TABLE in `rest-api/index.md` is doc-gen-generated, so it can't — this tool
+guards the hand-written per-resource WHY). This tool extracts both sides
 and diffs them — the way [`crossing-audit`](crossing-audit.md) diffs JS calls
 against routes, except here the doc surface is the other side. It closes a real
 gap: [`doc-coverage-audit`](doc-coverage-audit.md) enforces
@@ -34,7 +36,7 @@ endpoint matches a served route* until this tool.
     (e.g. `:user_id` vs `:member_id`).
   - `auth_mismatch` — code route is platform-admin-gated, the doc describes it
     as public/open (file-level).
-  - `doc_missing` — a route module has no `docs/api/<module>.md`.
+  - `doc_missing` — a route module has no `docs/internal/rest-api/<module>.md`.
 
 ## Internal contracts
 
@@ -62,21 +64,21 @@ endpoint matches a served route* until this tool.
   request/response struct's wire fields, honoring serde rename/rename_all/flatten,
   and only flagging REQUIRED struct fields as missing. Nested object fields aren't
   recursed; the `syn` escalation path covers that if needed.
-- Secondary surfaces (REDMAP "API quick reference" + per-object rows,
-  `internal/subsystems/api-routes.md`, `docs/INDEX.md` links) are checked for
-  STALE entries + INDEX link integrity, not exhaustive coverage — they are
-  navigation/summary docs, intentionally not a full per-endpoint contract. A
-  path that is a nest-prefix of a real route (e.g. `/api/auth`) or a `*` glob is
-  not treated as stale.
+- Secondary surfaces (the old public `docs/REDMAP.md`, `docs/INDEX.md`,
+  `subsystems/api-routes.md`) were deleted/archived in the docs rebuild
+  (CAS_701CF65E) — those checks now self-skip (guarded `read() == null`). The
+  single nav map is `docs/internal/redmap.md` + the generated route table; a
+  follow-up can point the stale-entry check there if wanted.
 
 ## Dependencies (upstream)
 
 - `tools/lib/rust-routes.js` (code route set + `norm`).
-- `docs/api/*.md` (doc surface), `tools/api-doc-audit/acks.json` (allowlist).
+- `docs/internal/rest-api/*.md` (doc surface; `index.md` skipped — it's the
+  generated route table, not a per-resource page), `tools/api-doc-audit/acks.json` (allowlist).
 
 ## Related docs
 
 - [Shared extractor: rust-routes](../lib/rust-routes.md)
 - [Audit-suite landing](index.md)
 - [Master runner: audit.sh](../shell/audit.md)
-- [Subsystem: api-routes](../../../subsystems/api-routes.md)
+- [REST API section](../../../rest-api/index.md)

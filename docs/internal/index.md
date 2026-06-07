@@ -12,11 +12,10 @@ not by document-shape — you navigate by *"what part of the product is this?"*
 and *"how does this specific file work?"*, not by *"is this a spec or a
 flow?"*.
 
-> **Rebuild in progress (CAS_701CF65E).** This tree is being rewritten from
-> the old shape-based layout (architecture / subsystems / specs / flows / …)
-> into the feature/page spine below, and the public `docs/` tier is being
-> folded in (one tier, not two). Sections under **Transitional** are being
-> migrated and then deleted — don't add new docs there; add to the spine.
+> **Rebuilt 2026-06-07 (CAS_701CF65E)** from the old shape-based layout into
+> the feature/page spine below; the public `docs/` tier was folded in (one
+> tier, not two). The keepers from the old shape-sections were ported into the
+> spine; the originals are frozen under [`archive/legacy/`](archive/index.md).
 
 ## The two axes
 
@@ -54,28 +53,17 @@ WHY lives around them and is never overwritten.
 | [runbooks](runbooks/index.md) | operational / incident playbooks — one per incident class (cross-cutting shelf) | hand-written |
 | [processes](processes/index.md) | how the team works — touch-policy, audit cadence, bug→case→runbook, push policy, lane ownership | hand-written |
 | [decisions](decisions/index.md) | the durable **why** — design choices that bind future work (the keepers from the old `architecture/`) | hand-written |
-| [archive](archive/index.md) | snapshots no longer load-bearing | frozen |
-
-## Transitional — migrating into the spine (CAS_701CF65E)
-
-These are the old shape-based sections, still present until their content is
-ported (Phase C) and they're deleted (Phase E). **Don't add new docs here.**
-
-| Section | Migrating to |
-|---|---|
-| [architecture](architecture/index.md) | durable "why" → [decisions](decisions/index.md); FE/shell patterns → [stack/frontend](stack/index.md) |
-| [subsystems](subsystems/index.md) | per-system prose → [stack](stack/index.md) or the owning [page](pages/index.md) |
-| [specs](specs/index.md) | schemas → [db/schemas](db/schemas/index.md), RBAC → [db/rbac](db/rbac/index.md), page IA → [pages](pages/index.md), wire contracts → the owning subsystem |
-| [flows](flows/index.md) | cross-system traces → the owning [page](pages/index.md) / subsystem |
-| [ui](ui/index.md) | the generated component catalog stays under `ui/catalog/`, linked from [pages](pages/index.md) |
-| [observability](observability/index.md) | runtime visibility → [pages/monitoring](pages/index.md) + [stack/backend](stack/index.md) |
-| [cases](cases/index.md) | agent operating playbook → [pages/cases](pages/index.md) + [processes](processes/index.md) |
-| [excel-edge-cases](excel-edge-cases/index.md) | fixtures triage — kept; referenced from [stack/backend](stack/index.md) |
-| [jira-flow-proposition](jira-flow-proposition/index.md) | frozen proposition → [archive](archive/index.md) |
-| [standup](standup/index.md) | retired (empty) → deleted in Phase E |
+| [ui](ui/index.md) | the UI component catalog (`ui/catalog/`) — the dedup/registry instrument | generated (`--components`) |
+| [excel-edge-cases](excel-edge-cases/index.md) | dirty-`.xlsx` fixtures triage (22 fixtures × edge-case classes) | reference |
+| [archive](archive/index.md) | snapshots no longer load-bearing (incl. `legacy/` — the superseded shape-layout) | frozen |
 
 > Agent memory (`team-memory.md`, the `memory/` files, `.remember/`) is NOT
 > part of this doc tree — it's operational agent state, not documentation.
+> The superseded shape-layout docs (architecture / subsystems / specs / flows /
+> observability / cases) are frozen under [`archive/legacy/`](archive/index.md);
+> their keepers were ported into the spine. `ui/catalog/` holds the generated
+> component catalog (linked from [pages](pages/index.md)); `excel-edge-cases/`
+> keeps the dirty-fixtures triage.
 
 ## How to navigate
 

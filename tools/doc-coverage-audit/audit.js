@@ -487,15 +487,23 @@ var codeNavText = readFileSafe(path.join(ROOT, 'docs', 'internal', 'code', '_nav
 // nav, so the structure is self-indexing instead of duplicating a catalog into
 // redmap (the "absorb the catalog" anti-pattern).
 function dirIndexLists(absDocPath) {
-  if (path.basename(absDocPath) === 'index.md') return false;
-  var t = readFileSafe(path.join(path.dirname(absDocPath), 'index.md'));
-  return !!t && t.indexOf(path.basename(absDocPath)) !== -1;
+  var base = path.basename(absDocPath);
+  if (base === 'index.md') return false;
+  var dir = path.dirname(absDocPath);
+  // own section index.md, then the parent's (a subdir doc like pages/_shared/topbar.md
+  // is listed in pages/index.md as `_shared/topbar.md`).
+  var own = readFileSafe(path.join(dir, 'index.md'));
+  if (own && own.indexOf(base) !== -1) return true;
+  var parent = readFileSafe(path.join(path.dirname(dir), 'index.md'));
+  return !!parent && parent.indexOf(base) !== -1;
 }
 walk(path.join(ROOT, 'docs', 'internal'),
      function (f) { return f.endsWith('.md'); })
   .forEach(function (f) {
     var r = rel(f);
     if (r === 'docs/internal/redmap.md' || r === 'docs/internal/index.md') return;
+    // archive/ is frozen reference — not part of the navigable spine.
+    if (r.indexOf('docs/internal/archive/') === 0) return;
     var fromInternal = r.replace(/^docs\/internal\//, '');
     var indexed = redmapText.indexOf(fromInternal) !== -1;
     // code/ docs: indexed via the generated back-index (links are relative to code/).

@@ -17,9 +17,9 @@ feature areas). Superseded decisions move to [archive](../archive/index.md).
 
 ## Decisions
 
-_(ported in Phase C — e.g. the object model, the target architecture, the
-JS↔Rust boundary if it reads better as a binding decision than as stack prose,
-the disposability principle, the framework-layer strategy, VISION.)_
+- [object-model.md](object-model.md) — the few-orthogonal-primitives object model (a new object only for a new *shape*, never a new combination).
+- [target-architecture.md](target-architecture.md) — the durable architectural direction (framework-layer · disposability · scale-neutral).
+- [vision.md](vision.md) — the product north-star + strategy.
 
 ## Related
 

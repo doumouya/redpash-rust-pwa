@@ -292,7 +292,14 @@ Generated 2026-06-07 from the axum route tree (`tools/lib/rust-routes.js`) — 1
 
 ## Per-resource
 
-_(one `<resource>.md` per API resource — ported from `docs/api/*` in Phase C.)_
+The hand-written WHY per resource (auth, pagination quirks, business rules) —
+the generated table above is the authoritative route list; these add intent.
+`api-doc-audit` checks every route has a heading in its resource page.
+
+- [overview.md](overview.md)
+- [admin.md](admin.md) · [auth.md](auth.md) · [cases.md](cases.md) · [charts.md](charts.md) · [companies.md](companies.md) · [connectors.md](connectors.md)
+- [dashboards.md](dashboards.md) · [events.md](events.md) · [files.md](files.md) · [health.md](health.md) · [me.md](me.md) · [members.md](members.md)
+- [metrics.md](metrics.md) · [monitoring.md](monitoring.md) · [projects.md](projects.md) · [reports.md](reports.md) · [search.md](search.md) · [teams.md](teams.md) · [users.md](users.md)
 
 ## Source files
 

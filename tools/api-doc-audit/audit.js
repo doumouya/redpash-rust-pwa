@@ -39,7 +39,10 @@ var routesLib = require('../lib/rust-routes');
 var norm = routesLib.norm;
 
 var ROOT = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, '..', '..');
-var DOCS_API = path.join(ROOT, 'docs', 'api');
+// API docs moved into the rebuilt internal tree (CAS_701CF65E): the per-resource
+// WHY pages live under docs/internal/rest-api/, alongside the generated route
+// table in that section's index.md (which is skipped below — it's not a module doc).
+var DOCS_API = path.join(ROOT, 'docs', 'internal', 'rest-api');
 var OUT_HTML = path.join(__dirname, 'report.html');
 var OUT_JSON = path.join(__dirname, 'audit.json');
 var ACKS_FILE = path.join(__dirname, 'acks.json');
@@ -150,11 +153,13 @@ code.forEach(function (r) {
 // doc set
 var docByNorm = {};
 var docFiles = [];
-try { docFiles = fs.readdirSync(DOCS_API).filter(function (f) { return /\.md$/.test(f); }); } catch (e) {}
+// Skip index.md — that's the section landing + the GENERATED route table
+// (table rows, not per-resource `## METHOD /api/path` headings), not a module doc.
+try { docFiles = fs.readdirSync(DOCS_API).filter(function (f) { return /\.md$/.test(f) && f !== 'index.md'; }); } catch (e) {}
 var retiredFiles = [];
 var docMeta = {}; // docFile rel → { claimsOpen, gated:0 }
 docFiles.forEach(function (f) {
-  var rel = 'docs/api/' + f;
+  var rel = 'docs/internal/rest-api/' + f;
   var parsed = parseDocFile(rel, read(path.join(DOCS_API, f)) || '');
   docMeta[rel] = { claimsOpen: parsed.claimsOpen, gated: 0, line: 1 };
   if (parsed.retired) retiredFiles.push(f.replace(/\.md$/, ''));
@@ -245,7 +250,7 @@ code.forEach(function (r) { resources[resourceOf(r.path)] = true; });
 Object.keys(resources).sort().forEach(function (res) {
   if (!res) return;
   if (!fs.existsSync(path.join(DOCS_API, res + '.md'))) {
-    add('doc_missing', 'med', res, 'Route module /api/' + res + '/* has no docs/api/' + res + '.md page.', { path: '/api/' + res });
+    add('doc_missing', 'med', res, 'Route module /api/' + res + '/* has no docs/internal/rest-api/' + res + '.md page.', { path: '/api/' + res });
   }
 });
 
