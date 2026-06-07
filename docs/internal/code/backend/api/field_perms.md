@@ -70,7 +70,9 @@ reaches + the shared DTO shapes.
   perm_class)` builder (chains `.nosort()` / `.opts()` / `.rel()`); cells +
   default editor derive from `data_type` + `perm_class`.
 - `pub fn find_default(object, field)` — the catalog row for one field, for the
-  PUT handler's validation + revert check.
+  PUT handler's validation + revert check **and the `cases` PATCH `status` enum
+  gate** (CAS_0FBF301F Stage 0 — registry-driven validation replacing the inline
+  `matches!`; see the module test `case_status_drives_registry_validation`).
 - `pub async fn require_fields(state, caller, object_rid, object_type, &fields)`
   — the field-level write gate (slice 3); see above.
 

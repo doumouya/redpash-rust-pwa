@@ -304,8 +304,27 @@ async fn patch(
         }
     }
     if let Some(s) = status.as_deref() {
-        if !matches!(s, "backlog" | "todo" | "in_progress" | "in_review" | "done") {
-            return Err(AppError::bad_request("invalid", "status must be backlog | todo | in_progress | in_review | done"));
+        // Registry-driven validation (CAS_0FBF301F Stage 0): status's data_type +
+        // options come from the field catalog (field_perms), not a hardcoded
+        // `matches!` — so a new status (or a custom object's enum field) needs no
+        // edit here. Replaces the old inline check; the codec gate returns
+        // rule_code `data_type` on a bad value (same 400-before-write intent).
+        let def = crate::field_perms::find_default("case", "status")
+            .ok_or_else(|| AppError::internal("registry", "case.status missing from field registry"))?;
+        let value = serde_json::Value::String(s.to_string());
+        let mut sib = crate::validate_rules::Row::new();
+        sib.insert("status".to_string(), value.clone());
+        let outcome = crate::validate_rules::validate_value(
+            def.data_type, &def.options, "status", &[], &value, &sib,
+        );
+        if let Some(v) = outcome.errors.first() {
+            let kind = match v.rule_code.as_str() {
+                "data_type"    => "data_type",
+                "invalid_rule" => "invalid_rule",
+                "unknown_rule" => "unknown_rule",
+                _              => "invalid",
+            };
+            return Err(AppError::bad_request(kind, v.message.clone()));
         }
     }
     if let Some(p) = priority.as_deref() {

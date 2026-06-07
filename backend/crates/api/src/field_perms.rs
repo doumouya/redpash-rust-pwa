@@ -339,3 +339,35 @@ pub async fn require_fields(
 fn forbidden(msg: &'static str) -> AppError {
     AppError { status: StatusCode::FORBIDDEN, kind: "forbidden", message: msg.into(), inner: None }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stage 0 (CAS_0FBF301F): the `case.status` PATCH gate reads its enum +
+    /// options from the field catalog, not a hardcoded `matches!`. Pin that the
+    /// registry row exists with the expected shape, and that the validator —
+    /// driven by it — accepts a valid status and rejects an invalid one with
+    /// `rule_code = data_type`.
+    #[test]
+    fn case_status_drives_registry_validation() {
+        let def = find_default("case", "status").expect("case.status in registry");
+        assert_eq!(def.data_type, "enum");
+        for s in ["backlog", "todo", "in_progress", "in_review", "done"] {
+            assert!(def.options.contains(&s), "status option {s} missing from registry");
+        }
+
+        let ok = crate::validate_rules::validate_value(
+            def.data_type, &def.options, "status", &[],
+            &serde_json::json!("in_progress"), &crate::validate_rules::Row::new(),
+        );
+        assert!(ok.is_ok(), "valid status must pass");
+
+        let bad = crate::validate_rules::validate_value(
+            def.data_type, &def.options, "status", &[],
+            &serde_json::json!("frozen"), &crate::validate_rules::Row::new(),
+        );
+        assert!(!bad.is_ok(), "invalid status must fail");
+        assert_eq!(bad.errors[0].rule_code, "data_type");
+    }
+}
