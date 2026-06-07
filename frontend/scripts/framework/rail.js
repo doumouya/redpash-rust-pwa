@@ -230,7 +230,7 @@ function markInitials(g) {
 
 function groupHTML(g) {
   const head = '<div class="rp-rail-group-head" data-rail-action="group-toggle">'
-    + '<i class="rp-rail-group-caret bi bi-chevron-right"></i>'
+    + '<i class="rp-rail-group-caret bi bi-chevron-down"></i>'
     + (g.mark ? '<span class="rp-rail-group-mark" style="--mark:' + esc(g.mark) + '">' + esc(markInitials(g)) + '</span>' : "")
     + '<span class="rp-rail-group-name">' + esc(g.name || "") + '</span>'
     + (Number.isFinite(g.count) ? '<span class="rp-rail-group-count">' + g.count + '</span>' : "")

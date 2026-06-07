@@ -59,6 +59,11 @@ hand-built rails — all fixed before commit:
    error as the tab `title` (added `title` support to `mountRail`).
 7. **Empty-filter "No projects match" feedback lost.** **Fix:** `refreshRail` passes `emptyText`
    to `setGroups` (added `emptyText` support to `mountRail`).
+8. **Group caret pointed the wrong way (Em, live).** Same base-mismatch class as #1: `groupHTML`
+   emitted `bi-chevron-right`, but `rail.css`'s rotate (`:not(.expanded) → rotate(-90deg)`) was
+   written for Monitoring's `bi-chevron-down` base — so the caret pointed right when open and up
+   when collapsed. **Fix:** emit `bi-chevron-down` (match Monitoring) → down when open, `>` when
+   collapsed.
 
 ## Verify
 
