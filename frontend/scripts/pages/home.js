@@ -1757,7 +1757,7 @@ export default function home(app, { session: _session }) {
     // `selectMode` toggles the checkbox column + selection-chip
     // visibility; `selected` is the live set of picked rids.
     // `deleteMode` is the single-row-click-to-delete pattern (matches
-    // Workspace's `.rt-table.mode-delete` — Em 2026-05-25: "delete
+    // Workspace's `.rp-redtable.mode-delete` — Em 2026-05-25: "delete
     // alone is not working because rows are clickable here").
     // `editMode` makes cells flagged `editable: true` in spec.columns
     // contenteditable; blur or Enter fires a sparse PATCH against
@@ -1777,7 +1777,7 @@ export default function home(app, { session: _session }) {
     function decorateSelectMode() {
       const tbody = view.querySelector("#rp-home-list-tbody");
       if (!tbody) return;
-      const thead = view.querySelector(".rt-table thead tr");
+      const thead = view.querySelector(".rp-redtable thead tr");
       // Header checkbox column — strip first, re-add if selectMode.
       thead?.querySelector(".rp-list-sel-th")?.remove();
       tbody.querySelectorAll("td.rp-list-sel").forEach((td) => td.remove());
@@ -1839,7 +1839,7 @@ export default function home(app, { session: _session }) {
         view.querySelector('.rp-toolbar-mode[data-mode="select"]')?.classList.remove("is-active");
         decorateSelectMode();
       }
-      view.querySelector(".rt-table")?.classList.toggle("mode-delete", deleteMode);
+      view.querySelector(".rp-redtable")?.classList.toggle("mode-delete", deleteMode);
       view.querySelector('.rp-toolbar-mode[data-mode="delete"]')?.classList.toggle("is-active", deleteMode);
       updateSelChip();
     }
@@ -1875,7 +1875,7 @@ export default function home(app, { session: _session }) {
         }
         if (deleteMode) toggleDeleteMode(false);
       }
-      view.querySelector(".rt-table")?.classList.toggle("mode-edit", editMode);
+      view.querySelector(".rp-redtable")?.classList.toggle("mode-edit", editMode);
       view.querySelector('.rp-toolbar-mode[data-mode="edit"]')?.classList.toggle("is-active", editMode);
       decorateEditMode();
       updateSelChip();
@@ -2158,7 +2158,7 @@ export default function home(app, { session: _session }) {
     // hideCellHTML(...) injected at fetch-render time. Skipped when
     // the tab opts out (no hideMeta).
     if (spec.hideMeta) {
-      const headRow = view.querySelector(".rt-table thead tr");
+      const headRow = view.querySelector(".rp-redtable thead tr");
       if (headRow) headRow.insertAdjacentHTML(
         "beforeend",
         '<th class="rp-list-hide-th" aria-hidden="true"></th>',
@@ -2331,7 +2331,7 @@ export default function home(app, { session: _session }) {
       // Click-to-sort — header delegation. Three-state per column:
       // first click sets desc, second flips to asc, third clears.
       // After clearing, the backend falls back to its default sort.
-      view.querySelector(".rt-table thead")?.addEventListener("click", (e) => {
+      view.querySelector(".rp-redtable thead")?.addEventListener("click", (e) => {
         const th = e.target.closest("th.rp-list-sortable");
         if (!th) return;
         const key = th.dataset.sort;
@@ -2375,7 +2375,7 @@ export default function home(app, { session: _session }) {
       // Header select-all checkbox — delegated `change` listener on
       // the thead so it survives re-renders (decorateSelectMode
       // strips + re-adds the cell on every refetch + mode toggle).
-      view.querySelector(".rt-table thead")?.addEventListener("change", (e) => {
+      view.querySelector(".rp-redtable thead")?.addEventListener("change", (e) => {
         const cb = e.target.closest("input[data-sel-all]");
         if (!cb || !selectMode) return;
         const tbody = view.querySelector("#rp-home-list-tbody");

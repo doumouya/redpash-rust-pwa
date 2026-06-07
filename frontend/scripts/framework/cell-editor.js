@@ -50,7 +50,7 @@ export const cellEditor = {
   // decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender, tableRoot })
   //   view              — DOM root containing the redtable. Used only as
   //                       the fallback scope when tableRoot is omitted
-  //                       (legacy ".rt-table" / "#rp-home-list-tbody"
+  //                       (legacy ".rp-redtable" / "#rp-home-list-tbody"
   //                       lookups stay view-scoped, exactly as before).
   //   spec              — page spec (spec.columns[] carries editKey,
   //                       editor, options, render, requiresAdmin, ...)
@@ -72,7 +72,7 @@ export const cellEditor = {
   //                       FROM this root (so rp-redtable can pass its
   //                       <table class="rp-redtable">). When OMITTED,
   //                       falls back to the legacy view-scoped lookups
-  //                       (".rt-table thead tr" + "#rp-home-list-tbody")
+  //                       (".rp-redtable thead tr" + "#rp-home-list-tbody")
   //                       — every existing caller (home.js,
   //                       typedef-acceptance.js) behaves IDENTICALLY.
   decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender, tableRoot }) {
@@ -101,10 +101,10 @@ export const cellEditor = {
     // CURRENT thead position (survives column reorder), dispatch
     // buildOn per editor id.
     // thead row: derived from tableRoot when supplied (rp-redtable),
-    // else the legacy view-scoped ".rt-table thead tr" lookup.
+    // else the legacy view-scoped ".rp-redtable thead tr" lookup.
     const thead = tableRoot
       ? tableRoot.querySelector("thead tr")
-      : view.querySelector(".rt-table thead tr");
+      : view.querySelector(".rp-redtable thead tr");
     if (!thead) return;
     const dataTHs = [...thead.querySelectorAll("th[data-col-key]")];
     const keyToPos = new Map(dataTHs.map((th, i) => [th.dataset.colKey, i]));

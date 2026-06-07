@@ -564,7 +564,7 @@ export default function cases(app, { session }) {
         + '<td>' + (c.updated_at ? esc(fmtAge(c.updated_at)) : "—") + '</td>'
         + '</tr>';
     }).join("");
-    return '<table class="rt-table">'
+    return '<table class="rp-redtable rp-table">'
       + '<thead><tr><th>Title</th><th>Status</th><th>Priority</th>'
       +   '<th>Assignee</th><th>Updated</th></tr></thead>'
       + '<tbody>' + body + '</tbody></table>';

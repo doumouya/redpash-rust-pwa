@@ -500,7 +500,7 @@ export function mountReport(panelBody, ctx) {
       +   '</span>'
       + '</div>'
       + '<div class="rp-report-preview-wrap">'
-      +   '<table class="rt-table rp-report-preview-table">'
+      +   '<table class="rp-table rp-report-preview-table">'
       +     head + body
       +   '</table>'
       + '</div>'
@@ -658,7 +658,7 @@ export function mountReport(panelBody, ctx) {
       +   '</span>'
       + '</div>'
       + '<div class="rp-report-preview-wrap">'
-      +   '<table class="rt-table rp-report-preview-table rp-report-matrix-table">'
+      +   '<table class="rp-table rp-report-preview-table rp-report-matrix-table">'
       +     '<thead><tr>' + headerCells + '</tr></thead>'
       +     '<tbody>' + body + '</tbody>'
       +     foot

@@ -62,7 +62,7 @@ export default function workspace(app, { session }) {
   const table      = $("#wsTable");
   const thead      = table.tHead;
   const tbody      = table.tBodies[0];
-  const tableWrap  = table.closest(".rt-table-wrap");  // scroll container for virtual rows
+  const tableWrap  = table.closest(".rp-table-wrap");  // scroll container for virtual rows
   const tableState = $("#wsTableState");
   const colsDd     = $("#wsColsDd");
   const rowsInfo   = $("#wsRowsInfo");
@@ -797,7 +797,7 @@ export default function workspace(app, { session }) {
         + '<td>' + (p.owner_id === meRid ? "Personal" : "Shared") + '</td>'
         + '</tr>';
     }).join("");
-    return '<table class="rt-table">'
+    return '<table class="rp-redtable rp-table">'
       + '<thead><tr><th>Project</th><th>Files</th><th>Stage</th>'
       +   '<th>Cleanness</th><th>Owner</th></tr></thead>'
       + '<tbody>' + body + '</tbody></table>';

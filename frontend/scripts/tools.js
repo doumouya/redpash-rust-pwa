@@ -225,7 +225,7 @@ export function mountTools(panelBody, ctx) {
       + (castConfirm ? renderCastConfirm() : '')
       + (stepPreview ? renderStepPreview() : '')
       + '<div class="rp-tool-columns-tablewrap">'
-      +   '<table class="rt-table rp-tool-columns-table">'
+      +   '<table class="rp-table rp-tool-columns-table">'
       +     '<thead><tr>'
       +       '<th class="is-check"><input type="checkbox" class="rp-redtable-chk rp-col-check-all"'
       +         (allSelected ? ' checked' : '') + ' /></th>'
@@ -908,7 +908,7 @@ export function mountTools(panelBody, ctx) {
       : (v === '' ? '<span class="rp-step-preview-null">(empty)</span>' : esc(v));
     const table = d.sample?.length
       ? '<div class="rp-tool-columns-tablewrap rp-step-preview-tablewrap">'
-        + '<table class="rt-table rp-step-preview-table">'
+        + '<table class="rp-table rp-step-preview-table">'
         + '<thead><tr><th>Column</th><th class="is-num">Row</th><th>Before</th><th>After</th></tr></thead>'
         + '<tbody>'
         + d.sample.map((s) =>

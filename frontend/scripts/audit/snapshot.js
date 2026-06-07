@@ -36,7 +36,7 @@
 const ATOM_CATALOG = [
   ".rp-surface",
   ".rp-toolbar",
-  ".rt-table-wrap",
+  ".rp-table-wrap",
   ".rp-pager",
   ".rp-card",
   ".rp-btn-icon",

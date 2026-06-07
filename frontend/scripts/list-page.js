@@ -199,8 +199,8 @@ export function listPanel(columns, tbodyId) {
       + '<i class="bi bi-chevron-expand rp-list-sort-icon"></i>'
       + '</th>';
   }).join("");
-  return '<section class="rt-table-wrap">'
-    + '<table class="rt-table">'
+  return '<section class="rp-table-wrap">'
+    + '<table class="rp-redtable rp-table">'
     +   '<thead><tr>' + th + '</tr></thead>'
     +   '<tbody id="' + esc(tbodyId) + '"></tbody>'
     + '</table>'
@@ -406,7 +406,7 @@ export function wireListColumnsExport(view, opts) {
     : new Set(JSON.parse(hiddenRaw));
 
   function applyHiddenColumns() {
-    const table = view.querySelector(".rt-table");
+    const table = view.querySelector(".rp-redtable");
     if (!table) return;
     [...table.querySelectorAll("thead th[data-col-key]")].forEach((th) => {
       const hide = hiddenCols.has(th.dataset.colKey);
@@ -532,7 +532,7 @@ export function wireListColumnsExport(view, opts) {
   // when THs matched target, leaving tbody in spec order — every column
   // showed the wrong data after any fetchList repaint.)
   function applyColumnOrder() {
-    const table = view.querySelector(".rt-table");
+    const table = view.querySelector(".rp-redtable");
     if (!table) return;
     const headRow = table.querySelector("thead tr");
     if (!headRow) return;
@@ -545,7 +545,7 @@ export function wireListColumnsExport(view, opts) {
     reorderColumnDOM(headRow, tbody, specOrder, targetKeys, byKey);
   }
 
-  const headEl = view.querySelector(".rt-table thead");
+  const headEl = view.querySelector(".rp-redtable thead");
   function clearDropIndicators() {
     headEl?.querySelectorAll("th.is-drop-before, th.is-drop-after")
       .forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
@@ -599,7 +599,7 @@ export function wireListColumnsExport(view, opts) {
     // is the one call site where `applyColumnOrder()`'s spec-order
     // assumption would NOT hold; pass currentOrder explicitly instead.
     const byKey = new Map(ths.map((th) => [th.dataset.colKey, th]));
-    const tbody = view.querySelector(".rt-table tbody");
+    const tbody = view.querySelector(".rp-redtable tbody");
     const headRow = headEl.querySelector("tr");
     reorderColumnDOM(headRow, tbody, currentOrder, newOrder, byKey);
   });

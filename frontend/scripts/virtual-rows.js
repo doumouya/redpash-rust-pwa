@@ -22,7 +22,7 @@
 //   • Uniform row height (redtable cells are `white-space: nowrap`,
 //     one line each). Pass the height for the active density; call
 //     `remeasure()` after a density change.
-//   • A single scroll container (`.rt-table-wrap`) wraps the <table>.
+//   • A single scroll container (`.rp-table-wrap`) wraps the <table>.
 //
 // State that must NOT live on the DOM: selection / edit targets. Rows
 // are recycled, so a row scrolled out and back is a fresh node. The
