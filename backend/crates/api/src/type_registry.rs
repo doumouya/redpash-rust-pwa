@@ -16,14 +16,14 @@ use crate::field_perms::{default_registry, FieldRow};
 /// field. `rid_prefix` is reported as actually minted (live DB) — note that
 /// `dashboard` shares `FIL_` with `file` (both are `project_files` rows; only
 /// `chart` got a distinct `CHT_`).
-struct TypeMeta {
-    type_id:             &'static str,
-    rid_prefix:          &'static str,
-    display_name:        &'static str,
-    display_name_plural: &'static str,
-    rail_icon:           &'static str,
-    default_columns:     &'static [&'static str],
-    default_sort:        &'static str,
+pub(crate) struct TypeMeta {
+    pub(crate) type_id:             &'static str,
+    pub(crate) rid_prefix:          &'static str,
+    pub(crate) display_name:        &'static str,
+    pub(crate) display_name_plural: &'static str,
+    pub(crate) rail_icon:           &'static str,
+    pub(crate) default_columns:     &'static [&'static str],
+    pub(crate) default_sort:        &'static str,
 }
 
 /// The 7 membership-bearing builtin types (the ones the field registry grids).
@@ -127,7 +127,7 @@ fn field_to_def(r: &FieldRow) -> FieldDef {
 
 /// Assemble one builtin TypeDefinition. Cells carry perm_class defaults only —
 /// the `/admin/types` handler layers `field_permissions` overrides on top.
-fn build_one(m: &TypeMeta, registry: &[FieldRow]) -> TypeDefinition {
+pub(crate) fn build_one(m: &TypeMeta, registry: &[FieldRow]) -> TypeDefinition {
     let fields: Vec<FieldDef> = registry
         .iter()
         .filter(|r| r.object == m.type_id)

@@ -79,6 +79,17 @@ impl PermClass {
             PermClass::Readonly => "readonly",
         }
     }
+    /// Parse the stored wire string (TypeDefCache load) back to the enum.
+    pub fn from_str(s: &str) -> Option<PermClass> {
+        match s {
+            "standard"      => Some(PermClass::Standard),
+            "collaborative" => Some(PermClass::Collaborative),
+            "owner_grade"   => Some(PermClass::OwnerGrade),
+            "personal"      => Some(PermClass::Personal),
+            "readonly"      => Some(PermClass::Readonly),
+            _               => None,
+        }
+    }
     /// `[owner, admin, member, viewer]`.
     fn cells(self) -> [Perm; 4] {
         match self {
@@ -154,6 +165,39 @@ impl FieldRow {
     fn nosort(mut self) -> Self { self.is_sortable = false; self }
     fn opts(mut self, o: &[&'static str]) -> Self { self.options = o.to_vec(); self }
     fn rel(mut self, ty: &'static str, multi: bool) -> Self { self.rel = Some(Rel { ty, multi }); self }
+
+    /// Reconstruct a row from stored inputs (the TypeDefCache load path) — the
+    /// SAME derivation as `fld()`: the per-role cells + default editor +
+    /// is_editable come from `(data_type, perm_class)`, never stored, so the
+    /// seeded rows can't drift from the derivation. Strings are interned to
+    /// `&'static str` by the caller (the cache lives for the process).
+    pub(crate) fn from_parts(
+        object:      &'static str,
+        field:       &'static str,
+        data_type:   &'static str,
+        perm_class:  PermClass,
+        is_sortable: bool,
+        options:     Vec<&'static str>,
+        rel:         Option<Rel>,
+    ) -> Self {
+        let [owner, admin, member, viewer] = perm_class.cells();
+        FieldRow {
+            object,
+            field,
+            is_editable: !matches!(perm_class, PermClass::Readonly),
+            is_sortable,
+            data_type,
+            editor: default_editor(data_type, perm_class),
+            options,
+            perm_class,
+            rel,
+            owner,
+            admin,
+            member,
+            viewer,
+            is_overridden: false,
+        }
+    }
 }
 
 /// Default editor id for a `data_type` (readonly fields get none). Opaque to the

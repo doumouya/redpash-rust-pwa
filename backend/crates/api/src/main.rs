@@ -36,6 +36,7 @@ mod validate_rules;
 mod request_log;
 mod routes;
 mod state;
+mod type_cache;
 mod type_registry;
 
 use std::net::SocketAddr;

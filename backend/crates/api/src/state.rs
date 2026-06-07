@@ -70,6 +70,12 @@ pub struct AppState {
     /// (default "RedPash"); `None` when no matching company exists,
     /// in which case the source filter is a no-op.
     pub internal_company_id: Arc<Option<String>>,
+    /// The data-driven type registry (type_definitions/type_fields/
+    /// type_scope_roles), loaded once after migrate. Replaces the code-side
+    /// field/type/role registries (object-registry Stage 1). Read methods wire
+    /// in at C3 — staged-surface allow until then.
+    #[allow(dead_code)]
+    pub type_cache:          Arc<crate::type_cache::TypeDefCache>,
 }
 
 impl AppState {
@@ -86,6 +92,11 @@ impl AppState {
         // 1. Schema. sqlx::migrate! embeds the migrations at build time
         //    relative to the api crate's manifest dir.
         sqlx::migrate!("../../migrations").run(&db).await?;
+
+        // 1b. Type registry — load the seeded type_definitions/type_fields/
+        //     type_scope_roles into the immutable cache. Order is migrate
+        //     (which seeds) → load, never the reverse.
+        let type_cache = Arc::new(crate::type_cache::TypeDefCache::load(&db).await?);
 
         // 2. Dev user + default project.
         let bs = crate::bootstrap::run(&db).await?;
@@ -162,6 +173,7 @@ impl AppState {
             avatars: Arc::new(DashMap::new()),
             dev_login,
             internal_company_id: Arc::new(internal_company_id),
+            type_cache,
         })
     }
 
