@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
             Some(conn_id) => kafka_loader::Cfg::from_connection(&pool, &conn_id).await?,
             None          => kafka_loader::Cfg::from_env()?,
         };
-        kafka_loader::run(&pool, &data_dir, &cfg).await?;
+        let _ = kafka_loader::run(&pool, &data_dir, &cfg).await?; // CLI mode logs the rid itself
         return Ok(());
     }
 

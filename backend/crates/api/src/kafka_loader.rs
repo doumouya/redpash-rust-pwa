@@ -85,12 +85,29 @@ impl Cfg {
             anyhow::bail!("connector {connection_id} is kind '{}', not a kafka load target", conn.kind);
         }
         let var = |k: &str| std::env::var(k).with_context(|| format!("{k} not set"));
-        let topic = match conn.topic.filter(|s| !s.is_empty()) {
-            Some(t) => t,
-            None    => var("KAFKA_TOPIC")?,
+        // The established connector pattern: non-secret TRANSPORT (bootstrap / topic /
+        // security_protocol) comes from the connector's `config` JSONB, falling back to
+        // the legacy KAFKA_* env so existing RC connectors + load.sh keep working. SASL
+        // creds + the Avro contract still ride .env in this slice (K-3 adds the encrypted
+        // SASL config; the contract stays env-referenced for now — flagged follow-up).
+        let cfg_json = &conn.config;
+        let s = |k: &str| cfg_json.get(k).and_then(Value::as_str).map(str::to_string);
+        // Only SASL_SSL is wired (consume_raw mandates TLS) — reject any other protocol
+        // LOUDLY, never silently ignore a configured plaintext downgrade.
+        validate_security_protocol(s("security_protocol").as_deref())?;
+        let bootstrap = match s("bootstrap").filter(|b| !b.trim().is_empty()) {
+            Some(b) => b,
+            None    => var("KAFKA_BOOTSTRAP")?,
         };
+        // topic precedence: the connector's `topic` column, else config.topic, else env.
+        let topic = conn
+            .topic
+            .filter(|t| !t.is_empty())
+            .or_else(|| s("topic").filter(|t| !t.is_empty()))
+            .map(Ok)
+            .unwrap_or_else(|| var("KAFKA_TOPIC"))?;
         Ok(Self {
-            bootstrap:     var("KAFKA_BOOTSTRAP")?,
+            bootstrap,
             sasl_user:     var("KAFKA_KEY")?,
             sasl_password: var("KAFKA_SECRET")?,
             topic,
@@ -101,6 +118,21 @@ impl Cfg {
             version_header: std::env::var("KAFKA_VERSION_HEADER").ok().filter(|s| !s.is_empty()),
             wire_format:   WireFormat::from_meta(std::env::var("KAFKA_WIRE_FORMAT").ok().as_deref()),
         })
+    }
+}
+
+/// Validate a configured Kafka `security_protocol`. Only `SASL_SSL` is wired
+/// (`consume_raw` mandates TLS — SASL PLAIN over cleartext would leak creds). An
+/// absent value defaults to SASL_SSL; anything else is a LOUD error, never a silent
+/// plaintext downgrade (don't honour a protocol the consume path will ignore).
+fn validate_security_protocol(proto: Option<&str>) -> Result<()> {
+    match proto {
+        None => Ok(()),
+        Some(p) if p.trim().eq_ignore_ascii_case("SASL_SSL") => Ok(()),
+        Some(p) => anyhow::bail!(
+            "connector config: security_protocol '{p}' is not supported — only SASL_SSL \
+             (mandatory TLS) is wired"
+        ),
     }
 }
 
@@ -320,7 +352,7 @@ fn header_version(headers: &BTreeMap<String, Vec<u8>>, key_hint: Option<&str>) -
 /// ingest. NEVER decodes against a fixed version — each record is decoded
 /// against the writer schema named by its header; records without a resolvable
 /// version (or contract) are skipped + logged, not mis-decoded.
-pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
+pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<Option<String>> {
     // Per-version schemas resolve from the contracts dir as `{subject}-v{N}.json`.
     let contracts_dir: PathBuf = Path::new(&cfg.contract_path)
         .parent()
@@ -385,7 +417,7 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
 
     if records.is_empty() {
         tracing::warn!("kafka-load: nothing to load (0 decoded — check the version header above)");
-        return Ok(());
+        return Ok(None); // no file produced — the sync handler maps this to a clear "no records" response
     }
 
     // CSV columns = UNION of all decoded records' fields. Records span schema
@@ -409,7 +441,7 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<()> {
         "kafka-load: loaded {} rows ({} cols) into {rid} (project {}, as {}); by version {:?}; skipped {}",
         records.len(), columns.len(), cfg.project_rid, cfg.as_user, by_version, skipped
     );
-    Ok(())
+    Ok(Some(rid))
 }
 
 #[cfg(test)]
@@ -431,6 +463,18 @@ mod tests {
         let mut h3 = BTreeMap::new();
         h3.insert("traceId".to_string(), b"abc".to_vec());
         assert_eq!(header_version(&h3, None), None);
+    }
+
+    #[test]
+    fn security_protocol_only_sasl_ssl() {
+        assert!(validate_security_protocol(None).is_ok()); // absent → default SASL_SSL
+        assert!(validate_security_protocol(Some("SASL_SSL")).is_ok());
+        assert!(validate_security_protocol(Some("sasl_ssl")).is_ok()); // case-insensitive
+        assert!(validate_security_protocol(Some("  SASL_SSL  ")).is_ok()); // trimmed
+        // anything else is a loud error — never a silent plaintext downgrade
+        assert!(validate_security_protocol(Some("PLAINTEXT")).is_err());
+        assert!(validate_security_protocol(Some("SSL")).is_err());
+        assert!(validate_security_protocol(Some("SASL_PLAINTEXT")).is_err());
     }
 
     #[test]

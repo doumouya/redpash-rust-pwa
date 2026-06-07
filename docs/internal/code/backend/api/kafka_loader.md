@@ -3,7 +3,7 @@ title: backend/crates/api/src/kafka_loader.rs
 source: ../../../../../backend/crates/api/src/kafka_loader.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-06-01
+last modified date: 2026-06-07
 ---
 
 # kafka_loader.rs
@@ -79,10 +79,17 @@ is visible.
   `as_user` (`KAFKA_AS_USER`, REQUIRED — the RBAC-checked upload identity).
 - `pub async fn Cfg::from_connection(pool, connection_id)` — build from a
   persisted connection (a `CON_` rid). The user-CHOSEN destination (project +
-  as_user) and the topic come from the `connectors` row (Em: "ask the user which
-  project"); the cluster Kafka transport (bootstrap/creds/contract/wire-format)
-  stays in `.env` for the RC. Guards `kind == "kafka"`. `main.rs` uses this when
+  as_user) come from the `connectors` row. **Non-secret TRANSPORT now rides the
+  `config` JSONB (the established connector pattern), env as fallback:**
+  `config.bootstrap` (else `KAFKA_BOOTSTRAP`), `config.security_protocol` (default
+  `SASL_SSL`, validated by `validate_security_protocol` — any other value is a LOUD
+  error, never a silent plaintext downgrade), topic = the `topic` column → `config.topic`
+  → `KAFKA_TOPIC`. **SASL creds + the Avro contract still ride `.env`** in this slice
+  (K-3 adds the AES-GCM-encrypted SASL config; the contract stays env-referenced —
+  flagged follow-up). Guards `kind == "kafka"`. `main.rs` uses this when
   `REDPASH_KAFKA_CONNECTION` is set, else `from_env` (the legacy hardcode).
+- `fn validate_security_protocol(Option<&str>)` — only `SASL_SSL` is wired
+  (`consume_raw` mandates TLS); absent → ok (default), anything else → loud error.
 - `pub fn load_contract_schema(path)` — the Avro schema JSON from a Confluent
   envelope's `.schema` (or a bare schema file).
 - `pub fn schema_field_names(schema)` — top-level field names IN ORDER (the CSV
@@ -92,8 +99,11 @@ is visible.
 - `pub async fn ingest_csv(pool, data_dir, caller, project, filename, csv)` — the L:
   hands the CSV to `pipeline::upload_csv` AS `caller` (`caller_is_admin=false`),
   which does RBAC + blob + parse + summarize + insert + audit → returns the rid.
-- `pub async fn run(pool, data_dir, cfg)` — orchestrate consume → decode → csv →
-  ingest, with a logged summary.
+- `pub async fn run(pool, data_dir, cfg) -> Result<Option<String>>` — orchestrate
+  consume → decode → csv → ingest, with a logged summary. Returns the new file rid
+  (`Some`) so the in-app sync handler can report it, or `None` when 0 records were
+  decoded (nothing loaded — the sync handler maps that to a clear "no records" response,
+  not a file). The CLI mode discards it.
 
 Private: `consume_raw` (rskafka SASL_SSL fetch from one partition).
 
