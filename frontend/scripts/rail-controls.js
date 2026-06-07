@@ -2,14 +2,14 @@
  * Doc: docs/internal/code/frontend/scripts/rail-controls.md */
 // Rail interaction helpers — the two rail-control patterns that were
 // hand-rolled per page (Em 2026-05-29 consolidation batch). The CSS
-// atoms (.rt-nav / .rt-seg--rail) were already shared; this dedups
+// atoms (.rp-rail / .rp-seg--rail) were already shared; this dedups
 // the JS wiring so a new railed page (or a 3rd view-toggle) gets the
 // behavior for free instead of copy-pasting it.
 //
 //   mountRailCollapse(rail, btn)   — the chevron collapse toggle that
 //     was reimplemented 7× (workspace / home / cases / monitoring /
 //     docs / settings / profile).
-//   mountRailSeg(segEl, opts)      — the 2-option .rt-seg--rail toggle
+//   mountRailSeg(segEl, opts)      — the 2-option .rp-seg--rail toggle
 //     that switches the rail's body view + persists a pref (workspace
 //     Data↔Dashboards, cases Internal↔External).
 
@@ -32,7 +32,7 @@ export function mountRailCollapse(rail, btn) {
   });
 }
 
-// Rail segmented toggle — a 2+-option `.rt-seg--rail` whose buttons
+// Rail segmented toggle — a 2+-option `.rp-seg--rail` whose buttons
 // carry `data-rail-seg="<value>"`. Owns: click→persist→is-active sync,
 // pref seeding + initial sync on mount. The caller supplies what the
 // switch *does* via `onChange(value)` (CSS row-filter, server refetch,

@@ -112,7 +112,7 @@ export function mountToolsPanel(host, config = {}) {
   host.classList.add("has-columns");
 
   // The column-manager mounts into a host inside the panel body — its own
-  // flex-column surface (was columnsEl.rt-tool-columns).
+  // flex-column surface (was columnsEl.rp-tool-columns).
   const columnsEl = document.createElement("div");
   columnsEl.className = "rp-tool-columns";
   panel.body.appendChild(columnsEl);

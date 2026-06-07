@@ -148,7 +148,7 @@ export async function captureInventory(state = null) {
 
   // region buckets — which classes render inside each shell region. A class
   // can appear in more than one region; that's fine (it's a set per region).
-  const REGION_ROOTS = { topbar: ".rp-topbar", rail: ".rt-nav", main: ".rp-main" };
+  const REGION_ROOTS = { topbar: ".rp-topbar", rail: ".rp-rail", main: ".rp-main" };
   const regions = {};
   for (const name in REGION_ROOTS) {
     const root = document.querySelector(REGION_ROOTS[name]);

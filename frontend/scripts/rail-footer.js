@@ -2,7 +2,7 @@
  * Doc: docs/internal/code/frontend/scripts/rail-footer.md */
 // Rail footer nav — the shared utility cluster (Docs / Settings /
 // Profile) that lives at the bottom of every railed page's
-// `.rt-nav-foot`. Relocated out of the topbar 2026-05-28 (Em): the
+// `.rp-rail-footer`. Relocated out of the topbar 2026-05-28 (Em): the
 // topbar keeps the primary page nav + theme + sign-out; these three
 // "utility" destinations move to the rail foot, VS-Code / Slack style.
 //
