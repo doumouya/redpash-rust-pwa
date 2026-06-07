@@ -27,6 +27,9 @@ replaced is gone — the editor styling moved to `framework/editor-code.css`.
   (stat readout · target-name input · save · pager). `.rp-sw-stat.is-ok` /
   `.is-err` color the Settings "Test connection" result (`--rp-ok` / `--rp-danger`).
 - `.rp-sw-conn` / `-conn-guide` — the connectors guidance empty-state centering.
+- `.rp-sw-conn-add` / `-conn-btn` / `-conn-logo` — the two engine-specific "Add a
+  connector" buttons (each with its brand logo from `icons/connectors/`); a flex row of
+  shadow-card buttons with a 3rem contained logo + label, accent hover.
 
 ## Drift-prone areas
 

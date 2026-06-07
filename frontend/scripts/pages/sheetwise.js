@@ -37,6 +37,11 @@ const SQL_FACETS = [
 const CONNECTOR_FACETS = { mysql: SQL_FACETS, postgres: SQL_FACETS };
 const facetsForKind = (kind) => CONNECTOR_FACETS[kind] || SQL_FACETS;
 const KIND_MARK = { mysql: "#89b4fa", postgres: "#cba6f7", kafka: "#fab387", csv: "#a6e3a1" };
+// Per-engine display + connect defaults, keyed by the engine-specific Add buttons.
+const ENGINE_META = {
+  mysql:    { label: "MySQL", port: 3306, user: "root" },
+  postgres: { label: "PostgreSQL", port: 5432, user: "postgres" },
+};
 
 // SSL-mode ladder (MySQL 8.4 "Using Encrypted Connections"). Required is first =
 // the browser-selected default → secure-by-default. The backend enforces remote ≥
@@ -91,7 +96,8 @@ export default function sheetwise(app, { session }) {
   // ── result pager (framework component) ──
   const pager = mountPager($("#swPager"), { onPage: (n) => { state.page = n; run(state.lastSql); } });
   $("#swSave").addEventListener("click", saveTarget);
-  $("#swConnNew").addEventListener("click", openNewConnectorModal);
+  $("#swConnNewPg").addEventListener("click", () => openNewConnectorModal("postgres"));
+  $("#swConnNewMy").addEventListener("click", () => openNewConnectorModal("mysql"));
 
   // ════ rail (framework component) — toggle + per-view groups ════
   const rail = mountRail($("#swRail"), {
@@ -412,37 +418,53 @@ export default function sheetwise(app, { session }) {
       refreshRail();
     } catch (e) { setErr("Delete failed — " + e.message); loadConnectors(); }
   }
-  // New connector — the openModal flow (modal.js) over the MySQL config + a
+  // New connector — the openModal flow (modal.js) over the engine config + a
   // destination-project picker (same project-picker model as connection-setup.js).
-  async function openNewConnectorModal() {
+  // `kind` ("mysql" | "postgres") comes from the engine-specific Add buttons → the
+  // modal is locked to that engine (no Engine picker, engine-correct defaults). With
+  // no `kind` (the rail's generic add) the Engine picker is shown.
+  async function openNewConnectorModal(kind) {
+    const eng = ENGINE_META[kind]; // undefined → generic (Engine picker shown)
     let projects = [];
     try { projects = (await api("/api/projects")).items || []; } catch (_) { /* empty → new-project path */ }
     const projectOptions = [{ value: "", label: "＋ New project (named after the database)" }]
       .concat(projects.map((p) => ({ value: p.redpash_id, label: p.name || p.redpash_id })));
-    openModal({
-      title: "New connector", submitLabel: "Create & Pull", submitIcon: "bi-database-add",
-      fields: [
-        { key: "kind", label: "Engine", type: "select", options: [
+    const fields = [];
+    if (!eng) {
+      fields.push({ key: "kind", label: "Engine", type: "select", options: [
             { value: "mysql", label: "MySQL" },
             { value: "postgres", label: "PostgreSQL" },
           ],
-          hint: "MySQL or PostgreSQL — both pull a table → CSV through the same RBAC-checked pipeline." },
-        { key: "host", label: "Host", placeholder: "127.0.0.1",
-          hint: "Loopback (127.0.0.1) or a remote host. A remote host needs SSL mode ≥ Required — plaintext is refused off-loopback." },
-        { key: "port", label: "Port", placeholder: "3306 (MySQL) · 5432 (Postgres)" },
-        { key: "user", label: "User", placeholder: "root / postgres" },
-        { key: "password", label: "Password", type: "password" },
-        { key: "ssl_mode", label: "SSL mode", type: "select", options: SSL_MODE_OPTIONS,
-          hint: "Required encrypts the link (default). Verify CA / identity also validate the server cert. Preferred / Disabled are loopback-only." },
-        { key: "database", label: "Database", required: true, placeholder: "employees" },
-        { key: "schema", label: "Schema", placeholder: "public",
-          hint: "PostgreSQL only — the schema holding the table (defaults to public). Ignored for MySQL." },
-        { key: "table", label: "Table", required: true, placeholder: "employees" },
-        { key: "project_id", label: "Destination project", type: "select", options: projectOptions,
-          hint: "Where the pulled CSV lands — RBAC-checked exactly like a file upload." },
-      ],
+          hint: "MySQL or PostgreSQL — both pull a table → CSV through the same RBAC-checked pipeline." });
+    }
+    fields.push(
+      { key: "host", label: "Host", placeholder: "127.0.0.1",
+        hint: "Loopback (127.0.0.1) or a remote host. A remote host needs SSL mode ≥ Required — plaintext is refused off-loopback." },
+      { key: "port", label: "Port", placeholder: eng ? String(eng.port) : "3306 (MySQL) · 5432 (Postgres)" },
+      { key: "user", label: "User", placeholder: eng ? eng.user : "root / postgres" },
+      { key: "password", label: "Password", type: "password" },
+      { key: "ssl_mode", label: "SSL mode", type: "select", options: SSL_MODE_OPTIONS,
+        hint: "Required encrypts the link (default). Verify CA / identity also validate the server cert. Preferred / Disabled are loopback-only." },
+      { key: "database", label: "Database", required: true, placeholder: "employees" },
+    );
+    // Schema is PostgreSQL-only — show it for postgres, or in the generic modal (the
+    // user may pick postgres there). MySQL ignores it.
+    if (!eng || kind === "postgres") {
+      fields.push({ key: "schema", label: "Schema", placeholder: "public",
+        hint: "PostgreSQL only — the schema holding the table (defaults to public)." + (eng ? "" : " Ignored for MySQL.") });
+    }
+    fields.push(
+      { key: "table", label: "Table", required: true, placeholder: "employees" },
+      { key: "project_id", label: "Destination project", type: "select", options: projectOptions,
+        hint: "Where the pulled CSV lands — RBAC-checked exactly like a file upload." },
+    );
+    openModal({
+      title: eng ? ("New " + eng.label + " connector") : "New connector",
+      submitLabel: "Create & Pull", submitIcon: "bi-database-add",
+      fields,
       onSubmit: async (v) => {
-        const kind = v.kind || "mysql";
+        const k = kind || v.kind || "mysql";
+        const isPg = k === "postgres";
         const db = (v.database || "").trim(), table = (v.table || "").trim();
         if (!db || !table) throw new Error("Database and table are required.");
         let projectId = v.project_id;
@@ -452,13 +474,13 @@ export default function sheetwise(app, { session }) {
         }
         const config = {
           host: (v.host || "127.0.0.1").trim(),
-          port: Number(v.port) || (kind === "postgres" ? 5432 : 3306),
-          user: (v.user || (kind === "postgres" ? "postgres" : "root")).trim(),
+          port: Number(v.port) || (isPg ? 5432 : 3306),
+          user: (v.user || (isPg ? "postgres" : "root")).trim(),
           password: v.password || "", database: db, table,
           ssl_mode: v.ssl_mode || "required",
         };
-        if (kind === "postgres") config.schema = (v.schema || "public").trim();
-        const con = await api("/api/connectors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: db + "." + table, project_id: projectId, kind, config }) });
+        if (isPg) config.schema = (v.schema || "public").trim();
+        const con = await api("/api/connectors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: db + "." + table, project_id: projectId, kind: k, config }) });
         try { await api("/api/connectors/" + encodeURIComponent(con.redpash_id) + "/sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (_) { /* created; pull can be retried from the rail */ }
         state.connLoaded = false; loadConnectors(); refreshSources();
       },

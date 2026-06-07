@@ -44,9 +44,16 @@
             <p>Pull an external database into a CSV you can query — the live source is
                never touched. Expand a connector in the rail for its
                <b>Tables / Schema / Pulls / Settings</b>, or create one.</p>
-            <button class="rp-btn-icon rp-btn-icon--accent" id="swConnNew" type="button">
-              <i class="bi bi-plus-lg"></i><span>New connector</span>
-            </button>
+            <div class="rp-sw-conn-add">
+              <button class="rp-sw-conn-btn" id="swConnNewPg" type="button">
+                <img class="rp-sw-conn-logo" src="/icons/connectors/postgres.png" alt="" />
+                <span>Add PostgreSQL</span>
+              </button>
+              <button class="rp-sw-conn-btn" id="swConnNewMy" type="button">
+                <img class="rp-sw-conn-logo" src="/icons/connectors/mysql.png" alt="" />
+                <span>Add MySQL</span>
+              </button>
+            </div>
           </div>
           <div class="rp-sw-facet" id="swConnFacet" hidden></div>   <!-- active connector facet renders here -->
         </div>

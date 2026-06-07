@@ -49,16 +49,20 @@ this rebuild deletes that family and **composes framework components** —
   `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
   since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
   table materializes via `POST …/sql/materialize`.
-- **New connector:** `openNewConnectorModal` → `openModal` (modal.js) with an
-  **Engine** picker (`mysql` / `postgres`), host/port/user/password, an **SSL mode**
-  select (`SSL_MODE_OPTIONS`; Required is first = the secure-by-default selection),
-  database, a **schema** field (PostgreSQL-only — defaults to `public`; MySQL ignores
-  it), table, and a destination-project picker (the `connection-setup.js` pattern).
-  `onSubmit` posts `{ kind, config }` — `config` carries `ssl_mode` (default
-  `"required"`, read by both loaders) and, for postgres, `schema`; the port/user
-  defaults flip on the engine (3306/`root` vs 5432/`postgres`). The Tables/Schema/Pulls
-  facets are kind-agnostic (backend dispatches on `conn.kind`), so postgres connectors
-  use the same surface. Flow: `POST /api/projects` (new-project path) +
+- **New connector:** the connectors-guide CTA is **two engine-specific Add buttons,
+  each with its brand logo** (`#swConnNewPg` 🐘 PostgreSQL, `#swConnNewMy` 🐬 MySQL —
+  `frontend/icons/connectors/{postgres,mysql}.png`). Each calls
+  `openNewConnectorModal(kind)`, which is **engine-aware**: given a `kind` it LOCKS the
+  engine (no Engine picker; title "New <Engine> connector"; port/user defaults from
+  `ENGINE_META` = 3306/`root` vs 5432/`postgres`; the **schema** field shows only for
+  postgres). Called with no `kind` (the rail's generic add) it falls back to showing the
+  **Engine** picker. Other fields: host, an **SSL mode** select (`SSL_MODE_OPTIONS`,
+  Required-first = secure default), password, database, table, destination-project picker
+  (the `connection-setup.js` pattern). `onSubmit` posts `{ kind, config }` — `config`
+  carries `ssl_mode` (default `"required"`, read by both loaders) and, for postgres,
+  `schema`. The Tables/Schema/Pulls facets are kind-agnostic (backend dispatches on
+  `conn.kind`), so postgres connectors use the same surface. Flow: `POST /api/projects`
+  (new-project path) +
   `POST /api/connectors` + `…/sync`. The Settings facet notes that host / DB / SSL mode
   editing + a connection test arrive with the connector-config endpoint (deferred —
   config isn't in the list payload).
