@@ -21,6 +21,7 @@ use base64::Engine;
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::sync::OnceLock;
+use zeroize::Zeroizing;
 
 const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 const VERSION_PREFIX: &str = "v1:";
@@ -32,15 +33,22 @@ fn key() -> Result<&'static LessSafeKey> {
     if let Some(k) = KEY.get() {
         return Ok(k);
     }
-    let raw = std::env::var("REDPASH_MASTER_KEY")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .context("REDPASH_MASTER_KEY is not set — connector secret encryption is unavailable")?;
-    let bytes = B64.decode(raw.trim()).context("REDPASH_MASTER_KEY: not valid base64")?;
+    // Zeroizing wipes the plaintext key material from the heap on drop — the master key
+    // is the crown jewel (it protects every connector secret), so a core dump / heap
+    // forensic must not recover it. `UnboundKey::new` only borrows, so without this the
+    // env String + decoded bytes would linger in freed heap.
+    let raw: Zeroizing<String> = Zeroizing::new(
+        std::env::var("REDPASH_MASTER_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .context("REDPASH_MASTER_KEY is not set — connector secret encryption is unavailable")?,
+    );
+    let bytes: Zeroizing<Vec<u8>> =
+        Zeroizing::new(B64.decode(raw.trim()).context("REDPASH_MASTER_KEY: not valid base64")?);
     if bytes.len() != 32 {
         bail!("REDPASH_MASTER_KEY: must be base64 of 32 bytes (got {})", bytes.len());
     }
-    let unbound = UnboundKey::new(&AES_256_GCM, &bytes)
+    let unbound = UnboundKey::new(&AES_256_GCM, bytes.as_slice())
         .map_err(|_| anyhow::anyhow!("REDPASH_MASTER_KEY: invalid AES-256 key"))?;
     let _ = KEY.set(LessSafeKey::new(unbound)); // first writer wins; a race produces the same key
     Ok(KEY.get().expect("key set above"))

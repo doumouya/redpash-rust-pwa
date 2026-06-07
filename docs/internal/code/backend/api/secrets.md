@@ -48,6 +48,13 @@ loader's `from_connection` (`kafka_loader`). The plaintext secret is **never per
   key. The dangerous paths (plaintext storage, silent decrypt-skip) are still hard errors.
 - **Crypto core is key-explicit** (`seal`/`open` take a `LessSafeKey`) so it's unit-tested
   without env races; `encrypt`/`decrypt` wrap them with the cached master key.
+- **Plaintext key material is zeroized on drop** (`zeroize::Zeroizing`): the master-key
+  env String + decoded bytes in `key()` (`UnboundKey::new` only borrows, so they'd
+  otherwise linger in freed heap), and the create-path plaintext secret in
+  `routes/connectors.rs`. `seal` encrypts in place, so its buffer holds ciphertext (not
+  plaintext) after the call. Limitation: the secret also lives in axum's raw request body
+  + the serde-parsed `config` Value — serde copies make full zeroization impractical; the
+  owned extract is the high-value wipe.
 - **`redact.rs` masks `sasl_secret` / `sasl_secret_enc`** — defense-in-depth so neither
   reaches an `events.context` payload (the create event already carries only
   `{connector, project}`, not config).

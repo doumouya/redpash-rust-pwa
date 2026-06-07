@@ -119,10 +119,13 @@ async fn create(
     // Errors loudly (no master key) rather than storing a cleartext cluster credential.
     if let Some(obj) = config.as_object_mut() {
         if let Some(secret) = obj.get("sasl_secret").and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty()).map(str::to_string)
+            .filter(|s| !s.is_empty()).map(|s| zeroize::Zeroizing::new(s.to_string()))
         {
             let enc = crate::secrets::encrypt(&secret)
                 .map_err(|e| AppError::bad_request("secret_encrypt", e.to_string()))?;
+            // The extracted plaintext is Zeroizing (wiped on drop). The copy still living
+            // in the parsed body Value (removed below) + axum's raw body isn't wiped —
+            // serde copies make that impractical; the owned extract is the high-value wipe.
             obj.remove("sasl_secret");
             obj.insert("sasl_secret_enc".into(), serde_json::Value::String(enc));
             obj.insert("creds_version".into(), serde_json::json!(1));
