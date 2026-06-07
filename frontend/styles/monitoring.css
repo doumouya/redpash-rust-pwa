@@ -288,21 +288,6 @@
   color: var(--rp-text-mute);
 }
 
-/* ── rail surface-filter composition (CAS_274EDF3B — re-authored for rp-rail) ──
-   data-rail-view (set on .rp-rail by monitoring.js) hides the off-surface groups;
-   the Admin Console seg button is platform-admin-only (.rp-mon-admin, toggled once
-   /api/me lands). framework/rail.css defers these page-composition rules to the
-   page; ported from the legacy styles/rail.css rt-nav rules in the rollout. */
-.rp-rail[data-rail-view="monitoring"] .rp-rail-group[data-surface="admin"],
-.rp-rail[data-rail-view="admin"] .rp-rail-group[data-surface="monitoring"] {
-  display: none;
-}
-.rp-rail:not(.rp-mon-admin) #rpMonRailView [data-rail-seg="admin"] {
-  display: none;
-}
-
-
-/* Hide the admin rail segment for non-platform-admins — monitoring.js adds .rp-mon-admin
-   to the rail when /api/me.is_platform_admin. Folded from the legacy rail.css; the dead
-   .rt-nav selector updated to the migrated .rp-rail. */
-.rp-rail:not(.rp-mon-admin) #rpMonRailView [data-rail-seg="admin"] { display: none; }
+/* The Monitoring ↔ Admin Console rail-seg surface-filter rules were removed when
+   Admin Console moved to its own page (the Admin app, Slice B 2026-06-07) —
+   Monitoring no longer has a rail-seg or off-surface groups to hide. */

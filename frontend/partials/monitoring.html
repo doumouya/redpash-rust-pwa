@@ -18,22 +18,8 @@
           <i class="bi bi-chevron-double-left"></i>
         </button>
       </div>
-      <!-- View switcher (the rp-rail-views seg track, same as Workspace's
-           Data ↔ Dashboard toggle). Flips the rail between SYSTEM
-           observability groups and the Admin Console (org management).
-           Persisted via `monitoring-railView`. The Admin Console button is
-           platform-admin-only — hidden on .rp-rail without .rp-mon-admin
-           (monitoring.js sets it once /api/me lands). CAS_274EDF3B. -->
-      <div class="rp-rail-views" id="rpMonRailView">
-        <button type="button" class="is-active" data-rail-seg="monitoring"
-                title="System observability — requests, audits, optimization, activity">
-          <i class="bi bi-activity"></i> Monitoring
-        </button>
-        <button type="button" data-rail-seg="admin"
-                title="Admin Console — org management & configuration">
-          <i class="bi bi-sliders"></i> Admin Console
-        </button>
-      </div>
+      <!-- The Monitoring ↔ Admin Console rail-seg moved out: Admin Console is its
+           own page now (the Admin app, Slice B). Monitoring is observability-only. -->
       <div class="rp-rail-body" id="rpMonNavBody"></div>
       <div class="rp-rail-footer"><!-- rail footer nav mounted by monitoring.js --></div>
     </aside>

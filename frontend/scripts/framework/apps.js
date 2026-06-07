@@ -39,7 +39,8 @@ export const APPS = [
   {
     id: "admin", name: "Admin", icon: "bi-shield-lock", landing: "#/monitoring", admin: true,
     pages: [
-      { id: "monitoring", hash: "#/monitoring", icon: "bi-activity", label: "Monitoring" },
+      { id: "monitoring",    hash: "#/monitoring",    icon: "bi-activity", label: "Monitoring" },
+      { id: "admin-console", hash: "#/admin-console", icon: "bi-sliders",  label: "Admin Console" },
     ],
   },
 

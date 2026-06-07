@@ -37,20 +37,9 @@ export const MON_TABS = [
   // ── AUDITS ─────────────────────────────────────────────────
   { group: "AUDITS",   key: "runs",     label: "Runs",     icon: "bi-play-circle",          endpoint: "/monitoring/audit-runs",     wired: true },
   { group: "AUDITS",   key: "findings", label: "Findings", icon: "bi-exclamation-triangle", endpoint: "/monitoring/audit-findings", wired: true },
-  // ── ADMIN — Org management (Em-locked page-purpose split,
-  // 2026-05-31, CAS_274EDF3B). Gated on /api/me.is_platform_admin;
-  // the rail renders the group conditionally so non-admins never
-  // see the tabs. Each tab's endpoint is /admin/* (already gated
-  // server-side; the FE gate is a UX hide, the backend is the real
-  // auth per [[no-mystery-css]]-style discipline). Phase A of this
-  // group (this commit) wires the scaffold + Steps move + the two
-  // new admin-only surfaces (Fields, Audit catalog). Phase B (next
-  // commit) moves Users / Companies / Teams / Memberships off Home.
-  // RBAC introspection is a custom panel (not a redtable list); it
-  // lands in its own commit.
-  { group: "ADMIN",    key: "steps",          label: "Cleanings",     icon: "bi-wrench",          endpoint: "/admin/steps",         wired: true },
-  { group: "ADMIN",    key: "fields",         label: "Fields",        icon: "bi-grid-3x2-gap",    endpoint: "/admin/fields",        wired: true },
-  { group: "ADMIN",    key: "audit_catalog",  label: "Audit catalog", icon: "bi-card-checklist",  endpoint: "/admin/audit-catalog", wired: true },
+  // The ADMIN group (Cleanings / Fields / Audit catalog) MOVED to its own page
+  // `pages/admin-console.js` (the Admin app, Slice B 2026-06-07) — Monitoring is
+  // now system-observability only, no rail-seg. Those tabs live in ADMIN_VIEWS there.
   // ── OPTIMIZATION — known opportunities × live measurements ─
   // Spec: docs/internal/specs/optimization-map.md. Each row pairs a
   // doc-side optimization point with the metadata to evaluate its
@@ -82,15 +71,13 @@ export const MON_TABS = [
 // groups not in the active surface. The "admin" surface is platform-
 // admin-only (the ADMIN group is already /me.is_platform_admin-gated),
 // so the switcher's Admin Console option only shows for admins.
+// The ADMIN group moved to pages/admin-console.js (Slice B), so there is no more
+// rail-seg surface split — all remaining groups are the one Monitoring surface.
+// The `surface` field is retained (inert) to keep renderGroup's data-surface
+// stamp stable; it no longer gates anything.
 export const MON_GROUPS = [
   { name: "REQUESTS",     mark: "RQ", color: "blue",  surface: "monitoring" },
   { name: "AUDITS",       mark: "AD", color: "peach", surface: "monitoring" },
-  // ADMIN — Em-locked page-purpose split (2026-05-31 CAS_274EDF3B).
-  // Hosted on Monitoring's rail rather than a standalone /admin page
-  // so the platform-admin's surfaces all live in one shell. Whole
-  // group gated on /api/me.is_platform_admin (skipped at render time
-  // for non-admins; backend /admin/* endpoints are the real auth).
-  { name: "ADMIN",        mark: "AM", color: "mauve", surface: "admin"      },
   { name: "OPTIMIZATION", mark: "OP", color: "green", surface: "monitoring" },
   { name: "USERS",        mark: "US", color: "sky",   surface: "monitoring" },
   { name: "CATALOG",      mark: "CT", color: "teal",  surface: "monitoring" },

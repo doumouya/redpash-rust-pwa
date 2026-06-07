@@ -11,7 +11,7 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
-import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { esc, cssEsc } from "/scripts/dom.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import {
@@ -53,28 +53,11 @@ export default function monitoring(app, { session }) {
   const navBody = app.querySelector("#rpMonNavBody");
   const view    = app.querySelector("#rpMonView");
 
-  // CAS_274EDF3B — platform-admin gate for the ADMIN group on the
-  // Monitoring rail. Resolved once at mount via /api/me; cached so
-  // every renderRail call reads it without re-fetching. Defaults
-  // false until /me lands — the worst case is the ADMIN group
-  // appears a beat late for an admin (no privilege leak since the
-  // backend /admin/* endpoints enforce the real auth). Non-admins
-  // never see the group; renderGroup filters MON_GROUPS by this.
-  let isPlatformAdmin = false;
-  let railSeg = null; // the Monitoring ↔ Admin Console switcher (mounted below)
-  api.get("/me")
-    .then((me) => {
-      isPlatformAdmin = !!me?.is_platform_admin;
-      // Reveal the Admin Console switcher button (CSS-gated on this class)
-      // + re-render so the ADMIN group appears, then re-apply the saved
-      // view — if the user's pref was "admin" it was coerced to
-      // "monitoring" at mount (isPlatformAdmin was still false), so
-      // re-firing now restores Admin Console for an actual admin.
-      nav.classList.toggle("rp-mon-admin", isPlatformAdmin);
-      if (typeof renderRail === "function") renderRail();
-      if (railSeg) railSeg.set(railSeg.current());
-    })
-    .catch(() => { /* leave false; backend is the real gate */ });
+  // The Admin Console surface (the rail-seg + ADMIN group) moved to its own page
+  // `pages/admin-console.js` (the Admin app, Slice B 2026-06-07). Monitoring is
+  // now system-observability only — no rail-seg, no per-mount /me admin gate (the
+  // whole /monitoring route is already platform-admin gated: ROUTES admin:true +
+  // the backend require_platform_admin_mw on the /monitoring nest).
 
   // List-view specs for the three non-Requests tabs. Same Page<T>
   // shape across all three endpoints, so the renderer is generic; per
@@ -193,114 +176,6 @@ export default function monitoring(app, { session }) {
       ],
       row: requestRowHTML,
     },
-    steps: {
-      title: "Cleanings",
-      endpoint: "/admin/steps",
-      useWindow: false,
-      charts: [
-        { id: "rp-mon-steps-kind", title: "By kind (top 10)", kind: "barH",
-          data: (s) => s.by_kind, opts: { top: 10 } },
-        { id: "rp-mon-steps-24h",  title: "Active last 24h",  kind: "gauge",
-          data: (s) => s.total ? Math.round((s.last_24h / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-      ],
-      columns: [
-        { label: "File",    key: "file_filename", sortable: true  },
-        { label: "#",       key: "ordinal",       sortable: true  },
-        { label: "Kind",    key: "kind",          sortable: true  },
-        { label: "Applied", key: "applied",       sortable: true  },
-        { label: "When",    key: "created_at",    sortable: true  },
-      ],
-      row: (s) =>
-        '<tr>'
-        + '<td>' + esc(s.file_filename) + '</td>'
-        + '<td class="is-num">' + s.ordinal + '</td>'
-        + '<td><span class="rp-mono-pill">' + esc(s.kind) + '</span></td>'
-        + '<td>' + (s.applied ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
-                              : '<span class="rp-mono-pill">no</span>') + '</td>'
-        + '<td>' + fmtTime(s.created_at) + '</td>'
-        + '</tr>',
-    },
-    // CAS_274EDF3B — Fields tab. Consumes GET /api/admin/fields
-    // (shipped by the other Torv in 339e413). Each row is a
-    // (object, field) pair with a write|read|none cell per RBAC
-    // tier. Editor wiring waits on slice 2 (PUT) — for now the
-    // tab is read-only; the chip-enum framework + col.editEndpoint
-    // override are ready to drop in when PUT lands.
-    fields: {
-      title: "Fields",
-      endpoint: "/admin/fields",
-      useWindow: false,
-      columns: [
-        { label: "Object",     key: "object",       sortable: true  },
-        { label: "Field",      key: "field",        sortable: true  },
-        { label: "Editable",   key: "is_editable",  sortable: true  },
-        { label: "Sortable",   key: "is_sortable",  sortable: true  },
-        { label: "Owner",      key: "owner",        sortable: false },
-        { label: "Admin",      key: "admin",        sortable: false },
-        { label: "Member",     key: "member",       sortable: false },
-        { label: "Viewer",     key: "viewer",       sortable: false },
-      ],
-      row: (f) =>
-        '<tr>'
-        + '<td>' + esc(f.object || "—") + '</td>'
-        + '<td><span class="rp-mono-pill">' + esc(f.field || "—") + '</span></td>'
-        + '<td>' + (f.is_editable ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
-                                  : '<span class="rp-mono-pill">no</span>') + '</td>'
-        + '<td>' + (f.is_sortable ? '<span class="rp-mono-pill rp-tone-low">yes</span>'
-                                  : '<span class="rp-mono-pill">no</span>') + '</td>'
-        + '<td>' + accessChip(f.owner)  + '</td>'
-        + '<td>' + accessChip(f.admin)  + '</td>'
-        + '<td>' + accessChip(f.member) + '</td>'
-        + '<td>' + accessChip(f.viewer) + '</td>'
-        + '</tr>',
-    },
-    // CAS_274EDF3B — Audit catalog tab. Consumes GET /api/admin/
-    // audit-catalog (shipped by the other Torv in ff00aa6). One row
-    // per audit tool with severity buckets + diff-vs-prev.
-    audit_catalog: {
-      title: "Audit catalog",
-      endpoint: "/admin/audit-catalog",
-      useWindow: false,
-      // Endpoint returns {tools: [...]} not Page<T>, so the runtime
-      // needs to unwrap. The list-page renderer falls back to
-      // `items` then `rows`; we adapt via a custom unwrap hint.
-      itemsKey: "tools",
-      columns: [
-        { label: "Tool",       key: "tool",          sortable: true  },
-        { label: "Last run",   key: "ran_at",        sortable: true  },
-        { label: "Total",      key: "findings_total", sortable: false },
-        { label: "High",       key: "findings_high", sortable: false },
-        { label: "Medium",     key: "findings_med",  sortable: false },
-        { label: "Low",        key: "findings_low",  sortable: false },
-        { label: "Δ new",      key: "diff_new",      sortable: false },
-        { label: "Δ regressed",key: "diff_regressed",sortable: false },
-        { label: "Δ improved", key: "diff_improved", sortable: false },
-        { label: "Δ fixed",    key: "diff_fixed",    sortable: false },
-      ],
-      row: (t) => {
-        const sev = (n, tone) => '<td class="is-num">'
-          + (n > 0 ? '<span class="rp-mono-pill ' + tone + '">' + n + '</span>' : '—')
-          + '</td>';
-        const diff = (n) => '<td class="is-num">'
-          + (typeof n === 'number' ? (n > 0 ? '+' + n : String(n)) : '—')
-          + '</td>';
-        const f = t.findings || {};
-        const d = t.diff || {};
-        return '<tr>'
-          + '<td><span class="rp-mono-pill">' + esc(t.tool || "—") + '</span></td>'
-          + '<td>' + (t.ran_at ? fmtTime(t.ran_at) : '—') + '</td>'
-          + '<td class="is-num">' + (f.total || 0) + '</td>'
-          + sev(f.high || 0, 'rp-tone-high')
-          + sev(f.med  || 0, 'rp-tone-mid')
-          + sev(f.low  || 0, 'rp-tone-low')
-          + diff(d.new)
-          + diff(d.regressed)
-          + diff(d.improved)
-          + diff(d.fixed)
-          + '</tr>';
-      },
-    },
     queries: {
       title: "DB Queries",
       endpoint: "/monitoring/queries",
@@ -397,22 +272,8 @@ export default function monitoring(app, { session }) {
     });
   const listPanel       = (columns) => _listPanel(columns, "rp-mon-list-tbody");
 
-  // ─── rail collapse + Monitoring ↔ Admin Console switcher ────
+  // ─── rail collapse ────
   mountRailCollapse(nav, app.querySelector("#rpMonNavCollapse"));
-  // Same mechanism as Workspace's Data ↔ Dashboard (mountRailSeg →
-  // data-rail-view on .rp-rail → CSS hides the off-surface groups). The
-  // Admin Console surface is platform-admin-only: a non-admin can't
-  // select it (coerced back to "monitoring") and never sees the button
-  // (CSS gate on .rp-mon-admin). CAS_274EDF3B.
-  railSeg = mountRailSeg(app.querySelector("#rpMonRailView"), {
-    pref:        "monitoring-railView",
-    fallback:    "monitoring",
-    fireOnMount: true,
-    onChange:    (v) => {
-      const view = (v === "admin" && !isPlatformAdmin) ? "monitoring" : v;
-      nav.dataset.railView = view;
-    },
-  });
 
   // ─── render the rail (static groups → tabs, minus hidden) ───
   renderRail();
@@ -459,10 +320,7 @@ export default function monitoring(app, { session }) {
   // body view (#rpMonView), so no data refetch happens.
   function renderRail() {
     const hidden = new Set(getHiddenTabs().map((x) => x.key));
-    // ADMIN group is platform-admin-only (CAS_274EDF3B). Skip it for
-    // callers without is_platform_admin; backend /admin/* endpoints
-    // are the real auth, this is just UX hide.
-    const groups = MON_GROUPS.filter((g) => g.name !== "ADMIN" || isPlatformAdmin);
+    const groups = MON_GROUPS;
     let html = groups.map((g) => renderGroup(g, hidden)).join("");
     html += renderHiddenTabsSection();
     navBody.innerHTML = html;
@@ -1549,18 +1407,6 @@ export default function monitoring(app, { session }) {
     const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
     return date + ", " + time;
-  }
-  // CAS_274EDF3B — Fields tab access cell. Three states per
-  // (object × field × tier): write / read / none. Tones map to
-  // visibility — write = high (admin-ish weight), read = mid, none
-  // = dim. Matches the backend's GET /api/admin/fields cell shape.
-  function accessChip(value) {
-    const v = String(value || "none").toLowerCase();
-    const tone = v === "write" ? "rp-tone-high"
-               : v === "read"  ? "rp-tone-mid"
-               : "rp-meta";
-    if (v === "none" || v === "" || v === "—") return '<span class="rp-meta">—</span>';
-    return '<span class="rp-mono-pill ' + tone + '">' + esc(v) + '</span>';
   }
   function levelChip(level) {
     const v = String(level || "").toLowerCase();

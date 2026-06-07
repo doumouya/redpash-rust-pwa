@@ -3,7 +3,7 @@ title: frontend/scripts/main.js
 source: ../../../../frontend/scripts/main.js
 owner: Torv
 section: Internal · Code · Frontend · scripts
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # main.js
@@ -17,7 +17,8 @@ Hash-based SPA router. Each route names a partial (HTML fetched into #app) and a
 - ROUTES registry — route -> { partial, scriptPath, auth?, admin? }.
 - Boot: fetch /api/me, seed prefs, then route.
 - 401 -> redirect to #/login.
-- `admin: true` routes (Monitoring — CAS_274EDF3B) bounce a non-admin
+- `admin: true` routes (Monitoring + **`/admin-console`** — the latter added Slice B,
+  2026-06-07 — CAS_274EDF3B) bounce a non-admin
   (`!session?.is_platform_admin`) to #/home after the `auth` check — guards a
   direct hash deep-link. UX gate; the backend `require_platform_admin_mw` is the
   real auth.

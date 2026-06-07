@@ -29,6 +29,10 @@ const ROUTES = {
   "/sheetwise":  { partial: "/partials/sheetwise.html",  script: "/scripts/pages/sheetwise.js",  auth: true  },
   "/cases":      { partial: "/partials/cases.html",      script: "/scripts/pages/cases.js",      auth: true  },
   "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true, admin: true },
+  // Admin app pages (platform-admin only; the topbar app-switcher only offers the
+  // Admin app to admins, and the backend /admin + /monitoring nests are the real
+  // auth). Admin Console split out of the Monitoring page (Slice B).
+  "/admin-console": { partial: "/partials/admin-console.html", script: "/scripts/pages/admin-console.js", auth: true, admin: true },
   "/profile":    { partial: "/partials/profile.html",    script: "/scripts/pages/profile.js",    auth: true  },
   "/settings":   { partial: "/partials/settings.html",   script: "/scripts/pages/settings.js",   auth: true  },
   "/docs":       { partial: "/partials/docs.html",       script: "/scripts/pages/docs.js",       auth: true  },
