@@ -25,7 +25,7 @@ const EXCLUDE = new Set(['login.html', 'login.js']);
 // an accidental fork. That review gate is the whole point: SheetWise's sw-* would
 // have had to be justified + added here, surfacing the "is this really a new role,
 // or a re-skin of an atom?" question before it ever shipped.
-const ALLOW_FAMILY = new Set(['rp', 'bi', 'is', 'has', 'tok', 'ws', 'ds', 'mode']);
+const ALLOW_FAMILY = new Set(['rp', 'bi', 'is', 'has', 'tok', 'ws', 'mode']);
 
 // SCOPE: this is a FAMILY gate (foreign prefix family) — the SheetWise class of
 // failure. It deliberately does NOT chase rp--prefixed role re-skins

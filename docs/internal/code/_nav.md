@@ -12,7 +12,7 @@ generated block — run `node tools/doc-gen/gen.js --code-nav`.
 
 <!-- doc-gen:code-nav START — generated from the code/ doc tree; do not hand-edit -->
 Generated 2026-06-07 — every atomic doc under `code/`, the per-file
-survival layer (251 docs). Links are relative to `code/`.
+survival layer (252 docs). Links are relative to `code/`.
 
 ### backend (108)
 
@@ -301,7 +301,7 @@ survival layer (251 docs). Links are relative to `code/`.
 **frontend/**
 - [typedef-acceptance.md](frontend/typedef-acceptance.md)
 
-### tools (48)
+### tools (49)
 
 **tools/audit-suite/**
 - [api-doc-audit.md](tools/audit-suite/api-doc-audit.md)
@@ -321,6 +321,7 @@ survival layer (251 docs). Links are relative to `code/`.
 - [observability-audit.md](tools/audit-suite/observability-audit.md)
 - [page-structure-audit.md](tools/audit-suite/page-structure-audit.md)
 - [redtable-audit.md](tools/audit-suite/redtable-audit.md)
+- [retired-class-audit.md](tools/audit-suite/retired-class-audit.md)
 - [rs-audit.md](tools/audit-suite/rs-audit.md)
 - [rs-perf-audit.md](tools/audit-suite/rs-perf-audit.md)
 - [theme-coverage-audit.md](tools/audit-suite/theme-coverage-audit.md)

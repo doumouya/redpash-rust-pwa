@@ -2585,7 +2585,7 @@ export default function workspace(app, { session }) {
         // A chart save may have changed the rail's stage dot; refresh.
         loadProjects();
       },
-      // ds-config-save pressed while the canvas is a synthetic
+      // rp-dash-config-save pressed while the canvas is a synthetic
       // chart-only wrapper (no real DSH_ to write to). Soft hint
       // instead of a 404 — promoting a chart to a real dashboard is
       // the separate follow-up step.
@@ -2599,8 +2599,8 @@ export default function workspace(app, { session }) {
   $("#wsDesignerCfgToggle")?.addEventListener("click", (e) => {
     const designer = $("#wsDesigner");
     if (!designer) return;
-    const wasOpen = !designer.classList.contains("ds-config-hidden");
-    designer.classList.toggle("ds-config-hidden", wasOpen);
+    const wasOpen = !designer.classList.contains("rp-dash-config-hidden");
+    designer.classList.toggle("rp-dash-config-hidden", wasOpen);
     e.currentTarget.classList.toggle("is-active", !wasOpen);
     designerCtrl?.resize();
   });

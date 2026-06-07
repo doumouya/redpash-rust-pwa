@@ -77,12 +77,12 @@ export function mountDesigner(designerEl, ctx) {
   // Build the static shell once. Tiles render into the grid; the
   // aside is the slot mountBuilder fills with its head + accordion
   // body (it owns its own innerHTML — designer just hands it the
-  // container so the existing .ds-config CSS hooks stay in place).
+  // container so the existing .rp-dash-config CSS hooks stay in place).
   designerEl.innerHTML = ''
-    + '<div class="ds-canvas">'
-    +   '<div class="ds-grid" id="dsGrid"></div>'
+    + '<div class="rp-dash-canvas">'
+    +   '<div class="rp-dash-grid" id="dsGrid"></div>'
     + '</div>'
-    + '<aside class="ds-config" id="dsConfig"></aside>';
+    + '<aside class="rp-dash-config" id="dsConfig"></aside>';
   const gridEl  = designerEl.querySelector("#dsGrid");
   const asideEl = designerEl.querySelector("#dsConfig");
 
@@ -114,7 +114,7 @@ export function mountDesigner(designerEl, ctx) {
     // Source-file dropdown changed → swap the tile's data file, refetch
     // its columns, reset stale column picks, re-aggregate.
     onSourceChange: (rid) => { if (sel) void changeSource(sel, rid); },
-    // ds-config-save (builder header) = save the whole dashboard.
+    // rp-dash-config-save (builder header) = save the whole dashboard.
     onSave:      () => saveDashboard(),
   });
 
@@ -142,7 +142,7 @@ export function mountDesigner(designerEl, ctx) {
     teardown();
     if (!payload) { renderCanvasEmpty(); return; }
     if (payload.type === "chart") {
-      mountChartTile(payload.chart, /* span */ "span-12", /* selected */ true);
+      mountChartTile(payload.chart, /* span */ "rp-dash-span-12", /* selected */ true);
       return;
     }
     if (payload.type === "dashboard") {
@@ -150,9 +150,9 @@ export function mountDesigner(designerEl, ctx) {
       const widgets = (dashboard?.spec?.widgets || []).filter((w) => w.kind === "chart");
       if (!widgets.length) {
         renderCanvasEmpty();
-        if (gridEl) gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+        if (gridEl) gridEl.innerHTML = '<p class="rp-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
         // A real (saved) dashboard can always be re-saved — enable the
-        // ds-config-save button. Synthetic chart-only wrappers (null
+        // rp-dash-config-save button. Synthetic chart-only wrappers (null
         // rid) leave it disabled (saveDashboard hints instead).
         if (dashboard?.redpash_id) builder.setDirty(true);
         return;
@@ -161,7 +161,7 @@ export function mountDesigner(designerEl, ctx) {
       // faster when the fetches go simultaneous rather than serial.
       // Failed fetches render an error placeholder tile; one bad
       // chart doesn't blank the whole canvas.
-      gridEl.innerHTML = '<p class="ds-empty">Loading widgets…</p>';
+      gridEl.innerHTML = '<p class="rp-empty">Loading widgets…</p>';
       const fetches = widgets.map((w) =>
         api.get("/charts/" + encodeURIComponent(w.spec?.chart_id || "")).catch((err) => ({ __err: err, widget: w })));
       const results = await Promise.all(fetches);
@@ -185,7 +185,7 @@ export function mountDesigner(designerEl, ctx) {
         }
         // Default span — alternate 6/6 for now. Slot/template-aware
         // sizing comes when the template registry lands.
-        const span = "span-6";
+        const span = "rp-dash-span-6";
         mountChartTile(res, span, /* selected */ false, w);
       });
       // Persist the cleaned spec so the dead refs don't resurface on the
@@ -203,7 +203,7 @@ export function mountDesigner(designerEl, ctx) {
       if (tiles.length) {
         selectTile(tiles[0]);
       } else if (gridEl) {
-        gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+        gridEl.innerHTML = '<p class="rp-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
       }
       // Enable the dashboard-save button for a real dashboard (see
       // the empty-case note above). Called after selectTile since
@@ -219,11 +219,11 @@ export function mountDesigner(designerEl, ctx) {
   function mountChartTile(chart, spanClass, selected, widget) {
     if (!chart) return null;
     const cfg = mergeCfg(chart);
-    const tileEl = makeTile(chart, cfg, !!selected, spanClass || "span-12");
+    const tileEl = makeTile(chart, cfg, !!selected, spanClass || "rp-dash-span-12");
     gridEl.appendChild(tileEl);
     const t = THEMES[cfg.theme] || THEMES.vintage;
     const themeName = t.registered ? cfg.theme : undefined;
-    const inst = window.echarts?.init(tileEl.querySelector(".ds-chart"), themeName);
+    const inst = window.echarts?.init(tileEl.querySelector(".rp-dash-chart"), themeName);
     if (inst) inst.setOption(buildOption(cfg, t));
     const entry = { rid: chart.redpash_id, chart, cfg, inst, tileEl,
                     widget: widget || null, themeName,
@@ -239,10 +239,10 @@ export function mountDesigner(designerEl, ctx) {
 
   function makeErrorTile(widget, err) {
     const el = document.createElement("div");
-    el.className = "ds-tile ds-tile--error span-6";
+    el.className = "rp-dash-tile rp-dash-tile--error rp-dash-span-6";
     el.innerHTML = ''
-      + '<div class="ds-tile-head"><span class="ds-tile-title">Chart unavailable</span></div>'
-      + '<div class="ds-tile-body"><div class="ds-tile-err">'
+      + '<div class="rp-dash-tile-head"><span class="rp-dash-tile-title">Chart unavailable</span></div>'
+      + '<div class="rp-dash-tile-body"><div class="rp-dash-tile-err">'
       +   '<i class="bi bi-exclamation-triangle"></i> '
       +   esc(err?.body?.message || err?.message || "couldn\'t fetch widget")
       + '</div></div>';
@@ -262,7 +262,7 @@ export function mountDesigner(designerEl, ctx) {
   }
 
   function renderCanvasEmpty() {
-    if (gridEl) gridEl.innerHTML = '<p class="ds-empty">No chart loaded.</p>';
+    if (gridEl) gridEl.innerHTML = '<p class="rp-empty">No chart loaded.</p>';
     builder.render();
     builder.setDirty(false);
   }
@@ -303,7 +303,7 @@ export function mountDesigner(designerEl, ctx) {
   // ── canvas / tiles ────────────────────────────────────────────────
   function makeTile(chart, cfg, selected, spanClass) {
     const el = document.createElement("div");
-    el.className = "ds-tile" + (selected ? " selected" : "") + " " + (spanClass || "span-12");
+    el.className = "rp-dash-tile" + (selected ? " is-selected" : "") + " " + (spanClass || "rp-dash-span-12");
     el.dataset.rid = chart.redpash_id;
     // Tile-head actions (Em 2026-05-28): edit (focus the builder on
     // this chart) · save (PUT this chart to the project) · delete
@@ -311,23 +311,23 @@ export function mountDesigner(designerEl, ctx) {
     // the canvas without touching the DB). The save button starts
     // disabled; an accordion edit on the selected tile enables it.
     el.innerHTML = ''
-      + '<div class="ds-tile-head">'
-      +   '<span class="ds-tile-title">' + esc(cfg.title) + '</span>'
-      +   '<div class="ds-tile-actions">'
-      +     '<button class="ds-tile-act ds-tile-edit"  type="button" title="Edit chart"><i class="bi bi-pencil"></i></button>'
-      +     '<button class="ds-tile-act ds-tile-save"  type="button" title="Save chart" disabled><i class="bi bi-save"></i></button>'
-      +     '<button class="ds-tile-act ds-tile-del"   type="button" title="Delete chart"><i class="bi bi-trash3"></i></button>'
-      +     '<button class="ds-tile-act ds-tile-close" type="button" title="Remove from canvas"><i class="bi bi-x-lg"></i></button>'
+      + '<div class="rp-dash-tile-head">'
+      +   '<span class="rp-dash-tile-title">' + esc(cfg.title) + '</span>'
+      +   '<div class="rp-dash-tile-actions">'
+      +     '<button class="rp-dash-tile-act rp-dash-tile-edit"  type="button" title="Edit chart"><i class="bi bi-pencil"></i></button>'
+      +     '<button class="rp-dash-tile-act rp-dash-tile-save"  type="button" title="Save chart" disabled><i class="bi bi-save"></i></button>'
+      +     '<button class="rp-dash-tile-act rp-dash-tile-del"   type="button" title="Delete chart"><i class="bi bi-trash3"></i></button>'
+      +     '<button class="rp-dash-tile-act rp-dash-tile-close" type="button" title="Remove from canvas"><i class="bi bi-x-lg"></i></button>'
       +   '</div>'
       + '</div>'
-      + '<div class="ds-tile-body"><div class="ds-chart"></div></div>';
+      + '<div class="rp-dash-tile-body"><div class="rp-dash-chart"></div></div>';
     return el;
   }
 
   // ── selection ─────────────────────────────────────────────────────
   function selectTile(entry) {
     sel = entry;
-    tiles.forEach((t) => t.tileEl.classList.toggle("selected", t === entry));
+    tiles.forEach((t) => t.tileEl.classList.toggle("is-selected", t === entry));
     builder.render();
     // Fetch the tile's source columns lazily; re-render the accordion
     // once they arrive so the group-by / measure dropdowns populate.
@@ -344,7 +344,7 @@ export function mountDesigner(designerEl, ctx) {
   // reverse sync (panel → header) already lives in the asideEl input
   // listener, so both directions now agree.
   function startTitleEdit(entry) {
-    const span = entry?.tileEl?.querySelector(".ds-tile-title");
+    const span = entry?.tileEl?.querySelector(".rp-dash-tile-title");
     if (!span || span.isContentEditable) return;
     const original = entry.cfg.title || "Untitled chart";
     span.contentEditable = "true";
@@ -473,7 +473,7 @@ export function mountDesigner(designerEl, ctx) {
     const nextThemeName = t.registered ? entry.cfg.theme : undefined;
     if (entry.themeName !== nextThemeName) {
       entry.inst?.dispose?.();
-      const el = entry.tileEl.querySelector(".ds-chart");
+      const el = entry.tileEl.querySelector(".rp-dash-chart");
       if (el) el.innerHTML = "";
       entry.inst = window.echarts?.init(el, nextThemeName);
       entry.themeName = nextThemeName;
@@ -582,7 +582,7 @@ export function mountDesigner(designerEl, ctx) {
     tiles = tiles.filter((t) => t !== entry);
     if (sel === entry) { sel = null; builder.render(); }
     if (!tiles.length && gridEl) {
-      gridEl.innerHTML = '<p class="ds-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
+      gridEl.innerHTML = '<p class="rp-empty">Empty dashboard. Use <i>Add chart</i> to add a widget.</p>';
     }
   }
 
@@ -592,12 +592,12 @@ export function mountDesigner(designerEl, ctx) {
   function markTileDirty(entry, on) {
     if (!entry) return;
     entry.dirty = on;
-    const btn = entry.tileEl?.querySelector(".ds-tile-save");
+    const btn = entry.tileEl?.querySelector(".rp-dash-tile-save");
     if (btn) btn.disabled = !on || busy;
-    entry.tileEl?.classList.toggle("ds-tile--dirty", on);
+    entry.tileEl?.classList.toggle("rp-dash-tile--dirty", on);
   }
   function setTileBusy(entry, on) {
-    const btn = entry?.tileEl?.querySelector(".ds-tile-save");
+    const btn = entry?.tileEl?.querySelector(".rp-dash-tile-save");
     if (btn) btn.disabled = on || !entry.dirty;
   }
 
@@ -655,15 +655,15 @@ export function mountDesigner(designerEl, ctx) {
   // select-on-click fallback (each ends in `return`). Plain tile
   // click selects.
   gridEl.addEventListener("click", (e) => {
-    const t = e.target.closest(".ds-tile");
+    const t = e.target.closest(".rp-dash-tile");
     if (!t) return;
     const entry = tiles.find((x) => x.tileEl === t);
     if (!entry) return;
 
-    if (e.target.closest(".ds-tile-edit"))  { selectTile(entry); startTitleEdit(entry); return; }
-    if (e.target.closest(".ds-tile-save"))  { void saveChart(entry); return; }
-    if (e.target.closest(".ds-tile-del"))   { void deleteChart(entry); return; }
-    if (e.target.closest(".ds-tile-close")) { closeTile(entry); return; }
+    if (e.target.closest(".rp-dash-tile-edit"))  { selectTile(entry); startTitleEdit(entry); return; }
+    if (e.target.closest(".rp-dash-tile-save"))  { void saveChart(entry); return; }
+    if (e.target.closest(".rp-dash-tile-del"))   { void deleteChart(entry); return; }
+    if (e.target.closest(".rp-dash-tile-close")) { closeTile(entry); return; }
 
     selectTile(entry);
   });
@@ -671,7 +671,7 @@ export function mountDesigner(designerEl, ctx) {
   // Accordion event handlers + the builder header's save button live
   // inside mountBuilder. The `onCfgChange` hook pipes every accordion
   // edit through rerender(sel) + markTileDirty(sel, true) (the per-
-  // tile save commits chart config); `onSave` (the ds-config-save
+  // tile save commits chart config); `onSave` (the rp-dash-config-save
   // button) calls saveDashboard(). The one side effect that stays
   // here is the tile-header text — it sits outside the chart canvas
   // so ECharts setOption doesn't reach it.
@@ -679,7 +679,7 @@ export function mountDesigner(designerEl, ctx) {
     if (!sel) return;
     const fld = e.target.closest('[data-key="title"]');
     if (!fld) return;
-    const t = sel.tileEl.querySelector(".ds-tile-title");
+    const t = sel.tileEl.querySelector(".rp-dash-tile-title");
     if (t) t.textContent = e.target.value || "Untitled chart";
   });
 
@@ -707,7 +707,7 @@ export function mountDesigner(designerEl, ctx) {
       dashboard = saved;
       // Clear the "Empty dashboard" placeholder on first add.
       if (tiles.length === 0 && gridEl) gridEl.innerHTML = "";
-      const entry = mountChartTile(chart, "span-6", true);
+      const entry = mountChartTile(chart, "rp-dash-span-6", true);
       if (entry) selectTile(entry);
       return true;
     } catch (err) {

@@ -32,6 +32,7 @@ without editing the runner.
 | `observability-audit/` | [observability-audit.md](observability-audit.md) | the meta-audit — watches the observability stack itself |
 | `page-structure-audit/` | [page-structure-audit.md](page-structure-audit.md) | per-page shell-pattern consistency |
 | `redtable-audit/` | [redtable-audit.md](redtable-audit.md) | redtable atom consistency across consumers |
+| `retired-class-audit/` | [retired-class-audit.md](retired-class-audit.md) | frontend JS/HTML emitting a retired class family (`ds-*`; `rt-*` later) the dedup renamed in CSS — the half-migration gate |
 | `rs-audit/` | [rs-audit.md](rs-audit.md) | backend Rust — structural / refactoring health (LOC, repeated lines, big match blocks, named anti-patterns) |
 | `rs-perf-audit/` | [rs-perf-audit.md](rs-perf-audit.md) | backend Rust — perf candidates (collect-then-slice, cache evict+rehydrate, n+1, etc.) |
 | `ui-doc-audit/` | [ui-doc-audit.md](ui-doc-audit.md) | UI doc **completeness gate** (every enumerated component is in the catalog) + dedup/divergence detector |

@@ -137,6 +137,16 @@ Every entry follows the same five headings:
   control that fires `onChange` on every `set()` needs a re-entrancy
   guard. Verified live via Playwright (`:8088`, dev-login) across all
   four toggle transitions.
+- [0018 — DB Console query masks the real SQL error as "transaction is aborted"](CAS_DF1FB40749374EDDA88F11081105DC7A-db-console-query-error-masking.md) —
+  **Resolved 2026-06-07** (CAS_DF1FB40749374EDDA88F11081105DC7A). Found by
+  dogfooding our own Postgres connector against our own DB (the Admin DB Console).
+  A typo / unknown-relation query returned "current transaction is aborted" instead
+  of `relation "…" does not exist`, because `postgres_loader::query` ran
+  `describe(sql)` **inside** the read-only txn and swallowed its error — the failed
+  describe aborted the txn, then the follow-up fetch reported the generic mask.
+  Fix: run `describe` **before** `BEGIN` and surface its error (Parse+Describe is
+  side-effect-free; the READ-ONLY txn still guards the fetch). Cross-schema query
+  works; column order preserved; regression assertion in the dogfood test.
 - [0012 — Cell-editor extensions — data-prefix render rule + chip-enum select-overlay editor](CAS_E97414C482AB431FA28D43392501F47B-cell-editor-data-prefix-and-chip-enum.md) —
   **Resolved 2026-05-31** (CAS_E97414C482AB431FA28D43392501F47B).
   Two coordinated extensions to the cell-editor contract that landed
@@ -244,3 +254,12 @@ Every entry follows the same five headings:
   `0.333333`; `SRID=4326;…` vs `SRID=0;…`. Discipline rule: every projection arm must end in
   a string type (CHAR/HEX/CONCAT) — `run()` decodes columns as `Option<String>`; a bench
   mysql-CLI audit hides this because the CLI prints every type as text.
+- [0017 — Chart designer/builder render raw: JS emits retired `ds-*` classes after the dedup renamed CSS to `rp-dash-*`](0017-designer-ds-class-drift.md) —
+  **Resolved 2026-06-07** (CAS_AACB45C0339F4DD68C0D140C4F392509). The dashboards dedup
+  (`c282646`) renamed the designer/dashboard CSS `ds-*`→`rp-dash-*` and deleted `chart.css`,
+  but five JS/HTML emitters still shipped `ds-*` — so `.ds-chart` never got `height:100%`
+  (empty chart preview) and the config controls were unstyled. Renamed the emitters to
+  `rp-dash-*` (`ds-empty`→`rp-empty` atom; `ds-title`→`rp-title`), and added the
+  `tools/retired-class-audit` gate so a half-migration (CSS renamed, emitter not) fails the
+  audit, not the user. The gate immediately surfaced two emitters a manual sweep mis-attributed.
+  Discipline rule: a class-family rename isn't done until the **emitters** move too — gate it.

@@ -89,20 +89,20 @@ export function mountBuilder(el, ctx) {
   // can flip it without re-rendering the body. Body is the accordion
   // sections, re-rendered on every render() call.
   el.innerHTML = ''
-    + '<div class="ds-config-head">'
-    +   '<span class="ds-config-title"><i class="bi bi-sliders"></i> Chart</span>'
-    +   '<button class="ds-config-save rp-btn-icon rp-btn-icon--accent" type="button" disabled>'
+    + '<div class="rp-dash-config-head">'
+    +   '<span class="rp-dash-config-title"><i class="bi bi-sliders"></i> Chart</span>'
+    +   '<button class="rp-dash-config-save rp-btn-icon rp-btn-icon--accent" type="button" disabled>'
     +     '<i class="bi bi-save"></i> Save'
     +   '</button>'
     + '</div>'
-    + '<div class="ds-config-body" id="ds-acc-body"></div>';
-  const saveBtn = el.querySelector(".ds-config-save");
-  const accBody = el.querySelector("#ds-acc-body");
+    + '<div class="rp-dash-config-body" id="rp-dash-acc-body"></div>';
+  const saveBtn = el.querySelector(".rp-dash-config-save");
+  const accBody = el.querySelector("#rp-dash-acc-body");
 
   // ── per-section renderers ────────────────────────────────────────
   function renderTypeSection(cfg) {
     const typeBtns = TYPE_LIST.map(([t, icon, label]) =>
-      '<button type="button" class="ds-type-btn' + (t === cfg.type ? " active" : "") + '"'
+      '<button type="button" class="rp-dash-type-btn' + (t === cfg.type ? " is-active" : "") + '"'
       + ' data-type="' + esc(t) + '"><i class="bi ' + esc(icon) + '"></i>' + esc(label)
       + '</button>').join('');
     // Title is edited inline in the tile header (the pencil → editable
@@ -110,7 +110,7 @@ export function mountBuilder(el, ctx) {
     // input. cfg.title stays the source of truth; the header edit writes
     // it directly. (The title input-handler branch below is now dead but
     // harmless — left in case a title field is reintroduced.)
-    return '<div class="ds-type-grid">' + typeBtns + '</div>';
+    return '<div class="rp-dash-type-grid">' + typeBtns + '</div>';
   }
 
   // Polymorphic per source.kind. Anything not matched falls back to a
@@ -118,7 +118,7 @@ export function mountBuilder(el, ctx) {
   // throwing — better than a blank panel.
   function renderDataSection(cfg, source) {
     if (!source) {
-      return '<p class="ds-muted">No data source bound.</p>';
+      return '<p class="rp-dash-muted">No data source bound.</p>';
     }
     if (source.kind === "file") {
       // Three live controls (Em 2026-05-28): the source file (pick any
@@ -136,25 +136,25 @@ export function mountBuilder(el, ctx) {
       const isCount = aggFn === "count";
 
       const sourceCtl = files.length
-        ? '<select class="ds-input" data-key="source_file_id">'
+        ? '<select class="rp-dash-input" data-key="source_file_id">'
           + files.map((f) =>
               '<option value="' + esc(f.rid) + '"' + (f.rid === curRid ? " selected" : "") + '>'
               + esc(f.name) + '</option>').join('')
           + '</select>'
-        : '<div class="ds-source"><i class="bi bi-filetype-csv"></i> '
+        : '<div class="rp-dash-source"><i class="bi bi-filetype-csv"></i> '
           + esc(source.label || curRid || "(no source bound)") + '</div>';
 
       const groupCtl = cols.length
-        ? '<select class="ds-input" data-key="group_by">'
+        ? '<select class="rp-dash-input" data-key="group_by">'
           + cols.map((c) =>
               '<option value="' + esc(c.name) + '"' + (c.name === cfg.group_by ? " selected" : "") + '>'
               + esc(c.name) + '</option>').join('')
           + '</select>'
-        : '<div class="ds-source"><i class="bi bi-hash"></i> '
-          + (cfg.group_by ? esc(cfg.group_by) : '<span class="ds-muted">loading columns…</span>')
+        : '<div class="rp-dash-source"><i class="bi bi-hash"></i> '
+          + (cfg.group_by ? esc(cfg.group_by) : '<span class="rp-dash-muted">loading columns…</span>')
           + '</div>';
 
-      const fnCtl = '<select class="ds-input ds-agg-fn" data-key="agg_fn">'
+      const fnCtl = '<select class="rp-dash-input rp-dash-agg-fn" data-key="agg_fn">'
         + AGG_FNS.map(([v, l]) =>
             '<option value="' + esc(v) + '"' + (v === aggFn ? " selected" : "") + '>'
             + esc(l) + '</option>').join('')
@@ -162,7 +162,7 @@ export function mountBuilder(el, ctx) {
       // Column the measure runs on. `count` can run over all rows ("*");
       // every other fn needs a real column, so the "All rows" option is
       // offered only for count.
-      const colCtl = '<select class="ds-input ds-agg-col" data-key="agg_col"'
+      const colCtl = '<select class="rp-dash-input rp-dash-agg-col" data-key="agg_col"'
           + (cols.length ? "" : " disabled") + '>'
         + (isCount
             ? '<option value="*"' + (aggCol === "*" ? " selected" : "") + '>All rows</option>'
@@ -173,10 +173,10 @@ export function mountBuilder(el, ctx) {
         + '</select>';
 
       return ''
-        + '<span class="ds-lbl">Source view</span>' + sourceCtl
-        + '<span class="ds-lbl">Group by</span>' + groupCtl
-        + '<span class="ds-lbl">Measure</span>'
-        + '<div class="ds-measure-row">' + fnCtl + colCtl + '</div>';
+        + '<span class="rp-dash-lbl">Source view</span>' + sourceCtl
+        + '<span class="rp-dash-lbl">Group by</span>' + groupCtl
+        + '<span class="rp-dash-lbl">Measure</span>'
+        + '<div class="rp-dash-measure-row">' + fnCtl + colCtl + '</div>';
     }
     if (source.kind === "monitoring-stats") {
       const endpoint = source.endpoint || cfg.source?.endpoint || "";
@@ -188,29 +188,29 @@ export function mountBuilder(el, ctx) {
       // /monitoring/requests/stats: status_mix, top_routes, buckets.p95_ms,
       // buckets.count).
       const pointerCtl = Array.isArray(source.schema) && source.schema.length
-        ? '<select class="ds-input" data-key="source.pointer">'
+        ? '<select class="rp-dash-input" data-key="source.pointer">'
           + source.schema.map((p) =>
               '<option value="' + esc(p) + '"' + (p === pointer ? " selected" : "") + '>'
               + esc(p) + '</option>').join('')
           + '</select>'
-        : '<input class="ds-input" data-key="source.pointer" value="' + esc(pointer) + '" placeholder="e.g. status_mix" />';
+        : '<input class="rp-dash-input" data-key="source.pointer" value="' + esc(pointer) + '" placeholder="e.g. status_mix" />';
       const windowChips = WINDOW_CHIPS.map((w) =>
         '<button type="button" class="rp-chip' + (w === window_ ? " is-active" : "") + '"'
         + ' data-source-window="' + esc(w) + '">' + esc(w) + '</button>').join('');
       return ''
-        + '<span class="ds-lbl">Endpoint</span>'
-        + '<div class="ds-source"><i class="bi bi-cloud-download"></i> ' + esc(endpoint) + '</div>'
-        + '<span class="ds-lbl">Field</span>'
+        + '<span class="rp-dash-lbl">Endpoint</span>'
+        + '<div class="rp-dash-source"><i class="bi bi-cloud-download"></i> ' + esc(endpoint) + '</div>'
+        + '<span class="rp-dash-lbl">Field</span>'
         + pointerCtl
-        + '<span class="ds-lbl">Window</span>'
+        + '<span class="rp-dash-lbl">Window</span>'
         + '<div class="rp-chip-row">' + windowChips + '</div>';
     }
-    return '<p class="ds-muted">Unknown source kind: ' + esc(source.kind) + '</p>';
+    return '<p class="rp-dash-muted">Unknown source kind: ' + esc(source.kind) + '</p>';
   }
 
   function renderAxesSection(cfg) {
     if (["pie", "gauge", "radar"].includes(cfg.kind)) {
-      return '<p class="ds-muted">Axes don\'t apply to this chart kind.</p>';
+      return '<p class="rp-dash-muted">Axes don\'t apply to this chart kind.</p>';
     }
     return toggleRow("splitLines", cfg.splitLines, "Show split lines")
       + toggleRow("axisLine", cfg.axisLine, "Show axis line");
@@ -218,8 +218,8 @@ export function mountBuilder(el, ctx) {
 
   function renderLegendSection(cfg) {
     return toggleRow("legend", cfg.legend, "Show legend")
-      + '<span class="ds-lbl">Position</span>'
-      + '<select class="ds-input" data-key="legendPos">'
+      + '<span class="rp-dash-lbl">Position</span>'
+      + '<select class="rp-dash-input" data-key="legendPos">'
       +   '<option value="bottom"' + (cfg.legendPos === "bottom" ? " selected" : "") + '>Bottom</option>'
       +   '<option value="top"'    + (cfg.legendPos === "top"    ? " selected" : "") + '>Top</option>'
       + '</select>';
@@ -231,33 +231,33 @@ export function mountBuilder(el, ctx) {
 
   function renderStyleSection(cfg) {
     const themeRows = Object.entries(THEMES).map(([key, t]) =>
-      '<button type="button" class="ds-theme-opt' + (key === cfg.theme ? " active" : "") + '"'
+      '<button type="button" class="rp-dash-theme-opt' + (key === cfg.theme ? " is-active" : "") + '"'
       + ' data-theme="' + esc(key) + '">'
-      + '<span class="ds-sw">' + t.series.slice(0, 5).map((c) =>
+      + '<span class="rp-dash-sw">' + t.series.slice(0, 5).map((c) =>
           '<i style="background:' + c + '"></i>').join('') + '</span>'
       + '<span>' + esc(t.name) + '</span>'
-      + (key === cfg.theme ? '<i class="bi bi-check2 ds-check"></i>' : '')
+      + (key === cfg.theme ? '<i class="bi bi-check2 rp-dash-check"></i>' : '')
       + '</button>').join('');
     return (SMOOTHABLE.has(cfg.type)
         ? toggleRow("smooth", cfg.smooth, "Smooth lines")
         : "")
-      + '<span class="ds-lbl">Chart theme</span>'
-      + '<div class="ds-theme-opts">' + themeRows + '</div>';
+      + '<span class="rp-dash-lbl">Chart theme</span>'
+      + '<div class="rp-dash-theme-opts">' + themeRows + '</div>';
   }
 
   // ── shared HTML helpers ──────────────────────────────────────────
   function section(name, icon, label, open, body) {
-    return '<div class="ds-sec' + (open ? " open" : "") + '" data-sec="' + esc(name) + '">'
-      + '<button class="ds-sec-head" type="button">'
-      +   '<i class="bi bi-chevron-down ds-sec-caret"></i>'
-      +   '<i class="bi ' + esc(icon) + ' ds-sec-icon"></i>'
-      +   '<span class="ds-sec-label">' + esc(label) + '</span>'
+    return '<div class="rp-dash-sec' + (open ? " is-open" : "") + '" data-sec="' + esc(name) + '">'
+      + '<button class="rp-dash-sec-head" type="button">'
+      +   '<i class="bi bi-chevron-down rp-dash-sec-caret"></i>'
+      +   '<i class="bi ' + esc(icon) + ' rp-dash-sec-icon"></i>'
+      +   '<span class="rp-dash-sec-label">' + esc(label) + '</span>'
       + '</button>'
-      + '<div class="ds-sec-body">' + body + '</div>'
+      + '<div class="rp-dash-sec-body">' + body + '</div>'
       + '</div>';
   }
   function toggleRow(key, on, label) {
-    return '<label class="ds-toggle-row">'
+    return '<label class="rp-dash-toggle-row">'
       + '<input type="checkbox" data-key="' + esc(key) + '"' + (on ? " checked" : "") + ' /> '
       + esc(label) + '</label>';
   }
@@ -271,7 +271,7 @@ export function mountBuilder(el, ctx) {
     const cfg = ctx.getCfg?.();
     if (!cfg) { accBody.innerHTML = ""; rendered = false; return; }
     const openSecs = rendered
-      ? new Set([...accBody.querySelectorAll(".ds-sec.open")].map((s) => s.dataset.sec))
+      ? new Set([...accBody.querySelectorAll(".rp-dash-sec.open")].map((s) => s.dataset.sec))
       : null;
     const isOpen = (name, dflt) => openSecs ? openSecs.has(name) : dflt;
     const source = ctx.getSource?.();
@@ -293,9 +293,9 @@ export function mountBuilder(el, ctx) {
   function onClick(e) {
     const cfg = ctx.getCfg?.();
     if (!cfg) return;
-    const head = e.target.closest(".ds-sec-head");
-    if (head) { head.parentElement.classList.toggle("open"); return; }
-    const tBtn = e.target.closest(".ds-type-btn");
+    const head = e.target.closest(".rp-dash-sec-head");
+    if (head) { head.parentElement.classList.toggle("is-open"); return; }
+    const tBtn = e.target.closest(".rp-dash-type-btn");
     if (tBtn) {
       cfg.type = tBtn.dataset.type;
       cfg.kind = TYPE_TO_KIND[cfg.type] || cfg.kind;
@@ -303,7 +303,7 @@ export function mountBuilder(el, ctx) {
       ctx.onCfgChange?.();
       return;
     }
-    const themeBtn = e.target.closest(".ds-theme-opt");
+    const themeBtn = e.target.closest(".rp-dash-theme-opt");
     if (themeBtn) {
       cfg.theme = themeBtn.dataset.theme;
       render();

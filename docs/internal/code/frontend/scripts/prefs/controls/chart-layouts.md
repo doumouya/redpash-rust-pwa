@@ -3,8 +3,12 @@ title: frontend/scripts/prefs/controls/chart-layouts.js
 source: ../../../../../../frontend/scripts/prefs/controls/chart-layouts.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/prefs/controls
-last modified date: 2026-06-01
+last modified date: 2026-06-07
 ---
+
+<!-- 2026-06-07: the Add-chart modal's builder host now uses `.rp-dash-config`
+     (migrated from the retired `ds-*` family; guarded by tools/retired-class-audit, runbook 0017). -->
+
 
 # chart-layouts.js
 

@@ -3,7 +3,7 @@ title: frontend/scripts/designer.js
 source: ../../../../frontend/scripts/designer.js
 owner: Torv
 section: Internal · Code · Frontend · scripts
-last modified date: 2026-05-30
+last modified date: 2026-06-07
 ---
 
 # designer.js
@@ -21,6 +21,8 @@ Chart/dashboard authoring surface. Ported from the red-front prototype. Same sha
 ## Drift-prone areas
 
 - Chart spec wire (shared::chart::ChartSpec) — drift between Rust and the form-renderer breaks load/save.
+- **Class family is `rp-dash-*`** (migrated from the legacy `ds-*` on 2026-06-07; the dedup `c282646` had renamed the CSS in `dashboards.css` but left this emitter on `ds-*`, so the `.ds-chart` ECharts mount got no height → empty preview). The empty-state uses the shared `.rp-empty` atom. Emitting a retired `ds-*` name again **fails `tools/retired-class-audit`** (runbook 0017).
+- **The same dedup also renamed BARE classes this file emits** (caught by the adversarial review, not the prefix-guard): tile grid spans `span-N → rp-dash-span-N` (else a tile gets no `grid-column` and collapses), and the tile selection state `selected → is-selected` (`.rp-dash-tile.is-selected`). Both are migrated here. These bare/state renames aren't prefix-guardable — verify them by review when touching tile markup.
 
 ## Related
 

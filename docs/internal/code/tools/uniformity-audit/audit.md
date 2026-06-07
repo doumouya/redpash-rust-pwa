@@ -3,7 +3,7 @@ title: tools/uniformity-audit/audit.js
 source: ../../../../../tools/uniformity-audit/audit.js
 owner: Torv
 section: Internal · Code · Tools · uniformity-audit
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
 
 # uniformity-audit/audit.js
@@ -23,8 +23,11 @@ this turns "compose `rp-*` atoms, don't fork a family" from a habit into a gate.
   `className` strings + `classList.add/remove/toggle`). `login` is excluded — it's
   a centered card page, divergent by design, not a railed shell.
 - **Family gate:** a hyphenated class whose family ∉ `ALLOW_FAMILY`
-  (`rp` / `bi` / `is` / `has` / `tok` / `ws` / `ds` / `mode`) is a violation.
+  (`rp` / `bi` / `is` / `has` / `tok` / `ws` / `mode`) is a violation.
   Bare classes (no hyphen — `open` / `active` / `nul`, states/utilities) are skipped.
+  (`ds` was **dropped** from `ALLOW_FAMILY` on 2026-06-07 — the chart-designer `ds-*`
+  family is fully retired to `rp-dash-*`, so a `ds-*` in a partial/page now fails here,
+  and `ds-*` in **JS** fails the sibling [retired-class-audit](../audit-suite/retired-class-audit.md).)
 - **Baseline ratchet** (`baseline.json`): the current follow-on backlog (the
   `rt-*` legacy tail in cases/workspace/home) is locked as *known*; only classes
   NOT in the baseline are NEW and FAIL (exit 1). `--baseline` rewrites the lock

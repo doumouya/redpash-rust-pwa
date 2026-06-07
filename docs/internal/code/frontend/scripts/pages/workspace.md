@@ -3,8 +3,12 @@ title: frontend/scripts/pages/workspace.js
 source: ../../../../../frontend/scripts/pages/workspace.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/pages
-last modified date: 2026-06-05
+last modified date: 2026-06-07
 ---
+
+<!-- 2026-06-07: the designer config-panel toggle now uses `.rp-dash-config-hidden`
+     (migrated from the retired `ds-*` family; guarded by tools/retired-class-audit, runbook 0017). -->
+
 
 # workspace.js
 

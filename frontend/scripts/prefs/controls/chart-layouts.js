@@ -222,7 +222,7 @@ function openAddChartModal(tabKey, cfg, onAdd) {
     +   '</header>'
     +   '<div class="rp-settings-chart-modal-grid">'
     +     '<div class="rp-settings-chart-modal-preview" id="rp-settings-chart-preview"></div>'
-    +     '<aside class="ds-config rp-settings-chart-modal-builder" id="rp-settings-chart-builder"></aside>'
+    +     '<aside class="rp-dash-config rp-settings-chart-modal-builder" id="rp-settings-chart-builder"></aside>'
     +   '</div>'
     +   '<footer class="rp-settings-chart-modal-foot">'
     +     '<button type="button" class="rp-btn-icon rp-settings-chart-modal-cancel">Cancel</button>'
