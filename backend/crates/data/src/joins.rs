@@ -28,64 +28,82 @@ const MIN_UNIQUE: usize = 1;
 
 #[derive(Debug, Serialize)]
 pub struct JoinCandidate {
-    pub this_col:  String,
+    pub this_col: String,
     pub other_col: String,
     /// Overlap coefficient — `matches / min(this_uniques, other_uniques)`.
     /// Used as the sort key (FK→PK signal: a 100-row test export fully
     /// covered by a 100k-row prod export ranks first). Invisible to the
     /// end user; the frontend renders raw counts instead.
-    pub score:     f32,
+    pub score: f32,
     /// Count of overlapping values within the capped unique sets.
-    pub matches:   u32,
+    pub matches: u32,
     /// Unique-value count on the base file's column (after MAX_UNIQUE
     /// cap). Powers the user-facing "X of N base values match" string.
-    pub this_uniques:  u32,
+    pub this_uniques: u32,
     /// Unique-value count on the other file's column (after MAX_UNIQUE
     /// cap). Powers the "(other file has N unique)" tail of the same
     /// string — gives the user cardinality at a glance.
     pub other_uniques: u32,
-    pub samples:   Vec<String>,
+    pub samples: Vec<String>,
 }
 
 pub fn detect_pair(
-    this_df:     &DataFrame,
-    other_df:    &DataFrame,
-    threshold:   f32,
+    this_df: &DataFrame,
+    other_df: &DataFrame,
+    threshold: f32,
     max_results: usize,
 ) -> Result<Vec<JoinCandidate>> {
-    let this  = unique_per_col(this_df,  MAX_UNIQUE)?;
+    let this = unique_per_col(this_df, MAX_UNIQUE)?;
     let other = unique_per_col(other_df, MAX_UNIQUE)?;
 
     let mut out: Vec<JoinCandidate> = Vec::new();
     for (tc, ta) in &this {
-        if ta.len() < MIN_UNIQUE { continue; }
+        if ta.len() < MIN_UNIQUE {
+            continue;
+        }
         for (oc, ob) in &other {
-            if ob.len() < MIN_UNIQUE { continue; }
-            let (small, large) = if ta.len() <= ob.len() { (ta, ob) } else { (ob, ta) };
+            if ob.len() < MIN_UNIQUE {
+                continue;
+            }
+            let (small, large) = if ta.len() <= ob.len() {
+                (ta, ob)
+            } else {
+                (ob, ta)
+            };
             let mut hits = 0u32;
             let mut samples: Vec<String> = Vec::with_capacity(5);
             for v in small {
                 if large.contains(v) {
                     hits += 1;
-                    if samples.len() < 5 { samples.push(v.clone()); }
+                    if samples.len() < 5 {
+                        samples.push(v.clone());
+                    }
                 }
             }
             let denom = small.len() as f32;
-            let score = if denom > 0.0 { hits as f32 / denom } else { 0.0 };
+            let score = if denom > 0.0 {
+                hits as f32 / denom
+            } else {
+                0.0
+            };
             if score >= threshold {
                 out.push(JoinCandidate {
-                    this_col:      tc.clone(),
-                    other_col:     oc.clone(),
+                    this_col: tc.clone(),
+                    other_col: oc.clone(),
                     score,
-                    matches:       hits,
-                    this_uniques:  ta.len() as u32,
+                    matches: hits,
+                    this_uniques: ta.len() as u32,
                     other_uniques: ob.len() as u32,
                     samples,
                 });
             }
         }
     }
-    out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     out.truncate(max_results);
     Ok(out)
 }
@@ -99,43 +117,54 @@ pub fn detect_pair(
 /// String on the other) don't blow up the request — string equality
 /// is the right semantics for ID-style columns anyway.
 pub fn execute(
-    left:       &DataFrame,
-    right:      &DataFrame,
-    left_keys:  &[String],
+    left: &DataFrame,
+    right: &DataFrame,
+    left_keys: &[String],
     right_keys: &[String],
-    join_type:  &str,
+    join_type: &str,
 ) -> Result<DataFrame> {
     if left_keys.is_empty() || left_keys.len() != right_keys.len() {
         return Err(DataError::InvalidSpec(
-            "joins.execute needs same-length non-empty key arrays".into()));
+            "joins.execute needs same-length non-empty key arrays".into(),
+        ));
     }
     let jt = match join_type {
-        "inner"          => JoinType::Inner,
-        "left"           => JoinType::Left,
-        "right"          => JoinType::Right,
+        "inner" => JoinType::Inner,
+        "left" => JoinType::Left,
+        "right" => JoinType::Right,
         "outer" | "full" => JoinType::Full,
-        other            => return Err(DataError::InvalidSpec(
-            format!("unsupported join type: {other}"))),
+        other => {
+            return Err(DataError::InvalidSpec(format!(
+                "unsupported join type: {other}"
+            )))
+        }
     };
 
     // Cast each key column to String on both sides. `with_column` here
     // replaces the column in-place since names match.
-    let mut left_c  = left.clone();
+    let mut left_c = left.clone();
     let mut right_c = right.clone();
     for k in left_keys {
-        let casted = left_c.column(k.as_str()).map_err(DataError::from)?
-            .cast(&DataType::String).map_err(DataError::from)?;
+        let casted = left_c
+            .column(k.as_str())
+            .map_err(DataError::from)?
+            .cast(&DataType::String)
+            .map_err(DataError::from)?;
         left_c.with_column(casted).map_err(DataError::from)?;
     }
     for k in right_keys {
-        let casted = right_c.column(k.as_str()).map_err(DataError::from)?
-            .cast(&DataType::String).map_err(DataError::from)?;
+        let casted = right_c
+            .column(k.as_str())
+            .map_err(DataError::from)?
+            .cast(&DataType::String)
+            .map_err(DataError::from)?;
         right_c.with_column(casted).map_err(DataError::from)?;
     }
 
     let l: Vec<&str> = left_keys.iter().map(|s| s.as_str()).collect();
     let r: Vec<&str> = right_keys.iter().map(|s| s.as_str()).collect();
-    left_c.join(&right_c, l, r, JoinArgs::new(jt))
+    left_c
+        .join(&right_c, l, r, JoinArgs::new(jt))
         .map_err(DataError::from)
 }
 
@@ -171,12 +200,14 @@ pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, Hash
         for i in 0..c.len() {
             let v = c.get(i).map_err(DataError::from)?;
             let s = match v {
-                AnyValue::Null            => continue,
-                AnyValue::String(s)       => (*s).to_string(),
-                AnyValue::StringOwned(s)  => s.to_string(),
-                other                     => other.to_string(),
+                AnyValue::Null => continue,
+                AnyValue::String(s) => (*s).to_string(),
+                AnyValue::StringOwned(s) => s.to_string(),
+                other => other.to_string(),
             };
-            if !s.is_empty() { *counts.entry(s).or_insert(0) += 1; }
+            if !s.is_empty() {
+                *counts.entry(s).or_insert(0) += 1;
+            }
         }
 
         // If the column fits under the cap, every distinct value

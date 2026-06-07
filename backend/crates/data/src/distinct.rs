@@ -30,8 +30,8 @@ pub const MAX_UNIQUE: usize = 5_000;
 /// distinct set hit `MAX_UNIQUE` and the kept set is a top-N pick.
 #[derive(Debug, Clone)]
 pub struct DistinctResult {
-    pub values:    Vec<String>,
-    pub total:     u32,
+    pub values: Vec<String>,
+    pub total: u32,
     pub truncated: bool,
 }
 
@@ -43,12 +43,13 @@ pub struct DistinctResult {
 /// handler maps that to a clean 404 with the column name in the
 /// error message.
 pub fn for_column(
-    df:    &DataFrame,
-    col:   &str,
-    q:     Option<&str>,
+    df: &DataFrame,
+    col: &str,
+    q: Option<&str>,
     limit: usize,
 ) -> Result<DistinctResult> {
-    let column = df.column(col)
+    let column = df
+        .column(col)
         .map_err(|_| DataError::NotFound(format!("column {col} not in frame")))?;
 
     // First pass: count occurrences. HashMap grows to the column's
@@ -59,12 +60,14 @@ pub fn for_column(
     for i in 0..column.len() {
         let v = column.get(i).map_err(DataError::from)?;
         let s = match v {
-            AnyValue::Null            => continue,
-            AnyValue::String(s)       => (*s).to_string(),
-            AnyValue::StringOwned(s)  => s.to_string(),
-            other                     => other.to_string(),
+            AnyValue::Null => continue,
+            AnyValue::String(s) => (*s).to_string(),
+            AnyValue::StringOwned(s) => s.to_string(),
+            other => other.to_string(),
         };
-        if !s.is_empty() { *counts.entry(s).or_insert(0) += 1; }
+        if !s.is_empty() {
+            *counts.entry(s).or_insert(0) += 1;
+        }
     }
     let total = counts.len() as u32;
     let truncated = counts.len() > MAX_UNIQUE;
@@ -84,14 +87,23 @@ pub fn for_column(
     // reads stable regardless of how the user typed `q`.
     universe.sort();
 
-    let needle = q.map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty());
-    let mut values: Vec<String> = universe.into_iter()
+    let needle = q
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+    let mut values: Vec<String> = universe
+        .into_iter()
         .filter(|v| match &needle {
             Some(n) => v.to_ascii_lowercase().contains(n.as_str()),
-            None    => true,
+            None => true,
         })
         .collect();
-    if values.len() > limit { values.truncate(limit); }
+    if values.len() > limit {
+        values.truncate(limit);
+    }
 
-    Ok(DistinctResult { values, total, truncated })
+    Ok(DistinctResult {
+        values,
+        total,
+        truncated,
+    })
 }

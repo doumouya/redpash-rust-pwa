@@ -93,16 +93,27 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
 
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
-        if trimmed.is_empty() { continue; }
-        if trimmed.starts_with('#') { continue; }
-        if trimmed.get(..4).map(|p| p.eq_ignore_ascii_case("sep=")).unwrap_or(false) {
+        if trimmed.is_empty() {
             continue;
         }
-        let (best_d, best_n) = DELIMS.iter()
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed
+            .get(..4)
+            .map(|p| p.eq_ignore_ascii_case("sep="))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let (best_d, best_n) = DELIMS
+            .iter()
             .map(|&d| (d, count_unquoted(line, d)))
             .max_by_key(|(_, n)| *n)
             .unwrap_or((b',', 0));
-        if best_n < 2 { continue; }
+        if best_n < 2 {
+            continue;
+        }
         skip_rows = i;
         delimiter = best_d;
         found_multi = true;
@@ -111,7 +122,9 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
 
     if !found_multi {
         for (i, line) in lines.iter().enumerate() {
-            if looks_like_preamble_1col(line) { continue; }
+            if looks_like_preamble_1col(line) {
+                continue;
+            }
             skip_rows = i;
             break;
         }
@@ -129,19 +142,22 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
         let sample: Vec<&str> = text.lines().skip(skip_rows).take(20).collect();
         let wrapped = sample.len() >= 2 && {
             const DELIMS: [u8; 4] = [b',', b';', b'\t', b'|'];
-            let rich = sample.iter().filter(|l| {
-                DELIMS.iter().any(|&d| l.bytes().filter(|&b| b == d).count() >= 2)
-            }).count();
+            let rich = sample
+                .iter()
+                .filter(|l| {
+                    DELIMS
+                        .iter()
+                        .any(|&d| l.bytes().filter(|&b| b == d).count() >= 2)
+                })
+                .count();
             rich * 2 >= sample.len()
         };
         if wrapped {
             let mut rows = text.lines().skip(skip_rows);
             let header = rows.next().unwrap_or("column_1");
             let values: Vec<&str> = rows.collect();
-            let wrapped_df = DataFrame::new(
-                vec![Series::new(header.into(), values.as_slice())],
-            )
-            .map_err(DataError::from)?;
+            let wrapped_df = DataFrame::new(vec![Series::new(header.into(), values.as_slice())])
+                .map_err(DataError::from)?;
 
             // Parse stops at classification. Em 2026-05-26: *"the goal
             // is not to solve all type of tricky csv in one click,
@@ -157,7 +173,12 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
             // `step_preview`. Same machinery that handles every other
             // user-confirmed transform in the cleaning pipeline; parse
             // stops being the exception.
-            return Ok((wrapped_df, RescueDiag::WrapDetected { preview_width: None }));
+            return Ok((
+                wrapped_df,
+                RescueDiag::WrapDetected {
+                    preview_width: None,
+                },
+            ));
         }
     }
 
@@ -203,8 +224,11 @@ fn normalize_newlines(text: String) -> String {
 fn count_unquoted(line: &str, d: u8) -> usize {
     let (mut n, mut in_q) = (0usize, false);
     for b in line.bytes() {
-        if b == b'"' { in_q = !in_q; }
-        else if b == d && !in_q { n += 1; }
+        if b == b'"' {
+            in_q = !in_q;
+        } else if b == d && !in_q {
+            n += 1;
+        }
     }
     n
 }
@@ -221,13 +245,25 @@ fn count_unquoted(line: &str, d: u8) -> usize {
 /// 1-col file with the header on line 0.
 fn looks_like_preamble_1col(line: &str) -> bool {
     let t = line.trim();
-    if t.is_empty() { return true; }
-    if t.starts_with('#') { return true; }
+    if t.is_empty() {
+        return true;
+    }
+    if t.starts_with('#') {
+        return true;
+    }
     let lower = t.to_ascii_lowercase();
-    if lower == "sep" || lower.starts_with("sep=") { return true; }
-    if t.starts_with('"') && t.ends_with('"') { return true; }
-    if t.contains(": ") && t.len() >= 10 { return true; }
-    if t.len() > 30 && t.contains(' ') { return true; }
+    if lower == "sep" || lower.starts_with("sep=") {
+        return true;
+    }
+    if t.starts_with('"') && t.ends_with('"') {
+        return true;
+    }
+    if t.contains(": ") && t.len() >= 10 {
+        return true;
+    }
+    if t.len() > 30 && t.contains(' ') {
+        return true;
+    }
     false
 }
 

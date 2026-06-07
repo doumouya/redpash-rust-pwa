@@ -42,7 +42,8 @@ pub fn run_sql(tables: Vec<(String, DataFrame)>, sql: &str) -> Result<DataFrame>
     if !is_read_only(trimmed) {
         return Err(DataError::InvalidSpec(
             "only read-only queries are allowed (SELECT / WITH / set-operations); \
-             DDL/DML (CREATE, DROP, INSERT, UPDATE, DELETE, …) is rejected".into(),
+             DDL/DML (CREATE, DROP, INSERT, UPDATE, DELETE, …) is rejected"
+                .into(),
         ));
     }
 
@@ -90,11 +91,12 @@ pub fn is_read_only(sql: &str) -> bool {
     }
 
     const FORBIDDEN: &[&str] = &[
-        "insert", "update", "delete", "drop", "create", "alter", "truncate",
-        "attach", "copy", "merge", "grant", "revoke", "call", "execute",
-        "replace", "into", "vacuum", "analyze",
+        "insert", "update", "delete", "drop", "create", "alter", "truncate", "attach", "copy",
+        "merge", "grant", "revoke", "call", "execute", "replace", "into", "vacuum", "analyze",
     ];
-    !tokenize(&lower).iter().any(|t| FORBIDDEN.contains(&t.as_str()))
+    !tokenize(&lower)
+        .iter()
+        .any(|t| FORBIDDEN.contains(&t.as_str()))
 }
 
 /// Strip `-- line` and `/* block */` comments AND empty out string-literal
@@ -171,7 +173,11 @@ mod tests {
 
     #[test]
     fn runs_basic_select() {
-        let out = run_sql(vec![("t".into(), df_orders())], "SELECT id, amt FROM t WHERE amt > 60").unwrap();
+        let out = run_sql(
+            vec![("t".into(), df_orders())],
+            "SELECT id, amt FROM t WHERE amt > 60",
+        )
+        .unwrap();
         assert_eq!(out.height(), 2);
         assert_eq!(out.width(), 2);
     }
@@ -181,7 +187,9 @@ mod tests {
         assert!(is_read_only("WITH p AS (SELECT * FROM t) SELECT * FROM p"));
         assert!(is_read_only("SELECT a FROM t UNION ALL SELECT a FROM u"));
         assert!(is_read_only("select * from t -- drop table t\n"));
-        assert!(is_read_only("SELECT * FROM t WHERE name = 'please drop everything'"));
+        assert!(is_read_only(
+            "SELECT * FROM t WHERE name = 'please drop everything'"
+        ));
     }
 
     #[test]

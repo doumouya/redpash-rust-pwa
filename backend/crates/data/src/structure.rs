@@ -21,17 +21,17 @@ pub struct StructureFlags {
     /// The line-ending issue is cosmetic (mixed CRLF/LF, no data loss) rather
     /// than lossy (a lone CR that swallows rows) — penalized far less.
     pub line_ending_cosmetic: bool,
-    pub binary_suspect:      bool,
-    pub delimiter_suspect:   bool,
-    pub ragged_suspect:      bool,
-    pub header_suspect:      bool,
+    pub binary_suspect: bool,
+    pub delimiter_suspect: bool,
+    pub ragged_suspect: bool,
+    pub header_suspect: bool,
     /// A column is *mostly* one structured type (numeric/bool/date) but
     /// contaminated with off-type cells — the silent 50–95% band the
     /// semantic sniff waves through as a clean string column (hook #6).
-    pub type_drift_suspect:  bool,
+    pub type_drift_suspect: bool,
     /// Worst drifting column's off-type fraction (0..0.5) — the penalty
     /// scales by this so heavier contamination stings more.
-    pub type_drift_frac:     f32,
+    pub type_drift_frac: f32,
     /// A pure-digit value with a leading zero (`001`, `07920`) was cast
     /// to int — the zero, and the identity it encoded (zip / code / badge
     /// id), is silently gone. Only visible by comparing raw bytes to the
@@ -40,7 +40,7 @@ pub struct StructureFlags {
     /// A date column mixes ≥2 incompatible formats (`2026-01-13` + `13/01/2026`)
     /// — the dates parse to different days silently. Worse when day/month order
     /// is contradictory (one cell is dd/mm, another mm/dd).
-    pub date_drift_suspect:  bool,
+    pub date_drift_suspect: bool,
     /// Blank / whitespace-only rows are interspersed in the data — Polars drops
     /// them silently, so the parsed frame hides that the source was peppered
     /// with empty lines.
@@ -57,25 +57,43 @@ impl StructureFlags {
     /// grade (that's the score-calibration follow-up).
     pub fn penalty(&self) -> f32 {
         let mut p: f32 = 0.0;
-        if self.binary_suspect      { p += 70.0; } // corrupt bytes → unusable
-        if self.delimiter_suspect   { p += 45.0; } // wrong shape
-        // Lone CR swallows rows (data loss); mixed CRLF/LF is cosmetic (Polars
-        // reads both) — so the cosmetic case docks a token amount, not 25.
-        if self.line_ending_suspect { p += if self.line_ending_cosmetic { 8.0 } else { 25.0 }; }
-        if self.ragged_suspect      { p += 25.0; }
-        if self.header_suspect      { p += 20.0; }
+        if self.binary_suspect {
+            p += 70.0;
+        } // corrupt bytes → unusable
+        if self.delimiter_suspect {
+            p += 45.0;
+        } // wrong shape
+          // Lone CR swallows rows (data loss); mixed CRLF/LF is cosmetic (Polars
+          // reads both) — so the cosmetic case docks a token amount, not 25.
+        if self.line_ending_suspect {
+            p += if self.line_ending_cosmetic { 8.0 } else { 25.0 };
+        }
+        if self.ragged_suspect {
+            p += 25.0;
+        }
+        if self.header_suspect {
+            p += 20.0;
+        }
         // Graded: contamination * scale, capped — a 25%-dirty column docks
         // ~17, a 50%-dirty one ~30, never enough alone to read "cursed".
-        if self.type_drift_suspect  { p += (self.type_drift_frac * 70.0).min(35.0); }
+        if self.type_drift_suspect {
+            p += (self.type_drift_frac * 70.0).min(35.0);
+        }
         // Identity loss, not corruption: the data parsed, but a code/id lost
         // its leading zero. Moderate — the file is usable, the column isn't.
-        if self.numeric_id_loss_suspect { p += 20.0; }
+        if self.numeric_id_loss_suspect {
+            p += 20.0;
+        }
         // Mixed date formats parse to silently-wrong days; ambiguous and
         // dangerous, but the values are recoverable once normalized.
-        if self.date_drift_suspect { p += 18.0; }
+        if self.date_drift_suspect {
+            p += 18.0;
+        }
         // Dropped blank rows — the data's fine, but the source was messier than
         // the frame admits. Mild.
-        if self.whitespace_rows_suspect { p += 12.0; }
+        if self.whitespace_rows_suspect {
+            p += 12.0;
+        }
         p.min(100.0)
     }
 
@@ -101,9 +119,13 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
     if utf8.is_err() {
         f.binary_suspect = true;
         f.reasons.push("invalid UTF-8 bytes in the input".into());
-    } else if raw.iter().any(|&b| b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r')) {
+    } else if raw
+        .iter()
+        .any(|&b| b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r'))
+    {
         f.binary_suspect = true;
-        f.reasons.push("control bytes (NUL/BEL/ESC/…) inside cell values".into());
+        f.reasons
+            .push("control bytes (NUL/BEL/ESC/…) inside cell values".into());
     }
 
     // ── line endings: lone CR (classic-Mac) or mixed CRLF+LF ──
@@ -111,30 +133,47 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
     let (mut lone_cr, mut bare_lf, mut crlf) = (false, false, false);
     for &b in raw {
         if prev == b'\r' {
-            if b == b'\n' { crlf = true; } else { lone_cr = true; }
+            if b == b'\n' {
+                crlf = true;
+            } else {
+                lone_cr = true;
+            }
         }
-        if b == b'\n' && prev != b'\r' { bare_lf = true; }
+        if b == b'\n' && prev != b'\r' {
+            bare_lf = true;
+        }
         prev = b;
     }
-    if prev == b'\r' { lone_cr = true; } // trailing CR
+    if prev == b'\r' {
+        lone_cr = true;
+    } // trailing CR
     if lone_cr {
         f.line_ending_suspect = true; // lossy: a lone CR swallows whole rows
         f.reasons.push("lone CR line endings (classic-Mac)".into());
     } else if crlf && bare_lf {
         f.line_ending_suspect = true;
         f.line_ending_cosmetic = true; // Polars reads both — no data lost
-        f.reasons.push("mixed CRLF / LF line endings (cosmetic)".into());
+        f.reasons
+            .push("mixed CRLF / LF line endings (cosmetic)".into());
     }
 
     // ── delimiter ambiguity + raggedness (text-level) ──
     if let Ok(text) = utf8 {
-        let sample: Vec<&str> =
-            text.lines().filter(|l| !l.trim().is_empty()).take(50).collect();
+        let sample: Vec<&str> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .take(50)
+            .collect();
         if let Some(header) = sample.first() {
-            let present = DELIMS.iter().filter(|&&d| count_unquoted(header, d) >= 1).count();
+            let present = DELIMS
+                .iter()
+                .filter(|&&d| count_unquoted(header, d) >= 1)
+                .count();
             if present >= 2 {
                 f.delimiter_suspect = true;
-                f.reasons.push(format!("header mixes {present} delimiter types — ambiguous split"));
+                f.reasons.push(format!(
+                    "header mixes {present} delimiter types — ambiguous split"
+                ));
             }
             let dom = DELIMS
                 .iter()
@@ -159,7 +198,9 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
             let mx = widths.iter().copied().max().unwrap_or(0);
             if !multiline_quoted && mx > mn && (mx >= mn.saturating_mul(2) || mx - mn >= 3) {
                 f.ragged_suspect = true;
-                f.reasons.push(format!("ragged rows: field count ranges {mn}..{mx} (truncation/wrong delimiter)"));
+                f.reasons.push(format!(
+                    "ragged rows: field count ranges {mn}..{mx} (truncation/wrong delimiter)"
+                ));
             }
             // ANY data row wider than the header → Polars truncates it to the
             // header width, silently dropping the trailing field(s). One such
@@ -201,7 +242,9 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
                     int_cols.iter().any(|&j| {
                         fields.get(j).is_some_and(|v| {
                             let t = v.trim();
-                            t.len() > 1 && t.starts_with('0') && t.bytes().all(|b| b.is_ascii_digit())
+                            t.len() > 1
+                                && t.starts_with('0')
+                                && t.bytes().all(|b| b.is_ascii_digit())
                         })
                     })
                 });
@@ -222,7 +265,10 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
             // line trims to ",,,", not "".
             let lines: Vec<&str> = text.lines().collect();
             if let Some(last) = lines.iter().rposition(|l| !l.trim().is_empty()) {
-                let blank = lines[..=last].iter().filter(|l| l.trim().is_empty()).count();
+                let blank = lines[..=last]
+                    .iter()
+                    .filter(|l| l.trim().is_empty())
+                    .count();
                 let total = last + 1;
                 if blank > 0 && blank as f32 / total as f32 >= 0.08 {
                     f.whitespace_rows_suspect = true;
@@ -260,20 +306,24 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
     }
 
     // ── header weirdness: duplicates / all-numeric ──
-    let names: Vec<String> = df.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let names: Vec<String> = df
+        .get_columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
     // Polars renames duplicate headers with a "_duplicated_" suffix.
-    let dup = names.iter().any(|n| n.contains("_duplicated_"))
-        || {
-            let mut seen = std::collections::HashSet::new();
-            names.iter().any(|n| !seen.insert(n.as_str()))
-        };
+    let dup = names.iter().any(|n| n.contains("_duplicated_")) || {
+        let mut seen = std::collections::HashSet::new();
+        names.iter().any(|n| !seen.insert(n.as_str()))
+    };
     if dup {
         f.header_suspect = true;
         f.reasons.push("duplicate header names".into());
     }
     if !names.is_empty() && names.iter().all(|n| n.trim().parse::<f64>().is_ok()) {
         f.header_suspect = true;
-        f.reasons.push("all-numeric headers (a data row used as the header?)".into());
+        f.reasons
+            .push("all-numeric headers (a data row used as the header?)".into());
     }
 
     f
@@ -331,7 +381,11 @@ mod tests {
         assert_eq!(f.penalty(), 25.0, "lone CR is the lossy 25-point penalty");
         let f = detect(b"a,b\r\n1,2\nx,y\r\n", &df); // mixed CRLF/LF — cosmetic
         assert!(f.line_ending_suspect && f.line_ending_cosmetic);
-        assert_eq!(f.penalty(), 8.0, "mixed CRLF/LF is the cosmetic 8-point penalty");
+        assert_eq!(
+            f.penalty(),
+            8.0,
+            "mixed CRLF/LF is the cosmetic 8-point penalty"
+        );
         let f = detect(b"a,b\n1,\x00\n", &df); // control byte
         assert!(f.binary_suspect);
         let f = detect("a,b\nx,y\n".as_bytes(), &df); // clean
@@ -369,7 +423,10 @@ mod tests {
         // trailing-field drop fires ragged even though the spread is 1.
         let df = df2("id", "price");
         let f = detect(b"id,price\n1,1.234,56\n2,2.000,00\n3,3.500,75\n", &df);
-        assert!(f.ragged_suspect, "data wider than header should flag ragged");
+        assert!(
+            f.ragged_suspect,
+            "data wider than header should flag ragged"
+        );
 
         // A SINGLE over-wide row (the rest match the header) is still lost
         // data — one dropped field must flag, spread of 1 notwithstanding.
@@ -379,7 +436,10 @@ mod tests {
             Series::new("age".into(), &["30", "29", "31", "32"]).into(),
         ])
         .unwrap();
-        let f = detect(b"id,name,age\n1,Alice,30\n2,Bob,29\n3,Charlie,31,extra\n4,Delta,32\n", &df);
+        let f = detect(
+            b"id,name,age\n1,Alice,30\n2,Bob,29\n3,Charlie,31,extra\n4,Delta,32\n",
+            &df,
+        );
         assert!(f.ragged_suspect, "one over-wide row drops a field → flag");
     }
 
@@ -391,7 +451,10 @@ mod tests {
         assert!(f.whitespace_rows_suspect);
         // a row of empty FIELDS (",,") is NOT a blank line → no flag
         let f = detect(b"id,name\n1,a\n,\n3,c\n4,d\n", &df);
-        assert!(!f.whitespace_rows_suspect, "empty-field row is not a blank line");
+        assert!(
+            !f.whitespace_rows_suspect,
+            "empty-field row is not a blank line"
+        );
         // a single trailing newline is not interior → no flag
         let f = detect(b"id,name\n1,a\n2,b\n", &df);
         assert!(!f.whitespace_rows_suspect);
@@ -407,7 +470,10 @@ mod tests {
         ])
         .unwrap();
         let f = detect(b"id,code\n1,001\n2,010\n3,100\n", &df);
-        assert!(f.numeric_id_loss_suspect, "leading-zero ids cast to int should flag");
+        assert!(
+            f.numeric_id_loss_suspect,
+            "leading-zero ids cast to int should flag"
+        );
 
         // Plain ints with no leading zeros → no false positive.
         let f = detect(b"id,code\n1,5\n2,42\n3,100\n", &df);

@@ -36,19 +36,19 @@ pub fn summarize(df: &DataFrame) -> Result<Vec<ColumnMeta>> {
             let v = c.get(i).map_err(DataError::from)?;
             if !matches!(v, AnyValue::Null) {
                 sample = Some(match v {
-                    AnyValue::String(s)      => s.to_string(),
+                    AnyValue::String(s) => s.to_string(),
                     AnyValue::StringOwned(s) => s.to_string(),
-                    other                    => other.to_string(),
+                    other => other.to_string(),
                 });
                 break;
             }
         }
 
         out.push(ColumnMeta {
-            name:       c.name().to_string(),
+            name: c.name().to_string(),
             dtype,
             semantic_dtype,
-            null_pct:   Some(100.0 * nulls / h),
+            null_pct: Some(100.0 * nulls / h),
             unique_pct: Some(100.0 * unique / h),
             sample,
         });
@@ -60,12 +60,12 @@ pub fn summarize(df: &DataFrame) -> Result<Vec<ColumnMeta>> {
 fn storage_dtype_name(d: &DataType) -> &'static str {
     match d {
         d if d.is_integer() => "int",
-        d if d.is_float()   => "float",
-        DataType::Boolean   => "bool",
+        d if d.is_float() => "float",
+        DataType::Boolean => "bool",
         DataType::Date | DataType::Datetime(_, _) => "date",
-        DataType::String    => "string",
-        DataType::Null      => "empty",
-        _                   => "string",
+        DataType::String => "string",
+        DataType::Null => "empty",
+        _ => "string",
     }
 }
 
@@ -73,16 +73,31 @@ fn storage_dtype_name(d: &DataType) -> &'static str {
 // "non-numeric" (used as a guard so a pure `1/0` column lands as int,
 // not bool).
 const BOOL_WORDS_ANY: &[&str] = &[
-    "true", "false", "yes", "no", "y", "n", "t", "f",
-    "oui", "non", "vrai", "faux", "o", "0", "1",
+    "true", "false", "yes", "no", "y", "n", "t", "f", "oui", "non", "vrai", "faux", "o", "0", "1",
 ];
 const BOOL_WORDS_NON_NUMERIC: &[&str] = &[
-    "true", "false", "yes", "no", "y", "n", "t", "f",
-    "oui", "non", "vrai", "faux", "o",
+    "true", "false", "yes", "no", "y", "n", "t", "f", "oui", "non", "vrai", "faux", "o",
 ];
 const SENTINEL_TOKENS: &[&str] = &[
-    "", "n/a", "na", "n.a.", "-", "--", "?", "null", "none", "nan",
-    "#n/a", ".", "tbd", "x", "#ref!", "#value!", "unknown", "undefined", "nd",
+    "",
+    "n/a",
+    "na",
+    "n.a.",
+    "-",
+    "--",
+    "?",
+    "null",
+    "none",
+    "nan",
+    "#n/a",
+    ".",
+    "tbd",
+    "x",
+    "#ref!",
+    "#value!",
+    "unknown",
+    "undefined",
+    "nd",
 ];
 
 /// Guess the column's *intended* type. When Polars already typed it
@@ -94,34 +109,45 @@ const SENTINEL_TOKENS: &[&str] = &[
 fn sniff_semantic_type(c: &Series) -> &'static str {
     match c.dtype() {
         d if d.is_integer() => return "int",
-        d if d.is_float()   => return "float",
-        DataType::Boolean   => return "bool",
+        d if d.is_float() => return "float",
+        DataType::Boolean => return "bool",
         DataType::Date | DataType::Datetime(_, _) => return "date",
-        DataType::Null      => return "empty",
-        DataType::String    => {}
-        _                   => return "string",
+        DataType::Null => return "empty",
+        DataType::String => {}
+        _ => return "string",
     }
 
     // Sample up to 50 non-null, non-sentinel string cells.
     let mut samples: Vec<String> = Vec::with_capacity(50);
     for i in 0..c.len() {
-        if samples.len() >= 50 { break; }
+        if samples.len() >= 50 {
+            break;
+        }
         let s = match c.get(i) {
-            Ok(AnyValue::String(s))      => s.to_string(),
+            Ok(AnyValue::String(s)) => s.to_string(),
             Ok(AnyValue::StringOwned(s)) => s.to_string(),
             _ => continue,
         };
         let t = s.trim().to_ascii_lowercase();
-        if t.is_empty() || SENTINEL_TOKENS.contains(&t.as_str()) { continue; }
+        if t.is_empty() || SENTINEL_TOKENS.contains(&t.as_str()) {
+            continue;
+        }
         samples.push(t);
     }
-    if samples.is_empty() { return "string"; }
+    if samples.is_empty() {
+        return "string";
+    }
     let n = samples.len() as f32;
 
     // Bool — require ≥80% in the wordlist AND at least one non-numeric
     // token so a pure `1/0` column doesn't get tagged bool over int.
-    let bool_hits = samples.iter().filter(|s| BOOL_WORDS_ANY.contains(&s.as_str())).count();
-    let has_non_numeric_bool = samples.iter().any(|s| BOOL_WORDS_NON_NUMERIC.contains(&s.as_str()));
+    let bool_hits = samples
+        .iter()
+        .filter(|s| BOOL_WORDS_ANY.contains(&s.as_str()))
+        .count();
+    let has_non_numeric_bool = samples
+        .iter()
+        .any(|s| BOOL_WORDS_NON_NUMERIC.contains(&s.as_str()));
     if has_non_numeric_bool && bool_hits as f32 / n >= 0.8 {
         return "bool";
     }
@@ -149,9 +175,9 @@ fn sniff_semantic_type(c: &Series) -> &'static str {
         //   2. Any sample is a pure-digit string with a leading zero
         //      (length > 1) — e.g. "07920", "001234". Float cast
         //      drops the zero.
-        let leading_zero = samples.iter().any(|s| {
-            s.len() > 1 && s.starts_with('0') && s.chars().all(|c| c.is_ascii_digit())
-        });
+        let leading_zero = samples
+            .iter()
+            .any(|s| s.len() > 1 && s.starts_with('0') && s.chars().all(|c| c.is_ascii_digit()));
         if name_looks_id(c.name()) || leading_zero {
             return "string";
         }
@@ -166,12 +192,27 @@ fn sniff_semantic_type(c: &Series) -> &'static str {
 /// `CODE_POSTAL`, `siren`, `phone_number`. Kept tight on purpose —
 /// `no` / `num` / `numero` were too eager (matched legitimate counts).
 const ID_NAME_TOKENS: &[&str] = &[
-    "postcode", "postal", "zip", "zipcode",
-    "siren", "siret", "tva",
-    "phone", "telephone", "mobile", "fax",
-    "iban", "bic", "swift",
-    "id", "uid", "guid", "uuid", "ssn",
-    "code", "ref",
+    "postcode",
+    "postal",
+    "zip",
+    "zipcode",
+    "siren",
+    "siret",
+    "tva",
+    "phone",
+    "telephone",
+    "mobile",
+    "fax",
+    "iban",
+    "bic",
+    "swift",
+    "id",
+    "uid",
+    "guid",
+    "uuid",
+    "ssn",
+    "code",
+    "ref",
 ];
 
 fn name_looks_id(name: &str) -> bool {
@@ -192,9 +233,9 @@ fn looks_date_shaped(s: &str) -> bool {
     for sep in ['/', '-', '.'] {
         let parts: Vec<&str> = s.split(sep).collect();
         if parts.len() == 3
-            && parts.iter().all(|p| {
-                !p.is_empty() && p.len() <= 4 && p.chars().all(|c| c.is_ascii_digit())
-            })
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.len() <= 4 && p.chars().all(|c| c.is_ascii_digit()))
         {
             return true;
         }
@@ -212,7 +253,9 @@ fn looks_date_shaped(s: &str) -> bool {
 // finicky letter whitelist for the trailing currency / unit suffix.
 fn looks_numeric_ish(s: &str) -> bool {
     let total = s.chars().count();
-    if total == 0 { return false; }
+    if total == 0 {
+        return false;
+    }
     let first = s.chars().next().unwrap();
     if !(first.is_ascii_digit() || matches!(first, '-' | '+' | '.' | '€' | '$' | '£')) {
         return false;
@@ -331,11 +374,16 @@ pub(crate) fn date_format_shape(s: &str) -> Option<&'static str> {
     if t.len() == 8 && t.bytes().all(|b| b.is_ascii_digit()) {
         return Some("compact8"); // yyyymmdd
     }
-    for (sep, head, tail) in [('-', "dash-head", "dash-tail"),
-                              ('/', "slash-head", "slash-tail"),
-                              ('.', "dot-head", "dot-tail")] {
+    for (sep, head, tail) in [
+        ('-', "dash-head", "dash-tail"),
+        ('/', "slash-head", "slash-tail"),
+        ('.', "dot-head", "dot-tail"),
+    ] {
         let p: Vec<&str> = t.split(sep).collect();
-        if p.len() == 3 && p.iter().all(|g| !g.is_empty() && g.len() <= 4 && g.bytes().all(|b| b.is_ascii_digit())) {
+        if p.len() == 3
+            && p.iter()
+                .all(|g| !g.is_empty() && g.len() <= 4 && g.bytes().all(|b| b.is_ascii_digit()))
+        {
             return Some(if p[0].len() == 4 { head } else { tail });
         }
     }
@@ -352,8 +400,12 @@ fn daymonth_force(s: &str) -> Option<bool> {
         if p.len() == 3 && p[2].len() == 4 {
             let g0: u32 = p[0].parse().ok()?;
             let g1: u32 = p[1].parse().ok()?;
-            if g0 > 12 && g1 <= 12 { return Some(true); }   // dd/mm
-            if g1 > 12 && g0 <= 12 { return Some(false); }  // mm/dd
+            if g0 > 12 && g1 <= 12 {
+                return Some(true);
+            } // dd/mm
+            if g1 > 12 && g0 <= 12 {
+                return Some(false);
+            } // mm/dd
             return None;
         }
     }
@@ -440,13 +492,32 @@ mod tests {
     #[test]
     fn date_drift_flags_mixed_formats_and_contradiction() {
         // 3 shapes (dash-head, slash-tail, slash-head) + 13/01 vs 01/13 clash.
-        let df = df1("date", &["2026-01-13", "13/01/2026", "01/13/2026", "2026/01/13", "2026-01-14"]);
-        let (col, shapes, contradiction) = worst_date_drift(&df).expect("mixed formats should drift");
+        let df = df1(
+            "date",
+            &[
+                "2026-01-13",
+                "13/01/2026",
+                "01/13/2026",
+                "2026/01/13",
+                "2026-01-14",
+            ],
+        );
+        let (col, shapes, contradiction) =
+            worst_date_drift(&df).expect("mixed formats should drift");
         assert_eq!(col, "date");
-        assert!(shapes >= 2 && contradiction, "shapes={shapes} contradiction={contradiction}");
+        assert!(
+            shapes >= 2 && contradiction,
+            "shapes={shapes} contradiction={contradiction}"
+        );
         // A clean single-format ISO column does NOT drift.
-        let df = df1("date", &["2026-01-13", "2026-01-14", "2026-02-01", "2026-03-09"]);
-        assert!(worst_date_drift(&df).is_none(), "single-format dates are clean");
+        let df = df1(
+            "date",
+            &["2026-01-13", "2026-01-14", "2026-02-01", "2026-03-09"],
+        );
+        assert!(
+            worst_date_drift(&df).is_none(),
+            "single-format dates are clean"
+        );
     }
 
     #[test]
@@ -457,6 +528,9 @@ mod tests {
         // A pure dirty-numeric String column (100% numeric-ish, e.g. all
         // `€`-prefixed) — handled by the sniff + strict-parse, not drift.
         let df = df1("price", &["€10", "€20", "€30", "€40"]);
-        assert!(worst_type_drift(&df).is_none(), "pure numeric-ish is not drift");
+        assert!(
+            worst_type_drift(&df).is_none(),
+            "pure numeric-ish is not drift"
+        );
     }
 }

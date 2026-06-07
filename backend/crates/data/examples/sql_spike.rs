@@ -17,11 +17,13 @@ fn sample() -> (DataFrame, DataFrame) {
         "cust"   => [10i64, 10, 20, 30, 20],
         "amt"    => [100.0f64, 50.0, 200.0, 75.0, 25.0],
         "status" => ["paid", "pending", "paid", "paid", "pending"],
-    ].unwrap();
+    ]
+    .unwrap();
     let customers = df![
         "cust" => [10i64, 20, 30],
         "name" => ["Acme", "Globex", "Initech"],
-    ].unwrap();
+    ]
+    .unwrap();
     (orders, customers)
 }
 
@@ -74,10 +76,39 @@ fn main() {
             ctx.execute(sql).and_then(|lf| lf.collect())
         }));
         match result {
-            Ok(Ok(df)) => { pass += 1; println!("  PASS  {:<28} -> {} rows x {} cols", name, df.height(), df.width()); }
-            Ok(Err(e)) => { fail += 1; let m = e.to_string(); println!("  FAIL  {:<28} -> {}", name, m.lines().next().unwrap_or("").chars().take(90).collect::<String>()); }
-            Err(_)     => { fail += 1; println!("  PANIC {:<28} -> (panicked)", name); }
+            Ok(Ok(df)) => {
+                pass += 1;
+                println!(
+                    "  PASS  {:<28} -> {} rows x {} cols",
+                    name,
+                    df.height(),
+                    df.width()
+                );
+            }
+            Ok(Err(e)) => {
+                fail += 1;
+                let m = e.to_string();
+                println!(
+                    "  FAIL  {:<28} -> {}",
+                    name,
+                    m.lines()
+                        .next()
+                        .unwrap_or("")
+                        .chars()
+                        .take(90)
+                        .collect::<String>()
+                );
+            }
+            Err(_) => {
+                fail += 1;
+                println!("  PANIC {:<28} -> (panicked)", name);
+            }
         }
     }
-    println!("\n=== {} pass / {} fail of {} ===", pass, fail, probes.len());
+    println!(
+        "\n=== {} pass / {} fail of {} ===",
+        pass,
+        fail,
+        probes.len()
+    );
 }

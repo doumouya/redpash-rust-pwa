@@ -33,7 +33,9 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     // 2. Combined group keys = row groups + column groups. The matrix
     //    layout is a frontend concern; from Polars' perspective it's
     //    just one big group_by over both dimensions.
-    let combined: Vec<String> = spec.group_by.iter()
+    let combined: Vec<String> = spec
+        .group_by
+        .iter()
         .chain(spec.group_by_cols.iter())
         .cloned()
         .collect();
@@ -43,8 +45,8 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     let mut effective_aggs = spec.aggregations.clone();
     if !combined.is_empty() && effective_aggs.is_empty() {
         effective_aggs.push(Aggregation {
-            col:   "*".into(),
-            fn_:   AggFn::Count,
+            col: "*".into(),
+            fn_: AggFn::Count,
             alias: Some("count".into()),
         });
     }
@@ -55,7 +57,7 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     let lf2 = if combined.is_empty() {
         if agg_exprs.is_empty() {
             let n = df.height() as i64;
-            return df!{"rows" => &[n]}.map_err(DataError::from);
+            return df! {"rows" => &[n]}.map_err(DataError::from);
         }
         lf.select(agg_exprs)
     } else {
@@ -80,11 +82,13 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
         // its requested direction. Then append remaining group-by
         // columns as ascending tie-breakers so subtotals stay
         // hierarchically grouped even with custom sorts.
-        let mut by:         Vec<String> = Vec::new();
-        let mut descending: Vec<bool>   = Vec::new();
+        let mut by: Vec<String> = Vec::new();
+        let mut descending: Vec<bool> = Vec::new();
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for s in &spec.sort {
-            if s.col.is_empty() || !seen.insert(s.col.clone()) { continue; }
+            if s.col.is_empty() || !seen.insert(s.col.clone()) {
+                continue;
+            }
             by.push(s.col.clone());
             descending.push(s.dir.eq_ignore_ascii_case("desc"));
         }
@@ -117,33 +121,35 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     Ok(df)
 }
 
-fn apply_windows(
-    df:      DataFrame,
-    windows: &[shared::report::WindowSpec],
-) -> Result<DataFrame> {
+fn apply_windows(df: DataFrame, windows: &[shared::report::WindowSpec]) -> Result<DataFrame> {
     let mut lf = df.lazy();
     for w in windows {
-        if w.alias.is_empty() || w.col.is_empty() { continue; }
-        let base  = col(w.col.as_str());
+        if w.alias.is_empty() || w.col.is_empty() {
+            continue;
+        }
+        let base = col(w.col.as_str());
         let parts: Vec<Expr> = w.partition_by.iter().map(|c| col(c.as_str())).collect();
 
         let derived = match w.fn_.as_str() {
             // ── Aggregate windows (Phase B) ─────────────────────
             "sum" | "mean" | "count" | "min" | "max" => {
                 let agg = match w.fn_.as_str() {
-                    "sum"   => base.clone().sum(),
-                    "mean"  => base.clone().mean(),
+                    "sum" => base.clone().sum(),
+                    "mean" => base.clone().mean(),
                     "count" => base.clone().count(),
-                    "min"   => base.clone().min(),
-                    "max"   => base.clone().max(),
+                    "min" => base.clone().min(),
+                    "max" => base.clone().max(),
                     _ => unreachable!(),
                 };
-                let windowed = if parts.is_empty() { agg } else { agg.over(parts) };
+                let windowed = if parts.is_empty() {
+                    agg
+                } else {
+                    agg.over(parts)
+                };
                 if w.as_percent {
                     // x / window * 100 — explicit float cast so
                     // integer division doesn't silently produce 0s.
-                    (base / windowed.cast(DataType::Float64) * lit(100.0))
-                        .alias(w.alias.as_str())
+                    (base / windowed.cast(DataType::Float64) * lit(100.0)).alias(w.alias.as_str())
                 } else {
                     windowed.alias(w.alias.as_str())
                 }
@@ -154,17 +160,19 @@ fn apply_windows(
             // computing the expression so the partition's natural
             // order matches the user's intent.
             "lag" | "lead" | "first_value" | "last_value" => {
-                let Some(ob) = w.order_by.as_deref().filter(|s| !s.is_empty()) else { continue };
+                let Some(ob) = w.order_by.as_deref().filter(|s| !s.is_empty()) else {
+                    continue;
+                };
                 lf = lf.sort_by_exprs(
                     vec![col(ob)],
                     SortMultipleOptions::default().with_order_descending_multi(vec![false]),
                 );
                 let offset = w.offset.max(1) as i64;
                 let inner = match w.fn_.as_str() {
-                    "lag"         => base.clone().shift(lit(offset)),
-                    "lead"        => base.clone().shift(lit(-offset)),
+                    "lag" => base.clone().shift(lit(offset)),
+                    "lead" => base.clone().shift(lit(-offset)),
                     "first_value" => base.clone().first(),
-                    "last_value"  => base.clone().last(),
+                    "last_value" => base.clone().last(),
                     _ => unreachable!(),
                 };
                 if parts.is_empty() {
@@ -181,13 +189,12 @@ fn apply_windows(
 }
 
 fn apply_top_n(
-    df:           DataFrame,
-    top:          &shared::report::TopNFilter,
+    df: DataFrame,
+    top: &shared::report::TopNFilter,
     fallback_part: &[String],
 ) -> Result<DataFrame> {
     let descending = top.direction.eq_ignore_ascii_case("desc");
-    let sort_opts  = SortMultipleOptions::default()
-        .with_order_descending_multi(vec![descending]);
+    let sort_opts = SortMultipleOptions::default().with_order_descending_multi(vec![descending]);
     // Default partition_by to the report's group_by[0..n-1] minus the
     // last level — i.e. "top N of the deepest dimension within each
     // outer group". Empty means global top-N.
@@ -206,7 +213,8 @@ fn apply_top_n(
     }
 
     let part_exprs: Vec<Expr> = partition.iter().map(|c| col(c.as_str())).collect();
-    let lf = df.lazy()
+    let lf = df
+        .lazy()
         .sort_by_exprs(vec![col(top.order_by.as_str())], sort_opts)
         .group_by_stable(part_exprs)
         .head(Some(top.n as usize));
@@ -225,18 +233,19 @@ fn build_agg_exprs(aggs: &[Aggregation]) -> Result<Vec<Expr>> {
         };
         let alias = a.alias.clone().unwrap_or_else(|| default_alias(a));
         let expr = match a.fn_ {
-            AggFn::Count          => base.count(),
-            AggFn::CountDistinct  => base.n_unique(),
-            AggFn::Sum            => base.sum(),
-            AggFn::Mean           => base.mean(),
-            AggFn::Min            => base.min(),
-            AggFn::Max            => base.max(),
-            AggFn::First          => base.first(),
-            AggFn::Last           => base.last(),
-            AggFn::Median         => base.median(),
-            AggFn::Q1             => base.quantile(lit(0.25), QuantileInterpolOptions::Linear),
-            AggFn::Q3             => base.quantile(lit(0.75), QuantileInterpolOptions::Linear),
-        }.alias(alias.as_str());
+            AggFn::Count => base.count(),
+            AggFn::CountDistinct => base.n_unique(),
+            AggFn::Sum => base.sum(),
+            AggFn::Mean => base.mean(),
+            AggFn::Min => base.min(),
+            AggFn::Max => base.max(),
+            AggFn::First => base.first(),
+            AggFn::Last => base.last(),
+            AggFn::Median => base.median(),
+            AggFn::Q1 => base.quantile(lit(0.25), QuantileInterpolOptions::Linear),
+            AggFn::Q3 => base.quantile(lit(0.75), QuantileInterpolOptions::Linear),
+        }
+        .alias(alias.as_str());
         out.push(expr);
     }
     Ok(out)
@@ -244,18 +253,21 @@ fn build_agg_exprs(aggs: &[Aggregation]) -> Result<Vec<Expr>> {
 
 fn default_alias(a: &Aggregation) -> String {
     let fn_label = match a.fn_ {
-        AggFn::Count          => "count",
-        AggFn::CountDistinct  => "distinct",
-        AggFn::Sum            => "sum",
-        AggFn::Mean           => "mean",
-        AggFn::Min            => "min",
-        AggFn::Max            => "max",
-        AggFn::First          => "first",
-        AggFn::Last           => "last",
-        AggFn::Median         => "median",
-        AggFn::Q1             => "q1",
-        AggFn::Q3             => "q3",
+        AggFn::Count => "count",
+        AggFn::CountDistinct => "distinct",
+        AggFn::Sum => "sum",
+        AggFn::Mean => "mean",
+        AggFn::Min => "min",
+        AggFn::Max => "max",
+        AggFn::First => "first",
+        AggFn::Last => "last",
+        AggFn::Median => "median",
+        AggFn::Q1 => "q1",
+        AggFn::Q3 => "q3",
     };
-    if a.col == "*" { fn_label.to_string() }
-    else            { format!("{}_{fn_label}", a.col) }
+    if a.col == "*" {
+        fn_label.to_string()
+    } else {
+        format!("{}_{fn_label}", a.col)
+    }
 }

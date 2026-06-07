@@ -9,18 +9,26 @@ use polars::prelude::*;
 use super::util::{arr_strings, build_filter_predicate};
 
 pub(super) fn drop_rows(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
-    let indices: Vec<u32> = params.get("indices")
+    let indices: Vec<u32> = params
+        .get("indices")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u32))
+                .collect()
+        })
         .unwrap_or_default();
     if indices.is_empty() {
         return Err(DataError::InvalidSpec(
-            "drop_rows needs params.indices: [int]".into()));
+            "drop_rows needs params.indices: [int]".into(),
+        ));
     }
     let n = df.height();
     let mut keep = vec![true; n];
     for i in indices {
-        if let Some(slot) = keep.get_mut(i as usize) { *slot = false; }
+        if let Some(slot) = keep.get_mut(i as usize) {
+            *slot = false;
+        }
     }
     let mask: BooleanChunked = keep.into_iter().collect();
     df.filter(&mask).map_err(DataError::from)
@@ -39,35 +47,57 @@ pub(super) fn drop_rows(df: DataFrame, params: &serde_json::Value) -> Result<Dat
 /// `lit().cast(...)` so the predicate works across int / float
 /// columns without per-row dtype branching.
 pub(super) fn filter_rows(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
-    let combinator = params.get("combinator").and_then(|v| v.as_str()).unwrap_or("and");
+    let combinator = params
+        .get("combinator")
+        .and_then(|v| v.as_str())
+        .unwrap_or("and");
     let combine_or = matches!(combinator, "or" | "OR" | "Or");
-    let preds = params.get("predicates").and_then(|v| v.as_array())
-        .ok_or_else(|| DataError::InvalidSpec(
-            "filter_rows needs params.predicates: [{column, op, value?}]".into()))?;
+    let preds = params
+        .get("predicates")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            DataError::InvalidSpec(
+                "filter_rows needs params.predicates: [{column, op, value?}]".into(),
+            )
+        })?;
     if preds.is_empty() {
         return Err(DataError::InvalidSpec(
-            "filter_rows needs at least one predicate".into()));
+            "filter_rows needs at least one predicate".into(),
+        ));
     }
 
     let mut combined: Option<Expr> = None;
     for p in preds {
-        let column = p.get("column").and_then(|v| v.as_str())
-            .ok_or_else(|| DataError::InvalidSpec(
-                "filter_rows predicate missing `column`".into()))?;
-        let op = p.get("op").and_then(|v| v.as_str())
-            .ok_or_else(|| DataError::InvalidSpec(
-                "filter_rows predicate missing `op`".into()))?;
-        let case_sensitive = p.get("case_sensitive").and_then(|v| v.as_bool()).unwrap_or(true);
+        let column = p.get("column").and_then(|v| v.as_str()).ok_or_else(|| {
+            DataError::InvalidSpec("filter_rows predicate missing `column`".into())
+        })?;
+        let op = p
+            .get("op")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| DataError::InvalidSpec("filter_rows predicate missing `op`".into()))?;
+        let case_sensitive = p
+            .get("case_sensitive")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let value = p.get("value");
 
         let expr = build_filter_predicate(column, op, value, case_sensitive)?;
         combined = Some(match combined.take() {
-            None       => expr,
-            Some(prev) => if combine_or { prev.or(expr) } else { prev.and(expr) },
+            None => expr,
+            Some(prev) => {
+                if combine_or {
+                    prev.or(expr)
+                } else {
+                    prev.and(expr)
+                }
+            }
         });
     }
     let final_expr = combined.expect("predicates non-empty by check above");
-    df.lazy().filter(final_expr).collect().map_err(DataError::from)
+    df.lazy()
+        .filter(final_expr)
+        .collect()
+        .map_err(DataError::from)
 }
 
 pub(super) fn drop_nulls(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {

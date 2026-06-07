@@ -10,17 +10,22 @@ use crate::{DataError, Result};
 use polars::prelude::*;
 
 pub(super) fn arr_strings(params: &serde_json::Value, key: &str) -> Vec<String> {
-    params.get(key)
+    params
+        .get(key)
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 pub(super) fn json_to_string(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Null      => String::new(),
-        other                        => other.to_string(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
     }
 }
 
@@ -52,37 +57,39 @@ pub(super) fn build_filter_predicate(
 ) -> Result<Expr> {
     let c = col(column);
     let need_value = || -> Result<&serde_json::Value> {
-        value.ok_or_else(|| DataError::InvalidSpec(
-            format!("filter_rows op `{op}` needs a value")))
+        value.ok_or_else(|| DataError::InvalidSpec(format!("filter_rows op `{op}` needs a value")))
     };
     let val_string = || -> Result<String> { Ok(json_to_string(need_value()?)) };
-    let val_f64    = || -> Result<f64> {
+    let val_f64 = || -> Result<f64> {
         let v = need_value()?;
         v.as_f64()
             .or_else(|| v.as_i64().map(|n| n as f64))
             .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
-            .ok_or_else(|| DataError::InvalidSpec(
-                format!("filter_rows op `{op}` needs a numeric value")))
+            .ok_or_else(|| {
+                DataError::InvalidSpec(format!("filter_rows op `{op}` needs a numeric value"))
+            })
     };
-    let val_array  = || -> Result<Vec<String>> {
+    let val_array = || -> Result<Vec<String>> {
         let v = need_value()?;
         v.as_array()
             .map(|a| a.iter().map(json_to_string).collect())
-            .ok_or_else(|| DataError::InvalidSpec(
-                format!("filter_rows op `{op}` needs an array value")))
+            .ok_or_else(|| {
+                DataError::InvalidSpec(format!("filter_rows op `{op}` needs an array value"))
+            })
     };
 
     Ok(match op {
-        "eq"  => c.cast(DataType::String).eq(lit(val_string()?)),
+        "eq" => c.cast(DataType::String).eq(lit(val_string()?)),
         "neq" => c.cast(DataType::String).neq(lit(val_string()?)),
 
         "in" => {
             let needles = val_array()?;
             if needles.is_empty() {
-                lit(false)   // empty set → nothing matches
+                lit(false) // empty set → nothing matches
             } else {
                 let s = c.cast(DataType::String);
-                needles.into_iter()
+                needles
+                    .into_iter()
                     .map(|v| s.clone().eq(lit(v)))
                     .reduce(|a, b| a.or(b))
                     .unwrap()
@@ -91,10 +98,11 @@ pub(super) fn build_filter_predicate(
         "not_in" => {
             let needles = val_array()?;
             if needles.is_empty() {
-                lit(true)    // empty exclusion → everything matches
+                lit(true) // empty exclusion → everything matches
             } else {
                 let s = c.cast(DataType::String);
-                needles.into_iter()
+                needles
+                    .into_iter()
                     .map(|v| s.clone().neq(lit(v)))
                     .reduce(|a, b| a.and(b))
                     .unwrap()
@@ -109,8 +117,11 @@ pub(super) fn build_filter_predicate(
             if case_sensitive {
                 c.cast(DataType::String).str().contains_literal(lit(pat))
             } else {
-                c.cast(DataType::String).str().to_lowercase()
-                    .str().contains_literal(lit(pat.to_lowercase()))
+                c.cast(DataType::String)
+                    .str()
+                    .to_lowercase()
+                    .str()
+                    .contains_literal(lit(pat.to_lowercase()))
             }
         }
         // Symmetric inverse of `contains` — same case-sensitivity
@@ -122,35 +133,46 @@ pub(super) fn build_filter_predicate(
             let inner = if case_sensitive {
                 c.cast(DataType::String).str().contains_literal(lit(pat))
             } else {
-                c.cast(DataType::String).str().to_lowercase()
-                    .str().contains_literal(lit(pat.to_lowercase()))
+                c.cast(DataType::String)
+                    .str()
+                    .to_lowercase()
+                    .str()
+                    .contains_literal(lit(pat.to_lowercase()))
             };
             inner.not()
         }
-        "starts_with" => c.cast(DataType::String).str().starts_with(lit(val_string()?)),
-        "ends_with"   => c.cast(DataType::String).str().ends_with(lit(val_string()?)),
+        "starts_with" => c
+            .cast(DataType::String)
+            .str()
+            .starts_with(lit(val_string()?)),
+        "ends_with" => c.cast(DataType::String).str().ends_with(lit(val_string()?)),
 
         // Numeric comparisons. Cast the value to Float64; Polars widens
         // the column side as needed.
-        "gt"  => c.gt (lit(val_f64()?)),
+        "gt" => c.gt(lit(val_f64()?)),
         "gte" => c.gt_eq(lit(val_f64()?)),
-        "lt"  => c.lt (lit(val_f64()?)),
+        "lt" => c.lt(lit(val_f64()?)),
         "lte" => c.lt_eq(lit(val_f64()?)),
 
         "between" => {
             // value must be a 2-element array [low, high], inclusive.
-            let arr = need_value()?.as_array().ok_or_else(|| DataError::InvalidSpec(
-                "filter_rows op `between` needs value: [low, high]".into()))?;
+            let arr = need_value()?.as_array().ok_or_else(|| {
+                DataError::InvalidSpec("filter_rows op `between` needs value: [low, high]".into())
+            })?;
             if arr.len() != 2 {
                 return Err(DataError::InvalidSpec(
-                    "filter_rows op `between` needs exactly two endpoints".into()));
+                    "filter_rows op `between` needs exactly two endpoints".into(),
+                ));
             }
             let parse = |v: &serde_json::Value| -> Result<f64> {
                 v.as_f64()
                     .or_else(|| v.as_i64().map(|n| n as f64))
                     .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
-                    .ok_or_else(|| DataError::InvalidSpec(
-                        "filter_rows op `between` endpoints must be numeric".into()))
+                    .ok_or_else(|| {
+                        DataError::InvalidSpec(
+                            "filter_rows op `between` endpoints must be numeric".into(),
+                        )
+                    })
             };
             let lo = parse(&arr[0])?;
             let hi = parse(&arr[1])?;
@@ -160,21 +182,31 @@ pub(super) fn build_filter_predicate(
         // Date ops — value side parsed by Polars lazily. Bogus date
         // strings cast to NULL and the comparison fails for every row,
         // which is the right behavior (loud failure beats silent keep).
-        "before" => c.cast(DataType::Date)
-                     .lt(lit(val_string()?).cast(DataType::Date)),
-        "after"  => c.cast(DataType::Date)
-                     .gt(lit(val_string()?).cast(DataType::Date)),
+        "before" => c
+            .cast(DataType::Date)
+            .lt(lit(val_string()?).cast(DataType::Date)),
+        "after" => c
+            .cast(DataType::Date)
+            .gt(lit(val_string()?).cast(DataType::Date)),
 
-        "is_null"  => c.is_null(),
+        "is_null" => c.is_null(),
         "not_null" => c.is_not_null(),
 
-        other => return Err(DataError::InvalidSpec(
-            format!("unsupported filter_rows op: {other}"))),
+        other => {
+            return Err(DataError::InvalidSpec(format!(
+                "unsupported filter_rows op: {other}"
+            )))
+        }
     })
 }
 
 pub(super) fn default_strptime() -> StrptimeOptions {
-    StrptimeOptions { format: None, strict: false, exact: false, cache: true }
+    StrptimeOptions {
+        format: None,
+        strict: false,
+        exact: false,
+        cache: true,
+    }
 }
 
 /// Try several common date layouts and take the first that parses.
@@ -192,40 +224,51 @@ pub(super) fn parse_date_flex(column: &str) -> Expr {
         // tried before any `%Y` format or dd/mm/yy dates parse to year 2.
         // `exact: true` makes a real 4-digit year fail the `%y` formats (it
         // leaves 2 unconsumed digits), so ordering 2-digit-first is safe.
-        "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",   // 2-digit, day-first (FR/Africa default)
-        "%m/%d/%y",                            // 2-digit, month-first (US)
+        "%d/%m/%y", "%d-%m-%y", "%d.%m.%y", // 2-digit, day-first (FR/Africa default)
+        "%m/%d/%y", // 2-digit, month-first (US)
         // 4-digit year, day-first then month-first
-        "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
-        "%m/%d/%Y", "%m-%d-%Y",
+        "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%m/%d/%Y", "%m-%d-%Y",
         // 4-digit year-first (ISO) + compact
-        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d",
-        "%Y%m%d",
+        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d",
     ];
-    let exprs: Vec<Expr> = FORMATS.iter()
-        .map(|f| col(column).str().to_date(StrptimeOptions {
-            format: Some((*f).into()),
-            strict: false, exact: true, cache: true,
-        }))
+    let exprs: Vec<Expr> = FORMATS
+        .iter()
+        .map(|f| {
+            col(column).str().to_date(StrptimeOptions {
+                format: Some((*f).into()),
+                strict: false,
+                exact: true,
+                cache: true,
+            })
+        })
         .collect();
     coalesce(&exprs)
 }
 
 pub(super) fn parse_datetime_flex(column: &str) -> Expr {
     const FORMATS: &[&str] = &[
-        "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
-        "%Y/%m/%d %H:%M:%S", "%d/%m/%Y %H:%M:%S",
-        "%Y-%m-%d %H:%M",    "%d/%m/%Y %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y/%m/%d %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M",
     ];
-    let exprs: Vec<Expr> = FORMATS.iter()
-        .map(|f| col(column).str().to_datetime(
-            None,
-            None,
-            StrptimeOptions {
-                format: Some((*f).into()),
-                strict: false, exact: true, cache: true,
-            },
-            lit("raise"),
-        ))
+    let exprs: Vec<Expr> = FORMATS
+        .iter()
+        .map(|f| {
+            col(column).str().to_datetime(
+                None,
+                None,
+                StrptimeOptions {
+                    format: Some((*f).into()),
+                    strict: false,
+                    exact: true,
+                    cache: true,
+                },
+                lit("raise"),
+            )
+        })
         .collect();
     coalesce(&exprs)
 }
@@ -245,9 +288,11 @@ pub(super) fn parse_datetime_flex(column: &str) -> Expr {
 /// is left as-is (US / standard). Returns `None` when there's no number.
 pub(super) fn normalize_numeric_cell(raw: &str) -> Option<f64> {
     // Keep sign / digits / separators / spaces; drop currency, letters, %.
-    let kept: String = raw.chars()
-        .filter(|c| c.is_ascii_digit()
-            || matches!(c, ',' | '.' | '-' | '+' | ' ' | '\u{00A0}' | '\u{202F}'))
+    let kept: String = raw
+        .chars()
+        .filter(|c| {
+            c.is_ascii_digit() || matches!(c, ',' | '.' | '-' | '+' | ' ' | '\u{00A0}' | '\u{202F}')
+        })
         .collect();
     let s = kept.replace([' ', '\u{00A0}', '\u{202F}'], ""); // spaces = thousands → drop
     if !s.chars().any(|c| c.is_ascii_digit()) {
@@ -258,12 +303,12 @@ pub(super) fn normalize_numeric_cell(raw: &str) -> Option<f64> {
         if s.rfind(',') > s.rfind('.') {
             s.replace('.', "").replace(',', ".") // 1.234,56 → 1234.56
         } else {
-            s.replace(',', "")                   // 1,234.56 → 1234.56
+            s.replace(',', "") // 1,234.56 → 1234.56
         }
     } else if has_comma {
-        s.replace(',', ".")                      // 2114,29 → 2114.29
+        s.replace(',', ".") // 2114,29 → 2114.29
     } else {
-        s                                        // 1234 / 12.5 / -3
+        s // 1234 / 12.5 / -3
     };
     normalized.parse::<f64>().ok()
 }
@@ -330,7 +375,7 @@ mod tests {
         assert_eq!(normalize_numeric_cell("1 234,56"), Some(1234.56)); // space thousands, comma dec
         assert_eq!(normalize_numeric_cell("1.234,56"), Some(1234.56)); // dot thousands, comma dec
         assert_eq!(normalize_numeric_cell("1,234.56"), Some(1234.56)); // comma thousands, dot dec
-        // No number → None (sentinels / blanks handled elsewhere).
+                                                                       // No number → None (sentinels / blanks handled elsewhere).
         assert_eq!(normalize_numeric_cell("inconnu"), None);
         assert_eq!(normalize_numeric_cell(""), None);
         assert_eq!(normalize_numeric_cell("ND"), None);
@@ -355,17 +400,32 @@ mod tests {
         use polars::prelude::*;
         // The regression: "02/01/23" parsed to year 0002 because greedy
         // %Y ran before %d/%m/%y. Day-first dd/mm/yy must win → 2023-01-02.
-        let df = df!["d" => ["02/01/23", "20/05/2020", "03/27/2023", "2021-02-16", "20211112"]].unwrap();
-        let out = df.lazy()
-            .select([super::parse_date_flex("d").dt().strftime("%Y-%m-%d").alias("d")])
-            .collect().unwrap();
-        let got: Vec<Option<&str>> = out.column("d").unwrap().str().unwrap().into_iter().collect();
-        assert_eq!(got, vec![
-            Some("2023-01-02"), // dd/mm/yy — NOT 0002-01-23
-            Some("2020-05-20"), // dd/mm/yyyy
-            Some("2023-03-27"), // mm/dd/yyyy (US; day 27 > 12 forces month-first)
-            Some("2021-02-16"), // ISO
-            Some("2021-11-12"), // compact yyyymmdd
-        ]);
+        let df =
+            df!["d" => ["02/01/23", "20/05/2020", "03/27/2023", "2021-02-16", "20211112"]].unwrap();
+        let out = df
+            .lazy()
+            .select([super::parse_date_flex("d")
+                .dt()
+                .strftime("%Y-%m-%d")
+                .alias("d")])
+            .collect()
+            .unwrap();
+        let got: Vec<Option<&str>> = out
+            .column("d")
+            .unwrap()
+            .str()
+            .unwrap()
+            .into_iter()
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                Some("2023-01-02"), // dd/mm/yy — NOT 0002-01-23
+                Some("2020-05-20"), // dd/mm/yyyy
+                Some("2023-03-27"), // mm/dd/yyyy (US; day 27 > 12 forces month-first)
+                Some("2021-02-16"), // ISO
+                Some("2021-11-12"), // compact yyyymmdd
+            ]
+        );
     }
 }

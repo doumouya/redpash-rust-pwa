@@ -110,9 +110,9 @@ pub fn xlsx_to_csv(bytes: &[u8]) -> Result<Vec<u8>> {
 fn cell_to_string(v: &calamine::Data) -> String {
     use calamine::Data;
     match v {
-        Data::Empty           => String::new(),
-        Data::String(s)       => s.clone(),
-        Data::Int(i)          => i.to_string(),
+        Data::Empty => String::new(),
+        Data::String(s) => s.clone(),
+        Data::Int(i) => i.to_string(),
         Data::Float(f) => {
             if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e15 {
                 (*f as i64).to_string()
@@ -120,11 +120,17 @@ fn cell_to_string(v: &calamine::Data) -> String {
                 f.to_string()
             }
         }
-        Data::Bool(b)         => if *b { "true".into() } else { "false".into() },
-        Data::DateTime(dt)    => dt.to_string(),
-        Data::DateTimeIso(s)  => s.clone(),
-        Data::DurationIso(s)  => s.clone(),
-        Data::Error(_)        => String::new(),
+        Data::Bool(b) => {
+            if *b {
+                "true".into()
+            } else {
+                "false".into()
+            }
+        }
+        Data::DateTime(dt) => dt.to_string(),
+        Data::DateTimeIso(s) => s.clone(),
+        Data::DurationIso(s) => s.clone(),
+        Data::Error(_) => String::new(),
     }
 }
 
@@ -142,8 +148,8 @@ pub fn from_csv_bytes(bytes: &[u8], tld_hint: Option<&str>) -> Result<(DataFrame
 /// surfaces alongside the parse stats — lets the table differentiate a
 /// genuinely 1-col CSV from a wrapped file the rescue couldn't unwrap.
 pub fn from_csv_bytes_with_diag(
-    bytes:     &[u8],
-    tld_hint:  Option<&str>,
+    bytes: &[u8],
+    tld_hint: Option<&str>,
 ) -> Result<(DataFrame, String, RescueDiag)> {
     let (text, encoding) = crate::encoding::decode(bytes, tld_hint);
     let (df, diag) = parse_text_with_diag(text)?;
@@ -167,7 +173,6 @@ pub fn from_csv_bytes_with_encoding(bytes: &[u8], encoding_label: &str) -> Resul
 pub fn parse_text(text: String) -> Result<DataFrame> {
     parse_text_with_diag(text).map(|(df, _)| df)
 }
-
 
 /// Paginate a DataFrame for the redtable.
 ///
@@ -203,7 +208,11 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
     let mut sort_keys: Vec<(String, bool)> = Vec::new();
     if let Some(json) = q.sorts.as_deref().filter(|s| !s.is_empty()) {
         #[derive(serde::Deserialize)]
-        struct SortKey { col: String, #[serde(default)] dir: String }
+        struct SortKey {
+            col: String,
+            #[serde(default)]
+            dir: String,
+        }
         if let Ok(items) = serde_json::from_str::<Vec<SortKey>>(json) {
             for it in items {
                 if !it.col.is_empty() && df.column(&it.col).is_ok() {
@@ -215,14 +224,18 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
     if sort_keys.is_empty() {
         if let Some(c) = q.sort.as_deref().filter(|s| !s.is_empty()) {
             if df.column(c).is_ok() {
-                let desc = q.dir.as_deref().map(|d| d.eq_ignore_ascii_case("desc")).unwrap_or(false);
+                let desc = q
+                    .dir
+                    .as_deref()
+                    .map(|d| d.eq_ignore_ascii_case("desc"))
+                    .unwrap_or(false);
                 sort_keys.push((c.to_string(), desc));
             }
         }
     }
     if !sort_keys.is_empty() {
-        let by:          Vec<String> = sort_keys.iter().map(|(c, _)| c.clone()).collect();
-        let descending:  Vec<bool>   = sort_keys.iter().map(|(_, d)| *d).collect();
+        let by: Vec<String> = sort_keys.iter().map(|(c, _)| c.clone()).collect();
+        let descending: Vec<bool> = sort_keys.iter().map(|(_, d)| *d).collect();
         let opts = SortMultipleOptions::default().with_order_descending_multi(descending);
         lf = lf.sort(by, opts);
     }
@@ -232,11 +245,11 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
 
     // 5. Slice for the page.
     let total = view.height() as u64;
-    let page  = q.page.unwrap_or(1).max(1);
+    let page = q.page.unwrap_or(1).max(1);
     // "All rows" comes through as a large sentinel from the frontend;
     // 500k is the ceiling we trust the browser to buffer + sort in a Web
     // Worker (lockstep with CLIENT_ENGINE_ROW_CAP, covers the 400k file; CAS_21B43BEC).
-    let size  = q.size.unwrap_or(25).clamp(1, 500_000);
+    let size = q.size.unwrap_or(25).clamp(1, 500_000);
     let offset = ((page - 1) as i64).saturating_mul(size as i64);
     let slice = view.slice(offset, size as usize);
 
@@ -248,8 +261,8 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
         row_indices.push(match v {
             AnyValue::UInt32(n) => n,
             AnyValue::UInt64(n) => n as u32,
-            AnyValue::Int64(n)  => n as u32,
-            AnyValue::Int32(n)  => n as u32,
+            AnyValue::Int64(n) => n as u32,
+            AnyValue::Int32(n) => n as u32,
             _ => 0,
         });
     }
@@ -258,10 +271,16 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
     //    helper col since the user can't name it) or drop the helper
     //    explicitly.
     let projected: DataFrame = if let Some(cols) = q.cols.as_deref().filter(|s| !s.is_empty()) {
-        let names: Vec<&str> = cols.split(',').map(|c| c.trim()).filter(|c| !c.is_empty()).collect();
+        let names: Vec<&str> = cols
+            .split(',')
+            .map(|c| c.trim())
+            .filter(|c| !c.is_empty())
+            .collect();
         slice.select(names).map_err(DataError::from)?
     } else {
-        let names: Vec<String> = slice.get_columns().iter()
+        let names: Vec<String> = slice
+            .get_columns()
+            .iter()
             .map(|c| c.name().to_string())
             .filter(|n| n != IDX_COL)
             .collect();
@@ -305,7 +324,8 @@ mod tests {
         let df = df!["city" => ["Paris", "PARIS", "Lyon", "paris"]].unwrap();
         let filter = serde_json::json!({
             "col": "city", "op": "contains", "value": "par"
-        }).to_string();
+        })
+        .to_string();
         let out = apply_filter(df, &filter).unwrap();
         assert_eq!(out.height(), 3, "all three 'paris' variants match");
     }
@@ -317,11 +337,17 @@ mod tests {
         let filter = serde_json::json!({
             "col": "city", "op": "contains", "value": "Par",
             "case_sensitive": true
-        }).to_string();
+        })
+        .to_string();
         let out = apply_filter(df, &filter).unwrap();
         assert_eq!(out.height(), 1, "only 'Paris' (capital P) matches");
-        let cities: Vec<Option<&str>> =
-            out.column("city").unwrap().str().unwrap().into_iter().collect();
+        let cities: Vec<Option<&str>> = out
+            .column("city")
+            .unwrap()
+            .str()
+            .unwrap()
+            .into_iter()
+            .collect();
         assert_eq!(cities, vec![Some("Paris")]);
     }
 
@@ -334,9 +360,14 @@ mod tests {
         let filter = serde_json::json!({
             "col": "name", "op": "eq", "value": "alice",
             "case_sensitive": false
-        }).to_string();
+        })
+        .to_string();
         let out = apply_filter(df, &filter).unwrap();
-        assert_eq!(out.height(), 2, "both Alice + ALICE match lowercased 'alice'");
+        assert_eq!(
+            out.height(),
+            2,
+            "both Alice + ALICE match lowercased 'alice'"
+        );
     }
 
     /// `case_sensitive: true` on the `in` set op — array membership
@@ -347,11 +378,17 @@ mod tests {
         let filter = serde_json::json!({
             "col": "country", "op": "in", "value": ["FR", "BE"],
             "case_sensitive": true
-        }).to_string();
+        })
+        .to_string();
         let out = apply_filter(df, &filter).unwrap();
         assert_eq!(out.height(), 2, "only uppercase FR + BE match");
-        let countries: Vec<Option<&str>> =
-            out.column("country").unwrap().str().unwrap().into_iter().collect();
+        let countries: Vec<Option<&str>> = out
+            .column("country")
+            .unwrap()
+            .str()
+            .unwrap()
+            .into_iter()
+            .collect();
         assert_eq!(countries, vec![Some("FR"), Some("BE")]);
     }
 }

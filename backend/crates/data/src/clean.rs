@@ -33,9 +33,7 @@ pub struct CleanSummary {
 impl CleanSummary {
     /// Did auto-clean actually change anything?
     pub fn is_noop(&self) -> bool {
-        self.cells_trimmed == 0
-            && self.junk_blanked == 0
-            && self.duplicate_rows_dropped == 0
+        self.cells_trimmed == 0 && self.junk_blanked == 0 && self.duplicate_rows_dropped == 0
     }
 }
 
@@ -208,9 +206,14 @@ mod tests {
         assert!(s.cells_trimmed >= 2, "'  Alice ' and '  N/A  ' were padded");
         assert!(s.junk_blanked >= 2, "'N/A' and '-' are junk");
 
-        let names: Vec<Option<&str>> =
-            out.column("name").unwrap().str().unwrap().into_iter().collect();
+        let names: Vec<Option<&str>> = out
+            .column("name")
+            .unwrap()
+            .str()
+            .unwrap()
+            .into_iter()
+            .collect();
         assert_eq!(names[0], Some("Alice")); // whitespace stripped
-        assert_eq!(names[2], None);          // "N/A" blanked to null
+        assert_eq!(names[2], None); // "N/A" blanked to null
     }
 }

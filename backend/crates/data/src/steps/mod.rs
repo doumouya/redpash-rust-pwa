@@ -50,33 +50,35 @@ mod util;
 
 pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<DataFrame> {
     match kind {
-        "drop_columns"   => columns::drop_columns(df, params),
+        "drop_columns" => columns::drop_columns(df, params),
         "filter_columns" => columns::filter_columns(df, params),
 
-        "drop_rows"   => rows::drop_rows(df, params),
+        "drop_rows" => rows::drop_rows(df, params),
         "filter_rows" => rows::filter_rows(df, params),
 
         "unwrap_csv" => structure::unwrap_csv(df, params),
 
         "drop_nulls" => rows::drop_nulls(df, params),
 
-        "set_cell"   => cells::set_cell(df, params),
+        "set_cell" => cells::set_cell(df, params),
         "fill_nulls" => cells::fill_nulls(df, params),
-        "cast"       => cells::cast(df, params),
+        "cast" => cells::cast(df, params),
 
-        "rename_column"      => columns::rename_column(df, params),
+        "rename_column" => columns::rename_column(df, params),
         "snake_case_columns" => columns::snake_case_columns(df, params),
-        "replace_in_names"   => columns::replace_in_names(df, params),
+        "replace_in_names" => columns::replace_in_names(df, params),
 
-        "change_case"  => cells::change_case(df, params),
+        "change_case" => cells::change_case(df, params),
         "replace_text" => cells::replace_text(df, params),
-        "fix_invalid"  => cells::fix_invalid(df, params),
+        "fix_invalid" => cells::fix_invalid(df, params),
 
         "join_columns" => structure::join_columns(df, params),
         "split_column" => structure::split_column(df, params),
         "format_dates" => structure::format_dates(df, params),
 
-        other => Err(DataError::InvalidSpec(format!("unknown step kind: {other}"))),
+        other => Err(DataError::InvalidSpec(format!(
+            "unknown step kind: {other}"
+        ))),
     }
 }
 
@@ -114,11 +116,14 @@ mod tests {
 
         let out = apply(df, "unwrap_csv", &serde_json::Value::Null).unwrap();
 
-        assert_eq!(out.width(), 4, "every row must unwrap to the 4 real columns");
+        assert_eq!(
+            out.width(),
+            4,
+            "every row must unwrap to the 4 real columns"
+        );
         assert_eq!(out.height(), 6);
 
-        let cols: Vec<&str> =
-            out.get_column_names().iter().map(|c| c.as_str()).collect();
+        let cols: Vec<&str> = out.get_column_names().iter().map(|c| c.as_str()).collect();
         assert_eq!(cols, ["id", "name", "city", "ok"]);
 
         let col = |name: &str| -> Vec<String> {
@@ -132,7 +137,13 @@ mod tests {
         };
         // The `;`, `|`, `\"`-escaped and `'`-quoted rows all split into
         // the right cells — not just the dominant comma/double-quote row.
-        assert_eq!(col("name"), ["Alice", "Bob", "Carol", "Dan", "Eve", "Frank"]);
-        assert_eq!(col("city"), ["Paris", "Lyon", "Nice", "Metz", "Lille", "Caen"]);
+        assert_eq!(
+            col("name"),
+            ["Alice", "Bob", "Carol", "Dan", "Eve", "Frank"]
+        );
+        assert_eq!(
+            col("city"),
+            ["Paris", "Lyon", "Nice", "Metz", "Lille", "Caen"]
+        );
     }
 }

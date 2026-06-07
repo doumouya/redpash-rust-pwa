@@ -27,9 +27,10 @@ fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let dates = take_flag(&mut args, "--dates");
     let ref_dir = take_opt(&mut args, "--ref");
-    let dir = args.first().cloned().expect(
-        "usage: clean_dir <raw_dir> [--dates] [--ref <clean_dir>]",
-    );
+    let dir = args
+        .first()
+        .cloned()
+        .expect("usage: clean_dir <raw_dir> [--dates] [--ref <clean_dir>]");
 
     // Index the reference clean files by their NNN prefix, if given.
     let ref_scores: HashMap<String, f32> = ref_dir
@@ -59,7 +60,10 @@ fn main() {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         let bytes = match fs::read(path) {
             Ok(b) => b,
-            Err(e) => { println!("{name:<34} read-err {e}"); continue; }
+            Err(e) => {
+                println!("{name:<34} read-err {e}");
+                continue;
+            }
         };
         let Some(raw_score) = score_bytes(&bytes) else {
             println!("{name:<34} (unscoreable / empty)");
@@ -68,7 +72,7 @@ fn main() {
 
         // ── The standard cleaning recipe ───────────────────────────
         let Some((clean_score, sub)) = clean_and_score(&bytes, dates) else {
-            println!("{name:<34} {raw_score:>6.2}  clean-err", );
+            println!("{name:<34} {raw_score:>6.2}  clean-err",);
             continue;
         };
         let delta = clean_score - raw_score;
@@ -78,7 +82,9 @@ fn main() {
         let ref_str = match ref_score {
             Some(rs) => {
                 ref_compared += 1;
-                if clean_score + 0.5 >= rs { met_or_beat_ref += 1; }
+                if clean_score + 0.5 >= rs {
+                    met_or_beat_ref += 1;
+                }
                 format!("{rs:>6.2}")
             }
             None => format!("{:>6}", "-"),
@@ -124,21 +130,33 @@ fn clean_and_score(bytes: &[u8], dates: bool) -> Option<(f32, (f32, f32, f32, f3
     //    date/bool widen this filter as their coercion is hardened.
     let _ = dates; // CLI compat; coercion is now unconditional
     let cols = data::dtype::summarize(&df).ok()?;
-    let drift: Vec<(String, String)> = cols.iter()
-        .filter(|c| c.dtype == "string" && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool"))
+    let drift: Vec<(String, String)> = cols
+        .iter()
+        .filter(|c| {
+            c.dtype == "string"
+                && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool")
+        })
         .map(|c| (c.name.clone(), c.semantic_dtype.clone()))
         .collect();
     for (name, sem) in drift {
-        if let Ok(next) = data::steps::apply(
-            df.clone(), "cast", &json!({ "column": name, "dtype": sem }),
-        ) {
+        if let Ok(next) =
+            data::steps::apply(df.clone(), "cast", &json!({ "column": name, "dtype": sem }))
+        {
             df = next;
         }
     }
 
     let cols = data::dtype::summarize(&df).ok()?;
     let r = data::stats::cleanness_report(&df, &cols, &[])?;
-    Some((r.score, (r.completeness, r.type_consistency, r.value_hygiene, r.row_uniqueness)))
+    Some((
+        r.score,
+        (
+            r.completeness,
+            r.type_consistency,
+            r.value_hygiene,
+            r.row_uniqueness,
+        ),
+    ))
 }
 
 fn score_bytes(bytes: &[u8]) -> Option<f32> {
@@ -150,13 +168,21 @@ fn score_bytes(bytes: &[u8]) -> Option<f32> {
 /// Score every CSV in a directory, keyed by its `NNN` index.
 fn score_dir_by_index(dir: &str) -> HashMap<String, f32> {
     let mut out = HashMap::new();
-    let Ok(rd) = fs::read_dir(dir) else { return out; };
+    let Ok(rd) = fs::read_dir(dir) else {
+        return out;
+    };
     for entry in rd.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|x| x.to_str()) != Some("csv") { continue; }
+        if path.extension().and_then(|x| x.to_str()) != Some("csv") {
+            continue;
+        }
         let name = path.file_name().unwrap().to_string_lossy().to_string();
-        let (Some(ix), Ok(bytes)) = (file_index(&name), fs::read(&path)) else { continue; };
-        if let Some(s) = score_bytes(&bytes) { out.insert(ix, s); }
+        let (Some(ix), Ok(bytes)) = (file_index(&name), fs::read(&path)) else {
+            continue;
+        };
+        if let Some(s) = score_bytes(&bytes) {
+            out.insert(ix, s);
+        }
     }
     out
 }
@@ -167,26 +193,49 @@ fn file_index(name: &str) -> Option<String> {
     let mut parts = stem.split('_');
     parts.next()?; // "raw" / "clean"
     let n = parts.next()?;
-    if n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty() { Some(n.to_string()) } else { None }
+    if n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty() {
+        Some(n.to_string())
+    } else {
+        None
+    }
 }
 
 fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
-    if let Some(i) = args.iter().position(|a| a == flag) { args.remove(i); true } else { false }
+    if let Some(i) = args.iter().position(|a| a == flag) {
+        args.remove(i);
+        true
+    } else {
+        false
+    }
 }
 
 fn take_opt(args: &mut Vec<String>, flag: &str) -> Option<String> {
     let i = args.iter().position(|a| a == flag)?;
     args.remove(i);
-    if i < args.len() { Some(args.remove(i)) } else { None }
+    if i < args.len() {
+        Some(args.remove(i))
+    } else {
+        None
+    }
 }
 
 fn median(v: &mut [f32]) -> f32 {
-    if v.is_empty() { return 0.0; }
+    if v.is_empty() {
+        return 0.0;
+    }
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n = v.len();
-    if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 }
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
 }
 
 fn mean(v: &[f32]) -> f32 {
-    if v.is_empty() { 0.0 } else { v.iter().sum::<f32>() / v.len() as f32 }
+    if v.is_empty() {
+        0.0
+    } else {
+        v.iter().sum::<f32>() / v.len() as f32
+    }
 }

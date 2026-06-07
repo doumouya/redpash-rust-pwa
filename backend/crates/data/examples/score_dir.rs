@@ -29,7 +29,10 @@ fn main() {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         let bytes = match fs::read(&path) {
             Ok(b) => b,
-            Err(e) => { println!("{name}\tread-err\t{e}"); continue; }
+            Err(e) => {
+                println!("{name}\tread-err\t{e}");
+                continue;
+            }
         };
         match data::parse::from_csv_bytes(&bytes, None) {
             Ok((df, _enc)) => match data::dtype::summarize(&df) {
@@ -41,7 +44,12 @@ fn main() {
     }
 }
 
-fn print_report(name: &str, df: &polars::prelude::DataFrame, cols: &[shared::file::ColumnMeta], verbose: bool) {
+fn print_report(
+    name: &str,
+    df: &polars::prelude::DataFrame,
+    cols: &[shared::file::ColumnMeta],
+    verbose: bool,
+) {
     // Eval harness intentionally scores against the canonical
     // SENTINELS set only — extras (learned + global) would make the
     // reference scores user / DB-dependent. Always &[].
@@ -51,18 +59,33 @@ fn print_report(name: &str, df: &polars::prelude::DataFrame, cols: &[shared::fil
     };
 
     // Collect drifting columns (storage != semantic, where the diff is meaningful).
-    let drift_cols: Vec<&shared::file::ColumnMeta> = cols.iter()
-        .filter(|c| c.dtype == "string"
-            && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool"))
+    let drift_cols: Vec<&shared::file::ColumnMeta> = cols
+        .iter()
+        .filter(|c| {
+            c.dtype == "string"
+                && matches!(c.semantic_dtype.as_str(), "int" | "float" | "date" | "bool")
+        })
         .collect();
 
     // Flags surface the high-level diagnostic categories at a glance.
     let mut flags: Vec<String> = Vec::new();
-    if !drift_cols.is_empty() { flags.push(format!("drift={}", drift_cols.len())); }
-    if r.shape_integrity    < 0.999 { flags.push(format!("shape={:.2}",    r.shape_integrity)); }
-    if r.encoding_integrity < 0.999 { flags.push(format!("mojibake={:.2}", r.encoding_integrity)); }
-    if r.header_integrity   < 0.999 { flags.push(format!("header={:.2}",   r.header_integrity)); }
-    let flags_str = if flags.is_empty() { "-".into() } else { flags.join(",") };
+    if !drift_cols.is_empty() {
+        flags.push(format!("drift={}", drift_cols.len()));
+    }
+    if r.shape_integrity < 0.999 {
+        flags.push(format!("shape={:.2}", r.shape_integrity));
+    }
+    if r.encoding_integrity < 0.999 {
+        flags.push(format!("mojibake={:.2}", r.encoding_integrity));
+    }
+    if r.header_integrity < 0.999 {
+        flags.push(format!("header={:.2}", r.header_integrity));
+    }
+    let flags_str = if flags.is_empty() {
+        "-".into()
+    } else {
+        flags.join(",")
+    };
 
     println!(
         "{:6.2}  compl={:5.1} type={:5.1} hyg={:5.1} uniq={:5.1}  struct={:.2}  {:>3}c × {:>4}r  flags={}  {}",
@@ -76,7 +99,10 @@ fn print_report(name: &str, df: &polars::prelude::DataFrame, cols: &[shared::fil
 
     if verbose && !drift_cols.is_empty() {
         for c in drift_cols {
-            println!("        ⤷ drift: {:24} storage={:<6} → semantic={}", c.name, c.dtype, c.semantic_dtype);
+            println!(
+                "        ⤷ drift: {:24} storage={:<6} → semantic={}",
+                c.name, c.dtype, c.semantic_dtype
+            );
         }
     }
 }

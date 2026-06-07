@@ -18,15 +18,51 @@ use std::collections::{HashMap, HashSet};
 /// can reuse it without redefining.
 pub const SENTINELS: &[&str] = &[
     // English + symbolic
-    "n/a", "na", "n.a.", "-", "--", "—", "–", "?", "??", "???",
-    "null", "(null)", "<null>", "none", "nan", "nil", ".", "..",
-    "tbd", "tba", "x", "unknown", "undefined", "missing", "(blank)", "blank",
+    "n/a",
+    "na",
+    "n.a.",
+    "-",
+    "--",
+    "—",
+    "–",
+    "?",
+    "??",
+    "???",
+    "null",
+    "(null)",
+    "<null>",
+    "none",
+    "nan",
+    "nil",
+    ".",
+    "..",
+    "tbd",
+    "tba",
+    "x",
+    "unknown",
+    "undefined",
+    "missing",
+    "(blank)",
+    "blank",
     // French — the founding (Fleury) locale: inconnu / non disponible /
     // sans objet / non communiqué. These were the biggest miss (a French
     // dataset's junk slipped straight through the English-only set).
-    "inconnu", "n/d", "nd", "n.d.", "non disponible", "s/o", "s.o.", "n.c.",
+    "inconnu",
+    "n/d",
+    "nd",
+    "n.d.",
+    "non disponible",
+    "s/o",
+    "s.o.",
+    "n.c.",
     // Excel error literals exported as text
-    "#n/a", "#name?", "#ref!", "#value!", "#div/0!", "#num!", "#null!",
+    "#n/a",
+    "#name?",
+    "#ref!",
+    "#value!",
+    "#div/0!",
+    "#num!",
+    "#null!",
 ];
 
 /// One sentinel value discovered across the frame, with per-column
@@ -36,11 +72,11 @@ pub const SENTINELS: &[&str] = &[
 /// like `"N/A"` / `"n/a"` / `" N/A "` together.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SentinelOccurrence {
-    pub value:     String,
+    pub value: String,
     pub canonical: String,
-    pub total:     u64,
+    pub total: u64,
     /// `(column_name, count)` pairs, sorted by count desc.
-    pub columns:   Vec<(String, u64)>,
+    pub columns: Vec<(String, u64)>,
 }
 
 /// Scan every string column for cells whose trimmed-lowercased form
@@ -60,41 +96,60 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
     // Union of the canonical sentinel list + the caller's extras. The
     // `HashSet<&str>` here borrows from `extras_lower`, which has to
     // outlive the scan loop — hence the explicit owned vec above it.
-    let extras_lower: Vec<String> = extras.iter()
+    let extras_lower: Vec<String> = extras
+        .iter()
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty())
         .collect();
     let mut canonical: HashSet<&str> = SENTINELS.iter().copied().collect();
-    for e in &extras_lower { canonical.insert(e.as_str()); }
+    for e in &extras_lower {
+        canonical.insert(e.as_str());
+    }
 
     // (value_as_found) → (canonical, total, per-column counts)
     let mut buckets: HashMap<String, (String, u64, HashMap<String, u64>)> = HashMap::new();
     for series in df.get_columns() {
-        if !matches!(series.dtype(), DataType::String) { continue; }
+        if !matches!(series.dtype(), DataType::String) {
+            continue;
+        }
         let cname = series.name().to_string();
         for i in 0..series.len() {
-            let av = match series.get(i) { Ok(v) => v, Err(_) => continue };
+            let av = match series.get(i) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
             let raw: String = match av {
-                AnyValue::String(s)      => s.to_string(),
+                AnyValue::String(s) => s.to_string(),
                 AnyValue::StringOwned(s) => s.to_string(),
-                _                        => continue,
+                _ => continue,
             };
             let trimmed = raw.trim();
-            if trimmed.is_empty() { continue; }
+            if trimmed.is_empty() {
+                continue;
+            }
             let canon = trimmed.to_ascii_lowercase();
-            if !canonical.contains(canon.as_str()) { continue; }
-            let entry = buckets.entry(raw.clone())
+            if !canonical.contains(canon.as_str()) {
+                continue;
+            }
+            let entry = buckets
+                .entry(raw.clone())
                 .or_insert_with(|| (canon, 0u64, HashMap::new()));
             entry.1 += 1;
             *entry.2.entry(cname.clone()).or_insert(0u64) += 1;
         }
     }
-    let mut out: Vec<SentinelOccurrence> = buckets.into_iter()
+    let mut out: Vec<SentinelOccurrence> = buckets
+        .into_iter()
         .map(|(value, (canonical, total, cols_map))| {
             // Stable per-column ordering: by count desc, then name asc.
             let mut cols: Vec<(String, u64)> = cols_map.into_iter().collect();
             cols.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-            SentinelOccurrence { value, canonical, total, columns: cols }
+            SentinelOccurrence {
+                value,
+                canonical,
+                total,
+                columns: cols,
+            }
         })
         .collect();
     out.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.value.cmp(&b.value)));
@@ -109,27 +164,27 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
 #[derive(Debug, Clone, Copy)]
 pub struct CleannessReport {
     /// Blended final score, 0..100. `value_quality * structural`.
-    pub score:              f32,
+    pub score: f32,
     // ── value-quality components, 0..100 each (weights in cleanness) ──
     /// `100 − mean(null_pct)`. Weight 35%.
-    pub completeness:       f32,
+    pub completeness: f32,
     /// Strict-parse pass rate against each column's `semantic_dtype`. Weight 25%.
-    pub type_consistency:   f32,
+    pub type_consistency: f32,
     /// Fraction of string cells with no whitespace pad / no sentinel value. Weight 25%.
-    pub value_hygiene:      f32,
+    pub value_hygiene: f32,
     /// `100 × distinct_rows / total_rows`. Weight 15%.
-    pub row_uniqueness:     f32,
+    pub row_uniqueness: f32,
     /// Pre-clamp weighted blend of the four above, 0..100.
-    pub value_quality:      f32,
+    pub value_quality: f32,
     // ── structural-tier sub-signals, 0..1 each (min taken as gate) ───
     /// `1/m` if the lone column is m-fields-per-cell under-parsed, else 1.0.
-    pub shape_integrity:    f32,
+    pub shape_integrity: f32,
     /// Fraction of string cells free of U+FFFD or `Ã©`-style mojibake.
     pub encoding_integrity: f32,
     /// 0.5 if the lone column's name is a `sep` / `#…` / `Key: value` artefact.
-    pub header_integrity:   f32,
+    pub header_integrity: f32,
     /// `min` of the three structural sub-signals — the gate.
-    pub structural:         f32,
+    pub structural: f32,
 }
 
 /// File-level cleanness score (0–100).
@@ -164,30 +219,37 @@ pub fn cleanness(df: &DataFrame, columns: &[ColumnMeta], extras: &[String]) -> O
 /// the caller's `prefs.learned_sentinels` and the `global_sentinels`
 /// view (≥2-user submissions). An empty slice reproduces the
 /// pre-learning baseline byte-for-byte.
-pub fn cleanness_report(df: &DataFrame, columns: &[ColumnMeta], extras: &[String]) -> Option<CleannessReport> {
+pub fn cleanness_report(
+    df: &DataFrame,
+    columns: &[ColumnMeta],
+    extras: &[String],
+) -> Option<CleannessReport> {
     if df.width() == 0 || df.height() == 0 || columns.is_empty() {
         return None;
     }
 
     // ── value quality — four components, each 0..100 ───────────────
-    let completeness     = completeness_score(columns);
+    let completeness = completeness_score(columns);
     let type_consistency = type_consistency_score(df, columns);
-    let value_hygiene    = value_hygiene_score(df, extras);
-    let row_uniqueness   = row_uniqueness_score(df);
+    let value_hygiene = value_hygiene_score(df, extras);
+    let row_uniqueness = row_uniqueness_score(df);
     let value_quality = 0.35 * completeness
-                      + 0.25 * type_consistency
-                      + 0.25 * value_hygiene
-                      + 0.15 * row_uniqueness;
+        + 0.25 * type_consistency
+        + 0.25 * value_hygiene
+        + 0.15 * row_uniqueness;
 
     // ── structural integrity — 0..1 gate, weakest link ────────────
-    let shape    = shape_integrity(df);
+    let shape = shape_integrity(df);
     let encoding = encoding_integrity(df);
-    let header   = header_integrity(df);
+    let header = header_integrity(df);
     let structural = shape.min(encoding).min(header);
 
     Some(CleannessReport {
         score: (value_quality * structural).clamp(0.0, 100.0),
-        completeness, type_consistency, value_hygiene, row_uniqueness,
+        completeness,
+        type_consistency,
+        value_hygiene,
+        row_uniqueness,
         value_quality,
         shape_integrity: shape,
         encoding_integrity: encoding,
@@ -199,13 +261,16 @@ pub fn cleanness_report(df: &DataFrame, columns: &[ColumnMeta], extras: &[String
 /// **Completeness** — `100 − null_pct` per column, averaged. An
 /// all-null (`"empty"` dtype) column is pinned to 0.
 fn completeness_score(columns: &[ColumnMeta]) -> f32 {
-    let sum: f32 = columns.iter().map(|c| {
-        if c.dtype == "empty" {
-            0.0
-        } else {
-            (100.0 - c.null_pct.unwrap_or(0.0).clamp(0.0, 100.0)).clamp(0.0, 100.0)
-        }
-    }).sum();
+    let sum: f32 = columns
+        .iter()
+        .map(|c| {
+            if c.dtype == "empty" {
+                0.0
+            } else {
+                (100.0 - c.null_pct.unwrap_or(0.0).clamp(0.0, 100.0)).clamp(0.0, 100.0)
+            }
+        })
+        .sum();
     sum / columns.len() as f32
 }
 
@@ -220,11 +285,13 @@ fn completeness_score(columns: &[ColumnMeta]) -> f32 {
 /// with `€995,83` and `1 234,56 EUR` scores proportionally low. The
 /// non-null denominator keeps this orthogonal to `completeness_score`.
 fn type_consistency_score(df: &DataFrame, columns: &[ColumnMeta]) -> f32 {
-    if columns.is_empty() { return 100.0; }
+    if columns.is_empty() {
+        return 100.0;
+    }
     let mut sum = 0.0f32;
     for cm in columns {
         let storage = cm.dtype.as_str();
-        let intent  = cm.semantic_dtype.as_str();
+        let intent = cm.semantic_dtype.as_str();
         // Polars typed it OK, or it's genuinely a text column — nothing
         // for type-consistency to dock.
         if storage != "string" || intent == "string" || intent == "empty" {
@@ -233,22 +300,33 @@ fn type_consistency_score(df: &DataFrame, columns: &[ColumnMeta]) -> f32 {
         }
         // Storage / semantic disagree: count non-null non-empty cells
         // that natively parse as the intended type.
-        let Ok(c) = df.column(&cm.name) else { sum += 100.0; continue; };
+        let Ok(c) = df.column(&cm.name) else {
+            sum += 100.0;
+            continue;
+        };
         let (mut total, mut clean) = (0u64, 0u64);
         for i in 0..c.len() {
             let Some(raw) = cell_str(c, i) else { continue };
             let t = raw.trim();
-            if t.is_empty() { continue; }
+            if t.is_empty() {
+                continue;
+            }
             total += 1;
             let ok = match intent {
                 "float" | "int" => is_clean_numeric(t),
-                "date"          => is_clean_iso_date(t),
-                "bool"          => is_clean_bool(t),
-                _               => true,
+                "date" => is_clean_iso_date(t),
+                "bool" => is_clean_bool(t),
+                _ => true,
             };
-            if ok { clean += 1; }
+            if ok {
+                clean += 1;
+            }
         }
-        sum += if total == 0 { 100.0 } else { 100.0 * clean as f32 / total as f32 };
+        sum += if total == 0 {
+            100.0
+        } else {
+            100.0 * clean as f32 / total as f32
+        };
     }
     sum / columns.len() as f32
 }
@@ -265,9 +343,12 @@ fn is_clean_numeric(s: &str) -> bool {
 fn is_clean_iso_date(s: &str) -> bool {
     let parts: Vec<&str> = s.split('-').collect();
     parts.len() == 3
-        && parts[0].len() == 4 && parts[0].chars().all(|c| c.is_ascii_digit())
-        && (1..=2).contains(&parts[1].len()) && parts[1].chars().all(|c| c.is_ascii_digit())
-        && (1..=2).contains(&parts[2].len()) && parts[2].chars().all(|c| c.is_ascii_digit())
+        && parts[0].len() == 4
+        && parts[0].chars().all(|c| c.is_ascii_digit())
+        && (1..=2).contains(&parts[1].len())
+        && parts[1].chars().all(|c| c.is_ascii_digit())
+        && (1..=2).contains(&parts[2].len())
+        && parts[2].chars().all(|c| c.is_ascii_digit())
 }
 
 /// Strict boolean — exact `true` / `false` (case-insensitive). Any
@@ -289,38 +370,54 @@ fn is_clean_bool(s: &str) -> bool {
 fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
     // Build the per-call canonical vocabulary. `HashSet<&str>` borrows
     // from `extras_lower`, so the owned vec has to outlive the loop.
-    let extras_lower: Vec<String> = extras.iter()
+    let extras_lower: Vec<String> = extras
+        .iter()
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty())
         .collect();
     let mut sentinels: HashSet<&str> = SENTINELS.iter().copied().collect();
-    for e in &extras_lower { sentinels.insert(e.as_str()); }
+    for e in &extras_lower {
+        sentinels.insert(e.as_str());
+    }
 
     let (mut total, mut clean) = (0u64, 0u64);
     for c in df.get_columns() {
-        if !matches!(c.dtype(), DataType::String) { continue; }
+        if !matches!(c.dtype(), DataType::String) {
+            continue;
+        }
         for i in 0..c.len() {
             let Some(raw) = cell_str(c, i) else { continue };
             let trimmed = raw.trim();
-            if trimmed.is_empty() { continue; } // null-ish — not hygiene's job
+            if trimmed.is_empty() {
+                continue;
+            } // null-ish — not hygiene's job
             total += 1;
-            let padded     = raw.len() != trimmed.len();
+            let padded = raw.len() != trimmed.len();
             let is_sentinel = sentinels.contains(trimmed.to_ascii_lowercase().as_str());
-            if !padded && !is_sentinel { clean += 1; }
+            if !padded && !is_sentinel {
+                clean += 1;
+            }
         }
     }
-    if total == 0 { 100.0 } else { 100.0 * clean as f32 / total as f32 }
+    if total == 0 {
+        100.0
+    } else {
+        100.0 * clean as f32 / total as f32
+    }
 }
 
 /// **Row uniqueness** — `100 × distinct_rows / total_rows`. Exact
 /// full-row duplicates are the `drop_duplicates` step's target.
 fn row_uniqueness_score(df: &DataFrame) -> f32 {
     let rows = df.height();
-    if rows == 0 { return 100.0; }
+    if rows == 0 {
+        return 100.0;
+    }
     let cols = df.get_columns();
     let mut seen: HashSet<Vec<Option<String>>> = HashSet::with_capacity(rows);
     for i in 0..rows {
-        let key: Vec<Option<String>> = cols.iter()
+        let key: Vec<Option<String>> = cols
+            .iter()
             .map(|c| c.get(i).ok().and_then(av_to_owned))
             .collect();
         seen.insert(key);
@@ -342,7 +439,9 @@ fn shape_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
     }
-    let Some(c) = df.get_columns().first() else { return 1.0 };
+    let Some(c) = df.get_columns().first() else {
+        return 1.0;
+    };
     if !matches!(c.dtype(), DataType::String) {
         return 1.0;
     }
@@ -383,7 +482,9 @@ fn header_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
     }
-    let Some(c) = df.get_columns().first() else { return 1.0 };
+    let Some(c) = df.get_columns().first() else {
+        return 1.0;
+    };
     let name = c.name().trim();
     let lower = name.to_ascii_lowercase();
     let junk = name.is_empty()
@@ -391,7 +492,11 @@ fn header_integrity(df: &DataFrame) -> f32 {
         || lower.starts_with("sep=")
         || name.starts_with('#')
         || name.contains(": "); // "Domaine: clients" — a preamble line, not a header
-    if junk { 0.5 } else { 1.0 }
+    if junk {
+        0.5
+    } else {
+        1.0
+    }
 }
 
 // High-frequency French double-decode mojibake signatures — what you
@@ -401,9 +506,7 @@ fn header_integrity(df: &DataFrame) -> f32 {
 // are valid UTF-8 themselves, so a wrong-encoding decode produces text
 // that looks intact but is garbage. Listed roughly in frequency order
 // for French; `Ã©` alone catches >50% of real-world cases.
-const MOJIBAKE_SIGS: &[&str] = &[
-    "Ã©", "Ã¨", "Ãª", "Ã ", "Ã§", "Ã®", "Ã´", "Ã¢", "Ã¹", "Ã»",
-];
+const MOJIBAKE_SIGS: &[&str] = &["Ã©", "Ã¨", "Ãª", "Ã ", "Ã§", "Ã®", "Ã´", "Ã¢", "Ã¹", "Ã»"];
 
 /// **Encoding integrity** ∈ [0,1] — fraction of string cells with no
 /// encoding damage. Catches both flavours: **U+FFFD** replacement
@@ -414,24 +517,28 @@ const MOJIBAKE_SIGS: &[&str] = &[
 fn encoding_integrity(df: &DataFrame) -> f32 {
     let (mut total, mut damaged) = (0u64, 0u64);
     for c in df.get_columns() {
-        if !matches!(c.dtype(), DataType::String) { continue; }
+        if !matches!(c.dtype(), DataType::String) {
+            continue;
+        }
         for i in 0..c.len() {
             let Some(v) = cell_str(c, i) else { continue };
             total += 1;
-            if v.contains('\u{FFFD}')
-                || MOJIBAKE_SIGS.iter().any(|s| v.contains(s))
-            {
+            if v.contains('\u{FFFD}') || MOJIBAKE_SIGS.iter().any(|s| v.contains(s)) {
                 damaged += 1;
             }
         }
     }
-    if total == 0 { 1.0 } else { 1.0 - damaged as f32 / total as f32 }
+    if total == 0 {
+        1.0
+    } else {
+        1.0 - damaged as f32 / total as f32
+    }
 }
 
 /// One cell as an owned `String` — `None` for null / non-string cells.
 fn cell_str(c: &Series, i: usize) -> Option<String> {
     match c.get(i) {
-        Ok(AnyValue::String(s))      => Some(s.to_string()),
+        Ok(AnyValue::String(s)) => Some(s.to_string()),
         Ok(AnyValue::StringOwned(s)) => Some(s.to_string()),
         _ => None,
     }
@@ -446,20 +553,29 @@ fn cell_str(c: &Series, i: usize) -> Option<String> {
 /// gates this on `rows_before == rows_after`.
 pub fn count_cell_diffs(before: &DataFrame, after: &DataFrame) -> u64 {
     let n = before.height().min(after.height());
-    let after_names: HashSet<String> = after.get_columns().iter()
-        .map(|c| c.name().to_string()).collect();
-    let common: Vec<String> = before.get_columns().iter()
+    let after_names: HashSet<String> = after
+        .get_columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+    let common: Vec<String> = before
+        .get_columns()
+        .iter()
         .map(|c| c.name().to_string())
         .filter(|n| after_names.contains(n))
         .collect();
 
     let mut changed = 0u64;
     for cname in &common {
-        let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else { continue; };
+        let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else {
+            continue;
+        };
         for i in 0..n {
             let bs = bc.get(i).ok().and_then(av_to_owned);
             let as_ = ac.get(i).ok().and_then(av_to_owned);
-            if bs != as_ { changed += 1; }
+            if bs != as_ {
+                changed += 1;
+            }
         }
     }
     changed
@@ -467,10 +583,10 @@ pub fn count_cell_diffs(before: &DataFrame, after: &DataFrame) -> u64 {
 
 fn av_to_owned(v: AnyValue) -> Option<String> {
     match v {
-        AnyValue::Null            => None,
-        AnyValue::String(s)       => Some(s.to_string()),
-        AnyValue::StringOwned(s)  => Some(s.to_string()),
-        other                     => Some(other.to_string()),
+        AnyValue::Null => None,
+        AnyValue::String(s) => Some(s.to_string()),
+        AnyValue::StringOwned(s) => Some(s.to_string()),
+        other => Some(other.to_string()),
     }
 }
 
@@ -481,16 +597,16 @@ fn av_to_owned(v: AnyValue) -> Option<String> {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CellChange {
     pub column: String,
-    pub row:    usize,
+    pub row: usize,
     pub before: Option<String>,
-    pub after:  Option<String>,
+    pub after: Option<String>,
 }
 
 /// A header that changes name (old → new) without changing its values.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RenamePair {
     pub from: String,
-    pub to:   String,
+    pub to: String,
 }
 
 /// Structured before/after diff — the data behind the generic
@@ -501,19 +617,19 @@ pub struct RenamePair {
 /// sample of changed cells for the UI table.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FrameDiff {
-    pub rows_before:     u64,
-    pub rows_after:      u64,
-    pub cells_changed:   u64,
+    pub rows_before: u64,
+    pub rows_after: u64,
+    pub cells_changed: u64,
     /// Subset of `cells_changed` that go from a value to null — the
     /// "data loss" signal (e.g. casting unparseable cells). This is what
     /// the cast-only `cast_preview` surfaced; kept here so the generic
     /// preview carries the same warning for every tool.
-    pub cells_nulled:    u64,
-    pub columns_added:   Vec<String>,
+    pub cells_nulled: u64,
+    pub columns_added: Vec<String>,
     pub columns_removed: Vec<String>,
     pub columns_renamed: Vec<RenamePair>,
     pub columns_changed: Vec<String>,
-    pub sample:          Vec<CellChange>,
+    pub sample: Vec<CellChange>,
 }
 
 /// Diff `before` against `after` (the result of dry-running a step).
@@ -530,34 +646,61 @@ pub struct FrameDiff {
 /// / `rows_after` carry it and the cell sample is left empty. `sample_cap`
 /// bounds the sample globally; a per-column cap (~⅓ of it) keeps one wide
 /// column from crowding out the rest. O(rows × common-cols), pure scan.
-pub fn diff_frames(before: &DataFrame, after: &DataFrame, kind: &str, sample_cap: usize) -> FrameDiff {
+pub fn diff_frames(
+    before: &DataFrame,
+    after: &DataFrame,
+    kind: &str,
+    sample_cap: usize,
+) -> FrameDiff {
     let rows_before = before.height() as u64;
-    let rows_after  = after.height() as u64;
+    let rows_after = after.height() as u64;
 
-    let before_names: Vec<String> = before.get_columns().iter().map(|c| c.name().to_string()).collect();
-    let after_names:  Vec<String> = after.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let before_names: Vec<String> = before
+        .get_columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+    let after_names: Vec<String> = after
+        .get_columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
     let before_set: HashSet<&String> = before_names.iter().collect();
-    let after_set:  HashSet<&String> = after_names.iter().collect();
+    let after_set: HashSet<&String> = after_names.iter().collect();
 
-    let mut columns_added   = Vec::new();
+    let mut columns_added = Vec::new();
     let mut columns_removed = Vec::new();
     let mut columns_renamed = Vec::new();
 
     let positional_rename = before_names.len() == after_names.len()
-        && matches!(kind, "rename_column" | "snake_case_columns" | "replace_in_names");
+        && matches!(
+            kind,
+            "rename_column" | "snake_case_columns" | "replace_in_names"
+        );
     if positional_rename {
         for (b, a) in before_names.iter().zip(after_names.iter()) {
             if b != a {
-                columns_renamed.push(RenamePair { from: b.clone(), to: a.clone() });
+                columns_renamed.push(RenamePair {
+                    from: b.clone(),
+                    to: a.clone(),
+                });
             }
         }
     } else {
-        columns_removed = before_names.iter().filter(|n| !after_set.contains(*n)).cloned().collect();
-        columns_added   = after_names.iter().filter(|n| !before_set.contains(*n)).cloned().collect();
+        columns_removed = before_names
+            .iter()
+            .filter(|n| !after_set.contains(*n))
+            .cloned()
+            .collect();
+        columns_added = after_names
+            .iter()
+            .filter(|n| !before_set.contains(*n))
+            .cloned()
+            .collect();
     }
 
     let mut cells_changed = 0u64;
-    let mut cells_nulled  = 0u64;
+    let mut cells_nulled = 0u64;
     let mut columns_changed: Vec<String> = Vec::new();
     let mut sample: Vec<CellChange> = Vec::new();
     let per_col_cap = (sample_cap / 3).max(2);
@@ -565,30 +708,50 @@ pub fn diff_frames(before: &DataFrame, after: &DataFrame, kind: &str, sample_cap
     if rows_before == rows_after {
         let n = before.height();
         for cname in &before_names {
-            if !after_set.contains(cname) { continue; } // removed or renamed away
-            let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else { continue; };
+            if !after_set.contains(cname) {
+                continue;
+            } // removed or renamed away
+            let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else {
+                continue;
+            };
             let mut col_touched = false;
             let mut per_col = 0usize;
             for i in 0..n {
-                let bs  = bc.get(i).ok().and_then(av_to_owned);
+                let bs = bc.get(i).ok().and_then(av_to_owned);
                 let as_ = ac.get(i).ok().and_then(av_to_owned);
                 if bs != as_ {
                     cells_changed += 1;
-                    if bs.is_some() && as_.is_none() { cells_nulled += 1; }
+                    if bs.is_some() && as_.is_none() {
+                        cells_nulled += 1;
+                    }
                     col_touched = true;
                     if sample.len() < sample_cap && per_col < per_col_cap {
-                        sample.push(CellChange { column: cname.clone(), row: i, before: bs, after: as_ });
+                        sample.push(CellChange {
+                            column: cname.clone(),
+                            row: i,
+                            before: bs,
+                            after: as_,
+                        });
                         per_col += 1;
                     }
                 }
             }
-            if col_touched { columns_changed.push(cname.clone()); }
+            if col_touched {
+                columns_changed.push(cname.clone());
+            }
         }
     }
 
     FrameDiff {
-        rows_before, rows_after, cells_changed, cells_nulled,
-        columns_added, columns_removed, columns_renamed, columns_changed, sample,
+        rows_before,
+        rows_after,
+        cells_changed,
+        cells_nulled,
+        columns_added,
+        columns_removed,
+        columns_renamed,
+        columns_changed,
+        sample,
     }
 }
 
@@ -601,7 +764,9 @@ pub fn diff_frames(before: &DataFrame, after: &DataFrame, kind: &str, sample_cap
 /// Width-0 / height-0 frames return 0. O(rows × cols), pure scan.
 pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
     let n = df.height();
-    if n == 0 || df.width() == 0 { return 0; }
+    if n == 0 || df.width() == 0 {
+        return 0;
+    }
     let cols = df.get_columns();
     let mut count = 0u64;
     for i in 0..n {
@@ -612,7 +777,9 @@ pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
                 break;
             }
         }
-        if all_null { count += 1; }
+        if all_null {
+            count += 1;
+        }
     }
     count
 }
@@ -623,15 +790,19 @@ pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<Stri
     let scan_cap = limit.saturating_mul(3).max(limit);
     let mut set: HashSet<String> = HashSet::new();
     for i in 0..column.len() {
-        if set.len() >= scan_cap { break; }
+        if set.len() >= scan_cap {
+            break;
+        }
         let v = column.get(i).map_err(DataError::from)?;
         let s = match v {
-            AnyValue::Null            => continue,
-            AnyValue::String(s)       => (*s).to_string(),
-            AnyValue::StringOwned(s)  => s.to_string(),
-            other                     => other.to_string(),
+            AnyValue::Null => continue,
+            AnyValue::String(s) => (*s).to_string(),
+            AnyValue::StringOwned(s) => s.to_string(),
+            other => other.to_string(),
         };
-        if !s.is_empty() { set.insert(s); }
+        if !s.is_empty() {
+            set.insert(s);
+        }
     }
     let mut vec: Vec<String> = set.into_iter().collect();
     vec.sort();
@@ -655,14 +826,21 @@ mod diff_tests {
         assert_eq!(d.cells_changed, 2);
         assert_eq!(d.cells_nulled, 0);
         assert_eq!(d.columns_changed, vec!["name".to_string()]);
-        assert!(d.sample.iter().any(|c|
-            c.before.as_deref() == Some("FOO") && c.after.as_deref() == Some("foo")));
+        assert!(d
+            .sample
+            .iter()
+            .any(|c| c.before.as_deref() == Some("FOO") && c.after.as_deref() == Some("foo")));
     }
 
     #[test]
     fn rename_reads_as_a_rename_not_remove_plus_add() {
         let df = df!["old" => [1, 2, 3]].unwrap();
-        let after = apply(df.clone(), "rename_column", &json!({ "from": "old", "to": "new" })).unwrap();
+        let after = apply(
+            df.clone(),
+            "rename_column",
+            &json!({ "from": "old", "to": "new" }),
+        )
+        .unwrap();
         let d = diff_frames(&df, &after, "rename_column", 12);
         assert_eq!(d.columns_renamed.len(), 1);
         assert_eq!(d.columns_renamed[0].from, "old");
@@ -677,7 +855,7 @@ mod diff_tests {
         let after = apply(df.clone(), "drop_rows", &json!({ "indices": [1] })).unwrap();
         let d = diff_frames(&df, &after, "drop_rows", 12);
         assert_eq!((d.rows_before, d.rows_after), (3, 2));
-        assert!(d.sample.is_empty());   // row-count change → cell diff is not meaningful
+        assert!(d.sample.is_empty()); // row-count change → cell diff is not meaningful
         assert_eq!(d.cells_changed, 0);
     }
 }
