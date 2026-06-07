@@ -1802,7 +1802,7 @@ export default function home(app, { session: _session }) {
     function updateSelChip() {
       const chip   = view.querySelector("#rp-list-toolbar-sel-chip");
       const count  = view.querySelector("#rp-list-toolbar-sel-count");
-      const delBtn = view.querySelector('.rt-mode[data-mode="delete"]');
+      const delBtn = view.querySelector('.rp-toolbar-mode[data-mode="delete"]');
       if (chip)  chip.hidden = !selectMode;
       if (count) count.textContent = selected.size;
       // Delete button stays clickable in both shapes: bulk-delete when
@@ -1822,7 +1822,7 @@ export default function home(app, { session: _session }) {
       selected.clear();
       // Mutually exclusive with deleteMode — exit it if active.
       if (selectMode && deleteMode) toggleDeleteMode(false);
-      view.querySelector('.rt-mode[data-mode="select"]')?.classList.toggle("is-active", selectMode);
+      view.querySelector('.rp-toolbar-mode[data-mode="select"]')?.classList.toggle("is-active", selectMode);
       decorateSelectMode();
       updateSelChip();
     }
@@ -1836,11 +1836,11 @@ export default function home(app, { session: _session }) {
       if (deleteMode && selectMode) {
         selectMode = false;
         selected.clear();
-        view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+        view.querySelector('.rp-toolbar-mode[data-mode="select"]')?.classList.remove("is-active");
         decorateSelectMode();
       }
       view.querySelector(".rt-table")?.classList.toggle("mode-delete", deleteMode);
-      view.querySelector('.rt-mode[data-mode="delete"]')?.classList.toggle("is-active", deleteMode);
+      view.querySelector('.rp-toolbar-mode[data-mode="delete"]')?.classList.toggle("is-active", deleteMode);
       updateSelChip();
     }
 
@@ -1870,13 +1870,13 @@ export default function home(app, { session: _session }) {
         if (selectMode) {
           selectMode = false;
           selected.clear();
-          view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+          view.querySelector('.rp-toolbar-mode[data-mode="select"]')?.classList.remove("is-active");
           decorateSelectMode();
         }
         if (deleteMode) toggleDeleteMode(false);
       }
       view.querySelector(".rt-table")?.classList.toggle("mode-edit", editMode);
-      view.querySelector('.rt-mode[data-mode="edit"]')?.classList.toggle("is-active", editMode);
+      view.querySelector('.rp-toolbar-mode[data-mode="edit"]')?.classList.toggle("is-active", editMode);
       decorateEditMode();
       updateSelChip();
     }
@@ -2094,7 +2094,7 @@ export default function home(app, { session: _session }) {
       );
       selected.clear();
       selectMode = false;
-      view.querySelector('.rt-mode[data-mode="select"]')?.classList.remove("is-active");
+      view.querySelector('.rp-toolbar-mode[data-mode="select"]')?.classList.remove("is-active");
       updateSelChip();
       fetchList(spec, chipState);
     }
@@ -2366,7 +2366,7 @@ export default function home(app, { session: _session }) {
 
     // ── mode buttons: enable + wire for specs that opted in ─────
     if (spec.modes?.select) {
-      const btn = view.querySelector('.rt-mode[data-mode="select"]');
+      const btn = view.querySelector('.rp-toolbar-mode[data-mode="select"]');
       if (btn) {
         btn.removeAttribute("disabled");
         btn.title = "Select mode (toggle)";
@@ -2391,7 +2391,7 @@ export default function home(app, { session: _session }) {
       });
     }
     if (spec.modes?.delete) {
-      const btn = view.querySelector('.rt-mode[data-mode="delete"]');
+      const btn = view.querySelector('.rp-toolbar-mode[data-mode="delete"]');
       if (btn) {
         // Two shapes on click:
         //   - select-mode + selection non-empty → bulkDelete the set
@@ -2412,7 +2412,7 @@ export default function home(app, { session: _session }) {
       (c) => typeof c === "object" && c.editable
     );
     if (hasEditable) {
-      const btn = view.querySelector('.rt-mode[data-mode="edit"]');
+      const btn = view.querySelector('.rp-toolbar-mode[data-mode="edit"]');
       if (btn) {
         btn.removeAttribute("disabled");
         btn.title = "Edit mode (toggle)";

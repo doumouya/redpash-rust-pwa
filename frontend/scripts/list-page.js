@@ -210,7 +210,7 @@ export function listPanel(columns, tbodyId) {
 // Toolbar shell — full Workspace-parity shape. Same button order +
 // indices as workspace.html line 47-102. Em 2026-05-25 (after the
 // rp-surface adoption fixed the cascade): "try to bring back the
-// rt-mode buttons and all the buttons we removed". Same boring tab
+// rp-toolbar-mode buttons and all the buttons we removed". Same boring tab
 // everywhere; controls disable in their natural state where the
 // feature isn't wired yet, matching Workspace's no-file-open look.
 //
@@ -237,7 +237,7 @@ export function listPanel(columns, tbodyId) {
 // renderers wire them via querySelector without colliding with #ws*.
 export function listToolbarHTML(spec) {
   const s = spec || {};
-  const parts = ['<div class="rt-toolbar rt-toolbar--data rp-list-toolbar">'];
+  const parts = ['<div class="rp-toolbar rp-toolbar--data rp-list-toolbar">'];
 
   // filter-panel toggle — workspace puts this first in the toolbar
   // (workspace.html line 48). Opt-in via `filter: true` so Home tabs
@@ -257,7 +257,7 @@ export function listToolbarHTML(spec) {
       + '<input type="search" id="rp-list-toolbar-search" '
       +   'placeholder="' + esc(s.searchPlaceholder || "Search…") + '" />'
       + '</div>',
-      '<span class="rt-toolbar-sep"></span>',
+      '<span class="rp-toolbar-sep"></span>',
     );
   }
 
@@ -267,13 +267,13 @@ export function listToolbarHTML(spec) {
     const enable = (key) => (typeof s.modes === "object" ? !!m[key] : false);
     const dis = (key) => enable(key) ? "" : " disabled";
     parts.push(
-      '<button class="rp-btn-icon rt-mode" data-mode="edit"   type="button" '
+      '<button class="rp-btn-icon rp-toolbar-mode" data-mode="edit"   type="button" '
       +   'title="Edit mode"' + dis("edit") + '><i class="bi bi-pencil"></i></button>',
-      '<button class="rp-btn-icon rt-mode" data-mode="select" type="button" '
+      '<button class="rp-btn-icon rp-toolbar-mode" data-mode="select" type="button" '
       +   'title="Select mode"' + dis("select") + '><i class="bi bi-check2-square"></i></button>',
-      '<button class="rp-btn-icon rt-mode" data-mode="delete" type="button" '
+      '<button class="rp-btn-icon rp-toolbar-mode" data-mode="delete" type="button" '
       +   'title="Delete mode"' + dis("delete") + '><i class="bi bi-trash3"></i></button>',
-      '<span class="rt-toolbar-sep"></span>',
+      '<span class="rp-toolbar-sep"></span>',
     );
   }
 
@@ -295,7 +295,7 @@ export function listToolbarHTML(spec) {
   parts.push(
     '<button class="rp-btn-icon" id="rp-list-toolbar-refresh" type="button" '
     +   'title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>',
-    '<span class="rt-toolbar-sep"></span>',
+    '<span class="rp-toolbar-sep"></span>',
   );
 
   // rows-per-page pill — wired to the rowsPerPageHome pref.
@@ -333,7 +333,7 @@ export function listToolbarHTML(spec) {
     + '<i class="bi bi-check2-square"></i>'
     + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
     + '</span>',
-    '<span class="rt-toolbar-sep"></span>',
+    '<span class="rp-toolbar-sep"></span>',
   );
 
   // export dropdown — disabled stub. Wire when the per-tab exporter

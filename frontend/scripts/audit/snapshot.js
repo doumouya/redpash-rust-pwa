@@ -35,7 +35,7 @@
 // catalog in redtable-unification.md.
 const ATOM_CATALOG = [
   ".rp-surface",
-  ".rt-toolbar",
+  ".rp-toolbar",
   ".rt-table-wrap",
   ".rp-pager",
   ".rp-card",
