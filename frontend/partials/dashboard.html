@@ -46,7 +46,11 @@
 
     <!-- ════ main — the designer surface ════ -->
     <main class="rp-main">
-      <div class="rp-surface" id="dashSurface">
+      <!-- is-designer-mode: this page is PERMANENTLY the designer surface, so it
+           reuses Workspace's designer-mode treatment (shows .rp-dash-toolbar, which
+           dashboards.css hides by default). No data toolbar/pager/panels exist here,
+           so the other is-designer-mode rules are inert. -->
+      <div class="rp-surface is-designer-mode" id="dashSurface">
 
         <!-- landing — the default surface when nothing is open (bare #/dashboard,
              no deep-link). Recent charts/dashboards + an empty-state nudge.
