@@ -1,115 +1,51 @@
-<!-- SheetWise — the SQL console (view 1) + Connectors (view 2). The whole-app
-     design-language pilot, now a real in-app route. Composes the framework
-     shell (rp-shell → topbar → rp-main → rp-surface); the page's own SQL editor
-     + result + connector forms live under #swSurface (sheetwise.css). The
-     standalone /sheetwise.html it replaced carried its own topbar + theme
-     switcher — both gone here: the app topbar carries brand/nav/theme, and the
-     page follows the global theme. -->
-<section class="rp-shell">
+<!-- SheetWise — the SQL console (view 1) + Connectors (view 2), conformed to the
+     canonical rail-shell every other page uses. The rail (Sources/Targets in SQL
+     view; connectors in Connectors view) toggles via the rp-rail-views
+     data-rail-seg track; the surface holds the editor + result, or the connector
+     guidance. Everything is a framework component — the page owns only rp-sw-*
+     POSITIONING (the rp-cases-*/rp-mon-* convention), never a role-private class.
+     mountRail / mountEditorCode / mountRedTable / mountPager / mountChipRow are
+     mounted by pages/sheetwise.js into the hosts below. -->
+<section class="rp-shell rp-shell--wide">
   <header id="rp-topbar"></header>
 
   <div class="rp-shell-body">
+    <!-- rail — Sources/Targets (SQL) · connectors (Connectors); mountRail fills it -->
+    <aside class="rp-rail" id="swRail"></aside>
+
     <main class="rp-main">
       <div class="rp-surface" id="swSurface">
 
-        <!-- sub-header — page label + the [SQL | Connectors] view switcher -->
-        <div class="sw-bar">
-          <span class="sw-bar-title">Sheet<b>Wise</b><span class="sw-bar-sub">SQL on your data — query, transform, materialize</span></span>
-          <span class="sw-bar-sp"></span>
-          <div class="sw-seg" id="swSeg" role="group" aria-label="View">
-            <button type="button" data-view="sql" aria-pressed="true">SQL</button>
-            <button type="button" data-view="connectors" aria-pressed="false">Connectors</button>
-          </div>
-        </div>
-
         <!-- ════ view 1 — SQL console ════ -->
-        <div class="sw-main" id="swViewSql">
-          <aside class="sw-side" id="swSide">
-            <h2>Sources <span class="sw-h2-note">read from</span></h2>
-            <div id="swTables"><p class="mute" style="padding:.5rem;color:var(--rp-text-mute);font-size:var(--rp-text-sm)">Loading…</p></div>
-            <div class="sw-connect" title="Pull a database into a CSV via the Connectors view.">
-              <span class="ico">＋</span> Connect a database <span class="soon">Connectors</span>
-            </div>
-            <h2 style="margin-top:var(--rp-sp-4)">Targets <span class="sw-h2-note">write to</span></h2>
-            <div id="swTargets" class="sw-targets">
-              <p class="sw-targets-hint">A query result is a <b>target table</b> — name it in the result footer &amp; <b>Save as table</b> to materialize a new file.</p>
-              <div id="swTargetList"></div>
-            </div>
-          </aside>
-
-          <div class="sw-work">
-            <div class="sw-editor-wrap">
-              <div class="sw-ed" id="swEd">
-                <div class="sw-ed-scroll">
-                  <pre id="swHi" aria-hidden="true"></pre>
-                  <textarea id="swTa" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"
-                    aria-label="SQL query" placeholder="SELECT * FROM t LIMIT 100"></textarea>
-                </div>
-                <div class="sw-ed-bar">
-                  <span class="hint">Query the active table as <kbd>t</kbd> · <kbd>⌘/Ctrl + Enter</kbd> to run</span>
-                  <span class="sp"></span>
-                  <button class="sw-btn sw-btn--ghost" id="swClear">Clear</button>
-                  <button class="sw-btn sw-btn--accent" id="swRun">▶ Run</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="sw-result">
-              <div class="sw-err" id="swErr"></div>
-              <div class="sw-grid" id="swGrid"><div class="sw-empty">Run a query to see results.</div></div>
-              <div class="sw-foot">
-                <span id="swStat">—</span>
-                <span class="sp"></span>
-                <input id="swTargetName" class="sw-target-in" placeholder="target table name" aria-label="Target table name" />
-                <button class="sw-btn sw-btn--ghost" id="swSave" disabled title="Materialize this result as a new table file in the project">＋ Save as table</button>
-                <div class="sw-pager" id="swPager"></div>
-              </div>
-            </div>
+        <div class="rp-sw-view" id="swViewSql">
+          <div class="rp-sw-editbar">
+            <div id="swCols"></div>                       <!-- active file's columns (mountChipRow sets rp-chip-row) -->
+            <div id="swEditor"></div>                     <!-- mountEditorCode -->
+          </div>
+          <div class="rp-sw-err" id="swErr" role="alert" aria-live="assertive" hidden></div>
+          <div id="swGrid"></div>                          <!-- mountRedTable (the result grid) -->
+          <div class="rp-sw-foot" id="swFoot">
+            <span class="rp-sw-stat" id="swStat">—</span>
+            <span class="rp-sw-foot-sp"></span>
+            <input class="rp-input rp-sw-target-in" id="swTargetName"
+                   placeholder="target table name" aria-label="Target table name" />
+            <button class="rp-btn-icon rp-btn-icon--glass" id="swSave" type="button" disabled
+                    title="Materialize this result as a new table file in the project">
+              <i class="bi bi-plus-lg"></i><span>Save as table</span>
+            </button>
+            <div id="swPager"></div>                       <!-- mountPager -->
           </div>
         </div>
 
-        <!-- ════ view 2 — Connectors ════ -->
-        <div class="sw-conn" id="swViewConnectors" hidden>
-          <div class="sw-conn-wrap">
-            <h2 class="sw-conn-h">Connectors <span class="sw-conn-sub-note">pull external data into a CSV you can query — the live source is never touched</span></h2>
-            <div class="sw-conn-cards" id="swConnCards">
-              <button type="button" class="sw-conn-card is-active" data-conn="mysql"><span class="ico">🛢️</span><span class="nm">MySQL</span><span class="tag">sqlx</span></button>
-              <button type="button" class="sw-conn-card" data-conn="kafka"><span class="ico">⚡</span><span class="nm">Kafka Confluent</span><span class="tag">avro</span></button>
-              <button type="button" class="sw-conn-card" data-conn="csv"><span class="ico">📄</span><span class="nm">CSV upload</span><span class="tag">base</span></button>
-            </div>
-
-            <div class="sw-conn-panel" id="swConnMysql">
-              <h3 class="sw-conn-h3">New MySQL connector</h3>
-              <div class="sw-form-grid">
-                <label class="sw-fl">Host<input id="myHost" class="sw-in" value="127.0.0.1" /></label>
-                <label class="sw-fl">Port<input id="myPort" class="sw-in" value="3306" /></label>
-                <label class="sw-fl">User<input id="myUser" class="sw-in" value="root" /></label>
-                <label class="sw-fl">Password<input id="myPass" class="sw-in" type="password" /></label>
-                <label class="sw-fl">Database<input id="myDb" class="sw-in" placeholder="employees" /></label>
-                <label class="sw-fl">Table<input id="myTable" class="sw-in" placeholder="employees" /></label>
-              </div>
-              <div class="sw-form-dest">
-                <label class="sw-fl">Destination project<select id="myProj" class="sw-in"></select></label>
-                <label class="sw-chk"><input type="checkbox" id="myNewProj" /> New project — named after the database</label>
-              </div>
-              <div class="sw-form-actions">
-                <span class="sw-form-msg" id="myMsg"></span>
-                <span class="sp"></span>
-                <button class="sw-btn sw-btn--accent" id="myCreate">▶ Create &amp; Pull</button>
-              </div>
-              <p class="sw-conn-note">The table is copied to a CSV in your project; SheetWise SQL runs on that copy. The live MySQL is read-only — re-pull anytime.</p>
-            </div>
-
-            <div class="sw-conn-panel" id="swConnKafka" hidden>
-              <p class="sw-conn-note">Kafka Confluent is configured via its connector RC (<code>connectors/kafka-confluent-rc</code>) + the load runner; UI configuration lands here next. It produces a CSV the same way.</p>
-            </div>
-            <div class="sw-conn-panel" id="swConnCsv" hidden>
-              <p class="sw-conn-note">CSV is the base path — upload a file in the workspace and it appears in SheetWise <b>Sources</b> directly.</p>
-            </div>
-
-            <h3 class="sw-conn-h3" style="margin-top:var(--rp-sp-5)">Configured connectors</h3>
-            <div class="sw-err" id="swConnErr" role="alert" aria-live="assertive" style="display:none"></div>
-            <div id="swConnList" class="sw-conn-list"><p class="sw-conn-note">None yet — create one above.</p></div>
+        <!-- ════ view 2 — Connectors (guidance; the connector list lives in the rail) ════ -->
+        <div class="rp-sw-view rp-sw-conn" id="swViewConnectors" hidden>
+          <div class="rp-empty rp-sw-conn-guide">
+            <i class="bi bi-database-add"></i>
+            <p>Pull an external database into a CSV you can query — the live source is
+               never touched. Pick a connector in the rail, or create one.</p>
+            <button class="rp-btn-icon rp-btn-icon--accent" id="swConnNew" type="button">
+              <i class="bi bi-plus-lg"></i><span>New connector</span>
+            </button>
           </div>
         </div>
 

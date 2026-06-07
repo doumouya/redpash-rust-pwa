@@ -85,6 +85,7 @@
 @import "framework/filter-panel.css";
 @import "framework/tools-panel.css";
 @import "framework/toolbar.css";
+@import "framework/editor-code.css"; /* rp-editor — code/SQL editor (syntax-highlight overlay) */
 
 /* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
 @import "shell.css";     /* rail-page shell — home, monitoring */

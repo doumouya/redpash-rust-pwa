@@ -11,58 +11,56 @@ last modified date: 2026-06-05
 ## Purpose
 
 The **SheetWise** page — the SQL console (view 1) + the Connectors view (view 2),
-and the whole-app design-language pilot. Mounted by the router at `/sheetwise`
-(`main.js` ROUTES → `partials/sheetwise.html` + this module). Ported from the
-standalone `frontend/sheetwise.html` it replaced (2026-06-05): the page's own
-topbar + theme switcher are gone — the app topbar (`mountTopbar`) carries
-brand / nav / theme, and the page follows the **global theme** (token-driven, so
-it recolors with every theme).
+**conformed to the canonical rail-shell** (CAS_B747F2B6, 2026-06-05). It originally
+shipped as the design-language pilot but forked a bespoke `sw-*` class family;
+this rebuild deletes that family and **composes framework components** —
+`mountRail` / `mountEditorCode` / `mountRedTable` / `mountPager` / `mountChipRow` /
+`openModal` — exactly like every other railed page. The page owns only behaviour
++ the `rp-sw-*` POSITIONING in `styles/sheetwise.css` (the `rp-cases-*` convention).
 
 ## Public surface
 
-- `export default function sheetwise(app, { session })` — the router mount
-  contract. Scopes all DOM lookups to the mounted `app` node (`$`/`$$` =
-  `app.querySelector[All]`), mounts the topbar with `active: "sheetwise"`, then
-  wires the two views.
-- **View 1 (SQL):** the active SOURCE file is queried as table `t` via
-  `POST /api/files/:rid/sql` (read-only substrate); a result is materialized into
-  a new TARGET file via `POST /api/files/:rid/sql/materialize`. Cosmetic syntax
-  highlight overlay (a transparent `<textarea>` over a highlighted `<pre>` — it
-  never parses/executes; the backend allowlist is the real guard).
-- **View 2 (Connectors):** pick a connector card → configure source + destination
-  (project picker or ＋ New project, default = source DB) → **Create & Pull**
-  (`POST /api/projects` for the new-project case, then `POST /api/connectors`
-  kind=`mysql`, then `POST /api/connectors/:rid/sync`). The pulled CSV appears in
-  SOURCES. Configured connectors list each with **✎ rename** (inline `<input>` →
-  `PATCH /api/connectors/:rid`, Enter/blur commits, Esc cancels), **🗑 delete**
-  (two-click "Sure?" confirm → `DELETE /api/connectors/:rid`, no browser dialog;
-  removes the row, reloads if the list empties), and a re-**Pull** button. Rename +
-  delete are server-gated to Admin+ on the connector's project (managing connectors
-  is admin power; creation moves to the Admin Console post-test). A failed op
-  surfaces the backend error in an inline `#swConnErr` alert (`role="alert"`)
-  instead of vanishing into the console.
+- `export default function sheetwise(app, { session })` — the router mount.
+- **Rail (`mountRail` at the shell level)** carries the **SQL ↔ Connectors toggle**
+  as its `views` track (`rp-rail-views` `data-rail-seg`, persisted under the
+  `sheetwiseRailView` pref — the standardized toggle, not a bespoke seg) + the
+  per-view groups; `switchView` flips the surface (`#swViewSql`/`#swViewConnectors`)
+  and re-renders the groups via `rail.setGroups`.
+  - **SQL view groups:** Sources (files → `rp-rail-tab`, click = `selectTable`) +
+    Targets (materialized results). The active file's columns render as a
+    `mountChipRow`; a chip click → `editor.insertAtCaret(name)`.
+  - **Connectors view group:** each connector is a `rp-rail-tab` (db icon) —
+    click = pull (`…/sync` → CSV lands in Sources → jump to SQL), rename via the
+    tab pencil (`PATCH /api/connectors/:rid`), delete via the tab hide (`DELETE`);
+    `addLabel`/the guidance button → `openNewConnectorModal`.
+- **SQL surface:** `mountEditorCode` (the editor; Run/Clear are `rp-btn-icon` in its
+  `actions` slot, ⌘/Ctrl+Enter runs) → `mountRedTable` (result, re-mounted per query
+  since columns are dynamic; `getCell` renders `null` as `∅`) → `mountPager`. Save-as-
+  table materializes via `POST …/sql/materialize`.
+- **New connector:** `openNewConnectorModal` → `openModal` (modal.js) with the MySQL
+  fields + a destination-project picker (the `connection-setup.js` pattern) →
+  `POST /api/projects` (new-project path) + `POST /api/connectors` + `…/sync`.
 
 ## Drift-prone areas
 
-- **Self-contained `api()` helper** (raw same-origin `fetch`, cookie session) —
-  kept local rather than `api.js` so the SheetWise-specific 401 message + the raw
-  `/api/files/:rid/sql` paths stay identical to the proven standalone path. If the
-  app's auth model moves off same-origin cookies, this needs revisiting.
-- **Zero-risk model (Em):** a connector copies the source into a CSV; SQL runs on
-  the copy. The live source is read-only — never mutate it. The `/sql` allowlist
-  rejects `DROP`/`UPDATE` on the CSV; re-pull reproduces it.
-- **`innerHTML` is XSS-safe by construction** — every dynamic value goes through
-  `esc()` (the highlighter escapes each token; error paths wrap `esc(e.message)`);
-  the rest are static strings. Keep new dynamic content escaped.
-- **Theme:** the page renders in whatever the global theme is. Until the
-  design-language switch-on flips the default + ships the 4-theme picker, that's
-  the current default (catppuccin-`dark`); the RedPash-red identity shows when a
-  `new-*` theme is active. The page itself hard-codes no palette.
+- **Self-contained `api()` helper** (raw same-origin `fetch`, cookie session) — kept
+  local so the SheetWise-specific 401 message + raw `/api/files/:rid/sql` paths stay
+  identical to the proven path.
+- **Zero-risk model (Em):** a connector copies the source into a CSV; SQL runs on the
+  copy; the live source is read-only. Pull/re-pull is idempotent.
+- **The editor is the one genuine page-content surface — but it's a COMPONENT now**
+  (`framework/editor-code.js`, `rp-editor*`/`rp-tok-*`), not a `sw-*` re-skin. Language
+  is parameterized (`language: "sql"`); the highlighter is cosmetic (non-executing).
+- **No page-private classes.** Everything is `rp-*` (framework) or `rp-sw-*`
+  (positioning only). The `tools/uniformity-audit` guard fails the build if a `sw-*`
+  (or any unsanctioned family) reappears — see [uniformity-audit](../../../tools/uniformity-audit/audit.md).
+- **Dynamic redtable columns:** each query has a different column set, so `renderResult`
+  re-mounts `mountRedTable` into `#swGrid` rather than calling `setColumns` — simplest
+  correct path for fully-variable result shapes.
 
 ## Related
 
 - [Frontend pillar landing](../../../index.md)
+- [editor-code.js](../framework/editor-code.md) · [rail.js](../framework/rail.md) · [redtable.js](../framework/redtable.md) · [pager.js](../framework/pager.md) — the composed components.
 - [main.js](../main.md) — the router that mounts this at `/sheetwise`.
-- [topbar.js](../topbar.md) — the shared chrome (`mountTopbar`, the SheetWise NAV entry).
-- [files/sql route](../../backend/api/routes/files/sql.md) — the `/sql` + `/sql/materialize` substrate.
-- [routes/connectors.rs](../../backend/api/routes/connectors.md) · [mysql_loader.rs](../../backend/api/mysql_loader.md) — the Connectors backend.
+- [files/sql route](../../backend/api/routes/files/sql.md) · [routes/connectors.rs](../../backend/api/routes/connectors.md) — the backends.
