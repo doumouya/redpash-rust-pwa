@@ -288,6 +288,16 @@ pub async fn run(pool: &PgPool, data_dir: &Path, cfg: &Cfg) -> Result<String> {
     Ok(outcome.rid)
 }
 
+/// Connection probe for the "Test connection" action: connect with the secure
+/// options (reuses `connect_pinned`, so the SSRF/TLS gate already ran in
+/// `from_connection`) + a trivial `SELECT 1`. Read-only — proves creds + host + TLS
+/// reachability without pulling data. Mirror of `mysql_loader::probe`.
+pub async fn probe(cfg: &Cfg) -> Result<()> {
+    let mut pg = connect_pinned(&cfg.opts).await?;
+    sqlx::query("SELECT 1").execute(&mut pg).await.context("probe: SELECT 1")?;
+    Ok(())
+}
+
 /// Connect with the secure options + pin the SESSION (UTC / bytea hex) — shared by
 /// `run` + the introspection readers so every path uses the SAME secure connection
 /// (no format!'d URL) and the same faithful session.

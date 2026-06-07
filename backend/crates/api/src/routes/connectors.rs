@@ -266,8 +266,8 @@ async fn schema(
 /// "Test connection" action). Read-only: connect + `SELECT 1` (the loader's `probe`,
 /// which reuses the secure connect path, so the SSRF/TLS gate runs). VIEW-gated like
 /// the other introspection reads; leak-free 404. A standalone handler (not folded
-/// into the sync/tables/schema match) so it composes additively. MySQL wired;
-/// postgres falls through to "unsupported" until `postgres_loader::probe` lands.
+/// into the sync/tables/schema match) so it composes additively. MySQL + postgres
+/// wired (each loader's `probe` = secure connect + `SELECT 1`).
 async fn test_connection(
     State(state): State<AppState>,
     headers:      HeaderMap,
@@ -285,8 +285,14 @@ async fn test_connection(
             crate::mysql_loader::probe(&cfg).await
                 .map_err(|e| AppError::bad_request("connector_test", e.to_string()))?;
         }
+        "postgres" => {
+            let cfg = crate::postgres_loader::Cfg::from_connection(&state.db, &rid).await
+                .map_err(|e| AppError::bad_request("connector_cfg", e.to_string()))?;
+            crate::postgres_loader::probe(&cfg).await
+                .map_err(|e| AppError::bad_request("connector_test", e.to_string()))?;
+        }
         other => return Err(AppError::bad_request("unsupported",
-            format!("connection test is wired for kind 'mysql' (got '{other}')"))),
+            format!("connection test is wired for kind 'mysql'/'postgres' (got '{other}')"))),
     }
     Ok(Json(serde_json::json!({ "ok": true })))
 }

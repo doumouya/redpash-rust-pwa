@@ -47,10 +47,10 @@ POST   /api/connectors/:rid/test     probe the source connection — connect + S
   `list_tables`) for the **Tables** sub-tab. **VIEW**-gated. Returns `{ items }`
   (the `{name,rows,kind}` shape is serde-identical across loaders).
 - `test_connection` (POST `/:rid/test`) — probe the source connection for the Settings
-  **Test connection** action: `db::get_connector` → `require_view` → `mysql_loader::probe`
+  **Test connection** action: `db::get_connector` → `require_view` → the loader's `probe`
   (connect + `SELECT 1`). A standalone handler (NOT folded into the sync/tables/schema
-  match) so it composes additively. **VIEW**-gated; returns `{ ok: true }`. MySQL wired;
-  postgres falls through to "unsupported" until `postgres_loader::probe` lands.
+  match) so it composes additively. **VIEW**-gated; returns `{ ok: true }`. MySQL +
+  postgres wired (each loader's `probe`).
 - `schema` (GET `/:rid/schema?table=`) — one table's columns + types + projection
   strategy (`mysql`/`postgres` `describe_table`) for the **Schema** sub-tab. VIEW-gated.
 - `list` (GET `/`) — `db::list_connectors(caller)` (reach-aware).

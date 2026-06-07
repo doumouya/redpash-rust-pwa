@@ -44,6 +44,9 @@ of silently assuming; `::text` still extracts it.
   `pipeline::upload_csv` (`caller_is_admin=false`).
 - `list_tables` / `describe_table` — `information_schema` + `pg_class.reltuples`; PK from
   the primary-key constraint. The Tables/Schema facets.
+- `probe(&Cfg) -> Result<()>` — the "Test connection" action (`POST /:rid/test`): reuses
+  `connect_pinned` (gate already ran in `from_connection`) + `SELECT 1`. Mirror of
+  `mysql_loader::probe`.
 - `qi` (double-quote identifier), `csv_field` (RFC-4180 + NUL strip), `TableInfo`, `ColInfo`.
 
 ## Drift-prone areas
