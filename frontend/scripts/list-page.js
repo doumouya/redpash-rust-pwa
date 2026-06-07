@@ -301,7 +301,7 @@ export function listToolbarHTML(spec) {
   // rows-per-page pill — wired to the rowsPerPageHome pref.
   parts.push(
     '<div class="rp-menu-wrap">'
-    + '<button class="rt-pill" data-dd="rp-list-toolbar-rows-dd" type="button" '
+    + '<button class="rp-chip" data-dd="rp-list-toolbar-rows-dd" type="button" '
     +   'title="Rows per page">'
     +   '<span id="rp-list-toolbar-rows-label">25 rows</span>'
     +   '<i class="bi bi-chevron-down chev"></i>'
@@ -329,7 +329,7 @@ export function listToolbarHTML(spec) {
 
   // selection chip — shown only when a tab's modes include select.
   parts.push(
-    '<span class="rt-sel-chip" id="rp-list-toolbar-sel-chip" hidden>'
+    '<span class="rp-chip" id="rp-list-toolbar-sel-chip" hidden>'
     + '<i class="bi bi-check2-square"></i>'
     + '<span id="rp-list-toolbar-sel-count">0</span>&nbsp;selected'
     + '</span>',

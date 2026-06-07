@@ -73,7 +73,7 @@ export function createVirtualRows({ scroller, tbody, rowHeight, renderRow, overs
   // spacer would collapse to its intrinsic size and wreck the scroll
   // height. (The windowed real rows can keep cv:auto; they're on-screen.)
   const SPACER = (h) =>
-    '<tr class="rt-vrow-spacer" aria-hidden="true" style="content-visibility:visible">' +
+    '<tr class="rp-vrow-spacer" aria-hidden="true" style="content-visibility:visible">' +
     '<td colspan="999" style="height:' + h + 'px;padding:0;border:0"></td></tr>';
 
   // Geometry for the current scroll position. Returns the window [start, end),

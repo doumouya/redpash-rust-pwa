@@ -136,9 +136,25 @@
   text-align: right;
   padding-right: 0.375rem;
 }
-#rp-home-list-tbody tr .rt-tab-close { opacity: 0; }
-#rp-home-list-tbody tr:hover .rt-tab-close,
-#rp-home-list-tbody tr:focus-within .rt-tab-close { opacity: 1; }
+/* Hide button (the "×" on a list row) — folded from the legacy .rt-tab-close so it
+   survives the rail.css retirement: base look + the row-hover reveal, page-scoped. */
+.rp-home-hide {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease);
+}
+.rp-home-hide i { font-size: 0.8125rem; }
+.rp-home-hide:hover { background: var(--rp-surface-2); color: var(--rp-accent); }
+#rp-home-list-tbody tr:hover .rp-home-hide,
+#rp-home-list-tbody tr:focus-within .rp-home-hide { opacity: 1; }
 
 /* Recovery host — sits below the pager, inside .rp-surface. Matches
    the .rt-hidden atoms' inset so the <details> reads as part of the

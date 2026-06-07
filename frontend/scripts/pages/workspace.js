@@ -1752,7 +1752,7 @@ export default function workspace(app, { session }) {
     vrows.setRows(rows);
     // Correct the row-height estimate from the first real row — adapts to
     // the active density (compact/cozy/comfortable) without hard-coding.
-    const firstReal = tbody.querySelector("tr:not(.rt-vrow-spacer)");
+    const firstReal = tbody.querySelector("tr:not(.rp-vrow-spacer)");
     if (firstReal) {
       const h = firstReal.getBoundingClientRect().height;
       if (h > 0 && Math.abs(h - vrows.rowHeight) > 0.5) { measuredRowH = h; vrows.remeasure(h); }
@@ -2897,9 +2897,9 @@ export default function workspace(app, { session }) {
   // server-side changes.
   $("#wsRefresh").addEventListener("click", (e) => {
     const i = e.currentTarget.querySelector("i");
-    i.classList.remove("rt-spinning");
+    i.classList.remove("rp-toolbar-spin", "is-spinning");
     void i.offsetWidth;
-    i.classList.add("rt-spinning");
+    i.classList.add("rp-toolbar-spin", "is-spinning");
     loadProjects();
     if (activeFileRid) {
       const rid = activeFileRid;

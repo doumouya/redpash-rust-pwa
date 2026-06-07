@@ -118,7 +118,7 @@ export default function home(app, { session: _session }) {
   }
   function hideCellHTML(rid) {
     return '<td class="rp-list-hide-cell">'
-      + '<span class="rt-tab-close rp-home-hide" data-hide-rid="' + esc(rid) + '" title="Hide from list">'
+      + '<span class="rp-home-hide" data-hide-rid="' + esc(rid) + '" title="Hide from list">'
       +   '<i class="bi bi-x"></i>'
       + '</span>'
       + '</td>';
@@ -2263,9 +2263,9 @@ export default function home(app, { session: _session }) {
       view.querySelector("#rp-list-toolbar-refresh")?.addEventListener("click", (e) => {
         const icon = e.currentTarget.querySelector("i");
         if (icon) {
-          icon.classList.remove("rt-spinning");
+          icon.classList.remove("rp-toolbar-spin", "is-spinning");
           void icon.offsetWidth;
-          icon.classList.add("rt-spinning");
+          icon.classList.add("rp-toolbar-spin", "is-spinning");
         }
         fetchList(spec, chipState);
       });
@@ -2590,7 +2590,7 @@ export default function home(app, { session: _session }) {
               const meta = spec.hideMeta(item);
               if (!meta || !meta.rid) return html;
               const cell = '<td class="rp-list-hide-cell">'
-                + '<span class="rt-tab-close rp-home-hide" '
+                + '<span class="rp-home-hide" '
                 +   'data-hide-rid="'  + esc(meta.rid)        + '" '
                 +   'data-hide-name="' + esc(meta.name || "") + '" '
                 +   'data-hide-sub="'  + esc(meta.sub  || "") + '" '

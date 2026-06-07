@@ -20,7 +20,7 @@
 //   TYPE_LABEL — four case-type labels (task/bug/feature/epic).
 //
 //   RAIL_MARK_COLOR — status → color-token mapping for the rail's
-//     `.rt-group-mark`. Same mapping the column accent stripe uses
+//     `.rp-rail-group-mark`. Same mapping the column accent stripe uses
 //     (cases.css) so rail mark + column stripe + status chip read
 //     as one palette.
 //
