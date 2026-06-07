@@ -12,7 +12,7 @@
 // structure + the one behavior the simple table has: row-click.
 //
 // Composes shared atoms — does NOT redefine them:
-//   • rp-empty (A9) for the no-rows state (was .rt-empty + .rp-cases-ov-table-empty).
+//   • rp-empty (A9) for the no-rows state (was .rp-empty + .rp-cases-ov-table-empty).
 //   • rp-status (A12) for status-pill cells (kind:"status") — tone via is-* state.
 //   • rp-mono-pill (A10) for inline id/method/kind cells (kind:"id").
 // Cell GLYPH it owns (a reusable cell helper, not an atom): rp-priority-dot —

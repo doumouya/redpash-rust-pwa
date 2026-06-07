@@ -252,7 +252,7 @@ export function listToolbarHTML(spec) {
   // search
   if (s.searchPlaceholder !== false) {
     parts.push(
-      '<div class="rt-search">'
+      '<div class="rp-search">'
       + '<i class="bi bi-search"></i>'
       + '<input type="search" id="rp-list-toolbar-search" '
       +   'placeholder="' + esc(s.searchPlaceholder || "Search…") + '" />'

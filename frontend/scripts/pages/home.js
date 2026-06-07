@@ -389,7 +389,7 @@ export default function home(app, { session: _session }) {
         +   (u.org_role ? roleChip(u.org_role) : '<span class="rp-meta">—</span>') + '</td>'
         + '<td class="rp-meta">' + esc(u.avatar_url || "—") + '</td>'
         + '<td class="rp-meta">' + fmtTime(u.created_at) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(u.redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(u.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     companies: {
@@ -460,14 +460,14 @@ export default function home(app, { session: _session }) {
       ],
       row: (c) =>
         '<tr data-rid="' + esc(c.redpash_id || "") + '">'
-        + '<td>' + esc(c.name) + ' <span class="rt-mono-pill">' + esc(c.slug) + '</span></td>'
-        + '<td><span class="rt-mono-pill">' + esc(c.slug || "—") + '</span></td>'
+        + '<td>' + esc(c.name) + ' <span class="rp-mono-pill">' + esc(c.slug) + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(c.slug || "—") + '</span></td>'
         + '<td class="is-num">' + (c.member_count || 0) + '</td>'
         + '<td>' + (c.my_role ? roleChip(c.my_role) : "—") + '</td>'
         + '<td class="rp-meta">' + esc(c.avatar_url || "—") + '</td>'
         + '<td>' + fmtTime(c.created_at) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
 
@@ -557,7 +557,7 @@ export default function home(app, { session: _session }) {
         + '<td class="is-num">' + (t.member_count || 0) + '</td>'
         + '<td>' + (t.my_role ? roleChip(t.my_role) : "—") + '</td>'
         + '<td>' + fmtTime(t.created_at) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(t.redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(t.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     memberships: {
@@ -760,13 +760,13 @@ export default function home(app, { session: _session }) {
         '<tr data-rid="'
         + esc((m.scope || "") + ":" + (m.scope_redpash_id || "") + ":" + (m.member_redpash_id || ""))
         + '">'
-        + '<td>' + esc(m.user_display_name) + ' <span class="rt-mono-pill">@' + esc(m.user_username) + '</span></td>'
+        + '<td>' + esc(m.user_display_name) + ' <span class="rp-mono-pill">@' + esc(m.user_username) + '</span></td>'
         + '<td class="rp-meta">@' + esc(m.user_username || "") + '</td>'
         + '<td>' + roleChip(m.role) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(m.scope || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(m.scope || "—") + '</span></td>'
         + '<td>' + esc(m.scope_name) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(m.scope_redpash_id || "—") + '</span></td>'
-        + '<td><span class="rt-mono-pill">' + esc(m.member_redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(m.scope_redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(m.member_redpash_id || "—") + '</span></td>'
         + '<td>' + fmtTime(m.joined_at) + '</td>'
         + '</tr>',
     },
@@ -889,8 +889,8 @@ export default function home(app, { session: _session }) {
           + '<td data-full="' + esc(c.priority || "medium") + '">' + priorityChip(c.priority) + '</td>'
           + '<td>' + esc(c.assignee_display_name || c.assignee_id || "—") + '</td>'
           + '<td>' + esc(c.reporter_display_name || c.reporter_id || "—") + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(c.project_id || "—") + '</span></td>'
-          + '<td><span class="rt-mono-pill">' + esc(c.company_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(c.project_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(c.company_id || "—") + '</span></td>'
           + '<td>' + categoryLabel + '</td>'
           + '<td class="rp-meta" data-full="' + esc(c.description || "") + '" data-trunc="120">'
             + esc((c.description || "").slice(0, 120) || "—") + '</td>'
@@ -898,7 +898,7 @@ export default function home(app, { session: _session }) {
             + esc((c.error_message || "").slice(0, 80) || "—") + '</td>'
           + '<td>' + fmtTime(c.created_at) + '</td>'
           + '<td>' + fmtTime(c.updated_at) + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
           + '</tr>';
       },
     },
@@ -1002,7 +1002,7 @@ export default function home(app, { session: _session }) {
           + '&file=' + encodeURIComponent(f.redpash_id || "") + '">'
           + '<td>' + esc(f.display_name || f.filename) + '</td>'
           + '<td>' + esc(f.project_name) + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(f.file_type) + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(f.file_type) + '</span></td>'
           + '<td>' + stageChip(f.stage) + '</td>'
           + '<td class="is-num">' + (f.row_count != null ? f.row_count : "—") + '</td>'
           + '<td class="is-num">' + (f.col_count != null ? f.col_count : "—") + '</td>'
@@ -1010,7 +1010,7 @@ export default function home(app, { session: _session }) {
           + '<td class="is-num">' + clean + '</td>'
           + '<td>' + fmtTime(f.created_at) + '</td>'
           + '<td>' + fmtTime(f.updated_at) + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(f.redpash_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(f.redpash_id || "—") + '</span></td>'
           + '</tr>';
       },
     },
@@ -1091,11 +1091,11 @@ export default function home(app, { session: _session }) {
         + '<td>' + esc(c.display_name || c.filename) + '</td>'
         + '<td>' + esc(c.filename || "—") + '</td>'
         + '<td>' + esc(c.project_name) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(c.project_redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(c.project_redpash_id || "—") + '</span></td>'
         + '<td>' + stageChip(c.stage) + '</td>'
         + '<td>' + fmtTime(c.created_at) + '</td>'
         + '<td>' + fmtTime(c.updated_at) + '</td>'
-        + '<td><span class="rt-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
+        + '<td><span class="rp-mono-pill">' + esc(c.redpash_id || "—") + '</span></td>'
         + '</tr>',
     },
     projects: {
@@ -1228,13 +1228,13 @@ export default function home(app, { session: _session }) {
           + '<td>' + esc(p.status || "—") + '</td>'
           + '<td>' + (p.is_default ? '<i class="bi bi-check2"></i>' : '<span class="rp-meta">—</span>') + '</td>'
           + '<td>' + esc(p.owner_display_name || p.owner_id || "—") + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(p.company_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(p.company_id || "—") + '</span></td>'
           + '<td class="is-num">' + clean + '</td>'
           + '<td class="rp-meta" data-full="' + esc(p.description || "") + '" data-trunc="120">'
             + esc((p.description || "").slice(0, 120) || "—") + '</td>'
           + '<td>' + fmtTime(p.created_at) + '</td>'
           + '<td>' + fmtTime(p.updated_at) + '</td>'
-          + '<td><span class="rt-mono-pill">' + esc(p.redpash_id || "—") + '</span></td>'
+          + '<td><span class="rp-mono-pill">' + esc(p.redpash_id || "—") + '</span></td>'
           + '</tr>';
       },
     },
@@ -2663,28 +2663,28 @@ export default function home(app, { session: _session }) {
   }
 
   // Coloured badges for list-row signal columns. Use existing
-  // .rt-mono-pill base + .rt-tone--{low,mid,high} for tone, so the
+  // .rp-mono-pill base + .rp-tone-{low,mid,high} for tone, so the
   // visual vocabulary stays consistent with /monitoring.
   function roleChip(role) {
     const v = String(role || "").toLowerCase();
-    const tone = v === "owner" ? "rt-tone--high"
-              : v === "admin" || v === "collaborator" ? "rt-tone--mid"
-              : v === "member" || v === "viewer" ? "rt-tone--low"
+    const tone = v === "owner" ? "rp-tone-high"
+              : v === "admin" || v === "collaborator" ? "rp-tone-mid"
+              : v === "member" || v === "viewer" ? "rp-tone-low"
               : "";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(role || "—") + '</span>';
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(role || "—") + '</span>';
   }
   function stageChip(stage) {
     const v = String(stage || "").toLowerCase();
-    const tone = v === "publish" ? "rt-tone--low"
-              : v === "design"   ? "rt-tone--mid"
-              : v === "clean"    ? "rt-tone--mid"
+    const tone = v === "publish" ? "rp-tone-low"
+              : v === "design"   ? "rp-tone-mid"
+              : v === "clean"    ? "rp-tone-mid"
               : "";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(stage || "—") + '</span>';
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(stage || "—") + '</span>';
   }
   function planChip(plan) {
     const v = String(plan || "").toLowerCase();
-    const tone = v === "free" ? "" : "rt-tone--low";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(plan || "—") + '</span>';
+    const tone = v === "free" ? "" : "rp-tone-low";
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(plan || "—") + '</span>';
   }
   // caseTypeChip — Cases tab's "Type" column (bug / feature / task / epic).
   // Matches the backend validator allowlist at cases.rs:303 — any drift
@@ -2692,7 +2692,7 @@ export default function home(app, { session: _session }) {
   // visual budget on status + priority which carry the real state.
   function caseTypeChip(type) {
     const v = String(type || "task").toLowerCase();
-    return '<span class="rt-mono-pill">' + esc(v) + '</span>';
+    return '<span class="rp-mono-pill">' + esc(v) + '</span>';
   }
   // teamKindChip — Teams tab's "Kind" column. `team` is the default,
   // `department` carries the single-parent + one-direct-dept-per-user
@@ -2700,8 +2700,8 @@ export default function home(app, { session: _session }) {
   // trigger). Visual weight on department so it pops vs regular teams.
   function teamKindChip(kind) {
     const v = String(kind || "team").toLowerCase();
-    const tone = v === "department" ? "rt-tone--mid" : "";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(v) + '</span>';
+    const tone = v === "department" ? "rp-tone-mid" : "";
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(v) + '</span>';
   }
   // platformRoleChip — surfaces `users.role` (platform-wide tier; admin =
   // RBAC bypass per rbac::is_platform_admin). Distinct from org_role
@@ -2713,28 +2713,28 @@ export default function home(app, { session: _session }) {
       return '<span class="rp-meta">—</span>';
     }
     // admin gets the "high" tone — admin / owner-tier visual weight
-    const tone = v === "admin" ? "rt-tone--high" : "rt-tone--mid";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(role) + '</span>';
+    const tone = v === "admin" ? "rp-tone-high" : "rp-tone-mid";
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(role) + '</span>';
   }
   // Cases status — flow: backlog → todo → in_progress → in_review → done.
   // Mid-flow states (in_progress / in_review) get the warmer tone; the
   // terminal `done` gets low (cool/green-ish vibe via the chip token).
   function caseStatusChip(status) {
     const v = String(status || "").toLowerCase();
-    const tone = v === "in_progress" || v === "in_review" ? "rt-tone--mid"
-              : v === "todo"        ? "rt-tone--low"
+    const tone = v === "in_progress" || v === "in_review" ? "rp-tone-mid"
+              : v === "todo"        ? "rp-tone-low"
               : "";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(status || "—") + '</span>';
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(status || "—") + '</span>';
   }
   // Cases priority — low / medium / high / critical. Tone scales with
   // urgency; medium gets no tone (it's the default + most rows).
   function priorityChip(priority) {
     const v = String(priority || "").toLowerCase();
-    const tone = v === "critical" ? "rt-tone--high"
-              : v === "high"     ? "rt-tone--mid"
-              : v === "low"      ? "rt-tone--low"
+    const tone = v === "critical" ? "rp-tone-high"
+              : v === "high"     ? "rp-tone-mid"
+              : v === "low"      ? "rp-tone-low"
               : "";
-    return '<span class="rt-mono-pill ' + tone + '">' + esc(priority || "—") + '</span>';
+    return '<span class="rp-mono-pill ' + tone + '">' + esc(priority || "—") + '</span>';
   }
   // Org affiliation — softer than role/plan (which carry signal). The
   // dot prefix makes the cell read "this user belongs to: X" without
