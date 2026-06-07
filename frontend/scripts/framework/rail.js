@@ -278,6 +278,8 @@ function tabHTML(t) {
 
 function hiddenHTML(c) {
   if (!c.hidden?.length) return "";
+  // Total hidden items across all sections (projects + files) → "Hidden (N)".
+  const count = c.hidden.reduce((n, s) => n + (s.items?.length || 0), 0);
   const sections = c.hidden.map((s) => {
     const items = (s.items || []).map((it) =>
       '<button type="button" class="rp-rail-hidden-item" data-rail-action="restore" '
@@ -291,7 +293,7 @@ function hiddenHTML(c) {
       + items + '</div>';
   }).join("");
   return '<details class="rp-rail-hidden">'
-    + '<summary class="rp-rail-hidden-summary">Hidden</summary>'
+    + '<summary class="rp-rail-hidden-summary"><i class="bi bi-eye-slash"></i> Hidden (' + count + ')</summary>'
     + '<div class="rp-rail-hidden-body">' + sections + '</div>'
     + '</details>';
 }
