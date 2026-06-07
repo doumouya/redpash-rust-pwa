@@ -99,6 +99,12 @@ this rebuild deletes that family and **composes framework components** —
   `<table class="rp-redtable rp-table" id="swTable">` matches Workspace's `wsTable` and
   page tweaks scope under `#swTable`) rather than calling `setColumns` — simplest correct
   path for fully-variable result shapes.
+- **`getCell` reads by `col.key`, NOT the 3rd arg.** `p.rows` are positional arrays;
+  columns are keyed `String(columnIndex)`, so `getCell: (row, col) => row[col.key]` reads
+  the right cell. `mountRedTable`'s 3rd `getCell` arg is the **ROW** index (it feeds
+  rownum / data-rid), so `(row,_,i) => row[i]` transposed every row into one column — the
+  bug fixed after Em caught it live. (The redtable default's array branch has the same
+  trap; SheetWise indexes by `col.key` explicitly.)
 
 ## Related
 

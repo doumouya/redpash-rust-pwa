@@ -252,7 +252,10 @@ export default function sheetwise(app, { session }) {
       id: "swTable", // id ON THE TABLE → parity with Workspace's wsTable; SheetWise tweaks under #swTable
       columns: p.columns.map((c, i) => ({ key: String(i), label: c })),
       rows: p.rows,
-      getCell: (row, _col, i) => (row[i] === null ? "∅" : row[i]),
+      // p.rows are POSITIONAL arrays → read each cell by its COLUMN key (= the column
+      // index). NOT by getCell's 3rd arg, which is the ROW index (rownum/data-rid use it);
+      // indexing by the row index transposed every row into a single column (the bug).
+      getCell: (row, col) => (row[col.key] === null ? "∅" : row[col.key]),
       empty: "No rows.",
     });
     $("#swStat").textContent = `${p.total.toLocaleString()} rows · page ${p.page}/${p.pages} · ${p.ms} ms`;
