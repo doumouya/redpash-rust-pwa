@@ -37,11 +37,9 @@
 @import "base.css";      /* reset + document defaults + brand text */
 
 /* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
-@import "user-picker.css"; /* shared user-picker atom — search input + dropdown */
 @import "topbar.css";    /* brand · omnibox · actions */
 @import "rail.css";      /* the rail nav (home + monitoring + workspace) */
 @import "panel.css";     /* rp-* workspace-unique panel content: step-history, report-builder, joins, sentinels (generic chrome → framework/{panel,filter-panel,tools-panel}.css) */
-@import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
 @import "sw-update.css"; /* service-worker update banner */
 
 /* ── 2.5 framework atoms + components — the rp-* layer (CAS_37B2E1BF) ─────
@@ -83,6 +81,8 @@
 @import "framework/tools-panel.css";
 @import "framework/toolbar.css";
 @import "framework/editor-code.css"; /* rp-editor — code/SQL editor (syntax-highlight overlay) */
+@import "framework/user-picker.css"; /* rp-user-picker — shared search-input + results dropdown (relocated from styles/) */
+@import "framework/modal.css";       /* rp-modal-* — shared overlay-modal (relocated from styles/) */
 
 /* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
 @import "shell.css";     /* rail-page shell — home, monitoring */

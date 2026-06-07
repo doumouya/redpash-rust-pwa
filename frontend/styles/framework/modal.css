@@ -35,7 +35,7 @@
 .rp-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(17, 17, 27, 0.55);
+  background: rgba(0, 0, 0, 0.5); /* theme-neutral scrim — dims the page in every theme */
   backdrop-filter: blur(0.125rem);
 }
 
