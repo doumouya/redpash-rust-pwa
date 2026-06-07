@@ -179,8 +179,13 @@ export default function dashboard(app, { session }) {
     if (!items.length) { navBody.innerHTML = '<div class="rp-rail-state">No projects yet.</div>'; return; }
     navBody.innerHTML = items.map(projectGroup).join("");
     applyRailFilters();
-    // Expand the default/first group for context + seed the source picker.
-    const first = navBody.querySelector('.rp-rail-group[data-default="1"]') || navBody.querySelector(".rp-rail-group");
+    // Expand the focused project (a #/dashboard?source= deep-link sets it)
+    // or the default/first group for context + seed the source picker.
+    const focused = focusedProjectRid
+      && navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
+    const first = focused
+      || navBody.querySelector('.rp-rail-group[data-default="1"]')
+      || navBody.querySelector(".rp-rail-group");
     if (first) {
       first.classList.add("expanded");
       if (!focusedProjectRid) focusedProjectRid = first.dataset.rid || null;
@@ -367,5 +372,28 @@ export default function dashboard(app, { session }) {
   }
 
   // ─── init ──────────────────────────────────────────────────────
-  loadProjects();
+  // Optional deep-link #/dashboard?source=<FIL_rid> — the Workspace per-row
+  // "Visualize" affordance (Slice D) lands here: focus that file's project
+  // and pre-pick it as the chart source. Best-effort — an unknown or
+  // non-data rid just falls back to the default first-CSV pick.
+  (async () => {
+    const qs = location.hash.split("?")[1];
+    const wantSource = qs ? new URLSearchParams(qs).get("source") : null;
+    if (wantSource) {
+      try {
+        const env = await api.get("/files/" + encodeURIComponent(wantSource));
+        const ft  = env?.summary?.file_type;
+        if (env?.summary?.project_redpash_id && ft !== "chart" && ft !== "dashboard") {
+          focusedProjectRid = env.summary.project_redpash_id;
+        }
+      } catch { /* unknown rid — fall through to the default pick */ }
+    }
+    await loadProjects();
+    // renderRail's source-seed is fire-and-forget; re-load the focused
+    // project's CSV list here so the pre-pick lands deterministically.
+    if (wantSource && focusedProjectRid) {
+      await refreshSources(focusedProjectRid);
+      if (projectSourceFiles.files.some((f) => f.rid === wantSource)) await setSource(wantSource);
+    }
+  })();
 }

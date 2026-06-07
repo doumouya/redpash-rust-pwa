@@ -18,13 +18,12 @@
 import { api } from "/scripts/api.js";
 import { mountTopbar } from "/scripts/topbar.js";
 import { mountRailFooterNav } from "/scripts/rail-footer.js";
-import { mountRailCollapse, mountRailSeg } from "/scripts/rail-controls.js";
+import { mountRailCollapse } from "/scripts/rail-controls.js";
 import { mountTools } from "/scripts/tools.js";
 import { mountJoins } from "/scripts/joins.js";
 import { mountReport } from "/scripts/report.js";
 import { attachAutocomplete, mountChipPicker } from "/scripts/autocomplete.js";
 import { invalidateFile as invalidateColumnIndex } from "/scripts/column-index.js";
-import { mountDesigner } from "/scripts/designer.js";
 import { getEngine, warmWorkerEngine, workerSort } from "/scripts/wasm-engine.js";
 import { getPref, setPref } from "/scripts/prefs.js";
 import { heroStripHTML, createListCharts } from "/scripts/list-page.js";
@@ -73,29 +72,15 @@ export default function workspace(app, { session }) {
 
   // ─── state ─────────────────────────────────────────────────────
   let activeFileRid = null;
-  // True only while loadFile is syncing the rail seg to the file it
-  // just opened (maybeAutoToggleRail → set() → onChange). That echo
-  // must NOT re-run the surface swap — the file is already chosen.
-  // CAS_3BCD6727.
-  let railSyncing = false;
-  // Per-view "last opened" memory — CAS_3BCD6727. When the user toggles
-  // the rail Data ↔ Dashboards view, the surface swaps to the
-  // last-opened file of the new view kind, or — if that view has
-  // nothing to restore — drops to the landing overview (so a wrong-kind
-  // file never lingers under the new view). One slot per view; loadFile
-  // updates the slot matching the opened file's kind (data files → data;
-  // charts + dashboards → dashboards) so toggling back restores it.
-  const lastFileRidByView = { data: null, dashboards: null };
   let activeColumns = [];   // ColumnMeta[] for the open file
   let activeSteps   = [];   // ProjectStep[] — drives undo/redo enable
   let activeSummary = null; // FileSummary — drives per-tool context renderers
   // The project the user is currently focused on — independent of which
   // file (if any) is open. Updates on group-head click, on file open
   // (inherits the file's project), and on the initial deep-link expand.
-  // Read by activeProjectRid / activeProjectName so the rail-foot
-  // buttons (Upload, New chart, New dashboard, + New project) target
-  // the visible project even when the user clicked a group head
-  // without opening a file inside it.
+  // Read by activeProjectName so the rail-foot New Project button (and
+  // Upload) target the visible project even when the user clicked a group
+  // head without opening a file inside it.
   let focusedProjectRid = null;
   let groupColorIdx = 0;
   let sortKeys      = [];   // [{ col, dir, isDate }] — col is display-column-index (≥3)
@@ -135,14 +120,6 @@ export default function workspace(app, { session }) {
   let toolsCtrl     = null; // mountTools' control surface — refresh() rebuilds the open form / columns view
   let joinsCtrl     = null; // mountJoins' control surface — refresh() re-fetches sibling candidates
   let reportCtrl    = null; // mountReport's control surface — refresh() rebuilds the open builder
-  let designerCtrl  = null; // mountDesigner — load(chart) when a chart-typed file opens
-  let sourceCache   = { rid: null, columns: [] }; // last data file the user opened — drives "+ New chart" + designer source
-  // Project's data files (file_type ∉ {chart, dashboard}), as
-  // [{rid, name}] — feeds the designer's source-file dropdown so a tile
-  // can be re-pointed at any data file in the same project. Refreshed
-  // (ensureProjectSourceFiles) whenever a chart/dashboard/data file
-  // opens; the designer reads it synchronously via getSourceFiles.
-  let projectSourceFiles = { projRid: null, files: [] };
 
   // Per-rid envelope cache — populated by prewarmGroupFiles after a
   // project group's file list renders (idle-time background fetches)
@@ -233,95 +210,8 @@ export default function workspace(app, { session }) {
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAGE_SIZE;
   }
 
-  // ─── rail — collapse + view switcher (shared rail-controls) ────
+  // ─── rail — collapse (shared rail-controls) ────────────────────
   mountRailCollapse(nav, $("#wsNavCollapse"));
-
-  // Which view kind the rp-surface is currently showing — derived from
-  // the #wsSurface mode classes (the single source of truth that
-  // loadFile/showLanding maintain), NOT a parallel variable that could
-  // drift across the ~dozen activeFileRid reset sites. landing ⇒ null
-  // (belongs to no view); designer ⇒ "dashboards" (chart/dashboard
-  // canvas); otherwise the data redtable, but only if a data file is
-  // actually open (guards the pre-file mount tick). CAS_3BCD6727.
-  function currentSurfaceView() {
-    const s = $("#wsSurface");
-    if (!s || s.classList.contains("is-landing-mode")) return null;
-    if (s.classList.contains("is-designer-mode")) return "dashboards";
-    return activeFileRid ? "data" : null;
-  }
-
-  // ─── rail-foot create button — ONE context-aware control (CAS_37B2E1BF) ──
-  // Em's coherence ask: collapse Workspace's separate create buttons into one
-  // button that adapts to the rail view, like Home's syncCreateButton. Data →
-  // New chart (charts the active data file); Dashboards → New dashboard. Upload
-  // now lives in the data toolbar + the landing; New project in the rail head.
-  // Refs are captured HERE — before railViewSeg mounts with fireOnMount — so the
-  // first onChange (which calls syncWsCreateButton) doesn't hit a TDZ. The run
-  // handlers (createChart/createDashboard) are hoisted function declarations.
-  const createBtn      = $("#wsCreate");
-  const createBtnIcon  = $("#wsCreateIcon");
-  const createBtnLabel = $("#wsCreateLabel");
-  const WS_CREATE = {
-    data:       { label: "New chart",     icon: "bi-bar-chart-line", run: createChart },
-    dashboards: { label: "New dashboard", icon: "bi-grid-1x2",       run: createDashboard },
-  };
-  let activeWsCreate = WS_CREATE.data;
-  function syncWsCreateButton(view) {
-    const spec = WS_CREATE[view] || WS_CREATE.data;
-    activeWsCreate = spec;
-    if (createBtnLabel) createBtnLabel.textContent = spec.label;
-    if (createBtnIcon)  createBtnIcon.className = "bi " + spec.icon;   // reset to a single class + set
-    if (createBtn)      createBtn.title = spec.label;
-  }
-  createBtn?.addEventListener("click", async () => {
-    createBtn.disabled = true;
-    createBtn.classList.add("is-busy");
-    try { await activeWsCreate.run(); }
-    finally { createBtn.disabled = false; createBtn.classList.remove("is-busy"); }
-  });
-
-  // View switcher (Data ↔ Dashboards) — the active view is a data
-  // attribute on the rail; CSS hides the file rows that don't belong
-  // (no refetch — every project group already renders all its file
-  // kinds). fireOnMount so the filter attr applies on load. The
-  // returned `set` is used after create flows (upload → data, new
-  // dashboard → dashboards) so a freshly-created row isn't hidden by
-  // the current filter.
-  const railViewSeg = mountRailSeg($("#wsRailView"), {
-    pref:        "workspace-railView",
-    fallback:    "data",
-    fireOnMount: true,
-    onChange:    (view) => {
-      nav.dataset.railView = view;
-      syncWsCreateButton(view);   // repoint the one rail-foot create button to this view
-      // CAS_3BCD6727 — swap the rp-surface so toggling the rail brings
-      // the corresponding view forward. Ignore the loadFile rail-sync
-      // echo (the file is already chosen). If the surface already shows
-      // this view's kind, nothing to do. Otherwise it's showing the
-      // OTHER view (e.g. a CSV redtable while toggling to Dashboards) —
-      // restore this view's last-opened file, else drop to the landing
-      // so a wrong-kind file never lingers under the new view.
-      if (railSyncing) return;
-      if (currentSurfaceView() === view) return;
-      const target = lastFileRidByView[view];
-      if (target) {
-        loadFile(target);
-      } else if (activeFileRid) {
-        activeFileRid = null;   // wrong-kind file was showing — drop it
-        showLanding();
-      }
-    },
-  });
-  // setRailView fires onChange even for the current value (rail-controls
-  // set() has no equality short-circuit), so wrap it in the railSyncing
-  // guard: loadFile uses it (via maybeAutoToggleRail) to mirror the rail
-  // to the file it opened, and that echo must not bounce back into a
-  // surface swap. CAS_3BCD6727.
-  const setRailView = (view) => {
-    railSyncing = true;
-    railViewSeg.set(view);
-    railSyncing = false;
-  };
 
   // ─── rail filter — project-name search + ownership pills ───────
   // Both are pure visibility filters (applyRailFilters); they never
@@ -438,9 +328,6 @@ export default function workspace(app, { session }) {
     if (lastEnv) {
       const newRid  = lastEnv.summary.redpash_id;
       const projRid = lastEnv.summary.project_redpash_id;
-      // Uploads are data files — surface the rail's Data view so the
-      // freshly-uploaded row isn't hidden behind the Dashboards filter.
-      setRailView("data");
       await refreshAndOpen(newRid, projRid);
     }
 
@@ -468,10 +355,9 @@ export default function workspace(app, { session }) {
 
   // The .rp-rail-group node for the user's current project focus, or null.
   // Prefers the explicit focusedProjectRid (set on group-head click +
-  // file-open) over the active-file's parent group. Both rail-foot
-  // resolvers (activeProjectName for upload, activeProjectRid for
-  // dashboard / chart / new-project) read from this so they target
-  // the visible project even when no file is open inside it.
+  // file-open) over the active-file's parent group. activeProjectName
+  // (the upload-target resolver) reads from this so Upload targets the
+  // visible project even when no file is open inside it.
   function focusedProjectGroup() {
     if (focusedProjectRid) {
       const g = navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(focusedProjectRid) + '"]');
@@ -619,6 +505,12 @@ export default function workspace(app, { session }) {
     const params   = new URLSearchParams(location.hash.split("?")[1] || "");
     const wantRid  = params.get("project");
     const wantFile = params.get("file");
+    // A chart deep-link (CHT_ prefix) belongs to #/dashboard now (charting
+    // left Workspace, Slice D). Charts no longer render in this rail, so the
+    // auto-open can't reach them — hand off here rather than silently fall
+    // back to the first data file. (A FIL_ dashboard rid that slips through
+    // is caught by loadFile's envelope guard.)
+    if (wantFile && wantFile.startsWith("CHT_")) { location.hash = "#/dashboard"; return; }
     const hasDeepLink = !!(wantRid || wantFile);
     const first = (wantRid && navBody.querySelector('.rp-rail-group[data-rid="' + cssEsc(wantRid) + '"]'))
                || navBody.querySelector('.rp-rail-group[data-default="1"]')
@@ -680,8 +572,8 @@ export default function workspace(app, { session }) {
   }
 
   // ─── landing surface — the default overview (no file open) ─────
-  // A third surface mode alongside data + designer: .is-landing-mode on
-  // #wsSurface (workspace.css) hides the toolbars / body / pager and
+  // The second surface mode alongside the data redtable: .is-landing-mode
+  // on #wsSurface (workspace.css) hides the toolbar / body / pager and
   // shows #wsLanding. The Workspace twin of the Cases board — recent
   // projects + a stats strip. Opening any file (rail click or a landing
   // card) calls hideLanding() and takes over the surface.
@@ -708,9 +600,7 @@ export default function workspace(app, { session }) {
     showLanding();
   }
   function showLanding() {
-    const surface = $("#wsSurface");
-    surface.classList.remove("is-designer-mode");
-    surface.classList.add("is-landing-mode");
+    $("#wsSurface").classList.add("is-landing-mode");
     renderLanding();
     setLandingTabActive(true);
   }
@@ -1029,7 +919,11 @@ export default function workspace(app, { session }) {
 
   function renderFiles(body, items) {
     const hiddenSet = new Set(getHidden(HIDDEN_FILES_KEY).map((x) => x.rid));
-    const visible = items.filter((f) => !hiddenSet.has(f.redpash_id));
+    // Workspace is the data-redtable surface — charts + dashboards live on
+    // the #/dashboard page (Slice D), so they're filtered out of the rail
+    // here. This keeps syncGroupCount honest (it counts rendered tabs).
+    const visible = items.filter((f) =>
+      !hiddenSet.has(f.redpash_id) && f.file_type !== "chart" && f.file_type !== "dashboard");
     if (!visible.length) {
       body.innerHTML = '<div class="rp-rail-state">No files yet.</div>';
     } else {
@@ -1098,20 +992,15 @@ export default function workspace(app, { session }) {
   function fileTab(f) {
     const dot = STAGE_DOT[f.stage] || "is-dirty";
     const name = f.display_name || f.filename || "(unnamed)";
-    // Icon per file_type — Designer-bound rows (chart, dashboard)
-    // get distinct glyphs so the rail reads at a glance.
-    const icon = f.file_type === "chart"     ? "bi-bar-chart-line"
-              : f.file_type === "dashboard"  ? "bi-grid-1x2"
-              :                                 "bi-filetype-csv";
-    // Which rail view this file belongs to. The view toggle (rail head)
-    // hides the rows whose kind isn't the active view: charts (reports)
-    // + dashboards under "dashboards", everything else under "data".
-    const viewKind = f.file_type === "chart"     ? "report"
-                  : f.file_type === "dashboard"  ? "dashboard"
-                  :                                 "data";
-    return '<button class="rp-rail-tab" type="button" data-view-kind="' + viewKind + '" data-rid="' + esc(f.redpash_id) + '">'
-      +   '<i class="bi ' + icon + ' rp-rail-tab-icon"></i>'
+    // Workspace lists DATA files only — renderFiles filters charts +
+    // dashboards out (they live on the #/dashboard page), so the icon is
+    // always the CSV glyph. The chart glyph is the per-row "Visualize"
+    // affordance: it deep-links this CSV into #/dashboard with itself
+    // pre-picked as the chart source (handled in the navBody delegator).
+    return '<button class="rp-rail-tab" type="button" data-rid="' + esc(f.redpash_id) + '">'
+      +   '<i class="bi bi-filetype-csv rp-rail-tab-icon"></i>'
       +   '<span class="rp-rail-tab-name">' + esc(name) + '</span>'
+      +   '<span class="rp-rail-tab-visualize" title="Visualize — chart this file in the designer"><i class="bi bi-bar-chart-line"></i></span>'
       +   '<span class="rp-rail-tab-rename" title="Rename file"><i class="bi bi-pencil"></i></span>'
       +   '<span class="rp-rail-tab-dot ' + dot + '" title="' + esc(f.stage || "") + '"></span>'
       +   '<span class="rp-rail-tab-hide" title="Close"><i class="bi bi-x"></i></span>'
@@ -1191,6 +1080,16 @@ export default function workspace(app, { session }) {
         group.dataset.filesLoaded = "";
         loadFilesForGroup(group);
       }
+      return;
+    }
+    // Per-row "Visualize" chart glyph — deep-link this CSV into the
+    // #/dashboard designer with itself pre-picked as the chart source.
+    // Caught before the generic tab-click branch so it doesn't also
+    // loadFile the row in the redtable (Slice D — charting left Workspace).
+    const visualizeBtn = e.target.closest(".rp-rail-tab-visualize");
+    if (visualizeBtn) {
+      const rid = visualizeBtn.closest(".rp-rail-tab")?.dataset.rid;
+      if (rid) location.hash = "#/dashboard?source=" + encodeURIComponent(rid);
       return;
     }
     if (e.target.closest(".rp-rail-tab-hide")) {
@@ -1280,43 +1179,12 @@ export default function workspace(app, { session }) {
     });
   }
 
-  // Wrap a chart row as a synthetic single-widget dashboard so the
-  // dashboard designer canvas can render it. `redpash_id: null` flags
-  // this wrapper to designer.addChartWidget (skips the PUT/dashboards
-  // round-trip) and to the workspace Add-chart click handler (skips
-  // the navigate-away fallback that would replace the open chart).
-  function chartAsDashboard(chart) {
-    if (!chart) return null;
-    return {
-      redpash_id: null,
-      project_redpash_id: chart.project_redpash_id || null,
-      title: chart.title || "Untitled chart",
-      description: null,
-      folder: null,
-      spec: {
-        template_id: "",
-        widgets: [{
-          slot: "w1",
-          kind: "chart",
-          spec: { chart_id: chart.redpash_id },
-        }],
-      },
-    };
-  }
-
-  // CAS_55984AC7 step 6a — auto-toggle the rail view to match the
-  // opened file's kind so a CHT_/dashboard file isn't hidden behind
-  // a Data-view rail (and vice versa). Gated by the pref
-  // workspace-railViewAutoFollow (default "1"); off restores the
-  // pre-step-6 manual-toggle behavior. setRailView is idempotent —
-  // calling it with the current view is a no-op.
-  function maybeAutoToggleRail(targetView) {
-    if (getPref("workspace-railViewAutoFollow") !== "1") return;
-    setRailView(targetView);
-  }
-
   async function loadFile(rid) {
     if (!rid || rid === activeFileRid) return;
+    // Charting left Workspace (Slice D): a chart rid (CHT_ prefix) opens on
+    // the standalone #/dashboard page, not a dead designer surface here.
+    // Caught before any surface mutation so a stray click just navigates.
+    if (rid.startsWith("CHT_")) { location.hash = "#/dashboard"; return; }
     hideLanding();   // opening any file leaves the overview surface
     activeFileRid = rid;
     // Reset all per-file state — column-indexed knobs only make sense
@@ -1329,37 +1197,6 @@ export default function workspace(app, { session }) {
     setTableState("Loading…");
     rowsInfo.textContent = "Loading…";
     try {
-      // Charts and data files take different load paths. Rid prefix
-      // disambiguates without a probe call — CHT_* is a chart row in
-      // project_files; FIL_* is a data file. The /files/:rid endpoint
-      // 500s on chart rids (no row/column metadata), so we MUST not
-      // hit it for charts.
-      if (rid.startsWith("CHT_")) {
-        maybeAutoToggleRail("dashboards");
-        const chart = await api.get("/charts/" + encodeURIComponent(rid));
-        await ensureSourceCache(chart?.source_file_id);
-        await ensureProjectSourceFiles(chart?.project_redpash_id);
-        enterDesignerMode(chart?.title || "Untitled chart");
-        // Em 2026-05-28: "keep only the view where 'Add chart' doesn't
-        // remove the current chart, but where we can add many charts on
-        // the canvas". The dashboard canvas IS that view — single-chart
-        // files render here too, wrapped as a synthetic 1-widget
-        // dashboard. The wrapper has no redpash_id; designer.js + the
-        // Add-chart click handler below recognise that and skip the
-        // dashboard-PUT path (which would 404 against a synthetic rid).
-        designerCtrl?.load({ type: "dashboard", dashboard: chartAsDashboard(chart) });
-        // Opening a chart inherits its project as the focus.
-        if (chart?.project_redpash_id) focusedProjectRid = chart.project_redpash_id;
-        rowsInfo.textContent = "Chart · " + (chart?.title || "untitled");
-        totalPages = 1;
-        renderPager();
-        // A chart renders in the designer canvas — it belongs to the
-        // Dashboards view, so record it as that view's last-opened file
-        // so toggling Data → Dashboards restores it. CAS_3BCD6727.
-        lastFileRidByView.dashboards = rid;
-        return;
-      }
-
       // Cache-first read. Envelope was already fetched by
       // prewarmGroupFiles when the file's project group expanded,
       // so the typical click on a tab in an open group is a
@@ -1372,6 +1209,17 @@ export default function workspace(app, { session }) {
         envelope = await api.get("/files/" + encodeURIComponent(rid));
         if (envelope) fileEnvelopeCache.set(rid, envelope);
       }
+      // A FIL_-prefixed row whose file_type is chart/dashboard (a
+      // deep-link or a stored rid that resolves to one) also belongs to
+      // #/dashboard — hand off rather than render a dead surface. The rail
+      // filters these out (renderFiles), so this only fires for an external
+      // #/workspace?file=… deep-link to a chart/dashboard.
+      const fileType = envelope?.summary?.file_type;
+      if (fileType === "chart" || fileType === "dashboard") {
+        activeFileRid = null;
+        location.hash = "#/dashboard";
+        return;
+      }
       activeColumns = envelope?.columns || [];
       activeSteps   = envelope?.steps   || [];
       activeSummary = envelope?.summary || null;
@@ -1381,77 +1229,24 @@ export default function workspace(app, { session }) {
         focusedProjectRid = envelope.summary.project_redpash_id;
       }
       syncToolbar();
-      // Defensive fallback for legacy CHT_-prefix mistakes or future
-      // file_types that route through the same designer path.
-      const fileType = envelope?.summary?.file_type;
-      if (fileType === "chart") {
-        maybeAutoToggleRail("dashboards");
-        // Defensive fallback — shouldn't normally hit since the
-        // CHT_ branch returns above, but legacy/wrong-prefixed rids
-        // could land here.
-        const chart = await api.get("/charts/" + encodeURIComponent(rid));
-        await ensureSourceCache(chart?.source_file_id);
-        await ensureProjectSourceFiles(chart?.project_redpash_id || envelope?.summary?.project_redpash_id);
-        enterDesignerMode(chart?.title || envelope?.summary?.display_name || "Untitled chart");
-        // Same synthetic-dashboard wrapping as the CHT_ branch above.
-        designerCtrl?.load({ type: "dashboard", dashboard: chartAsDashboard(chart) });
-        rowsInfo.textContent = "Chart · " + (chart?.title || envelope?.summary?.display_name || "untitled");
-        totalPages = 1;
-        renderPager();
-        // Charts render in the Dashboards view — record the restore
-        // slot (CAS_3BCD6727), as in the CHT_ branch above.
-        lastFileRidByView.dashboards = rid;
-      } else if (fileType === "dashboard") {
-        maybeAutoToggleRail("dashboards");
-        // Dashboards = FIL_-prefix project_files rows with
-        // file_type='dashboard'. Spec carries widgets[] each
-        // referencing a chart by id. Designer fetches each in
-        // parallel and renders the multi-tile canvas.
-        const dashboard = await api.get("/dashboards/" + encodeURIComponent(rid));
-        await ensureProjectSourceFiles(dashboard?.project_redpash_id || envelope?.summary?.project_redpash_id);
-        enterDesignerMode(dashboard?.title || envelope?.summary?.display_name || "Untitled dashboard", "dashboard");
-        designerCtrl?.load({ type: "dashboard", dashboard });
-        rowsInfo.textContent = "Dashboard · " + (dashboard?.title || envelope?.summary?.display_name || "untitled");
-        totalPages = 1;
-        renderPager();
-        // CAS_3BCD6727: record per-view last-opened so toggling Data ↔
-        // Dashboards in the rail restores the right file.
-        lastFileRidByView.dashboards = rid;
-      } else {
-        maybeAutoToggleRail("data");
-        rebuildColsDropdown(activeColumns);
-        rebuildFilterCols(activeColumns);
-        // Cache the open data file so the designer's Add-chart (from a
-        // dashboard) has an immediate source to chart against.
-        sourceCache = { rid, columns: activeColumns };
-        // Tear down any open designer (user navigated from chart to data).
-        designerCtrl?.load(null);
-        exitDesignerMode();
-        // Data-file-only panels — Tools (cleaning + joins) and Report
-        // builder operate on rows/columns/steps that don't exist for
-        // chart/dashboard rids. Firing these before the file_type
-        // switch caused joinsCtrl.refresh() to 400 against the
-        // not_a_data_file guard when a dashboard loaded — they now
-        // run only on the CSV branch.
-        toolsCtrl?.refresh();
-        // workspace-joinsAutoDetect (default "1") gates the
-        // auto-refresh of the sibling-join candidates on every file
-        // open. Joins detection is expensive on large projects
-        // (one POST /joins per open) — off lets the user trigger
-        // via the Joins tab when they actually need it.
-        if (getPref("workspace-joinsAutoDetect") !== "0") {
-          joinsCtrl?.refresh();
-        }
-        reportCtrl?.refresh();
-        // Capacity gate: small files render through the client engine
-        // (full set buffered, sort/page client-side); big files keep the
-        // server page path.
-        clientMode = (envelope?.summary?.row_count || 0) <= CLIENT_ENGINE_ROW_CAP;
-        if (clientMode) await refreshClientBuffer();
-        else            await fetchAndRender();
-        // CAS_3BCD6727: data files belong to the "data" view slot.
-        lastFileRidByView.data = rid;
+      rebuildColsDropdown(activeColumns);
+      rebuildFilterCols(activeColumns);
+      // Data-file panels — Tools (cleaning + joins) + Report builder.
+      toolsCtrl?.refresh();
+      // workspace-joinsAutoDetect (default "1") gates the auto-refresh of
+      // the sibling-join candidates on every file open. Joins detection is
+      // expensive on large projects (one POST /joins per open) — off lets
+      // the user trigger via the Joins tab when they actually need it.
+      if (getPref("workspace-joinsAutoDetect") !== "0") {
+        joinsCtrl?.refresh();
       }
+      reportCtrl?.refresh();
+      // Capacity gate: small files render through the client engine (full
+      // set buffered, sort/page client-side); big files keep the server
+      // page path.
+      clientMode = (envelope?.summary?.row_count || 0) <= CLIENT_ENGINE_ROW_CAP;
+      if (clientMode) await refreshClientBuffer();
+      else            await fetchAndRender();
     } catch (err) {
       setTableState("Couldn’t load file" + (err.status ? " (" + err.status + ")" : "") + ".");
       rowsInfo.textContent = "Error.";
@@ -1762,16 +1557,13 @@ export default function workspace(app, { session }) {
 
   function setTableState(msg) {
     // State message — when no body is current (loading, error, no file).
-    const designer = document.getElementById("wsDesigner");
     if (msg) {
       tableState.textContent = msg;
       tableState.hidden = false;
       table.hidden = true;
-      if (designer) designer.hidden = true;
     } else {
       tableState.hidden = true;
       table.hidden = false;
-      if (designer) designer.hidden = true;
     }
   }
 
@@ -2555,306 +2347,6 @@ export default function workspace(app, { session }) {
     });
   }
 
-  // ─── designer — canvas + accordion config ─────────────────────
-  // Mounts a no-op container at boot; load(chart) lights it up when
-  // a chart-typed file is opened in loadFile. Single-tile for now
-  // (the opened CHT_); dashboard files (multi-tile, new file_type)
-  // are Phase 2. Source data lives on sourceCache (populated when
-  // the user visits a data file); designer.js reads it for the
-  // Data section + future live-preview from source.
-  const designerEl = $("#wsDesigner");
-  if (designerEl) {
-    designerCtrl = mountDesigner(designerEl, {
-      getSource: () => sourceCache,
-      // The project's data files [{rid, name}] for the per-tile source
-      // dropdown. Refreshed when a chart/dashboard/data file opens.
-      getSourceFiles: () => projectSourceFiles.files,
-      // Fires after a per-tile chart save (PUT /charts), a whole-
-      // dashboard save (PUT /dashboards), or a chart delete (null).
-      // Refresh the rail on delete so the dropped CHT_ row disappears;
-      // update the status line + designer title on a save.
-      onSaved:   (saved) => {
-        if (!saved) {
-          rowsInfo.textContent = "Chart deleted.";
-          loadProjects();
-          return;
-        }
-        rowsInfo.textContent = "Saved · " + (saved.title || "untitled");
-        const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
-        if (titleSpan) titleSpan.textContent = saved.title || "Untitled";
-        // A chart save may have changed the rail's stage dot; refresh.
-        loadProjects();
-      },
-      // rp-dash-config-save pressed while the canvas is a synthetic
-      // chart-only wrapper (no real DSH_ to write to). Soft hint
-      // instead of a 404 — promoting a chart to a real dashboard is
-      // the separate follow-up step.
-      onDashboardSaveUnavailable: () => {
-        rowsInfo.textContent = "Open or create a dashboard to save a multi-chart layout — a single chart saves via its own tile.";
-      },
-    });
-  }
-  // Designer toolbar — config-panel toggle (hides/shows the accordion
-  // when the user wants more canvas space).
-  $("#wsDesignerCfgToggle")?.addEventListener("click", (e) => {
-    const designer = $("#wsDesigner");
-    if (!designer) return;
-    const wasOpen = !designer.classList.contains("rp-dash-config-hidden");
-    designer.classList.toggle("rp-dash-config-hidden", wasOpen);
-    e.currentTarget.classList.toggle("is-active", !wasOpen);
-    designerCtrl?.resize();
-  });
-
-  // Reset data-file state + swap the surface into designer mode.
-  // mode = "chart" | "dashboard" — drives the toolbar title icon
-  // (chart-bar vs grid) so the user knows which kind of file is open.
-  // `data-designer-kind` is hardcoded to "dashboard" regardless of
-  // mode — Em 2026-05-28: "I want only data-designer-kind='dashboard'
-  // whenever user clicks on chart file or dashboard file". The
-  // dashboard surface treatment covers both scenarios (a chart is a
-  // single-widget dashboard); future CSS / JS that branches on the
-  // attribute gets one canonical value to read.
-  function enterDesignerMode(title, mode) {
-    activeColumns = [];
-    activeSteps   = [];
-    activeSummary = null;
-    syncToolbar();
-    // Don't refresh the Tools / Report panels here: they're data-file
-    // surfaces (hidden in designer mode via .is-designer-mode CSS), and
-    // refreshing the Report builder fires a /group/preview against the
-    // open CHT_/dashboard rid — which 400s with not_a_data_file. They
-    // get refreshed against real columns when a data file is next opened
-    // (the CSV branch of loadFile). Entering designer mode just hides
-    // them.
-    $("#wsSurface").classList.add("is-designer-mode");
-    $("#wsSurface").dataset.designerKind = "dashboard";
-    const titleSpan = $("#wsDesignerTitle")?.querySelector("span");
-    if (titleSpan) titleSpan.textContent = title || "Untitled";
-    const titleIcon = $("#wsDesignerTitle")?.querySelector("i");
-    if (titleIcon) {
-      titleIcon.className = mode === "dashboard"
-        ? "bi bi-grid-1x2"
-        : "bi bi-bar-chart-line";
-    }
-    $("#wsTable").hidden  = true;
-    $("#wsTableState").hidden = true;
-    $("#wsDesigner").hidden = false;
-  }
-  function exitDesignerMode() {
-    $("#wsSurface").classList.remove("is-designer-mode");
-    delete $("#wsSurface").dataset.designerKind;
-    $("#wsDesigner").hidden = true;
-    $("#wsTable").hidden = false;
-  }
-
-  // Ensure sourceCache holds the chart's source data file. Fetches
-  // /files/:rid for the source if the user opened the chart directly
-  // without visiting the source first.
-  async function ensureSourceCache(sourceRid) {
-    if (!sourceRid) return;
-    if (sourceCache.rid === sourceRid && sourceCache.columns.length) return;
-    try {
-      const env = await api.get("/files/" + encodeURIComponent(sourceRid));
-      sourceCache = { rid: sourceRid, columns: env?.columns || [] };
-    } catch {
-      // Best-effort — designer surfaces "source file unavailable" if
-      // it can't fetch. Don't block chart load.
-    }
-  }
-
-  // Populate projectSourceFiles with the project's data files (the ones
-  // a chart can source from — charts/dashboards excluded). Cached per
-  // project rid; the designer reads it synchronously via getSourceFiles
-  // to fill the source-file dropdown. Best-effort — a failed fetch
-  // leaves the dropdown degraded to the static current-source line.
-  async function ensureProjectSourceFiles(projRid) {
-    if (!projRid) return;
-    try {
-      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
-      const files = (list?.items || [])
-        .filter((f) => f.file_type !== "chart" && f.file_type !== "dashboard")
-        .map((f) => ({ rid: f.redpash_id, name: f.display_name || f.filename || f.redpash_id }));
-      projectSourceFiles = { projRid, files };
-    } catch {
-      // leave the previous cache in place
-    }
-  }
-
-  // Chart creation moved entirely into the dashboard view (Em
-  // 2026-05-28): the rail-foot "New chart" button + its
-  // createChartFromSource helper + syncNewChartButton enable-state
-  // logic were removed. Charts are now created via the designer
-  // toolbar's Add-chart button (#wsDesignerAddChart), which appends
-  // a chart widget to the open dashboard's canvas. sourceCache still
-  // feeds that path (it's set when a data file is opened) — the
-  // designer reads it to source the new chart.
-
-  // Append a chart widget to the currently-open REAL dashboard. Returns
-  // false when no real dashboard is open (the caller promotes first).
-  // Factored out so the normal click and the promote-then-add path share it.
-  async function addChartToOpenDashboard() {
-    const dashRid = designerCtrl?.getOpenDashboardRid?.();
-    if (!dashRid) return false;
-    // Resolve a source data file. Preference: the most recently opened
-    // data file (sourceCache), else the first non-chart/-dashboard file
-    // in the dashboard's own project (covers "opened the dashboard cold").
-    const dashboard = designerCtrl.getOpenDashboard?.();
-    const projRid   = dashboard?.project_redpash_id;
-    let src = sourceCache;
-    if (!src.rid && projRid) {
-      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
-      const dataFile = (list?.items || []).find((f) =>
-        f.file_type !== "chart" && f.file_type !== "dashboard");
-      if (dataFile) {
-        const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
-        src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
-      }
-    }
-    if (!src.rid) {
-      rowsInfo.textContent = "Add chart: this project has no data file to chart yet — upload one first.";
-      return true;  // handled — nothing to chart, but not a "no dashboard" miss
-    }
-    const firstCol = src.columns[0]?.name || "";
-    // workspace-defaultChartKind controls the kind a freshly-added
-    // chart starts with (Add chart from the dashboard canvas).
-    // Registered pref; fallback "bar" preserves pre-step-6c behavior.
-    const defaultKind = getPref("workspace-defaultChartKind") || "bar";
-    const chart = await api.post("/charts", {
-      source_file_id: src.rid,
-      title:          "Untitled chart",
-      spec: { kind: defaultKind, group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
-    });
-    await designerCtrl?.addChartWidget?.(chart);  // appends widget, PUTs, mounts tile
-    await loadProjects();                          // rail picks up the new CHT_ row
-    return true;
-  }
-
-  // Promote a standalone chart (opened through the synthetic 1-widget
-  // dashboard wrapper, redpash_id=null) into a REAL dashboard that
-  // contains it, then open that dashboard. This is what makes "Add chart"
-  // work from a lone chart instead of silently no-opping: the current
-  // chart becomes the first widget of a fresh dashboard and the canvas
-  // switches to it — matching "the dashboard is the surface where charts
-  // are collected + saved." Returns the new dashboard rid, or null.
-  async function promoteChartToDashboard() {
-    const synthetic = designerCtrl?.getOpenDashboard?.();
-    const chartRid  = synthetic?.spec?.widgets?.[0]?.spec?.chart_id
-                   || (activeFileRid?.startsWith("CHT_") ? activeFileRid : null);
-    const projRid   = synthetic?.project_redpash_id || focusedProjectRid;
-    if (!chartRid || !projRid) {
-      rowsInfo.textContent = "Add chart: couldn't resolve this chart's project to build a dashboard.";
-      return null;
-    }
-    const created = await api.post("/dashboards", {
-      project_redpash_id: projRid,
-      title:              "Untitled dashboard",
-      spec: { template_id: "free", widgets: [{ slot: "w1", kind: "chart", spec: { chart_id: chartRid } }] },
-    });
-    const newRid = created?.redpash_id;
-    if (!newRid) return null;
-    setRailView("dashboards");
-    await loadProjects();
-    activeFileRid = null;    // clear so loadFile doesn't early-return on the same rid
-    await loadFile(newRid);  // canvas switches to the real, persistable dashboard
-    return newRid;
-  }
-
-  // Designer-toolbar Add chart. On a real dashboard it just appends a
-  // widget. On a standalone chart (synthetic wrapper, no dashboard rid)
-  // it first PROMOTES the chart into a real dashboard, then adds — so the
-  // button is never a dead no-op and the chart you were viewing is kept
-  // as the dashboard's first widget.
-  $("#wsDesignerAddChart")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      if (!designerCtrl?.getOpenDashboardRid?.()) {
-        const promoted = await promoteChartToDashboard();
-        if (!promoted) return;  // couldn't promote — message already surfaced
-      }
-      await addChartToOpenDashboard();
-    } catch (err) {
-      console.warn("[designer] addChart failed:", err);
-      rowsInfo.textContent = "Add chart failed: " + (err?.body?.message || err?.message || "see console");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // + New dashboard rail button — POST /api/dashboards in the focused
-  // project (group-head-clicked OR the active file's group); last-ditch
-  // falls back to the first rendered group so a brand-new session with
-  // a default project still routes correctly. Auto-opens the new dash.
-  function activeProjectRid() {
-    return focusedProjectGroup()?.dataset?.rid
-        || navBody.querySelector(".rp-rail-group")?.dataset?.rid
-        || null;
-  }
-  // ─── create handlers for the one rail-foot button (CAS_37B2E1BF) ────
-  // Wired to #wsCreate via WS_CREATE / syncWsCreateButton (above); that click
-  // wrapper owns the disabled / is-busy state, so these just do the work and
-  // open the result. Both target activeProjectRid() (the focused rail group),
-  // exactly like the old per-button handlers.
-
-  // Dashboards view → New dashboard: an empty free-template dashboard in the
-  // active project, opened in the designer (was the #wsNewDashboard button).
-  async function createDashboard() {
-    const projRid = activeProjectRid();
-    if (!projRid) { rowsInfo.textContent = "New dashboard: open or create a project first."; return; }
-    try {
-      const created = await api.post("/dashboards", {
-        project_redpash_id: projRid,
-        title:              "Untitled dashboard",
-        spec:               { template_id: "free", widgets: [] },
-      });
-      const newRid = created?.redpash_id;
-      // A dashboard lives in the rail's Dashboards view — switch to it so the
-      // new row is visible (it'd be hidden under the Data view).
-      setRailView("dashboards");
-      await loadProjects();
-      if (newRid) { activeFileRid = null; await loadFile(newRid); }
-    } catch (err) {
-      console.warn("[designer] + New dashboard failed:", err);
-      rowsInfo.textContent = "New dashboard failed — see console.";
-    }
-  }
-
-  // Data view → New chart: a standalone chart over the active data file (the
-  // open/last data file via sourceCache, else the project's first data file),
-  // opened in the designer. Mirrors addChartToOpenDashboard's source resolution
-  // + POST /charts, but standalone (no dashboard wrapper).
-  async function createChart() {
-    const projRid = activeProjectRid();
-    if (!projRid) { rowsInfo.textContent = "New chart: open or create a project first."; return; }
-    let src = sourceCache;
-    if (!src.rid) {
-      const list = await api.get("/projects/" + encodeURIComponent(projRid) + "/files");
-      const dataFile = (list?.items || []).find((f) => f.file_type !== "chart" && f.file_type !== "dashboard");
-      if (dataFile) {
-        const env = await api.get("/files/" + encodeURIComponent(dataFile.redpash_id));
-        src = sourceCache = { rid: dataFile.redpash_id, columns: env?.columns || [] };
-      }
-    }
-    if (!src.rid) { rowsInfo.textContent = "New chart: this project has no data file yet — upload one first."; return; }
-    try {
-      const firstCol    = src.columns[0]?.name || "";
-      const defaultKind = getPref("workspace-defaultChartKind") || "bar";
-      const chart = await api.post("/charts", {
-        source_file_id: src.rid,
-        title:          "Untitled chart",
-        spec: { kind: defaultKind, group_by: firstCol, agg_col: "*", agg_fn: "count", title: "" },
-      });
-      const newRid = chart?.redpash_id;
-      // Charts live in the Dashboards view — switch + open the new chart.
-      setRailView("dashboards");
-      await loadProjects();
-      if (newRid) { activeFileRid = null; await loadFile(newRid); }
-    } catch (err) {
-      console.warn("[designer] + New chart failed:", err);
-      rowsInfo.textContent = "New chart failed — see console.";
-    }
-  }
-
   // ─── new project — POST /api/projects + expand the new group ──
   // No prompt — the project lands with a placeholder name + an empty
   // file list. The hover pencil on the group head opens inline rename
@@ -2878,9 +2370,9 @@ export default function workspace(app, { session }) {
           loadFilesForGroup(group);
           group.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
-        // Seed focus to the new project — the next Upload / New chart /
-        // New dashboard click should target it, even though no file
-        // inside it is open yet (it's empty).
+        // Seed focus to the new project — the next Upload (or per-row
+        // Visualize) targets it, even though no file inside it is open
+        // yet (it's empty).
         focusedProjectRid = newRid;
       }
     } catch (err) {

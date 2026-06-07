@@ -11,27 +11,8 @@
     <aside class="rp-rail" id="wsNav">
       <div class="rp-rail-head">
         <span class="rp-rail-title">Projects</span>
-        <button class="rp-btn-icon" id="wsNewProject" type="button"
-                title="New project — appears in the rail, rename via the group head">
-          <i class="bi bi-plus-lg"></i>
-        </button>
         <button class="rp-btn-icon" id="wsNavCollapse" type="button" title="Collapse">
           <i class="bi bi-chevron-double-left"></i>
-        </button>
-      </div>
-      <!-- View switcher (the rp-rail-views seg track, same as the
-           Cases source toggle). Flips every project group's file list
-           between data files (redtable surface) and reports +
-           dashboards (designer surface). Persisted via the
-           `workspaceRailView` pref. -->
-      <div class="rp-rail-views" id="wsRailView">
-        <button type="button" class="is-active" data-rail-seg="data"
-                title="Show CSV / Excel data files — opens the redtable">
-          <i class="bi bi-table"></i> Data
-        </button>
-        <button type="button" data-rail-seg="dashboards"
-                title="Show reports + dashboards — opens the designer">
-          <i class="bi bi-grid-1x2"></i> Dashboards
         </button>
       </div>
       <!-- Rail filter zone — name search + ownership pills. Both are
@@ -56,13 +37,13 @@
         <div class="rp-rail-state">Loading projects…</div>
       </div>
       <div class="rp-rail-footer">
-        <!-- One context-aware create button (CAS_37B2E1BF): adapts to the rail
-             view like Home's single rail-foot create — Data → New chart (from the
-             active data file), Dashboards → New dashboard. Upload moved to the data
-             toolbar + landing; New project to the rail head. workspace.js repoints
-             label/icon/handler via syncWsCreateButton on every rail-view switch. -->
-        <button class="rp-btn-icon rp-btn-icon--glass" id="wsCreate" type="button">
-          <i class="bi bi-bar-chart-line" id="wsCreateIcon"></i><span id="wsCreateLabel">New chart</span>
+        <!-- New Project — the rail-foot primary CTA (glass), like Home's
+             rail-foot create. Charting moved to the standalone #/dashboard
+             page (Slice D), so Workspace's one rail-foot action is New
+             Project. Upload lives in the data toolbar + the landing. -->
+        <button class="rp-btn-icon rp-btn-icon--glass" id="wsNewProject" type="button"
+                title="New project — appears in the rail, rename via the group head">
+          <i class="bi bi-plus-lg"></i><span>New project</span>
         </button>
       </div>
     </aside>
@@ -73,14 +54,14 @@
 
         <!-- landing — the default surface when no file is open (bare
              #/workspace, no deep-link). Recent projects + a stats strip,
-             the Workspace twin of the Cases board. A third surface mode
-             alongside data + designer: .is-landing-mode (workspace.css)
-             hides the toolbars / body / pager and shows this. Content is
+             the Workspace twin of the Cases board. The second surface mode
+             alongside the data redtable: .is-landing-mode (workspace.css)
+             hides the toolbar / body / pager and shows this. Content is
              rendered by workspace.js renderLanding(). -->
         <div class="ws-landing" id="wsLanding"></div>
 
-        <!-- toolbar (data mode) — hidden when the surface is in
-             designer mode (chart file open) -->
+        <!-- toolbar — the data redtable's controls (charting moved to the
+             standalone #/dashboard page, Slice D). -->
         <div class="rp-toolbar rp-toolbar--data">
           <!-- Upload lives here (where files are worked) + on the landing (the
                empty state). Moved off the rail foot in the create-button
@@ -149,24 +130,6 @@
           </button>
         </div>
 
-        <!-- toolbar (designer mode) — breadcrumb + Add chart +
-             config toggle. Shown only when the surface is in
-             designer mode (chart file open). -->
-        <div class="rp-dash-toolbar">
-          <span class="rp-title" id="wsDesignerTitle">
-            <i class="bi bi-bar-chart-line"></i> <span>Chart</span>
-          </span>
-          <span class="rp-dash-toolbar-spacer"></span>
-          <button class="rp-btn-icon rp-btn-icon--glass" id="wsDesignerAddChart" type="button"
-                  title="Create a new chart from the same source data file">
-            <i class="bi bi-plus-lg"></i><span>Add chart</span>
-          </button>
-          <span class="rp-toolbar-sep"></span>
-          <button class="rp-btn-icon is-active" id="wsDesignerCfgToggle" type="button" title="Chart config">
-            <i class="bi bi-sliders"></i>
-          </button>
-        </div>
-
         <!-- body — filter panel · table · tools panel -->
         <div class="rp-surface-body">
 
@@ -217,7 +180,6 @@
               <thead><!-- dynamic — rebuilt when a file loads --></thead>
               <tbody><!-- dynamic --></tbody>
             </table>
-            <div class="rp-dash-shell" id="wsDesigner" hidden><!-- designer.js mounts the canvas + accordion here --></div>
             <div class="rp-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
 

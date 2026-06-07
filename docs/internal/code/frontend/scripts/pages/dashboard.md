@@ -35,6 +35,11 @@ bug (runbook CAS_3BCD6727): with no opposite surface to toggle to, there's no ec
   then appends a widget from the picked source).
 - Open paths: a chart (`CHT_*`) loads wrapped as a synthetic 1-widget dashboard (`chartAsDashboard`);
   a dashboard loads its multi-tile spec. Both via `/api/charts/:rid` / `/api/dashboards/:rid`.
+- **`?source=<FIL_rid>` deep-link (D2 bridge).** The Workspace per-row "Visualize" glyph navigates
+  to `#/dashboard?source=<csv-rid>`. On init this page parses the source rid out of `location.hash`
+  (the router strips the `?` suffix before matching — `main.js:69`), fetches the file to resolve its
+  project, focuses that project's rail group, and pre-picks the CSV as the chart source (`setSource`).
+  Best-effort — an unknown / non-data rid falls back to the default first-CSV pick.
 
 ## Drift-prone areas
 

@@ -263,3 +263,10 @@ Every entry follows the same five headings:
   `tools/retired-class-audit` gate so a half-migration (CSS renamed, emitter not) fails the
   audit, not the user. The gate immediately surfaced two emitters a manual sweep mis-attributed.
   Discipline rule: a class-family rename isn't done until the **emitters** move too — gate it.
+- [0019 — Workspace Dashboards path stripped (Slice D / D2): designer + view-toggle removed, CAS_3BCD6727 deleted structurally](0019-workspace-dashboards-strip.md) —
+  **Done 2026-06-07** (Slice D / D2, CAS_3BCD6727). With the designer on its own `#/dashboard`
+  page (D1), Workspace's in-page Data↔Dashboards toggle + designer mount + chart/dashboard
+  flows were deleted (~515 lines): Workspace is now a pure data-redtable. The rail lists data
+  files only; a per-row "Visualize" glyph deep-links a CSV to `#/dashboard?source=<rid>`; the
+  rail-foot button is New Project. Removing the opposite-view surface **deletes the
+  CAS_3BCD6727 re-entrancy bug structurally** (no swap, no echo) — supersedes runbook 0013.

@@ -319,6 +319,26 @@
 .rp-rail-tab:hover .rp-rail-tab-rename, .rp-rail-tab.active .rp-rail-tab-rename { opacity: 1; }
 .rp-rail-tab-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
 
+/* File "Visualize" glyph — deep-links the CSV into the #/dashboard designer
+   (Slice D, Workspace per-row chart icon). Same hover-fade affordance as the
+   rename pencil; --rp-info on hover (links / info semantics) marks it as
+   navigation, distinct from the destructive close ×. */
+.rp-rail-tab-visualize {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-rail-tab-visualize i { font-size: 0.75rem; }
+.rp-rail-tab:hover .rp-rail-tab-visualize, .rp-rail-tab.active .rp-rail-tab-visualize { opacity: 1; }
+.rp-rail-tab-visualize:hover { background: var(--rp-surface-2); color: var(--rp-info); }
+
 /* Editing state for the file-name span while inline rename is active.
    Mirrors .rp-rail-group-name-editing — undo ellipsis so the full value
    shows, accent outline reads as a focused text input. */
