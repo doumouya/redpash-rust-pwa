@@ -114,7 +114,7 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.rp-dash-toolbar .rp-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.rp-dash-toolbar .rp-title i { color: var(--rp-info); font-size: 0.875rem; }
 .rp-dash-toolbar-spacer { flex: 1; }
 
 /* ── designer shell ─────────────────────────────────────────────
@@ -165,7 +165,7 @@
   transition: border-color 0.14s var(--rp-ease), box-shadow 0.14s var(--rp-ease);
 }
 .rp-dash-tile.is-selected {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
 }
 .rp-dash-tile-head {
@@ -220,7 +220,7 @@
    without hover, signalling unsaved edits. */
 .rp-dash-tile--dirty .rp-dash-tile-save:not(:disabled) {
   opacity: 1;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
 }
 .rp-dash-tile-body {
@@ -273,7 +273,7 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.rp-dash-config-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.rp-dash-config-title i { color: var(--rp-info); font-size: 0.875rem; }
 /* Config-panel Save CTA composes the rp-btn-icon + --accent atom (A1,
    was rt-btn + rt-btn--accent). rp-dash-config-save is the SIZING
    modifier — the verbatim ds-config-save deltas vs the atom. */
@@ -309,7 +309,7 @@
   transition: transform 0.15s var(--rp-ease);
 }
 .rp-dash-sec:not(.is-open) .rp-dash-sec-caret { transform: rotate(-90deg); }
-.rp-dash-sec-icon { font-size: 0.8125rem; color: var(--rp-accent-2); }
+.rp-dash-sec-icon { font-size: 0.8125rem; color: var(--rp-info); }
 .rp-dash-sec-label {
   flex: 1;
   text-align: left;
@@ -343,7 +343,7 @@
   outline: 0;
 }
 .rp-dash-input:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
 }
 .rp-dash-toggle-row {
@@ -358,7 +358,7 @@
 .rp-dash-toggle-row input {
   width: 0.9375rem;
   height: 0.9375rem;
-  accent-color: var(--rp-accent-2);
+  accent-color: var(--rp-info);
   cursor: pointer;
 }
 .rp-dash-muted {
@@ -392,8 +392,8 @@
 .rp-dash-type-btn i { font-size: 0.9375rem; }
 .rp-dash-type-btn:hover { color: var(--rp-text); }
 .rp-dash-type-btn.is-active {
-  color: var(--rp-accent-2);
-  border-color: var(--rp-accent-2);
+  color: var(--rp-info);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
 }
 
@@ -410,7 +410,7 @@
   color: var(--rp-text);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.rp-dash-source i { color: var(--rp-accent-2); font-size: 0.8125rem; }
+.rp-dash-source i { color: var(--rp-info); font-size: 0.8125rem; }
 .rp-dash-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -421,7 +421,7 @@
   padding: 0.1875rem 0.5625rem;
   border-radius: 6.1875rem;
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-weight: 550;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
@@ -454,7 +454,7 @@
 }
 .rp-dash-theme-opt:hover { background: var(--rp-hover); }
 .rp-dash-theme-opt.is-active {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
 }
 .rp-dash-sw { display: flex; gap: 0.125rem; }
@@ -465,6 +465,6 @@
 }
 .rp-dash-theme-opt span { flex: 1; text-align: left; font-weight: 550; }
 .rp-dash-theme-opt .rp-dash-check {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.75rem;
 }

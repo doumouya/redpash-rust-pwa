@@ -108,7 +108,7 @@
 }
 .rp-modal-input:focus,
 .rp-modal-textarea:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
 }
 .rp-modal-textarea {
   min-height: 6rem;

@@ -55,7 +55,7 @@
    workspace header has the .rp-redtable-sort chevron <i>; a list header has the
    .rp-redtable-sort-icon span. */
 .rp-redtable th.is-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-.rp-redtable th.is-sortable.is-sorted { color: var(--rp-accent-2); }
+.rp-redtable th.is-sortable.is-sorted { color: var(--rp-info); }
 /* WORKSPACE fork hover (was .rt-table th.sortable:hover) — dims. */
 .rp-redtable th.is-sortable:has(.rp-redtable-sort):hover { color: var(--rp-text-dim); }
 /* LIST fork hover (was .rp-list-sortable:hover) — brightens. */
@@ -66,7 +66,7 @@
    .rp-redtable-sort-ord is the superscript multi-key order number (1,2,3…) shown
    only when sorting on >1 column. */
 .rp-redtable th .rp-redtable-sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
-.rp-redtable th .rp-redtable-sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-accent-2); }
+.rp-redtable th .rp-redtable-sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-info); }
 
 /* ── sort glyph — LIST variant (was .rp-list-sortable / .rp-list-sort-icon /
    .is-asc / .is-desc, legacy shell.css) ───────────────────────────────────────
@@ -122,7 +122,7 @@
   top: -2px;
   bottom: -2px;
   width: 0.3125rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   border-radius: 1px;
   pointer-events: none;
   z-index: 2;
@@ -140,7 +140,7 @@
    The checkbox INPUT itself — select-all, per-row, cols-picker item, tools-panel
    column-select. Accent-coloured, pointer cursor. Used in the select/edit modes
    and the cols dropdown. */
-.rp-redtable-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-accent-2); cursor: pointer; }
+.rp-redtable-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-info); cursor: pointer; }
 
 /* ── edit mode (was .rt-table.mode-edit td.editable / :hover / :focus) ─────────
    WORKSPACE inline-edit cell wrapper. In edit mode every data cell gets an inset
@@ -158,7 +158,7 @@
 }
 .rp-redtable.mode-edit td.editable:hover { background: var(--rp-accent-soft); }
 .rp-redtable td.editable:focus {
-  outline: 0.125rem solid var(--rp-accent-2);
+  outline: 0.125rem solid var(--rp-info);
   outline-offset: -0.125rem;
   background: var(--rp-surface);
   border-radius: 0.25rem;
@@ -186,7 +186,7 @@
   width: 100%;
   height: 1.625rem;
   padding: 0 0.375rem;
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.375rem;
   background: var(--rp-surface);
   color: var(--rp-text);
@@ -196,6 +196,6 @@
 }
 .rp-cell-edit-select:focus,
 .rp-cell-edit-input:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.125rem var(--rp-accent-soft);
 }

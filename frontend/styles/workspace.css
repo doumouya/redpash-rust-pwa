@@ -81,7 +81,7 @@
               transform 0.14s var(--rp-ease);
 }
 .ws-landing-card:hover {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   background: var(--rp-hover);
   transform: translateY(-0.0625rem);
 }

@@ -83,7 +83,7 @@
    selector was id-coupled to #filterToggle (a STALE id that never matched the
    live #wsFilterToggle); rebound here to the class hook so it isn't id-coupled —
    the filter button is an rp-btn-icon with .has-filter inside the toolbar. */
-.rp-toolbar .rp-btn-icon.has-filter { color: var(--rp-accent-2); }
+.rp-toolbar .rp-btn-icon.has-filter { color: var(--rp-info); }
 .rp-toolbar .rp-btn-icon.has-filter::after {
   content: "";
   position: absolute;
@@ -92,7 +92,7 @@
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 6.1875rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
 }
 
 /* ── mode buttons (was .rt-mode) ──────────────────────────────────────────────
@@ -105,7 +105,7 @@
 .rp-toolbar-mode:not(:disabled):hover { color: var(--rp-text); }
 .rp-toolbar-mode.is-active {
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
 }
 .rp-toolbar-mode[data-mode="delete"].armed {
   color: var(--rp-accent);
@@ -155,7 +155,7 @@
   padding: 0 0.6875rem;
   border-radius: 6.1875rem;
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.7812rem;
   font-weight: 600;
   cursor: pointer;

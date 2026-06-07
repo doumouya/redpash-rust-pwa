@@ -78,7 +78,6 @@ html[data-theme="catppuccin-mocha"],
   --rp-text-mute: #6c7086;
 
   --rp-accent:    #f38ba8;
-  --rp-accent-2:  #89b4fa;
   --rp-on-accent: #11111b;  /* dark text reads on the light-pink accent */
   --rp-mauve:     #cba6f7;
   --rp-ok:        #a6e3a1;
@@ -122,7 +121,6 @@ html[data-theme="catppuccin-latte"],
   --rp-text-mute: #8c8fa1;
 
   --rp-accent:    #d20f39;
-  --rp-accent-2:  #1e66f5;
   --rp-on-accent: #ffffff;
   --rp-mauve:     #8839ef;
   --rp-ok:        #40a02b;
@@ -162,7 +160,6 @@ html[data-theme="new-dark"],
   --rp-text-mute: #6b7280;
 
   --rp-accent:    #f04438;  /* RedPash red */
-  --rp-accent-2:  #5b8def;  /* secondary hue (links/info) */
   --rp-on-accent: #ffffff;
   --rp-mauve:     #b692f6;
   --rp-ok:        #2dd4a7;
@@ -201,7 +198,6 @@ html[data-theme="new-light"],
   --rp-text-mute: #98a2b3;
 
   --rp-accent:    #f04438;  /* RedPash red */
-  --rp-accent-2:  #2563eb;
   --rp-on-accent: #ffffff;
   --rp-mauve:     #8b5cf6;
   --rp-ok:        #16a34a;

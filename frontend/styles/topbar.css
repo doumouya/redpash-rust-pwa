@@ -71,7 +71,7 @@
   transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
 }
 .rp-omni:focus-within {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.25rem var(--rp-accent-soft);
 }
 .rp-omni i { color: var(--rp-text-mute); font-size: 0.875rem; }
@@ -147,7 +147,7 @@
 .rp-omni-result.is-active {
   background: var(--rp-accent-soft);
 }
-.rp-omni-result.is-active i { color: var(--rp-accent-2); }
+.rp-omni-result.is-active i { color: var(--rp-info); }
 .rp-omni-result-label {
   flex: 1;
   min-width: 0;
@@ -166,7 +166,7 @@
 }
 .rp-omni-hl {
   background: rgba(137, 180, 250, 0.22);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-weight: 600;
   border-radius: 0.1875rem;
   padding: 0 0.125rem;
@@ -191,7 +191,7 @@
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--rp-bg);
-  background: linear-gradient(135deg, var(--rp-accent-2), var(--rp-teal));
+  background: linear-gradient(135deg, var(--rp-info), var(--rp-teal));
   text-decoration: none;
   outline: 0.125rem solid transparent;
   outline-offset: 0.125rem;
@@ -199,6 +199,6 @@
 }
 a.rp-avatar { cursor: pointer; }
 a.rp-avatar:hover { transform: scale(1.06); }
-a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
+a.rp-avatar.is-active { outline-color: var(--rp-info); }
 /* Size variant — same atom, larger usage (Profile head). */
 .rp-avatar--lg { width: 4rem; height: 4rem; margin-left: 0; font-size: 1.375rem; }

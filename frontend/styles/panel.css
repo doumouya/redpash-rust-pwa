@@ -288,9 +288,9 @@
   gap: 0.25rem;
   padding: 0.1875rem 0.25rem 0.1875rem 0.625rem;
   border-radius: 6.1875rem;
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.7188rem;
   font-weight: 600;
   font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -304,7 +304,7 @@
   border: 0;
   border-radius: 6.1875rem;
   background: transparent;
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   cursor: pointer;
 }
 .rp-report-chip-del:hover { background: rgba(243, 139, 168, 0.18); color: var(--rp-accent); }
@@ -345,7 +345,7 @@
   outline: 0;
 }
 .rp-report-agg select:focus,
-.rp-report-agg input:focus { border-color: var(--rp-accent-2); }
+.rp-report-agg input:focus { border-color: var(--rp-info); }
 .rp-report-add-agg,
 .rp-report-add-window {
   width: 100%;
@@ -391,7 +391,7 @@
   outline: 0;
 }
 .rp-report-window-row input:focus,
-.rp-report-window-row select:focus { border-color: var(--rp-accent-2); }
+.rp-report-window-row select:focus { border-color: var(--rp-info); }
 .rp-report-window-pct {
   display: inline-flex;
   align-items: center;
@@ -448,11 +448,11 @@
   cursor: pointer;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.rp-report-part-chip:hover { border-color: var(--rp-accent-2); color: var(--rp-text); }
+.rp-report-part-chip:hover { border-color: var(--rp-info); color: var(--rp-text); }
 .rp-report-part-chip.is-on {
   background: var(--rp-accent-soft);
-  border-color: var(--rp-accent-2);
-  color: var(--rp-accent-2);
+  border-color: var(--rp-info);
+  color: var(--rp-info);
   font-weight: 600;
 }
 .rp-report-muted {
@@ -513,7 +513,7 @@
 }
 .rp-report-topn-row select[data-topn-key="order_by"] { flex: 1; }
 .rp-report-topn-row input:focus,
-.rp-report-topn-row select:focus { border-color: var(--rp-accent-2); }
+.rp-report-topn-row select:focus { border-color: var(--rp-info); }
 
 /* Show toggles (C2) — show_details / show_subtotals / show_total. */
 .rp-report-show-row {
@@ -586,7 +586,7 @@
   background: var(--rp-hover);
 }
 .rp-report-sort-arrow {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.5625rem;
   margin-left: 0.125rem;
 }
@@ -597,7 +597,7 @@
   padding: 0 0.1875rem;
   margin-left: 0.1875rem;
   border-radius: 6.1875rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-surface);
   font-size: 0.5625rem;
   font-weight: 700;
@@ -608,7 +608,7 @@
 .rp-report-preview-table tr.is-total td {
   background: var(--rp-accent-soft);
   font-weight: 700;
-  border-top: 1px solid var(--rp-accent-2);
+  border-top: 1px solid var(--rp-info);
 }
 .rp-report-preview-table .is-muted { color: var(--rp-text-mute); }
 
@@ -626,7 +626,7 @@
 .rp-report-matrix-table tfoot tr.is-total td {
   background: var(--rp-accent-soft);
   font-weight: 700;
-  border-top: 1px solid var(--rp-accent-2);
+  border-top: 1px solid var(--rp-info);
 }
 /* Multi-measure matrix (CAS_AF836C82 #1) — each row value spans K
    measure sub-rows; the measure name lives in its own column. */
@@ -676,7 +676,7 @@
   border-bottom: 1px solid var(--rp-border);
   font-size: 0.7812rem;
 }
-.rp-join-card__head i { color: var(--rp-accent-2); }
+.rp-join-card__head i { color: var(--rp-info); }
 .rp-join-card__title  { font-weight: 600; color: var(--rp-text); flex: 1 1 auto; }
 .rp-join-card__count  { color: var(--rp-text-mute); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
 .rp-join-table {
@@ -706,7 +706,7 @@
   color: var(--rp-text-mute);
 }
 .rp-join-table td.is-strength.is-strong { color: var(--rp-ok); }
-.rp-join-table td.is-strength.is-medium { color: var(--rp-accent-2); }
+.rp-join-table td.is-strength.is-medium { color: var(--rp-info); }
 .rp-join-table td.is-strength.is-weak   { color: var(--rp-text-mute); }
 .rp-join-col {
   display: inline-block;
@@ -740,7 +740,7 @@
   border: 0;
   border-top: 1px solid var(--rp-border);
   background: transparent;
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.7188rem;
   text-align: center;
   cursor: pointer;
@@ -758,7 +758,7 @@
 .rp-join-pick {
   width: 0.875rem;
   height: 0.875rem;
-  accent-color: var(--rp-accent-2);
+  accent-color: var(--rp-info);
   cursor: pointer;
 }
 .rp-join-table tr.is-picked { background: var(--rp-accent-soft); }

@@ -57,7 +57,7 @@
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
 .rp-chip:hover { color: var(--rp-text); }
-.rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
+.rp-chip.is-active { background: var(--rp-info); color: var(--rp-bg); }
 
 /* /home + /monitoring list-view pagers now use the canonical .rp-pager
    (pager.css) — same class as Workspace. Per [[naming-consistency]]

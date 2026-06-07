@@ -17,7 +17,7 @@
   max-width: 23.75rem;
   background: var(--rp-surface);
   color: var(--rp-text);
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.625rem;
   box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
   font-size: 0.8125rem;
@@ -38,14 +38,14 @@
   gap: 0.4375rem;
   font-weight: 600;
 }
-.rp-sw-update__msg i { color: var(--rp-accent-2); font-size: 0.9375rem; }
+.rp-sw-update__msg i { color: var(--rp-info); font-size: 0.9375rem; }
 
 .rp-sw-update__btn {
   height: 1.75rem;
   padding: 0 0.75rem;
   border: 0;
   border-radius: 0.4375rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
   font: inherit;
   font-size: 0.7812rem;

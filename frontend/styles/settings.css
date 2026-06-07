@@ -506,7 +506,7 @@
 }
 .rp-theme-swatch-card:hover { border-color: var(--rp-text-mute); }
 .rp-theme-swatch-card:focus-visible {
-  outline: 2px solid var(--rp-accent-2);
+  outline: 2px solid var(--rp-info);
   outline-offset: 2px;
 }
 .rp-theme-swatch-card[aria-checked="true"] {

@@ -42,7 +42,7 @@
   box-shadow: 0 0 0 0.1875rem var(--rp-surface);
 }
 .rp-activity-dot[data-tone="ok"]   { background: var(--rp-ok); }
-.rp-activity-dot[data-tone="info"] { background: var(--rp-accent-2); }
+.rp-activity-dot[data-tone="info"] { background: var(--rp-info); }
 .rp-activity-dot[data-tone="warn"] { background: var(--rp-warn); }
 .rp-activity-event > .rp-avatar { margin: 0 auto; }
 

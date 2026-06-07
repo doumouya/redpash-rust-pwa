@@ -58,7 +58,7 @@
   padding-right: 0.25rem;
 }
 .rp-tool-columns-table tr.is-selected td { background: var(--rp-accent-soft); }
-.rp-tool-columns-table tr.is-selected td.is-name { color: var(--rp-accent-2); }
+.rp-tool-columns-table tr.is-selected td.is-name { color: var(--rp-info); }
 
 /* column drag-reorder (vertical row drag) — the manager rows ARE the handles.
    The redtable's .is-drop-before/after draw VERTICAL bars on a TH (horizontal
@@ -66,8 +66,8 @@
    the row's cells (a tr can't host a positioned pseudo, but a td box can). */
 .rp-tool-columns-table tbody tr[draggable="true"] { cursor: grab; }
 .rp-tool-columns-table tbody tr.is-dragging td { opacity: 0.45; }
-.rp-tool-columns-table tbody tr.is-drop-before td { box-shadow: inset 0 0.125rem 0 var(--rp-accent-2); }
-.rp-tool-columns-table tbody tr.is-drop-after td { box-shadow: inset 0 -0.125rem 0 var(--rp-accent-2); }
+.rp-tool-columns-table tbody tr.is-drop-before td { box-shadow: inset 0 0.125rem 0 var(--rp-info); }
+.rp-tool-columns-table tbody tr.is-drop-after td { box-shadow: inset 0 -0.125rem 0 var(--rp-info); }
 .rp-tool-columns-table input.rp-col-check,
 .rp-tool-columns-table input.rp-col-check-all {
   cursor: pointer;
@@ -93,7 +93,7 @@
   width: 100%;
   height: 1.625rem;
   padding: 0 0.4375rem;
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.375rem;
   background: var(--rp-surface);
   color: var(--rp-text);
@@ -103,7 +103,7 @@
   outline: 0;
 }
 .rp-col-name-input:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.125rem var(--rp-accent-soft);
 }
 
@@ -126,7 +126,7 @@
   width: 100%;
   height: 1.625rem;
   padding: 0 0.375rem;
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.375rem;
   background: var(--rp-surface);
   color: var(--rp-text);
@@ -271,12 +271,12 @@
 .rp-tool-columns-selchip i { font-size: 0.75rem; }
 .rp-tool-columns-selchip b { color: var(--rp-text-mute); font-weight: 650; }
 .rp-tool-columns-selchip.is-active {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
   color: var(--rp-text);
 }
 .rp-tool-columns-selchip.is-active b,
-.rp-tool-columns-selchip.is-active i { color: var(--rp-accent-2); }
+.rp-tool-columns-selchip.is-active i { color: var(--rp-info); }
 .rp-tool-columns-selchip-clear:hover {
   background: color-mix(in srgb, var(--rp-accent) 18%, transparent);
   color: var(--rp-accent);
@@ -293,7 +293,7 @@
 .rp-tool-columns-sheet {
   margin-bottom: 0.5rem;
   padding: 0.625rem 0.75rem;
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.5rem;
   background: var(--rp-accent-soft);
 }
@@ -311,7 +311,7 @@
   font-weight: 650;
   color: var(--rp-text);
 }
-.rp-tool-columns-sheet-title i { color: var(--rp-accent-2); }
+.rp-tool-columns-sheet-title i { color: var(--rp-info); }
 .rp-tool-columns-sheet-blurb {
   margin: 0 0 0.5rem;
   font-size: 0.7188rem;
@@ -356,8 +356,8 @@
   padding: 0.125rem 0.5rem;
   border-radius: 6.1875rem;
   background: var(--rp-surface);
-  border: 1px solid var(--rp-accent-2);
-  color: var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
+  color: var(--rp-info);
   font-size: 0.7188rem;
   font-weight: 600;
   font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -373,11 +373,11 @@
   color: var(--rp-warn);
 }
 .rp-tool-columns-sheet.rp-step-preview {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
 }
 .rp-tool-columns-sheet.rp-step-preview .rp-tool-columns-sheet-title i {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
 }
 .rp-step-preview-summary b { color: var(--rp-text); }
 .rp-step-preview-tablewrap {

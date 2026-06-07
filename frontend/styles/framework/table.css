@@ -87,7 +87,7 @@
   display: inline-block;
 }
 .rp-priority-dot.is-low      { background: var(--rp-ok); }
-.rp-priority-dot.is-medium   { background: var(--rp-accent-2); }
+.rp-priority-dot.is-medium   { background: var(--rp-info); }
 .rp-priority-dot.is-high     { background: var(--rp-warn); }
 .rp-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
 

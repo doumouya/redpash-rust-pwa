@@ -44,8 +44,8 @@
 .rt-btn:active { transform: scale(0.96); }
 .rt-btn:disabled { opacity: 0.4; cursor: default; }
 .rt-btn:disabled:hover { background: transparent; color: var(--rp-text-mute); }
-.rt-btn:focus-visible { outline: 0.125rem solid var(--rp-accent-2); outline-offset: 1px; }
-.rt-btn.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+.rt-btn:focus-visible { outline: 0.125rem solid var(--rp-info); outline-offset: 1px; }
+.rt-btn.is-active { background: var(--rp-accent-soft); color: var(--rp-info); }
 .rt-btn i { font-size: 0.9375rem; }
 .rt-btn--glass {
   color: var(--rp-text);
@@ -55,7 +55,7 @@
   backdrop-filter: blur(0.5rem);
 }
 .rt-btn--glass:hover { background: var(--rp-surface-2); }
-.rt-btn--accent { color: var(--rp-bg); background: var(--rp-accent-2); }
+.rt-btn--accent { color: var(--rp-bg); background: var(--rp-info); }
 .rt-btn--accent:hover { filter: brightness(1.08); }
 .rt-btn--accent i { color: var(--rp-bg); }
 .rt-btn--block { width: 100%; }

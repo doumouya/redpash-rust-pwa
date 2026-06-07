@@ -45,9 +45,9 @@
 }
 .rt-table th.sortable { cursor: pointer; user-select: none; }
 .rt-table th.sortable:hover { color: var(--rp-text-dim); }
-.rt-table th.sortable.sorted { color: var(--rp-accent-2); }
+.rt-table th.sortable.sorted { color: var(--rp-info); }
 .rt-table th .sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
-.rt-table th .sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-accent-2); }
+.rt-table th .sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-info); }
 
 /* Column reorder (click-and-grab) — every TH carries draggable="true"
    so the user can pick up a header and drop it on another.
@@ -76,7 +76,7 @@
   top: -2px;
   bottom: -2px;
   width: 0.3125rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   border-radius: 1px;
   pointer-events: none;
   z-index: 2;
@@ -114,7 +114,7 @@
   border-radius: 0.3125rem;
 }
 
-.rt-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-accent-2); cursor: pointer; }
+.rt-chk { width: 0.9375rem; height: 0.9375rem; accent-color: var(--rp-info); cursor: pointer; }
 
 /* status pill */
 .rt-status {
@@ -129,8 +129,8 @@
 .rt-status::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 6.1875rem; }
 .rt-status.is-active { color: var(--rp-ok); background: rgba(166, 227, 161, 0.12); }
 .rt-status.is-active::before { background: var(--rp-ok); }
-.rt-status.is-new { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
-.rt-status.is-new::before { background: var(--rp-accent-2); }
+.rt-status.is-new { color: var(--rp-info); background: var(--rp-accent-soft); }
+.rt-status.is-new::before { background: var(--rp-info); }
 .rt-status.is-lapsed { color: var(--rp-peach); background: rgba(250, 179, 135, 0.12); }
 .rt-status.is-lapsed::before { background: var(--rp-peach); }
 
@@ -141,7 +141,7 @@
 }
 .rt-table.mode-edit td.editable:hover { background: var(--rp-accent-soft); }
 .rt-table td.editable:focus {
-  outline: 0.125rem solid var(--rp-accent-2);
+  outline: 0.125rem solid var(--rp-info);
   outline-offset: -0.125rem;
   background: var(--rp-surface);
   border-radius: 0.25rem;

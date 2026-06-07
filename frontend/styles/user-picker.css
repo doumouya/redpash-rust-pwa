@@ -34,7 +34,7 @@
   outline: 0;
 }
 .rp-user-picker-wrap input:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
 }
 .rp-user-picker-results {
   position: absolute;

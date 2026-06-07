@@ -90,7 +90,7 @@
 /* Active chip in the flat-wrap variant — re-declares the atom's accent fill
    because the override above changed the inactive background. */
 .rp-cases-chip-row .rp-chip.is-active {
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
 }
 

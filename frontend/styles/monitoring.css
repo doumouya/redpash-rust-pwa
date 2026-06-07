@@ -85,7 +85,7 @@
   text-transform: lowercase;
 }
 .rp-mon-opt-pill--open    { color: var(--rp-warn);     border-color: var(--rp-warn); }
-.rp-mon-opt-pill--planned { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-mon-opt-pill--planned { color: var(--rp-info); border-color: var(--rp-info); }
 .rp-mon-opt-pill--done    { color: var(--rp-ok);       border-color: var(--rp-ok); }
 .rp-mon-opt-pill--wontfix { color: var(--rp-text-mute); }
 
@@ -193,7 +193,7 @@
 .rp-mon-modal-id {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.75rem;
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   background: var(--rp-bg);
   padding: 1px 0.375rem;
   border-radius: 0.25rem;

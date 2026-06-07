@@ -38,7 +38,7 @@
 .rp-btn-icon:disabled { opacity: 0.4; cursor: default; }
 .rp-btn-icon:disabled:hover { background: transparent; color: var(--rp-text-mute); }
 .rp-btn-icon:focus-visible { outline: 0.125rem solid var(--rp-accent); outline-offset: 1px; }
-.rp-btn-icon.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+.rp-btn-icon.is-active { background: var(--rp-accent-soft); color: var(--rp-info); }
 .rp-btn-icon i { font-size: 0.9375rem; }
 .rp-btn-icon--glass {
   color: var(--rp-text);
@@ -48,7 +48,7 @@
   backdrop-filter: blur(0.5rem);
 }
 .rp-btn-icon--glass:hover { background: var(--rp-surface-2); }
-.rp-btn-icon--accent { color: var(--rp-bg); background: var(--rp-accent-2); }
+.rp-btn-icon--accent { color: var(--rp-bg); background: var(--rp-info); }
 .rp-btn-icon--accent:hover { filter: brightness(1.08); }
 .rp-btn-icon--accent i { color: var(--rp-bg); }
 .rp-btn-icon--block { width: 100%; }
@@ -93,7 +93,7 @@
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--rp-bg);
-  background: linear-gradient(135deg, var(--rp-accent-2), var(--rp-teal));
+  background: linear-gradient(135deg, var(--rp-info), var(--rp-teal));
   text-decoration: none;
   outline: 0.125rem solid transparent;
   outline-offset: 0.125rem;
@@ -101,7 +101,7 @@
 }
 a.rp-avatar { cursor: pointer; }
 a.rp-avatar:hover { transform: scale(1.06); }
-a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
+a.rp-avatar.is-active { outline-color: var(--rp-info); }
 .rp-avatar--lg { width: 4rem; height: 4rem; margin-left: 0; font-size: 1.375rem; }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -194,7 +194,7 @@ a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
 .rp-chip:hover { color: var(--rp-text); }
-.rp-chip.is-active { background: var(--rp-accent-2); color: var(--rp-bg); }
+.rp-chip.is-active { background: var(--rp-info); color: var(--rp-bg); }
 
 /* ── A6 rp-title — title text (collapses the 12-class -title family: shell-head,
    card, panel, chart, modal, dashboard…). BASE here; contexts set font-size
@@ -248,7 +248,7 @@ a.rp-avatar.is-active { outline-color: var(--rp-accent-2); }
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease), border-color 0.14s var(--rp-ease);
 }
 .rp-mono-pill.is-copyable:hover { background: var(--rp-hover); color: var(--rp-text); border-color: var(--rp-border); }
-.rp-mono-pill.is-copied { background: var(--rp-accent-soft); color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-mono-pill.is-copied { background: var(--rp-accent-soft); color: var(--rp-info); border-color: var(--rp-info); }
 
 /* ── A11 rp-input — form / select field (was .ds-input; collapses modal-input,
    config inputs, comment-edit). Distinct from rp-search. */

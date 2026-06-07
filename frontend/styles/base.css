@@ -17,7 +17,7 @@ body {
 
 #app { min-height: 100%; }
 
-a { color: var(--rp-accent-2); }
+a { color: var(--rp-info); }
 
 /* The RedPash wordmark. Font, weight and colour only — each surface
    sets its own size (login is large, the home bar is small). */

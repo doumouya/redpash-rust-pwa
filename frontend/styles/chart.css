@@ -59,7 +59,7 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.rt-toolbar--designer .ds-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.rt-toolbar--designer .ds-title i { color: var(--rp-info); font-size: 0.875rem; }
 .rt-toolbar-spacer { flex: 1; }
 
 /* ── designer shell ─────────────────────────────────────────────
@@ -110,7 +110,7 @@
   transition: border-color 0.14s var(--rp-ease), box-shadow 0.14s var(--rp-ease);
 }
 .ds-tile.selected {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
 }
 .ds-tile-head {
@@ -165,7 +165,7 @@
    without hover, signalling unsaved edits. */
 .ds-tile--dirty .ds-tile-save:not(:disabled) {
   opacity: 1;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
 }
 .ds-tile-body {
@@ -221,7 +221,7 @@
   font-weight: 600;
   color: var(--rp-text);
 }
-.ds-config-title i { color: var(--rp-accent-2); font-size: 0.875rem; }
+.ds-config-title i { color: var(--rp-info); font-size: 0.875rem; }
 .ds-config-save {
   height: 1.75rem;
   padding: 0 0.75rem;
@@ -262,7 +262,7 @@
   transition: transform 0.15s var(--rp-ease);
 }
 .ds-sec:not(.open) .ds-sec-caret { transform: rotate(-90deg); }
-.ds-sec-icon { font-size: 0.8125rem; color: var(--rp-accent-2); }
+.ds-sec-icon { font-size: 0.8125rem; color: var(--rp-info); }
 .ds-sec-label {
   flex: 1;
   text-align: left;
@@ -296,7 +296,7 @@
   outline: 0;
 }
 .ds-input:focus {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
 }
 .ds-toggle-row {
@@ -311,7 +311,7 @@
 .ds-toggle-row input {
   width: 0.9375rem;
   height: 0.9375rem;
-  accent-color: var(--rp-accent-2);
+  accent-color: var(--rp-info);
   cursor: pointer;
 }
 .ds-muted {
@@ -345,8 +345,8 @@
 .ds-type-btn i { font-size: 0.9375rem; }
 .ds-type-btn:hover { color: var(--rp-text); }
 .ds-type-btn.active {
-  color: var(--rp-accent-2);
-  border-color: var(--rp-accent-2);
+  color: var(--rp-info);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
 }
 
@@ -363,7 +363,7 @@
   color: var(--rp-text);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.ds-source i { color: var(--rp-accent-2); font-size: 0.8125rem; }
+.ds-source i { color: var(--rp-info); font-size: 0.8125rem; }
 .ds-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -374,7 +374,7 @@
   padding: 0.1875rem 0.5625rem;
   border-radius: 6.1875rem;
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-weight: 550;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
@@ -407,7 +407,7 @@
 }
 .ds-theme-opt:hover { background: var(--rp-hover); }
 .ds-theme-opt.active {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   background: var(--rp-accent-soft);
 }
 .ds-sw { display: flex; gap: 0.125rem; }
@@ -418,6 +418,6 @@
 }
 .ds-theme-opt span { flex: 1; text-align: left; font-weight: 550; }
 .ds-theme-opt .ds-check {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.75rem;
 }

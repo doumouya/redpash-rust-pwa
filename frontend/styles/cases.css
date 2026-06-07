@@ -43,7 +43,7 @@
   font-size: 0.7812rem;
   outline: 0;
 }
-.rp-cases-rail-search:focus { border-color: var(--rp-accent-2); }
+.rp-cases-rail-search:focus { border-color: var(--rp-info); }
 
 /* Source toggle — Internal vs External, replacing the older
    status/assignee groupBy (2026-05-28). Shape comes from the shared
@@ -95,7 +95,7 @@
   background: var(--rp-surface-2);
 }
 .rp-cases-chip-row .rp-chip.is-active {
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
 }
 
@@ -233,7 +233,7 @@
   background: var(--rp-text-mute);
 }
 .rp-cases-col[data-status="backlog"]::before     { background: var(--rp-text-mute); }
-.rp-cases-col[data-status="todo"]::before        { background: var(--rp-accent-2); }
+.rp-cases-col[data-status="todo"]::before        { background: var(--rp-info); }
 .rp-cases-col[data-status="in_progress"]::before { background: var(--rp-mauve); }
 .rp-cases-col[data-status="in_review"]::before   { background: var(--rp-warn); }
 .rp-cases-col[data-status="done"]::before        { background: var(--rp-ok); }
@@ -287,11 +287,11 @@
   transition: border-color 0.12s var(--rp-ease), box-shadow 0.12s var(--rp-ease);
 }
 .rp-cases-card:hover {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.18);
 }
 .rp-cases-card:focus-visible {
-  outline: 0.125rem solid var(--rp-accent-2);
+  outline: 0.125rem solid var(--rp-info);
   outline-offset: 1px;
 }
 /* Drag-drop (Em 2026-05-28) — the dragged card dims + the target
@@ -301,8 +301,8 @@
   cursor: grabbing;
 }
 .rp-cases-col.is-drop-target {
-  border-color: var(--rp-accent-2);
-  box-shadow: inset 0 0 0 1px var(--rp-accent-2);
+  border-color: var(--rp-info);
+  box-shadow: inset 0 0 0 1px var(--rp-info);
 }
 .rp-cases-col.is-drop-target .rp-cases-col-body {
   background: var(--rp-accent-soft);
@@ -330,7 +330,7 @@
   background: var(--rp-text-mute);
 }
 .rp-cases-priority-dot.is-low      { background: var(--rp-ok); }
-.rp-cases-priority-dot.is-medium   { background: var(--rp-accent-2); }
+.rp-cases-priority-dot.is-medium   { background: var(--rp-info); }
 .rp-cases-priority-dot.is-high     { background: var(--rp-warn); }
 .rp-cases-priority-dot.is-critical { background: var(--rp-accent); box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--rp-accent) 25%, transparent); }
 
@@ -358,7 +358,7 @@
    passes through to the class name as-is. */
 .rp-cases-status-dot { margin-left: auto; }
 .rp-cases-status-dot.is-backlog     { background: var(--rp-text-mute); }
-.rp-cases-status-dot.is-todo        { background: var(--rp-accent-2); }
+.rp-cases-status-dot.is-todo        { background: var(--rp-info); }
 .rp-cases-status-dot.is-in_progress { background: var(--rp-mauve); }
 .rp-cases-status-dot.is-in_review   { background: var(--rp-warn); }
 .rp-cases-status-dot.is-done        { background: var(--rp-ok); }
@@ -390,7 +390,7 @@
 /* Shape from `.rt-icon-btn` + `--sm` (button.css). Only the
    accent-blue hover-color tweak stays — the chevron lifts to
    accent-2 on hover (vs the atom's default text color). */
-.rp-cases-card-cycle:hover { color: var(--rp-accent-2); }
+.rp-cases-card-cycle:hover { color: var(--rp-info); }
 
 /* ── card triage signal (Em 2026-05-30) ───────────────────────────
    Three at-a-glance channels so a card is scannable without opening
@@ -413,7 +413,7 @@
   background: var(--rp-text-mute);
 }
 .rp-cases-card[data-priority="low"]::before      { background: var(--rp-ok); }
-.rp-cases-card[data-priority="medium"]::before    { background: var(--rp-accent-2); }
+.rp-cases-card[data-priority="medium"]::before    { background: var(--rp-info); }
 .rp-cases-card[data-priority="high"]::before       { background: var(--rp-warn); }
 .rp-cases-card[data-priority="critical"]::before  { background: var(--rp-accent); }
 
@@ -489,8 +489,8 @@
 }
 .rp-cases-detail-rid.is-copied {
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
-  border-color: var(--rp-accent-2);
+  color: var(--rp-info);
+  border-color: var(--rp-info);
 }
 /* Close X — anchors to /cases (no ?id=) so the router clears
    the detail. Plain link, no rt-btn chrome — the head bar
@@ -550,7 +550,7 @@
   top: 50%;
   transform: translateY(-50%);
 }
-.rp-cases-side-toggle.is-active { color: var(--rp-accent-2); }
+.rp-cases-side-toggle.is-active { color: var(--rp-info); }
 /* Drop the chip-row atom's default bottom margin in this context;
    the band owns the spacing. */
 .rp-cases-detail-path .rp-chip-row { margin-bottom: 0; max-width: 100%; flex-wrap: wrap; }
@@ -666,7 +666,7 @@
 .rp-cases-detail-title:hover { background: var(--rp-hover); }
 .rp-cases-detail-title.is-editing {
   background: var(--rp-surface);
-  outline: 0.125rem solid var(--rp-accent-2);
+  outline: 0.125rem solid var(--rp-info);
   outline-offset: 0;
   text-overflow: clip;
   overflow: auto;
@@ -725,7 +725,7 @@
 .rp-cases-detail-side-desc-body > :first-child { margin-top: 0; }
 .rp-cases-detail-side-desc-body > :last-child  { margin-bottom: 0; }
 .rp-cases-detail-side-desc-body p { margin: 0 0 0.4375rem; }
-.rp-cases-detail-side-desc-body a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-detail-side-desc-body a { color: var(--rp-info); text-decoration: underline; }
 .rp-cases-detail-side-desc-body code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-cases-detail-side-desc-body pre { margin: 0.375rem 0; padding: 0.5rem; background: var(--rp-bg); border: 1px solid var(--rp-border); border-radius: 0.375rem; overflow-x: auto; font-size: 0.7188rem; }
 .rp-cases-detail-side-desc-body ul, .rp-cases-detail-side-desc-body ol { margin: 0.25rem 0; padding-left: 1.125rem; }
@@ -758,7 +758,7 @@
   border: 1px solid var(--rp-border);
   border-radius: 0.5rem;
 }
-.rp-cases-side-desc-form:focus-within { border-color: var(--rp-accent-2); }
+.rp-cases-side-desc-form:focus-within { border-color: var(--rp-info); }
 .rp-cases-desc-toolbar { border-bottom: 1px solid var(--rp-border); }
 .rp-cases-side-desc-input {
   min-height: 5rem;
@@ -772,7 +772,7 @@
   word-break: break-word;
 }
 .rp-cases-side-desc-input:empty::before { content: attr(data-placeholder); color: var(--rp-text-mute); }
-.rp-cases-side-desc-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-side-desc-input a { color: var(--rp-info); text-decoration: underline; }
 .rp-cases-side-desc-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-cases-side-desc-actions {
   display: flex;
@@ -870,7 +870,7 @@
 .rp-cases-prop-opt:hover { background: var(--rp-hover); }
 .rp-cases-prop-opt.is-active { background: var(--rp-accent-soft); }
 .rp-cases-prop-opt-lbl { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rp-cases-prop-opt-check { color: var(--rp-accent-2); font-size: 0.75rem; flex: 0 0 auto; }
+.rp-cases-prop-opt-check { color: var(--rp-info); font-size: 0.75rem; flex: 0 0 auto; }
 
 /* source badge — Internal (team) vs External (customer) */
 .rp-cases-source-badge {
@@ -882,7 +882,7 @@
   font-size: 0.625rem;
   font-weight: 600;
 }
-.rp-cases-source-badge.is-internal { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-cases-source-badge.is-internal { color: var(--rp-info); background: var(--rp-accent-soft); }
 .rp-cases-source-badge.is-external { color: var(--rp-peach); background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
 
 /* sidebar blocks — error payload + description */
@@ -989,8 +989,8 @@
   padding: 0.5rem 0.75rem;
 }
 .rp-cases-comment--own .rp-cases-comment-bubble {
-  background: color-mix(in srgb, var(--rp-accent-2) 7%, var(--rp-surface-2));
-  border-color: color-mix(in srgb, var(--rp-accent-2) 22%, var(--rp-border));
+  background: color-mix(in srgb, var(--rp-info) 7%, var(--rp-surface-2));
+  border-color: color-mix(in srgb, var(--rp-info) 22%, var(--rp-border));
 }
 .rp-cases-comment-head {
   display: flex;
@@ -1016,7 +1016,7 @@
   border-radius: 6.1875rem;
 }
 .rp-cases-comment-role.is-reporter { color: var(--rp-peach);    background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
-.rp-cases-comment-role.is-assignee { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-cases-comment-role.is-assignee { color: var(--rp-info); background: var(--rp-accent-soft); }
 .rp-cases-comment-when { margin-left: auto; }   /* time pins to the head's right edge */
 .rp-cases-comment-edited { font-style: italic; }
 
@@ -1034,11 +1034,11 @@
 .rp-cases-comment-body p { margin: 0 0 0.5rem; }
 .rp-cases-comment-body strong, .rp-cases-comment-body b { font-weight: 700; color: var(--rp-text); }
 .rp-cases-comment-body a {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   text-decoration: underline;
   text-underline-offset: 0.125rem;
 }
-.rp-cases-comment-body a:hover { color: color-mix(in srgb, var(--rp-accent-2) 80%, white); }
+.rp-cases-comment-body a:hover { color: color-mix(in srgb, var(--rp-info) 80%, white); }
 .rp-cases-comment-body code {
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 0.78em;
@@ -1084,7 +1084,7 @@
   border-radius: 0.375rem;
   cursor: default;
 }
-.rp-cases-msg-file-icon { color: var(--rp-accent-2); font-size: 0.9375rem; flex: 0 0 auto; }
+.rp-cases-msg-file-icon { color: var(--rp-info); font-size: 0.9375rem; flex: 0 0 auto; }
 .rp-cases-msg-file-name { font-size: 0.75rem; color: var(--rp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rp-cases-msg-file-size { font-size: 0.6562rem; color: var(--rp-text-mute); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 
@@ -1131,7 +1131,7 @@
   min-height: 3rem;
   padding: 0.4375rem 0.5rem;
   background: var(--rp-surface);
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.375rem;
   color: var(--rp-text);
   font: inherit;
@@ -1141,7 +1141,7 @@
   word-break: break-word;
 }
 /* inherit the rendered-body formatting inside the edit editor */
-.rp-cases-comment-edit-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-comment-edit-input a { color: var(--rp-info); text-decoration: underline; }
 .rp-cases-comment-edit-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-cases-comment-edit-actions {
   display: flex;
@@ -1153,7 +1153,7 @@
 /* @mention chip — inline reference rendered inside comment/desc bodies
    and the editors. Non-editable; accent text on a soft inset. */
 .rp-mention {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   background: var(--rp-surface-2);
   padding: 0 0.25rem;
   border-radius: 0.3125rem;
@@ -1221,7 +1221,7 @@
   border: 1px solid var(--rp-border);
   border-radius: 0.625rem;
 }
-.rp-cases-composer:focus-within { border-color: var(--rp-accent-2); }
+.rp-cases-composer:focus-within { border-color: var(--rp-info); }
 .rp-cases-composer-toolbar {
   display: flex;
   align-items: center;
@@ -1260,7 +1260,7 @@
   content: attr(data-placeholder);
   color: var(--rp-text-mute);
 }
-.rp-cases-composer-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-cases-composer-input a { color: var(--rp-info); text-decoration: underline; }
 .rp-cases-composer-input code {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem;
@@ -1285,7 +1285,7 @@
   border-radius: 0.375rem;
   font-size: 0.7188rem;
 }
-.rp-cases-pending-chip > i { color: var(--rp-accent-2); }
+.rp-cases-pending-chip > i { color: var(--rp-info); }
 .rp-cases-pending-name { color: var(--rp-text); max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-cases-pending-size { color: var(--rp-text-mute); font-size: 0.6562rem; font-variant-numeric: tabular-nums; }
 .rp-cases-pending-remove {
@@ -1314,7 +1314,7 @@
   cursor: pointer;
   font-size: 0.7188rem;
 }
-.rp-cases-composer-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-cases-composer-attach:hover { color: var(--rp-info); border-color: var(--rp-info); }
 .rp-cases-composer-as { font-size: 0.6562rem; color: var(--rp-text-mute); margin-left: auto; }
 .rp-cases-composer-as strong { color: var(--rp-text-dim); font-weight: 600; }
 .rp-cases-comment-form-send {
@@ -1324,13 +1324,13 @@
   padding: 0.375rem 0.8125rem;
   border: 0;
   border-radius: 0.375rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
   font-size: 0.7188rem;
   font-weight: 600;
   cursor: pointer;
 }
-.rp-cases-comment-form-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-accent-2) 88%, white); }
+.rp-cases-comment-form-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-info) 88%, white); }
 .rp-cases-comment-form-send[disabled] { opacity: 0.4; cursor: not-allowed; }
 .rp-cases-comment-form-send i { font-size: 0.8125rem; }
 
@@ -1342,10 +1342,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: color-mix(in srgb, var(--rp-accent-2) 12%, var(--rp-surface));
-  border: 0.125rem dashed var(--rp-accent-2);
+  background: color-mix(in srgb, var(--rp-info) 12%, var(--rp-surface));
+  border: 0.125rem dashed var(--rp-info);
   border-radius: 0.625rem;
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.8125rem;
   font-weight: 600;
   pointer-events: none;
@@ -1377,7 +1377,7 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rp-cases-link-pop input:focus { border-color: var(--rp-accent-2); }
+.rp-cases-link-pop input:focus { border-color: var(--rp-info); }
 .rp-cases-link-text { width: 8rem; }
 .rp-cases-link-url  { width: 13rem; }
 .rp-cases-link-pop button {
@@ -1390,9 +1390,9 @@
   cursor: pointer;
 }
 .rp-cases-link-add {
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   font-weight: 600;
 }
 
@@ -1446,8 +1446,8 @@
   border-radius: 0.375rem;
   transition: border-color 0.12s var(--rp-ease);
 }
-.rp-cases-attach:hover { border-color: var(--rp-accent-2); }
-.rp-cases-attach-icon { flex: 0 0 auto; font-size: 0.9375rem; color: var(--rp-accent-2); }
+.rp-cases-attach:hover { border-color: var(--rp-info); }
+.rp-cases-attach-icon { flex: 0 0 auto; font-size: 0.9375rem; color: var(--rp-info); }
 .rp-cases-attach-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -1514,7 +1514,7 @@
   transition: transform 0.12s ease;
 }
 .rp-cases-rail-attach[open] .rp-cases-rail-attach-head::before { transform: rotate(90deg); }
-.rp-cases-rail-attach-head > .bi-paperclip { color: var(--rp-accent-2); }
+.rp-cases-rail-attach-head > .bi-paperclip { color: var(--rp-info); }
 .rp-cases-rail-attach-count { color: var(--rp-text-3); font-variant-numeric: tabular-nums; }
 .rp-cases-rail-attach-list {
   margin: 0.375rem 0 0;
@@ -1562,8 +1562,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--rp-accent-2);
-  background: color-mix(in srgb, var(--rp-accent-2) 12%, transparent);
+  color: var(--rp-info);
+  background: color-mix(in srgb, var(--rp-info) 12%, transparent);
   padding: 0.125rem 0.4375rem;
   border-radius: 6.1875rem;
   display: inline-block;
@@ -1613,7 +1613,7 @@
   color: var(--rp-bg);
   letter-spacing: 0.02em;
 }
-.rp-cases-user-avatar[data-c="blue"]  { background: var(--rp-accent-2); }
+.rp-cases-user-avatar[data-c="blue"]  { background: var(--rp-info); }
 .rp-cases-user-avatar[data-c="mauve"] { background: var(--rp-mauve); }
 .rp-cases-user-avatar[data-c="peach"] { background: var(--rp-peach); }
 .rp-cases-user-avatar[data-c="green"] { background: var(--rp-ok); }

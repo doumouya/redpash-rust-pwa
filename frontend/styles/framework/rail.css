@@ -105,7 +105,7 @@
   background: var(--rp-surface-2);
 }
 .rp-rail-chips .rp-chip.is-active {
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
 }
 
@@ -160,7 +160,7 @@
   font-weight: 700;
   color: var(--rp-bg);
 }
-.rp-rail-group-mark[data-c="blue"]  { background: var(--rp-accent-2); }
+.rp-rail-group-mark[data-c="blue"]  { background: var(--rp-info); }
 .rp-rail-group-mark[data-c="mauve"] { background: var(--rp-mauve); }
 .rp-rail-group-mark[data-c="teal"]  { background: var(--rp-teal); }
 .rp-rail-group-mark[data-c="peach"] { background: var(--rp-peach); }
@@ -365,7 +365,7 @@
   color: var(--rp-text-dim);
   pointer-events: none;
 }
-.rp-rail-tab-ghost .rp-rail-tab-icon { color: var(--rp-accent-2); }
+.rp-rail-tab-ghost .rp-rail-tab-icon { color: var(--rp-info); }
 .rp-rail-tab-ghost-active {
   color: var(--rp-text);
   background: linear-gradient(
@@ -402,7 +402,7 @@
   border-radius: 50%;
   flex-shrink: 0;
   border: 1.5px solid var(--rp-text-mute);
-  border-top-color: var(--rp-accent-2);
+  border-top-color: var(--rp-info);
   box-sizing: border-box;
   animation: rp-spin 0.8s linear infinite;
 }
@@ -467,7 +467,7 @@
   transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
 }
 .rp-rail-footer-nav-item:hover { background: var(--rp-hover); color: var(--rp-text); }
-.rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-accent-2); }
+.rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-info); }
 /* Profile avatar — initials chip rather than an icon. */
 .rp-rail-footer-nav-avatar {
   font-size: 0.625rem;
@@ -479,8 +479,8 @@
 }
 .rp-rail-footer-nav-avatar.is-active {
   background: var(--rp-accent-soft);
-  border-color: var(--rp-accent-2);
-  color: var(--rp-accent-2);
+  border-color: var(--rp-info);
+  color: var(--rp-info);
 }
 /* Compact rail — center the cluster as it wraps to a column. */
 .rp-rail.compact .rp-rail-footer-nav { justify-content: center; }
@@ -544,5 +544,5 @@
   text-overflow: ellipsis;
 }
 .rp-rail-hidden-meta { color: var(--rp-text-mute); }
-.rp-rail-hidden-restore { font-size: 0.8125rem; color: var(--rp-accent-2); flex-shrink: 0; }
+.rp-rail-hidden-restore { font-size: 0.8125rem; color: var(--rp-info); flex-shrink: 0; }
 .rp-rail-hidden-item:hover .rp-rail-hidden-restore { color: var(--rp-text); }

@@ -49,8 +49,8 @@
   padding: 0.5rem 0.75rem;
 }
 .rp-comment--own .rp-comment-bubble {
-  background: color-mix(in srgb, var(--rp-accent-2) 7%, var(--rp-surface-2));
-  border-color: color-mix(in srgb, var(--rp-accent-2) 22%, var(--rp-border));
+  background: color-mix(in srgb, var(--rp-info) 7%, var(--rp-surface-2));
+  border-color: color-mix(in srgb, var(--rp-info) 22%, var(--rp-border));
 }
 .rp-comment-head {
   display: flex;
@@ -76,7 +76,7 @@
   border-radius: 6.1875rem;
 }
 .rp-comment-role.is-reporter { color: var(--rp-peach);    background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
-.rp-comment-role.is-assignee { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-comment-role.is-assignee { color: var(--rp-info); background: var(--rp-accent-soft); }
 .rp-comment-date { margin-left: auto; }   /* time pins to the head's right edge */
 .rp-comment-edited { font-style: italic; }
 
@@ -94,11 +94,11 @@
 .rp-comment-body p { margin: 0 0 0.5rem; }
 .rp-comment-body strong, .rp-comment-body b { font-weight: 700; color: var(--rp-text); }
 .rp-comment-body a {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   text-decoration: underline;
   text-underline-offset: 0.125rem;
 }
-.rp-comment-body a:hover { color: color-mix(in srgb, var(--rp-accent-2) 80%, white); }
+.rp-comment-body a:hover { color: color-mix(in srgb, var(--rp-info) 80%, white); }
 .rp-comment-body code {
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 0.78em;
@@ -144,7 +144,7 @@
   border-radius: 0.375rem;
   cursor: default;
 }
-.rp-comment-file-icon { color: var(--rp-accent-2); font-size: 0.9375rem; flex: 0 0 auto; }
+.rp-comment-file-icon { color: var(--rp-info); font-size: 0.9375rem; flex: 0 0 auto; }
 .rp-comment-file-name { font-size: 0.75rem; color: var(--rp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rp-comment-file-size { font-size: 0.6562rem; color: var(--rp-text-mute); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 
@@ -190,7 +190,7 @@
   min-height: 3rem;
   padding: 0.4375rem 0.5rem;
   background: var(--rp-surface);
-  border: 1px solid var(--rp-accent-2);
+  border: 1px solid var(--rp-info);
   border-radius: 0.375rem;
   color: var(--rp-text);
   font: inherit;
@@ -199,7 +199,7 @@
   outline: 0;
   word-break: break-word;
 }
-.rp-comment-edit-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-comment-edit-input a { color: var(--rp-info); text-decoration: underline; }
 .rp-comment-edit-input code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem; }
 .rp-comment-edit-actions {
   display: flex;
@@ -213,7 +213,7 @@
    editors. Non-editable; accent text on a soft inset. (Generic rp- already;
    the comment/editor surface owns it.) */
 .rp-mention {
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   background: var(--rp-surface-2);
   padding: 0 0.25rem;
   border-radius: 0.3125rem;
@@ -276,7 +276,7 @@
   border: 1px solid var(--rp-border);
   border-radius: 0.625rem;
 }
-.rp-composer:focus-within { border-color: var(--rp-accent-2); }
+.rp-composer:focus-within { border-color: var(--rp-info); }
 .rp-composer-toolbar {
   display: flex;
   align-items: center;
@@ -315,7 +315,7 @@
   content: attr(data-placeholder);
   color: var(--rp-text-mute);
 }
-.rp-composer-input a { color: var(--rp-accent-2); text-decoration: underline; }
+.rp-composer-input a { color: var(--rp-info); text-decoration: underline; }
 .rp-composer-input code {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.78em; background: var(--rp-bg); padding: 0.05rem 0.3125rem; border-radius: 0.25rem;
@@ -340,7 +340,7 @@
   border-radius: 0.375rem;
   font-size: 0.7188rem;
 }
-.rp-composer-chip > i { color: var(--rp-accent-2); }
+.rp-composer-chip > i { color: var(--rp-info); }
 .rp-composer-chip-name { color: var(--rp-text); max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-composer-chip-size { color: var(--rp-text-mute); font-size: 0.6562rem; font-variant-numeric: tabular-nums; }
 .rp-composer-chip-remove {
@@ -369,7 +369,7 @@
   cursor: pointer;
   font-size: 0.7188rem;
 }
-.rp-composer-attach:hover { color: var(--rp-accent-2); border-color: var(--rp-accent-2); }
+.rp-composer-attach:hover { color: var(--rp-info); border-color: var(--rp-info); }
 .rp-composer-as { font-size: 0.6562rem; color: var(--rp-text-mute); margin-left: auto; }
 .rp-composer-as strong { color: var(--rp-text-dim); font-weight: 600; }
 .rp-comment-send {
@@ -379,13 +379,13 @@
   padding: 0.375rem 0.8125rem;
   border: 0;
   border-radius: 0.375rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
   font-size: 0.7188rem;
   font-weight: 600;
   cursor: pointer;
 }
-.rp-comment-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-accent-2) 88%, white); }
+.rp-comment-send:hover:not([disabled]) { background: color-mix(in srgb, var(--rp-info) 88%, white); }
 .rp-comment-send[disabled] { opacity: 0.4; cursor: not-allowed; }
 .rp-comment-send i { font-size: 0.8125rem; }
 
@@ -397,10 +397,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: color-mix(in srgb, var(--rp-accent-2) 12%, var(--rp-surface));
-  border: 0.125rem dashed var(--rp-accent-2);
+  background: color-mix(in srgb, var(--rp-info) 12%, var(--rp-surface));
+  border: 0.125rem dashed var(--rp-info);
   border-radius: 0.625rem;
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.8125rem;
   font-weight: 600;
   pointer-events: none;
@@ -432,7 +432,7 @@
   font-size: 0.75rem;
   outline: 0;
 }
-.rp-composer-link-pop input:focus { border-color: var(--rp-accent-2); }
+.rp-composer-link-pop input:focus { border-color: var(--rp-info); }
 .rp-composer-link-text { width: 8rem; }
 .rp-composer-link-url  { width: 13rem; }
 .rp-composer-link-pop button {
@@ -445,9 +445,9 @@
   cursor: pointer;
 }
 .rp-composer-link-add {
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
   color: var(--rp-bg);
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   font-weight: 600;
 }
 

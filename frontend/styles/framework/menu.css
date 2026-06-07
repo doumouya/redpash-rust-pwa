@@ -55,7 +55,7 @@
   transition: background 0.12s var(--rp-ease);
 }
 .rp-menu-item:hover { background: var(--rp-hover); }
-.rp-menu-item.selected { color: var(--rp-accent-2); font-weight: 600; }
+.rp-menu-item.selected { color: var(--rp-info); font-weight: 600; }
 /* trailing checkmark on the selected row (was .rt-dd-item .tick) */
 .rp-menu-item .rp-menu-tick { margin-left: auto; font-size: 0.75rem; }
 

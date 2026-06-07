@@ -25,7 +25,7 @@
 .rp-badge i { font-size: 0.75rem; }
 
 /* tones */
-.rp-badge[data-variant="accent"] { color: var(--rp-accent-2); background: var(--rp-accent-soft); }
+.rp-badge[data-variant="accent"] { color: var(--rp-info); background: var(--rp-accent-soft); }
 .rp-badge[data-variant="ok"]     { color: var(--rp-ok);    background: color-mix(in srgb, var(--rp-ok) 15%, transparent); }
 .rp-badge[data-variant="warn"]   { color: var(--rp-peach); background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }
 .rp-badge[data-variant="soon"]   { color: var(--rp-peach); background: color-mix(in srgb, var(--rp-peach) 16%, transparent); }

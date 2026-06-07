@@ -55,7 +55,7 @@
   font-size: 0.7812rem;
   outline: 0;
 }
-.rp-pred select:focus, .rp-pred input:focus { border-color: var(--rp-accent-2); }
+.rp-pred select:focus, .rp-pred input:focus { border-color: var(--rp-info); }
 .rp-pred input:disabled { opacity: 0.45; }
 .rp-pred select optgroup {
   color: var(--rp-text-mute);
@@ -182,7 +182,7 @@
   border-radius: 6.1875rem;
   border: 1px solid var(--rp-border);
   background: var(--rp-surface);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font: inherit;
   font-size: 0.6875rem;
   font-weight: 700;
@@ -217,7 +217,7 @@
   border-radius: 0.4375rem;
   cursor: text;
 }
-.rp-chip-picker:focus-within { border-color: var(--rp-accent-2); }
+.rp-chip-picker:focus-within { border-color: var(--rp-info); }
 .rp-chip-list {
   display: contents;
 }
@@ -327,7 +327,7 @@
   color: var(--rp-text);
 }
 .rp-ac-item.is-active {
-  outline: 1px solid var(--rp-accent-2);
+  outline: 1px solid var(--rp-info);
 }
 .rp-ac-empty {
   padding: 0.75rem;

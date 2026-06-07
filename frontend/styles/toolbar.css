@@ -14,7 +14,7 @@
 .rt-toolbar-sep { width: 1px; height: 1.25rem; background: var(--rp-border); margin: 0 0.3125rem; }
 
 /* filter toggle — a dot when a filter is applied */
-.rt-toolbar #filterToggle.has-filter { color: var(--rp-accent-2); }
+.rt-toolbar #filterToggle.has-filter { color: var(--rp-info); }
 .rt-toolbar #filterToggle.has-filter::after {
   content: "";
   position: absolute;
@@ -23,7 +23,7 @@
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 6.1875rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-info);
 }
 
 /* search — grows to fill the toolbar */
@@ -41,7 +41,7 @@
   transition: border-color 0.15s var(--rp-ease), box-shadow 0.15s var(--rp-ease);
 }
 .rt-search:focus-within {
-  border-color: var(--rp-accent-2);
+  border-color: var(--rp-info);
   box-shadow: 0 0 0 0.1875rem var(--rp-accent-soft);
 }
 .rt-search i { color: var(--rp-text-mute); font-size: 0.8125rem; }
@@ -103,7 +103,7 @@
   transition: background 0.12s var(--rp-ease);
 }
 .rt-dd-item:hover { background: var(--rp-hover); }
-.rt-dd-item.selected { color: var(--rp-accent-2); font-weight: 600; }
+.rt-dd-item.selected { color: var(--rp-info); font-weight: 600; }
 .rt-dd-item .tick { margin-left: auto; font-size: 0.75rem; }
 
 /* selection chip — shown in select mode */
@@ -115,7 +115,7 @@
   padding: 0 0.6875rem;
   border-radius: 6.1875rem;
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
   font-size: 0.7812rem;
   font-weight: 600;
   cursor: pointer;
@@ -139,7 +139,7 @@
    selection instead of navigating). */
 .rt-mode.is-active {
   background: var(--rp-accent-soft);
-  color: var(--rp-accent-2);
+  color: var(--rp-info);
 }
 
 /* delete-mode button armed against the current selection */

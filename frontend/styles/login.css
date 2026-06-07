@@ -34,7 +34,7 @@
 .rp-login::after {
   right: -18vmax;
   bottom: -24vmax;
-  background: radial-gradient(circle, var(--rp-accent-2), transparent 60%);
+  background: radial-gradient(circle, var(--rp-info), transparent 60%);
   animation: rp-drift-b 26s var(--rp-ease) infinite alternate;
 }
 @keyframes rp-drift-a { to { transform: translate(8vmax, 10vmax) scale(1.15); } }

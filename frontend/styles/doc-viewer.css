@@ -59,7 +59,7 @@
 .rp-doc ul, .rp-doc ol { margin: var(--rp-sp-3) 0; padding-left: var(--rp-sp-5); }
 .rp-doc li { margin: 0.25rem 0; }
 
-.rp-doc a { color: var(--rp-accent-2); text-decoration: underline; text-underline-offset: 0.125rem; }
+.rp-doc a { color: var(--rp-info); text-decoration: underline; text-underline-offset: 0.125rem; }
 .rp-doc a:hover { color: var(--rp-mauve); }
 
 .rp-doc code {
@@ -84,7 +84,7 @@
 .rp-doc blockquote {
   margin: var(--rp-sp-4) 0;
   padding: var(--rp-sp-2) var(--rp-sp-4);
-  border-left: 0.1875rem solid var(--rp-accent-2);
+  border-left: 0.1875rem solid var(--rp-info);
   color: var(--rp-text-dim);
   background: var(--rp-hover);
   border-radius: 0 var(--rp-radius) var(--rp-radius) 0;
