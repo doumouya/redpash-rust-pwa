@@ -127,18 +127,18 @@ export default function home(app, { session: _session }) {
     const hidden = getHomeHidden(tabKey);
     if (!hidden.length) return "";
     const items = hidden.map((h) =>
-      '<button class="rt-hidden-item" type="button" data-rid="' + esc(h.rid) + '">'
-      +   '<span class="rt-hidden-name">' + esc(h.name || h.rid)
-      +     (h.sub ? ' <span class="rt-hidden-meta">· ' + esc(h.sub) + '</span>' : "")
+      '<button class="rp-rail-hidden-item" type="button" data-rid="' + esc(h.rid) + '">'
+      +   '<span class="rp-rail-hidden-name">' + esc(h.name || h.rid)
+      +     (h.sub ? ' <span class="rp-rail-hidden-meta">· ' + esc(h.sub) + '</span>' : "")
       +   '</span>'
-      +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+      +   '<i class="bi bi-arrow-counterclockwise rp-rail-hidden-restore" title="Restore"></i>'
       + '</button>'
     ).join("");
-    return '<details class="rt-hidden">'
-      +   '<summary class="rt-hidden-summary">'
+    return '<details class="rp-rail-hidden">'
+      +   '<summary class="rp-rail-hidden-summary">'
       +     '<i class="bi bi-eye-slash"></i> Hidden (' + hidden.length + ')'
       +   '</summary>'
-      +   '<div class="rt-hidden-body">' + items + '</div>'
+      +   '<div class="rp-rail-hidden-body">' + items + '</div>'
       + '</details>';
   }
   function paintHomeHiddenSection() {
@@ -177,7 +177,7 @@ export default function home(app, { session: _session }) {
       paintHomeHiddenSection();
       return;
     }
-    const restoreItem = e.target.closest(".rt-hidden-item");
+    const restoreItem = e.target.closest(".rp-rail-hidden-item");
     if (restoreItem?.dataset.rid) {
       e.preventDefault();
       e.stopPropagation();
@@ -2143,9 +2143,9 @@ export default function home(app, { session: _session }) {
       + listPanel(spec.columns)
       + '<div class="rp-pager" id="rp-home-list-pager"></div>'
       // Hide/restore recovery host — paintHomeHiddenSection fills this
-      // with a <details class="rt-hidden"> when getHomeHidden(tabKey)
+      // with a <details class="rp-rail-hidden"> when getHomeHidden(tabKey)
       // is non-empty, else stays empty. Same atom set workspace + cases
-      // use (rail.css .rt-hidden-* family). Per-tab list per Em's
+      // use (rail.css .rp-rail-hidden-* family). Per-tab list per Em's
       // 2026-05-28 placement call (matches workspace's tail-of-rail).
       + '<div class="rp-home-hidden-host" id="rp-home-hidden-host"></div>';
 

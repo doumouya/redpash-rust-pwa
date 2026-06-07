@@ -152,11 +152,11 @@
         <!-- toolbar (designer mode) — breadcrumb + Add chart +
              config toggle. Shown only when the surface is in
              designer mode (chart file open). -->
-        <div class="rt-toolbar rt-toolbar--designer">
+        <div class="rp-dash-toolbar">
           <span class="ds-title" id="wsDesignerTitle">
             <i class="bi bi-bar-chart-line"></i> <span>Chart</span>
           </span>
-          <span class="rt-toolbar-spacer"></span>
+          <span class="rp-dash-toolbar-spacer"></span>
           <button class="rp-btn-icon rp-btn-icon--glass" id="wsDesignerAddChart" type="button"
                   title="Create a new chart from the same source data file">
             <i class="bi bi-plus-lg"></i><span>Add chart</span>
@@ -217,7 +217,7 @@
               <thead><!-- dynamic — rebuilt when a file loads --></thead>
               <tbody><!-- dynamic --></tbody>
             </table>
-            <div class="rt-designer" id="wsDesigner" hidden><!-- designer.js mounts the canvas + accordion here --></div>
+            <div class="rp-dash-shell" id="wsDesigner" hidden><!-- designer.js mounts the canvas + accordion here --></div>
             <div class="rp-table-state" id="wsTableState">Open a file from the rail to see its data.</div>
           </div>
 

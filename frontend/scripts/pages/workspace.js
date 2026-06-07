@@ -1056,42 +1056,42 @@ export default function workspace(app, { session }) {
   // Recovery section at the rail body's tail — appears only when at
   // least one project or file is hidden. Native <details> for the
   // toggle so we get the open-state animation + a11y for free. Each
-  // entry's click hits the navBody delegator (see the .rt-hidden-item
+  // entry's click hits the navBody delegator (see the .rp-rail-hidden-item
   // branch) which restores the rid via unhideOne + loadProjects.
   function renderHiddenSection(projects, files) {
     const count = projects.length + files.length;
     let body = "";
     if (projects.length) {
-      body += '<div class="rt-hidden-section">'
-        + '<div class="rt-hidden-title">Projects</div>'
+      body += '<div class="rp-rail-hidden-section">'
+        + '<div class="rp-rail-hidden-title">Projects</div>'
         + projects.map((p) =>
-            '<button class="rt-hidden-item" type="button"'
+            '<button class="rp-rail-hidden-item" type="button"'
             + ' data-kind="project" data-rid="' + esc(p.rid) + '">'
-            +   '<span class="rt-hidden-name">' + esc(p.name) + '</span>'
-            +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+            +   '<span class="rp-rail-hidden-name">' + esc(p.name) + '</span>'
+            +   '<i class="bi bi-arrow-counterclockwise rp-rail-hidden-restore" title="Restore"></i>'
             + '</button>').join("")
         + '</div>';
     }
     if (files.length) {
-      body += '<div class="rt-hidden-section">'
-        + '<div class="rt-hidden-title">Files</div>'
+      body += '<div class="rp-rail-hidden-section">'
+        + '<div class="rp-rail-hidden-title">Files</div>'
         + files.map((f) =>
-            '<button class="rt-hidden-item" type="button"'
+            '<button class="rp-rail-hidden-item" type="button"'
             + ' data-kind="file" data-rid="' + esc(f.rid) + '">'
-            +   '<span class="rt-hidden-name">' + esc(f.name)
+            +   '<span class="rp-rail-hidden-name">' + esc(f.name)
             +     (f.project
-                    ? ' <span class="rt-hidden-meta">· ' + esc(f.project) + '</span>'
+                    ? ' <span class="rp-rail-hidden-meta">· ' + esc(f.project) + '</span>'
                     : "")
             +   '</span>'
-            +   '<i class="bi bi-arrow-counterclockwise rt-hidden-restore" title="Restore"></i>'
+            +   '<i class="bi bi-arrow-counterclockwise rp-rail-hidden-restore" title="Restore"></i>'
             + '</button>').join("")
         + '</div>';
     }
-    return '<details class="rt-hidden">'
-      +   '<summary class="rt-hidden-summary">'
+    return '<details class="rp-rail-hidden">'
+      +   '<summary class="rp-rail-hidden-summary">'
       +     '<i class="bi bi-eye-slash"></i> Hidden (' + count + ')'
       +   '</summary>'
-      +   '<div class="rt-hidden-body">' + body + '</div>'
+      +   '<div class="rp-rail-hidden-body">' + body + '</div>'
       + '</details>';
   }
 
@@ -1158,7 +1158,7 @@ export default function workspace(app, { session }) {
     // Hidden-section item — click anywhere on a hidden entry restores
     // it (removes from the pref + re-renders). The restore icon is
     // visual only; the whole button is the click target.
-    const hiddenItem = e.target.closest(".rt-hidden-item");
+    const hiddenItem = e.target.closest(".rp-rail-hidden-item");
     if (hiddenItem) {
       const kind = hiddenItem.dataset.kind;
       const rid  = hiddenItem.dataset.rid;
