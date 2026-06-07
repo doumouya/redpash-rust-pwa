@@ -36,7 +36,7 @@ from the one source.
 
 ## Public surface
 
-`node tools/doc-gen/gen.js --schema [<table>] | --components  [--out <dir>]`
+`node tools/doc-gen/gen.js --schema [<table>] | --components | --code-nav  [--out <dir>]`
 - `--schema` — schema mode. `<table>` filters to one object; omit → all. Emits per-object
   `<schema>.<table>.md` (generated-region) + `tools/doc-gen/schema.contract.json` (the parity
   baseline for the schema-vs-DB audits). `--out` default `tools/doc-gen/out/schema/`.
@@ -44,6 +44,11 @@ from the one source.
   `docs/internal/ui/catalog/index.md` (the complete, code-enumerated component list + the dedup
   worklist) + `tools/doc-gen/component.contract.json`. Source = `tools/lib/fe-inventory.js` (the
   enumerator), NOT the DB. The `ui-doc-audit` gate fails if the index drifts from code.
+- `--code-nav` — **kind=code-nav**: walks `docs/internal/code/**/*.md` and writes a grouped,
+  linked back-index into the generated region of `docs/internal/code/_nav.md`. This makes the
+  per-file **survival layer** navigable (the fix for "266 atomic docs linked from no index");
+  `doc-coverage-audit`'s `unindexed_internal_doc` check reads `_nav.md` for the `code/` subtree,
+  so the generator owns that catalog instead of a hand-edited redmap.
 
 ## How it works (schema phase)
 

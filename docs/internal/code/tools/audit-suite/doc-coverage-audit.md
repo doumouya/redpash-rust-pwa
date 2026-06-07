@@ -23,16 +23,18 @@ Shipped 2026-05-30 as Phase A.1 of the [atomic-doc plan](../../../processes/atom
 
 ## Public surface
 
-- Scans `backend/crates/**/*.rs`, `frontend/scripts/**/*.js`, `tools/**/audit.js`, `tools/**/*.sh`, plus the 3 one-off tool dirs.
+- Scans `backend/crates/**/*.rs`, `frontend/scripts/**/*.js`, `tools/*-audit/audit.js`, `tools/**/*.sh`, the per-dir-single + one-off tool clusters, AND (dynamically) the remaining tool dirs **per-file** (`tools/<dir>/*.js` → `code/tools/<dir>/<file>.md`, e.g. doc-gen, lib, page-verify, css-twin-verify; spike/output dirs excluded).
 - Emits `report.html` (per-pillar coverage % + finding rows) and `audit.json` (ingest-compatible).
 - Auto-discovered by `tools/audit.sh` via the `tools/*-audit/` glob — tool name resolves to `doc-coverage`.
 - Uses `execFileSync` (not `exec`) for `git log -1 --format=%ct` calls so paths with shell metacharacters can't inject.
 
 ## Drift-prone areas
 
-- **Source → doc mapping** drops `crates/` and `src/` from backend paths and has per-category rules for `tools/` (audit-family vs shell vs per-dir vs one-off). Any new tool category needs an enumerator branch.
-- **`unindexed_internal_doc` heuristic** does a substring check for `<dir>/<file>` in `redmap.md`; the internal redmap's ASCII-tree convention writes basenames, so this metric over-counts. Known false-positive; refine when load-bearing.
-- **`stale_doc` threshold** is 14 days (decision §10·2). Bump in the rule if the cadence changes.
+- **Source → doc mapping** drops `crates/` and `src/` from backend paths and has per-category rules for `tools/` (audit-family → `audit-suite/`, shell → `shell/`, per-dir-single, one-off, and the dynamic per-file branch for the rest). A new per-file tool dir is picked up automatically; a new *spike/output* dir must be added to the skip set (`opfs-spike`, `out`, `screens`).
+- **`unindexed_internal_doc`** is satisfied two ways: spine docs by a path-substring in `redmap.md`; `code/` survival docs by appearing in the generated `code/_nav.md` back-index (run `doc-gen --code-nav`). This replaced the old redmap-substring-only check that over-counted every code doc.
+- **`missing_breadcrumb`** scans the first 30 lines for a `Doc:` prefix after stripping a leading comment marker *and/or* leading whitespace — so an indented `Doc:` on a multi-line-comment continuation line (the dominant JS style) is matched. (The old single-regex required a marker immediately before `Doc:` and false-flagged ~35 compliant files.)
+- **`stub_doc`** can be opted out per-doc with `concise: true` in the YAML front-matter (a genuinely small unit whose required sections are correctly brief) — keeps the signal meaningful vs lowering the threshold. **`stale_doc`** threshold is 14 days (decision §10·2).
+- **CSS docs** (`code/frontend/styles/`) are exempt from `orphan_doc` — CSS has no per-file source-enumeration rule (touch-policy scopes to `tools/` + `frontend/scripts/` + `backend/crates/`).
 
 ## 9 finding kinds
 

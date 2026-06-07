@@ -343,12 +343,77 @@ function genComponents(args) {
   console.log('contract:   ' + path.relative(ROOT, contractPath));
 }
 
+/* ── kind=code-nav (the survival-layer back-index) ─────────────────────────── */
+/* Walk every atomic doc under docs/internal/code/ and emit a grouped, linked
+   index into docs/internal/code/_nav.md's generated region. This makes the
+   per-file survival docs NAVIGABLE — the fix for "266 atomic docs linked from
+   no index". The doc-coverage audit's unindexed check reads THIS file for the
+   code/ subtree (so the generator owns the catalog, not a hand-edited redmap). */
+function genCodeNav() {
+  var codeDir = path.join(ROOT, 'docs', 'internal', 'code');
+  var stamp = new Date().toISOString().slice(0, 10);
+  var docs = [];
+  (function walkDocs(d) {
+    var ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+    ents.forEach(function (e) {
+      if (e.name === 'node_modules') return;
+      var full = path.join(d, e.name);
+      if (e.isDirectory()) { walkDocs(full); return; }
+      if (!e.name.endsWith('.md')) return;
+      if (/^(index|_template|_nav)\.md$/.test(e.name)) return;
+      docs.push(path.relative(codeDir, full).replace(/\\/g, '/'));
+    });
+  })(codeDir);
+  docs.sort();
+
+  var byPillar = {};
+  docs.forEach(function (r) { var p = r.split('/')[0]; (byPillar[p] = byPillar[p] || []).push(r); });
+
+  var L = [];
+  L.push('Generated ' + stamp + ' — every atomic doc under `code/`, the per-file');
+  L.push('survival layer (' + docs.length + ' docs). Links are relative to `code/`.');
+  L.push('');
+  Object.keys(byPillar).sort().forEach(function (pillar) {
+    L.push('### ' + pillar + ' (' + byPillar[pillar].length + ')');
+    var lastDir = null;
+    byPillar[pillar].forEach(function (r) {
+      var slash = r.lastIndexOf('/');
+      var dir = slash >= 0 ? r.slice(0, slash) : '.';
+      if (dir !== lastDir) { L.push(''); L.push('**' + dir + '/**'); lastDir = dir; }
+      L.push('- [' + r.slice(slash + 1) + '](' + r + ')');
+    });
+    L.push('');
+  });
+  var body = L.join('\n');
+
+  var key = 'code-nav';
+  var file = path.join(codeDir, '_nav.md');
+  var doc;
+  try { doc = { file: file, text: fs.readFileSync(file, 'utf8') }; }
+  catch (e) {
+    var mk = regionMarkers(key, 'the code/ doc tree');
+    doc = { file: file, text:
+      '---\ntitle: "code/ — navigation back-index"\nsection: Internal\nlast modified date: ' + stamp + '\n---\n\n' +
+      '# `code/` — atomic-doc back-index\n\n' +
+      'The generated index of the per-file survival layer (see [index.md](index.md)\n' +
+      'for the source→doc mapping rule + how to author one). Do not hand-edit the\n' +
+      'generated block — run `node tools/doc-gen/gen.js --code-nav`.\n\n' +
+      mk.start + '\n' + mk.end + '\n' };
+  }
+  fs.writeFileSync(doc.file, spliceRegion(doc.text, key, body));
+
+  console.log('doc-gen code-nav');
+  console.log('────────────────');
+  console.log('docs indexed: ' + docs.length + ' → ' + path.relative(ROOT, file));
+}
+
 /* ── dispatcher ───────────────────────────────────────────────────────────── */
 function main() {
   var args = process.argv.slice(2);
   if (args.indexOf('--components') >= 0) return genComponents(args);
+  if (args.indexOf('--code-nav') >= 0) return genCodeNav();
   if (args.indexOf('--schema') >= 0) return genSchema(args);
-  die('usage: node tools/doc-gen/gen.js --schema [<table>] | --components  [--out <dir>]');
+  die('usage: node tools/doc-gen/gen.js --schema [<table>] | --components | --code-nav  [--out <dir>]');
 }
 
 main();

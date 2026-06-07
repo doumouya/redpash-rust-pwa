@@ -206,6 +206,37 @@ function enumerateUnits() {
     });
   });
 
+  // (e) Remaining tool dirs — PER-FILE, mirrored like frontend/scripts:
+  //     tools/<dir>/<file>.js → docs/internal/code/tools/<dir>/<file>.md
+  //     (matches the hand-authored docs: doc-gen/gen.md, lib/rust-routes.md,
+  //     page-verify/verify.md, css-twin-verify/{verify,migrate}.md). Dynamic
+  //     discovery (replaces the old hardcoded inclusion lists): any tools/<dir>/
+  //     that isn't an *-audit dir (a), a per-dir-single tool (c), a one-off (d),
+  //     or an excluded spike/output dir. A new per-file tool dir is picked up
+  //     automatically. Top-level .js only (the convention these dirs use).
+  var TOOL_DIR_SINGLE = { 'mcp-server': 1, 'team': 1, 'wasm-bench': 1, 'memory-gc': 1, 'parse-diag': 1 };
+  var TOOL_DIR_ONEOFF = { 'css-parallel': 1, 'css-usage': 1, 'csv-to-xlsx-rs': 1 };
+  var TOOL_DIR_SKIP   = { 'opfs-spike': 1, 'out': 1, 'node_modules': 1, 'screens': 1 };
+  fs.readdirSync(path.join(ROOT, 'tools'), { withFileTypes: true })
+    .filter(function (ent) {
+      return ent.isDirectory() && !/-audit$/.test(ent.name)
+        && !TOOL_DIR_SINGLE[ent.name] && !TOOL_DIR_ONEOFF[ent.name] && !TOOL_DIR_SKIP[ent.name];
+    })
+    .forEach(function (ent) {
+      fs.readdirSync(path.join(ROOT, 'tools', ent.name), { withFileTypes: true })
+        .filter(function (f) { return f.isFile() && f.name.endsWith('.js'); })
+        .forEach(function (f) {
+          var r = 'tools/' + ent.name + '/' + f.name;
+          var doc = 'docs/internal/code/' + r.replace(/\.js$/, '.md');
+          units.push({
+            source: path.join(ROOT, r),
+            doc: path.join(ROOT, doc),
+            pillar: 'tools',
+            kind: 'tool-file',
+          });
+        });
+    });
+
   return units;
 }
 
@@ -227,16 +258,25 @@ function pickRepresentative(dir) {
 
 /* ── per-unit checks ─────────────────────────────────────────────────────── */
 
-/* Pull the breadcrumb out of the source file's first 30 lines. Accepts
-   any leading comment style: //!, //, /*, *, #. */
-var BREADCRUMB_RE = /(?:\/\/\!|\/\/|\/\*|\*|#)\s*Doc:\s*([^\s*]+)/i;
-
+/* Pull the breadcrumb out of the source file's first 30 lines. Scans each
+   line for a `Doc:` prefix after stripping a leading comment marker (//!, //,
+   /*, *, #) AND/OR leading whitespace. The whitespace strip is the fix for the
+   dominant JS style — a multi-line comment whose `Doc:` sits on an INDENTED
+   continuation line with no marker:
+       /* Purpose: ...
+          Doc: docs/internal/code/.../x.md *​/
+   The old single regex required a comment marker immediately before `Doc:`, so
+   it silently missed every such file (35 false-positive missing_breadcrumb). */
 function readBreadcrumb(srcPath) {
   var txt = readFileSafe(srcPath);
   if (!txt) return null;
-  var first30 = txt.split('\n').slice(0, 30).join('\n');
-  var m = BREADCRUMB_RE.exec(first30);
-  return m ? m[1] : null;
+  var lines = txt.split('\n').slice(0, 30);
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].replace(/^\s*(?:\/\/\!|\/\/|\/\*|\*|#)?\s*/, '');
+    var m = /^Doc:\s*(\S+)/i.exec(line);
+    if (m) return m[1].replace(/\*\/+$/, '');   // drop a trailing */ glued to the path
+  }
+  return null;
 }
 
 function checkRequiredHeadings(docText) {
@@ -247,10 +287,24 @@ function checkRequiredHeadings(docText) {
   return missing;
 }
 
+/* A doc may opt out of the stub check with `concise: true` in its YAML
+   front-matter — for a genuinely small unit (a one-fn module, a tiny type)
+   whose required sections are correctly brief, not under-written. Keeps the
+   stub signal meaningful for actually-empty docs instead of blanket-lowering
+   the threshold (atomic-doc-plan §10·1). */
+function frontMatter(docText) {
+  var m = docText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  return m ? m[1] : '';
+}
+function isConcise(docText) {
+  return /(^|\n)\s*concise:\s*true\b/.test(frontMatter(docText));
+}
+
 /* Stub detection: any required heading whose body (until the next
    `## ` heading or EOF) is shorter than STUB_BODY_MIN chars (after
    trim). Returns the names of stubbed sections. */
 function findStubSections(docText) {
+  if (isConcise(docText)) return [];
   var stubs = [];
   REQUIRED_HEADINGS.forEach(function (h) {
     var idx = docText.indexOf(h);
@@ -372,8 +426,12 @@ walk(path.join(ROOT, 'docs', 'internal', 'code'),
      function (f) { return f.endsWith('.md'); })
   .forEach(function (f) {
     var r = rel(f);
-    // index.md, _template.md are not unit docs — skip.
-    if (/(^|\/)(index|_template)\.md$/.test(r)) return;
+    // index.md, _template.md, _nav.md (the generated back-index) are not unit docs.
+    if (/(^|\/)(index|_template|_nav)\.md$/.test(r)) return;
+    // CSS docs (frontend/styles/) have no per-file source-enumeration rule
+    // (the touch-policy scopes to tools/ + frontend/scripts/ + backend/crates/),
+    // so they're allowed "extra" docs, not orphans.
+    if (r.indexOf('docs/internal/code/frontend/styles/') === 0) return;
     if (!unitDocs[r]) {
       findings.push({
         kind: 'orphan_doc',
@@ -416,23 +474,38 @@ if (exists(path.join(ROOT, 'docs', 'internal'))) {
     });
 }
 
-// unindexed_internal_doc: every .md under docs/internal/ should be
-// referenced from docs/internal/redmap.md. We accept any substring match
-// of the doc's relative path (from docs/internal/) inside redmap.md.
-var redmapText = readFileSafe(path.join(ROOT, 'docs', 'internal', 'redmap.md')) || '';
+// unindexed_internal_doc: every .md under docs/internal/ should be reachable
+// from a navigation index. The spine docs are indexed from redmap.md; the
+// per-file survival layer under code/ is indexed from the GENERATED
+// code/_nav.md back-index (doc-gen --code-nav) — hand-listing 266 atomic docs
+// in redmap is the "absorb the catalog" anti-pattern the atomic-doc-plan warns
+// against, so the generator owns that index and this check reads it.
+var redmapText  = readFileSafe(path.join(ROOT, 'docs', 'internal', 'redmap.md')) || '';
+var codeNavText = readFileSafe(path.join(ROOT, 'docs', 'internal', 'code', '_nav.md')) || '';
 walk(path.join(ROOT, 'docs', 'internal'),
      function (f) { return f.endsWith('.md'); })
   .forEach(function (f) {
     var r = rel(f);
     if (r === 'docs/internal/redmap.md' || r === 'docs/internal/index.md') return;
     var fromInternal = r.replace(/^docs\/internal\//, '');
-    if (redmapText.indexOf(fromInternal) === -1) {
+    var indexed = redmapText.indexOf(fromInternal) !== -1;
+    // code/ docs: indexed via the generated back-index (links are relative to code/).
+    if (!indexed && r.indexOf('docs/internal/code/') === 0) {
+      if (/(^|\/)(index|_template|_nav)\.md$/.test(r)) { indexed = true; }
+      else {
+        var fromCode = r.replace(/^docs\/internal\/code\//, '');
+        indexed = codeNavText.indexOf(fromCode) !== -1;
+      }
+    }
+    if (!indexed) {
       findings.push({
         kind: 'unindexed_internal_doc',
         pillar: 'docs',
         file: r,
         line: 0,
-        expected: 'cross-link from docs/internal/redmap.md',
+        expected: r.indexOf('docs/internal/code/') === 0
+          ? 'listed in the generated docs/internal/code/_nav.md (run doc-gen --code-nav)'
+          : 'cross-link from docs/internal/redmap.md',
         snippet: '',
       });
     }
