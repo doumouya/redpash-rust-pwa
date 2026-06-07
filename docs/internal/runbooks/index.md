@@ -270,3 +270,11 @@ Every entry follows the same five headings:
   files only; a per-row "Visualize" glyph deep-links a CSV to `#/dashboard?source=<rid>`; the
   rail-foot button is New Project. Removing the opposite-view surface **deletes the
   CAS_3BCD6727 re-entrancy bug structurally** (no swap, no echo) — supersedes runbook 0013.
+- [0020 — Slice D / D0': Workspace + Dashboard adopt the framework mountRail (not a new project-rail.js); regressions caught by adversarial verify](0020-d0-mountrail-adoption.md) —
+  **Done 2026-06-07** (Slice D / D0'). A pre-work map found `framework/rail.js` `mountRail` is
+  already the canonical rail (admin/sheetwise/database), so a new `project-rail.js` would have been
+  a 3rd parallel rail; instead Dashboard then Workspace adopted `mountRail`. A 15-agent adversarial
+  verify + Em's live eye caught 10 regressions vs the hand-built rails (all fixed): the headline was
+  per-tab affordances emitted as `rp-btn-icon` nested `<button>`s (oversized, invalid) — fixed by
+  bare `<span>`s like Monitoring/cases. Lesson: an UNEXERCISED framework path is a latent trap;
+  adopting a shared component on a richer page is a verification event.

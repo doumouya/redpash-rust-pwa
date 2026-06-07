@@ -7,46 +7,13 @@
 
   <div class="rp-shell-body">
 
-    <!-- ════ rail — projects + files, lazy-loaded ════ -->
-    <aside class="rp-rail" id="wsNav">
-      <div class="rp-rail-head">
-        <span class="rp-rail-title">Projects</span>
-        <button class="rp-btn-icon" id="wsNavCollapse" type="button" title="Collapse">
-          <i class="bi bi-chevron-double-left"></i>
-        </button>
-      </div>
-      <!-- Rail filter zone — name search + ownership pills. Both are
-           client-side, render-time filters (no refetch): they toggle
-           project-group visibility, never the data source. Mirrors the
-           Cases rail-filter so the two data-item rails align (search +
-           pills); the shared .rp-rail-* atoms supersede cases'
-           .rp-cases-rail-* in the consolidation pass. -->
-      <div class="rp-rail-filter">
-        <div class="rp-search">
-          <i class="bi bi-search"></i>
-          <input type="search" id="wsRailSearch" placeholder="Search projects…" autocomplete="off" />
-        </div>
-        <div class="rp-rail-chips" id="wsOwnerFilter" role="group" aria-label="Project ownership filter">
-          <button type="button" class="rp-chip is-active" data-owner="all">All</button>
-          <button type="button" class="rp-chip" data-owner="personal" title="Projects you own">Personal</button>
-          <button type="button" class="rp-chip" data-owner="shared" title="Projects shared with you by others">Shared</button>
-          <button type="button" class="rp-chip" data-owner="company" title="Company-scoped projects">Company</button>
-        </div>
-      </div>
-      <div class="rp-rail-body" id="wsNavBody" aria-busy="true">
-        <div class="rp-rail-state">Loading projects…</div>
-      </div>
-      <div class="rp-rail-footer">
-        <!-- New Project — the rail-foot primary CTA (glass), like Home's
-             rail-foot create. Charting moved to the standalone #/dashboard
-             page (Slice D), so Workspace's one rail-foot action is New
-             Project. Upload lives in the data toolbar + the landing. -->
-        <button class="rp-btn-icon rp-btn-icon--glass" id="wsNewProject" type="button"
-                title="New project — appears in the rail, rename via the group head">
-          <i class="bi bi-plus-lg"></i><span>New project</span>
-        </button>
-      </div>
-    </aside>
+    <!-- ════ rail — the framework mountRail component fills this host ════
+         (projects → their DATA files; title, collapse, search, ownership
+         chips, the Overview pseudo-tab, hidden-recovery, and the New-project
+         footer are all built by workspace.js's mountRail config — D0', the
+         same component as dashboard/admin/sheetwise/database). Upload stays in
+         the data toolbar (not the rail foot, per CAS_37B2E1BF/D2). -->
+    <aside id="wsNav"></aside>
 
     <!-- ════ main — the redtable surface ════ -->
     <main class="rp-main">

@@ -18,6 +18,19 @@ last modified date: 2026-06-07
      the rail filters them out) redirects to #/dashboard. Runbook 0019.
      Sections below marked [D2-REMOVED] describe machinery that no longer exists. -->
 
+<!-- 2026-06-07 (Slice D / D0'): the projects→files RAIL was migrated off its
+     hand-built markup onto the framework `mountRail` component (frontend/scripts/
+     framework/rail.js) — the same rail admin-console/sheetwise/database/dashboard
+     use. Workspace no longer emits any rp-rail-* markup or wires collapse/search/
+     chips/rename/hide itself: it owns a groups DATA-MODEL (cachedProjects +
+     filesByGroup + expanded + uploadGhosts + the hidden prefs) and a re-render is
+     refreshRail() = rail.setGroups(buildGroups(), buildHidden()). The on{} handlers
+     (tab/groupToggle/groupRename/groupHide/tabRename/tabHide/restore/create + the
+     custom `visualize`) carry the page logic. Deleted: renderRail/projectGroup/
+     renderFiles/fileTab/syncGroupCount/applyRailFilters/landingTabHTML/the navBody
+     delegator/enterProjectRename/enterFileRename/focusedProjectGroup/the upload
+     ghost-DOM helpers. The descriptions of those below are HISTORICAL. -->
+
 
 # workspace.js
 
@@ -30,7 +43,7 @@ Workspace page — the redtable as a browser, wired to /api. On mount: load real
 - Default export: page mount.
 - Mounts Tools panel + Filter panel + Report builder eagerly.
 - Joins tab eager-mounted (2026-05-29).
-- Per-row "Visualize" glyph + rail-foot "New Project" (`#wsNewProject`); the per-row glyph deep-links a CSV to `#/dashboard?source=<rid>` (the WS→Dashboard bridge, Em 2026-06-07).
+- Rail = the framework `mountRail` component (D0'); the page is a config-supplier + groups data-model (`buildGroups`/`buildHidden`/`refreshRail`). Per-row "Visualize" glyph (mountRail `actions` → `on.visualize`) deep-links a CSV to `#/dashboard?source=<rid>`; rail-foot "New Project" (`footer.create` → `on.create` → `newProject`).
 
 ## Drift-prone areas
 

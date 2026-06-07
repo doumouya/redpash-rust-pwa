@@ -154,13 +154,17 @@ export function mountRail(host, config = {}) {
   return {
     el: host,
     seg,
-    /** Re-render the body (groups + hidden) in place after a data change. */
-    setGroups(groups, hidden) {
+    /** Re-render the body (groups + hidden) in place after a data change.
+     *  `emptyText` (optional) shows a `.rp-rail-state` line when groups is empty
+     *  (e.g. a filter that matched nothing) — distinct from a load error. */
+    setGroups(groups, hidden, emptyText) {
       const body = host.querySelector(".rp-rail-body");
       if (!body) return;
+      const list = groups || [];
       body.innerHTML =
           overviewHTML(config)
-        + (groups || []).map(groupHTML).join("")
+        + list.map(groupHTML).join("")
+        + (!list.length && emptyText ? '<div class="rp-rail-state">' + esc(emptyText) + '</div>' : "")
         + hiddenHTML({ ...config, hidden });
     },
   };
@@ -230,8 +234,8 @@ function groupHTML(g) {
     + (g.mark ? '<span class="rp-rail-group-mark" style="--mark:' + esc(g.mark) + '">' + esc(markInitials(g)) + '</span>' : "")
     + '<span class="rp-rail-group-name">' + esc(g.name || "") + '</span>'
     + (Number.isFinite(g.count) ? '<span class="rp-rail-group-count">' + g.count + '</span>' : "")
-    + (g.renamable ? '<button class="rp-btn-icon rp-rail-group-rename" data-rail-action="group-rename" title="Rename"><i class="bi bi-pencil"></i></button>' : "")
-    + (g.hidable ? '<button class="rp-btn-icon rp-rail-group-hide" data-rail-action="group-hide" title="Hide"><i class="bi bi-eye-slash"></i></button>' : "")
+    + (g.renamable ? '<span class="rp-rail-group-rename" data-rail-action="group-rename" title="Rename"><i class="bi bi-pencil"></i></span>' : "")
+    + (g.hidable ? '<span class="rp-rail-group-hide" data-rail-action="group-hide" title="Hide"><i class="bi bi-eye-slash"></i></span>' : "")
     + '</div>';
   const tabs = (g.tabs || []).map(tabHTML).join("");
   const add = g.addLabel
@@ -252,21 +256,23 @@ function tabHTML(t) {
         : t.ghost === "failed" ? " rp-rail-tab-ghost-failed" : "")
     : "";
   // Per-row action glyphs (e.g. workspace's "Visualize" → #/dashboard?source=).
-  // Each { action, icon, title, cls? } is a hover-fade rp-btn-icon whose
-  // data-rail-action routes through on[action] (default dispatch above).
+  // Each { action, icon, title, cls? } is a hover-fade `.rp-rail-tab-<cls>`
+  // affordance (NOT rp-btn-icon — those atoms are 1.25rem glyphs, not 2rem
+  // icon-buttons) routed through on[action] (default dispatch above).
   const actions = (t.actions || []).map((a) =>
-    '<button class="rp-btn-icon rp-rail-tab-' + esc(a.cls || a.action) + '" data-rail-action="'
-    + esc(a.action) + '" title="' + esc(a.title || "") + '"><i class="bi ' + esc(a.icon || "") + '"></i></button>'
+    '<span class="rp-rail-tab-' + esc(a.cls || a.action) + '" data-rail-action="'
+    + esc(a.action) + '" title="' + esc(a.title || "") + '"><i class="bi ' + esc(a.icon || "") + '"></i></span>'
   ).join("");
   return '<button type="button" class="rp-rail-tab' + (t.active ? " active" : "")
-    + (t.busy ? " is-busy" : "") + ghost + '" data-rail-action="tab" data-tab-id="' + esc(t.id ?? "") + '">'
+    + (t.busy ? " is-busy" : "") + ghost + '" data-rail-action="tab" data-tab-id="' + esc(t.id ?? "") + '"'
+    + (t.title ? ' title="' + esc(t.title) + '"' : "") + '>'
     + '<i class="rp-rail-tab-icon bi ' + esc(t.icon || "bi-file-earmark") + '"></i>'
     + '<span class="rp-rail-tab-name">' + esc(t.name || "") + '</span>'
     + actions
     + (t.busy ? '<span class="rp-rail-tab-spinner"></span>' : "")
     + (t.dot ? '<span class="rp-rail-tab-dot ' + esc(t.dot) + '"></span>' : "")
-    + (t.renamable ? '<button class="rp-btn-icon rp-rail-tab-rename" data-rail-action="tab-rename" title="Rename"><i class="bi bi-pencil"></i></button>' : "")
-    + (t.hidable ? '<button class="rp-btn-icon rp-rail-tab-hide" data-rail-action="tab-hide" title="Hide"><i class="bi bi-x"></i></button>' : "")
+    + (t.renamable ? '<span class="rp-rail-tab-rename" data-rail-action="tab-rename" title="Rename"><i class="bi bi-pencil"></i></span>' : "")
+    + (t.hidable ? '<span class="rp-rail-tab-hide" data-rail-action="tab-hide" title="Hide"><i class="bi bi-x"></i></span>' : "")
     + '</button>';
 }
 

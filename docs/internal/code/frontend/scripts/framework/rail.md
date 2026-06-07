@@ -21,10 +21,12 @@ hand-builds with `rt-nav-*`/`rt-group-*`/`rt-tab-*`.
 
 ## Public surface
 
-- `mountRail(host, config)` → `{ el, seg, setGroups(groups, hidden) }`. `host`
-  becomes the `.rp-rail`. Self-registers as `"rail"`. ESM; composes
+- `mountRail(host, config)` → `{ el, seg, setGroups(groups, hidden, emptyText?) }`.
+  `host` becomes the `.rp-rail`. Self-registers as `"rail"`. ESM; composes
   `mountRailCollapse`/`mountRailSeg` ([rail-controls.js](../rail-controls.md)) and
-  the `esc` util. `setGroups` re-renders the body in place after a data change.
+  the `esc` util. `setGroups` re-renders the body in place after a data change;
+  pass `emptyText` to show a `.rp-rail-state` line when `groups` is empty (e.g. a
+  filter that matched nothing — distinct from a load error).
 
 ### Config (every section optional)
 
@@ -40,10 +42,19 @@ hand-builds with `rt-nav-*`/`rt-group-*`/`rt-tab-*`.
 | `footer` | `{upload:{label},create:{label},nav:{active,session}}` | `rp-rail-footer` + `rp-rail-footer-nav` |
 | `on` | `{tab,tabRename,tabHide,groupToggle,groupRename,groupHide,groupAdd,restore,upload,create, …custom}` | event handlers |
 
-A tab takes `{ id, name, icon, dot, actions, ghost:'active'|'done'|'failed', active, busy, renamable, hidable }`.
+A tab takes `{ id, name, icon, dot, actions, title, ghost:'queued'|'active'|'done'|'failed', active, busy, renamable, hidable }`.
 - `mark` = any CSS colour (hex / `var(--rp-…)`); the group square fills with it (CSS `background: var(--mark)`) and shows `initials` (or 2 letters derived from `name`).
 - `dot` = a **state class** (`"is-clean"`/`"is-warn"`/`"is-dirty"`), not a colour — composes `.rp-rail-tab-dot.<class>`.
 - `actions` = extra per-row glyph buttons `[{ action, icon, title, cls? }]`; each routes by its `action` name through `on[action](tabId, groupId)` (the delegator's default case). Workspace's per-row "Visualize" (`→ #/dashboard?source=`) is the first user.
+- `title` = an optional hover tooltip on the tab (e.g. a failed-upload ghost's error message).
+- **Affordance glyphs are bare `<span>`s, NOT `<button>`/`rp-btn-icon`.** rename/hide/`actions`
+  render as `<span class="rp-rail-tab-rename" data-rail-action="…">` (group:
+  `rp-rail-group-rename`) — exactly like the hand-built Monitoring/cases rails. The tab itself is
+  the `<button class="rp-rail-tab">`, so an affordance `<button>` inside it would be invalid
+  nested-button HTML; and `rp-btn-icon` (a 2rem `min-width`/padded icon button) breaks the tight
+  tab row. The `.rp-rail-{tab,group}-{rename,hide,visualize}` atoms are 1.25rem hover-fade glyphs
+  that style a `<span>` directly. The delegator routes them via `data-rail-action`. See
+  Drift-prone (D0', 2026-06-07).
 
 ## How it works
 
@@ -96,13 +107,22 @@ A tab takes `{ id, name, icon, dot, actions, ghost:'active'|'done'|'failed', act
   override for the name-keyed palette), (b) `groupHTML` filling the mark with
   `initials` (or 2 letters from `name`), (c) `tabHTML` emitting the dot as the
   `.is-*` class. This repaired admin-console + sheetwise marks too.
-- **Studio adoption (D0', 2026-06-07)**: `dashboard.js` migrated off its hand-built
-  rail onto `mountRail` (a groups data-model + `setGroups`), joining admin-console /
-  sheetwise / database. `workspace.js` is the next (rich) adopter — it drives the
-  per-row `actions` (Visualize), `hidden` recovery, rename, and `overview` pinned tab.
-- **Cutover pending**: a couple of pages (workspace until its D0' lands, cases) still
-  build their own rails. At cutover each becomes a config-supplier; Cases'
-  `rp-cases-rail-board` folds into `rp-rail-overview` then.
+- **Studio adoption (D0', 2026-06-07)**: `dashboard.js` then `workspace.js` (the rich
+  adopter — per-row `actions`/Visualize, `hidden` recovery, rename, `overview` pinned tab,
+  upload ghosts) migrated off their hand-built rails onto `mountRail`, joining admin-console
+  / sheetwise / database.
+- **Affordance-glyph regression (D0', 2026-06-07)**: workspace was the first page to use
+  **per-tab** rename/hide/actions, which exposed that `tabHTML`/`groupHTML` emitted those as
+  `<button class="rp-btn-icon rp-rail-…-rename">` — invalid (a `<button>` nested inside the tab
+  `<button>`) AND oversized (`rp-btn-icon` is a 2rem `min-width`/padded button; the
+  `.rp-rail-*-{rename,hide,visualize}` atoms only set 1.25rem `width/height`), so the glyphs
+  rendered as oversized boxes that broke the tab row (squeezed the stage dot). Fixed by emitting
+  the affordances as bare `<span>`s (no `rp-btn-icon`, no nested button) — exactly like the
+  hand-built Monitoring/cases rails, which always rendered fine. The atom CSS styles the span
+  directly; no CSS change needed. The path was never exercised until a page mounted the
+  *component* with per-tab affordances. Runbook 0020.
+- **Cutover pending**: `cases.js` still builds its own rail. At cutover it becomes a
+  config-supplier; `rp-cases-rail-board` folds into `rp-rail-overview` then.
 - The two helpers it composes live OUTSIDE `framework/` (`rail-controls.js`);
   they were deduped before the framework existed and stay class-agnostic.
 
