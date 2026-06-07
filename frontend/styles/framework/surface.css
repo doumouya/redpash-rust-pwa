@@ -63,7 +63,7 @@
   flex-direction: column;
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
-  border-radius: 0.875rem;
+  border-radius: var(--rp-radius-lg);
   box-shadow: var(--rp-shadow);
   overflow: hidden;
 }

@@ -49,6 +49,6 @@
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
 .rp-pg:hover { background: var(--rp-hover); color: var(--rp-text); }
-.rp-pg.active { background: var(--rp-accent-2); color: var(--rp-bg); }
+.rp-pg.active { background: var(--rp-accent); color: var(--rp-on-accent); }
 .rp-pg:disabled { color: var(--rp-text-mute); opacity: 0.45; cursor: default; background: transparent; }
 .rp-pg-gap { color: var(--rp-text-mute); padding: 0 0.125rem; font-size: 0.8125rem; }

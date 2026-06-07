@@ -270,7 +270,10 @@
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
 .rp-rail-tab:hover { background: var(--rp-hover); color: var(--rp-text); }
-.rp-rail-tab.active { background: var(--rp-accent-soft); color: var(--rp-text); }
+/* active = the brand accent (design-language preview: accent-soft bg + accent text
+   + accent rail-bar + accent icon). Was a red-tinted accent-soft bg with a BLUE
+   accent-2 bar/icon — incoherent in the new themes; now all-accent. */
+.rp-rail-tab.active { background: var(--rp-accent-soft); color: var(--rp-accent); }
 .rp-rail-tab:disabled { opacity: 0.4; cursor: default; }
 .rp-rail-tab:disabled:hover { background: transparent; color: var(--rp-text-dim); }
 .rp-rail-tab.active::before {
@@ -281,10 +284,10 @@
   bottom: 0.4375rem;
   width: 0.1875rem;
   border-radius: 6.1875rem;
-  background: var(--rp-accent-2);
+  background: var(--rp-accent);
 }
 .rp-rail-tab-icon { font-size: 0.875rem; color: var(--rp-text-mute); flex-shrink: 0; }
-.rp-rail-tab.active .rp-rail-tab-icon { color: var(--rp-accent-2); }
+.rp-rail-tab.active .rp-rail-tab-icon { color: var(--rp-accent); }
 .rp-rail-tab-name {
   flex: 1;
   text-align: left;
