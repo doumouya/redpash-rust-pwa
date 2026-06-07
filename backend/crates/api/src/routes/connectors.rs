@@ -112,7 +112,22 @@ async fn create(
 
     let topic = body.topic.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let kind  = body.kind.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("kafka");
-    let config = body.config.clone().unwrap_or_else(|| serde_json::json!({}));
+    let mut config = body.config.clone().unwrap_or_else(|| serde_json::json!({}));
+    // Secret-at-rest: a plaintext `sasl_secret` in the create body is ENCRYPTED into
+    // `sasl_secret_enc` (+ creds_version) before it ever hits the DB — never persist the
+    // plaintext. Generic over connector kinds (kafka today; the standard for S3/CDC next).
+    // Errors loudly (no master key) rather than storing a cleartext cluster credential.
+    if let Some(obj) = config.as_object_mut() {
+        if let Some(secret) = obj.get("sasl_secret").and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty()).map(str::to_string)
+        {
+            let enc = crate::secrets::encrypt(&secret)
+                .map_err(|e| AppError::bad_request("secret_encrypt", e.to_string()))?;
+            obj.remove("sasl_secret");
+            obj.insert("sasl_secret_enc".into(), serde_json::Value::String(enc));
+            obj.insert("creds_version".into(), serde_json::json!(1));
+        }
+    }
 
     let rid = id::new("CON");
     db::insert_connector(&state.db, &rid, project_id, name, kind, topic, &user, &user, &config).await?;

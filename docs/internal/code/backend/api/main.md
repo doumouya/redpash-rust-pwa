@@ -3,7 +3,7 @@ title: backend/crates/api/src/main.rs
 source: ../../../../../backend/crates/api/src/main.rs
 owner: Gus
 section: Internal · Code · backend · api
-last modified date: 2026-05-30
+last modified date: 2026-06-07
 ---
 
 # main.rs
@@ -12,10 +12,12 @@ last modified date: 2026-05-30
 
 `redpash-api` — HTTP entrypoint.
 
-Boots in three steps:
+Boots in steps:
 1. load `.env` (DATABASE_URL, REDPASH_BIND, …) — silent if file missing
 2. init `tracing-subscriber` from RUST_LOG (default `info`)
-3. build the Axum router from `routes::router()` and serve until SIGTERM
+3. `secrets::report_startup()` — connector secret-at-rest posture: **refuse to boot on a
+   MALFORMED `REDPASH_MASTER_KEY`**, warn (don't fail) when it's unset (see [secrets.md](secrets.md))
+4. build the Axum router from `routes::router()` and serve until SIGTERM
 
 **Kafka loader mode** (CAS_75A0D1FD): when `REDPASH_KAFKA_LOAD` is set, after
 the `.env` load the binary runs the one-shot ETL loader

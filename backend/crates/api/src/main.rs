@@ -33,6 +33,7 @@ mod mysql_loader;
 mod postgres_loader;
 mod pipeline;
 mod redact;
+mod secrets;
 mod validate_expr;
 mod validate_rules;
 mod request_log;
@@ -135,6 +136,11 @@ async fn main() -> anyhow::Result<()> {
         )
         .with(db_query::layer())
         .init();
+
+    // Connector secret-at-rest posture: refuse to boot on a MALFORMED REDPASH_MASTER_KEY
+    // (operator error); warn (don't fail) when it's unset — encryption is then unavailable
+    // but env-based connector creds still work, so an existing deployment keeps booting.
+    secrets::report_startup()?;
 
     // Step 3 — app state (db pool, caches). Stubbed until Phase 2.
     let state = state::AppState::init().await?;

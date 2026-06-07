@@ -36,6 +36,10 @@ POST   /api/connectors/:rid/test     probe the source connection — connect + S
   (the same write-check `pipeline::upload_csv` applies at load), then
   `db::insert_connector` (as_user = created_by = the caller; + the connector-specific
   `config` JSONB) + a `connector_create` event. Returns 201 + the `ConnectorSummary`.
+  **Secret-at-rest:** a plaintext `config.sasl_secret` (kafka) is encrypted via
+  [`secrets::encrypt`](../secrets.md) into `sasl_secret_enc` + `creds_version` BEFORE
+  `insert_connector` — the plaintext is never persisted; errors loudly (no master key)
+  rather than storing cleartext. Generic over kinds (the standard for future connectors).
 - `sync` (POST `/:rid/sync`) — runs the connector's extract → CSV → a new project
   file ("Pull"). Same ≥Member write-reach gate as create; **dispatches by `kind`**
   — `mysql` → `mysql_loader::run`, `postgres` → `postgres_loader::run` (in-process

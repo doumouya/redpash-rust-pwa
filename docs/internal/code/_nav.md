@@ -12,9 +12,9 @@ generated block — run `node tools/doc-gen/gen.js --code-nav`.
 
 <!-- doc-gen:code-nav START — generated from the code/ doc tree; do not hand-edit -->
 Generated 2026-06-07 — every atomic doc under `code/`, the per-file
-survival layer (247 docs). Links are relative to `code/`.
+survival layer (251 docs). Links are relative to `code/`.
 
-### backend (105)
+### backend (108)
 
 **backend/api/bin/**
 - [audit_distincts.md](backend/api/bin/audit_distincts.md)
@@ -24,6 +24,7 @@ survival layer (247 docs). Links are relative to `code/`.
 - [bootstrap.md](backend/api/bootstrap.md)
 - [codec_avro.md](backend/api/codec_avro.md)
 - [codec_registry.md](backend/api/codec_registry.md)
+- [connectors_core.md](backend/api/connectors_core.md)
 
 **backend/api/db/**
 - [connectors.md](backend/api/db/connectors.md)
@@ -45,6 +46,7 @@ survival layer (247 docs). Links are relative to `code/`.
 - [main.md](backend/api/main.md)
 - [mysql_loader.md](backend/api/mysql_loader.md)
 - [pipeline.md](backend/api/pipeline.md)
+- [postgres_loader.md](backend/api/postgres_loader.md)
 - [rbac.md](backend/api/rbac.md)
 - [redact.md](backend/api/redact.md)
 - [request_log.md](backend/api/request_log.md)
@@ -86,6 +88,7 @@ survival layer (247 docs). Links are relative to `code/`.
 - [users.md](backend/api/routes/users.md)
 
 **backend/api/**
+- [secrets.md](backend/api/secrets.md)
 - [state.md](backend/api/state.md)
 - [type_cache.md](backend/api/type_cache.md)
 - [type_registry.md](backend/api/type_registry.md)
@@ -298,7 +301,7 @@ survival layer (247 docs). Links are relative to `code/`.
 **frontend/**
 - [typedef-acceptance.md](frontend/typedef-acceptance.md)
 
-### tools (47)
+### tools (48)
 
 **tools/audit-suite/**
 - [api-doc-audit.md](tools/audit-suite/api-doc-audit.md)
@@ -320,6 +323,7 @@ survival layer (247 docs). Links are relative to `code/`.
 - [redtable-audit.md](tools/audit-suite/redtable-audit.md)
 - [rs-audit.md](tools/audit-suite/rs-audit.md)
 - [rs-perf-audit.md](tools/audit-suite/rs-perf-audit.md)
+- [theme-coverage-audit.md](tools/audit-suite/theme-coverage-audit.md)
 - [ui-doc-audit.md](tools/audit-suite/ui-doc-audit.md)
 - [ui-runtime-audit.md](tools/audit-suite/ui-runtime-audit.md)
 - [ui-snapshot-audit.md](tools/audit-suite/ui-snapshot-audit.md)

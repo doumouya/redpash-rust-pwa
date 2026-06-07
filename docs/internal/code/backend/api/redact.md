@@ -3,7 +3,7 @@ title: backend/crates/api/src/redact.rs
 source: ../../../../../backend/crates/api/src/redact.rs
 owner: Gus
 section: Internal · Code · backend · api
-last modified date: 2026-05-30
+last modified date: 2026-06-07
 ---
 
 # redact.rs
@@ -21,10 +21,16 @@ blob store. Capping every redacted string at `MAX_CHARS`
 keeps the Monitoring drill-down responsive and the table
 from bloating with multi-KB JSON payloads.
 2. Substring masking. Known-sensitive field names get their
-values replaced with `[REDACTED]`. The list is empty today
-(pre-RBAC; no password / token columns exist yet) and
-grows as we add auth-bearing surfaces. Each addition lands
-with a test against a sample chain string.
+values replaced with `[REDACTED]`. `SENSITIVE_KEYS` currently
+masks the connector SASL credentials (`sasl_secret_enc`,
+`sasl_secret` — see [secrets.rs](secrets.md)); it grows as
+more auth-bearing surfaces land. Each addition lands with a
+test against a sample chain string. Note the masker's value
+terminates at `, } ) ] \n " '` (a chain-string domain), so a
+quote-wrapped JSON value isn't matched — the realistic vector
+is an error-chain string, and the connector secret never
+reaches `events.context` directly (the create event carries
+only `{connector, project}`), so this is defense-in-depth.
 
 ## Public surface
 

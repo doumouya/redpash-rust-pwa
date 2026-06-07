@@ -34,7 +34,11 @@ pub const MAX_CHARS: usize = 2048;
 /// auth surface lands (password_hash, session_token, …). Each
 /// addition is a one-line append + a test.
 const SENSITIVE_KEYS: &[&str] = &[
-    // intentionally empty pre-RBAC
+    // Connector SASL credentials (secret-at-rest, Kafka lane). The plaintext is never
+    // persisted (encrypted to `sasl_secret_enc`), but mask both the encrypted blob and
+    // any stray plaintext so neither lands in an events.context payload.
+    "sasl_secret_enc",
+    "sasl_secret",
 ];
 
 /// Sanitize a free-form chain / payload string for events.context.
@@ -162,9 +166,19 @@ mod tests {
     }
 
     #[test]
-    fn empty_sensitive_list_is_idempotent() {
+    fn non_sensitive_keys_pass_through() {
         let s = "password_hash=secret123 message=ok";
-        // No keys in SENSITIVE_KEYS today → string unchanged.
+        // No SENSITIVE_KEYS substring present (sasl_secret*) → string unchanged.
         assert_eq!(redact_chain(s), s);
+    }
+
+    #[test]
+    fn masks_connector_sasl_secret() {
+        // chain-string form (the masker's domain — value ends at a delimiter).
+        let s = "ctx: sasl_secret_enc=v1:abc123, topic=orders, sasl_secret=plain}";
+        let out = redact_chain(s);
+        assert!(!out.contains("v1:abc123"), "encrypted blob must be masked");
+        assert!(!out.contains("plain"), "stray plaintext secret must be masked");
+        assert!(out.contains("topic=orders"), "non-secret fields preserved");
     }
 }

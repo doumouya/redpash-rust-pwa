@@ -84,9 +84,12 @@ is visible.
   `config.bootstrap` (else `KAFKA_BOOTSTRAP`), `config.security_protocol` (default
   `SASL_SSL`, validated by `validate_security_protocol` — any other value is a LOUD
   error, never a silent plaintext downgrade), topic = the `topic` column → `config.topic`
-  → `KAFKA_TOPIC`. **SASL creds + the Avro contract still ride `.env`** in this slice
-  (K-3 adds the AES-GCM-encrypted SASL config; the contract stays env-referenced —
-  flagged follow-up). Guards `kind == "kafka"`. `main.rs` uses this when
+  → `KAFKA_TOPIC`. **SASL creds:** the username (`config.sasl_user`) is plaintext config,
+  the **secret is ENCRYPTED at rest** (`config.sasl_secret_enc`) and decrypted via
+  [`secrets::decrypt`](secrets.md) — a present-but-undecryptable secret is a LOUD error,
+  never a silent skip; both fall back to the `.env` `KAFKA_KEY`/`KAFKA_SECRET` when the
+  config keys are absent (legacy RC). The Avro contract still rides `.env` (flagged
+  follow-up). Guards `kind == "kafka"`. `main.rs` uses this when
   `REDPASH_KAFKA_CONNECTION` is set, else `from_env` (the legacy hardcode).
 - `fn validate_security_protocol(Option<&str>)` — only `SASL_SSL` is wired
   (`consume_raw` mandates TLS); absent → ok (default), anything else → loud error.

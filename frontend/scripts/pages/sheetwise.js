@@ -439,15 +439,20 @@ export default function sheetwise(app, { session }) {
     try { projects = (await api("/api/projects")).items || []; } catch (_) { /* empty → new-project path */ }
     const projectOptions = [{ value: "", label: "＋ New project (auto-named)" }]
       .concat(projects.map((p) => ({ value: p.redpash_id, label: p.name || p.redpash_id })));
-    // Kafka is a STREAM, not a SQL engine: a topic + bootstrap, no host/db/table. SASL
-    // creds come from the connector .env for now (K-3 adds encrypted SASL config fields).
+    // Kafka is a STREAM, not a SQL engine: a topic + bootstrap, no host/db/table. The
+    // SASL secret is ENCRYPTED at rest server-side (AES-256-GCM); leave the creds blank
+    // to use the connector .env (single-cluster RC).
     if (kind === "kafka") {
       openModal({
         title: "New Kafka connector", submitLabel: "Create & Pull", submitIcon: "bi-database-add",
         fields: [
           { key: "topic", label: "Topic", required: true, placeholder: "orders.v1" },
           { key: "bootstrap", label: "Bootstrap servers", required: true, placeholder: eng.bootstrap,
-            hint: "host:port of the Kafka brokers (Confluent Cloud or local). TLS (SASL_SSL) is mandatory; cluster credentials come from the connector .env for now." },
+            hint: "host:port of the Kafka brokers (Confluent Cloud or local). TLS (SASL_SSL) is mandatory." },
+          { key: "sasl_username", label: "SASL key / username",
+            hint: "Confluent API key (or SASL username). Leave blank to use the connector .env credentials." },
+          { key: "sasl_password", label: "SASL secret / password", type: "password",
+            hint: "Encrypted at rest (AES-256-GCM) — never stored in plaintext. Leave blank to use the .env credentials." },
           { key: "project_id", label: "Destination project", type: "select", options: projectOptions,
             hint: "Where the consumed records land as a CSV — RBAC-checked exactly like a file upload." },
         ],
@@ -462,6 +467,10 @@ export default function sheetwise(app, { session }) {
             projectId = p.redpash_id || (p.project && p.project.redpash_id);
           }
           const config = { bootstrap, security_protocol: "SASL_SSL" };
+          const saslUser = (v.sasl_username || "").trim();
+          const saslSecret = v.sasl_password || "";
+          if (saslUser) config.sasl_user = saslUser;
+          if (saslSecret) config.sasl_secret = saslSecret; // server encrypts → sasl_secret_enc
           const con = await api("/api/connectors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "kafka." + topic, project_id: projectId, kind: "kafka", topic, config }) });
           try { await api("/api/connectors/" + encodeURIComponent(con.redpash_id) + "/sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (_) { /* created; pull can be retried from the rail */ }
           state.connLoaded = false; loadConnectors(); refreshSources();

@@ -110,6 +110,7 @@ dependencies = [
  "pulldown-cmark",
  "regex",
  "reqwest",
+ "ring",
  "rskafka",
  "rustls",
  "serde",

@@ -106,10 +106,22 @@ impl Cfg {
             .or_else(|| s("topic").filter(|t| !t.is_empty()))
             .map(Ok)
             .unwrap_or_else(|| var("KAFKA_TOPIC"))?;
+        // SASL creds: prefer the connector config (the established pattern), env as the
+        // legacy fallback. The username (API key) is plaintext config; the SECRET is
+        // ENCRYPTED at rest (`sasl_secret_enc`, AES-256-GCM) — decrypt it via the master
+        // key (a present-but-undecryptable secret is a LOUD error, never a silent skip).
+        let sasl_user = match s("sasl_user").filter(|u| !u.trim().is_empty()) {
+            Some(u) => u,
+            None => var("KAFKA_KEY")?,
+        };
+        let sasl_password = match s("sasl_secret_enc").filter(|e| !e.trim().is_empty()) {
+            Some(enc) => crate::secrets::decrypt(&enc).context("decrypt connector SASL secret")?,
+            None => var("KAFKA_SECRET")?,
+        };
         Ok(Self {
             bootstrap,
-            sasl_user:     var("KAFKA_KEY")?,
-            sasl_password: var("KAFKA_SECRET")?,
+            sasl_user,
+            sasl_password,
             topic,
             max_records:   std::env::var("KAFKA_MAX_RECORDS").ok().and_then(|s| s.parse().ok()).unwrap_or(500),
             project_rid:   conn.project_id,

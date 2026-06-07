@@ -58,9 +58,11 @@ this rebuild deletes that family and **composes framework components** —
   LOCKS the engine (no Engine picker; title "New <Engine> connector"; port/user defaults
   from `ENGINE_META`; the **schema** field shows only for postgres). **`kind==="kafka"`
   takes a separate branch** — a STREAM, not a SQL engine — with fields **topic +
-  bootstrap servers + destination project** (no host/db/table/ssl_mode; SASL_SSL is
-  fixed; cluster creds come from the connector `.env` until K-3's encrypted SASL config);
-  `onSubmit` posts `{kind:"kafka", topic, config:{bootstrap, security_protocol:"SASL_SSL"}}`.
+  bootstrap servers + SASL key/secret (optional) + destination project** (no
+  host/db/table/ssl_mode; SASL_SSL fixed). `onSubmit` posts `{kind:"kafka", topic,
+  config:{bootstrap, security_protocol:"SASL_SSL", sasl_user?, sasl_secret?}}` — the
+  `sasl_secret` is **encrypted server-side** at create ([`secrets`](../../backend/api/secrets.md));
+  blank creds fall back to the connector `.env`.
   Called with no `kind` (the rail's generic add) it falls back to the **Engine** picker. Other fields: host, an **SSL mode** select (`SSL_MODE_OPTIONS`,
   Required-first = secure default), password, database, table, destination-project picker
   (the `connection-setup.js` pattern). `onSubmit` posts `{ kind, config }` — `config`
