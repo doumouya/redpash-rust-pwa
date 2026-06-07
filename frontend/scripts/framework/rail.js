@@ -112,8 +112,10 @@ export function mountRail(host, config = {}) {
       case "overview": e.preventDefault(); config.onOverview?.(); return;
       case "group-toggle": {
         e.preventDefault();
-        const collapsed = groupEl.classList.toggle("is-collapsed");
-        on.groupToggle?.(groupId, collapsed);
+        // rail.css shows the group body via `.expanded` (NOT `.is-collapsed`) —
+        // `.rp-rail-group:not(.expanded) .rp-rail-group-body { display:none }`.
+        const expanded = groupEl.classList.toggle("expanded");
+        on.groupToggle?.(groupId, !expanded);
         return;
       }
       case "group-rename": e.stopPropagation();
@@ -212,7 +214,8 @@ function groupHTML(g) {
   const add = g.addLabel
     ? '<button type="button" class="rp-rail-group-add" data-rail-action="group-add"><i class="bi bi-plus"></i>' + esc(g.addLabel) + '</button>'
     : "";
-  return '<div class="rp-rail-group' + (g.collapsed ? " is-collapsed" : "") + '" '
+  // `.expanded` shows the body (rail.css); default to expanded, omit it when collapsed.
+  return '<div class="rp-rail-group' + (g.collapsed ? "" : " expanded") + '" '
     + 'data-group-id="' + esc(g.id ?? "") + '">'
     + head
     + '<div class="rp-rail-group-body">' + tabs + add + '</div>'

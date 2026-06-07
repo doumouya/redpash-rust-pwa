@@ -3,7 +3,7 @@ title: frontend/scripts/framework/rail.js
 source: ../../../../../../frontend/scripts/framework/rail.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-04
+last modified date: 2026-06-05
 ---
 
 # framework/rail.js — Rail component (B1)
@@ -61,6 +61,14 @@ A tab takes `{ id, name, icon, dot, ghost:'active'|'done'|'failed', active, busy
 
 ## Drift-prone areas
 
+- **Group expand state is `.expanded`, NOT `.is-collapsed`** (fixed 2026-06-05, found
+  when SheetWise became `mountRail`'s first live consumer). `rail.css` shows the body
+  via `.rp-rail-group:not(.expanded) .rp-rail-group-body { display:none }`, so
+  `groupHTML` renders `.expanded` by default (omits it only when `g.collapsed`) and
+  `group-toggle` toggles `.expanded`. The earlier `is-collapsed` toggle was a no-op
+  against the CSS — every mountRail group rendered with its body hidden. The
+  hand-built workspace rail had always added `.expanded` manually (`workspace.js`),
+  which is why the bug only surfaced once a page mounted the *component*.
 - **Footer is folded into the rail here.** The live app splits the utility nav
   into [rail-footer.js](../rail-footer.md) (mounted separately, class
   `rp-rail-footnav`); the framework re-unifies it as part of the rail
