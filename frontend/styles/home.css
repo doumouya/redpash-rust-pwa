@@ -76,8 +76,8 @@
   font-size: 0.6875rem;
   padding: 0.125rem 0.5rem;
   border-radius: 62.4375rem;
-  background: rgba(137, 180, 250, 0.10);   /* accent-2 @ 10% */
-  border: 1px solid rgba(137, 180, 250, 0.32);
+  background: color-mix(in srgb, var(--rp-info) 10%, transparent);   /* accent-2 @ 10% */
+  border: 1px solid color-mix(in srgb, var(--rp-info) 32%, transparent);
   color: var(--rp-accent-2);
   white-space: nowrap;
 }

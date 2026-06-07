@@ -86,7 +86,7 @@
   flex-direction: column;
   gap: var(--rp-sp-3);
   padding: var(--rp-sp-4);
-  background: rgba(137, 180, 250, 0.06);
+  background: color-mix(in srgb, var(--rp-info) 6%, transparent);
   border: 1px solid var(--rp-glass-border);
   border-radius: var(--rp-radius);
   animation: rp-result-in 0.3s var(--rp-ease);
@@ -121,14 +121,14 @@
 .rp-login__stat {
   font-size: var(--rp-text-sm);
   color: var(--rp-text-dim);
-  background: rgba(205, 214, 244, 0.05);
+  background: color-mix(in srgb, var(--rp-text) 5%, transparent);
   border: 1px solid var(--rp-border);
   border-radius: 62.4375rem;
   padding: 0.1875rem 0.625rem;
 }
 .rp-login__stat b { color: var(--rp-text); font-weight: 600; }
 .rp-login__stat--local {
-  border-color: rgba(166, 227, 161, 0.35);
+  border-color: color-mix(in srgb, var(--rp-ok) 35%, transparent);
   color: var(--rp-ok);
 }
 

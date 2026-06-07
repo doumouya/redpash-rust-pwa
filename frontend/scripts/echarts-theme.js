@@ -3,16 +3,16 @@
 // ECharts theme registration + resolver — shared across designer.js,
 // echarts-kpi.js, and any page that paints a chart.
 //
-// One source of truth for our two RedPash themes (Mocha + Latte):
-// the JSON files in /echarts-themes/redpash-{mocha,latte}.json.
-// ensureRegisteredThemes() fetches both once per page-load and calls
-// echarts.registerTheme. Returns a memoized promise; safe to await
+// One source of truth for our four chart themes — the JSON files in
+// /echarts-themes/redpash-{mocha,latte,newdark,newlight}.json (one per app
+// theme). ensureRegisteredThemes() fetches all four once per page-load and
+// calls echarts.registerTheme. Returns a memoized promise; safe to await
 // from every chart-init path without duplicating fetches.
 //
-// chartTheme() resolves the right theme NAME for the current chrome
-// theme — Mocha when the page is dark, Latte when light. Pages that
-// want a different theme pass the name to echarts.init directly;
-// most consumers (Home / Monitoring / Profile) just use this default.
+// chartTheme() resolves the right theme NAME for the current app theme via
+// CHART_THEME — so charts carry the RedPash identity in new-dark/new-light
+// and the catppuccin palette in mocha/latte. Pages that want a different
+// theme pass the name to echarts.init directly.
 //
 // The hand-rolled REDPASH_MOCHA / REDPASH_LATTE constants that used
 // to live here were retired when the JSON files landed — keeping two
@@ -20,7 +20,22 @@
 // asked for the refactor. JSON files are the canonical source; this
 // module is the runtime wiring.
 
-const THEME_NAMES = ["redpash-mocha", "redpash-latte"];
+// One chart theme per app theme. mocha/latte = the catppuccin palettes;
+// newdark/newlight = the RedPash identity (red lead), generated from the
+// former by gen-chart-themes.js with the new-theme --rp-* token values.
+const THEME_NAMES = ["redpash-mocha", "redpash-latte", "redpash-newdark", "redpash-newlight"];
+
+// html[data-theme] value → its chart theme. `dark`/`light` are the legacy
+// catppuccin aliases (tokens.css aliases them too); keep both mapping so a
+// stored legacy value still themes its charts correctly.
+const CHART_THEME = {
+  "new-dark":         "redpash-newdark",
+  "new-light":        "redpash-newlight",
+  "dark":             "redpash-mocha",
+  "catppuccin-mocha": "redpash-mocha",
+  "light":            "redpash-latte",
+  "catppuccin-latte": "redpash-latte",
+};
 let registerP = null;
 
 // Fetch + register both RedPash themes. Memoized — subsequent calls
@@ -45,17 +60,14 @@ export function ensureRegisteredThemes() {
   return registerP;
 }
 
-// Returns "redpash-mocha" when the page chrome is dark (default),
-// "redpash-latte" when light. Reads html[data-theme] first
-// (set by tokens.css + the boot script in index.html), then falls
-// back to the OS-level prefers-color-scheme.
+// Resolve the chart theme NAME for the current app theme. Reads
+// html[data-theme] (set by tokens.css + index.html's pre-paint) and maps it
+// via CHART_THEME so every one of the 4 themes gets its matching palette —
+// new-dark/new-light render the RedPash identity, not the catppuccin fallback.
+// No/unknown data-theme → match the OS, defaulting to the new identity.
 export function chartTheme() {
-  return resolveDark() ? "redpash-mocha" : "redpash-latte";
-}
-
-function resolveDark() {
   const t = document.documentElement?.dataset?.theme;
-  if (t === "light") return false;
-  if (t === "dark")  return true;
-  return !window.matchMedia?.("(prefers-color-scheme: light)").matches;
+  if (t && CHART_THEME[t]) return CHART_THEME[t];
+  const light = window.matchMedia?.("(prefers-color-scheme: light)").matches;
+  return light ? "redpash-newlight" : "redpash-newdark";
 }

@@ -214,7 +214,7 @@
 .rp-dash-tile.is-selected .rp-dash-tile-act { opacity: 1; }
 .rp-dash-tile-act:hover { background: var(--rp-surface-2); color: var(--rp-text); }
 .rp-dash-tile-del:hover,
-.rp-dash-tile-close:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.rp-dash-tile-close:hover { background: color-mix(in srgb, var(--rp-accent) 14%, transparent); color: var(--rp-accent); }
 .rp-dash-tile-act:disabled { opacity: 0; cursor: default; }
 /* Dirty tile → its save button stays visible + accent-filled even
    without hover, signalling unsaved edits. */

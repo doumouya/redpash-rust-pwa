@@ -98,7 +98,7 @@
   max-width: 40%;
 }
 .rp-search-hl {
-  background: rgba(137, 180, 250, 0.22);
+  background: color-mix(in srgb, var(--rp-info) 22%, transparent);
   color: var(--rp-accent-2);
   font-weight: 600;
   border-radius: 0.1875rem;

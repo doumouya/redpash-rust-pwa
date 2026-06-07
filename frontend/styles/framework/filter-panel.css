@@ -106,7 +106,7 @@
   cursor: pointer;
   transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
 }
-.rp-pred-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.rp-pred-del:hover { background: color-mix(in srgb, var(--rp-accent) 14%, transparent); color: var(--rp-accent); }
 
 /* ── rp-pred--stack / rp-pred-lbl — label-on-top variant ─────────────────────
    The tools-panel forms reuse rp-pred as a vertical stack (label above field).
@@ -158,7 +158,7 @@
   transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
 }
 .rp-group-card-del i { font-size: 0.75rem; }
-.rp-group-card-del:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.rp-group-card-del:hover { background: color-mix(in srgb, var(--rp-accent) 14%, transparent); color: var(--rp-accent); }
 
 /* ── rp-add-pred — Add-condition button margin modifier ──────────────────────
    The button itself composes rp-btn-icon (--glass --block); this adds the top
@@ -253,7 +253,7 @@
   padding: 0;
 }
 .rp-chip-x:hover {
-  background: rgba(243, 139, 168, 0.18);
+  background: color-mix(in srgb, var(--rp-accent) 18%, transparent);
   color: var(--rp-accent);
 }
 .rp-chip-picker .rp-chip-input {

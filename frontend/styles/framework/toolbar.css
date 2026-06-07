@@ -109,7 +109,7 @@
 }
 .rp-toolbar-mode[data-mode="delete"].armed {
   color: var(--rp-accent);
-  background: rgba(243, 139, 168, 0.14);
+  background: color-mix(in srgb, var(--rp-accent) 14%, transparent);
 }
 
 /* ── refresh spinner (was .rt-spin / .rt-spinning) ────────────────────────────

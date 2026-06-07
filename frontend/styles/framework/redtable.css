@@ -168,7 +168,7 @@
    WORKSPACE delete-mode rows — pointer cursor + red-tinted hover (accent/danger)
    on the whole row, signalling click-to-delete. */
 .rp-redtable.mode-delete tbody tr { cursor: pointer; }
-.rp-redtable.mode-delete tbody tr:hover { background: rgba(243, 139, 168, 0.1); }
+.rp-redtable.mode-delete tbody tr:hover { background: color-mix(in srgb, var(--rp-accent) 10%, transparent); }
 .rp-redtable.mode-delete tbody tr:hover td { color: var(--rp-accent); }
 
 /* ── cell-editor widgets — the two ORPHAN inline-editor inputs ────────────────

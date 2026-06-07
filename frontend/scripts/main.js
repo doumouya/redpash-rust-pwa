@@ -16,6 +16,7 @@ import { api } from "/scripts/api.js";
 import { installErrorCapture } from "/scripts/events.js";
 import { seedPrefs } from "/scripts/prefs.js";
 import { esc } from "/scripts/dom.js";
+import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 
 // Arm frontend error capture before anything else runs, so a
 // boot-time exception still reaches the Events log.
@@ -88,6 +89,11 @@ async function mount(path) {
     import(route.script),
   ]);
   app.innerHTML = html;
+  // Register the chart themes BEFORE the page paints any chart: echarts bakes
+  // the theme at init() time, so a chart created before registration lands
+  // would keep echarts' default palette (the RedPash identity never applies).
+  // Memoized + SW-cached → a no-op resolved promise after the first route.
+  await ensureRegisteredThemes();
   await mod.default?.(app, { session, getSession });
   app.setAttribute("aria-busy", "false");
 }

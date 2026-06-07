@@ -233,7 +233,7 @@
 }
 .rp-rail-group-hide i { font-size: 0.875rem; }
 .rp-rail-group-head:hover .rp-rail-group-hide { opacity: 1; }
-.rp-rail-group-hide:hover { background: rgba(243, 139, 168, 0.14); color: var(--rp-accent); }
+.rp-rail-group-hide:hover { background: color-mix(in srgb, var(--rp-accent) 14%, transparent); color: var(--rp-accent); }
 
 /* Editing state — drops the ellipsis so the full value is visible while
    the user types. Outline matches the accent so it reads as a focused
@@ -387,7 +387,7 @@
   animation: none;
 }
 .rp-rail-tab-ghost-failed {
-  background: rgba(243, 139, 168, 0.12);
+  background: color-mix(in srgb, var(--rp-accent) 12%, transparent);
   color: var(--rp-text);
 }
 .rp-rail-tab-ghost-failed .rp-rail-tab-icon { color: var(--rp-accent); }
