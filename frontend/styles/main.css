@@ -37,11 +37,9 @@
 @import "base.css";      /* reset + document defaults + brand text */
 
 /* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
-@import "button.css";    /* .rp-btn + .rt-btn families */
 @import "user-picker.css"; /* shared user-picker atom — search input + dropdown */
 @import "topbar.css";    /* brand · omnibox · actions */
 @import "rail.css";      /* the rail nav (home + monitoring + workspace) */
-@import "table.css";     /* .rt-table-wrap + .rt-table + .rt-table-state + .rt-status */
 @import "panel.css";     /* rp-* workspace-unique panel content: step-history, report-builder, joins, sentinels (generic chrome → framework/{panel,filter-panel,tools-panel}.css) */
 @import "modal.css";     /* .rp-modal-* — shared overlay-modal atom (cases, home, monitoring) */
 @import "sw-update.css"; /* service-worker update banner */
