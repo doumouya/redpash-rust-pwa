@@ -15,10 +15,11 @@
 //! SESSION scope only (the source's global state is never mutated). Rows stream
 //! (no full-table buffer); a decode error is surfaced, never swallowed.
 //!
-//! v1 is loopback-only / `ssl-mode=disable` (sqlx has no TLS backend yet). The
-//! host gate + ssl_mode + remote-TLS land via the shared `connectors_core` once the
-//! SQL-connector TLS slice ships (Slice A) — at which point this file's local
-//! `is_loopback_host` folds into `connectors_core::host_gate`.
+//! Connection security is the shared `connectors_core`: the host/TLS admission gate
+//! (loopback any mode; a remote host must encrypt; link-local/metadata refused) + the
+//! engine-agnostic `ssl_mode` (mapped here to `PgSslMode`). So Postgres reaches remote
+//! sources over TLS (`ssl_mode=required`/`verify_*`, optional `ssl_root_cert`) exactly
+//! like the MySQL connector.
 #![allow(dead_code)]
 
 use std::path::Path;
@@ -28,6 +29,7 @@ use futures_util::TryStreamExt;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::{Connection, Executor, PgPool, Row};
 
+use crate::connectors_core;
 use crate::pipeline;
 
 /// Source connection + table, plus the user-chosen destination (project +
@@ -41,16 +43,16 @@ pub struct Cfg {
     pub as_user:     String,
 }
 
-/// Loopback-only host gate (v1 is plaintext `ssl-mode=disable`). Accepts `localhost`
-/// + any loopback IP literal (127.0.0.0/8, ::1); rejects hostnames like
-/// `127.evil.com` that a `starts_with("127.")` check would let through (SSRF).
-///
-/// TEMPORARY: replace with `connectors_core::host_gate(host, ssl_mode)` (loopback-OR-TLS
-/// + the SSRF-for-remote guard) once the shared core lands with the SQL-connector
-/// Torv's TLS slice — it's the same security-load-bearing logic both loaders need.
-fn is_loopback_host(host: &str) -> bool {
-    host == "localhost"
-        || host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
+/// Map the engine-agnostic `connectors_core::SslMode` → sqlx `PgSslMode`.
+fn pg_ssl_mode(m: connectors_core::SslMode) -> PgSslMode {
+    use connectors_core::SslMode::*;
+    match m {
+        Disabled => PgSslMode::Disable,
+        Preferred => PgSslMode::Prefer,
+        Required => PgSslMode::Require,
+        VerifyCa => PgSslMode::VerifyCa,
+        VerifyIdentity => PgSslMode::VerifyFull,
+    }
 }
 
 impl Cfg {
@@ -80,24 +82,28 @@ impl Cfg {
             );
         }
         let host = s("host").unwrap_or_else(|| "127.0.0.1".into());
-        if !is_loopback_host(&host) {
-            anyhow::bail!(
-                "Postgres connector v1 is localhost-only — host '{host}' is not a loopback \
-                 address. Plaintext ssl-mode=disable would leak credentials + data over the \
-                 wire; use 127.0.0.1 / ::1 / localhost. Remote + TLS lands via connectors_core \
-                 (the SQL-connector TLS slice)."
-            );
-        }
+        // ssl_mode: explicit from config, else loopback→Preferred, remote→Required.
+        // The shared gate enforces remote-must-encrypt + the link-local/metadata block.
+        let ssl_mode = match s("ssl_mode").as_deref() {
+            Some(m) => connectors_core::parse_ssl_mode(m),
+            None if connectors_core::is_loopback_host(&host) => connectors_core::SslMode::Preferred,
+            None => connectors_core::SslMode::Required,
+        };
+        connectors_core::host_gate(&host, ssl_mode).map_err(|e| anyhow::anyhow!(e))?;
         let port = u16::try_from(cfg.get("port").and_then(|v| v.as_u64()).unwrap_or(5432)).unwrap_or(5432);
         let user = s("user").unwrap_or_else(|| "postgres".into());
         let pass = s("password").unwrap_or_default();
-        let opts = PgConnectOptions::new()
+        let mut opts = PgConnectOptions::new()
             .host(&host)
             .port(port)
             .username(&user)
             .password(&pass)
             .database(&database)
-            .ssl_mode(PgSslMode::Disable);
+            .ssl_mode(pg_ssl_mode(ssl_mode));
+        // CA bundle for verify-ca / verify-full (server-cert validation).
+        if let Some(ca) = s("ssl_root_cert").or_else(|| s("ssl_ca")).filter(|c| !c.trim().is_empty()) {
+            opts = opts.ssl_root_cert(ca);
+        }
         Ok(Self { opts, database, schema, table, project_rid: c.project_id, as_user: c.as_user })
     }
 }

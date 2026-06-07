@@ -24,6 +24,7 @@ mod rbac;
 // the not-yet-wired generic-PATCH / ingestion surface.
 mod codec_avro;
 mod codec_registry;
+mod connectors_core;
 // Field-level permission registry (CAS_C4219F2B) + the codec-delegating validator.
 mod field_perms;
 mod field_validate;

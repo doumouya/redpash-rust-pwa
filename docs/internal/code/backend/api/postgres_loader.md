@@ -46,15 +46,27 @@ of silently assuming; `::text` still extracts it.
   the primary-key constraint. The Tables/Schema facets.
 - `qi` (double-quote identifier), `csv_field` (RFC-4180 + NUL strip), `TableInfo`, `ColInfo`.
 
-## Security (v1) + the shared-core fold-in
+## Drift-prone areas
 
-v1 is **loopback-only / `ssl-mode=disable`** (sqlx 0.8 has no TLS backend yet) — the local
-`is_loopback_host` gate rejects non-loopback hosts (same posture as the MySQL connector
-pre-TLS). **Remote + TLS, the `ssl_mode` ladder, the SSRF-for-remote guard, and
-credential-at-rest land via a shared `connectors_core`** co-designed with the SQL-connector
-Torv's TLS slice (their `tls-rustls` feature unblocks Postgres too); at that point this
-file's `is_loopback_host` folds into `connectors_core::host_gate(host, ssl_mode)`. The
-`routes/connectors.rs` `"postgres"` dispatch is wired then (via the proposed loader registry).
+**Connection admission is the shared [connectors_core](connectors_core.md) gate, not
+local to this file** — so the drift risk is staying in lockstep with it (the MySQL
+connector consumes the same gate; a change there must keep this consumer's mapping valid):
+
+- `from_connection` reads the `ssl_mode` config key → `connectors_core::parse_ssl_mode`
+  (default: **loopback→`Preferred`, remote→`Required`**), then calls
+  `connectors_core::host_gate(host, ssl_mode)` — which refuses link-local / metadata hosts
+  **always** and requires a **remote** host to **encrypt** (`Disabled`/`Preferred` stay
+  loopback-only; plaintext never leaves the box).
+- `pg_ssl_mode` maps the engine-agnostic `SslMode` → `PgSslMode`
+  (`Required`→`Require`, `VerifyCa`→`VerifyCa`, `VerifyIdentity`→`VerifyFull`); the
+  `ssl_root_cert` / `ssl_ca` config key supplies the CA bundle for the `Verify*` modes.
+- The connection is still built from **discrete `PgConnectOptions` components, never a
+  `format!`'d URL** (SSRF-safe by construction), and a pre-built `conn` URL is rejected.
+
+So Postgres reaches **remote sources over TLS** exactly like MySQL — the loopback-only
+framing is gone (it rode the SQL-connector Torv's `tls-rustls-ring` sqlx feature). The
+`routes/connectors.rs` `"postgres"` dispatch is live; the open loader **registry** is the
+remaining `connectors_core` co-design item.
 
 ## Related
 
