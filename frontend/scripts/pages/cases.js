@@ -263,7 +263,7 @@ export default function cases(app, { session }) {
   async function loadAgentChips() {
     if (!chipsAssignee) return;
     try {
-      const data = await api.get("/admin/users?size=20");
+      const data = await api.get("/objects/user?size=20");
       const users = data?.rows || [];
       // Skip the current user — already covered by [Mine]. Skip users
       // without a usable display name.
@@ -1082,7 +1082,7 @@ export default function cases(app, { session }) {
   }
   async function queryMentions(editor, token) {
     try {
-      const data = await api.get("/admin/users?q=" + encodeURIComponent(token.query) + "&size=8");
+      const data = await api.get("/objects/user?q=" + encodeURIComponent(token.query) + "&size=8");
       if (!mentionState || mentionState.editor !== editor) return;   // stale
       mentionState.items = data?.rows || [];
       mentionState.sel = 0;
@@ -1587,7 +1587,7 @@ export default function cases(app, { session }) {
   async function searchAssignees(q, resultsEl) {
     if (!resultsEl) return;
     try {
-      const data = await api.get("/admin/users?q=" + encodeURIComponent(q) + "&size=10");
+      const data = await api.get("/objects/user?q=" + encodeURIComponent(q) + "&size=10");
       const rows = data?.rows || [];
       resultsEl.innerHTML = rows.length
         ? rows.map((u) => {

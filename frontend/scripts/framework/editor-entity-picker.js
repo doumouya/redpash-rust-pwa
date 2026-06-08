@@ -26,9 +26,10 @@ import { api } from "/scripts/api.js";
 // of need). Unknown relType → bare text input (rid typed, backend validates).
 const SOURCES = {
   company: {
-    // /admin/companies → Page<CompanySummary>; the Company fields serialize
-    // FLAT on each row (redpash_id / name), not nested under `.company`.
-    url:     "/admin/companies?size=500",
+    // /api/objects/company → Page<CompanySummary> (registry reach provider, the
+    // caller's reachable companies; flat redpash_id / name). Was /admin/companies
+    // (admin-scoped, all rows) — Lane 1 admin-scope fix.
+    url:     "/objects/company?size=500",
     extract: (page) => (page.rows || []).map((r) => ({ rid: r.redpash_id, name: r.name })),
   },
 };
