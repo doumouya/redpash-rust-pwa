@@ -224,7 +224,12 @@ export default function home(app, { session: _session }) {
   const LIST_VIEWS = {
     users: {
       title: "Users",
-      endpoint: "/admin/users",
+      // Lane 1: user-scoped reach delivery — company-share (the caller + people
+      // sharing a company). DELETE + the platform-role/org edit columns stay
+      // admin (explicit /admin/users; requiresAdmin-gated, backend-enforced) —
+      // allowlisted in admin-scope-audit as genuine admin writes.
+      endpoint: "/objects/user",
+      deleteEndpoint: "/admin/users",
       // Hide/restore — per [[replicable-feature-pattern]]. Each tab's
       // hideMeta(item) returns the {rid, name, sub?} captured into the
       // home_hidden_<tabKey> pref when the user hits the × on a row.
@@ -264,33 +269,9 @@ export default function home(app, { session: _session }) {
       itemNoun: "user",
       itemNounPlural: "users",
       modes: { select: true, delete: true },
-      // Composite layout for this tab — KPI tiles flanked by the two
-      // charts in a single row. Per Em's 2026-05-25 spec (Users tab
-      // only): [chart1 20%] [stats 2×2, 15% each] [chart2 20%].
-      // Other tabs keep the default kpi-strip-then-charts-strip
-      // stacked shape.
-      compositeStrip: true,
-      // Visual placeholder — `?window=` isn't wired on /admin/users yet
-      // (backend TODO). The chip submits the query param but the
-      // backend ignores it today; flipping the active chip is a no-op
-      // until that lands. Keeps the unified 6-section stack visible.
-      chipRows: [{
-        name: "window",
-        label: "Activity",
-        options: [
-          { label: "All time", value: "all" },
-          { label: "Last 7d",  value: "7d"  },
-          { label: "Last 30d", value: "30d" },
-        ],
-        default: "all",
-      }],
-      charts: [
-        { id: "rp-home-users-plan",   title: "By plan",       kind: "donut",
-          data: (s) => s.by_plan },
-        { id: "rp-home-users-active", title: "Active last 7d", kind: "gauge",
-          data: (s) => s.total ? Math.round((s.active_7d / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-      ],
+      // Gauges + the no-op `window` chip dropped in the Lane-1 reach repoint
+      // (no /admin/users/stats fetch). Client-derived later (S2/S4).
+      charts: [],
       // Placeholder matches the backend's ILIKE columns on /admin/users
       // (username + display_name + email + organisation). Sort not yet
       // wired backend-side; modes/columns/export disabled per the Files
@@ -394,7 +375,11 @@ export default function home(app, { session: _session }) {
     },
     companies: {
       title: "Companies",
-      endpoint: "/admin/companies",
+      // Lane 1: user-scoped reach delivery (the caller's companies). DELETE stays
+      // admin-only (explicit /admin/companies = the prior spec.endpoint default,
+      // backend-gated) — allowlisted in admin-scope-audit as a genuine admin write.
+      endpoint: "/objects/company",
+      deleteEndpoint: "/admin/companies",
       hideMeta: (c) => ({
         rid:  c.redpash_id,
         name: c.name,
@@ -418,27 +403,9 @@ export default function home(app, { session: _session }) {
       itemNoun: "company",
       itemNounPlural: "companies",
       modes: { select: true, delete: true },
-      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
-      // Visual placeholder — `?view=` isn't wired on /admin/companies
-      // yet (backend TODO). Same shape as the users tab's window chip.
-      chipRows: [{
-        name: "view",
-        label: "View",
-        options: [
-          { label: "All",         value: "all"    },
-          { label: "Active 30d",  value: "active" },
-          { label: "With projects", value: "wp"   },
-        ],
-        default: "all",
-      }],
-      charts: [
-        { id: "rp-home-co-active", title: "Active last 30d", kind: "gauge",
-          data: (s) => s.total ? Math.round((s.active_30d / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-        { id: "rp-home-co-proj",   title: "With projects",   kind: "gauge",
-          data: (s) => s.total ? Math.round((s.with_projects / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-      ],
+      // Gauges + the no-op `view` chip dropped in the Lane-1 reach repoint
+      // (no /admin/companies/stats fetch). Client-derived later (S2/S4).
+      charts: [],
       toolbar: {
         searchPlaceholder: "Search name, slug…",
         modes: { select: true, delete: true },
@@ -473,7 +440,10 @@ export default function home(app, { session: _session }) {
 
     teams: {
       title: "Teams",
-      endpoint: "/admin/teams",
+      // Lane 1: user-scoped reach delivery (teams the caller can reach). DELETE
+      // stays admin (explicit /admin/teams = prior default; backend-gated).
+      endpoint: "/objects/team",
+      deleteEndpoint: "/admin/teams",
       hideMeta: (t) => ({
         rid:  t.redpash_id,
         name: t.name,
@@ -493,7 +463,7 @@ export default function home(app, { session: _session }) {
           { key: "company_id", label: "Company", type: "entity-picker",
             required: true,
             placeholder: "Search company by name…",
-            endpoint: "/admin/companies",
+            endpoint: "/objects/company",
             labelKey: "name",
             ridKey:   "redpash_id",
           },
@@ -525,16 +495,8 @@ export default function home(app, { session: _session }) {
         ],
         default: "all",
       }],
-      // 2 gauges to feed the composite strip (member-adoption % + the
-      // raw distinct-companies count, normalized against total teams).
-      charts: [
-        { id: "rp-home-team-adopted", title: "With members", kind: "gauge",
-          data: (s) => s.total ? Math.round((s.with_members / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-        { id: "rp-home-team-by-co",   title: "Distinct companies", kind: "gauge",
-          data: (s) => s.total ? Math.round((s.by_company / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-      ],
+      // Gauges dropped in the Lane-1 reach repoint (no /admin/teams/stats).
+      charts: [],
       toolbar: {
         searchPlaceholder: "Search team name…",
         modes: { select: true, delete: true },
@@ -1092,7 +1054,7 @@ export default function home(app, { session: _session }) {
           // a foreign company so the picker doesn't leak existence.
           { key: "company_id", label: "Company (optional)", type: "entity-picker",
             placeholder: "Search company by name… (leave empty for personal)",
-            endpoint: "/admin/companies",
+            endpoint: "/objects/company",
             labelKey: "name",
             ridKey:   "redpash_id",
           },

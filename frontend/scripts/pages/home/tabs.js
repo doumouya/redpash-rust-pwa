@@ -32,12 +32,15 @@
 
 export const HOME_TABS = [
   // ── ORG ────────────────────────────────────────────────────
-  { group: "ORG",    key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/admin/users",       wired: true  },
-  { group: "ORG",    key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/admin/companies",   wired: true  },
+  { group: "ORG",    key: "users",       label: "Users",       icon: "bi-people",       perm: "admin", endpoint: "/objects/user",      wired: true  },
+  { group: "ORG",    key: "companies",   label: "Companies",   icon: "bi-building",     perm: "admin", endpoint: "/objects/company",   wired: true  },
   // Teams — company-scoped subgroups; grant-bearing principals in the
   // RBAC resolver via `rbac::caller_principals`. Shipped 2026-05-31
   // with the routes/teams.rs + /api/admin/teams CRUD slice.
-  { group: "ORG",    key: "teams",       label: "Teams",       icon: "bi-people-fill",  perm: "admin", endpoint: "/admin/teams",       wired: true  },
+  { group: "ORG",    key: "teams",       label: "Teams",       icon: "bi-people-fill",  perm: "admin", endpoint: "/objects/team",      wired: true  },
+  // memberships stays /admin/* (an edge, not a registered entity-type); user-scoped
+  // via the registry membership provider once a /api/memberships route or type
+  // registration lands (Lane 1 follow-up). Allowlisted in admin-scope-audit.
   { group: "ORG",    key: "memberships", label: "Memberships", icon: "bi-link-45deg",   perm: "admin", endpoint: "/admin/memberships", wired: true  },
   // Cases — flat-table read of /api/cases for the rail. The /cases
   // page renders the kanban + detail; this Home tab gives the

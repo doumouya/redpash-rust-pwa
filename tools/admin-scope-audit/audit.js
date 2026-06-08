@@ -42,7 +42,33 @@ const SCRIPTS = path.join(FE, 'scripts');
 // here documents an intentional exception (e.g. config metadata, not user data)
 // so the gate stays green without hiding the decision.
 const ALLOW = {
-  // 'scripts/framework/type-registry.js::/admin/types': 'field-shape config metadata, not per-user data',
+  // ── Lane 1 (2026-06-08): the user's own DATA + pickers are user-scoped via the
+  // registry; the entries below are CONSCIOUS exceptions, each a genuine admin
+  // surface or a documented deferral (not a silenced leak). Reviewed by Em.
+
+  // Genuine admin-only WRITES on the Home ORG tabs — the LIST reads are now
+  // user-scoped (/objects/*); these writes (platform-role/org PATCH, deletes,
+  // membership-grant pickers) are admin actions, requiresAdmin-gated in the UI
+  // and backend-enforced (rbac). They legitimately target /admin/*.
+  'scripts/pages/home.js::/admin/users':       'admin-only writes (platform-role/org PATCH, user delete, membership-grant user picker); requiresAdmin + backend-gated',
+  'scripts/pages/home.js::/admin/companies':   'admin-only writes (company delete, membership-grant scope picker); backend-gated',
+  'scripts/pages/home.js::/admin/teams':       'admin-only writes (team delete, membership-grant scope picker); backend-gated',
+
+  // Memberships is an EDGE, not a registered entity-type — /api/objects/membership
+  // is gated until a type registration or a dedicated /api/memberships user route
+  // lands. The registry membership reach provider is BUILT + ready. Deferred.
+  'scripts/pages/home.js::/admin/memberships':       'memberships tab + create (edge type); user-scoped provider ready, routing deferred (Lane 1 follow-up)',
+  'scripts/pages/home/tabs.js::/admin/memberships':  'memberships rail hint (edge type); user-scoping deferred',
+
+  // Settings chart-customizer preview stats. The Home tab gauges these preview
+  // were dropped in the Lane-1 reach repoint; the customizer's admin-stat options
+  // are orphaned pending the client-derived gauge re-add (S4). Admin surfaces.
+  'scripts/charts/home-bank.js::/admin/users/stats':         'settings chart-customizer preview stat; gauge dropped, re-add pending (S4)',
+  'scripts/charts/home-bank.js::/admin/memberships/stats':   'settings chart-customizer preview stat; re-add pending (S4)',
+  'scripts/charts/home-bank.js::/admin/files/stats':         'settings chart-customizer preview stat; re-add pending (S4)',
+  'scripts/charts/home-bank.js::/admin/companies/stats':     'settings chart-customizer preview stat; re-add pending (S4)',
+  'scripts/charts/home-bank.js::/admin/charts/stats':        'settings chart-customizer preview stat; re-add pending (S4)',
+  'scripts/charts/monitoring-bank.js::/admin/steps/stats':   'settings chart-customizer monitoring preview stat; admin surface',
 };
 
 // ── fs walk ─────────────────────────────────────────────────────────────────
