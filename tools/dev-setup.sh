@@ -11,7 +11,8 @@ if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 #   2. tools/install-stack.sh  — fill any gaps (rust, node, psql, …)
 #   3. tools/stack-version.sh  — re-probe to confirm install worked
 #   4. tools/db-setup.sh       — service + role + database + .env + auth
-#   5. cargo check -p api      — repo compiles against the new env
+#   5. tools/mcp-server build  — npm install + tsc so the redpash-slack MCP has dist/
+#   6. cargo check -p api      — repo compiles against the new env
 #
 # Exit codes:
 #   0 — every step landed; api crate compiles
@@ -91,6 +92,13 @@ if [ "$NO_DB" -eq 0 ]; then
 fi
 
 if [ "$NO_BUILD" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+  # Build the cases/Slack MCP server so dist/server.js exists. The redpash-slack MCP
+  # entry points at dist/, but node_modules + dist are gitignored, so a fresh checkout
+  # has neither and the server fails to connect ("Connection closed", -32000). Build it
+  # here once so `/mcp` finds it. Skipped if node is absent (install-stack handles node).
+  if command -v npm >/dev/null 2>&1; then
+    step "mcp-server build"           sh -c "cd '$REPO_ROOT/tools/mcp-server' && npm install --no-audit --no-fund && npm run build"
+  fi
   step "cargo check -p api"           sh -c "cd '$REPO_ROOT/backend' && cargo check -p api"
 fi
 

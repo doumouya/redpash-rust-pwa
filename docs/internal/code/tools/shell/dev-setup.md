@@ -3,17 +3,23 @@ title: tools/dev-setup.sh
 source: ../../../../../tools/dev-setup.sh
 owner: Gus
 section: Internal · Code · Tools · shell
-last modified date: 2026-05-30
+last modified date: 2026-06-08
 ---
 
 # dev-setup.sh
 
 ## Purpose
 
-Orchestrator — chains the three onboarding scripts (install-stack →
-db-setup → wasm build) in dependency order so a fresh host goes from
-clean to *"api boots"* in one invocation. The "first-run" command for
-a new contributor.
+Orchestrator — chains the onboarding steps (install-stack → db-setup →
+**mcp-server build** → cargo check) in dependency order so a fresh host
+goes from clean to *"api boots"* in one invocation. The "first-run"
+command for a new contributor.
+
+The `mcp-server build` step (`npm install && npm run build` in
+`tools/mcp-server/`) produces `dist/server.js` — without it the
+`redpash-slack` MCP entry has no module to load and fails with
+"Connection closed" (`node_modules`/`dist` are gitignored, so a fresh
+checkout has neither). Gated on `npm` being present + `--no-build` off.
 
 ## Public surface
 
