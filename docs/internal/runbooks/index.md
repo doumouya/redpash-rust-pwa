@@ -286,9 +286,12 @@ Every entry follows the same five headings:
   not-yet-expanded groups also match. Lesson: search over a lazily-hydrated list must hydrate the
   whole collection first — otherwise it silently covers only the loaded slice.
 - [0022 — User surfaces read admin endpoints; object lists move to the registry, shaped by the data engine](0022-admin-scope-registry-list.md) —
-  **In progress 2026-06-08 (S1 done).** Home read `/admin/*` (all-rows, admin-gated) for what should be the
-  caller's RBAC reach. Built `tools/admin-scope-audit` (40-leak worklist + gate). Em's architecture: route
-  user lists through the object registry (`ListProviderRegistry` reach providers → `GET /api/objects/:type`,
-  reach-delivery only) and shape them in the data-engine wasm client-side ("one engine, two surfaces"). S1
-  (backend, 6 providers + paginated reach handler) shipped + live-smoke-verified; S2 (engine wrappers) / S3
-  (frontend repoint — leak closes) / S4 (Workspace+Overview) staged. Lesson: reach-scope `all_count`, never `count_total`.
+  **Admin-scope lane DONE 2026-06-08 — `admin-scope-audit` → 0 user-surface leaks (exit 0).** Home + pickers
+  read `/admin/*` (all-rows, admin-gated) for what should be the caller's RBAC reach. Built
+  `tools/admin-scope-audit` (40-leak worklist + gate). Em's architecture: route user lists through the object
+  registry (`ListProviderRegistry` reach providers → `GET /api/objects/:type`) + shape in the data-engine wasm
+  client-side ("one engine"). S1 (backend, 6 reach providers + paginated handler, live-smoke-verified, `a34db97`)
+  + S3 (frontend repoint: pickers + Home DATA & ORG tab reads → `/objects/:type`; admin writes kept + audit
+  `ALLOW{}`-documented; `21f94d9`/`9894898`/`299ad3f`). DEFERRED (documented): memberships user-scoping (edge),
+  client-derived gauges, the dashboard Overview (Lane 2). Lessons: reach-scope `all_count` not `count_total`;
+  writes default to `spec.endpoint` so repointing a read needs an explicit admin write endpoint.

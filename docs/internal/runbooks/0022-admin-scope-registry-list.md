@@ -45,12 +45,24 @@ the S3 frontend repoint lands.
   delegates to the reach core; `profile.js` reads `.rows`. **Verified** by a 2nd-instance live smoke:
   all 5 reachable providers return correct `Page<Value>` with the proven `*Summary` column keys
   (chart/file/user/company/team), no SQL/decode errors. `membership` 404s until S3 registers the type.
-- **S2 — data engine.** Wire client filter/search/group wrappers (`apply_filter`/`get_distinct_values`/
-  `run_sql`) into `wasm-engine.js` + `engine.worker.js` (sort/page already client-side).
-- **S3 — frontend repoint (the leak closes; audit → green).** Shared client-engine list component;
-  Home tabs + pickers + profile → `/api/objects/:type`; gauges client-derive (kills the `/admin/*/stats`
-  leaks); register the `membership` type.
-- **S4 — converge Workspace + build the dashboard Overview** (the original task) on the shared component.
+- **S3 — frontend repoint (DONE; admin-scope-audit → 0 leaks, exit 0).** Pickers (cases.js,
+  editor-entity-picker.js) → `/objects/{user,company}`; Home DATA tabs (files, charts) +
+  ORG tabs (users, companies, teams) READS → `/objects/:type`; project-create company picker →
+  `/objects/company`. Admin WRITES kept explicit (`deleteEndpoint`/`editEndpoint` → `/admin/*`;
+  requiresAdmin + backend-gated) and documented in the audit `ALLOW{}`. KPI gauges dropped on
+  repointed tabs (reach DELIVERY only). Commits `21f94d9` (pickers), `9894898` (DATA), `299ad3f` (ORG).
+- **DEFERRED (allowlisted + documented, not silenced):** (a) **memberships** user-scoping — it's an
+  edge, not a registered entity-type, so `/api/objects/membership` is gated; the registry membership
+  reach provider is BUILT + ready, needs a `type_definitions` registration or a dedicated
+  `/api/memberships` route. (b) **Client-derived gauges** — the dropped tab KPI gauges return computed
+  from the list payload (the `projects` tab is the model: `data: (s)=> s.items…`); the settings
+  chart-customizer (`home-bank.js`/`monitoring-bank.js`) preview stats wait on that.
+- **S2/S4 — the "one engine" client shaping + dashboard Overview** (the original Lane-2 task) on a
+  shared client-engine list component — the next lane. Reads now flow through the registry, so the
+  Overview is a config of the same `/api/objects/:type` data.
+
+**Takes effect on backend restart** onto `a34db97` (the reach providers); against an older running
+binary `/objects/*` returns empty.
 
 ## Lessons / risks
 
