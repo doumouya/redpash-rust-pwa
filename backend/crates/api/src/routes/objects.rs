@@ -8,12 +8,15 @@
 //! validation reuses `validate_rules::validate_value` off the type's catalog.
 //! Doc: docs/internal/code/backend/api/routes/objects.md
 
-use axum::extract::{Path, State};
+use std::time::Instant;
+
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use shared::Page;
 use sqlx::types::Json as SqlxJson;
 
 use crate::error::AppError;
@@ -245,42 +248,101 @@ async fn delete_one(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `GET /api/objects/:type` — the caller's reachable objects of the type.
-/// Stage 2 = DIRECT membership only (the scope cascade lands in Stage 3); a
-/// platform admin sees all.
+/// `GET /api/objects/:type` — the caller's RBAC-reachable rows of the type, as a
+/// paginated `Page<Value>`. A **builtin** type delivers via its registered reach
+/// provider (typed table); a **custom** type falls through to the `entity_data`
+/// default below. Reach via `list_viewer` (admin → no filter). SHAPING
+/// (filter/search/sort/page) runs in the data-engine wasm on the CLIENT under the
+/// row cap; `page/size/q/sort` here drive only the over-cap server fallback.
 async fn list(
     State(state):  State<AppState>,
     headers:       HeaderMap,
     Path(type_id): Path<String>,
-) -> Result<Json<Vec<ObjectView>>, AppError> {
+    Query(q):      Query<super::admin::AdminQuery>,
+) -> Result<Json<Page<Value>>, AppError> {
     let caller = super::resolve_user_rid(&state, &headers).await?;
     require_type(&state, &type_id)?;
-    let admin = crate::rbac::is_platform_admin(&state, &caller).await?;
-    let rows: Vec<(String, String, Option<String>, SqlxJson<Value>)> = sqlx::query_as(
+    let viewer = super::list_viewer(&state, &caller).await?;
+    let page = match super::list_registry::registry().get(&type_id) {
+        Some(p) => (p.list)(&state, &caller, &q, viewer.as_deref()).await?,
+        None    => entity_data_page(&state, &type_id, &q, viewer.as_deref()).await?,
+    };
+    Ok(Json(page))
+}
+
+/// Custom-type fallback: reach-scoped paginated page over `entity_data`. Reach =
+/// direct membership on the object OR its `scope_parent` (the cascade — Stage 2
+/// was direct-only). Rows are the `data` JSONB with `rid`/`owner`/`scope_parent`
+/// merged in at top level (flat, like the typed providers). `viewer = None` ⇒
+/// admin (every row). Optional `q` does a coarse `data::text` substring match for
+/// the over-cap server fallback; the client engine does the real filtering.
+async fn entity_data_page(
+    state:   &AppState,
+    type_id: &str,
+    q:       &super::admin::AdminQuery,
+    viewer:  Option<&[String]>,
+) -> Result<Page<Value>, AppError> {
+    let started = Instant::now();
+    let (offset, size, page) = super::pagination::paginate(q.page, q.size);
+
+    const REACH: &str = "($2::text[] IS NULL OR EXISTS (SELECT 1 FROM memberships m \
+         WHERE m.member_redpash_id = ANY($2) \
+           AND m.object_redpash_id IN (ed.object_id, ed.scope_parent_id)))";
+
+    let all_count: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*)::BIGINT FROM entity_data ed WHERE ed.type_id = $1 AND {REACH}"
+    ))
+    .bind(type_id)
+    .bind(viewer)
+    .fetch_one(&state.db)
+    .await?;
+
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*)::BIGINT FROM entity_data ed WHERE ed.type_id = $1 AND {REACH} \
+            AND ($3::text IS NULL OR ed.data::text ILIKE '%' || $3 || '%')"
+    ))
+    .bind(type_id)
+    .bind(viewer)
+    .bind(q.q.as_deref())
+    .fetch_one(&state.db)
+    .await?;
+
+    let rows: Vec<(String, String, Option<String>, SqlxJson<Value>)> = sqlx::query_as(&format!(
         "SELECT ed.object_id, ed.owner_id, ed.scope_parent_id, ed.data \
            FROM entity_data ed \
-          WHERE ed.type_id = $1 \
-            AND ($2 OR EXISTS ( \
-                SELECT 1 FROM memberships m \
-                 WHERE m.object_redpash_id = ed.object_id AND m.member_redpash_id = $3)) \
-          ORDER BY ed.created_at",
-    )
-    .bind(&type_id)
-    .bind(admin)
-    .bind(&caller)
+          WHERE ed.type_id = $1 AND {REACH} \
+            AND ($3::text IS NULL OR ed.data::text ILIKE '%' || $3 || '%') \
+          ORDER BY ed.created_at DESC LIMIT $4 OFFSET $5"
+    ))
+    .bind(type_id)
+    .bind(viewer)
+    .bind(q.q.as_deref())
+    .bind(size as i64)
+    .bind(offset)
     .fetch_all(&state.db)
     .await?;
-    let items = rows
+
+    let rows: Vec<Value> = rows
         .into_iter()
-        .map(|(rid, owner, scope_parent, data)| ObjectView {
-            type_id: type_id.clone(),
-            rid,
-            owner,
-            scope_parent,
-            data: data.0,
+        .map(|(rid, owner, scope_parent, data)| {
+            let mut m = match data.0 {
+                Value::Object(m) => m,
+                other => {
+                    let mut m = Map::new();
+                    m.insert("value".into(), other);
+                    m
+                }
+            };
+            m.insert("rid".into(), Value::String(rid));
+            m.insert("owner".into(), Value::String(owner));
+            if let Some(sp) = scope_parent {
+                m.insert("scope_parent".into(), Value::String(sp));
+            }
+            Value::Object(m)
         })
         .collect();
-    Ok(Json(items))
+
+    Ok(super::pagination::build_page(rows, total as u64, all_count as u64, page, size, started))
 }
 
 /// Load one object's `entity_data` row → `ObjectView`, enforcing the type

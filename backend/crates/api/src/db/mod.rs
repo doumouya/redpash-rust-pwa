@@ -398,26 +398,9 @@ const CHART_COLS: &str = "redpash_id, project_redpash_id, source_file_id,
                           COALESCE(display_name, filename) AS title,
                           spec, created_at, updated_at";
 
-pub async fn list_charts(pool: &PgPool, owner: &str) -> sqlx::Result<Vec<Chart>> {
-    // PROJECT-FILES-ACK: type=chart — owner's saved charts.
-    // Single-table SELECT — a JOIN to `projects` collides the shared,
-    // unqualified CHART_COLS on redpash_id / created_at / updated_at
-    // ("column reference redpash_id is ambiguous"). Owner filter runs as
-    // a subquery so CHART_COLS stays usable as-is, shared unchanged with
-    // find_chart / insert_chart / update_chart.
-    let rows: Vec<ChartRow> = sqlx::query_as(&format!(
-        "SELECT {CHART_COLS} FROM project_files
-         WHERE file_type = 'chart'
-           AND project_redpash_id IN (
-             SELECT object_redpash_id FROM memberships
-             WHERE member_redpash_id = $1 AND role = 'owner')
-         ORDER BY updated_at DESC"
-    ))
-    .bind(owner)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows.into_iter().map(Into::into).collect())
-}
+// list_charts (owner-only `{items}`) was removed in Lane 1 (admin-scope sweep):
+// /api/charts is now served by the reach-aware paginated `admin::charts_page`
+// (routes/charts.rs), so the caller sees charts shared with them, not just owned.
 
 pub async fn find_chart(pool: &PgPool, rid: &str) -> sqlx::Result<Option<Chart>> {
     // PROJECT-FILES-ACK: type=chart — single chart by rid; type-filter

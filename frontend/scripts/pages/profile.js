@@ -313,7 +313,10 @@ async function loadUsage(app) {
     api.get("/dashboards"),
   ]);
   const proj = projects.value?.items   ?? [];
-  const ch   = charts.value?.items     ?? [];
+  // /api/charts is now reach-scoped + paginated (Page<…>.rows) — Lane 1 made the
+  // user charts list share the registry reach core. Fall back to .items for any
+  // still-{items} shape. dashboards stays {items} until it moves too.
+  const ch   = charts.value?.rows ?? charts.value?.items ?? [];
   const dash = dashboards.value?.items ?? [];
   const fileCount = proj.reduce((s, p) => s + (p.file_count ?? 0), 0);
   paintUsageChart(el, [

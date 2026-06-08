@@ -14,17 +14,14 @@
 //!   DELETE /api/charts/:rid   delete
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
 use shared::chart::{Chart, ChartRequest};
+use shared::{admin::ChartSummary, Page};
 
 use crate::{db, error::AppError, id, state::AppState};
-
-#[derive(Serialize)]
-struct ChartsList { items: Vec<Chart> }
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -32,14 +29,21 @@ pub fn routes() -> Router<AppState> {
         .route("/:rid", get(get_one).put(update_one).delete(delete_one))
 }
 
+/// GET /api/charts — the caller's charts, RBAC-reach-scoped + paginated.
+/// Shares the reach-aware core with /api/admin/charts: admin passes no viewer
+/// (sees all), a non-admin caller passes their principals so they see only
+/// charts in projects/companies they can reach. Returns `Page<ChartSummary>`
+/// (same shape as the admin tab) so the Home Charts tab + dashboard Overview
+/// reuse the list reader. Was owner-only `{items}` (db::list_charts) — that
+/// hid charts shared with the caller; superseded by reach (Lane 1, admin-scope).
 async fn list(
     State(state): State<AppState>,
     headers:      axum::http::HeaderMap,
-) -> Result<Json<ChartsList>, AppError> {
-    let user = super::resolve_user_rid(&state, &headers).await?;
-    let items = db::list_charts(&state.db, &user)
-        .await?;
-    Ok(Json(ChartsList { items }))
+    Query(q):     Query<super::admin::AdminQuery>,
+) -> Result<Json<Page<ChartSummary>>, AppError> {
+    let user   = super::resolve_user_rid(&state, &headers).await?;
+    let viewer = super::list_viewer(&state, &user).await?;
+    Ok(Json(super::admin::charts_page(&state, &q, viewer.as_deref()).await?))
 }
 
 async fn create(

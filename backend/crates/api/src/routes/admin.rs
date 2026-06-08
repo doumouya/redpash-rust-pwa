@@ -79,15 +79,15 @@ pub fn routes() -> Router<AppState> {
 use super::pagination::{build_page, paginate};
 
 #[derive(Deserialize)]
-struct AdminQuery {
-    #[serde(default)] page: Option<u32>,
-    #[serde(default)] size: Option<u32>,
-    #[serde(default)] q:    Option<String>, // free-text search where applicable
+pub(super) struct AdminQuery {
+    #[serde(default)] pub(super) page: Option<u32>,
+    #[serde(default)] pub(super) size: Option<u32>,
+    #[serde(default)] pub(super) q:    Option<String>, // free-text search where applicable
     /// Click-to-sort header support. Validated against the per-endpoint
     /// SORTABLE_* allowlist; bad / missing values fall back to each
     /// handler's default column. `dir` → "asc"|"desc" (default "desc").
-    #[serde(default)] sort: Option<String>,
-    #[serde(default)] dir:  Option<String>,
+    #[serde(default)] pub(super) sort: Option<String>,
+    #[serde(default)] pub(super) dir:  Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -861,6 +861,19 @@ async fn list_charts(
     State(state): State<AppState>,
     Query(q):     Query<AdminQuery>,
 ) -> Result<Json<Page<ChartSummary>>, AppError> {
+    // Admin surface: no viewer filter (already platform-admin-gated by the nest).
+    Ok(Json(charts_page(&state, &q, None).await?))
+}
+
+/// Paginated chart list, reach-aware. `viewer = None` → every chart (admin).
+/// `viewer = Some(principals)` → only charts whose project (or its company) the
+/// caller can reach — the user-scoped `/api/charts` list. The reach predicate
+/// mirrors `db::list_projects` / `list_cases` (charts are `project_files`).
+pub(super) async fn charts_page(
+    state:  &AppState,
+    q:      &AdminQuery,
+    viewer: Option<&[String]>,
+) -> Result<Page<ChartSummary>, AppError> {
     let started = Instant::now();
     let (offset, size, page) = paginate(q.page, q.size);
 
@@ -878,31 +891,40 @@ async fn list_charts(
         _              => "f.created_at",
     };
 
+    // Reach: $1 is the caller's principals (self + teams) as text[], or NULL for
+    // admin (no filter). A chart is reachable if the caller is a member of its
+    // project OR the project's company. Same shape across the project_files family.
+    const REACH: &str =
+        "($1::text[] IS NULL OR EXISTS (SELECT 1 FROM memberships m
+              WHERE m.member_redpash_id = ANY($1)
+                AND m.object_redpash_id IN (f.project_redpash_id, p.company_id)))";
+
     // Charts live in project_files with file_type='chart'. Two counts:
-    //   all_count — every chart row ever (the Charts tab's true total).
+    //   all_count — every chart in reach (pre-search) — the tab's true total.
     //   total     — post-search filter.
-    //
-    // PROJECT-FILES-ACK: type=chart — admin Charts tab; all three
-    // queries below filter to file_type='chart' inline.
-    let all_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM project_files WHERE file_type = 'chart'",
-    )
+    // PROJECT-FILES-ACK: type=chart — Charts tab; all three queries filter to it.
+    let all_count: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*)::BIGINT FROM project_files f
+           JOIN projects p ON p.redpash_id = f.project_redpash_id
+          WHERE f.file_type = 'chart' AND {REACH}"
+    ))
+    .bind(viewer)
     .fetch_one(&state.db)
     .await?;
 
-    // PROJECT-FILES-ACK: type=chart — post-search count for the Charts tab.
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM project_files
-         WHERE file_type = 'chart'
-           AND ($1::text IS NULL OR
-                filename                 ILIKE '%' || $1 || '%' OR
-                COALESCE(display_name, '') ILIKE '%' || $1 || '%')",
-    )
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*)::BIGINT FROM project_files f
+           JOIN projects p ON p.redpash_id = f.project_redpash_id
+          WHERE f.file_type = 'chart' AND {REACH}
+            AND ($2::text IS NULL OR
+                 f.filename                 ILIKE '%' || $2 || '%' OR
+                 COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')"
+    ))
+    .bind(viewer)
     .bind(q.q.as_deref())
     .fetch_one(&state.db)
     .await?;
 
-    // PROJECT-FILES-ACK: type=chart — row data for the Charts tab.
     // ORDER BY built via format! with sort_col from the SORTABLE_CHARTS
     // allowlist (never user input directly).
     let sql = format!(
@@ -913,14 +935,15 @@ async fn list_charts(
            FROM project_files f
            JOIN projects p ON p.redpash_id = f.project_redpash_id
            LEFT JOIN file_stages s ON s.file_redpash_id = f.redpash_id
-          WHERE f.file_type = 'chart'
-            AND ($1::text IS NULL OR
-                 f.filename                 ILIKE '%' || $1 || '%' OR
-                 COALESCE(f.display_name, '') ILIKE '%' || $1 || '%')
+          WHERE f.file_type = 'chart' AND {REACH}
+            AND ($2::text IS NULL OR
+                 f.filename                 ILIKE '%' || $2 || '%' OR
+                 COALESCE(f.display_name, '') ILIKE '%' || $2 || '%')
           ORDER BY {sort_col} {sort_dir} NULLS LAST
-          LIMIT $2 OFFSET $3"
+          LIMIT $3 OFFSET $4"
     );
     let rows = sqlx::query(&sql)
+    .bind(viewer)
     .bind(q.q.as_deref())
     .bind(size as i64)
     .bind(offset)
@@ -941,7 +964,7 @@ async fn list_charts(
         })
         .collect();
 
-    Ok(Json(build_page(rows, total as u64, all_count as u64, page, size, started)))
+    Ok(build_page(rows, total as u64, all_count as u64, page, size, started))
 }
 
 // ── /api/admin/steps ────────────────────────────────────────────────────

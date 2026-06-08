@@ -54,6 +54,7 @@ mod files;
 mod group;
 mod health;
 mod admin;
+mod list_registry;
 mod me;
 mod members;
 mod objects;
@@ -84,6 +85,24 @@ pub(crate) fn ensure_owner(
         return Err(AppError::not_found("not_found", format!("{label} {rid}")));
     }
     Ok(())
+}
+
+/// Reach filter for a user-scoped LIST endpoint. `None` when the caller is a
+/// platform admin (sees everything, like the `/admin/*` surface); else
+/// `Some(principals)` — the caller plus their teams — for the reach-aware
+/// `EXISTS(memberships … member = ANY($viewer))` predicate. Mirrors the
+/// `viewer` derivation in `routes/cases.rs`; shared so every user list endpoint
+/// (charts/files/dashboards/companies/teams/users/memberships) scopes identically
+/// and no surface re-implements (or forgets) the admin-bypass. (Lane 1.)
+pub(crate) async fn list_viewer(
+    state:  &crate::state::AppState,
+    caller: &str,
+) -> Result<Option<Vec<String>>, crate::error::AppError> {
+    if crate::rbac::is_platform_admin(state, caller).await? {
+        Ok(None)
+    } else {
+        Ok(Some(crate::rbac::principals(&state.db, caller).await?))
+    }
 }
 
 // 256 MiB — well above Salesforce's 100 MB CSV import cap, and Polars

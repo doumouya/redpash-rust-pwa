@@ -285,3 +285,10 @@ Every entry follows the same five headings:
   shows the group expanded with just the hits) + a global `ensureAllFilesLoaded()` so files inside
   not-yet-expanded groups also match. Lesson: search over a lazily-hydrated list must hydrate the
   whole collection first — otherwise it silently covers only the loaded slice.
+- [0022 — User surfaces read admin endpoints; object lists move to the registry, shaped by the data engine](0022-admin-scope-registry-list.md) —
+  **In progress 2026-06-08 (S1 done).** Home read `/admin/*` (all-rows, admin-gated) for what should be the
+  caller's RBAC reach. Built `tools/admin-scope-audit` (40-leak worklist + gate). Em's architecture: route
+  user lists through the object registry (`ListProviderRegistry` reach providers → `GET /api/objects/:type`,
+  reach-delivery only) and shape them in the data-engine wasm client-side ("one engine, two surfaces"). S1
+  (backend, 6 providers + paginated reach handler) shipped + live-smoke-verified; S2 (engine wrappers) / S3
+  (frontend repoint — leak closes) / S4 (Workspace+Overview) staged. Lesson: reach-scope `all_count`, never `count_total`.
