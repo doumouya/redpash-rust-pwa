@@ -41,7 +41,7 @@ fn rows_to_df(rows_json: &str) -> Result<DataFrame, String> {
     }
     let columns: Vec<String> = rows[0].keys().cloned().collect();
 
-    let mut series_list: Vec<Series> = Vec::with_capacity(columns.len());
+    let mut series_list: Vec<Column> = Vec::with_capacity(columns.len());
     for col in &columns {
         // Type inference from first non-null value across all rows.
         let kind: &str = rows.iter().find_map(|r| match r.get(col) {
@@ -77,7 +77,7 @@ fn rows_to_df(rows_json: &str) -> Result<DataFrame, String> {
                 Series::new(col.as_str().into(), v)
             }
         };
-        series_list.push(s);
+        series_list.push(s.into_column());
     }
     DataFrame::new_infer_height(series_list).map_err(|e| format!("df build: {e}"))
 }
@@ -85,7 +85,7 @@ fn rows_to_df(rows_json: &str) -> Result<DataFrame, String> {
 /// DataFrame → JSON array of row objects.
 fn df_to_rows(df: &DataFrame) -> Result<String, String> {
     let n = df.height();
-    let cols: Vec<&Series> = df.columns().iter().collect();
+    let cols: Vec<&Column> = df.columns().iter().collect();
     let mut rows: Vec<Value> = Vec::with_capacity(n);
     for i in 0..n {
         let mut row = serde_json::Map::with_capacity(cols.len());

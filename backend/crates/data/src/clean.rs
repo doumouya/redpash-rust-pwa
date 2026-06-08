@@ -131,9 +131,9 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
     // route through par_iter). Falls back to AnyValue rebuild for
     // dtypes we don't expect in cleaned data (auto_clean only produces
     // String / numeric / bool columns).
-    let new_cols: Vec<Series> = cols
+    let new_cols: Vec<Column> = cols
         .iter()
-        .map(|col| -> Result<Series> {
+        .map(|col| -> Result<Column> {
             let name = col.name().clone();
             match col.dtype() {
                 DataType::String => {
@@ -142,7 +142,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
                         .filter(|&i| keep_mask[i])
                         .map(|i| ca.get(i))
                         .collect();
-                    Ok(Series::new(name, v))
+                    Ok(Series::new(name, v).into_column())
                 }
                 DataType::Boolean => {
                     let ca = col.bool()?;
@@ -150,7 +150,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
                         .filter(|&i| keep_mask[i])
                         .map(|i| ca.get(i))
                         .collect();
-                    Ok(Series::new(name, v))
+                    Ok(Series::new(name, v).into_column())
                 }
                 DataType::Float64 => {
                     let ca = col.f64()?;
@@ -158,7 +158,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
                         .filter(|&i| keep_mask[i])
                         .map(|i| ca.get(i))
                         .collect();
-                    Ok(Series::new(name, v))
+                    Ok(Series::new(name, v).into_column())
                 }
                 DataType::Int64 => {
                     let ca = col.i64()?;
@@ -166,7 +166,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
                         .filter(|&i| keep_mask[i])
                         .map(|i| ca.get(i))
                         .collect();
-                    Ok(Series::new(name, v))
+                    Ok(Series::new(name, v).into_column())
                 }
                 _ => {
                     // Fallback: rebuild via AnyValue. Should be unreachable for
@@ -176,7 +176,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
                         .filter(|&i| keep_mask[i])
                         .map(|i| col.get(i).unwrap_or(AnyValue::Null))
                         .collect();
-                    Series::from_any_values_and_dtype(name, &values, col.dtype(), false)
+                    Series::from_any_values_and_dtype(name, &values, col.dtype(), false).map(|s| s.into_column())
                         .map_err(crate::DataError::from)
                 }
             }
