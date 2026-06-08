@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/objects.rs
 source: ../../../../../../backend/crates/api/src/routes/objects.rs
 owner: Torv
 section: Internal · Code · backend · api · routes
-last modified date: 2026-06-07
+last modified date: 2026-06-08
 ---
 
 # routes/objects.rs
@@ -37,7 +37,7 @@ stay `entity_data`-only (custom types).
 | Method | Path | Gate | Notes |
 |---|---|---|---|
 | `GET`    | `/:type` | reach-filtered, paginated | the caller's reachable rows as `Page<Value>`. Builtin → reach provider (typed table); custom → `entity_data` (now cascade: direct membership OR `scope_parent_id`). `viewer` via `list_viewer` (admin → all). |
-| `POST`   | `/:type` | authenticated | create — validates fields, mints `<PREFIX>_…`, one tx: `register_entity` + `entity_data` insert + **auto-grant owner membership**. |
+| `POST`   | `/:type` | authenticated; **≥Member on `scope_parent_id`** if set | create — validates fields, mints `<PREFIX>_…`, one tx: `register_entity` + `entity_data` insert + **auto-grant owner membership**. If `scope_parent_id` is supplied, `require_grant` ≥Member on the parent (leak-free 404) so a caller can't graft an object under a scope they don't belong to — runbook `objects-scope-parent-idor`. |
 | `GET`    | `/:type/:rid` | `require_view` | one object. 404 leak-free on type-mismatch / no reach. |
 | `PATCH`  | `/:type/:rid` | `require_grant` ≥Member + `require_fields` | per-field perm + `validate_value` (merging stored values for cross-field rules) → JSONB merge. |
 | `DELETE` | `/:type/:rid` | `require_grant` ≥Admin | deletes the entity (cascades `entity_data`) + memberships, one tx. |

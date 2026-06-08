@@ -104,6 +104,22 @@ async fn create(
     let merged: Row = body.data.clone().into_iter().collect();
     validate_fields(&state, &type_id, &body.data, &merged)?;
 
+    // IDOR guard (runbook: objects-scope-parent-idor, case pending). `scope_parent_id`
+    // is caller-supplied; without a reach check any authenticated user could graft this
+    // object under a scope they don't belong to — it would then surface to that scope's
+    // members (the list REACH clause) and hand its admins cascade write over it. Require
+    // >=Member reach on the parent — the same write-into-parent rule as connectors.rs.
+    // require_grant 404s a parent the caller can't reach (leak-free: existing-but-foreign
+    // is indistinguishable from missing); object_kind default-denies an unknown id (it
+    // resolves an empty grant -> 404).
+    if let Some(parent) = body.scope_parent_id.as_deref() {
+        let kind = state.type_cache.object_kind(parent);
+        crate::rbac::require_grant(&state, &caller, parent, kind, |g| {
+            g.effective().is_some_and(|r| r >= Role::Member)
+        })
+        .await?;
+    }
+
     let prefix = state
         .type_cache
         .rid_prefix(&type_id)
