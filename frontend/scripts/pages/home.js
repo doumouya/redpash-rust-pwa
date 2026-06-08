@@ -904,7 +904,9 @@ export default function home(app, { session: _session }) {
     },
     files: {
       title: "Files",
-      endpoint: "/admin/files",
+      // Lane 1: user-scoped reach delivery via the registry (was /admin/files,
+      // all-rows admin). Writes stay on the file ownership endpoint (/files).
+      endpoint: "/objects/file",
       hideMeta: (f) => ({
         rid:  f.redpash_id,
         name: f.display_name || f.filename || "(untitled)",
@@ -931,33 +933,11 @@ export default function home(app, { session: _session }) {
       // Wired modes: select toggles the checkbox column, delete fires
       // bulk DELETE /files/:rid against the selection.
       modes: { select: true, delete: true },
-      statsEndpoint: "/admin/files/stats",
-      compositeStrip: true,   // 3 charts → first 2 flank, 3rd renders below
-      // Functional — /admin/files's FilesQuery already accepts ?stage=
-      // (see backend/crates/api/src/routes/admin.rs:86). Empty value
-      // means "no filter".
-      chipRows: [{
-        name: "stage",
-        label: "Stage",
-        options: [
-          { label: "All",     value: ""        },
-          { label: "New",     value: "new"     },
-          { label: "Clean",   value: "clean"   },
-          { label: "Design",  value: "design"  },
-          { label: "Publish", value: "publish" },
-        ],
-        default: "",
-      }],
-      // Trimmed from 3 to 2 charts (Em 2026-05-25 "random for now")
-      // to fit the composite-strip cleanly. Kept stage + cleanness
-      // (composition + quality); by-type bar dropped — its info
-      // overlaps with the type column already visible in the row.
-      charts: [
-        { id: "rp-home-files-stage", title: "By stage",  kind: "donut",
-          data: (s) => s.by_stage },
-        { id: "rp-home-files-clean", title: "Cleanness", kind: "gauge",
-          data: (s) => s.avg_cleanness ?? 0, opts: { max: 100, unit: "%" } },
-      ],
+      // KPI gauges + the server-side `stage` chip were dropped in the Lane-1
+      // repoint to /objects/file (reach DELIVERY only — no /admin/files/stats,
+      // no server chip). Both return as client-derived shaping once the
+      // data-engine list component lands (S2/S4). No stats fetch → no leak.
+      charts: [],
       // Toolbar — search + sort + refresh are wired. Modes/columns/
       // export stripped 2026-05-25 per [[unify-behavior-not-names]]
       // (no disabled-stub buttons; they'll return when their handlers
@@ -1016,7 +996,8 @@ export default function home(app, { session: _session }) {
     },
     charts: {
       title: "Charts",
-      endpoint: "/admin/charts",
+      // Lane 1: user-scoped reach delivery via the registry (was /admin/charts).
+      endpoint: "/objects/chart",
       hideMeta: (c) => ({
         rid:  c.redpash_id,
         name: c.display_name || c.filename || "(untitled)",
@@ -1040,27 +1021,9 @@ export default function home(app, { session: _session }) {
         href:  "#/workspace",
       },
       modes: { select: true, delete: true },
-      compositeStrip: true,   // 2 charts → KPI 2×2 flanked
-      // Visual placeholder — /admin/charts doesn't accept ?window= yet
-      // (backend TODO). Mirrors the users tab's activity-window shape.
-      chipRows: [{
-        name: "window",
-        label: "Window",
-        options: [
-          { label: "All time", value: "all" },
-          { label: "Last 7d",  value: "7d"  },
-          { label: "Last 30d", value: "30d" },
-        ],
-        default: "all",
-      }],
-      charts: [
-        { id: "rp-home-cht-recent", title: "Created last 7d", kind: "gauge",
-          data: (s) => s.total ? Math.round((s.last_7d / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-        { id: "rp-home-cht-reports", title: "In a report",    kind: "gauge",
-          data: (s) => s.total ? Math.round((s.used_in_reports / s.total) * 100) : 0,
-          opts: { max: 100, unit: "%" } },
-      ],
+      // KPI gauges dropped in the Lane-1 repoint to /objects/chart (reach
+      // DELIVERY only — no /objects/chart/stats). Client-derived later (S2/S4).
+      charts: [],
       toolbar: {
         searchPlaceholder: "Search chart name…",
         modes: { select: true, delete: true },

@@ -45,8 +45,8 @@ export const HOME_TABS = [
   { group: "ORG",    key: "cases",       label: "Cases",       icon: "bi-card-list",    perm: "user",  endpoint: "/cases",             wired: true  },
   // ── DATA ───────────────────────────────────────────────────
   { group: "DATA",   key: "projects",    label: "Projects",    icon: "bi-folder",       perm: "user",  endpoint: "/projects",          wired: true  },
-  { group: "DATA",   key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/admin/files",       wired: true  },
-  { group: "DATA",   key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/admin/charts",      wired: true  },
+  { group: "DATA",   key: "files",       label: "Files",       icon: "bi-file-earmark", perm: "user",  endpoint: "/objects/file",      wired: true  },
+  { group: "DATA",   key: "charts",      label: "Charts",      icon: "bi-bar-chart",    perm: "user",  endpoint: "/objects/chart",     wired: true  },
   // Steps moved to /monitoring (AUDITS group) — operational audit-
   // trail records of cleaning ops, fits Monitoring's "what happened"
   // framing better than Home's org/data inventory.
