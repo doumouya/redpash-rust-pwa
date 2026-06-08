@@ -85,7 +85,7 @@ through the eager scan path — so **no Cargo feature flag reaches it**. It need
 `[patch.crates-io] polars = { git = …, rev = … }` in `backend/Cargo.toml`. The principle:
 **keep the async paths compiling** (they're runtime-guarded by `if run_async`, false on
 wasm — never reached) and remove only the wasm-fatal leaves. The full patch recipe (the
-9-file, ~90-line diff to re-apply on the next bump) is in
+11-file, ~110-line diff to re-apply on the next bump) is in
 [`references/polars-0.43-to-0.54.md`](references/polars-0.43-to-0.54.md) §wasm, and the
 post-mortem is runbook `0023-polars-0.54-wasm-fork.md`. Headlines:
 

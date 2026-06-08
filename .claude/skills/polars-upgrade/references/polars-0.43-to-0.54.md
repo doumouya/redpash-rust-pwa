@@ -57,7 +57,7 @@ feature-gated. So tokio's `net` (→ mio) and `rt-multi-thread` (→ threads) ar
 unconditionally and **no Cargo feature flag reaches it**.
 
 **Principle:** keep the async code *compiling* (it's never reached on wasm) and remove
-only the wasm-fatal *leaves*. The fix is ~90 lines across 9 files — re-apply on each bump.
+only the wasm-fatal *leaves*. The fix is ~110 lines across 11 files — re-apply on each bump.
 
 ### Diagnose
 ```
@@ -65,7 +65,7 @@ cargo tree --target wasm32-unknown-unknown -p data -i mio -e features   # invert
 cargo tree --target wasm32-unknown-unknown -p data -i tokio -e features # who enables `net`
 ```
 
-### The 9 edits (re-appliable)
+### The 10 edits (re-appliable)
 
 1. **`crates/polars/Cargo.toml`** — drop `streaming` from `csv`:
    `csv = ["polars-io", "polars-io/csv", "polars-lazy?/csv", "polars-sql?/csv"]`
@@ -104,14 +104,25 @@ cargo tree --target wasm32-unknown-unknown -p data -i tokio -e features # who en
 
 8. **`crates/polars-async/Cargo.toml` + `src/lib.rs`** — the keystone. Target-gate tokio
    (`wasm = ["rt","sync","time"]`, no net/rt-multi-thread), and give `RuntimeManager::new`
-   a wasm variant: `Builder::new_current_thread().enable_time().build()`. Add wasm
+   a wasm variant: **`Builder::new_current_thread().build()`** — a BARE runtime. **Do NOT
+   add `.enable_time()`**: tokio builds the time driver eagerly and seeds it with
+   `std::time::Instant::now()`, which PANICS on wasm32; `ASYNC` is a LazyLock dereffed on
+   *every* collect (`dsl_to_ir/mod.rs`), so the timer crashes the engine on the first
+   filter/sort/group/sql even though the runtime is "never driven" (construction touches
+   the clock — this bug survived a green build, caught only by a runtime smoke). Add wasm
    variants of `block_in_place` (→ `f()`) and `block_in_place_on` (→ `self.rt.block_on(future)`).
    Result: `ASYNC` is a **real** runtime on every target, so `polars-plan`/`polars-lazy`/
    `polars-mem-engine` (which use `ASYNC.spawn` / `block_on` / typed `JoinHandle`) compile
    unchanged. *This is what stops the cascade* — a fake-stub `ASYNC` fails on typed
    `tokio::task::JoinHandle` usage; a real current-thread runtime doesn't.
 
-9. **`backend/Cargo.toml` (OUR repo, not the fork)** —
+9. **`crates/polars-utils/Cargo.toml` + `src/live_timer.rs`** — alias `Instant` to
+   `web-time` on wasm (`#[cfg(target_family="wasm")] use web_time::Instant`; add `web-time`
+   as a wasm-target dep — already in RedPash's lockfile transitively). Defensive: the
+   IO-metrics `LiveTimer` isn't on the in-memory collect path, but `std::time::Instant`
+   there is wasm-fatal if `IOMetrics` is ever constructed.
+
+10. **`backend/Cargo.toml` (OUR repo, not the fork)** —
    `[patch.crates-io] polars = { git = "https://github.com/doumouya/polars-rp", rev = "<sha>" }`.
    Patch the **git** umbrella: the git workspace keeps intra-workspace `path`-deps so the
    patch cascades to every sub-crate. A *published-crate* vendor has its paths stripped —
@@ -126,4 +137,4 @@ cargo check --workspace && cargo test -p data                       # host unaff
 tools/build-wasm.sh                                                  # fresh frontend/wasm blob
 ```
 
-Reference commit: `doumouya/polars-rp` @ `005fa250b` (the 0.54.3 patch).
+Reference commit: `doumouya/polars-rp` @ `0bb178d6` (the 0.54.3 patch).

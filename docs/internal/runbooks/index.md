@@ -300,10 +300,11 @@ Every entry follows the same five headings:
   **wasm "one engine" restored on polars 0.54.** 0.54's async/cloud/streaming machinery made `polars-async`
   (tokio multi-thread + `std::thread`) an unconditional dep of `polars-core` and wove `ASYNC`/async byte-sources
   through the eager scan path, dragging tokio `net`(→mio) + `rt-multi-thread` onto `wasm32-unknown-unknown` (48 mio
-  errors). Fix = thin fork `doumouya/polars-rp` @ `005fa250b` (~90 lines / 9 files): keep the async paths
+  errors). Fix = thin fork `doumouya/polars-rp` @ `0bb178d6` (~110 lines / 11 files): keep the async paths
   *compiling* (runtime-guarded, never reached on wasm) + remove the wasm-fatal leaves — drop `streaming` from csv,
-  target-gate the unused/file/net tokio deps off wasm, and give `polars-async` a **current-thread** runtime on wasm
-  so `ASYNC` stays real and the plan/lazy/scan layer compiles unchanged. Consumed via one `[patch.crates-io]` git
+  target-gate the unused/file/net tokio deps off wasm, and give `polars-async` a **bare current-thread** runtime on
+  wasm (no `.enable_time()` — eager `Instant::now()` panics; caught by runtime smoke after a green build) so `ASYNC`
+  stays real and the plan/lazy/scan layer compiles unchanged. Consumed via one `[patch.crates-io]` git
   rev. wasm `check` clean (mio gone), host + 32 tests unaffected. Lessons: `cargo tree -i <leaf>` from the leaf;
   target-gated deps are transparent to the other surface; git-fork `[patch]` cascades via path-deps (a published
   vendor does not). Playbook: `.claude/skills/polars-upgrade`.

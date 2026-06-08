@@ -61,13 +61,13 @@ reaches it, because the offending deps are unconditional.
 ## Solution
 
 Maintain a thin RedPash fork — **`doumouya/polars-rp`** (0.54.3) — consumed via a
-single `[patch.crates-io] polars = { git = …, rev = 005fa250b }` in
+single `[patch.crates-io] polars = { git = …, rev = 0bb178d6 }` in
 `backend/Cargo.toml`. Patching the umbrella to the *git* fork cascades to every
 sub-crate because the fork keeps intra-workspace `path`-deps (a *published* crate has
 its paths stripped — which is exactly why the earlier umbrella-only vendor patch
 silently failed to reach `polars-core`).
 
-The fork's divergence is **one commit, ~90 lines across 9 files** — keep the async
+The fork's divergence is **one commit, ~110 lines across 11 files** — keep the async
 paths *compiling* (they're never reached on wasm) and remove only the wasm-fatal
 leaves:
 
@@ -78,11 +78,14 @@ leaves:
   `tokio::fs`+mmap byte-source constructor and its `DynByteSourceBuilder::Mmap` arm
   off wasm.
 - **`polars-core`** — gate its (code-unused) `tokio` dep off wasm.
-- **`polars-async`** — build a **current-thread** tokio runtime on wasm
-  (`Builder::new_current_thread().enable_time()` — no `net`, no `rt-multi-thread`);
-  `block_in_place`/`block_in_place_on` run the closure/future directly. So `ASYNC`
-  stays a *real* runtime on every target and the whole plan/lazy/scan layer compiles
-  unchanged — the key move that stopped the cascade.
+- **`polars-async`** — build a **bare current-thread** tokio runtime on wasm
+  (`Builder::new_current_thread().build()` — no `net`, no `rt-multi-thread`, and
+  crucially **no `.enable_time()`**: the time driver is built eagerly and seeds itself
+  with `std::time::Instant::now()`, which panics on wasm — and `ASYNC` is dereffed on
+  every collect, so it would crash the first filter/sort/group/sql). `block_in_place`/
+  `block_in_place_on` run the closure/future directly. So `ASYNC` stays a *real* runtime
+  on every target and the whole plan/lazy/scan layer compiles unchanged — the key move
+  that stopped the cascade.
 - **`data/src/wasm.rs`** (RedPash) — two 0.54 API fixes the host never exercised:
   `Vec<Series>` → `Vec<Column>` + `.into_column()` for `DataFrame::new_infer_height`,
   and `df.columns()` now yields `&[Column]` so collect into `Vec<&Column>`.
@@ -103,6 +106,19 @@ Verified: `cargo check --target wasm32-unknown-unknown -p data` clean
   gating every call site) kept the fork tiny and avoided touching plan/lazy/mem-engine.
 - **git-fork vs published-vendor.** `[patch.crates-io]` to a git workspace cascades
   via path-deps; to a published-crate copy it does **not** (paths stripped on publish).
+- **Compile ≠ runtime — SMOKE the engine.** `cargo check` + the release build +
+  wasm-bindgen all went green while `apply_filter` still hard-panicked at runtime
+  (`Builder::new_current_thread().enable_time()` — tokio builds the time driver
+  eagerly and seeds it with `std::time::Instant::now()`, fatal on wasm; `ASYNC` is
+  dereffed on every collect). A node smoke (`initSync` + call EVERY export) + an
+  adversarial review caught it. `enable_time()` is wrong on wasm even when the runtime
+  is "never driven" — *construction* touches the clock. Always run the engine, and
+  exercise the lazy-**collect** path (parse_csv is eager and misses it).
+- **Host pin = fork 0.54.3, not crates.io 0.54.4 (deliberate, low-risk).** The
+  `[patch]` is global, so the *server* also moves to the fork — a 0.54.3-stamped dev
+  snapshot (base `1c1155555`, 2026-06-05), one point-release behind crates.io 0.54.4.
+  32 data tests + host `cargo check` pass, no regression observed; treat as a
+  documented pin. On the next bump, rebase onto the 0.54.4+ tag and re-check.
 - **Maintenance.** Rebase the single patch commit on each polars bump; drop the patch
   entirely when upstream ships `wasm32-unknown-unknown` support. Playbook:
   `.claude/skills/polars-upgrade`.

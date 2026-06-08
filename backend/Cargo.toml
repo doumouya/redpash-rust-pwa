@@ -92,6 +92,6 @@ strip           = "symbols"
 # umbrella to the git fork cascades to every sub-crate because the fork (unlike a
 # published crate) keeps intra-workspace path-deps. Drop this patch when upstream
 # ships wasm32-unknown-unknown support. Rebase the fork's single patch commit on
-# each polars bump (the divergence is ~90 lines across 9 files).
+# each polars bump (the divergence is ~110 lines across 11 files).
 [patch.crates-io]
-polars = { git = "https://github.com/doumouya/polars-rp", rev = "005fa250bebc8f1d5e04fba6f1dbcfe0a655b5ba" }
+polars = { git = "https://github.com/doumouya/polars-rp", rev = "0bb178d6ea1239ba009ca69a569ea66871b8a328" }
