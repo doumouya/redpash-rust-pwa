@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
         };
         let scan_ms = scan_t0.elapsed().as_millis() as u64;
 
-        let cols = df.get_columns();
+        let cols = df.columns();
         let mut distincts_per_col: Vec<u32> = Vec::with_capacity(map.len());
         let mut bytes_per_distinct: Vec<u32> = Vec::new();
         let mut distinct_total:       u64 = 0;

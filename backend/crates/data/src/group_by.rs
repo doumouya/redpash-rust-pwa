@@ -144,7 +144,7 @@ fn apply_windows(df: DataFrame, windows: &[shared::report::WindowSpec]) -> Resul
                 let windowed = if parts.is_empty() {
                     agg
                 } else {
-                    agg.over(parts)
+                    agg.over(parts)?
                 };
                 if w.as_percent {
                     // x / window * 100 — explicit float cast so
@@ -178,7 +178,7 @@ fn apply_windows(df: DataFrame, windows: &[shared::report::WindowSpec]) -> Resul
                 if parts.is_empty() {
                     inner.alias(w.alias.as_str())
                 } else {
-                    inner.over(parts).alias(w.alias.as_str())
+                    inner.over(parts)?.alias(w.alias.as_str())
                 }
             }
             _ => continue,
@@ -242,8 +242,8 @@ fn build_agg_exprs(aggs: &[Aggregation]) -> Result<Vec<Expr>> {
             AggFn::First => base.first(),
             AggFn::Last => base.last(),
             AggFn::Median => base.median(),
-            AggFn::Q1 => base.quantile(lit(0.25), QuantileInterpolOptions::Linear),
-            AggFn::Q3 => base.quantile(lit(0.75), QuantileInterpolOptions::Linear),
+            AggFn::Q1 => base.quantile(lit(0.25), QuantileMethod::Linear),
+            AggFn::Q3 => base.quantile(lit(0.75), QuantileMethod::Linear),
         }
         .alias(alias.as_str());
         out.push(expr);

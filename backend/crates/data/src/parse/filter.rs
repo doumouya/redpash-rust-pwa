@@ -293,7 +293,7 @@ pub(super) fn tree_expr(node: &FilterNode) -> Result<Option<Expr>> {
 pub(super) fn search_expr(needle: &str, df: &DataFrame) -> Option<Expr> {
     let lit_needle = lit(needle.to_lowercase());
     let mut acc: Option<Expr> = None;
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }

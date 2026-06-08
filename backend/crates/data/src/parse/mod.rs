@@ -279,7 +279,7 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
         slice.select(names).map_err(DataError::from)?
     } else {
         let names: Vec<String> = slice
-            .get_columns()
+            .columns()
             .iter()
             .map(|c| c.name().to_string())
             .filter(|n| n != IDX_COL)
@@ -289,7 +289,7 @@ pub fn page(df: &DataFrame, q: &PageQuery) -> Result<(Vec<Row>, u64, u64, Vec<u3
     };
 
     // 8. Stringify cells in column order.
-    let cols = projected.get_columns();
+    let cols = projected.columns();
     let n = projected.height();
     let mut rows: Vec<Row> = Vec::with_capacity(n);
     for r in 0..n {
@@ -346,7 +346,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect();
         assert_eq!(cities, vec![Some("Paris")]);
     }
@@ -387,7 +387,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect();
         assert_eq!(countries, vec![Some("FR"), Some("BE")]);
     }

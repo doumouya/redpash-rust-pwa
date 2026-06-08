@@ -230,7 +230,7 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
             // so a stray "00" from a mis-split decimal ("2.000,00") would
             // false-positive; that raggedness is already flagged, so skip.
             let int_cols: Vec<usize> = df
-                .get_columns()
+                .columns()
                 .iter()
                 .enumerate()
                 .filter(|(_, c)| c.dtype().is_integer())
@@ -307,7 +307,7 @@ pub fn detect(raw: &[u8], df: &DataFrame) -> StructureFlags {
 
     // ── header weirdness: duplicates / all-numeric ──
     let names: Vec<String> = df
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();
@@ -366,7 +366,7 @@ mod tests {
     use super::*;
 
     fn df2(h1: &str, h2: &str) -> DataFrame {
-        DataFrame::new(vec![
+        DataFrame::new_infer_height(vec![
             Series::new(h1.into(), &["x"]).into(),
             Series::new(h2.into(), &["y"]).into(),
         ])
@@ -410,7 +410,7 @@ mod tests {
     #[test]
     fn flags_type_drift_and_header_narrower_than_data() {
         // amount column 3/4 numeric + one "foo" → type drift (hook #6).
-        let df = DataFrame::new(vec![
+        let df = DataFrame::new_infer_height(vec![
             Series::new("id".into(), &["1", "2", "3", "4"]).into(),
             Series::new("amount".into(), &["10", "20", "foo", "40"]).into(),
         ])
@@ -430,7 +430,7 @@ mod tests {
 
         // A SINGLE over-wide row (the rest match the header) is still lost
         // data — one dropped field must flag, spread of 1 notwithstanding.
-        let df = DataFrame::new(vec![
+        let df = DataFrame::new_infer_height(vec![
             Series::new("id".into(), &["1", "2", "3", "4"]).into(),
             Series::new("name".into(), &["Alice", "Bob", "Charlie", "Delta"]).into(),
             Series::new("age".into(), &["30", "29", "31", "32"]).into(),
@@ -464,7 +464,7 @@ mod tests {
     fn flags_leading_zero_numeric_id_loss() {
         // code column "001"/"010"/"100" → Polars stores int 1/10/100, the
         // leading zero is gone. Frame is clean ints; only raw reveals it.
-        let df = DataFrame::new(vec![
+        let df = DataFrame::new_infer_height(vec![
             Series::new("id".into(), &[1i64, 2, 3]).into(),
             Series::new("code".into(), &[1i64, 10, 100]).into(),
         ])

@@ -48,15 +48,15 @@ pub fn auto_clean(df: &DataFrame) -> Result<(DataFrame, CleanSummary)> {
     let mut summary = CleanSummary::default();
 
     // ── 1 + 2. Per string column: trim, then blank junk to null. ─────
-    let mut columns: Vec<Series> = Vec::with_capacity(df.width());
-    for series in df.get_columns() {
+    let mut columns: Vec<Column> = Vec::with_capacity(df.width());
+    for series in df.columns() {
         if series.dtype() != &DataType::String {
             columns.push(series.clone());
             continue;
         }
-        let chunked = series.str()?;
+        let chunked = series.as_materialized_series().str()?;
         let mut cleaned: Vec<Option<&str>> = Vec::with_capacity(chunked.len());
-        for cell in chunked.into_iter() {
+        for cell in chunked.iter() {
             match cell {
                 None => cleaned.push(None),
                 Some(raw) => {
@@ -73,9 +73,9 @@ pub fn auto_clean(df: &DataFrame) -> Result<(DataFrame, CleanSummary)> {
                 }
             }
         }
-        columns.push(Series::new(series.name().clone(), cleaned));
+        columns.push(Series::new(series.name().clone(), cleaned).into_column());
     }
-    let trimmed = DataFrame::new(columns)?;
+    let trimmed = DataFrame::new_infer_height(columns)?;
 
     // ── 3. Drop fully-identical duplicate rows (row order preserved). ─
     // `unique_stable` routes through `df._apply_columns_par(...)` →
@@ -111,7 +111,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
     // `Null` from `""` and typed numeric vs string).
     let mut seen: HashSet<Vec<String>> = HashSet::with_capacity(height);
     let mut keep_mask: Vec<bool> = Vec::with_capacity(height);
-    let cols = df.get_columns();
+    let cols = df.columns();
     for i in 0..height {
         let sig: Vec<String> = cols
             .iter()
@@ -183,7 +183,7 @@ fn drop_dupe_rows_serial(df: DataFrame) -> Result<DataFrame> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    DataFrame::new(new_cols).map_err(crate::DataError::from)
+    DataFrame::new_infer_height(new_cols).map_err(crate::DataError::from)
 }
 
 #[cfg(test)]
@@ -211,7 +211,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect();
         assert_eq!(names[0], Some("Alice")); // whitespace stripped
         assert_eq!(names[2], None); // "N/A" blanked to null

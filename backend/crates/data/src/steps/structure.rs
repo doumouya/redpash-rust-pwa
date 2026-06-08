@@ -28,7 +28,7 @@ pub(super) fn unwrap_csv(df: DataFrame, _params: &serde_json::Value) -> Result<D
             "unwrap_csv only applies to a single-column DataFrame".into(),
         ));
     }
-    let series = &df.get_columns()[0];
+    let series = &df.columns()[0];
 
     // A "wrapped" CSV is one where the real record was quoted
     // whole, so Polars' first parse collapsed it to one column.
@@ -197,7 +197,7 @@ pub(super) fn join_columns(df: DataFrame, params: &serde_json::Value) -> Result<
         .map_err(DataError::from)?;
     let to_drop: HashSet<&str> = [col1, col2].into_iter().collect();
     let keep: Vec<String> = lf
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .filter(|n| !to_drop.contains(n.as_str()))
@@ -270,7 +270,7 @@ pub(super) fn split_column(df: DataFrame, params: &serde_json::Value) -> Result<
     } else {
         let to_drop: HashSet<&str> = [column].into_iter().collect();
         let keep: Vec<String> = lf
-            .get_columns()
+            .columns()
             .iter()
             .map(|c| c.name().to_string())
             .filter(|n| !to_drop.contains(n.as_str()))

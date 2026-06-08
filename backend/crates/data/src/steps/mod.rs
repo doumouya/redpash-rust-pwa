@@ -131,7 +131,7 @@ mod tests {
                 .unwrap()
                 .str()
                 .unwrap()
-                .into_iter()
+                .iter()
                 .map(|o| o.unwrap_or("").to_string())
                 .collect()
         };

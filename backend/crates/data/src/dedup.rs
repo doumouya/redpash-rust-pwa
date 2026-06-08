@@ -42,7 +42,7 @@ pub struct DupRow {
 
 pub fn detect(df: &DataFrame, by: &[String], max_rows: usize) -> Result<DedupReport> {
     let all_names: Vec<String> = df
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();
@@ -73,7 +73,7 @@ pub fn detect(df: &DataFrame, by: &[String], max_rows: usize) -> Result<DedupRep
 
     // Collect (original_index, cells) for every marked row.
     let mut dups: Vec<DupRow> = Vec::new();
-    for (i, marked) in mask.into_iter().enumerate() {
+    for (i, marked) in mask.iter().enumerate() {
         if matches!(marked, Some(true)) {
             let cells = stringify_row(df, i)?;
             dups.push(DupRow {
@@ -123,7 +123,7 @@ pub fn detect(df: &DataFrame, by: &[String], max_rows: usize) -> Result<DedupRep
 
 fn stringify_row(df: &DataFrame, i: usize) -> Result<Vec<Option<String>>> {
     let mut row = Vec::with_capacity(df.width());
-    for c in df.get_columns() {
+    for c in df.columns() {
         let val = c.get(i).map_err(DataError::from)?;
         row.push(match val {
             AnyValue::Null => None,

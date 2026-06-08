@@ -229,11 +229,11 @@ fn map_data_err(e: data::DataError) -> AppError {
 }
 
 fn stringify(df: &DataFrame) -> Result<(Vec<Row>, Vec<String>), AppError> {
-    let names: Vec<String> = df.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let names: Vec<String> = df.columns().iter().map(|c| c.name().to_string()).collect();
     let mut rows: Vec<Row> = Vec::with_capacity(df.height());
     for r in 0..df.height() {
         let mut row: Row = Vec::with_capacity(df.width());
-        for c in df.get_columns() {
+        for c in df.columns() {
             let v = c.get(r).map_err(|e| AppError::internal("polars", e.to_string()))?;
             row.push(av_to_owned(v));
         }

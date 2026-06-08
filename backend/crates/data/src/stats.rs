@@ -108,7 +108,7 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
 
     // (value_as_found) → (canonical, total, per-column counts)
     let mut buckets: HashMap<String, (String, u64, HashMap<String, u64>)> = HashMap::new();
-    for series in df.get_columns() {
+    for series in df.columns() {
         if !matches!(series.dtype(), DataType::String) {
             continue;
         }
@@ -381,7 +381,7 @@ fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
     }
 
     let (mut total, mut clean) = (0u64, 0u64);
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }
@@ -413,7 +413,7 @@ fn row_uniqueness_score(df: &DataFrame) -> f32 {
     if rows == 0 {
         return 100.0;
     }
-    let cols = df.get_columns();
+    let cols = df.columns();
     let mut seen: HashSet<Vec<Option<String>>> = HashSet::with_capacity(rows);
     for i in 0..rows {
         let key: Vec<Option<String>> = cols
@@ -439,7 +439,7 @@ fn shape_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
     }
-    let Some(c) = df.get_columns().first() else {
+    let Some(c) = df.columns().first() else {
         return 1.0;
     };
     if !matches!(c.dtype(), DataType::String) {
@@ -482,7 +482,7 @@ fn header_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
     }
-    let Some(c) = df.get_columns().first() else {
+    let Some(c) = df.columns().first() else {
         return 1.0;
     };
     let name = c.name().trim();
@@ -516,7 +516,7 @@ const MOJIBAKE_SIGS: &[&str] = &["Ã©", "Ã¨", "Ãª", "Ã ", "Ã§", "Ã®", 
 /// cell hitting either signal counts as damaged once.
 fn encoding_integrity(df: &DataFrame) -> f32 {
     let (mut total, mut damaged) = (0u64, 0u64);
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }
@@ -536,7 +536,7 @@ fn encoding_integrity(df: &DataFrame) -> f32 {
 }
 
 /// One cell as an owned `String` — `None` for null / non-string cells.
-fn cell_str(c: &Series, i: usize) -> Option<String> {
+fn cell_str(c: &Column, i: usize) -> Option<String> {
     match c.get(i) {
         Ok(AnyValue::String(s)) => Some(s.to_string()),
         Ok(AnyValue::StringOwned(s)) => Some(s.to_string()),
@@ -554,12 +554,12 @@ fn cell_str(c: &Series, i: usize) -> Option<String> {
 pub fn count_cell_diffs(before: &DataFrame, after: &DataFrame) -> u64 {
     let n = before.height().min(after.height());
     let after_names: HashSet<String> = after
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();
     let common: Vec<String> = before
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .filter(|n| after_names.contains(n))
@@ -656,12 +656,12 @@ pub fn diff_frames(
     let rows_after = after.height() as u64;
 
     let before_names: Vec<String> = before
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();
     let after_names: Vec<String> = after
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();
@@ -767,7 +767,7 @@ pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
     if n == 0 || df.width() == 0 {
         return 0;
     }
-    let cols = df.get_columns();
+    let cols = df.columns();
     let mut count = 0u64;
     for i in 0..n {
         let mut all_null = true;

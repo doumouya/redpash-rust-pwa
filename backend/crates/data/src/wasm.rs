@@ -79,13 +79,13 @@ fn rows_to_df(rows_json: &str) -> Result<DataFrame, String> {
         };
         series_list.push(s);
     }
-    DataFrame::new(series_list).map_err(|e| format!("df build: {e}"))
+    DataFrame::new_infer_height(series_list).map_err(|e| format!("df build: {e}"))
 }
 
 /// DataFrame → JSON array of row objects.
 fn df_to_rows(df: &DataFrame) -> Result<String, String> {
     let n = df.height();
-    let cols: Vec<&Series> = df.get_columns().iter().collect();
+    let cols: Vec<&Series> = df.columns().iter().collect();
     let mut rows: Vec<Value> = Vec::with_capacity(n);
     for i in 0..n {
         let mut row = serde_json::Map::with_capacity(cols.len());
@@ -195,7 +195,7 @@ pub fn parse_csv(bytes: &[u8]) -> Result<String, JsValue> {
 
     // Empty-cell fraction across the whole grid.
     let total_cells = df.width() * df.height();
-    let empty_cells: usize = df.get_columns().iter().map(|s| s.null_count()).sum();
+    let empty_cells: usize = df.columns().iter().map(|s| s.null_count()).sum();
     let empty_pct = if total_cells > 0 {
         empty_cells as f64 / total_cells as f64 * 100.0
     } else {
@@ -280,7 +280,7 @@ fn df_metrics(df: &polars::prelude::DataFrame) -> (usize, usize, f64, usize, f64
         })
         .count();
     let total_cells = df.width() * df.height();
-    let empty_cells: usize = df.get_columns().iter().map(|s| s.null_count()).sum();
+    let empty_cells: usize = df.columns().iter().map(|s| s.null_count()).sum();
     let empty_pct = if total_cells > 0 {
         empty_cells as f64 / total_cells as f64 * 100.0
     } else {

@@ -164,7 +164,7 @@ pub fn execute(
     let l: Vec<&str> = left_keys.iter().map(|s| s.as_str()).collect();
     let r: Vec<&str> = right_keys.iter().map(|s| s.as_str()).collect();
     left_c
-        .join(&right_c, l, r, JoinArgs::new(jt))
+        .join(&right_c, l, r, JoinArgs::new(jt), None)
         .map_err(DataError::from)
 }
 
@@ -187,7 +187,7 @@ pub fn execute(
 /// frequency order doesn't matter.
 pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, HashSet<String>>> {
     let mut out: HashMap<String, HashSet<String>> = HashMap::with_capacity(df.width());
-    for c in df.get_columns() {
+    for c in df.columns() {
         let name = c.name().to_string();
 
         // First pass: count occurrences. HashMap<value, count> grows

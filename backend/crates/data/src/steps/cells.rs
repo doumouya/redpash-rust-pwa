@@ -63,7 +63,7 @@ pub(super) fn set_cell(df: DataFrame, params: &serde_json::Value) -> Result<Data
     df.lazy()
         .with_row_index(IDX, None)
         .with_columns([updated.alias(column)])
-        .drop([IDX])
+        .drop(cols([IDX]))
         .collect()
         .map_err(DataError::from)
 }
@@ -82,7 +82,7 @@ pub(super) fn fill_nulls(df: DataFrame, params: &serde_json::Value) -> Result<Da
     let names: Vec<String> = match &one_col {
         Some(c) => vec![c.clone()],
         None => df
-            .get_columns()
+            .columns()
             .iter()
             .map(|c| c.name().to_string())
             .collect(),
@@ -94,7 +94,7 @@ pub(super) fn fill_nulls(df: DataFrame, params: &serde_json::Value) -> Result<Da
         let filled = match strategy {
             "fixed" => c.fill_null(lit(value.clone())),
             "zero" => c.fill_null(lit(0i64)),
-            "forward" => c.forward_fill(None),
+            "forward" => c.fill_null_with_strategy(FillNullStrategy::Forward(None)),
             other => {
                 return Err(DataError::InvalidSpec(format!(
                     "unknown fill strategy: {other}"
@@ -140,7 +140,7 @@ pub(super) fn cast(df: DataFrame, params: &serde_json::Value) -> Result<DataFram
             .str()
             .map_err(DataError::from)?;
         let floats: Vec<Option<f64>> = ca
-            .into_iter()
+            .iter()
             .map(|o| o.and_then(normalize_numeric_cell))
             .collect();
         let series = Series::new(column.into(), floats);
@@ -150,7 +150,7 @@ pub(super) fn cast(df: DataFrame, params: &serde_json::Value) -> Result<DataFram
             series
         };
         let mut out = df;
-        out.with_column(new_col).map_err(DataError::from)?;
+        out.with_column(new_col.into_column()).map_err(DataError::from)?;
         return Ok(out);
     }
 
@@ -163,12 +163,12 @@ pub(super) fn cast(df: DataFrame, params: &serde_json::Value) -> Result<DataFram
             .str()
             .map_err(DataError::from)?;
         let bools: Vec<Option<bool>> = ca
-            .into_iter()
+            .iter()
             .map(|o| o.and_then(normalize_bool_cell))
             .collect();
         let series = Series::new(column.into(), bools);
         let mut out = df;
-        out.with_column(series).map_err(DataError::from)?;
+        out.with_column(series.into_column()).map_err(DataError::from)?;
         return Ok(out);
     }
 
@@ -200,7 +200,7 @@ pub(super) fn change_case(df: DataFrame, params: &serde_json::Value) -> Result<D
         DataError::InvalidSpec("change_case needs params.mode: lower|upper".into())
     })?;
     let mut exprs: Vec<Expr> = Vec::new();
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }
@@ -271,7 +271,7 @@ pub(super) fn replace_text(df: DataFrame, params: &serde_json::Value) -> Result<
 ///     replaying cleanly.
 pub(super) fn fix_invalid(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
     let replacement: Expr = match params.get("replacement") {
-        None | Some(serde_json::Value::Null) => lit(LiteralValue::Null),
+        None | Some(serde_json::Value::Null) => lit(Null {}),
         Some(serde_json::Value::String(s)) => lit(s.clone()),
         Some(other) => lit(other.to_string()),
     };
@@ -322,7 +322,7 @@ pub(super) fn fix_invalid(df: DataFrame, params: &serde_json::Value) -> Result<D
         } else if let Some(column) = params.get("column").and_then(|v| v.as_str()) {
             vec![column.to_string()]
         } else {
-            df.get_columns()
+            df.columns()
                 .iter()
                 .filter(|s| matches!(s.dtype(), DataType::String))
                 .map(|s| s.name().to_string())
@@ -336,7 +336,7 @@ pub(super) fn fix_invalid(df: DataFrame, params: &serde_json::Value) -> Result<D
 
     // Validate every target column exists before mutating the frame.
     let known: HashSet<String> = df
-        .get_columns()
+        .columns()
         .iter()
         .map(|c| c.name().to_string())
         .collect();

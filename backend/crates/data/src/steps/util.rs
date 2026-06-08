@@ -415,7 +415,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect();
         assert_eq!(
             got,

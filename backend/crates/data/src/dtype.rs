@@ -22,12 +22,12 @@ pub fn summarize(df: &DataFrame) -> Result<Vec<ColumnMeta>> {
     let h = df.height().max(1) as f32;
     let mut out = Vec::with_capacity(df.width());
 
-    for c in df.get_columns() {
+    for c in df.columns() {
         let nulls = c.null_count() as f32;
         let unique = c.n_unique().unwrap_or(0) as f32;
 
         let dtype = storage_dtype_name(c.dtype()).to_string();
-        let semantic_dtype = sniff_semantic_type(c).to_string();
+        let semantic_dtype = sniff_semantic_type(c.as_materialized_series()).to_string();
 
         // First non-null cell — inlined so we don't need to name the
         // column type (its identifier varies across polars versions).
@@ -322,7 +322,7 @@ pub fn classify_cell(raw: &str) -> CellKind {
 /// skipped.
 pub(crate) fn worst_type_drift(df: &DataFrame) -> Option<(String, f32)> {
     let mut worst: Option<(String, f32)> = None;
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }
@@ -419,7 +419,7 @@ fn daymonth_force(s: &str) -> Option<bool> {
 /// contradiction even within one shape.
 pub(crate) fn worst_date_drift(df: &DataFrame) -> Option<(String, usize, bool)> {
     let mut worst: Option<(String, usize, bool)> = None;
-    for c in df.get_columns() {
+    for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
             continue;
         }
@@ -464,7 +464,7 @@ mod tests {
     use super::*;
 
     fn df1(name: &str, vals: &[&str]) -> DataFrame {
-        DataFrame::new(vec![Series::new(name.into(), vals).into()]).unwrap()
+        DataFrame::new_infer_height(vec![Series::new(name.into(), vals).into()]).unwrap()
     }
 
     #[test]

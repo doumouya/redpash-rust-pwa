@@ -21,10 +21,6 @@ serde_json      = { workspace = true }
 thiserror       = { workspace = true }
 anyhow          = { workspace = true }
 
-# Direct dep only to force the `raw` feature on hashbrown 0.14 — see the
-# explanatory comment in the workspace Cargo.toml. We don't actually use
-# hashbrown in this crate's source.
-hashbrown       = { workspace = true }
 chardetng       = { workspace = true }
 encoding_rs     = { workspace = true }
 csv             = { workspace = true }
@@ -62,7 +58,7 @@ maud            = { workspace = true }
 #      rayon-core / ahash). The cfg flag this needs is set in the build
 #      command: `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-polars          = { version = "0.43", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
+polars          = { version = "0.54", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
 uuid            = { version = "1", features = ["v4", "serde", "js"] }
 getrandom       = { version = "0.3", features = ["wasm_js"] }
 wasm-bindgen    = "0.2"

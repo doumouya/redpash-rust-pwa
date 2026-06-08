@@ -43,7 +43,7 @@ pub fn to_xlsx(df: &DataFrame) -> Result<Vec<u8>> {
         sheet.write_with_format(0, col as u16, name.as_str(), &header)?;
     }
 
-    let columns = df.get_columns();
+    let columns = df.columns();
     for row in 0..df.height() {
         for (col, series) in columns.iter().enumerate() {
             write_cell(sheet, (row + 1) as u32, col as u16, &series.get(row)?)?;
@@ -80,7 +80,7 @@ pub fn to_json(df: &DataFrame) -> Result<Vec<u8>> {
         .iter()
         .map(|name| name.to_string())
         .collect();
-    let columns = df.get_columns();
+    let columns = df.columns();
 
     let mut rows = Vec::with_capacity(df.height());
     for row in 0..df.height() {

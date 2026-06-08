@@ -124,7 +124,7 @@ async fn run_spec_on_frame(
                     // Promote the group_by columns to the front so the
                     // frontend can render rowspan'd group cells in the
                     // leading columns.
-                    let all_names: Vec<String> = df.get_columns().iter()
+                    let all_names: Vec<String> = df.columns().iter()
                         .map(|c| c.name().to_string()).collect();
                     let mut ordered: Vec<String> = spec_owned.group_by.clone();
                     for n in all_names {
@@ -179,7 +179,7 @@ fn make_section(df: &DataFrame) -> Result<Section, AppError> {
 /// (group-by columns first, then aggregations).
 fn total_row_aligned(df: &DataFrame, group_by_n: usize) -> Result<Row, AppError> {
     let mut row: Row = vec![None; group_by_n];
-    for c in df.get_columns() {
+    for c in df.columns() {
         let v = c.get(0).map_err(|e| AppError::internal("polars", e.to_string()))?;
         row.push(av_to_owned(v));
     }
@@ -197,11 +197,11 @@ fn av_to_owned(v: polars::prelude::AnyValue) -> Option<String> {
 }
 
 fn stringify(df: &DataFrame) -> Result<(Vec<Row>, Vec<String>), AppError> {
-    let names: Vec<String> = df.get_columns().iter().map(|c| c.name().to_string()).collect();
+    let names: Vec<String> = df.columns().iter().map(|c| c.name().to_string()).collect();
     let mut rows: Vec<Row> = Vec::with_capacity(df.height());
     for r in 0..df.height() {
         let mut row: Row = Vec::with_capacity(df.width());
-        for c in df.get_columns() {
+        for c in df.columns() {
             let v = c.get(r).map_err(|e| AppError::internal("polars", e.to_string()))?;
             row.push(av_to_owned(v));
         }

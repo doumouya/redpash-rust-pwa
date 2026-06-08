@@ -149,7 +149,7 @@ async fn parse(body: Bytes) -> Result<Json<DemoResult>, AppError> {
 
         // Empty-cell fraction across the whole grid.
         let total_cells = df.width() * df.height();
-        let empty_cells: usize = df.get_columns().iter().map(|s| s.null_count()).sum();
+        let empty_cells: usize = df.columns().iter().map(|s| s.null_count()).sum();
         let empty_pct = if total_cells > 0 {
             empty_cells as f64 / total_cells as f64 * 100.0
         } else {

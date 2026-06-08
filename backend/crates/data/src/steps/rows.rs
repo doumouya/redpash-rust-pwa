@@ -108,7 +108,7 @@ pub(super) fn drop_nulls(df: DataFrame, params: &serde_json::Value) -> Result<Da
     let collected = if cols.is_empty() {
         lf.drop_nulls(None).collect()
     } else {
-        let subset: Vec<Expr> = cols.iter().map(|c| col(c.as_str())).collect();
+        let subset = by_name(cols.iter().map(|c| c.as_str()), true, false);
         lf.drop_nulls(Some(subset)).collect()
     };
     collected.map_err(DataError::from)

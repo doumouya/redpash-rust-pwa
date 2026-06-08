@@ -156,7 +156,7 @@ pub fn parse_text_with_diag(text: String) -> Result<(DataFrame, RescueDiag)> {
             let mut rows = text.lines().skip(skip_rows);
             let header = rows.next().unwrap_or("column_1");
             let values: Vec<&str> = rows.collect();
-            let wrapped_df = DataFrame::new(vec![Series::new(header.into(), values.as_slice())])
+            let wrapped_df = DataFrame::new_infer_height(vec![Series::new(header.into(), values.as_slice()).into_column()])
                 .map_err(DataError::from)?;
 
             // Parse stops at classification. Em 2026-05-26: *"the goal
