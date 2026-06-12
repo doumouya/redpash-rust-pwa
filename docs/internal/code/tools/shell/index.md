@@ -26,9 +26,10 @@ hand or from CI / make targets.
 | `install-stack.sh` | [install-stack.md](install-stack.md) | installs the runtime stack (Rust toolchain, Postgres, Node) |
 | `port-check.sh` | [port-check.md](port-check.md) | verifies the dev port is free before `cargo run` |
 | `stack-version.sh` | [stack-version.md](stack-version.md) | prints versions of every runtime + dependency (precursor to the dep-audit tool) |
+| `test-fe.sh` | [test-fe.md](test-fe.md) | the FE test gate — `node --test frontend/tests/`; explicit "n/a (0 tests)" + exit 0 while the Phase-2 harness is pending |
 
 ## Related
 
 - [Tools pillar landing](../index.md)
-- [Spec: dep-audit-design](../../../specs/dep-audit-design.md) — `stack-version.sh` is the seed for the dep-audit work
+- [Spec (archived): dep-audit-design](../../../archive/legacy/specs/dep-audit-design.md) — `stack-version.sh` is the seed for the dep-audit work
 - [Process: audit-cadence](../../../processes/audit-cadence.md)
