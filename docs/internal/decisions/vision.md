@@ -63,7 +63,7 @@ The deeper, binding form of this bet is **one engine, two surfaces**: the same
 so the identical compute can run *client-side* in the browser. The WHY is **data
 governance** — raw data never has to leave the device; we bring the compute to the
 data rather than the data to a server. This is the constraint behind the
-[JS↔Rust boundary](../architecture/js-rust-boundary.md): Rust owns data, JS owns
+[JS↔Rust boundary](../stack/frontend.md): Rust owns data, JS owns
 pixels, and JS never implements a data engine. The cleaning/report logic exists
 once, in Rust, and is reachable from either surface — duplicating it in JS would
 fork the moat.

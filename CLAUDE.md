@@ -76,8 +76,8 @@ Every documented source file carries a 2-line header:
   manual `CACHE_VERSION` or cache JS/CSS — that treadmill is why the old SW
   was gutted (`tools/build-wasm.sh` content-hashes the wasm; the SW keys on it).
 - **JS↔Rust boundary is locked.** Rust owns data, JS owns pixels. JS
-  never implements a data engine. See
-  [`docs/internal/architecture/js-rust-boundary.md`](docs/internal/architecture/js-rust-boundary.md).
+  never implements a data engine. See the "JS ↔ Rust boundary" section
+  of [`docs/internal/stack/frontend.md`](docs/internal/stack/frontend.md).
 
 ## Lane ownership
 

@@ -38,6 +38,6 @@ sides of the JS↔Rust boundary. One file per resource.
 ## Related
 
 - [Backend pillar landing](../index.md)
-- [Architecture: js-rust-boundary](../../../architecture/js-rust-boundary.md) — DTOs ARE the boundary
-- [Architecture: object-model](../../../architecture/object-model.md) — the locked 2-entity model
-- [Spec: filter-dto](../../../specs/filter-dto.md)
+- [Stack: frontend (JS↔Rust boundary)](../../../stack/frontend.md) — DTOs ARE the boundary
+- [Decision: object-model](../../../decisions/object-model.md) — the locked 2-entity model
+- [Spec (archived): filter-dto](../../../archive/legacy/specs/filter-dto.md)

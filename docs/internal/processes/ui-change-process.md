@@ -14,9 +14,9 @@ last modified date: 2026-05-23
 > audits don't have to be argued with.
 
 Companion docs:
-[js-rust-boundary.md](../architecture/js-rust-boundary.md) ·
+[stack/frontend.md (JS↔Rust boundary)](../stack/frontend.md) ·
 [frontend-parity-inventory.md](../archive/frontend-parity-inventory.md) ·
-[object-model.md](../architecture/object-model.md) ·
+[object-model.md](../decisions/object-model.md) ·
 incident log: [runbooks/](../runbooks/).
 
 ## Before you change anything
@@ -36,7 +36,7 @@ this had X"* is a bug pattern.
 
 ### 2. Confirm the contract — pixels, not data
 
-Per [`js-rust-boundary.md`](../architecture/js-rust-boundary.md): **JS owns pixels,
+Per the JS↔Rust boundary section of [`stack/frontend.md`](../stack/frontend.md): **JS owns pixels,
 Rust owns data.** If the change does anything beyond render /
 interact / cache / route, stop and re-check the boundary. Filter,
 sort, step, edit-data-content — all Rust.
@@ -82,7 +82,7 @@ idea (`home-btn` *and* `workspace-btn` for the same button) are a bug
 
 For concepts that exist on **both** sides of the JS/Rust boundary
 (`filter`, `step`, `chart`), apply the shared-noun + layer-verb rule
-from [`js-rust-boundary.md`](../architecture/js-rust-boundary.md): same noun in
+from the JS↔Rust boundary section of [`stack/frontend.md`](../stack/frontend.md): same noun in
 `filter.js` / `filter.rs` / `Filter` DTO; JS verbs `collect` /
 `render`, Rust verbs `compile` / `apply`.
 
