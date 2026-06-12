@@ -480,18 +480,28 @@ mod scope_parent_idor_tests {
             h
         }
 
-        /// Delete exactly what we seeded. `entities` cascade removes the
-        /// companies rows, the user's owned `entity_data`, and every membership
-        /// edge FK'd into the registry; the `users` row and the `sessions` row
-        /// FK separately (users → entities is the user entity we drop; sessions
-        /// reference the user) so delete those explicitly and first.
+        /// Delete exactly what we seeded — `delete_entity` on every minted rid,
+        /// so teardown leaves ZERO rows (no `entities`-level orphan).
+        ///
+        /// The FK cascade chain all hangs off `entities(id)`:
+        ///   - `users.redpash_id    REFERENCES entities(id) ON DELETE CASCADE`
+        ///   - `sessions.user_redpash_id REFERENCES users(redpash_id) ON DELETE CASCADE`
+        ///   - `memberships.member_redpash_id REFERENCES entities(id) ON DELETE CASCADE`
+        ///   - `companies.redpash_id REFERENCES entities(id) ON DELETE CASCADE`
+        ///   - `entity_data.object_id REFERENCES entities(id) ON DELETE CASCADE`
+        /// so `delete_entity(pool, &caller)` removes the caller's `entities` row
+        /// AND cascades its `users` child (and that user's `sessions` + the
+        /// caller-as-subject membership edges) — it REPLACES the old raw
+        /// `DELETE FROM users` that left the registry row behind. Likewise
+        /// `delete_entity` on each scope cascades its `companies` row + every
+        /// membership FK'd into it.
+        ///
+        /// The only rows NOT cascade-reachable from a seeded rid are the
+        /// in-test created objects (AC-2/3/4): `entity_data.owner_id` has no
+        /// cascade FK to the caller, so drop those via their OWN entity first
+        /// (cascades their `entity_data` row + auto 'owner' membership edge).
         async fn teardown(&self, pool: &PgPool) {
-            let _ = sqlx::query("DELETE FROM sessions WHERE redpash_id = $1")
-                .bind(&self.sid)
-                .execute(pool)
-                .await;
-            // Any objects created in-test under this caller (AC-2/3/4) — drop via
-            // their entity so entity_data + memberships cascade.
+            // 1) In-test created objects, dropped via their own entity.
             let owned: Vec<(String,)> =
                 sqlx::query_as("SELECT object_id FROM entity_data WHERE owner_id = $1")
                     .bind(&self.caller)
@@ -501,10 +511,10 @@ mod scope_parent_idor_tests {
             for (oid,) in owned {
                 let _ = crate::db::delete_entity(pool, &oid).await;
             }
-            let _ = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
-                .bind(&self.caller)
-                .execute(pool)
-                .await;
+            // 2) Caller entity → cascades users → sessions + caller's membership
+            //    edges. (No leftover `entities(type='user')` orphan.)
+            let _ = crate::db::delete_entity(pool, &self.caller).await;
+            // 3) Both scope entities → cascade companies + scope memberships.
             for scope in [&self.scope_a, &self.scope_b] {
                 let _ = crate::db::delete_entity(pool, scope).await;
             }
