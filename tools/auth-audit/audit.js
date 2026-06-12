@@ -188,6 +188,55 @@ function callsEventRecord(body) {
   return /\b(?:crate::)?event::(?:record|info|warn|error)\s*\(/.test(body);
 }
 
+/* ── Cat-4: unchecked scope_parent_id / parent binds (CAS_26EC…) ──────────────
+   The IDOR class the sibling Case (CAS_DD6F) fixed: a handler reads a
+   caller-supplied parent/scope id from the request body AND binds it into a DB
+   write WITHOUT a reach check on that id. Three predicates, all over the
+   comment/string-stripped handler body (params for the destructure shape).
+   v1 field-name set is narrow on purpose — `/\b(scope_parent|parent)_id\b/`
+   only — so `project_id`/`owner_id`/`source_file_id`/`rid` (legitimately bound
+   after their own checks) do NOT flood the report. Broaden later in response to
+   a finding, not pre-emptively. */
+
+/* (1) Reads a caller-supplied parent/scope id. True if the body or params
+   carries a `scope_parent_id` / `…parent_id` token sourced from the request
+   body — a `body.<field>` access, or a `Json(...)`/`Query(...)`/`Form(...)`
+   destructure. v1 keys on the body-token regex since findHandlers already
+   hands us the per-handler body (the stripped text). */
+function readsScopeParent(params, body) {
+  var text = String(params || '') + '\n' + String(body || '');
+  return /\b(?:scope_parent|parent)_id\b/.test(text);
+}
+
+/* (2) Binds that value into a DB write. True if the body has an INSERT/UPDATE
+   SQL string AND a `.bind(` referencing the parent field, OR the parent field
+   is passed to a `db::(insert|update|create|register)_…` / `register_entity`
+   mutation call. The `.bind` arm requires BOTH the write keyword and a parent-
+   bound argument so a read-only handler (no INSERT/UPDATE) never matches. */
+function bindsParentToWrite(body) {
+  var b = String(body || '');
+  var hasWriteSql = /\b(?:INSERT|UPDATE)\b/i.test(b);
+  var bindsParent = /\.bind\(\s*&?\s*(?:body\.)?\w*(?:scope_parent|parent)_id\b/.test(b);
+  if (hasWriteSql && bindsParent) return true;
+  // db::*_ / register_entity mutation that carries a parent field as an arg.
+  var dbCall = /\bdb::(?:insert|update|create|register)_\w+\s*\([^;]*\b(?:scope_parent|parent)_id\b/.test(b)
+            || /\bregister_entity\s*\([^;]*\b(?:scope_parent|parent)_id\b/.test(b);
+  return dbCall;
+}
+
+/* (3) Has a reach check on the bound id. NEW recognizer, SEPARATE from Cat-1's
+   callsOwnershipGate (which keys on ensure_owner/require_member and feeds the
+   ownership-leak category). Keeping the two gate sets distinct is the precision
+   that makes objects.rs::create a Cat-1 false positive but NOT a Cat-4 finding:
+   Cat-1 doesn't know require_grant, Cat-4 does. Matches the RBAC reach gates —
+   require_grant / require_view / require_action — qualified by rbac::,
+   crate::rbac::, super::, or bare. ensure_owner must NOT satisfy this. */
+function callsReachGate(body) {
+  var b = String(body || '');
+  return /\b(?:crate::)?rbac::(?:require_grant|require_view|require_action)\s*\(/.test(b)
+      || /\b(?:super::)?(?:require_grant|require_view|require_action)\s*\(/.test(b);
+}
+
 /* Routes whose handlers don't carry per-user ownership by design.
    These files get a relaxed cat-1 check — handlers can extract
    Path(rid) without ensure_owner if the resource is public, admin-
@@ -233,6 +282,17 @@ function walk(dir, acc) {
   return acc;
 }
 
+/* ── exports + main guard ────────────────────────────────────────────────────
+   The classifiers are pure (string in, bool/value out) so they're unit-testable
+   without running the scan. The whole scan/render/report body below is gated by
+   `require.main === module` so `node audit.js` behaves identically, but
+   `require('./audit.js')` is side-effect-free (no "Scanning…" banner, no file
+   writes) — that's what tools/auth-audit/test/scope-parent.test.js needs to
+   import the predicates. */
+module.exports = { readsScopeParent, bindsParentToWrite, callsReachGate, hasAuthAck };
+
+if (require.main === module) {
+
 console.log('Scanning ' + SRC_DIR + ' …');
 var routesDir = path.join(SRC_DIR, 'crates/api/src/routes');
 var paths = walk(routesDir, []).sort();
@@ -242,6 +302,8 @@ var handlers = [];        // every detected pub async fn — full inventory
 var leaks = [];           // cat-1: Path-extract handler missing ensure_owner AND no ACK
 var acknowledged = [];    // cat-1: missing gate BUT carries AUTH-AUDIT-ACK annotation
 var auditGaps = [];       // cat-3: mutation handler missing event::record
+var scopeParentLeaks = [];// cat-4: reads caller-supplied parent id, binds to write, no reach gate
+var scopeParentAck = [];  // cat-4: same, but carries AUTH-AUDIT-ACK annotation
 var ensureOwnerCalls = 0;
 var eventRecordCalls = 0;
 
@@ -297,6 +359,26 @@ paths.forEach(function (full) {
         detail: 'mutation handler without event::record(audit trail)'
       });
     }
+    // Cat-4: caller-supplied parent id bound into a write without a reach gate.
+    // SEPARATE gate set from Cat-1 (callsReachGate, not callsOwnershipGate) —
+    // require_grant on the parent is what keeps objects.rs::create green here.
+    if (readsScopeParent(h.params, h.body)
+        && bindsParentToWrite(h.body)
+        && !callsReachGate(h.body)) {
+      if (ack) {
+        scopeParentAck.push({
+          file: rel, name: h.name,
+          reason: ack,
+          detail: 'reads caller-supplied parent id + binds it to a write without a reach gate — acknowledged inline'
+        });
+      } else {
+        scopeParentLeaks.push({
+          file: rel, name: h.name,
+          kind: 'scope-parent-injection',
+          detail: 'reads caller-supplied parent id + binds it to a write without require_grant/require_view'
+        });
+      }
+    }
   });
 });
 
@@ -305,6 +387,8 @@ handlers.sort(byFileName);
 leaks.sort(byFileName);
 acknowledged.sort(byFileName);
 auditGaps.sort(byFileName);
+scopeParentLeaks.sort(byFileName);
+scopeParentAck.sort(byFileName);
 
 /* ── headline + payload ──────────────────────────────────────────────────── */
 
@@ -318,11 +402,14 @@ var data = {
     leaks:            leaks.length,
     acknowledged:     acknowledged.length,
     auditGaps:        auditGaps.length,
+    scopeParentLeaks: scopeParentLeaks.length,
   },
-  handlers:     handlers,
-  leaks:        leaks,
-  acknowledged: acknowledged,
-  auditGaps:    auditGaps,
+  handlers:         handlers,
+  leaks:            leaks,
+  acknowledged:     acknowledged,
+  auditGaps:        auditGaps,
+  scopeParentLeaks: scopeParentLeaks,
+  scopeParentAck:   scopeParentAck,
 };
 
 fs.writeFileSync(path.join(__dirname, 'audit.json'), JSON.stringify(data, null, 2));
@@ -343,6 +430,7 @@ function renderHtml(d) {
     '<section class="cards" id="cards"></section>',
     '<nav class="tabs">',
     '  <button class="tab active" data-tab="leaks">Ownership leaks</button>',
+    '  <button class="tab" data-tab="scopeparent">Scope-parent leaks</button>',
     '  <button class="tab" data-tab="acks">Acknowledged</button>',
     '  <button class="tab" data-tab="audit">Audit-trail gaps</button>',
     '  <button class="tab" data-tab="handlers">All handlers</button>',
@@ -350,6 +438,12 @@ function renderHtml(d) {
     '<div class="panel" id="panel-leaks">',
     '  <div class="toolbar"><span class="count" id="count-leaks"></span></div>',
     '  <table id="t-leaks"><thead><tr>',
+    '    <th>File</th><th>Handler</th><th>Detail</th>',
+    '  </tr></thead><tbody></tbody></table>',
+    '</div>',
+    '<div class="panel hidden" id="panel-scopeparent">',
+    '  <div class="toolbar"><span class="count" id="count-scopeparent"></span></div>',
+    '  <table id="t-scopeparent"><thead><tr>',
     '    <th>File</th><th>Handler</th><th>Detail</th>',
     '  </tr></thead><tbody></tbody></table>',
     '</div>',
@@ -426,6 +520,7 @@ var JS = [
   "['ensure_owner uses',  D.stats.ensureOwnerCalls, 'ok'],",
   "['event::record uses', D.stats.eventRecordCalls, 'ok'],",
   "['Ownership leaks',    D.stats.leaks,            D.stats.leaks?'bad':'ok'],",
+  "['Scope-parent leaks', D.stats.scopeParentLeaks, D.stats.scopeParentLeaks?'bad':'ok'],",
   "['Acknowledged',       D.stats.acknowledged,     D.stats.acknowledged?'warn':''],",
   "['Audit-trail gaps',   D.stats.auditGaps,        D.stats.auditGaps?'warn':'ok']",
   "];",
@@ -436,7 +531,7 @@ var JS = [
   "for(var i=0;i<tabs.length;i++)tabs[i].addEventListener('click',function(){",
   "for(var j=0;j<tabs.length;j++)tabs[j].classList.remove('active');",
   "this.classList.add('active');var t=this.getAttribute('data-tab');",
-  "['leaks','acks','audit','handlers'].forEach(function(p){",
+  "['leaks','scopeparent','acks','audit','handlers'].forEach(function(p){",
   "document.getElementById('panel-'+p).classList.toggle('hidden',p!==t);});});",
   "function renderRows(id,rows,cols){",
   "var tb=document.querySelector('#'+id+' tbody');",
@@ -446,6 +541,8 @@ var JS = [
   "(cols===3?'<td>'+esc(r.detail||'')+'</td>':'')+'</tr>';}).join('');}",
   "document.getElementById('count-leaks').textContent=D.leaks.length+' leak(s)';",
   "renderRows('t-leaks',D.leaks,3);",
+  "document.getElementById('count-scopeparent').textContent=D.scopeParentLeaks.length+' leak(s)';",
+  "renderRows('t-scopeparent',D.scopeParentLeaks,3);",
   "document.getElementById('count-acks').textContent=D.acknowledged.length+' acknowledged';",
   "renderRows('t-acks',D.acknowledged.map(function(a){return {file:a.file,name:a.name,detail:a.reason};}),3);",
   "document.getElementById('count-audit').textContent=D.auditGaps.length+' gap(s)';",
@@ -470,6 +567,8 @@ console.log('  event::record uses ' + data.stats.eventRecordCalls);
 console.log('');
 console.log('  ownership leaks    ' + data.stats.leaks
   + (data.stats.leaks ? '   ⚠  (no gate, no AUTH-AUDIT-ACK annotation)' : '   ✓'));
+console.log('  scope-parent leaks ' + data.stats.scopeParentLeaks
+  + (data.stats.scopeParentLeaks ? '   ⚠  (caller-supplied parent id bound to write, no reach gate)' : '   ✓'));
 console.log('  acknowledged       ' + data.stats.acknowledged
   + (data.stats.acknowledged ? '   ●  (gate skipped + AUTH-AUDIT-ACK present)' : ''));
 console.log('  audit-trail gaps   ' + data.stats.auditGaps
@@ -479,6 +578,13 @@ if (leaks.length) {
   console.log('');
   console.log('  ownership leaks (top 10):');
   leaks.slice(0, 10).forEach(function (l) {
+    console.log('    ' + l.file + '::' + l.name + '  —  ' + l.detail);
+  });
+}
+if (scopeParentLeaks.length) {
+  console.log('');
+  console.log('  scope-parent leaks (top 10):');
+  scopeParentLeaks.slice(0, 10).forEach(function (l) {
     console.log('    ' + l.file + '::' + l.name + '  —  ' + l.detail);
   });
 }
@@ -493,3 +599,5 @@ if (auditGaps.length) {
 console.log('');
 console.log('  report   -> ' + OUT);
 console.log('  json     -> ' + path.join(__dirname, 'audit.json'));
+
+}  // end if (require.main === module)

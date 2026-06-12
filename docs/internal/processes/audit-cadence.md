@@ -61,7 +61,7 @@ meaningful regression check throughout.
 | `tools/html-audit/` | Partial-HTML duplication / componentisation candidates | `audit.html` + `audit.json` |
 | `tools/crossing-audit/` | JS↔Rust seam — `/api/*` calls without a route (dangling) + route-table + DTO surface diff | `report.html` |
 | `tools/redtable-audit/` | Foundation `.rt-*` invariants (R-2…R-6 rules — `.rt-*` overrides outside canonical files, retired wrap/pager classes, modes:true stubs, pager-shaped non-pager classes) | stdout pass/fail |
-| `tools/auth-audit/` | Auth surface invariants (cookie / session / OAuth shape) | `audit.html` + `audit.json` |
+| `tools/auth-audit/` | Route auth-posture — ownership-gate hygiene (Cat-1), scope-parent/parent-bind IDOR (Cat-4), audit-trail completeness (Cat-3) | `report.html` + `audit.json` |
 | `tools/observability-audit/` | Cross-cutting observability invariants — event capture, log levels, perf marks, error airlock; meta-check `X-AUD` (counts other tools' `audit.json` artifacts as a freshness signal) | stdout + `audit.json` |
 | `tools/css-tab-compare-audit/` | Cross-tab CSS naming-leak detector — same-role-different-name candidates, mixed-prefix violations (`.rt-mon-*`), misnamed shared atoms (list-page.js atoms with page-prefix names) | `audit.html` + `audit.json` |
 | `tools/ui-snapshot-audit/` | **Computed-style drift on the foundation atom catalog** — reads JSON snapshots captured by the SPA's `?audit=1` mode (`frontend/scripts/audit/snapshot.js`), emits one finding per (route × atom × prop × theme) with a value-hash severity. Drift surfaces as `regressed`/`improved` via `audit.run_diff()`. | `audit.json` |
