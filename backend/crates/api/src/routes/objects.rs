@@ -377,3 +377,312 @@ async fn load(state: &AppState, type_id: &str, rid: &str) -> Result<ObjectView, 
     }
     Ok(ObjectView { type_id: rtype, rid: rid.to_string(), owner, scope_parent, data: data.0 })
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Regression test — `scope_parent_id` IDOR (CAS_DD6F55FB, runbook
+// objects-scope-parent-idor). The fix (commit d3f933a) gates a caller-supplied
+// `scope_parent_id` behind `require_grant(... >= Member)` so an authenticated
+// user can't graft an object under a scope they don't belong to. These tests
+// PIN that guard: they call the module-private `create(...)` DIRECTLY and assert
+// on the returned `Result` (StatusCode on Ok, AppError.status on Err) — no axum
+// server, no visibility change to `create`.
+//
+// HARNESS: the dogfood pattern from `postgres_loader.rs` — `#[tokio::test]
+// #[ignore]` against the LIVE app Postgres at 127.0.0.1:5433 / mansa:mansa /
+// redpash_prerelease. Run explicitly:
+//   cargo test -p api -- --ignored scope_parent_idor --nocapture
+//
+// CRITICAL trap (architect-flagged): the non-admin caller is a REAL seeded
+// `users` row reached via an `rp_session` cookie — NOT `state.dev_user`. A
+// dev_user caller trips `is_platform_admin`'s fast-path and would silently
+// bypass the very guard under test (a fake-green). Each test seeds two `company`
+// scopes (A, B) + a caller + a session, and tears the seeded rows down at the end
+// (entities-cascade covers the data/membership rows; users + session deleted
+// explicitly) so the shared DB stays clean.
+#[cfg(test)]
+mod scope_parent_idor_tests {
+    use super::*;
+    use axum::extract::{Path, State};
+    use axum::http::header::{HeaderMap, HeaderValue, COOKIE};
+    use sqlx::PgPool;
+
+    const TYPE_ID: &str = "connection";
+
+    /// The seeded fixture for one test: two `company` scopes + a caller `users`
+    /// row + a live session. Hold it for the duration of the test, then call
+    /// [`Seed::teardown`] to delete exactly what we minted.
+    struct Seed {
+        scope_a: String,
+        scope_b: String,
+        caller:  String,
+        sid:     String,
+    }
+
+    impl Seed {
+        /// Mint scope A, scope B, and the caller. `caller_role` is the
+        /// `users.role` value (`"user"` for a normal caller, `"admin"` for a
+        /// platform admin — AC-4). `member_of_a` adds a `member` edge on scope A.
+        async fn create(pool: &PgPool, caller_role: &str, member_of_a: bool) -> Seed {
+            let scope_a = crate::id::new("CMP");
+            let scope_b = crate::id::new("CMP");
+            let caller = crate::id::new("USR");
+
+            // scope A + scope B — real `company` entities (register entity, then
+            // the companies subtype row; slug is UNIQUE so derive it from the rid).
+            for scope in [&scope_a, &scope_b] {
+                crate::db::register_entity(pool, scope, "company").await.expect("register company entity");
+                sqlx::query("INSERT INTO companies (redpash_id, name, slug) VALUES ($1, $2, $3)")
+                    .bind(scope)
+                    .bind(format!("idor-test {scope}"))
+                    .bind(scope.to_lowercase())
+                    .execute(pool)
+                    .await
+                    .expect("insert company");
+            }
+
+            // caller — a real `users` row (entity FIRST, per users_entity_fk).
+            crate::db::register_entity(pool, &caller, "user").await.expect("register user entity");
+            sqlx::query("INSERT INTO users (redpash_id, username, display_name, role) VALUES ($1, $2, $3, $4)")
+                .bind(&caller)
+                .bind(format!("idor-caller-{caller}"))
+                .bind("IDOR Test Caller")
+                .bind(caller_role)
+                .execute(pool)
+                .await
+                .expect("insert user");
+
+            if member_of_a {
+                sqlx::query(
+                    "INSERT INTO memberships (object_redpash_id, member_redpash_id, role, context_role) \
+                     VALUES ($1, $2, 'member', '')",
+                )
+                .bind(&scope_a)
+                .bind(&caller)
+                .execute(pool)
+                .await
+                .expect("seed member edge on scope A");
+            }
+
+            let sid = crate::db::create_session(pool, &caller, 1).await.expect("create session");
+
+            Seed { scope_a, scope_b, caller, sid }
+        }
+
+        /// `Cookie: rp_session=<sid>` so `resolve_user_rid` resolves THIS caller
+        /// (never `state.dev_user` — that would fast-path the platform-admin
+        /// bypass and hide the guard).
+        fn headers(&self) -> HeaderMap {
+            let mut h = HeaderMap::new();
+            h.insert(
+                COOKIE,
+                HeaderValue::from_str(&format!("rp_session={}", self.sid)).expect("cookie header"),
+            );
+            h
+        }
+
+        /// Delete exactly what we seeded. `entities` cascade removes the
+        /// companies rows, the user's owned `entity_data`, and every membership
+        /// edge FK'd into the registry; the `users` row and the `sessions` row
+        /// FK separately (users → entities is the user entity we drop; sessions
+        /// reference the user) so delete those explicitly and first.
+        async fn teardown(&self, pool: &PgPool) {
+            let _ = sqlx::query("DELETE FROM sessions WHERE redpash_id = $1")
+                .bind(&self.sid)
+                .execute(pool)
+                .await;
+            // Any objects created in-test under this caller (AC-2/3/4) — drop via
+            // their entity so entity_data + memberships cascade.
+            let owned: Vec<(String,)> =
+                sqlx::query_as("SELECT object_id FROM entity_data WHERE owner_id = $1")
+                    .bind(&self.caller)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
+            for (oid,) in owned {
+                let _ = crate::db::delete_entity(pool, &oid).await;
+            }
+            let _ = sqlx::query("DELETE FROM users WHERE redpash_id = $1")
+                .bind(&self.caller)
+                .execute(pool)
+                .await;
+            for scope in [&self.scope_a, &self.scope_b] {
+                let _ = crate::db::delete_entity(pool, scope).await;
+            }
+        }
+    }
+
+    /// Build the full `AppState` the way the binary does — `AppState::init()`
+    /// runs migrate (idempotent on the live DB) + bootstrap + loads the
+    /// `type_cache`, so `create` sees a real `connection` type and a real
+    /// `object_kind`/`rid_prefix`. Points `DATABASE_URL` at the live prerelease
+    /// DB (the dogfood target). OAuth stays off → cookie-session resolution.
+    async fn live_state() -> AppState {
+        std::env::set_var(
+            "DATABASE_URL",
+            "postgres://mansa:mansa@127.0.0.1:5433/redpash_prerelease",
+        );
+        // Keep on-disk artifacts out of the repo root.
+        std::env::set_var("REDPASH_DATA_DIR", std::env::temp_dir().join("redpash-idor-test").to_string_lossy().to_string());
+        AppState::init().await.expect("AppState::init against live prerelease DB")
+    }
+
+    /// Count `entity_data` rows owned by `caller` — used to prove the denied
+    /// path (AC-1) wrote NOTHING.
+    async fn owned_rows(pool: &PgPool, caller: &str) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM entity_data WHERE owner_id = $1")
+            .bind(caller)
+            .fetch_one(pool)
+            .await
+            .expect("count owned rows")
+    }
+
+    /// AC-1 — FOREIGN-PARENT INJECTION DENIED (the bug, now fixed).
+    /// Caller is a Member of scope A only; create with `scope_parent_id = B`
+    /// (no reach to B) ⇒ 404 (AppError.status == NOT_FOUND), and NO `entity_data`
+    /// row is written.
+    #[tokio::test]
+    #[ignore]
+    async fn scope_parent_idor_ac1_foreign_parent_denied() {
+        let state = live_state().await;
+        let seed = Seed::create(&state.db, "user", /* member_of_a */ true).await;
+
+        let before = owned_rows(&state.db, &seed.caller).await;
+        let body = CreateBody { data: Map::new(), scope_parent_id: Some(seed.scope_b.clone()) };
+        let result = create(
+            State(state.clone()),
+            seed.headers(),
+            Path(TYPE_ID.to_string()),
+            Json(body),
+        )
+        .await;
+
+        let err = result.err().expect("AC-1: foreign-parent create must be denied");
+        assert_eq!(
+            err.status,
+            StatusCode::NOT_FOUND,
+            "AC-1: denial must be leak-free 404 (got {})",
+            err.status,
+        );
+        let after = owned_rows(&state.db, &seed.caller).await;
+        assert_eq!(after, before, "AC-1: no entity_data row may be written on a denied create");
+
+        seed.teardown(&state.db).await;
+    }
+
+    /// AC-2 — OWN-PARENT ATTACH ALLOWED.
+    /// Caller is a Member of A; create with `scope_parent_id = A` ⇒ 201 CREATED;
+    /// the persisted row has `scope_parent_id = A`, `owner_id = caller`, and an
+    /// auto-created `owner` membership edge on the new object.
+    #[tokio::test]
+    #[ignore]
+    async fn scope_parent_idor_ac2_own_parent_allowed() {
+        let state = live_state().await;
+        let seed = Seed::create(&state.db, "user", /* member_of_a */ true).await;
+
+        let body = CreateBody { data: Map::new(), scope_parent_id: Some(seed.scope_a.clone()) };
+        let (status, Json(view)) = create(
+            State(state.clone()),
+            seed.headers(),
+            Path(TYPE_ID.to_string()),
+            Json(body),
+        )
+        .await
+        .expect("AC-2: own-parent create must succeed");
+
+        assert_eq!(status, StatusCode::CREATED, "AC-2: own-parent attach is 201");
+        assert_eq!(view.scope_parent.as_deref(), Some(seed.scope_a.as_str()), "AC-2: view echoes scope A");
+        assert_eq!(view.owner, seed.caller, "AC-2: owner is the caller");
+
+        // Persisted row.
+        let row: Option<(String, Option<String>)> = sqlx::query_as(
+            "SELECT owner_id, scope_parent_id FROM entity_data WHERE object_id = $1",
+        )
+        .bind(&view.rid)
+        .fetch_optional(&state.db)
+        .await
+        .expect("load persisted row");
+        let (owner_id, scope_parent_id) = row.expect("AC-2: entity_data row must exist");
+        assert_eq!(owner_id, seed.caller, "AC-2: persisted owner_id is the caller");
+        assert_eq!(scope_parent_id.as_deref(), Some(seed.scope_a.as_str()), "AC-2: persisted scope_parent_id is A");
+
+        // Auto `owner` membership edge on the new object.
+        let owner_edges: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::BIGINT FROM memberships \
+             WHERE object_redpash_id = $1 AND member_redpash_id = $2 AND role = 'owner'",
+        )
+        .bind(&view.rid)
+        .bind(&seed.caller)
+        .fetch_one(&state.db)
+        .await
+        .expect("count owner edges");
+        assert_eq!(owner_edges, 1, "AC-2: exactly one auto owner membership edge on the new object");
+
+        seed.teardown(&state.db).await;
+    }
+
+    /// AC-3 — OMITTED PARENT ALLOWED (the guard only fires when a parent is
+    /// supplied). Non-admin caller, `scope_parent_id = None` ⇒ 201 with
+    /// `scope_parent = None`. Caller need not be a member of anything.
+    #[tokio::test]
+    #[ignore]
+    async fn scope_parent_idor_ac3_omitted_parent_allowed() {
+        let state = live_state().await;
+        let seed = Seed::create(&state.db, "user", /* member_of_a */ false).await;
+
+        let body = CreateBody { data: Map::new(), scope_parent_id: None };
+        let (status, Json(view)) = create(
+            State(state.clone()),
+            seed.headers(),
+            Path(TYPE_ID.to_string()),
+            Json(body),
+        )
+        .await
+        .expect("AC-3: no-parent create must succeed");
+
+        assert_eq!(status, StatusCode::CREATED, "AC-3: omitted-parent create is 201");
+        assert_eq!(view.scope_parent, None, "AC-3: scope_parent stays None when omitted");
+
+        let scope_parent_id: Option<String> =
+            sqlx::query_scalar("SELECT scope_parent_id FROM entity_data WHERE object_id = $1")
+                .bind(&view.rid)
+                .fetch_one(&state.db)
+                .await
+                .expect("load persisted scope_parent_id");
+        assert_eq!(scope_parent_id, None, "AC-3: persisted scope_parent_id is NULL");
+
+        seed.teardown(&state.db).await;
+    }
+
+    /// AC-4 — PLATFORM ADMIN BYPASSES (intended). Caller has `users.role='admin'`
+    /// (NOT via the dev_user fast-path — a real seeded admin). Create with
+    /// `scope_parent_id = B` (no membership on B) ⇒ 201, proving the
+    /// `is_platform_admin` bypass is deliberate, not a hole.
+    #[tokio::test]
+    #[ignore]
+    async fn scope_parent_idor_ac4_platform_admin_bypass() {
+        let state = live_state().await;
+        let seed = Seed::create(&state.db, "admin", /* member_of_a */ false).await;
+        // Sanity: the admin caller must NOT be the bootstrap dev_user — otherwise
+        // AC-4 would pass via the fast-path, not the role='admin' branch.
+        assert_ne!(
+            seed.caller.as_str(),
+            state.dev_user.as_ref().as_str(),
+            "AC-4: admin caller must be a distinct seeded user, not dev_user",
+        );
+
+        let body = CreateBody { data: Map::new(), scope_parent_id: Some(seed.scope_b.clone()) };
+        let (status, Json(view)) = create(
+            State(state.clone()),
+            seed.headers(),
+            Path(TYPE_ID.to_string()),
+            Json(body),
+        )
+        .await
+        .expect("AC-4: platform-admin foreign-parent create must succeed");
+
+        assert_eq!(status, StatusCode::CREATED, "AC-4: platform admin bypasses the reach gate (201)");
+        assert_eq!(view.scope_parent.as_deref(), Some(seed.scope_b.as_str()), "AC-4: view echoes scope B");
+
+        seed.teardown(&state.db).await;
+    }
+}
