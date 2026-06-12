@@ -42,8 +42,10 @@ docs/internal/
 │
 │   ── cross-cutting shelves ──
 ├── runbooks/           operational / incident playbooks
-├── processes/          how the team works (touch-policy, audit cadence, push policy, …)
+├── processes/          how the team works (touch-policy, audit cadence, push policy, agent roles, …)
 ├── decisions/          the durable WHY — design choices that bind future work
+├── specs/              Case spec mirrors — on-disk handoff fallback for the agent role chain
+├── state/              orchestrator run-ledger (current_feature.md) — operational run-state, not docs
 ├── ui/                 the generated component catalog (ui/catalog/, --components)
 ├── excel-edge-cases/   dirty-.xlsx fixtures triage
 └── archive/            snapshots no longer load-bearing (incl. legacy/)
@@ -64,6 +66,9 @@ docs/internal/
 | Sign-in / session flow | [auth/](auth/index.md) |
 | Debug a production incident | [runbooks/](runbooks/index.md) |
 | Follow the team's conventions | [processes/](processes/index.md) |
+| How the agent role chain works (roles, /feature, gates, breaker) | [processes/agent-roles.md](processes/agent-roles.md) — role prompts in `.claude/agents/`, the orchestrator in `.claude/commands/feature.md` |
+| Find a Case's spec mirror (agent-chain handoff fallback) | [specs/](specs/index.md) |
+| See the orchestrator's live run-state | [state/](state/index.md) → `current_feature.md` — ephemeral run-ledger, not documentation |
 | See the UI component catalog | [ui/](ui/index.md) → [ui/catalog/](ui/catalog/index.md) (generated) |
 | Find a dirty-Excel fixture's edge case | [excel-edge-cases/](excel-edge-cases/index.md) |
 | See current doc coverage / drift | run `sh tools/audit.sh` — `doc-coverage-audit` reports per-pillar % + stubs / staleness |

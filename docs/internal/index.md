@@ -53,6 +53,8 @@ WHY lives around them and is never overwritten.
 | [runbooks](runbooks/index.md) | operational / incident playbooks — one per incident class (cross-cutting shelf) | hand-written |
 | [processes](processes/index.md) | how the team works — touch-policy, audit cadence, bug→case→runbook, push policy, lane ownership | hand-written |
 | [decisions](decisions/index.md) | the durable **why** — design choices that bind future work (the keepers from the old `architecture/`) | hand-written |
+| [specs](specs/index.md) | Case spec mirrors — the on-disk handoff fallback for the [agent role chain](processes/agent-roles.md), one doc per Case (unrelated to the retired shape-layout "specs") | hand-written |
+| [state](state/index.md) | the orchestrator's run-ledger (`current_feature.md`) — operational run-state, not documentation; reset per feature | hand-written |
 | [ui](ui/index.md) | the UI component catalog (`ui/catalog/`) — the dedup/registry instrument | generated (`--components`) |
 | [excel-edge-cases](excel-edge-cases/index.md) | dirty-`.xlsx` fixtures triage (22 fixtures × edge-case classes) | reference |
 | [archive](archive/index.md) | snapshots no longer load-bearing (incl. `legacy/` — the superseded shape-layout) | frozen |
