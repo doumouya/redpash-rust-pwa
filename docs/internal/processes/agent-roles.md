@@ -1,9 +1,11 @@
-# Process: agent role system (architect / coder / reviewer / tester / ops)
+# Process: agent role system (architect / tester / coder / reviewer / ops)
 
-> Status: **Phases 1A + 1B authored** — all five role agents + the full `/feature` chain (both
-> checkpoints) are written; they go live after the next Claude Code session rescans
-> `.claude/agents/`. Phase 2 (tdd-guard hard enforcement) + Phase 3 (role-marker, MCP wiring)
-> pending (see [Rollout](#rollout)). This doc is the authoritative description of the role system.
+> Status: **live since 2026-06-08** — validated end-to-end by Case CAS_DD6F55FB (the
+> `objects.rs` `scope_parent_id` IDOR regression tests, landed 2026-06-12). That run's lessons
+> + a full 49-finding independent review:
+> [`../specs/agent-system-review-2026-06-12.md`](../specs/agent-system-review-2026-06-12.md).
+> Phase 2 (tdd-guard hard enforcement) + Phase 3 (role-marker + PreToolUse role-guard) pending
+> (see [Rollout](#rollout)). This doc is the authoritative description of the role system.
 
 ## Why this exists
 The project outgrew single-person oversight. The fix is **role specialization + a trust
@@ -11,7 +13,7 @@ layer**: declarative role agents with scoped tools, driven by an orchestrator, w
 **automated gates** (not Em) decide whether a role's output is trustworthy — so Em reviews
 **decisions and exceptions, not every line.**
 
-The design is grounded in ChatDev (Qian et al., ACL'24, `py-scripts/2024.acl-long.810.pdf`),
+The design is grounded in ChatDev (Qian et al., ACL 2024, https://aclanthology.org/2024.acl-long.810/),
 whose ablation shows **role specialization is the #1 quality lever**. We map its ideas onto
 infrastructure we already own:
 
@@ -37,16 +39,20 @@ infrastructure we already own:
   ≤2-round-trip budget (not a gate failure). Any cap → stop + escalate to Em with the ledger.
 - **State ledger:** `docs/internal/state/current_feature.md` holds ephemeral run-state only
   (checklist, gate results, retry counters) so the orchestrator survives context bloat / restart.
+- **The sim:** [`frontend/orchestrator-sim.html`](../../../frontend/orchestrator-sim.html)
+  visualizes the chain (DAG, breaker counters, return paths). It sits outside every audit's
+  scan path — update it whenever the ledger template or the chain changes, or it silently
+  becomes a lying spec.
 
 ## The roles
 
 | Role | Can | Cannot | Gate it must pass |
 |---|---|---|---|
-| **architect** | read code/docs/skills; write spec doc + Case | edit source; run mutating Bash | Em approves the spec (Checkpoint 1) |
-| **tester** | write/run tests; `page-verify` | edit non-test source | tests map 1:1 to acceptance criteria; tdd-guard (Rust) |
+| **architect** | read code/docs/skills; write spec doc + Case | edit source; no Bash at all | Em approves the spec (Checkpoint 1) |
+| **tester** | write/run tests; `page-verify` | edit non-test source | tests map 1:1 to acceptance criteria; tdd-guard (Rust, Phase 2) |
 | **coder** | edit/write source; run `cargo test --jobs 4`; commit `-o` | edit test files; push; self-spec | tester's red tests go green |
-| **reviewer** | read; run audits read-only; dispatch specialists read-only; comment/transition Case | edit/write source (flags, never fixes) | `audit.sh` + `ci-audit` clean; coverage adequate |
-| **ops** | build/CI/deploy Bash; push (sole pusher, on Em's confirm) | — | build + `health-check` green |
+| **reviewer** | read; run audits read-only; weigh orchestrator-dispatched specialist findings; comment/transition Case | edit/write source (flags, never fixes) | `audit.sh` + `ci-audit` clean; coverage adequate |
+| **ops** | build/CI/deploy Bash; push (sole pusher, on Em's confirm) | — | build + `health-check` + `ci-audit` green |
 
 Full per-role contracts: `.claude/agents/{architect,coder,reviewer,tester,ops}.md`.
 
@@ -75,12 +81,18 @@ cloud runtime, not a local-RAM lever, and sends code off-device — against our 
 stance — so local is the default.)
 
 ## Rollout
-- **Phase 1A (authored):** architect, coder, `/feature` (architect → Checkpoint 1 → coder), this
-  doc, the ledger template.
-- **Phase 1B (authored):** tester, reviewer, ops; `/feature` full validation chain + Checkpoint 2.
-  _Live after the next session rescans `.claude/agents/`; first end-to-end run is the validation._
-- **Phase 2:** tdd-guard (hard on Rust via cargo reporter) + `node:test` FE harness (`tools/test-fe.sh`).
-- **Phase 3:** `.agent-role` marker + `board.js` role/path-violation flag (optional PreToolUse
-  hard-block); wire `tools/mcp-server/` into `.claude.json` so `case_*` is first-class.
+- **Phase 1A + 1B (live):** all five roles + the full `/feature` chain (both checkpoints) —
+  validated end-to-end by CAS_DD6F55FB (2026-06-08 → 2026-06-12). Lessons that run surfaced:
+  the regression lane (fix-pre-exists → tests born green, coder skipped), the reviewer→tester
+  loop for test-hygiene findings, and the runbook/atomic-doc gates assuming a coder commit
+  that never happened — see the [review](../specs/agent-system-review-2026-06-12.md).
+- **Phase 2:** tdd-guard (hard on Rust via cargo reporter) + `node:test` FE harness
+  (`tools/test-fe.sh` now exists as a tolerant stub — explicit n/a + exit 0 until
+  `frontend/tests/` lands).
+- **Phase 3:** `.agent-role` marker (session-id-stamped — a bare marker would wrongly constrain
+  the other parallel Torvs) + PreToolUse role-guard hard-block (recommended, not optional: every
+  path/command-level boundary is currently prompt discipline) + `board.js` role/path-violation
+  flag. The MCP wiring itself is DONE (e0a21cc, via user-level `~/.claude.json`) — the remaining
+  wiring task is a committed project `.mcp.json` so a fresh clone resolves `case_*`.
 
 Designed to lift wholesale into the `starter-pack` for any future project.

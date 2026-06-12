@@ -349,7 +349,7 @@ function roleWork(){
       S.gates.audit=false; S.gates.ciAudit=false;
       note("reviewer","ci-audit: NEW regression — blocked. looping back to coder","fail");
       render();
-      if(S.counters.retries>=CAPS.retries) return escalate("gate failed 3× — escalating to Em");
+      if(S.counters.retries>CAPS.retries) return escalate("retry budget (3/3) exhausted — escalating to Em");
       return after(1000,()=>{
         S.nodeState.reviewer=""; note("orchestrator","retry "+S.counters.retries+"/3 → coder","fail");
         enter(idxOf("coder")); return after(700, roleWork);
@@ -361,8 +361,8 @@ function roleWork(){
   }
 
   if(p.key==="ops"){
-    S.gates.build=true;
-    note("ops","build-wasm + health-check green · pushed prerelease · Case → done","ok");
+    S.gates.build=true; S.gates.ciAudit=true;
+    note("ops","build-wasm + health-check + ci-audit green · pushed prerelease · Case → done","ok");
     S.nodeState.ops="done"; S.state="landed"; S.status="landed"; render(); stop();
     return;
   }
