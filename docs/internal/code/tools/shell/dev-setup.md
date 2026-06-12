@@ -11,15 +11,19 @@ last modified date: 2026-06-08
 ## Purpose
 
 Orchestrator — chains the onboarding steps (install-stack → db-setup →
-**mcp-server build** → cargo check) in dependency order so a fresh host
-goes from clean to *"api boots"* in one invocation. The "first-run"
-command for a new contributor.
+**mcp-server build** → **audit deps** → cargo check) in dependency order
+so a fresh host goes from clean to *"api boots"* in one invocation. The
+"first-run" command for a new contributor.
 
 The `mcp-server build` step (`npm install && npm run build` in
 `tools/mcp-server/`) produces `dist/server.js` — without it the
 `redpash-slack` MCP entry has no module to load and fails with
 "Connection closed" (`node_modules`/`dist` are gitignored, so a fresh
-checkout has neither). Gated on `npm` being present + `--no-build` off.
+checkout has neither). The `audit deps` step (`npm install` in `tools/`)
+installs **acorn** so `sh tools/audit.sh` runs — the JS audits
+(`js` / `admin-scope` / `css-tab-compare` / `fe-framework`)
+`require('acorn')`, and `tools/node_modules` is gitignored. Both gated on
+`npm` present + `--no-build` off.
 
 ## Public surface
 

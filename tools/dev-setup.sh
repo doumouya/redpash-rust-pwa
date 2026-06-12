@@ -12,7 +12,8 @@ if [ -z "${BASH_VERSION-}" ]; then exec bash "$0" "$@"; fi
 #   3. tools/stack-version.sh  — re-probe to confirm install worked
 #   4. tools/db-setup.sh       — service + role + database + .env + auth
 #   5. tools/mcp-server build  — npm install + tsc so the redpash-slack MCP has dist/
-#   6. cargo check -p api      — repo compiles against the new env
+#   6. tools audit deps        — npm install (acorn) so `sh tools/audit.sh` runs
+#   7. cargo check -p api      — repo compiles against the new env
 #
 # Exit codes:
 #   0 — every step landed; api crate compiles
@@ -98,6 +99,10 @@ if [ "$NO_BUILD" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
   # here once so `/mcp` finds it. Skipped if node is absent (install-stack handles node).
   if command -v npm >/dev/null 2>&1; then
     step "mcp-server build"           sh -c "cd '$REPO_ROOT/tools/mcp-server' && npm install --no-audit --no-fund && npm run build"
+    # Static-analysis audit deps (acorn) so `sh tools/audit.sh` runs. The JS audits
+    # (js / admin-scope / css-tab-compare / fe-framework) `require('acorn')`, but
+    # tools/node_modules is gitignored — a fresh checkout crashes them with MODULE_NOT_FOUND.
+    step "audit deps (acorn)"         sh -c "cd '$REPO_ROOT/tools' && npm install --no-audit --no-fund"
   fi
   step "cargo check -p api"           sh -c "cd '$REPO_ROOT/backend' && cargo check -p api"
 fi
