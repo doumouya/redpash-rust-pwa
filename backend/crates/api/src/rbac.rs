@@ -15,12 +15,14 @@
 //! holds the object directly. `require_grant` / `require_view` are the
 //! handler-facing gates (dev_user bypasses as the dev-mode platform admin).
 
-use sqlx::PgPool;
-
-use crate::type_cache::TypeDefCache;
-use std::collections::BTreeMap;
-
 use crate::{error::AppError, state::AppState};
+
+// Post-neuter, only the #[cfg(test)] neuter_tests dead-pool oracle still names
+// PgPool; the runtime gates admit before any pool is touched. cfg-gating the
+// import keeps the non-test build warning-clean now that load_contract /
+// company_of (the only runtime PgPool namers) are gone.
+#[cfg(test)]
+use sqlx::PgPool;
 
 /// RBAC permission tier. Ordered `Viewer < Member < Admin < Owner` so the
 /// derived `Ord` makes "highest role wins" a plain `max`.
@@ -124,85 +126,6 @@ pub async fn require_view(
     Ok(())
 }
 
-// ─── permission contract (CAS_0DE2DDEF) ────────────────────────────────────
-// Step 1: storage + types + the horizontal-axis check. STORAGE ONLY — wired
-// into the gates in step 2, so nothing below changes enforcement yet.
-//
-// Em's reframe: RBAC is one declarative, per-company, versioned JSONB contract
-// the single evaluator reads. The tier ladder (`Role`), the self-overlay, and
-// the see-down visibility rule are framework DEFAULTS — not stored. The
-// contract carries the company-scope specials (owner/admins) + the HORIZONTAL
-// axis: per-(team, object-TYPE) action grants (HR owns Users+Payslips, Eng owns
-// Cases+Monitoring — capability, not team-over-team rank). The `memberships`
-// graph stays the instances; this is the policy over it.
-
-/// The per-company RBAC permission contract. Stored as JSONB in `company_rbac`
-/// (active = max(version)).
-///
-/// INVARIANT (Em, emphasised twice): enforcement branches on the TIER and these
-/// `grants` ONLY. `labels` is DISPLAY-ONLY (their label → tier, for the UI); no
-/// enforcement path reads it, and nothing here is keyed on a team/department
-/// NAME — only PKs (`company`, the grant keys = team PK) + object TYPEs. They
-/// pick whatever `context_role` / names they like; the framework ignores them.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct Contract {
-    #[serde(default)] pub company: String,
-    /// company_owner (USR_ id) — god of this company's subtree.
-    #[serde(default)] pub owner:  Option<String>,
-    /// company_admin (USR_ ids) — ORG-management only (teams/memberships/users-as-org),
-    /// NO auto content-CRUD (fail-closed). Content access is the explicit grants below.
-    #[serde(default)] pub admins: Vec<String>,
-    /// DISPLAY ONLY: label → tier (e.g. "Manager"→"owner"). Never enforced on.
-    #[serde(default)] pub labels: BTreeMap<String, String>,
-    /// The horizontal axis: team PK → object-TYPE → allowed actions (⊆ {c,r,u,d}).
-    #[serde(default)] pub grants: BTreeMap<String, BTreeMap<String, Vec<String>>>,
-}
-
-impl Contract {
-    /// A minimal starter for `company` owned by `owner` (empty grants — an admin
-    /// fills them in). Convenience for seeding/Admin-Console; the ABSENCE of any
-    /// contract row is treated as "unconfigured → tier-only", so this isn't required.
-    pub fn default_for(company: &str, owner: &str) -> Self {
-        Contract { company: company.into(), owner: Some(owner.into()), ..Default::default() }
-    }
-
-    pub fn is_company_owner(&self, user: &str) -> bool { self.owner.as_deref() == Some(user) }
-    pub fn is_company_admin(&self, user: &str) -> bool { self.admins.iter().any(|a| a == user) }
-
-    /// Horizontal-axis check: does ANY of `principals` (the caller + their teams,
-    /// from `principals()`) grant `action` (`"c"`/`"r"`/`"u"`/`"d"`) on
-    /// `object_type`? Tier-capping is applied separately by the evaluator (via
-    /// `resolve_grant`); this is purely the per-team object-TYPE capability.
-    /// Multi-team = union (any team that grants it wins). A user PK isn't a grant
-    /// key, so non-team principals contribute nothing.
-    pub fn allows(&self, principals: &[String], object_type: &str, action: &str) -> bool {
-        principals.iter().any(|p| {
-            self.grants
-                .get(p)
-                .and_then(|by_type| by_type.get(object_type))
-                .map_or(false, |acts| acts.iter().any(|a| a == action))
-        })
-    }
-}
-
-/// Load a company's ACTIVE contract (highest version), or `None` if it has none.
-/// `None` = "unconfigured" → the evaluator falls back to tier-only (today's
-/// behaviour), keeping the rollout non-breaking until a real contract lands.
-pub async fn load_contract(pool: &PgPool, company_id: &str) -> sqlx::Result<Option<Contract>> {
-    let row: Option<sqlx::types::Json<Contract>> = sqlx::query_scalar(
-        "SELECT contract FROM company_rbac WHERE company_id = $1 ORDER BY version DESC LIMIT 1",
-    )
-    .bind(company_id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|j| j.0))
-}
-
-// ─── contract-aware evaluator (epic step 2) ────────────────────────────────
-// The single gate, now reading both axes: the TIER (vertical, via resolve_grant)
-// AND the contract's per-(team, object-TYPE) grant (horizontal). Non-breaking:
-// a company with no registered contract evaluates tier-only (today's behaviour).
-
 /// The action being attempted, mapped to its CRUD letter (the contract's grant
 /// alphabet) and its framework-default minimum tier (the vertical axis). The
 /// contract's object-type grant is the *additional* horizontal gate on top.
@@ -224,49 +147,6 @@ impl Action {
     }
 }
 
-/// The object's company (to load that company's contract) — itself if it IS a
-/// company, else the cascade scope (case/project/file → company). `object_kind`
-/// is registry-driven (the `TypeDefCache`), so a new type resolves without a
-/// code edit (object-registry Stage 1; this also fixes the legacy `TEM_`/`TEAM`
-/// + adds `CON_` mis-dispatch — see type_cache::object_kind).
-async fn company_of(cache: &TypeDefCache, pool: &PgPool, object: &str) -> sqlx::Result<Option<String>> {
-    if cache.object_kind(object) == "company" {
-        return Ok(Some(object.to_string()));
-    }
-    sqlx::query_scalar(
-        "SELECT company_id FROM cases    WHERE redpash_id = $1
-         UNION SELECT company_id FROM projects WHERE redpash_id = $1
-         UNION SELECT p.company_id FROM project_files f
-               JOIN projects p ON p.redpash_id = f.project_redpash_id
-               WHERE f.redpash_id = $1
-         LIMIT 1",
-    )
-    .bind(object)
-    .fetch_optional(pool)
-    .await
-}
-
-/// PURE decision: combine the resolved `tier` (vertical) with the company's
-/// `contract` (horizontal) for `action` on `object_type`. Platform-admin bypass
-/// is the caller's job. INVARIANT: `contract == None` → tier-only (non-breaking);
-/// `company_owner` → full subtree; `company_admin` is NOT auto-content (fail-closed —
-/// it gets only what `grants` give it, org-management lives on the management routes).
-fn evaluate(
-    grant:       Grant,
-    contract:    Option<&Contract>,
-    principals:  &[String],
-    caller:      &str,
-    object_type: &str,
-    action:      Action,
-) -> bool {
-    let tier_ok = grant.effective().map_or(false, |r| r >= action.min_tier());
-    match contract {
-        None                                    => tier_ok,                 // unconfigured
-        Some(c) if c.is_company_owner(caller)   => true,                     // root of this company
-        Some(c)                                 => tier_ok && c.allows(principals, object_type, action.crud()),
-    }
-}
-
 /// Contract-aware gate. LEAN SINGLE-USER NEUTER (CAS_C8A9): admits
 /// unconditionally with ZERO per-request RBAC/membership SQL — returns `Ok(())`
 /// before the pool is touched (no `resolve_grant`/`company_of`/`load_contract`).
@@ -280,77 +160,6 @@ pub async fn require_action(
     _action: Action,
 ) -> Result<(), AppError> {
     Ok(())
-}
-
-#[cfg(test)]
-mod contract_tests {
-    use super::*;
-
-    // Contract object-TYPE keys are the canonical lowercase types `object_kind`
-    // produces ("case"/"user"/…), never display names.
-    #[test]
-    fn deserializes_the_sketch_and_enforces_object_type_grants() {
-        let json = r#"{
-          "company":"CMP_x","owner":"USR_o","admins":["USR_a"],
-          "labels":{"Manager":"owner"},
-          "grants":{"TEAM_eng":{"case":["c","r","u","d"],"monitoring":["r"]},
-                    "TEAM_hr":{"user":["c","r","u","d"],"payslip":["r"],"case":["c"]}}
-        }"#;
-        let c: Contract = serde_json::from_str(json).unwrap();
-        assert!(c.is_company_owner("USR_o"));
-        assert!(c.is_company_admin("USR_a"));
-        // Engineering owns cases + monitoring, NOT users
-        assert!( c.allows(&["TEAM_eng".into()], "case", "u"));
-        assert!(!c.allows(&["TEAM_eng".into()], "user", "u"));
-        assert!( c.allows(&["TEAM_eng".into()], "monitoring", "r"));
-        assert!(!c.allows(&["TEAM_eng".into()], "monitoring", "u"));
-        // HR owns users + payslips; only CREATE on cases
-        assert!( c.allows(&["TEAM_hr".into()], "user", "d"));
-        assert!( c.allows(&["TEAM_hr".into()], "case", "c"));
-        assert!(!c.allows(&["TEAM_hr".into()], "case", "u"));
-        // multi-team membership = union of grants
-        assert!( c.allows(&["TEAM_eng".into(), "TEAM_hr".into()], "user", "u"));
-        // a non-team principal (the user themselves) grants nothing
-        assert!(!c.allows(&["USR_o".into()], "case", "u"));
-    }
-
-    #[test]
-    fn default_for_grants_nothing_until_filled() {
-        let c = Contract::default_for("CMP_x", "USR_o");
-        assert!(c.is_company_owner("USR_o"));
-        assert!(c.grants.is_empty());
-        assert!(!c.allows(&["TEAM_eng".into()], "case", "r"));
-    }
-
-    #[test]
-    fn action_crud_and_min_tier() {
-        assert_eq!(Action::View.crud(), "r");
-        assert_eq!(Action::Edit.crud(), "u");
-        assert_eq!(Action::View.min_tier(), Role::Viewer);
-        assert_eq!(Action::Delete.min_tier(), Role::Admin);
-    }
-
-    #[test]
-    fn evaluate_combines_tier_and_contract() {
-        let member = Grant { direct: Some(Role::Member), scope: None };
-        let viewer = Grant { direct: Some(Role::Viewer), scope: None };
-        let none   = Grant { direct: None, scope: None };
-
-        // No contract → tier-only (today's behaviour, non-breaking).
-        assert!( evaluate(member, None, &[], "USR_u", "case", Action::Edit));
-        assert!(!evaluate(viewer, None, &[], "USR_u", "case", Action::Edit)); // viewer < member-min
-        assert!(!evaluate(none,   None, &[], "USR_u", "case", Action::View));
-
-        // With a contract: Eng owns case, not user.
-        let c: Contract = serde_json::from_str(
-            r#"{"owner":"USR_o","grants":{"TEAM_eng":{"case":["c","r","u","d"]}}}"#).unwrap();
-        let eng = vec!["USR_u".to_string(), "TEAM_eng".to_string()];
-        assert!( evaluate(member, Some(&c), &eng, "USR_u", "case", Action::Edit));   // granted + tier ok
-        assert!(!evaluate(member, Some(&c), &eng, "USR_u", "user", Action::Edit));   // no user grant → deny
-        assert!(!evaluate(viewer, Some(&c), &eng, "USR_u", "case", Action::Delete)); // tier too low for delete
-        // company_owner bypasses the horizontal axis on its whole subtree.
-        assert!( evaluate(none,   Some(&c), &[],  "USR_o", "user", Action::Delete));
-    }
 }
 
 // ─── RBAC-neuter gate tests (CAS_C8A9A3EC0935498880A468625FE3F490) ──────────
@@ -411,7 +220,6 @@ mod neuter_tests {
             http:                reqwest::Client::default(),
             avatars:             Arc::new(DashMap::new()),
             dev_login:           false,
-            internal_company_id: Arc::new(None),
             type_cache:          Arc::new(crate::type_cache::TypeDefCache::empty()),
         }
     }

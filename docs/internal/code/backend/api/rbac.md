@@ -3,7 +3,7 @@ title: backend/crates/api/src/rbac.rs
 source: ../../../../../backend/crates/api/src/rbac.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-06-13
+last modified date: 2026-06-14
 ---
 
 # rbac.rs
@@ -43,16 +43,11 @@ machinery without rewriting ~40 call sites.
   unconditionally; the `rule` closure is ignored. Signature unchanged.
 - `pub async fn require_view` — **NEUTERED**: returns `Ok(())`.
 - `pub async fn require_action(state, caller, object, Action)` — **NEUTERED**:
-  returns `Ok(())`; the `Action` arg is retained (consumed by `Action::crud()` /
-  `min_tier()` only in the kept `#[cfg(test)] contract_tests`).
+  returns `Ok(())`; the `Action` arg is retained so call sites compile.
 - `pub enum Action { View, Create, Edit, Delete }` — `crud()` (→ r/c/u/d) +
-  `min_tier()`. Retained for `require_action`'s signature + `contract_tests`.
-- `pub struct Contract { … }` + `pub async fn load_contract` + the private
-  `company_of` / `evaluate` — the per-company permission-contract storage/evaluator.
-  Kept ONLY for the `#[cfg(test)] contract_tests` module (a tester-owned file the
-  coder cannot edit); no production path references them, and the module-level
-  `#[allow(dead_code)]` on `mod rbac` covers them. Earmarked for deletion together
-  with that test module.
+  `min_tier()` retained for `require_action`'s signature. The two methods are now
+  unused (their only caller, `evaluate`, was deleted) — covered by the module
+  `#[allow(dead_code)]`, kept as restore surface.
 
 **Deleted in the lean slim:** `resolve_grant`, `GRANT_SQL`, `EDGES_SQL`,
 `grant_edges` / `GrantEdge`, `principals`, `effective_role` — the multi-tenant
@@ -61,6 +56,12 @@ former callers (`field_perms::require_fields`, `pipeline::upload_csv`,
 `routes::list_viewer`, `routes/cases.rs` list filter, `routes/admin.rs::rbac_resolve`)
 were collapsed to no-filter / admit-all in the same change.
 
+**Deleted in the AC-7 tail (CAS_C8A9, 2026-06-14):** `Contract` + `impl` +
+`load_contract` + the private `company_of` / `evaluate` (the per-company
+permission-contract storage/evaluator) and the `#[cfg(test)] contract_tests`
+module that was their last referrer. The contract layer is preserved in the
+`full-app-pre-slim` snapshot; nothing in the lean build evaluates it.
+
 ## Drift-prone areas
 
 - **The gates are no-ops — do NOT add per-request RBAC SQL behind them.** Any
@@ -68,15 +69,16 @@ were collapsed to no-filter / admit-all in the same change.
   `require_platform_admin_mw` would re-introduce the multi-tenant cost the lean
   build deliberately removed; the tester's `#[cfg(test)] neuter_tests` (dead-pool
   oracle) goes RED if a gate touches the pool for a non-dev caller.
-- **`Contract` / `load_contract` / `company_of` / `evaluate` are kept ONLY for the
-  `#[cfg(test)] contract_tests` module.** When that test module is retired, delete
-  these four and drop the `#[allow(dead_code)]` on `mod rbac` in `main.rs`.
+- The module `#[allow(dead_code)]` on `mod rbac` (`main.rs`) now covers only the
+  neuter-orphaned resolver helpers (`Role::from_rank`, the `Grant` reach-methods,
+  `Action::crud` / `min_tier`) — the multi-tenant **restore surface**. Don't delete
+  these piecemeal; re-arming RBAC restores them as a set.
 - Re-arming multi-tenant RBAC = restore from the `full-app-pre-slim` tag; don't
   hand-reconstruct the resolver.
 
 ## Related
 
 - [entity-membership-model](../../../specs/rbac/entity-membership-model.md) — the §2 resolver spec.
-- [permission-contract](../../../specs/rbac/permission-contract.md) — the versioned-JSONB contract model `require_action` evaluates (the two axes, storage, semantics).
+- [permission-contract](../../../specs/rbac/permission-contract.md) — the versioned-JSONB contract model (two axes, storage, semantics). **Historical for the lean build** — the evaluator was deleted; preserved in `full-app-pre-slim` for a multi-user restore.
 - [rbac catalog index](../../../specs/rbac/index.md) — the policy layer that will read this.
 - [Backend pillar landing](../index.md)

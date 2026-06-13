@@ -41,8 +41,9 @@
 ## Checklist (test-first order)
 - [x] architect: spec + Case written (CAS_C8A9A3EC… · specs/lean-cleanup.md)
 - [x] CHECKPOINT 1: Em approved the spec ("go" — all recs; resolutions in CAS_C8A9 comment)
-- [ ] tester: verification gates written (1:1 with ACs) · failing
-- [ ] coder: acceptance criteria implemented (atomic docs updated, tests turned green)
+- [x] tester: verification gates written (1:1 with ACs) · failing (1d93558; node 21 red, rbac 3 red)
+- [x] coder: bulk implemented GREEN (caa40e9) — RBAC neutered, demo/docs/companies/teams/users/members routes + cases-CRUD gone, admin.css + 6 framework CSS gone, dead grant machinery removed. cargo check 0, cargo test 102/0, node 24/25.
+- [x] **AC-7 deep-delete tail RESOLVED (uncommitted, Em-directed direct cut 2026-06-14)** — the 2 TEST-DRIFT items are gone, not deferred: deleted `Contract`+impl+`load_contract`+`company_of`+`evaluate`+`contract_tests` (rbac.rs −193 LOC), the dead `internal_company_id` AppState field (state.rs) + its bootstrap internal-company seeding block + `INTERNAL_COMPANY_DEFAULT` (bootstrap.rs), and the cascade-orphaned `create_company`+`COMPANY_COLS` (db/mod.rs). `neuter_tests` literal trimmed (mechanical — field gone, no assertion change). cargo check **0 warnings**, cargo test **98/0** (the 4 obsolete contract_tests removed). Atomic docs updated (rbac/state/bootstrap/db.mod/main). `contract_tests` was the OLD CAS_0DE2DDEF test, NOT a lean AC test → tester-owned neuter_tests untouched.
 - [ ] reviewer: `audit.sh` + `ci-audit` clean · coverage ok
 - [ ] CHECKPOINT 2: Em approved the push
 - [ ] ops: built + pushed + Case closed
@@ -63,4 +64,5 @@
 - **Escalation reason (if any):** none
 
 ## Handoff notes
-- (empty — no active run)
+- **Uncommitted on `lean`:** the AC-7-tail backend cut (rbac/state/bootstrap/db.mod/main + 5 atomic docs). Verified green (check 0 / test 98). Ready for reviewer → CP2 → ops, or fold into Em's next commit.
+- **Pre-existing audit noise (NOT from this cut):** doc-coverage `orphan_doc ×3` + `missing_doc ×2` + `wrong_breadcrumb ×1` are an in-flight `tools/audit-suite/` reorg (uniformity-audit / tokens-audit breadcrumbs point at a new dir the docs haven't moved to) — needs the tooling-lane owner's call, not part of this Case. admin-scope audit's "1 user-surface /admin/* leak" = monitoring's `/admin/users`+`/admin/steps/stats` calls, by-design in single-user (auth-audit confirms /admin /monitoring /metrics still gated).

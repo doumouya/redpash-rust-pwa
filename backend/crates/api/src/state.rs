@@ -63,13 +63,6 @@ pub struct AppState {
     /// Opt-in via `REDPASH_DEV_LOGIN`; off by default. Never enable in
     /// production — it's an unauthenticated session-mint endpoint.
     pub dev_login:       bool,
-    /// RID of the canonical "internal" company — drives the
-    /// internal/external case discriminator on `/api/cases?source=`.
-    /// A case is internal iff its reporter is a member of this
-    /// company. Resolved at startup from `REDPASH_INTERNAL_COMPANY_NAME`
-    /// (default "RedPash"); `None` when no matching company exists,
-    /// in which case the source filter is a no-op.
-    pub internal_company_id: Arc<Option<String>>,
     /// The data-driven type registry (type_definitions/type_fields/
     /// type_scope_roles), loaded once after migrate. Replaces the code-side
     /// field/type/role registries (object-registry Stage 1).
@@ -137,27 +130,6 @@ impl AppState {
             tracing::warn!("REDPASH_DEV_LOGIN enabled — /api/auth/dev-login mints sessions with no credentials. Dev only.");
         }
 
-        // Resolve the canonical "internal" company by name. Drives the
-        // /api/cases?source= filter — a case is internal iff its
-        // reporter shares a membership in this company. Default name
-        // matches the seeded RedPash company; override via env when
-        // the canonical company is named differently.
-        let internal_company_name = std::env::var("REDPASH_INTERNAL_COMPANY_NAME")
-            .unwrap_or_else(|_| "RedPash".to_string());
-        let internal_company_id: Option<String> = sqlx::query_scalar(
-            "SELECT redpash_id FROM companies WHERE name = $1 LIMIT 1",
-        )
-        .bind(&internal_company_name)
-        .fetch_optional(&db)
-        .await?;
-        match &internal_company_id {
-            Some(rid) => tracing::info!(company = %internal_company_name, %rid, "internal company resolved"),
-            None      => tracing::warn!(
-                company = %internal_company_name,
-                "no matching company — /api/cases?source= filter will be a no-op until one is created",
-            ),
-        }
-
         Ok(Self {
             db,
             files:           Arc::new(DashMap::new()),
@@ -170,7 +142,6 @@ impl AppState {
                 .expect("reqwest client init"),
             avatars: Arc::new(DashMap::new()),
             dev_login,
-            internal_company_id: Arc::new(internal_company_id),
             type_cache,
         })
     }

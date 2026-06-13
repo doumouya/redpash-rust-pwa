@@ -3,7 +3,7 @@ title: backend/crates/api/src/state.rs
 source: ../../../../../backend/crates/api/src/state.rs
 owner: Gus
 section: Internal · Code · backend · api
-last modified date: 2026-05-30
+last modified date: 2026-06-14
 ---
 
 # state.rs

@@ -916,10 +916,6 @@ impl From<CompanyRow> for Company {
     }
 }
 
-const COMPANY_COLS: &str = "redpash_id, name, slug, avatar_url, created_at, updated_at";
-
-
-
 /// The caller's *effective* role in a company, or `None` when they aren't a
 /// member. Handlers treat `None` the same as "company doesn't exist" (404) so
 /// existence isn't leaked.
@@ -1013,42 +1009,6 @@ pub async fn user_sole_owner_objects(
     .await?;
     Ok(rows.into_iter().map(|(rid,)| rid).collect())
 }
-
-/// Create a company and seat the creator as its owner — both writes in
-/// one transaction so a company never exists without an owner.
-pub async fn create_company(
-    pool:      &PgPool,
-    rid:        &str,
-    name:       &str,
-    slug:       &str,
-    avatar_url: Option<&str>,
-    owner_rid:  &str,
-) -> sqlx::Result<Company> {
-    let mut tx = pool.begin().await?;
-    register_entity(&mut *tx, rid, "company").await?;
-    let row: CompanyRow = sqlx::query_as(&format!(
-        "INSERT INTO companies (redpash_id, name, slug, avatar_url)
-         VALUES ($1, $2, $3, $4)
-         RETURNING {COMPANY_COLS}"
-    ))
-    .bind(rid)
-    .bind(name)
-    .bind(slug)
-    .bind(avatar_url)
-    .fetch_one(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
-         VALUES ($1, $2, 'owner')",
-    )
-    .bind(rid)
-    .bind(owner_rid)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(row.into())
-}
-
 
 /// Delete a company via the entity registry — cascades to the `companies`
 /// row, then onward: `memberships` cascade (object = the company),

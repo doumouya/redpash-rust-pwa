@@ -16,9 +16,10 @@ mod error;
 mod event;
 mod id;
 // RBAC gates — NEUTERED in the lean single-user build (CAS_C8A9): the four
-// gate fns admit unconditionally with zero per-request SQL. The allow(dead_code)
-// covers the contract-storage types (Contract/load_contract/company_of/evaluate)
-// kept for the #[cfg(test)] contract_tests until that module is retired.
+// gate fns admit unconditionally with zero per-request SQL. allow(dead_code)
+// covers the resolver helpers the neutered gates no longer call (Role::from_rank,
+// Grant reach-methods) — kept as the multi-tenant restore surface
+// (full-app-pre-slim snapshot). The Contract/contract-eval layer is now deleted.
 #[allow(dead_code)]
 mod rbac;
 // Open codec registry + avro meta-codec decode (CAS_75A0D1FD) + the Kafka
