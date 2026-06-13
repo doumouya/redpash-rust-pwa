@@ -73,8 +73,7 @@ export const cellEditor = {
   //                       <table class="rp-redtable">). When OMITTED,
   //                       falls back to the legacy view-scoped lookups
   //                       (".rp-redtable thead tr" + "#rp-home-list-tbody")
-  //                       — every existing caller (home.js,
-  //                       typedef-acceptance.js) behaves IDENTICALLY.
+  //                       — every existing caller behaves IDENTICALLY.
   decorate({ view, spec, editMode, selectMode, isPlatformAdmin, chipRender, tableRoot }) {
     // tbody: when a tableRoot is given, the editable cells live in THAT
     // table's tbody; otherwise keep the legacy hard-coded id, view-scoped.

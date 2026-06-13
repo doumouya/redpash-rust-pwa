@@ -3,7 +3,7 @@ title: frontend/scripts/framework/component-registry.js
 source: ../../../../../../frontend/scripts/framework/component-registry.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-04
+last modified date: 2026-06-14
 ---
 
 # component-registry.js

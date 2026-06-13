@@ -20,8 +20,8 @@
 //
 // Architecture: the page self-reports rather than being driven by a
 // headless browser. The "driver" is just whichever browser Em already
-// has open with `?audit=1` pinned. Mirrors the wasm-bench harness's
-// "the app reports its own state" pattern.
+// has open with `?audit=1` pinned — the app reports its own state
+// rather than being scraped by a headless driver.
 
 // Atom catalog — the foundation classes the design system contract
 // guarantees. Start with the cross-page atoms (rail/topbar/page-shell

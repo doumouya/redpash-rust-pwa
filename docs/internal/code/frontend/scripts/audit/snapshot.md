@@ -3,7 +3,7 @@ title: frontend/scripts/audit/snapshot.js
 source: ../../../../../frontend/scripts/audit/snapshot.js
 owner: Torv
 section: Internal · Code · Frontend · scripts/audit
-last modified date: 2026-06-05
+last modified date: 2026-06-14
 ---
 
 # snapshot.js

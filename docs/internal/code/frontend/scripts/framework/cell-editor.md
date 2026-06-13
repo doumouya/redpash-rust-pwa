@@ -3,7 +3,7 @@ title: frontend/scripts/framework/cell-editor.js
 source: ../../../../../frontend/scripts/framework/cell-editor.js
 owner: Torv
 section: Internal · Code · Frontend · scripts · framework
-last modified date: 2026-06-04
+last modified date: 2026-06-14
 ---
 
 # cell-editor.js
