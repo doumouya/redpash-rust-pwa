@@ -513,3 +513,122 @@ mod contract_tests {
         assert!( evaluate(none,   Some(&c), &[],  "USR_o", "user", Action::Delete));
     }
 }
+
+// ─── RBAC-neuter gate tests (CAS_C8A9A3EC0935498880A468625FE3F490) ──────────
+// Tester-owned (the coder cannot edit this module). Lean single-user-mode
+// neuter: the four gate fns + require_platform_admin_mw admit unconditionally,
+// then the multi-tenant machinery (resolve_grant / GRANT_SQL / EDGES_SQL /
+// principals / Contract / load_contract / company_of / evaluate) is deleted.
+// CHECKPOINT-1 APPROVED scope (the authoritative comment on the Case).
+//
+// RED-now / GREEN-after design — the honest proof of "ZERO per-request RBAC SQL":
+//   We build an AppState whose `db` is a LAZY pool pointed at an unreachable
+//   address (127.0.0.1:1 — connection refused the instant any query runs) and a
+//   `TypeDefCache::default()` (no DB). The caller is a NON-dev RID.
+//   • TODAY: require_grant/require_view/require_action with a non-dev caller call
+//     `resolve_grant` (and friends) → the lazy pool tries to connect → Err. The
+//     gate returns Err, so `is_ok()` is FALSE → these tests FAIL (correct red).
+//   • AFTER the no-op-neuter: the gate returns Ok(()) before touching the pool →
+//     these tests PASS (green). A green here is a PROOF the gate did no SQL,
+//     because the only pool available would have errored on the first query.
+//
+// We deliberately use a NON-dev caller: a dev_user caller already trips the
+// `is_platform_admin` fast-path (Ok with no SQL) TODAY, so it can't distinguish
+// "neutered" from "not neutered" — it would be a fake-green (the same trap the
+// objects.rs IDOR harness flags). The dev_user path is asserted separately as
+// the floor that must STILL hold.
+#[cfg(test)]
+mod neuter_tests {
+    use super::*;
+    use crate::state::{AppState, FileEntry};
+    use dashmap::DashMap;
+    use std::{path::PathBuf, sync::Arc};
+
+    const DEV: &str = "USR_dev_bootstrap";
+    const NON_DEV: &str = "USR_some_other_caller";
+    const OBJECT: &str = "CMP_target_object";
+
+    /// An AppState backed by a LAZY pool to an unreachable DB. `connect_lazy`
+    /// never opens a socket until the first query — so a gate that returns Ok
+    /// WITHOUT querying never touches it, and a gate that DOES query gets a
+    /// connection-refused Err. That asymmetry is the AC-5 "zero per-request SQL"
+    /// oracle. `type_cache` is the empty registry (object_kind is pure/in-memory).
+    fn state_with_dead_pool() -> AppState {
+        // Port 1 is unbound; connect_lazy defers the failing connect to query
+        // time. A short acquire_timeout makes the RED state (a gate that still
+        // queries) fail FAST instead of waiting the default 30s connect timeout
+        // — once the gate is neutered it returns Ok before the pool is touched,
+        // so the timeout is never hit in the green state.
+        let db: PgPool = sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(std::time::Duration::from_millis(200))
+            .connect_lazy("postgres://nobody@127.0.0.1:1/nodb")
+            .expect("connect_lazy parses the URL without connecting");
+        AppState {
+            db,
+            files:               Arc::new(DashMap::<String, FileEntry>::new()),
+            data_dir:            Arc::new(PathBuf::from("/tmp/redpash-neuter-test")),
+            dev_user:            Arc::new(DEV.to_string()),
+            oauth:               None,
+            http:                reqwest::Client::default(),
+            avatars:             Arc::new(DashMap::new()),
+            dev_login:           false,
+            internal_company_id: Arc::new(None),
+            type_cache:          Arc::new(crate::type_cache::TypeDefCache::empty()),
+        }
+    }
+
+    // ── AC-5 / AC-6: require_view admits a NON-dev caller with no SQL ─────────
+    #[tokio::test]
+    async fn ac5_require_view_admits_non_dev_caller_without_touching_the_pool() {
+        let state = state_with_dead_pool();
+        let r = require_view(&state, NON_DEV, OBJECT, "object").await;
+        assert!(
+            r.is_ok(),
+            "require_view denied/errored for a non-dev caller — in lean single-user mode it must \
+             admit unconditionally with ZERO per-request SQL (a query against the dead pool would \
+             have errored; an Err here means the multi-tenant resolve_grant path still runs). got: {r:?}"
+        );
+    }
+
+    // ── AC-5 / AC-6: require_grant admits regardless of the closure rule ──────
+    #[tokio::test]
+    async fn ac5_require_grant_admits_non_dev_caller_without_touching_the_pool() {
+        let state = state_with_dead_pool();
+        // A rule that REJECTS every grant — proves the neuter short-circuits
+        // BEFORE the rule is even consulted (no resolve_grant, no rule eval).
+        let r = require_grant(&state, NON_DEV, OBJECT, "object", |_g| false).await;
+        assert!(
+            r.is_ok(),
+            "require_grant denied/errored for a non-dev caller (even with an always-false rule) — \
+             lean mode must admit before resolving any Grant. An Err means resolve_grant queried \
+             the dead pool. got: {r:?}"
+        );
+    }
+
+    // ── AC-5 / AC-6: require_action (the contract-aware gate) admits ──────────
+    #[tokio::test]
+    async fn ac5_require_action_admits_non_dev_caller_without_touching_the_pool() {
+        let state = state_with_dead_pool();
+        for action in [Action::View, Action::Create, Action::Edit, Action::Delete] {
+            let r = require_action(&state, NON_DEV, OBJECT, action).await;
+            assert!(
+                r.is_ok(),
+                "require_action({action:?}) denied/errored for a non-dev caller — lean mode must \
+                 admit before resolve_grant/company_of/load_contract/principals run. An Err means \
+                 one of those queried the dead pool. got: {r:?}"
+            );
+        }
+    }
+
+    // ── AC-6 floor: the dev_user path STILL admits (must never regress) ───────
+    #[tokio::test]
+    async fn ac6_dev_user_still_admits_across_all_gates() {
+        let state = state_with_dead_pool();
+        assert!(require_view(&state, DEV, OBJECT, "object").await.is_ok(),
+            "dev_user must still pass require_view in lean mode");
+        assert!(require_grant(&state, DEV, OBJECT, "object", |_g| false).await.is_ok(),
+            "dev_user must still pass require_grant in lean mode");
+        assert!(require_action(&state, DEV, OBJECT, Action::Delete).await.is_ok(),
+            "dev_user must still pass require_action in lean mode");
+    }
+}

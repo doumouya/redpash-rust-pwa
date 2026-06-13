@@ -240,6 +240,25 @@ impl TypeDefCache {
     }
 }
 
+// Test-only: an empty registry, for tests in OTHER modules (e.g.
+// rbac::neuter_tests) that must build an AppState without a live DB. Crate-
+// visible (the module-local `cache_with_prefixes` below is private). Gated to
+// `cfg(test)` so it never reaches a release build. (Tester-owned test infra,
+// CAS_C8A9A3EC0935498880A468625FE3F490 — leaves the file's Doc: breadcrumb intact.)
+#[cfg(test)]
+impl TypeDefCache {
+    pub(crate) fn empty() -> Self {
+        TypeDefCache {
+            rows:           Vec::new(),
+            grid:           std::collections::HashSet::new(),
+            types:          std::collections::HashMap::new(),
+            type_defs:      Vec::new(),
+            scope_roles:    std::collections::HashMap::new(),
+            prefix_to_type: Vec::new(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

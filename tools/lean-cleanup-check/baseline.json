@@ -1,0 +1,41 @@
+{
+  "_comment": "AC-11 audit baseline for CAS_C8A9A3EC0935498880A468625FE3F490 (lean cleanup). Captured 2026-06-13 on branch `lean` BEFORE any deletion work. The contract is 'no NEW findings vs this baseline': the deletions must not INTRODUCE net-new dangling/unused/missing_doc/wrong_breadcrumb/stale_doc. Deleting dead routes is EXPECTED to REDUCE crossing-audit.unused (fewer served-but-uncalled routes) and js-audit.unreachable is unchanged by this pass (the 6 orphan framework JS twins are flag-not-cut per R-2). Re-run the three audits after the work; compare against these numbers. A reviewer/ops gate, not a unit test.",
+  "captured_at": "2026-06-13",
+  "branch": "lean",
+  "case": "CAS_C8A9A3EC0935498880A468625FE3F490",
+  "crossing_audit": {
+    "js_api_paths": 34,
+    "rust_routes_served": 109,
+    "crossings": 31,
+    "dangling": 3,
+    "unused": 78,
+    "dangling_paths": [
+      "/api/:_",
+      "/api/monitoring/logs",
+      "/api/reports/:_/run"
+    ],
+    "_note": "dangling must not GROW. unused is EXPECTED to DROP as DEAD routes are removed (demo/docs/companies/teams/users + cases CRUD + cases/:rid/members). A drop in `unused` is the success signal, not a regression."
+  },
+  "js_audit": {
+    "unreachable_modules": 21,
+    "unreachable_loc": 2253,
+    "_note": "Unchanged by this pass. The 6 orphan framework JS twins (comments/profile-record/settings-config/avatar-upload/filter-panel/tools-panel.js) are part of this 21 and are flag-not-cut (R-2, out of scope) — only their CSS sheets are cut (AC-4). So unreachable count holds; it must not GROW."
+  },
+  "css_audit": {
+    "reachable_sheets": 42,
+    "orphans": [],
+    "dangling_imports": [],
+    "_note": "AC-1 oracle. orphans=[] and dangling_imports=[] today. After AC-3/AC-4 (admin.css + 6 framework sheets deleted WITH their @import lines), orphans must stay [] and dangling_imports must stay [] — a half-delete (@import to a missing file) would surface here as a dangling_import. This is the structural guard that the sheet+@import are disposed together."
+  },
+  "doc_coverage_audit": {
+    "missing_doc": 1,
+    "missing_breadcrumb": 0,
+    "wrong_breadcrumb": 1,
+    "stale_doc": 0,
+    "stub_doc": 19,
+    "orphan_doc": 3,
+    "missing_required_heading": 7,
+    "unindexed_internal_doc": 16,
+    "_note": "AC-10/AC-11 oracle. After deleting route modules + their atomic docs in the SAME commit, these must show NO NEW missing_doc / wrong_breadcrumb / stale_doc. orphan_doc could legitimately DROP (a doc whose source we deleted should be deleted too); it must not GROW. Deleting a .rs without its .md would show as orphan_doc++ or a dangling Doc breadcrumb."
+  }
+}
