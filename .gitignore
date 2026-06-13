@@ -80,3 +80,6 @@ Thumbs.db
 # of truth, so the reports stay out of history.
 /tools/css-parallel/parallels.json
 /tools/css-usage/usage.json
+
+# tool/codemod backups (e.g. tokens.py .bak) — never commit
+*.bak

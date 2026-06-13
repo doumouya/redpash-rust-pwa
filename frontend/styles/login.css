@@ -75,7 +75,7 @@
 .rp-login__demo .rp-btn.is-busy { opacity: 0.7; cursor: progress; }
 .rp-login__hint {
   margin: 0;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-align: center;
 }
@@ -146,7 +146,7 @@
 }
 .rp-login__minitable {
   border-collapse: collapse;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   font-family: ui-monospace, Menlo, Consolas, monospace;
   white-space: nowrap;  /* don't wrap cells — horizontal scroll handles overflow */
 }
@@ -162,7 +162,7 @@
   background: var(--rp-surface-2);
   color: var(--rp-text-dim);
   font-weight: 600;
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -170,7 +170,7 @@
 .rp-login__minitable td.is-null { color: var(--rp-text-mute); }
 .rp-login__minitable-note {
   margin: 0;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-align: center;
 }

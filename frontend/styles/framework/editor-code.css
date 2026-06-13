@@ -31,7 +31,7 @@
   margin: 0;
   padding: var(--rp-sp-3) var(--rp-sp-4);
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
-  font-size: 0.9rem;
+  font-size: var(--rp-text-md);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

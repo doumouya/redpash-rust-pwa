@@ -45,7 +45,7 @@
 .ws-landing-table-empty { padding: 1rem; }
 .ws-landing-section-title {
   margin: 0 0 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   color: var(--rp-text-mute);
   text-transform: uppercase;
@@ -93,13 +93,13 @@
   gap: 0.125rem;
 }
 .ws-landing-card-name {
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ws-landing-card-meta { font-size: 0.6875rem; color: var(--rp-text-mute); }
+.ws-landing-card-meta { font-size: var(--rp-text-md); color: var(--rp-text-mute); }
 
 /* ════════════════════════════════════════════════════════════════════════════
    WORKSPACE PANEL CONTENT (merged from the legacy styles/panel.css at the dedup).
@@ -135,20 +135,20 @@
   flex-shrink: 0;
   min-width: 1.375rem;
   font-variant-numeric: tabular-nums;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
 }
 .rp-step-body { flex: 1; min-width: 0; }
 .rp-step-kind {
   display: block;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   color: var(--rp-text);
 }
 .rp-step-params {
   display: block;
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-dim);
   margin-top: 0.125rem;
   overflow: hidden;
@@ -157,7 +157,7 @@
 }
 .rp-step-time {
   flex-shrink: 0;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   font-variant-numeric: tabular-nums;
 }
@@ -179,7 +179,7 @@
   margin-bottom: 0.625rem;
   padding: 0.4375rem 0.625rem;
   border-radius: 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
   color: var(--rp-text-dim);
@@ -239,7 +239,7 @@
   margin-bottom: 0.625rem;
   padding: 0.4375rem 0.625rem;
   border-radius: 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   background: var(--rp-surface);
   border: 1px solid var(--rp-border);
   color: var(--rp-text-dim);
@@ -250,7 +250,7 @@
 .rp-report-sect:last-child { margin-bottom: 0; }
 .rp-report-empty {
   margin: 0.25rem 0 0.5rem;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   font-style: italic;
 }
@@ -276,7 +276,7 @@
   gap: 0.375rem 0.625rem;
 }
 .rp-report-q-label {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -293,14 +293,14 @@
   min-width: 0;
 }
 .rp-report-q-hint {
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   font-style: italic;
   padding: 0.25rem 0;
 }
 .rp-report-default-hint {
   margin: 0 0 0 4.875rem;       /* aligns with the measure row */
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   font-style: italic;
 }
@@ -357,7 +357,7 @@
   padding: 0.5rem 0.75rem;
   cursor: pointer;
   list-style: none;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -367,14 +367,14 @@
 .rp-report-advanced-summary::-webkit-details-marker { display: none; }
 .rp-report-advanced-summary:hover { color: var(--rp-text); }
 .rp-report-advanced-caret {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   transition: transform 0.15s var(--rp-ease);
 }
 .rp-report-advanced[open] .rp-report-advanced-caret {
   transform: rotate(90deg);
 }
 .rp-report-advanced-hint {
-  font-size: 0.625rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-transform: none;
   letter-spacing: 0;
@@ -401,7 +401,7 @@
   border: 1px solid var(--rp-info);
   background: var(--rp-accent-soft);
   color: var(--rp-info);
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
@@ -418,7 +418,7 @@
   cursor: pointer;
 }
 .rp-report-chip-del:hover { background: color-mix(in srgb, var(--rp-accent) 18%, transparent); color: var(--rp-accent); }
-.rp-report-chip-del i { font-size: 0.6875rem; }
+.rp-report-chip-del i { font-size: var(--rp-text-md); }
 
 /* Pivot-column chip — same shape as the group-by chip, mauve accent
    so the second-axis grouping reads as visually distinct. */
@@ -451,7 +451,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-report-agg select:focus,
@@ -497,7 +497,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-report-window-row input:focus,
@@ -506,7 +506,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   cursor: pointer;
 }
@@ -515,7 +515,7 @@
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
 }
 .rp-report-window-value select {
   flex: 1;
@@ -526,7 +526,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
 }
 .rp-report-window-value input[type="number"] {
   width: 3.5rem;
@@ -537,14 +537,14 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
 }
 .rp-report-window-parts {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   flex-wrap: wrap;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
 }
 .rp-report-part-chip {
   height: 1.375rem;
@@ -554,7 +554,7 @@
   background: var(--rp-surface);
   color: var(--rp-text-mute);
   font: inherit;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   cursor: pointer;
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
@@ -567,7 +567,7 @@
 }
 .rp-report-muted {
   color: var(--rp-text-mute);
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
 }
 
 /* Undo / redo strip (C4) — compact icon buttons at the top of the
@@ -587,7 +587,7 @@
   justify-content: center;
 }
 .rp-report-undo-strip button:disabled { opacity: 0.35; cursor: not-allowed; }
-.rp-report-undo-strip button i { font-size: 0.8125rem; }
+.rp-report-undo-strip button i { font-size: var(--rp-text-md); }
 
 /* Top-N (C3) — keep top/bottom N rows per partition. */
 .rp-report-topn { margin-top: 0.5rem; }
@@ -596,7 +596,7 @@
   align-items: center;
   gap: 0.375rem;
   margin-bottom: 0.375rem;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
 }
 .rp-report-topn-row input[type="number"] {
   width: 3.5rem;
@@ -607,7 +607,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-report-topn-row select {
@@ -618,7 +618,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-report-topn-row select[data-topn-key="order_by"] { flex: 1; }
@@ -636,7 +636,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
   cursor: pointer;
 }
@@ -655,7 +655,7 @@
   margin-bottom: 0.375rem;
 }
 .rp-report-preview-meta {
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
 }
 .rp-report-preview-meta b { color: var(--rp-text); font-weight: 650; }
@@ -669,7 +669,7 @@
 .rp-report-preview-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   font-variant-numeric: tabular-nums;
 }
 .rp-report-preview-table th,
@@ -685,7 +685,7 @@
   background: var(--rp-surface-2);
   color: var(--rp-text-mute);
   font-weight: 600;
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   z-index: 1;
@@ -697,7 +697,7 @@
 }
 .rp-report-sort-arrow {
   color: var(--rp-info);
-  font-size: 0.5625rem;
+  font-size: var(--rp-text-md);
   margin-left: 0.125rem;
 }
 .rp-report-sort-chain {
@@ -709,7 +709,7 @@
   border-radius: 6.1875rem;
   background: var(--rp-info);
   color: var(--rp-surface);
-  font-size: 0.5625rem;
+  font-size: var(--rp-text-md);
   font-weight: 700;
   text-align: center;
   line-height: 0.875rem;
@@ -743,7 +743,7 @@
 .rp-report-matrix-table .rp-report-matrix-measure,
 .rp-report-matrix-table th.rp-report-matrix-measure-h {
   color: var(--rp-text-mute);
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 400;
   white-space: nowrap;
   text-align: left;
@@ -767,7 +767,7 @@
 .rp-join-intro {
   margin: 0 0.25rem 0.625rem;
   color: var(--rp-text-mute);
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   line-height: 1.45;
 }
 .rp-join-card {
@@ -784,20 +784,20 @@
   padding: 0.5rem 0.625rem;
   background: var(--rp-hover);
   border-bottom: 1px solid var(--rp-border);
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
 }
 .rp-join-card__head i { color: var(--rp-info); }
 .rp-join-card__title  { font-weight: 600; color: var(--rp-text); flex: 1 1 auto; }
-.rp-join-card__count  { color: var(--rp-text-mute); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.rp-join-card__count  { color: var(--rp-text-mute); font-size: var(--rp-text-md); font-variant-numeric: tabular-nums; }
 .rp-join-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
 }
 .rp-join-table thead th {
   padding: 0.375rem 0.5rem;
   text-align: left;
-  font-size: 0.625rem;
+  font-size: var(--rp-text-md);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--rp-text-mute);
@@ -811,7 +811,7 @@
 .rp-join-table td.is-strength {
   width: 2.25rem;
   text-align: center;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   letter-spacing: 1px;
   color: var(--rp-text-mute);
 }
@@ -824,7 +824,7 @@
   border-radius: 0.25rem;
   background: var(--rp-hover);
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
 }
 .rp-join-table td.is-matches {
@@ -832,11 +832,11 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.rp-join-meta { color: var(--rp-text-mute); font-size: 0.6875rem; }
+.rp-join-meta { color: var(--rp-text-mute); font-size: var(--rp-text-md); }
 .rp-join-table td.is-samples {
   color: var(--rp-text-mute);
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   max-width: 12.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -851,7 +851,7 @@
   border-top: 1px solid var(--rp-border);
   background: transparent;
   color: var(--rp-info);
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   text-align: center;
   cursor: pointer;
 }
@@ -888,7 +888,7 @@
 .rp-join-card__hint {
   flex: 1 1 auto;
   color: var(--rp-text-mute);
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
 }
 .rp-join-card__type {
   height: 1.75rem;
@@ -897,13 +897,13 @@
   border-radius: 0.375rem;
   background: var(--rp-surface);
   color: var(--rp-text);
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   cursor: pointer;
 }
 .rp-join-card__apply {
   height: 1.75rem;
   padding: 0 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
 }
 .rp-join-card__apply[disabled] {
   opacity: 0.5;

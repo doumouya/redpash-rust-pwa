@@ -61,7 +61,7 @@
 .rp-mon-stat-chip {
   display: inline-block;
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   padding: 1px 0.375rem;
   margin-right: 0.25rem;
   border-radius: 0.25rem;
@@ -76,7 +76,7 @@
 .rp-mon-opt-pill {
   display: inline-block;
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   padding: 1px 0.5rem;
   border-radius: 62.4375rem;
   background: var(--rp-surface-2);
@@ -128,7 +128,7 @@
   background: var(--rp-hover);
 }
 .rp-mon-row-caret {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   margin-right: 0.25rem;
   transition: transform 0.12s var(--rp-ease);
@@ -150,7 +150,7 @@
   border-radius: 62.4375rem;
   background: var(--rp-accent-soft);
   color: var(--rp-accent);
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -163,7 +163,7 @@
   color: var(--rp-text);
   border: 1px solid var(--rp-border);
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -192,7 +192,7 @@
 #rp-mon-modal { --rp-modal-w: 55rem; }
 .rp-mon-modal-id {
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-info);
   background: var(--rp-bg);
   padding: 1px 0.375rem;
@@ -202,13 +202,13 @@
 .rp-mon-modal-empty {
   color: var(--rp-text-mute);
   text-align: center;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   padding: 1.5rem 0;
 }
 .rp-mon-modal-error {
   color: var(--rp-accent);
   text-align: center;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   padding: 1.5rem 0;
 }
 .rp-mon-modal-request {
@@ -221,14 +221,14 @@
 .rp-mon-modal-request--missing {
   color: var(--rp-text-mute);
   font-style: italic;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
 }
 .rp-mon-modal-request-row {
   display: flex;
   align-items: center;
   gap: 0.625rem;
   flex-wrap: wrap;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
 }
 .rp-mon-modal-route {
   flex: 1 1 auto;
@@ -238,7 +238,7 @@
 }
 .rp-mon-modal-meta {
   color: var(--rp-text-mute);
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-variant-numeric: tabular-nums;
 }
 /* Activity-feed friendly kind rendering (epic CAS_9A0C) — the icon +
@@ -253,7 +253,7 @@
 /* mon-modal timeline heading — rp-title atom sized by the section context (CAS_37B2E1BF). */
 .rp-mon-modal-timeline .rp-title {
   margin: 0 0 0.5rem;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -263,7 +263,7 @@
   gap: 0.5rem;
 }
 .rp-mon-modal-timeline .rp-title .rp-card-hint {
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -284,7 +284,7 @@
   gap: 0.375rem;
 }
 .rp-mon-user-hint {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
 }
 

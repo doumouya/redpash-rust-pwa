@@ -72,6 +72,6 @@
 }
 .rp-card--panic td.is-mono {
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
 }

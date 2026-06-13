@@ -19,12 +19,12 @@
   backdrop-filter: blur(0.5rem);
 }
 .rp-topbar .rp-search:focus-within { box-shadow: 0 0 0 0.25rem var(--rp-accent-soft); }
-.rp-topbar .rp-search i { font-size: 0.875rem; }
-.rp-topbar .rp-search input { font-size: 0.8438rem; }
+.rp-topbar .rp-search i { font-size: var(--rp-text-md); }
+.rp-topbar .rp-search input { font-size: var(--rp-text-md); }
 
 /* Ctrl-K hint chip */
 .rp-search-kbd {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-dim);
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
@@ -51,7 +51,7 @@
 
 .rp-search-menu-section {
   padding: 0.5rem 0.875rem 0.25rem;
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -71,13 +71,13 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
   text-align: left;
   cursor: pointer;
   transition: background 0.1s var(--rp-ease);
 }
-.rp-search-result i { color: var(--rp-text-mute); font-size: 0.875rem; flex-shrink: 0; }
+.rp-search-result i { color: var(--rp-text-mute); font-size: var(--rp-text-md); flex-shrink: 0; }
 .rp-search-result:hover,
 .rp-search-result.is-active { background: var(--rp-accent-soft); }
 .rp-search-result.is-active i { color: var(--rp-accent); }
@@ -90,7 +90,7 @@
 }
 .rp-search-result-sub {
   flex-shrink: 0;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -106,7 +106,7 @@
 }
 .rp-search-state {
   padding: 0.75rem 0.875rem;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-align: center;
 }
@@ -135,7 +135,7 @@
   border-color: var(--rp-info);
   box-shadow: 0 0 0 0.25rem var(--rp-accent-soft);
 }
-.rp-omni i { color: var(--rp-text-mute); font-size: 0.875rem; }
+.rp-omni i { color: var(--rp-text-mute); font-size: var(--rp-text-md); }
 .rp-omni input {
   flex: 1;
   border: 0;
@@ -143,11 +143,11 @@
   background: transparent;
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.8438rem;
+  font-size: var(--rp-text-md);
 }
 .rp-omni input::placeholder { color: var(--rp-text-mute); }
 .rp-omni-kbd {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-dim);
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
@@ -177,7 +177,7 @@
 
 .rp-omni-section {
   padding: 0.5rem 0.875rem 0.25rem;
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -197,13 +197,13 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
   text-align: left;
   cursor: pointer;
   transition: background 0.1s var(--rp-ease);
 }
-.rp-omni-result i { color: var(--rp-text-mute); font-size: 0.875rem; flex-shrink: 0; }
+.rp-omni-result i { color: var(--rp-text-mute); font-size: var(--rp-text-md); flex-shrink: 0; }
 .rp-omni-result:hover,
 .rp-omni-result.is-active {
   background: var(--rp-accent-soft);
@@ -218,7 +218,7 @@
 }
 .rp-omni-result-sub {
   flex-shrink: 0;
-  font-size: 0.7188rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -235,7 +235,7 @@
 
 .rp-omni-state {
   padding: 0.75rem 0.875rem;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-align: center;
 }

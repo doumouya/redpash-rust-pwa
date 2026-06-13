@@ -81,7 +81,7 @@
 .rp-list-sortable:hover { color: var(--rp-text); }
 .rp-list-sort-icon {
   margin-left: 0.25rem;
-  font-size: 0.625rem;
+  font-size: var(--rp-text-md);
   opacity: 0.45;
   transition: opacity 0.12s var(--rp-ease);
 }
@@ -152,7 +152,7 @@
   border-radius: var(--rp-radius);
 }
 .rp-kpi-label {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -162,7 +162,7 @@
      Savate displays well on the home greeting but reads poorly at
      small numeric sizes, especially on the Monitoring KPI row. One
      family across both pages — not worth maintaining two versions. */
-  font-size: 1.375rem;
+  font-size: var(--rp-text-lg);
   font-weight: 700;
   color: var(--rp-text);
 }
@@ -267,7 +267,7 @@
   align-items: center;
   justify-content: center;
   color: var(--rp-text-mute);
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -284,5 +284,5 @@
   margin: 0;
   text-align: center;
   color: var(--rp-text-mute);
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
 }

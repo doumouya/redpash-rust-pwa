@@ -42,7 +42,7 @@
      face is reserved for the RedPash wordmark, not the greeting. */
   font-family: var(--rp-font);
   font-weight: 900;
-  font-size: 1rem;
+  font-size: var(--rp-text-lg);
   letter-spacing: -0.01em;
 }
 

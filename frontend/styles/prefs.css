@@ -49,8 +49,8 @@ html[data-font-size="lg"] { font-size: 112.5%; }  /* root ~18px → UI ×1.125 *
    live --rp-text-md so the user sees the current size as they step. */
 .rp-fontstep { display: inline-flex; align-items: center; gap: 0.5rem; }
 .rp-fontstep__btn { font-weight: 700; line-height: 1; min-width: 2.5rem; }
-.rp-fontstep__btn--dn { font-size: 0.8125rem; }
-.rp-fontstep__btn--up { font-size: 1.125rem; }
+.rp-fontstep__btn--dn { font-size: var(--rp-text-md); }
+.rp-fontstep__btn--up { font-size: var(--rp-text-lg); }
 .rp-fontstep__btn:disabled { opacity: 0.4; cursor: default; }
 .rp-fontstep__preview {
   min-width: 2.5ch; text-align: center; font-weight: 600;

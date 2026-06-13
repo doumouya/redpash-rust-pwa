@@ -56,7 +56,7 @@
 /* The uppercase micro-label on its own line above the rail chips — smaller,
    distinct from the shared .rp-chip-row-label. */
 .rp-cases-chip-row-label {
-  font-size: 0.5938rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -82,7 +82,7 @@
    capsule chrome was dropped above, so the chips themselves carry the pill look). */
 .rp-cases-chip-row .rp-chip {
   padding: 0.1875rem 0.5rem;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   border-radius: 6.1875rem;
   background: var(--rp-surface-2);
 }
@@ -110,7 +110,7 @@
 
 /* Shrink the shared label inside the done-window variant. */
 .rp-cases-done-window .rp-chip-row-label {
-  font-size: 0.5938rem;
+  font-size: var(--rp-text-md);
   margin-right: 0.125rem;
 }
 
@@ -119,7 +119,7 @@
 .rp-cases-done-chip {
   height: 1.375rem;
   padding: 0 0.5rem;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
 }
 
 /* ── done-window inside the RAIL group body ──────────────────────────────────

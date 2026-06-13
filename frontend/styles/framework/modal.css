@@ -64,7 +64,7 @@
 
 .rp-modal-title {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   color: var(--rp-text);
 }
@@ -87,7 +87,7 @@
   gap: 0.3125rem;
 }
 .rp-modal-label {
-  font-size: 0.625rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -102,7 +102,7 @@
   border-radius: 0.4375rem;
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   outline: 0;
   resize: none;
 }
@@ -117,7 +117,7 @@
 }
 .rp-modal-hint {
   margin: 0;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
 }
 .rp-modal-foot {

@@ -65,8 +65,8 @@
    .rp-redtable-sort is the chevron <i> (bi-chevron-expand/up/down swapped by JS);
    .rp-redtable-sort-ord is the superscript multi-key order number (1,2,3…) shown
    only when sorting on >1 column. */
-.rp-redtable th .rp-redtable-sort { margin-left: 0.25rem; opacity: 0.7; font-size: 0.625rem; }
-.rp-redtable th .rp-redtable-sort-ord { margin-left: 1px; font-size: 0.5625rem; font-weight: 700; color: var(--rp-info); }
+.rp-redtable th .rp-redtable-sort { margin-left: 0.25rem; opacity: 0.7; font-size: var(--rp-text-md); }
+.rp-redtable th .rp-redtable-sort-ord { margin-left: 1px; font-size: var(--rp-text-md); font-weight: 700; color: var(--rp-info); }
 
 /* ── sort glyph — LIST variant (was .rp-list-sortable / .rp-list-sort-icon /
    .is-asc / .is-desc, legacy shell.css) ───────────────────────────────────────
@@ -83,7 +83,7 @@
    content live here. */
 .rp-redtable-sort-icon {
   margin-left: 0.25rem;
-  font-size: 0.625rem;
+  font-size: var(--rp-text-md);
   opacity: 0.45;
   transition: opacity 0.12s var(--rp-ease);
 }
@@ -191,7 +191,7 @@
   background: var(--rp-surface);
   color: var(--rp-text);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-cell-edit-select:focus,

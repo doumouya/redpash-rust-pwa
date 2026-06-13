@@ -46,7 +46,7 @@
    margin-bottom). Ancestor-context override (0-2-0 beats the atom's 0-1-0 per
    MDN specificity), never a 2nd class on the element. CAS_37B2E1BF. */
 .rp-chart-card .rp-title {
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -77,7 +77,7 @@
   align-items: center;
   justify-content: center;
   color: var(--rp-text-mute);
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }

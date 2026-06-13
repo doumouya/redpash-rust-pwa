@@ -15,7 +15,7 @@
 /* ── rp-table — the base simple table (was .rt-table, the read-only subset) ───
    width / collapse / tabular-nums + thead/tbody/td/tr cell styling, hover, and
    the cell-content helpers (.col-n, .cell-name, .cell-muted, .cell-warn). */
-.rp-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.rp-table { width: 100%; border-collapse: collapse; font-size: var(--rp-text-md); font-variant-numeric: tabular-nums; }
 .rp-table td.is-num { text-align: right; }
 
 .rp-table thead th {
@@ -25,7 +25,7 @@
   background: var(--rp-surface);
   text-align: left;
   padding: 0.625rem 0.75rem;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;

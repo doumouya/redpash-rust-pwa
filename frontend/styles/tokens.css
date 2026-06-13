@@ -42,12 +42,15 @@
      deliberate low-bandwidth (Africa-first) choice; swap to a self-hosted
      variable face here if a stronger display voice is wanted. */
   --rp-font:         system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --rp-font-brand:   "Savate", var(--rp-font);
-  --rp-font-display: var(--rp-font);
-  --rp-text-xs: 0.75rem;  /* 12px — pills, meta, table head */
-  --rp-text-sm: 0.875rem; /* 14px — table cells, captions */
+  --rp-font-brand:   "Savate", var(--rp-font);  /* brand wordmark (.rp-brand) — referenced, keep */
+  /* xs/sm are still referenced 33× (e.g. .rp-muted) — collapsed onto md so the
+     lean build has one readable body size. Give them a distinct value here if a
+     smaller step is wanted; never leave them undefined (font-size falls back to
+     inherited → wrong size). */
+  --rp-text-xs: var(--rp-text-md);
+  --rp-text-sm: var(--rp-text-md);
   --rp-text-md: 1rem;     /* 16px — body, controls */
-  --rp-text-lg: 1.25rem;  /* 20px — section titles */
+  --rp-text-lg: 1.5rem;  /* 20px — section titles */
   --rp-text-xl: 2rem;     /* 32px — page titles (unchanged — zero-visual) */
   --rp-text-2xl: 2.5rem;  /* 40px — display (new) */
 

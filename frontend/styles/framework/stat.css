@@ -47,7 +47,7 @@
   /* legacy .rp-kpi-label set NO font-weight (inherited 400); the rp-label atom
      ships 650, so the tile context resets to 400 to keep zero-visual-change. */
   font-weight: 400;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -62,7 +62,7 @@
      Savate displays well on the home greeting but reads poorly at
      small numeric sizes, especially on the Monitoring KPI row. One
      family across both pages — not worth maintaining two versions. */
-  font-size: 1.375rem;
+  font-size: var(--rp-text-lg);
   font-weight: 700;
   color: var(--rp-text);
 }

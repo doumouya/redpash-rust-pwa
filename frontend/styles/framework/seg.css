@@ -37,7 +37,7 @@
   background: transparent;
   color: var(--rp-text-dim);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   cursor: pointer;
 }
 /* Active pill — TRANSITIONAL dual selector. The converted builder mountSeg()
@@ -68,9 +68,9 @@
   justify-content: center;
   gap: 0.25rem;
   padding: 0 0.375rem;
-  font-size: 0.6875rem;
+  font-size: var(--rp-text-md);
 }
-.rp-seg--rail button i { font-size: 0.75rem; }
+.rp-seg--rail button i { font-size: var(--rp-text-md); }
 
 /* --combo — the wide, head-centered variant (was .rt-group-card-combo). Base
    .rp-seg is inline-flex sized to content (~6rem); the combo variant takes 60%

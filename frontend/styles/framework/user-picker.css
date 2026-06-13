@@ -30,7 +30,7 @@
   border-radius: 0.4375rem;
   background: var(--rp-surface-2);
   color: var(--rp-text);
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   outline: 0;
 }
 .rp-user-picker-wrap input:focus {
@@ -63,11 +63,11 @@
   background: var(--rp-hover);
 }
 .rp-user-picker-result-name {
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
 }
 .rp-user-picker-result-sub {
-  font-size: 0.6562rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-mute);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }

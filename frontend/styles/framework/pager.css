@@ -27,7 +27,7 @@
 }
 .rp-rows-info {
   margin-right: auto;
-  font-size: 0.7812rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text-dim);
 }
 
@@ -44,11 +44,11 @@
   border-radius: 0.4375rem;
   color: var(--rp-text-dim);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   cursor: pointer;
   transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
 }
 .rp-pg:hover { background: var(--rp-hover); color: var(--rp-text); }
 .rp-pg.active { background: var(--rp-accent); color: var(--rp-on-accent); }
 .rp-pg:disabled { color: var(--rp-text-mute); opacity: 0.45; cursor: default; background: transparent; }
-.rp-pg-gap { color: var(--rp-text-mute); padding: 0 0.125rem; font-size: 0.8125rem; }
+.rp-pg-gap { color: var(--rp-text-mute); padding: 0 0.125rem; font-size: var(--rp-text-md); }

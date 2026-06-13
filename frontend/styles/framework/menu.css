@@ -49,7 +49,7 @@
   gap: 0.5625rem;
   padding: 0.4375rem 0.5625rem;
   border-radius: 0.4375rem;
-  font-size: 0.8125rem;
+  font-size: var(--rp-text-md);
   color: var(--rp-text);
   cursor: pointer;
   transition: background 0.12s var(--rp-ease);
@@ -57,7 +57,7 @@
 .rp-menu-item:hover { background: var(--rp-hover); }
 .rp-menu-item.selected { color: var(--rp-accent); font-weight: 600; }
 /* trailing checkmark on the selected row (was .rt-dd-item .tick) */
-.rp-menu-item .rp-menu-tick { margin-left: auto; font-size: 0.75rem; }
+.rp-menu-item .rp-menu-tick { margin-left: auto; font-size: var(--rp-text-md); }
 
 /* ── panel-context override (was .rt-pred-multi .rt-dd-item) ──────────────────
    The multi-column picker packs the item rows tighter inside its scroll list.
@@ -68,6 +68,6 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.375rem;
-  font-size: 0.75rem;
+  font-size: var(--rp-text-md);
   cursor: pointer;
 }
