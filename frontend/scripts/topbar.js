@@ -48,7 +48,7 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
   // they're app-independent utilities; the topbar carries only nav + the launcher.
   const app = appForPage(active);
   host.innerHTML =
-      '<a class="rp-brand" href="#/home" title="Home">'
+      '<a class="rp-brand" href="#/workspace" title="Workspace">'
     +   '<span class="rp-brand-mark"></span>'
     +   '<span class="rp-brand-name">' + greetingFor(session) + '</span>'
     + '</a>'

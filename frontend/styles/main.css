@@ -82,15 +82,10 @@
 @import "framework/modal.css";       /* rp-modal-* — shared overlay-modal (relocated from styles/) */
 
 /* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
-@import "shell.css";     /* rail-page shell — home, monitoring */
+@import "shell.css";     /* rail-page shell — monitoring */
 @import "login.css";     /* the sign-in page */
-@import "home.css";      /* the home launchpad */
-@import "page.css";      /* generic page shell — profile, settings, docs */
-@import "profile.css";   /* /profile only — identity card, usage strip, plan */
-@import "settings.css";  /* /settings only — sentinel chips, About brand row */
+@import "page.css";      /* generic page shell — the 404 / error shell (.rp-page) */
 @import "monitoring.css"; /* /monitoring — window chips, top-routes table, modal */
-@import "cases.css";      /* /cases — kanban board + case detail page */
-@import "doc-viewer.css"; /* /docs viewer — rendered markdown typography */
 @import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
 @import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
 @import "admin.css";     /* /database (+ Admin app) — the DB console (rp-dbc-*) + denied placeholder */

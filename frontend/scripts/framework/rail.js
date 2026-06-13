@@ -51,15 +51,10 @@ import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/foo
 // below dispatches to on[action](tabId, groupId) — so a page adds a per-row
 // action (e.g. "visualize") by listing it in a tab's `actions` + on{}.
 
-// Cross-app UTILITY destinations only. Docs moved into the Support & Docs app
-// topbar (Slice C, 2026-06-07) — it's a content page, reached via the launcher,
-// not a global footer link. The footer carries Settings + the theme/sign-out
-// actions (footer-utilities) + Profile.
-const FOOTER_NAV = [
-  { id: "settings", hash: "#/settings", icon: "bi-gear", label: "Settings" },
-  // Profile renders as an avatar (initials) — the "this is you" read.
-  { id: "profile",  hash: "#/profile",  avatar: true,    label: "Profile" },
-];
+// Cross-app UTILITY destinations. LEAN build: the settings + profile pages were
+// removed (single-user tool, no prefs), so the footer carries only the
+// theme/sign-out actions (rendered separately) — no nav destinations.
+const FOOTER_NAV = [];
 
 function initialsOf(session) {
   const name = (session?.display_name || session?.username || "").trim();

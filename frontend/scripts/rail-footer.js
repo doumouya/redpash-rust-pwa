@@ -17,15 +17,9 @@
 import { esc } from "/scripts/dom.js";
 import { footerUtilitiesHTML, wireFooterUtilities } from "/scripts/framework/footer-utilities.js";
 
-// Cross-app UTILITY destinations only. Docs moved into the Support & Docs app
-// topbar (Slice C, 2026-06-07) — content page, reached via the launcher, not a
-// global footer link. Settings + theme/sign-out (footer-utilities) + Profile stay.
-const FOOTER_NAV = [
-  { id: "settings", hash: "#/settings", icon: "bi-gear", label: "Settings" },
-  // Profile renders as an avatar (initials) rather than an icon — same
-  // "this is you" read the topbar avatar used to carry.
-  { id: "profile",  hash: "#/profile",  avatar: true,    label: "Profile" },
-];
+// Cross-app UTILITY destinations. LEAN build: settings + profile pages removed
+// (single-user tool, no prefs) — only theme/sign-out (footer-utilities) remain.
+const FOOTER_NAV = [];
 
 function initialsOf(session) {
   const name = (session?.display_name || session?.username || "").trim();

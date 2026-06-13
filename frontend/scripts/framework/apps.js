@@ -21,37 +21,15 @@
 
 /** @type {App[]} — ordered as they appear in the launcher. */
 export const APPS = [
-  // Home — the launcher landing ("My Services" grid) + the org hub. No page-nav
-  // of its own (the grid IS the page); the topbar there is just the launcher.
-  { id: "home", name: "Home", icon: "bi-house-door", landing: "#/home", pages: [] },
-
-  // Studio — the data-work app. (Dashboard lands here as its own page in Slice D.)
+  // LEAN — one app, the personal data tool. No multi-tenant launcher / RBAC
+  // boundary; the four data surfaces are the whole nav.
   {
-    id: "studio", name: "Studio", icon: "bi-easel", landing: "#/workspace",
+    id: "studio", name: "RedPash", icon: "bi-easel", landing: "#/workspace",
     pages: [
-      { id: "workspace", hash: "#/workspace", icon: "bi-stars",    label: "Workspace" },
-      { id: "dashboard", hash: "#/dashboard", icon: "bi-bar-chart", label: "Dashboard" },
-      { id: "sheetwise", hash: "#/sheetwise", icon: "bi-database",  label: "SheetWise" },
-    ],
-  },
-
-  // Admin — platform-admin only (one RBAC boundary for the whole app). Monitoring
-  // splits into Monitoring + Admin Console, and Database lands, in Slice B.
-  {
-    id: "admin", name: "Admin", icon: "bi-shield-lock", landing: "#/monitoring", admin: true,
-    pages: [
-      { id: "monitoring",    hash: "#/monitoring",    icon: "bi-activity",   label: "Monitoring" },
-      { id: "admin-console", hash: "#/admin-console", icon: "bi-sliders",    label: "Admin Console" },
-      { id: "database",      hash: "#/database",      icon: "bi-hdd-stack",  label: "Database" },
-    ],
-  },
-
-  // Support & Docs — the help surfaces.
-  {
-    id: "support", name: "Support & Docs", icon: "bi-life-preserver", landing: "#/docs",
-    pages: [
-      { id: "docs",  hash: "#/docs",  icon: "bi-book-half", label: "Docs" },
-      { id: "cases", hash: "#/cases", icon: "bi-kanban",    label: "Cases" },
+      { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",     label: "Workspace" },
+      { id: "dashboard",  hash: "#/dashboard",  icon: "bi-bar-chart", label: "Dashboard" },
+      { id: "sheetwise",  hash: "#/sheetwise",  icon: "bi-database",  label: "SheetWise" },
+      { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",  label: "Monitoring" },
     ],
   },
 ];
@@ -65,10 +43,8 @@ export const APPS = [
  */
 export function appForPage(pageId) {
   return APPS.find((a) => a.pages.some((p) => p.id === pageId))
-    || APPS.find((a) => a.id === "home")
     || APPS[0]; // TOTAL by construction — the topbar reads `.id`/`.pages` on the
-                // result on EVERY page, so never return undefined (a future
-                // registry edit that drops the home entry can't blank every page).
+                // result on EVERY page, so never return undefined.
 }
 
 /**

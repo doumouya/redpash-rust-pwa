@@ -22,22 +22,15 @@ import { ensureRegisteredThemes } from "/scripts/echarts-theme.js";
 // boot-time exception still reaches the Events log.
 installErrorCapture();
 
+// LEAN build — a personal single-user data tool. Cut to the data surfaces
+// (workspace/dashboard/sheetwise/monitoring) + login; the SaaS pages
+// (home/cases/docs/profile/settings/admin-console/database) were removed.
 const ROUTES = {
   "/login":      { partial: "/partials/login.html",      script: "/scripts/pages/login.js",      auth: false },
-  "/home":       { partial: "/partials/home.html",       script: "/scripts/pages/home.js",       auth: true  },
   "/workspace":  { partial: "/partials/workspace.html",  script: "/scripts/pages/workspace.js",  auth: true  },
   "/dashboard":  { partial: "/partials/dashboard.html",  script: "/scripts/pages/dashboard.js",  auth: true  },
   "/sheetwise":  { partial: "/partials/sheetwise.html",  script: "/scripts/pages/sheetwise.js",  auth: true  },
-  "/cases":      { partial: "/partials/cases.html",      script: "/scripts/pages/cases.js",      auth: true  },
-  "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true, admin: true },
-  // Admin app pages (platform-admin only; the topbar app-switcher only offers the
-  // Admin app to admins, and the backend /admin + /monitoring nests are the real
-  // auth). Admin Console split out of the Monitoring page (Slice B).
-  "/admin-console": { partial: "/partials/admin-console.html", script: "/scripts/pages/admin-console.js", auth: true, admin: true },
-  "/database":      { partial: "/partials/database.html",      script: "/scripts/pages/database.js",      auth: true, admin: true },
-  "/profile":    { partial: "/partials/profile.html",    script: "/scripts/pages/profile.js",    auth: true  },
-  "/settings":   { partial: "/partials/settings.html",   script: "/scripts/pages/settings.js",   auth: true  },
-  "/docs":       { partial: "/partials/docs.html",       script: "/scripts/pages/docs.js",       auth: true  },
+  "/monitoring": { partial: "/partials/monitoring.html", script: "/scripts/pages/monitoring.js", auth: true  },
 };
 
 // ─── Session ────────────────────────────────────────────────────
@@ -68,7 +61,7 @@ export function getSession() { return session; }
 function currentPath() {
   const h = location.hash.replace(/^#/, "").split("?")[0];
   if (h && h.startsWith("/")) return h;
-  return session ? "/home" : "/login";
+  return session ? "/workspace" : "/login";
 }
 
 async function mount(path) {
@@ -78,14 +71,6 @@ async function mount(path) {
   if (!route) { app.innerHTML = errorShell("404", "Page not found", "We couldn't find " + path + "."); return; }
   if (route.auth && !session) {
     location.hash = "#/login";
-    return;
-  }
-  // Platform-admin-only route (Monitoring / Admin Console, CAS_274EDF3B):
-  // a member / viewer deep-linking the hash is bounced home. The topbar
-  // already hides the link; this guards the URL path. Backend /monitoring/*
-  // + /admin/* endpoints are the real auth — this is the UX gate.
-  if (route.admin && !session?.is_platform_admin) {
-    location.hash = "#/home";
     return;
   }
 
@@ -244,8 +229,8 @@ if (typeof window !== "undefined") {
 // new selectors. The CTA falls back to /login when there's no session;
 // /home otherwise.
 function errorShell(badge, title, body) {
-  const back = session ? "#/home" : "#/login";
-  const label = session ? "Back to home" : "Go to sign in";
+  const back = session ? "#/workspace" : "#/login";
+  const label = session ? "Back to Workspace" : "Go to sign in";
   return ''
     + '<section class="rp-page">'
     +   '<div class="rp-page__body" style="display:flex;align-items:center;justify-content:center;min-height:70vh;">'

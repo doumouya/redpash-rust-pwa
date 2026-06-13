@@ -131,7 +131,7 @@ export default function login(app) {
     if (loginMsg) loginMsg.textContent = "";
     try {
       await api.post("/auth/dev-login");
-      location.hash = "#/home";
+      location.hash = "#/workspace";
       location.reload();
     } catch (err) {
       dev.disabled = false;

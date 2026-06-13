@@ -16,10 +16,10 @@ import { toggleTheme, currentTheme } from "/scripts/theme.js";
 import { esc } from "/scripts/dom.js";
 
 const NAV = [
-  { id: "home",       hash: "#/home",       icon: "bi-house-door",  label: "Home" },
-  { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",       label: "Workspace" },
-  { id: "cases",      hash: "#/cases",      icon: "bi-kanban",      label: "Cases" },
-  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",    label: "Monitoring", admin: true },
+  { id: "workspace",  hash: "#/workspace",  icon: "bi-stars",     label: "Workspace" },
+  { id: "dashboard",  hash: "#/dashboard",  icon: "bi-bar-chart", label: "Dashboard" },
+  { id: "sheetwise",  hash: "#/sheetwise",  icon: "bi-database",  label: "SheetWise" },
+  { id: "monitoring", hash: "#/monitoring", icon: "bi-activity",  label: "Monitoring" },
 ];
 
 // Time-of-day salutation + first_name (display_name fallback) in the brand slot.
@@ -39,7 +39,7 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
   if (!host) return;
   host.className = "rp-topbar";
   host.innerHTML =
-      '<a class="rp-brand" href="#/home" title="Home">'
+      '<a class="rp-brand" href="#/workspace" title="Workspace">'
     +   '<span class="rp-brand-mark"></span>'
     +   '<span class="rp-brand-name">' + greetingFor(session) + '</span>'
     + '</a>'
