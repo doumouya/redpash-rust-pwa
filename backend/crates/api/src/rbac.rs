@@ -81,144 +81,6 @@ impl Grant {
     }
 }
 
-/// The reach-aware resolver (entity-membership-model §2, split by reach).
-/// `principals` = caller + every team they belong to (recursive, nested teams
-/// close). `direct` = tier on the object itself; `scope` = tier on its cascade
-/// scopes (company/project; for project_files the file→project→company chain).
-const GRANT_SQL: &str = "
-WITH RECURSIVE principals(pid) AS (
-        SELECT $1::text
-    UNION
-        SELECT m.object_redpash_id
-        FROM memberships m
-        JOIN principals p ON p.pid = m.member_redpash_id
-        JOIN entities  e ON e.id  = m.object_redpash_id AND e.type = 'team'
-),
-cascade_scopes(oid) AS (
-        SELECT company_id          FROM cases         WHERE redpash_id = $2
-    UNION SELECT project_id          FROM cases         WHERE redpash_id = $2
-    UNION SELECT company_id          FROM projects      WHERE redpash_id = $2
-    UNION SELECT project_redpash_id  FROM project_files WHERE redpash_id = $2
-    UNION SELECT p.company_id
-            FROM project_files f JOIN projects p ON p.redpash_id = f.project_redpash_id
-           WHERE f.redpash_id = $2
-    UNION SELECT scope_parent_id     FROM entity_data   WHERE object_id  = $2
-),
-ranked(object_redpash_id, rank) AS (
-    SELECT object_redpash_id,
-           CASE role WHEN 'owner' THEN 4 WHEN 'admin' THEN 3
-                     WHEN 'member' THEN 2 WHEN 'viewer' THEN 1 ELSE 0 END
-    FROM memberships
-    WHERE member_redpash_id IN (SELECT pid FROM principals)
-)
-SELECT
-  (SELECT max(rank) FROM ranked WHERE object_redpash_id = $2) AS direct,
-  (SELECT max(rank) FROM ranked WHERE object_redpash_id IN (SELECT oid FROM cascade_scopes)) AS scope
-";
-
-/// Resolve the caller's reach-split `Grant` on `object`.
-pub async fn resolve_grant(pool: &PgPool, caller: &str, object: &str) -> sqlx::Result<Grant> {
-    let (direct, scope): (Option<i32>, Option<i32>) = sqlx::query_as(GRANT_SQL)
-        .bind(caller)
-        .bind(object)
-        .fetch_one(pool)
-        .await?;
-    Ok(Grant {
-        direct: direct.and_then(Role::from_rank),
-        scope:  scope.and_then(Role::from_rank),
-    })
-}
-
-/// One membership edge contributing to a resolved grant — the "why" behind a
-/// `Grant`, for admin introspection. `reach` is `"direct"` (the edge is ON the
-/// object) or `"scope"` (it's on a parent company/project the object cascades
-/// to). `member` is the principal that holds it — the subject themselves or a
-/// team in their closure.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct GrantEdge {
-    pub object:       String,
-    pub member:       String,
-    pub role:         String,
-    pub context_role: String,
-    pub reach:        String,
-}
-
-// Same principal-closure + cascade-scope shape as GRANT_SQL — keep the two in
-// sync (see "Drift-prone areas" in rbac.md). Where GRANT_SQL collapses to
-// max-rank-per-reach, this returns the underlying rows so an admin can see
-// exactly which memberships (and via which principal) grant the access.
-const EDGES_SQL: &str = "
-WITH RECURSIVE principals(pid) AS (
-        SELECT $1::text
-    UNION
-        SELECT m.object_redpash_id
-        FROM memberships m
-        JOIN principals p ON p.pid = m.member_redpash_id
-        JOIN entities  e ON e.id  = m.object_redpash_id AND e.type = 'team'
-),
-cascade_scopes(oid) AS (
-        SELECT company_id          FROM cases         WHERE redpash_id = $2
-    UNION SELECT project_id          FROM cases         WHERE redpash_id = $2
-    UNION SELECT company_id          FROM projects      WHERE redpash_id = $2
-    UNION SELECT project_redpash_id  FROM project_files WHERE redpash_id = $2
-    UNION SELECT p.company_id
-            FROM project_files f JOIN projects p ON p.redpash_id = f.project_redpash_id
-           WHERE f.redpash_id = $2
-    UNION SELECT scope_parent_id     FROM entity_data   WHERE object_id  = $2
-)
-SELECT m.object_redpash_id, m.member_redpash_id, m.role, m.context_role,
-       CASE WHEN m.object_redpash_id = $2 THEN 'direct' ELSE 'scope' END AS reach
-FROM memberships m
-WHERE m.member_redpash_id IN (SELECT pid FROM principals)
-  AND (m.object_redpash_id = $2 OR m.object_redpash_id IN (SELECT oid FROM cascade_scopes))
-ORDER BY reach, m.role
-";
-
-/// Admin introspection — the membership edges (across the subject's principal
-/// closure) that grant any reach on `object`. Read-only; the route applies the
-/// platform-admin gate. Pairs with `resolve_grant` (tiers) to answer "who has
-/// reach on X, and why".
-pub async fn grant_edges(pool: &PgPool, subject: &str, object: &str) -> sqlx::Result<Vec<GrantEdge>> {
-    let rows: Vec<(String, String, String, String, String)> =
-        sqlx::query_as(EDGES_SQL).bind(subject).bind(object).fetch_all(pool).await?;
-    Ok(rows
-        .into_iter()
-        .map(|(object, member, role, context_role, reach)| GrantEdge {
-            object, member, role, context_role, reach,
-        })
-        .collect())
-}
-
-/// The caller's **principal set** — themselves plus every team they belong to
-/// (recursive, so nested teams close). Resolve once, then a list query can
-/// scope rows with `member_redpash_id = ANY($principals)` instead of running
-/// the recursive closure per row.
-pub async fn principals(pool: &PgPool, caller: &str) -> sqlx::Result<Vec<String>> {
-    let rows: Vec<(String,)> = sqlx::query_as(
-        "WITH RECURSIVE p(pid) AS (
-                SELECT $1::text
-            UNION
-                SELECT m.object_redpash_id FROM memberships m
-                JOIN p        ON p.pid = m.member_redpash_id
-                JOIN entities e ON e.id = m.object_redpash_id AND e.type = 'team')
-         SELECT pid FROM p",
-    )
-    .bind(caller)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows.into_iter().map(|(p,)| p).collect())
-}
-
-/// Highest role `caller` effectively holds on `object` (either reach), or
-/// `None` (default-deny). Thin view over `resolve_grant`.
-pub async fn effective_role(
-    pool:   &PgPool,
-    caller: &str,
-    object: &str,
-) -> sqlx::Result<Option<Role>> {
-    Ok(resolve_grant(pool, caller, object).await?.effective())
-}
-
 /// Is `caller` a platform admin (full access — the catalog's `*.view.all`)?
 /// The bootstrap `dev_user` always is (fast-path, no query — keeps dev mode
 /// working), plus any user with `users.role = 'admin'` (mig 20260531000002).
@@ -234,41 +96,32 @@ pub async fn is_platform_admin(state: &AppState, caller: &str) -> sqlx::Result<b
     Ok(row.map_or(false, |(r,)| r == "admin"))
 }
 
-/// Generic gate. Allow when the caller is a platform admin (`is_platform_admin`
-/// — bootstrap dev_user or `users.role='admin'`) OR when `rule` accepts their
-/// resolved `Grant`. Otherwise 404 — a denied caller can't tell "exists but not
-/// yours" from "doesn't exist" (matches `ensure_owner`'s leak-free contract).
-/// `label` is the object kind for the message.
-///
-/// Handlers express each atom's rule as the closure, e.g.
-///   case.update → `|g| g.is_member() || g.scope_at_least(Role::Admin)`
-///   case.delete → `|g| g.scope_at_least(Role::Admin)`
+/// Generic write/access gate. LEAN SINGLE-USER NEUTER (CAS_C8A9): admits
+/// unconditionally with ZERO per-request RBAC/membership SQL — it returns
+/// `Ok(())` before the pool is ever touched, so the sole user is never denied
+/// and no `resolve_grant`/`is_platform_admin` query runs. The signature is
+/// UNCHANGED (`rule`, `label`, `object` retained) so every call site compiles;
+/// the multi-tenant body that consulted the `rule` closure against a resolved
+/// `Grant` lives in the `full-app-pre-slim` snapshot.
 pub async fn require_grant(
-    state:  &AppState,
-    caller: &str,
-    object: &str,
-    label:  &str,
-    rule:   impl Fn(Grant) -> bool,
+    _state:  &AppState,
+    _caller: &str,
+    _object: &str,
+    _label:  &str,
+    _rule:   impl Fn(Grant) -> bool,
 ) -> Result<(), AppError> {
-    if is_platform_admin(state, caller).await? {
-        return Ok(());
-    }
-    let grant = resolve_grant(&state.db, caller, object).await?;
-    if rule(grant) {
-        Ok(())
-    } else {
-        Err(AppError::not_found("not_found", format!("{label} {object}")))
-    }
+    Ok(())
 }
 
-/// View gate (`*.view`): any effective role at any reach. P2's `case.view`.
+/// View gate (`*.view`). LEAN SINGLE-USER NEUTER (CAS_C8A9): admits with zero
+/// per-request SQL (signature unchanged; see `require_grant`).
 pub async fn require_view(
-    state:  &AppState,
-    caller: &str,
-    object: &str,
-    label:  &str,
+    _state:  &AppState,
+    _caller: &str,
+    _object: &str,
+    _label:  &str,
 ) -> Result<(), AppError> {
-    require_grant(state, caller, object, label, |g| g.effective().is_some()).await
+    Ok(())
 }
 
 // ─── permission contract (CAS_0DE2DDEF) ────────────────────────────────────
@@ -414,33 +267,19 @@ fn evaluate(
     }
 }
 
-/// Contract-aware gate: `is_platform_admin` bypasses (RedPash root); else the
-/// tier (resolve_grant) ∩ the company's contract decide. 404-on-deny (leak-free,
-/// same contract as `require_grant`). Non-breaking until a company registers a
-/// contract. The target single gate the epic converges every endpoint onto.
+/// Contract-aware gate. LEAN SINGLE-USER NEUTER (CAS_C8A9): admits
+/// unconditionally with ZERO per-request RBAC/membership SQL — returns `Ok(())`
+/// before the pool is touched (no `resolve_grant`/`company_of`/`load_contract`).
+/// Signature unchanged (`action: Action` retained) so all call sites compile.
+/// The multi-tenant tier ∩ contract decision lives in the `full-app-pre-slim`
+/// snapshot.
 pub async fn require_action(
-    state:  &AppState,
-    caller: &str,
-    object: &str,
-    action: Action,
+    _state:  &AppState,
+    _caller: &str,
+    _object: &str,
+    _action: Action,
 ) -> Result<(), AppError> {
-    if is_platform_admin(state, caller).await? {
-        return Ok(());
-    }
-    let object_type = state.type_cache.object_kind(object);
-    let grant   = resolve_grant(&state.db, caller, object).await?;
-    let company = company_of(&state.type_cache, &state.db, object).await?;
-    let contract = match &company {
-        Some(c) => load_contract(&state.db, c).await?,
-        None    => None,
-    };
-    // principals (the recursive team closure) only needed when a contract exists.
-    let princ = if contract.is_some() { principals(&state.db, caller).await? } else { Vec::new() };
-    if evaluate(grant, contract.as_ref(), &princ, caller, object_type, action) {
-        Ok(())
-    } else {
-        Err(AppError::not_found("not_found", format!("{object_type} {object}")))
-    }
+    Ok(())
 }
 
 #[cfg(test)]

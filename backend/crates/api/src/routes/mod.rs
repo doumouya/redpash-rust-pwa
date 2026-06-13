@@ -21,7 +21,7 @@ use axum::{
     extract::{DefaultBodyLimit, Request, State},
     http::HeaderValue,
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
     Router,
 };
 #[cfg(debug_assertions)]
@@ -44,11 +44,8 @@ use crate::state::AppState;
 mod auth;
 mod cases;
 mod charts;
-mod companies;
 mod connectors;
 mod dashboards;
-mod demo;
-mod docs;
 mod events;
 mod files;
 mod group;
@@ -56,15 +53,12 @@ mod health;
 mod admin;
 mod list_registry;
 mod me;
-mod members;
 mod objects;
 mod metrics;
 mod monitoring;
 mod pagination;
 mod projects;
 mod search;
-mod teams;
-mod users;
 
 pub(crate) use auth::read_cookie;
 pub(crate) use me::resolve_user_rid;
@@ -87,22 +81,17 @@ pub(crate) fn ensure_owner(
     Ok(())
 }
 
-/// Reach filter for a user-scoped LIST endpoint. `None` when the caller is a
-/// platform admin (sees everything, like the `/admin/*` surface); else
-/// `Some(principals)` — the caller plus their teams — for the reach-aware
-/// `EXISTS(memberships … member = ANY($viewer))` predicate. Mirrors the
-/// `viewer` derivation in `routes/cases.rs`; shared so every user list endpoint
-/// (charts/files/dashboards/companies/teams/users/memberships) scopes identically
-/// and no surface re-implements (or forgets) the admin-bypass. (Lane 1.)
+/// Reach filter for a user-scoped LIST endpoint. LEAN SINGLE-USER NEUTER
+/// (CAS_C8A9): always `None` (no filter — the sole user sees everything, like
+/// the `/admin/*` surface). The reach-aware `Some(principals)` branch only made
+/// sense in multi-tenant mode; it lives in the `full-app-pre-slim` snapshot.
+/// Kept as a fn (rather than inlining `None` at the two call sites) so the
+/// multi-user reach filter can be reintroduced in one place.
 pub(crate) async fn list_viewer(
-    state:  &crate::state::AppState,
-    caller: &str,
+    _state:  &crate::state::AppState,
+    _caller: &str,
 ) -> Result<Option<Vec<String>>, crate::error::AppError> {
-    if crate::rbac::is_platform_admin(state, caller).await? {
-        Ok(None)
-    } else {
-        Ok(Some(crate::rbac::principals(&state.db, caller).await?))
-    }
+    Ok(None)
 }
 
 // 256 MiB — well above Salesforce's 100 MB CSV import cap, and Polars
@@ -216,28 +205,18 @@ async fn capture_mw(
     resp
 }
 
-/// Platform-admin gate for the Monitoring router (CAS_274EDF3B). Resolves the
-/// caller from the session cookie and 404s non-admins BEFORE any monitoring
-/// handler runs — so the whole surface (system observability + the Admin
-/// Console group) is admin-only at the API layer, not merely hidden in the FE
-/// topbar. 404 (not 403) matches the leak-free contract the per-handler
-/// `/admin` gates use. Auto-covers every current + future `/monitoring/*` route
-/// (no per-handler gate to forget). Closes the `routes/monitoring.rs` "Open
-/// today; gate behind the admin role" TODO.
+/// Platform-admin gate for the `/monitoring`, `/metrics` and `/admin` routers
+/// (CAS_274EDF3B). LEAN SINGLE-USER NEUTER (CAS_C8A9): the only caller is the
+/// dev user, so this admits unconditionally with ZERO per-request RBAC SQL —
+/// no `resolve_user_rid` / `is_platform_admin` lookup. The full multi-tenant
+/// gate (resolve caller → 404 non-admins) lives in the `full-app-pre-slim`
+/// snapshot if multi-user is ever reintroduced.
 async fn require_platform_admin_mw(
-    State(state): State<AppState>,
-    req:          Request,
-    next:         Next,
+    State(_state): State<AppState>,
+    req:           Request,
+    next:          Next,
 ) -> Response {
-    let allowed = match resolve_user_rid(&state, req.headers()).await {
-        Ok(caller) => crate::rbac::is_platform_admin(&state, &caller).await.unwrap_or(false),
-        Err(_)     => false,
-    };
-    if allowed {
-        next.run(req).await
-    } else {
-        crate::error::AppError::not_found("not_found", "not found").into_response()
-    }
+    next.run(req).await
 }
 
 pub fn router(state: AppState) -> Router {
@@ -254,15 +233,12 @@ pub fn router(state: AppState) -> Router {
         .nest("/me",       me::routes())
         .nest("/auth",     auth::routes())
         .nest("/projects", projects::routes())
-        .nest("/companies",  companies::routes())
         .nest("/connectors", connectors::routes())
-        .nest("/teams",      teams::routes())
         .nest("/files",      files::routes())
         .nest("/group",      group::routes())
         .nest("/cases",      cases::routes())
         .nest("/charts",     charts::routes())
         .nest("/dashboards", dashboards::routes())
-        .nest("/users",      users::routes())
         .nest("/events",     events::routes())
         // SECURITY: /metrics aggregates the global, tenant-less request_log (error
         // rates, p99, full route inventory) — platform-wide system observability, not
@@ -283,9 +259,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/admin",      admin::routes()
             .layer(axum::middleware::from_fn_with_state(admin_gate_state, require_platform_admin_mw)))
         .nest("/search",     search::routes())
-        .nest("/demo",       demo::routes())
         .nest("/objects",    objects::routes())
-        .nest("/docs",       docs::routes())
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         // capture wraps the body-limit so a 413 is logged too; request_id

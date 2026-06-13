@@ -11,10 +11,10 @@ for the source→doc mapping rule + how to author one). Do not hand-edit the
 generated block — run `node tools/doc-gen/gen.js --code-nav`.
 
 <!-- doc-gen:code-nav START — generated from the code/ doc tree; do not hand-edit -->
-Generated 2026-06-07 — every atomic doc under `code/`, the per-file
-survival layer (259 docs). Links are relative to `code/`.
+Generated 2026-06-13 — every atomic doc under `code/`, the per-file
+survival layer (234 docs). Links are relative to `code/`.
 
-### backend (108)
+### backend (103)
 
 **backend/api/bin/**
 - [audit_distincts.md](backend/api/bin/audit_distincts.md)
@@ -56,11 +56,8 @@ survival layer (259 docs). Links are relative to `code/`.
 - [auth.md](backend/api/routes/auth.md)
 - [cases.md](backend/api/routes/cases.md)
 - [charts.md](backend/api/routes/charts.md)
-- [companies.md](backend/api/routes/companies.md)
 - [connectors.md](backend/api/routes/connectors.md)
 - [dashboards.md](backend/api/routes/dashboards.md)
-- [demo.md](backend/api/routes/demo.md)
-- [docs.md](backend/api/routes/docs.md)
 - [events.md](backend/api/routes/events.md)
 
 **backend/api/routes/files/**
@@ -75,8 +72,8 @@ survival layer (259 docs). Links are relative to `code/`.
 **backend/api/routes/**
 - [group.md](backend/api/routes/group.md)
 - [health.md](backend/api/routes/health.md)
+- [list_registry.md](backend/api/routes/list_registry.md)
 - [me.md](backend/api/routes/me.md)
-- [members.md](backend/api/routes/members.md)
 - [metrics.md](backend/api/routes/metrics.md)
 - [mod.md](backend/api/routes/mod.md)
 - [monitoring.md](backend/api/routes/monitoring.md)
@@ -84,8 +81,6 @@ survival layer (259 docs). Links are relative to `code/`.
 - [pagination.md](backend/api/routes/pagination.md)
 - [projects.md](backend/api/routes/projects.md)
 - [search.md](backend/api/routes/search.md)
-- [teams.md](backend/api/routes/teams.md)
-- [users.md](backend/api/routes/users.md)
 
 **backend/api/**
 - [secrets.md](backend/api/secrets.md)
@@ -156,7 +151,7 @@ survival layer (259 docs). Links are relative to `code/`.
 - [type_def.md](backend/shared/type_def.md)
 - [user.md](backend/shared/user.md)
 
-### frontend (102)
+### frontend (79)
 
 **frontend/scripts/**
 - [api.md](frontend/scripts/api.md)
@@ -170,7 +165,6 @@ survival layer (259 docs). Links are relative to `code/`.
 **frontend/scripts/charts/**
 - [build.md](frontend/scripts/charts/build.md)
 - [builder-ui.md](frontend/scripts/charts/builder-ui.md)
-- [home-bank.md](frontend/scripts/charts/home-bank.md)
 - [monitoring-bank.md](frontend/scripts/charts/monitoring-bank.md)
 - [render.md](frontend/scripts/charts/render.md)
 
@@ -183,11 +177,9 @@ survival layer (259 docs). Links are relative to `code/`.
 - [echarts-theme.md](frontend/scripts/echarts-theme.md)
 - [engine.worker.md](frontend/scripts/engine.worker.md)
 - [events.md](frontend/scripts/events.md)
-- [format.md](frontend/scripts/format.md)
 
 **frontend/scripts/framework/**
 - [activity.md](frontend/scripts/framework/activity.md)
-- [app-switcher.md](frontend/scripts/framework/app-switcher.md)
 - [apps.md](frontend/scripts/framework/apps.md)
 - [avatar-upload.md](frontend/scripts/framework/avatar-upload.md)
 - [badge.md](frontend/scripts/framework/badge.md)
@@ -196,7 +188,6 @@ survival layer (259 docs). Links are relative to `code/`.
 - [chip-row.md](frontend/scripts/framework/chip-row.md)
 - [comments.md](frontend/scripts/framework/comments.md)
 - [component-registry.md](frontend/scripts/framework/component-registry.md)
-- [connection-setup.md](frontend/scripts/framework/connection-setup.md)
 - [create-action.md](frontend/scripts/framework/create-action.md)
 - [dashboards.md](frontend/scripts/framework/dashboards.md)
 - [editor-chip-enum.md](frontend/scripts/framework/editor-chip-enum.md)
@@ -205,7 +196,6 @@ survival layer (259 docs). Links are relative to `code/`.
 - [editor-registry.md](frontend/scripts/framework/editor-registry.md)
 - [editor-text.md](frontend/scripts/framework/editor-text.md)
 - [field.md](frontend/scripts/framework/field.md)
-- [filter-panel.md](frontend/scripts/framework/filter-panel.md)
 - [footer-utilities.md](frontend/scripts/framework/footer-utilities.md)
 - [head.md](frontend/scripts/framework/head.md)
 - [menu.md](frontend/scripts/framework/menu.md)
@@ -223,35 +213,16 @@ survival layer (259 docs). Links are relative to `code/`.
 - [stat.md](frontend/scripts/framework/stat.md)
 - [surface.md](frontend/scripts/framework/surface.md)
 - [table.md](frontend/scripts/framework/table.md)
-- [toolbar.md](frontend/scripts/framework/toolbar.md)
-- [tools-panel.md](frontend/scripts/framework/tools-panel.md)
 - [topbar.md](frontend/scripts/framework/topbar.md)
-- [type-registry.md](frontend/scripts/framework/type-registry.md)
 - [virtual-rows.md](frontend/scripts/framework/virtual-rows.md)
 
 **frontend/scripts/**
 - [joins.md](frontend/scripts/joins.md)
 - [list-page.md](frontend/scripts/list-page.md)
 - [main.md](frontend/scripts/main.md)
-- [page-row.md](frontend/scripts/page-row.md)
-
-**frontend/scripts/pages/**
-- [admin-console.md](frontend/scripts/pages/admin-console.md)
-- [cases.md](frontend/scripts/pages/cases.md)
-
-**frontend/scripts/pages/cases/**
-- [labels.md](frontend/scripts/pages/cases/labels.md)
 
 **frontend/scripts/pages/**
 - [dashboard.md](frontend/scripts/pages/dashboard.md)
-- [database.md](frontend/scripts/pages/database.md)
-- [docs.md](frontend/scripts/pages/docs.md)
-- [home.md](frontend/scripts/pages/home.md)
-
-**frontend/scripts/pages/home/**
-- [tabs.md](frontend/scripts/pages/home/tabs.md)
-
-**frontend/scripts/pages/**
 - [login.md](frontend/scripts/pages/login.md)
 - [monitoring.md](frontend/scripts/pages/monitoring.md)
 
@@ -259,21 +230,11 @@ survival layer (259 docs). Links are relative to `code/`.
 - [tabs.md](frontend/scripts/pages/monitoring/tabs.md)
 
 **frontend/scripts/pages/**
-- [profile.md](frontend/scripts/pages/profile.md)
-- [settings-hidden.md](frontend/scripts/pages/settings-hidden.md)
-- [settings-search.md](frontend/scripts/pages/settings-search.md)
-- [settings.md](frontend/scripts/pages/settings.md)
 - [sheetwise.md](frontend/scripts/pages/sheetwise.md)
 - [workspace.md](frontend/scripts/pages/workspace.md)
 
 **frontend/scripts/**
 - [prefs.md](frontend/scripts/prefs.md)
-
-**frontend/scripts/prefs/controls/**
-- [chart-layouts.md](frontend/scripts/prefs/controls/chart-layouts.md)
-- [theme-swatch.md](frontend/scripts/prefs/controls/theme-swatch.md)
-
-**frontend/scripts/**
 - [rail-controls.md](frontend/scripts/rail-controls.md)
 - [rail-footer.md](frontend/scripts/rail-footer.md)
 - [report.md](frontend/scripts/report.md)
@@ -296,9 +257,6 @@ survival layer (259 docs). Links are relative to `code/`.
 - [virtual-rows.md](frontend/scripts/virtual-rows.md)
 - [wasm-engine.md](frontend/scripts/wasm-engine.md)
 
-**frontend/styles/**
-- [admin.md](frontend/styles/admin.md)
-
 **frontend/styles/framework/**
 - [activity.md](frontend/styles/framework/activity.md)
 - [redtable.md](frontend/styles/framework/redtable.md)
@@ -310,9 +268,10 @@ survival layer (259 docs). Links are relative to `code/`.
 **frontend/**
 - [typedef-acceptance.md](frontend/typedef-acceptance.md)
 
-### tools (49)
+### tools (52)
 
 **tools/audit-suite/**
+- [admin-scope-audit.md](tools/audit-suite/admin-scope-audit.md)
 - [api-doc-audit.md](tools/audit-suite/api-doc-audit.md)
 - [auth-audit.md](tools/audit-suite/auth-audit.md)
 - [ci-audit.md](tools/audit-suite/ci-audit.md)
@@ -345,6 +304,9 @@ survival layer (259 docs). Links are relative to `code/`.
 **tools/doc-gen/**
 - [gen.md](tools/doc-gen/gen.md)
 
+**tools/lean-cleanup-check/**
+- [lean-cleanup.test.md](tools/lean-cleanup-check/lean-cleanup.test.md)
+
 **tools/lib/**
 - [fe-inventory.md](tools/lib/fe-inventory.md)
 - [rust-routes.md](tools/lib/rust-routes.md)
@@ -375,6 +337,7 @@ survival layer (259 docs). Links are relative to `code/`.
 - [port-check.md](tools/shell/port-check.md)
 - [seed-rbac-coverage.md](tools/shell/seed-rbac-coverage.md)
 - [stack-version.md](tools/shell/stack-version.md)
+- [test-fe.md](tools/shell/test-fe.md)
 
 **tools/**
 - [team.md](tools/team.md)

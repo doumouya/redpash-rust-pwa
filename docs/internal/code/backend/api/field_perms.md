@@ -3,7 +3,7 @@ title: backend/crates/api/src/field_perms.rs
 source: ../../../../../backend/crates/api/src/field_perms.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-05-31
+last modified date: 2026-06-13
 ---
 
 # field_perms.rs
@@ -38,16 +38,13 @@ reaches + the shared DTO shapes.
   `data_type` / `editor` / `options` / `perm_class` / `rel`; per-role cells now
   derive from `perm_class` (5 classes — see below); `/admin/fields` cell output
   is byte-identical (regression guard). Feeds `GET /api/admin/types`.
-- **slice 3** (done): `require_fields(state, caller, object_rid, object_type, &fields)`
-  — the field-level write gate. After the coarse object gate admits the caller,
-  it maps the caller's effective tier to a matrix column and 403s
-  (`field_forbidden`) the first written field that isn't `Write` (defaults ⊕
-  overrides). Platform admins bypass. Wired into the patch handlers for
-  **case · company · file · chart · dashboard**. **Project stays on its bespoke
-  owner-grade guard**: that guard is *direct*-owner (`db::project_owner ==
-  caller`), correct for `is_default` (a per-user personal flag) — the matrix's
-  `owner` column is *effective* owner (incl. a company owner via scope), too
-  broad for it. So the matrix doesn't govern project's owner-grade fields.
+- **slice 3** (`require_fields`) — **NEUTERED in the lean build (CAS_C8A9)**: the
+  field-level write gate now admits unconditionally (single-user tool — the sole
+  user can write every field), with zero per-request SQL. Its signature is
+  unchanged so the patch handlers (case · company · file · chart · dashboard ·
+  objects) compile untouched. The per-field tier×matrix enforcement lives in the
+  `full-app-pre-slim` snapshot. **The registry itself (below) is untouched** — it
+  still backs `GET /api/admin/fields` + `GET /api/admin/types`.
 
 ## Public surface
 
@@ -70,14 +67,16 @@ reaches + the shared DTO shapes.
   DELETED — the 60 rows now live in `type_fields` and load into
   [type_cache](type_cache.md) (`TypeDefCache`), which re-derives each `FieldRow`
   through `from_parts` (the same `fld` derivation). `find_default` is now
-  `state.type_cache.find_default`; `require_fields` reads `state.type_cache.rows()`.
+  `state.type_cache.find_default`. (`TypeDefCache::rows()` was removed with the
+  `require_fields` neuter — it was the only reader; the grid uses `grid_rows()`.)
 - `pub(crate) FieldRow::from_parts(object, field, data_type, perm_class,
   is_sortable, options, rel)` — reconstruct a row from stored inputs (the cache
   load path); per-role cells + default editor + `is_editable` derive from
   `(data_type, perm_class)`, never stored, so the seed can't drift.
 - `pub PermClass::from_str` — parse the stored wire string back to the enum.
 - `pub async fn require_fields(state, caller, object_rid, object_type, &fields)`
-  — the field-level write gate (slice 3); reads the catalog via the cache.
+  — the field-level write gate (slice 3). **NEUTERED (lean, CAS_C8A9): returns
+  `Ok(())` unconditionally**; signature retained for the call sites.
 
 ## perm_class → per-role cells (the derivation)
 
@@ -95,9 +94,11 @@ override table layers on top:
 ## Drift-prone areas
 
 - Scope is the **membership-bearing** objects (company / project / case / team /
-  file / chart / dashboard) where the resolver's `effective()` tier maps onto
-  these columns. `user` (a subject) and `comment` (author-gated) are out of the
-  grid by design — note it if that changes.
+  file / chart / dashboard) where the (now-removed multi-tenant) resolver's
+  `effective()` tier mapped onto these columns. `user` (a subject) and `comment`
+  (author-gated) are out of the grid by design — note it if that changes. The
+  registry rows are still served; only the `require_fields` *enforcement* was
+  neutered in the lean build.
 - Authored from the [specs/rbac](../../specs/rbac/index.md) per-field atoms;
   when an object gains/loses an editable field (a new `*.update` atom), add/drop
   its row here. `is_sortable` should track the list endpoints' `?sort=` allowlists.
@@ -107,6 +108,6 @@ override table layers on top:
 ## Related
 
 - [routes/admin.rs](routes/admin.md) — `GET /api/admin/fields` serves this.
-- [rbac.rs](rbac.md) — the resolver that yields the caller's tier (the column);
-  this registry says what that tier may do per field.
+- [rbac.rs](rbac.md) — the (neutered) gate surface; the tier resolver this
+  registry's enforcement consumed was deleted in the lean slim.
 - [RBAC catalog](../../specs/rbac/index.md) — the prose atoms this encodes.

@@ -18,8 +18,9 @@ This module detects those shapes and emits a **score penalty + human reasons**,
 so a cursed file can't read ≈100.
 
 It changes nothing about the data — only the reported score + the surfaced
-reasons. Consumed today by `POST /api/demo/parse`
-([routes/demo.md](../api/routes/demo.md)); reusable by the upload path.
+reasons. (The `/api/demo/parse` route that exercised it was removed in the lean
+single-user slim, CAS_C8A9; the structure scorer itself is unchanged and
+reusable by the upload path.)
 
 ## Public surface
 
@@ -115,4 +116,3 @@ reasons. Consumed today by `POST /api/demo/parse`
 
 - [parse/sniff.rs](parse.md) — the delimiter sniff + line-ending normalization this complements.
 - [stats.rs](stats.md) — `cleanness_report` produces the raw score the penalty applies to.
-- [routes/demo.rs](../api/routes/demo.md) — `/api/demo/parse` exposes `score` (penalized), `score_raw`, `structure`.

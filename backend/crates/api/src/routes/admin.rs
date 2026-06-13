@@ -1758,26 +1758,21 @@ async fn rbac_resolve(
     if subject.is_empty() || object.is_empty() {
         return Err(AppError::bad_request("invalid", "subject and object are required"));
     }
-    let grant = crate::rbac::resolve_grant(&state.db, subject, object).await?;
-    let principals = crate::rbac::principals(&state.db, subject).await?;
-    let edges = crate::rbac::grant_edges(&state.db, subject, object).await?;
+    // LEAN SINGLE-USER NEUTER (CAS_C8A9): the multi-tenant resolver
+    // (resolve_grant / principals / grant_edges) is deleted — the sole user is
+    // a platform admin with full reach. Report the degenerate "sees all" result
+    // (no membership-graph edges) without touching the now-gone machinery.
     let subject_is_admin = crate::rbac::is_platform_admin(&state, subject).await?;
-    // Platform admin bypasses every gate → effective reach is "all" regardless
-    // of the membership edges (which may be empty).
-    let effective = if subject_is_admin {
-        Some("all")
-    } else {
-        grant.effective().map(|r| r.as_str())
-    };
+    let effective = if subject_is_admin { Some("all") } else { None };
     Ok(Json(serde_json::json!({
         "subject":                   subject,
         "object":                    object,
         "subject_is_platform_admin": subject_is_admin,
-        "direct":                    grant.direct.map(|r| r.as_str()),
-        "scope":                     grant.scope.map(|r| r.as_str()),
+        "direct":                    serde_json::Value::Null,
+        "scope":                     serde_json::Value::Null,
         "effective":                 effective,
-        "principals":                principals,
-        "edges":                     edges,
+        "principals":                serde_json::json!([]),
+        "edges":                     serde_json::json!([]),
     })))
 }
 

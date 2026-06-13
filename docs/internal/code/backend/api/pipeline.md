@@ -3,7 +3,7 @@ title: backend/crates/api/src/pipeline.rs
 source: ../../../../../backend/crates/api/src/pipeline.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-06-01
+last modified date: 2026-06-13
 ---
 
 # pipeline.rs
@@ -22,14 +22,14 @@ every future ETL connector) go through one enforced entry point.
 
 ## Public surface
 
-- `pub async fn upload_csv(pool, data_dir, caller, caller_is_admin, project,
+- `pub async fn upload_csv(pool, data_dir, caller, _caller_is_admin, project,
   original_filename, bytes, tld) -> Result<UploadOutcome, AppError>` — the one
-  path. In order: **RBAC** (`resolve_grant`, `effective() ≥ Member`; leak-free
-  not-found on deny; skipped when `caller_is_admin`) → Excel→CSV conversion →
-  blob write to `<data_dir>/files/<rid>.bin` (orphan-guarded) → parse +
-  `dtype::summarize` + `stats::cleanness` (shared global-sentinel vocabulary, on
-  a blocking thread) → `db::insert_file` → `file_upload` audit event attributed
-  to `caller`.
+  path. In order (lean, CAS_C8A9): ~~RBAC write-reach check~~ **dropped** (the sole
+  user owns every project; `_caller_is_admin` retained in the signature for the
+  snapshot's gate) → Excel→CSV conversion → blob write to
+  `<data_dir>/files/<rid>.bin` (orphan-guarded) → parse + `dtype::summarize` +
+  `stats::cleanness` (shared global-sentinel vocabulary, on a blocking thread) →
+  `db::insert_file` → `file_upload` audit event attributed to `caller`.
 - `pub struct UploadOutcome { rid, filename, encoding, columns, cleanness,
   size_bytes, fully_null_rows, frame }` — enough for the web route to build its
   `FileEnvelope` + cache the hot `frame` in `state.files`; a batch connector
@@ -42,19 +42,16 @@ every future ETL connector) go through one enforced entry point.
   write-check is a pass-through here; the route keeps the web-only `state.files`
   cache + the `FileEnvelope` response.
 - `kafka_loader::ingest_csv` — passes the configured `KAFKA_AS_USER` +
-  `caller_is_admin=false`, so a connector load fails loudly unless the as-user
-  holds ≥Member reach on the target project.
+  `caller_is_admin=false` (now ignored — the reach check is gone in the lean build).
 
 ## Drift-prone areas
 
-- **RBAC rule lives here, not in the callers.** The write gate is
-  `effective() ≥ Member`. If a new producer appears, route it through here —
-  don't re-check RBAC in the producer (that's the bypass this case removed). A
-  future `tools/connectors-audit/` lint should flag any connector touching
-  `db::insert_*` directly.
-- **`caller_is_admin` is the only bypass.** The web route passes
-  `is_platform_admin`; connectors MUST pass `false` (a connector with admin
-  bypass could silently land data anywhere — the exact bug this fixed).
+- **RBAC neutered (lean, CAS_C8A9).** The per-request write-reach check was removed
+  — single-user tool, the sole user owns every project. The framework-owns-policy
+  principle still holds: route every producer through `upload_csv` (audit + parse +
+  cleanness invariants stay). The multi-tenant `effective() ≥ Member` gate is in the
+  `full-app-pre-slim` snapshot. A future `tools/connectors-audit/` lint should still
+  flag any connector touching `db::insert_*` directly.
 - **Blob orphan guard** mirrors `routes::files::BlobGuard` but is a private copy
   here so the pipeline has no dependency back into the route module. If a third
   copy appears, lift it to a shared `pub(crate)` helper.
@@ -66,4 +63,4 @@ every future ETL connector) go through one enforced entry point.
 
 - [routes/files/mod.rs](routes/files/mod.md) — the web upload route (delegates here).
 - [kafka_loader.rs](kafka_loader.md) — the first connector through this path.
-- [rbac.rs](rbac.md) — `resolve_grant` / `Grant` / `Role` the write-check uses.
+- [rbac.rs](rbac.md) — the (neutered) gate surface; the write-reach resolver it used was deleted in the lean slim.

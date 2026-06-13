@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/projects.rs
 source: ../../../../../../backend/crates/api/src/routes/projects.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31
+last modified date: 2026-06-13
 ---
 
 # projects.rs
@@ -18,27 +18,22 @@ GET    /:rid             fetch one project summary
 PATCH  /:rid             sparse metadata update (inline edits)
 DELETE /:rid             delete (cascades to files / steps / dashboards)
 GET    /:rid/files       list files in a project (cleaner landing)
-*      /:rid/members      generic object-member CRUD (nested members.rs)
+
+The `/:rid/members` generic-member nest was removed in the lean slim (CAS_C8A9)
+when `members.rs` was deleted — single-user tool, no member management.
 
 ## Public surface
 
-- `pub fn routes` — project CRUD + a nest of the generic member router at
-  `/:rid/members` (see [members.rs](members.md)). Reach-aware: a project owner
-  *or* a company admin (cascade) manages project members.
+- `pub fn routes` — project CRUD + `/:rid/files`.
 
 ## Gates
 
-- `get_one` / `list_files` — `project.view` (member, incl. company cascade).
-- `patch_project` — `require_grant`, `effective() >= Admin` (owner is direct
-  `Owner`; company admin via cascade; platform). The **owner-grade fields**
-  (`owner_id` transfer, `company_id` re-scope, `is_default`) are guarded inside
-  the handler to the project owner / platform admin (catalog reach `own · all`,
-  owner-only) — they ride the same handler but can't be set by a mere admin.
-- `delete_project` — `require_grant`, `effective() >= Owner` (catalog
-  `own · company · all`, **owner-only at company tier**: project owner, company
-  owner, or platform — never a company admin). Default-project guard unchanged.
-- Per-field update atoms (name vs status vs …) are coarsened to one object-level
-  gate; field-level enforcement is the v3 custom-role layer.
+NEUTERED in the lean single-user build (CAS_C8A9). The handlers still call the
+`crate::rbac` gates (`require_view` / `require_grant` / `require_fields`), but in
+the lean build those admit unconditionally with zero per-request SQL — the sole
+user owns every project. The multi-tenant reach gates (`view` / `>= Admin` /
+`>= Owner` + the owner-grade-field guards) are preserved in the
+`full-app-pre-slim` snapshot.
 
 ## Drift-prone areas
 

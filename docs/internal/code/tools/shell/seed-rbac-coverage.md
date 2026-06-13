@@ -58,5 +58,7 @@ startup when dev-login is on — that's the green light.
 ## Related
 
 - [POST /api/admin/memberships allow-lists](../../backend/api/routes/admin.md)
-- [routes/teams.rs (team CRUD)](../../backend/api/routes/teams.md)
 - [Tools landing](../index.md)
+
+> Note: the `/api/teams` route + `routes/teams.rs` were removed in the lean
+> single-user slim (CAS_C8A9); the `teams` table + db helpers remain.

@@ -3,7 +3,7 @@ title: backend/crates/api/src/routes/admin.rs
 source: ../../../../../../backend/crates/api/src/routes/admin.rs
 owner: Gus
 section: Internal · Code · backend · api · routes
-last modified date: 2026-05-31
+last modified date: 2026-06-13
 ---
 
 # admin.rs
@@ -99,17 +99,15 @@ GET /api/admin/types/:type   ← one TypeDefinition by `type` id (404 if unknown
   (leak-free 404). NOTE: a tool that stores a value-hash in `severity` (e.g.
   `ui-snapshot`) buckets as `high` — that's the tool's data semantics, mirrored
   here for consistency, not a bug in this endpoint.
-- **`GET /api/admin/rbac` (`rbac_resolve`) is GATED** — RBAC introspection
-  (CAS_274EDF3B Admin Console slice). `?subject=<rid>&object=<rid>` → the
-  resolver's reach-split tiers (`direct`/`scope`/`effective`, `effective="all"`
-  when the subject is a platform admin), `subject_is_platform_admin`, the
-  subject's `principals` closure, and the contributing `edges` (each
-  `{object, member, role, context_role, reach}` where reach is `direct`|`scope`)
-  — the "why" behind the access. Requires `rbac::is_platform_admin(caller)`
-  (leak-free 404; it exposes the org membership graph); 400 on missing params.
-  Built on `rbac::resolve_grant` + `rbac::principals` + `rbac::grant_edges`
-  ([rbac.md](../rbac.md)). Response is raw JSON until the Admin Console FE
-  (co-owned, teams-lane) locks the shape.
+- **`GET /api/admin/rbac` (`rbac_resolve`) is GATED — NEUTERED (lean, CAS_C8A9)** —
+  RBAC introspection (CAS_274EDF3B). `?subject=<rid>&object=<rid>`. The
+  multi-tenant resolver it was built on (`resolve_grant`/`principals`/`grant_edges`)
+  was deleted in the lean slim, so it now reports the degenerate single-user
+  result: `subject_is_platform_admin` (still real, via `is_platform_admin`),
+  `effective="all"` for an admin else null, and empty `principals`/`edges`/
+  `direct`/`scope`. Requires `rbac::is_platform_admin(caller)` (leak-free 404);
+  400 on missing params. Response shape unchanged for the FE. The full reach
+  introspection is in the `full-app-pre-slim` snapshot. ([rbac.md](../rbac.md))
 - **`POST /api/admin/memberships` validator is double-keyed**: `(scope ⇒ role_allow, ctx_allow, role_default)` and `context_role` is checked against the per-scope `*_CONTEXT_ROLES` allow-list (Reporter/Case Owner/Watcher/Assignee for cases, CEO/CTO/… for companies, Project Owner/Data Analyst/… for projects, Team Manager/Lead/Member for teams). Empty context_role is allowed at every scope — it normalizes to `""` at the DB layer (`memberships.context_role` is NOT NULL with default `''`). FE allow-lists in [home.js memberships createSpec](../../../frontend/scripts/pages/home.md) are kept in sync — drift = 400 from this validator.
 
 ## Related

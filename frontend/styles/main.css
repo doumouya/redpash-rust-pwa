@@ -54,7 +54,6 @@
 @import "framework/topbar.css";
 @import "framework/omni.css";
 @import "framework/rail.css";
-@import "framework/comments.css";
 @import "framework/dashboards.css";
 @import "framework/surface.css";
 @import "framework/head.css";
@@ -71,11 +70,6 @@
 @import "framework/field.css";
 @import "framework/activity.css";   /* rp-activity — event timeline (Cases/Monitoring) */
 @import "framework/badge.css";
-@import "framework/avatar-upload.css";
-@import "framework/profile-record.css";
-@import "framework/settings-config.css";
-@import "framework/filter-panel.css";
-@import "framework/tools-panel.css";
 @import "framework/toolbar.css";
 @import "framework/editor-code.css"; /* rp-editor — code/SQL editor (syntax-highlight overlay) */
 @import "framework/user-picker.css"; /* rp-user-picker — shared search-input + results dropdown (relocated from styles/) */
@@ -88,4 +82,3 @@
 @import "monitoring.css"; /* /monitoring — window chips, top-routes table, modal */
 @import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
 @import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
-@import "admin.css";     /* /database (+ Admin app) — the DB console (rp-dbc-*) + denied placeholder */

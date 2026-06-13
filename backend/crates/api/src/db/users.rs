@@ -129,68 +129,6 @@ pub async fn list_memberships_for_user(
     }).collect())
 }
 
-/// Every user the caller can see — powers the Objects page's owner-reassignment
-/// picker + the directory. **See-down scoped** (CAS_AF2690C0, step-3):
-/// `viewer = Some(caller)` returns the caller + users who share a company with
-/// them, and attaches only memberships in the caller's companies; `viewer = None`
-/// = platform-admin, every user + every membership.
-pub async fn list_users(pool: &PgPool, viewer: Option<&str>) -> sqlx::Result<Vec<UserProfile>> {
-    let rows: Vec<UserRow> = sqlx::query_as(
-        "SELECT redpash_id, username, email, display_name, avatar_url,
-                job_title, organisation, use_case, plan, locale,
-                -- prefs from the user_preferences table (mig 023);
-                -- users.prefs JSONB column dropped in mig 024.
-                COALESCE(
-                  (SELECT jsonb_object_agg(p.key, p.value)
-                     FROM user_preferences p
-                    WHERE p.user_redpash_id = users.redpash_id),
-                  '{}'::jsonb
-                ) AS prefs,
-                first_name, last_name
-         FROM users
-         WHERE ($1::text IS NULL
-                OR users.redpash_id = $1
-                OR EXISTS (SELECT 1 FROM memberships ma
-                             JOIN memberships mb ON mb.object_redpash_id = ma.object_redpash_id
-                            WHERE ma.member_redpash_id = $1
-                              AND mb.member_redpash_id = users.redpash_id
-                              AND ma.object_redpash_id LIKE 'CMP\\_%'))
-         ORDER BY display_name ASC",
-    )
-    .bind(viewer)
-    .fetch_all(pool)
-    .await?;
-    // Memberships in one round-trip — group_concat by user id, then attach.
-    // Scoped to the caller's companies (see-down) so the attached membership
-    // graph doesn't leak other orgs; None (platform-admin) attaches all.
-    let mem_rows = sqlx::query(
-        "SELECT m.member_redpash_id, m.object_redpash_id AS company_id, m.role, c.name AS company_name
-         FROM memberships m
-         JOIN companies c ON c.redpash_id = m.object_redpash_id
-         WHERE ($1::text IS NULL
-                OR EXISTS (SELECT 1 FROM memberships me
-                            WHERE me.object_redpash_id = m.object_redpash_id
-                              AND me.member_redpash_id = $1))",
-    )
-    .bind(viewer)
-    .fetch_all(pool)
-    .await?;
-    let mut by_user: std::collections::HashMap<String, Vec<UserMembership>> =
-        std::collections::HashMap::new();
-    for r in &mem_rows {
-        by_user.entry(r.get::<String, _>("member_redpash_id")).or_default().push(UserMembership {
-            company_id:   r.get("company_id"),
-            company_name: r.get("company_name"),
-            role:         r.get("role"),
-        });
-    }
-    Ok(rows.into_iter().map(|r| {
-        let mut u: UserProfile = r.into();
-        u.memberships = by_user.remove(&u.redpash_id).unwrap_or_default();
-        u
-    }).collect())
-}
-
 /// Sparse update — every `Option::Some` field overwrites the column;
 /// `None` keeps the existing value via `COALESCE`. `updated_at` is
 /// bumped on every call.

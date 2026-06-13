@@ -20,7 +20,6 @@ use crate::{
     db,
     error::AppError,
     id,
-    rbac::{self, Role},
 };
 
 /// What `upload_csv` produces — enough for the web route to build its response
@@ -67,10 +66,9 @@ impl Drop for BlobGuard {
 /// uploaded *as* `caller`. The one path all file producers go through.
 ///
 /// Applies the framework's policy invariants so no producer can skip them:
-///   • **RBAC** — `caller` must reach `project` with ≥ `Member` (write); else a
-///     leak-free not-found. Skipped when `caller_is_admin` (the web route
-///     passes `is_platform_admin`; connectors pass `false`, so an operator
-///     can't silently land data in a project they hold no membership in).
+///   • **RBAC** — neutered in the lean single-user build (CAS_C8A9): the sole
+///     user owns every project, so the per-request write-reach check is dropped.
+///     `_caller_is_admin` is kept in the signature for the snapshot's gate.
 ///   • **Audit** — emits a `file_upload` event attributed to `caller`.
 ///   • Parse + summarize + cleanness (shared global-sentinel vocabulary).
 ///
@@ -82,24 +80,17 @@ pub async fn upload_csv(
     pool:              &PgPool,
     data_dir:          &Path,
     caller:            &str,
-    caller_is_admin:   bool,
+    _caller_is_admin:  bool,
     project:           &str,
     original_filename: &str,
     bytes:             Vec<u8>,
     tld:               Option<String>,
 ) -> Result<UploadOutcome, AppError> {
-    // ── RBAC: caller needs write-reach (≥ Member) on the target project ──
-    // The UI always uploads to the caller's own project (owner → passes); this
-    // check only bites a connector aimed at a project the caller can't reach.
-    if !caller_is_admin {
-        let grant = rbac::resolve_grant(pool, caller, project).await?;
-        let can_write = grant.effective().is_some_and(|r| r >= Role::Member);
-        if !can_write {
-            // Leak-free: a denied caller can't tell "no reach" from "doesn't
-            // exist" (matches rbac::require_grant's contract).
-            return Err(AppError::not_found("not_found", format!("project {project}")));
-        }
-    }
+    // LEAN SINGLE-USER NEUTER (CAS_C8A9): the per-request reach check (caller
+    // needs ≥ Member on the target project) is dropped — the sole user owns
+    // every project. `_caller_is_admin` is retained in the signature so the
+    // four callers (web route + the three connectors) compile unchanged; the
+    // multi-tenant write-reach gate lives in the `full-app-pre-slim` snapshot.
 
     // ── Excel → CSV (same pre-disk conversion as the UI path) ──
     let bytes = if data::parse::is_excel_filename(original_filename) {

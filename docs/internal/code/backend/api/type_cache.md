@@ -3,7 +3,7 @@ title: backend/crates/api/src/type_cache.rs
 source: ../../../../../backend/crates/api/src/type_cache.rs
 owner: Torv
 section: Internal · Code · backend · api
-last modified date: 2026-06-07
+last modified date: 2026-06-13
 ---
 
 # type_cache.rs
@@ -42,9 +42,11 @@ Stage-2 generic handler and Stage-3 `register_type` read.
 
 ## Public surface (read methods, wired at C3)
 
-- `rows()` / `find_default(object, field)` — the field catalog (replaces
-  `default_registry` + `find_default`; consumed by `require_fields`,
-  `/admin/fields`, the cases-PATCH status gate).
+- `find_default(object, field)` — the field catalog lookup (replaces
+  `default_registry` + `find_default`; consumed by the cases-PATCH status
+  validation). (`rows()` — the full catalog — was removed in the lean slim
+  CAS_C8A9 when its only reader `require_fields` was neutered; `grid_rows()`
+  serves `/admin/fields`.)
 - `type_defs()` / `type_def(id)` — builtin TypeDefinitions (replaces
   `builtin_types` / `builtin_type`; consumed by `/admin/types`). Built via the
   reused `type_registry::build_one`.
@@ -65,12 +67,12 @@ company/project/case/team/file/chart/dashboard). `user` (rel-only subject) and
 `connection` (the Stage-2 generic-handler proof catalog) exist for the
 `entities.type` FK but are NOT grid-served — `type_defs()` / `grid_rows()` exclude
 them, so `/admin/types` + `/admin/fields` stay byte-identical to the legacy
-output. `rows()` (all) feeds `require_fields`; `object_kind` uses every prefix.
+output. `object_kind` uses every prefix.
 
 ## Staged state
 
 C2: cache loads + held on `AppState`. **C3 (done):** consumers redirected
-(`require_fields` / `/admin/fields` → `grid_rows`; `/admin/types` → `type_defs`;
+(`/admin/fields` → `grid_rows`; `/admin/types` → `type_defs`;
 `create_membership` / `put_field` → `scope_roles`; `rbac::object_kind` →
 `object_kind`), the code-side registries (`default_registry` / `builtin_meta` /
 `builtin_types` / `builtin_type` / the admin role const arrays) DELETED, and

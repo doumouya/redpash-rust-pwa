@@ -15,8 +15,10 @@ mod db_query;
 mod error;
 mod event;
 mod id;
-// RBAC enforcement: the effective-access resolver + view gate (P2 wires
-// `case.view`; effective_role / Role expand as more atoms are gated).
+// RBAC gates — NEUTERED in the lean single-user build (CAS_C8A9): the four
+// gate fns admit unconditionally with zero per-request SQL. The allow(dead_code)
+// covers the contract-storage types (Contract/load_contract/company_of/evaluate)
+// kept for the #[cfg(test)] contract_tests until that module is retired.
 #[allow(dead_code)]
 mod rbac;
 // Open codec registry + avro meta-codec decode (CAS_75A0D1FD) + the Kafka

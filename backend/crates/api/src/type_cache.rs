@@ -183,12 +183,6 @@ impl TypeDefCache {
         Ok(Self { rows, grid, types, type_defs, scope_roles, prefix_to_type })
     }
 
-    /// The full field catalog — every type incl. `connection` (the
-    /// `default_registry()` replacement for `require_fields`).
-    pub fn rows(&self) -> &[FieldRow] {
-        &self.rows
-    }
-
     /// The grid-served field rows — the `/admin/fields` subset (excludes the
     /// rel-only `user` + the internal `connection`). Byte-identical to the
     /// legacy `default_registry()` output.
