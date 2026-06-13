@@ -1,12 +1,10 @@
-/* Purpose: App registry — the single source of truth for the multi-app model
-   (Informatica "My Services"). Maps each app to its pages (the per-app topbar
-   nav) + its RBAC gate. Consumed by topbar.js (per-app nav) and app-switcher.js
-   (the launcher menu). One place to add an app or move a page between apps.
+/* Purpose: App registry — the single source of truth for the topbar page-nav.
+   LEAN single-user build: ONE app, no launcher, no RBAC gate. topbar.js renders
+   all its pages directly as nav icons. One place to add/move a page.
    Doc: docs/internal/code/frontend/scripts/framework/apps.md */
 // ── App registry ────────────────────────────────────────────────────────────
-// RedPash is a set of apps switched from a launcher; an app is both an RBAC
-// boundary and a focused topbar (its nav shows only its own pages). This module
-// holds the data; topbar.js + app-switcher.js render it.
+// LEAN: one app, no launcher. This module holds the page list; topbar.js renders
+// it (appForPage → the app → its pages).
 //
 // Slice A maps apps to TODAY's pages (no page-splits yet). Later slices add the
 // new pages in place: Admin gets `admin-console` + `database` (Slice B), Studio

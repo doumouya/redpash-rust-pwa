@@ -2,21 +2,16 @@
  * Doc: docs/internal/code/frontend/scripts/topbar.md */
 // Topbar — the shared chrome for the authed pages.
 //
-// Multi-app model: the topbar is APP-SCOPED. A page calls
-// mountTopbar(el, { active, session }); `active` names the current page, and the
-// topbar DERIVES which app owns that page (apps.js `appForPage`) and renders only
-// that app's nav + the launcher (app-switcher). Pages don't pass an `app` — the
-// topbar self-determines it, so adding/moving a page is a one-line edit in apps.js
-// and never touches a page's mountTopbar call.
+// LEAN single-app model: there is one app (apps.js), so the topbar renders ALL
+// its pages directly as nav icons — no launcher. A page calls
+// mountTopbar(el, { active, session }); `active` names the current page (drives
+// the is-active highlight). Adding/moving a page is a one-line edit in apps.js.
 //
-// brand · omnibox · [launcher | app pages] + theme + sign-out. Utility pages
-// (profile / settings — rail-footer destinations) belong to no app → appForPage
-// falls back to the Home app, so their topbar is just the launcher.
+// brand · omnibox · page-nav. Theme + sign-out live in the rail footer.
 
 import { api } from "/scripts/api.js";
 import { esc } from "/scripts/dom.js";
 import { appForPage } from "/scripts/framework/apps.js";
-import { appSwitcherHTML } from "/scripts/framework/app-switcher.js";
 
 // The Ctrl/Cmd+K handler is global and must bind once for the app's
 // life, not once per topbar mount.
@@ -42,10 +37,8 @@ function greetingFor(session) {
 export function mountTopbar(host, { active = "", session = null } = {}) {
   if (!host) return;
   host.className = "rp-topbar";
-  // The app that owns this page → render only its nav (apps.js). Utility pages
-  // (profile / settings) fall back to the Home app, so their topbar is just the
-  // launcher. Theme toggle + sign-out moved to the rail footer (2026-06-07, Em) —
-  // they're app-independent utilities; the topbar carries only nav + the launcher.
+  // The single app (apps.js) → render all its pages as nav icons. Theme toggle +
+  // sign-out live in the rail footer (2026-06-07, Em); the topbar carries only nav.
   const app = appForPage(active);
   host.innerHTML =
       '<a class="rp-brand" href="#/workspace" title="Workspace">'
@@ -54,11 +47,10 @@ export function mountTopbar(host, { active = "", session = null } = {}) {
     + '</a>'
     + '<div class="rp-omni">'
     +   '<i class="bi bi-search"></i>'
-    +   '<input type="search" id="rp-omni" placeholder="Search RedPash — projects, files, settings…" />'
+    +   '<input type="search" id="rp-omni" placeholder="Search RedPash — projects, files…" />'
     +   '<kbd class="rp-omni-kbd">Ctrl K</kbd>'
     + '</div>'
     + '<nav class="rp-topbar-actions">'
-    +   appSwitcherHTML({ session, activeAppId: app.id })
     +   app.pages.map((p) =>
           '<a class="rp-btn-icon' + (p.id === active ? ' is-active' : '') + '"'
           + ' href="' + esc(p.hash) + '" title="' + esc(p.label) + '"><i class="bi ' + esc(p.icon) + '"></i></a>'
