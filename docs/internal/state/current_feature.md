@@ -23,16 +23,25 @@
 
 ---
 
-## Active feature  *(idle — reset; next `/feature` overwrites)*
-- **Request:** —
-- **Case:** —   ·   **Spec doc:** —
-- **Started:** —   ·   **Phase reached:** —
-- **Status:** idle
+## Active feature
+- **Request:** Lean dead-weight cleanup on the `lean` branch — single-user personal tool.
+  REMAINING after the page cut (9fac5fc) + frontend dead-JS sweep: (1) FE — orphaned CSS not in
+  the styles/main.css @import closure + partials not in scripts/main.js ROUTES; (2) BE — neuter
+  RBAC to single-user always-allow + remove dead route modules/machinery for the cut surfaces
+  (cases/admin/database/docs/profile/settings-prefs/memberships). Keep: workspace/dashboard/
+  sheetwise/monitoring/login + their live APIs (files, projects, data ops, connectors, monitoring,
+  auth+dev-login+/me, search, rail).
+- **Case:** CAS_C8A9A3EC0935498880A468625FE3F490   ·   **Spec doc:** docs/internal/specs/lean-cleanup.md
+- **Started:** 2026-06-13   ·   **Phase reached:** CHECKPOINT 1 (awaiting Em)
+- **Status:** in_progress · branch `lean`
+- **Architect finding:** admin + cases NOT fully dead (monitoring/cases.rs depend on parts) →
+  surgical, not blanket. Clear-dead: demo, docs. RBAC: no-op-neuter the 4 gates + mw, then
+  delete dead grant/membership machinery. 8 open questions (R-1..R-8) for Em.
 
 ## Checklist (test-first order)
-- [ ] architect: spec + Case written
-- [ ] CHECKPOINT 1: Em approved the spec
-- [ ] tester: red tests written (1:1 with ACs) · failing
+- [x] architect: spec + Case written (CAS_C8A9A3EC… · specs/lean-cleanup.md)
+- [x] CHECKPOINT 1: Em approved the spec ("go" — all recs; resolutions in CAS_C8A9 comment)
+- [ ] tester: verification gates written (1:1 with ACs) · failing
 - [ ] coder: acceptance criteria implemented (atomic docs updated, tests turned green)
 - [ ] reviewer: `audit.sh` + `ci-audit` clean · coverage ok
 - [ ] CHECKPOINT 2: Em approved the push
