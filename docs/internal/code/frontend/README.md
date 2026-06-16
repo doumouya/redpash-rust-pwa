@@ -1,4 +1,4 @@
-# RedPash-next frontend — start here
+# RedPash frontend — start here
 
 The frontend is a **no-framework, hash-routed SPA** in vanilla ES modules. One
 Rust binary serves both the API and the static UI; the data engine runs natively
@@ -15,7 +15,7 @@ spine as needed:
 | [`conventions.md`](conventions.md) | Before writing any code: the ui-fork-audit (R1–R9), the CI gates, CSS + tokens, how to add a component |
 | [`components.md`](components.md) | The toolbox: the composable grid family, the full component reference, chrome (rail/topbar/omni), responsive |
 | [`data-cleaner.md`](data-cleaner.md) | The `workspace` page: orchestrator, catalogs, modes, the report flow, current build state + gotchas |
-| [`backend.md`](backend.md) | The API routes the frontend speaks + the data engine (steps / group_by / filter / wasm) |
+| [`../backend/README.md`](../backend/README.md) | The API routes the frontend speaks + the data engine (steps / group_by / filter / wasm) — entry to the backend docs (split into `README` / `api-routes` / `data-engine` / `connectors`) |
 
 > Conventions of record live in the `vanilla-web` skill (WSL `~/.claude/skills/vanilla-web/`: `SKILL.md` + `references/redpash.md`). The skill's own rule: **the live source wins over any snapshot** — verify against the actual files, including this doc.
 
@@ -68,7 +68,7 @@ convention to `/apps/<app>/<page>/<page>.{html,js}`.
 |---|---|---|---|
 | `auth` | `hidden` | — | `login` → "Sign in" (`auth:false`) |
 | `studio` | `icon:bi-easel` | `#/workspace` | `workspace` → **"Data Cleaner"** (`bi-magic`) |
-| `admin` | `admin:true` | `#/org` | `org` → "Organization", `console` → "Console" |
+| `admin` | `admin:true` | `#/org` | `org` → "Organization" (`bi-diagram-3`), `console` → "Console" (`bi-sliders2`), `registry` → "Data Registry" (`bi-database`), `cases` → "Cases" (`bi-kanban`) |
 | `settings` | `hidden` | — | `settings` → "Settings" |
 
 > The Data Cleaner's route/file id is **`workspace`** (`#/workspace`, files at `apps/studio/workspace/`); its visible label is "Data Cleaner". The id is historical — renaming it is a mechanical sweep, deliberately not done.

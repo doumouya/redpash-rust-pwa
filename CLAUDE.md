@@ -1,10 +1,10 @@
-# Project conventions — RedPash-next
+# Project conventions — RedPash
 
 Ground-up rebuild of RedPash executing the approved roadmap at
-[`docs/ROADMAP.md`](docs/ROADMAP.md). The predecessor repo
-(`/home/mansa/rust-project/redpash-rust-pwa`) is the reference implementation —
-port-verbatim items are listed in the roadmap; its docs/internal tree holds the
-WHY behind every inherited rule.
+[`docs/ROADMAP.md`](docs/ROADMAP.md). This repo is the primary tree; see
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for the rebuild plan — port-verbatim items
+are listed there, and its docs/internal tree holds the WHY behind every
+inherited rule.
 
 ## Binding rules
 

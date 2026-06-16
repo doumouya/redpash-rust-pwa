@@ -1,4 +1,4 @@
-# RedPash-next
+# RedPash
 
 Ground-up rebuild of RedPash — the data-quality PWA for the Operational Analyst
 (Upload → instant quality report → Clean → Visualise, multi-file joins, one
@@ -13,4 +13,4 @@ survives intact; what changes is baked in from
 - Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Dev: `cd backend && cargo run -p api` (set `DATABASE_URL` for migrations)
 - Gates: `sh tools/ci.sh` (includes the wasm32 purity check on the data crate)
-- Reference implementation: `/home/mansa/rust-project/redpash-rust-pwa`
+- This repo is the primary tree; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the rebuild plan.

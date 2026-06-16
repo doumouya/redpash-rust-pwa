@@ -76,6 +76,22 @@ Stacks `[toolbar?][sheet?][redtable]`; omit `toolbar` and it's just the redtable
 — `update` fans out (rows/columns → `table.update`, state → `toolbar.update`). The
 `.rp-gridview-table` slot is `flex:1; min-height:0` so the redtable fills it.
 
+### The engine seam — what feeds rows into the grid
+Not registered components (no `mount…`/`register`) — they're the **data-source
+abstraction** the grid composes. `window-source.js` exports one interface, two
+sources, the SAME QuerySpec:
+
+```
+{ kind, ready, window(spec, offset, limit) → page, sql(query) → page, score() → report|null, destroy() }
+  page = { columns, rows, total }   spec = { filter?, search?, sort? } | null
+```
+
+- **`serverSource(rid)`** — stateless `POST /files/<rid>/page` (and `/sql`); re-reads the `.bin` + runs the pipeline per call. The source of truth and the fallback past the client memory budget.
+- **`clientSource(rid, {tld})`** — a resident wasm `Workbook` in a Worker: parse ONCE on open (off the `/api/files/<rid>/export?format=csv` bytes), then answer warm `window`/`sql` off-main. The data never leaves the device. Heavy ops (`score`) run in a **throwaway PEAK-OP engine** spawned + terminated per op, so the transient ~3× high-water never sticks to the resident floor; a worker crash (OOM) rejects in-flight calls so the caller can fall back to the server.
+- **`pickSource(rid, {rows, cols, tld})`** — routes by a `rows × cols` cell budget (`CELL_BUDGET = 12_000_000`): `clientSource` where it fits, `serverSource` for the genuinely huge tail (stateless is fine there; wasm32 caps linear memory at 4 GB). **The grid calls `window()`/`sql()`/`score()` and never knows which source answered.**
+
+**engine-worker** (`engine/engine-worker.js`) — the wasm engine OFF the main thread; holds ONE wasm `Workbook` and dispatches ops (`init`/`load`/`view`/`sql`/`score`) via the `{id,op,payload}` → `{id,ok,result|error}` protocol. `spawnEngine()` in window-source runs this same script in BOTH roles (resident + peak-op); only the lifetime differs, so the worker stays role-agnostic. The wasm URL is handed in at `init` (workers can't see the page's import map). `view`/`score` return the engine's JSON **string** verbatim — the main thread parses, keeping the stringify→parse marshal symmetrical with the server path. The `Workbook`'s surface used here: `from_csv` (parse) + `rows`/`cols` + **`view`** (the QuerySpec window) + **`sql`** (read-only table `t`) + `score`.
+
 ### side-panel — tabbed, collapsible inline panel
 `mountSidePanel(host, { side:"left"|"right", tabs:[{id,label,icon, mount(bodyHost)→{update?,destroy?}}], active?, collapsed?, onTab?, onToggle? })`.
 **Lazily mounts a tab's content on first show** and caches the handle (switching
@@ -114,11 +130,13 @@ Knobs: `--rp-wsp-left-w`, `--rp-wsp-right-w` (default `18rem`).
 | **score-badge** | the cleanness score + breakdown popover | `mountScoreBadge(host, {score, report?})` → `{el,update,destroy}` | report = {completeness,type_consistency,value_hygiene,row_uniqueness,structural} |
 | **uploader** | drop zone + file picker | `mountUploader(host, {label?,hint?,accept?,onFile(file)})` → `{el,busy(bool),update(){},destroy}` | accept defaults `.csv,.tsv,.txt` |
 | **steps-panel** | cleaning history + undo/redo | `mountStepsPanel(host, {steps:[{kind,params,applied}],canUndo,canRedo,onUndo,onRedo})` → `{el,update,destroy}` | undone steps render `.is-undone` |
+| **column-manager** | DC3b per-column cleaning surface — column multi-select + clean-op palette (global + column-scoped) with an INLINE action-sheet for ops that take params | `mountColumnManager(host, {columns:[{key,label?}], ops:[…], onApply(op,cols[],values)})` → `{el,update({columns?}),destroy}` | ops are DATA (the page's clean-catalog: `id/label/icon/scope/min/max/fields`); component reads only those generics + emits `onApply`, page owns `op.build` so the framework never imports a page module. `enabled()` mirrors clean-catalog's `opEnabled` (global ops always runnable; column ops gated by `min`/`max` vs selection size). Action-sheet built from `field.js`; a selection change that drops below an open op's `min` closes the sheet. `update({columns})` prunes selection keys no longer present |
+| **sql-editor** | the Workspace SQL console — read-only SQL textarea over the open file (exposed as table `t`), Run + "Save as file" (materialize) + inline status | `mountSqlEditor(host, {value?, suggestName?(), onRun(query)→Promise<page>, onMaterialize(query,name)→Promise})` → `{el,query(),destroy}` | bespoke handle — **no `update`**. Engine-agnostic: the page wires `onRun`/`onMaterialize` to the window-source seam (client-first Polars SQL, server fallback + server materialize). The read-only guard lives in the shared engine, so this surface does no validation. On a successful Run the page swaps the grid to the result + closes the panel (success shows nothing here); an ERROR keeps the panel open with the message |
 | **perm-cell** | cycling permission cell (`"" → "r" → "rw"`) | `mountPermCell(host, {value,onChange(next)})` → `{el,update,destroy}` | optimistic; page owns persistence |
 | **filter-panel** | builder UI for the shared FilterNode tree | `mountFilterPanel(host, {columns,value?,onApply(node),onClear()})` → `{el,update({columns,value}),destroy}` | value cell adapts to the op |
 | **filter-node** | PURE FilterNode ⇄ rows logic (no DOM) | exports `PRED_OPS`, `VALUELESS_OPS`, `RANGE_OPS`, `LIST_OPS`, `blankRow`, `rowComplete`, `rowToPred`, `assembleFilter`, `decomposeFilter`, `predToRow` | unit-tested independently |
 | **joins-wizard** | multi-file join flow (calls `detect()` on mount) | `mountJoinsWizard(host, {detect():Promise, onExecute(body):Promise, onCancel()})` → `{el,update,destroy}` | body = `{other_file,left_keys,right_keys,join_type,materialize_as?}` |
-| **object-list** | generic object-table page body | `mountObjectList(host, {type, onActiveChange?})` → `{el,update({type}),current(),destroy}` | columns/cells from the type registry, rows from `/api/objects/<type>` |
+| **object-list** | generic object-table page body | `mountObjectList(host, {type, source?, columns?, onOpen?})` → `{el,update({type}),current(),destroy}` | columns/cells from the type registry (or a `columns` override); rows from `source` (default `/api/objects/<type>`); `onOpen(row)` fires on row click |
 | **omni** | the topbar omnisearch pill | `mountOmni(host, {placeholder?})` → `{el,focus,destroy}` | **no `update`**; over `GET /api/search` |
 | **topbar** | toggle · omnisearch · per-app nav + launcher | `mountTopbar(host, {session,activePageId,onToggleRail?})` → `{el,update(){},destroy}` | nav derives from the apps registry |
 | **rail** | the page's left nav (data-driven) | `mountRail(host, config)` → `{el,setGroups(groups,hidden,emptyText),setActive(id),toggleCollapse(want?),destroy}` | bespoke handle — **no `update`** |
@@ -146,8 +164,12 @@ markup (R8).
 ```
 
 The topbar and rail share `--rp-bg` with no border between them (one continuous
-dark frame); the lighter surface floats inside. *(There is no `pager` component —
-pagination lives inside redtable.)*
+dark frame); the lighter surface floats inside. *(redtable owns its own
+pagination internally; the standalone **`pager`** component
+— `mountPager(host, {page, pages, total, onPage}) → {el, update, destroy}`,
+`register("pager", mountPager)` — is the reusable strip for surfaces that page
+rows themselves: a "N rows" count + a ‹/numbered-window/› control, ≤5 numbered
+buttons around the current page.)*
 
 ### Topbar — `mountTopbar(host, {session, activePageId, onToggleRail?})`
 A 3-column grid `1fr auto 1fr`:

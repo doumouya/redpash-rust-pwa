@@ -99,8 +99,8 @@ again — which is the whole reason it's a *log*, not a store.
   > or compute path.~~ (original 2026-06-13 stance)
 - **Resolved:** ~~idb-storage index test~~ → no (empty `Index`/`IndexMut`; source
   0.19.0 + browser spike). The single most-important open measurement is closed.
-- **Still open** (only if the version-log direction is pursued): a faster durable
-  write path (`StoreMut::append` vs INSERT-string); typed schema vs all-TEXT;
+- **Still open** (data-store hardening + the future git-for-data layer): a faster
+  durable write path (`StoreMut::append` vs INSERT-string); typed schema vs all-TEXT;
   async-in-wasm integration (`wasm-bindgen-futures`, no `block_on`); the commit/diff
   data model bridging GlueSQL ↔ Polars ↔ server `project_steps`.
 
