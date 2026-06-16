@@ -1,0 +1,9 @@
+{
+  "_comment": "API-doc audit allowlist. Intentional doc↔code gaps, keyed by finding kind. Patterns: exact path, '/prefix/*' (subtree), or a path with :param/*slug (normalized match). doc_missing entries are resource names. Lean baseline: the api-routes.md catalog matches the served routes 1:1 (0 findings), so every list is empty. Add an entry only for a DELIBERATE gap (e.g. a debug-only route the catalog intentionally omits).",
+  "undocumented_endpoint": [],
+  "stale_doc_endpoint": [],
+  "method_mismatch": [],
+  "path_param_mismatch": [],
+  "auth_mismatch": [],
+  "doc_missing": []
+}

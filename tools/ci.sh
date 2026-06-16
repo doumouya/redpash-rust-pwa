@@ -17,7 +17,11 @@ fi
 run sh tools/purity-check.sh
 run sh -c 'cd backend && cargo check --quiet --workspace'
 run sh -c 'cd backend && cargo test --quiet --workspace'
-run node tools/ui-fork-audit/audit.js
+# The ci-audit ratchet runs the WHOLE audit suite (incl. ui-fork) and fails
+# only on REGRESSIONS vs tools/ci-audit/baseline.json — existing findings are
+# the floored backlog, not a hard block. (File-baseline interim until the
+# Phase-7 Postgres run_diff lands; see tools/ci-audit/README.md.)
+run sh tools/ci-audit/check.sh
 run sh tools/test-fe.sh
 # build-fe self-checks the shipped module graph (a typo'd import fails the
 # build here instead of 404ing at runtime).
