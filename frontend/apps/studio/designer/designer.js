@@ -57,7 +57,10 @@ export default async function mount(root, ctx) {
             const payload = editor.getPayload();
             try {
               const row = await api.post("/charts", payload);
-              grid?.addElement({ id: row.redpash_id, x: 0, y: 0, w: 7, h: 4, mount: chartCell(payload.spec) });
+              // The persisted spec is recipe-only (no customer data — privacy F-E);
+              // render the new tile from the editor's live, client-side option.
+              const liveSpec = { ...payload.spec, option: editor.getOption() };
+              grid?.addElement({ id: row.redpash_id, x: 0, y: 0, w: 7, h: 4, mount: chartCell(liveSpec) });
               toast({ message: `“${payload.title}” added` });
               close();
             } catch (e) {

@@ -105,6 +105,13 @@ export function mountChartEditor(host, cfg = {}) {
     } catch { columns = []; }
   }
 
+  // The PERSISTABLE recipe — the chart DEFINITION minus the baked `option`. The
+  // option carries the /group/preview result (group keys = raw cell values +
+  // aggregates) — customer-derived data that must NEVER reach the server-side spec
+  // (privacy F-E / registry-redundancy.md: derive, don't store). source_file_id +
+  // group_by/agg/type/theme RE-DERIVE the option on render, so it stays client-only.
+  const recipe = () => { const { option, ...rest } = c; return rest; };
+
   // ── live preview: aggregate via /group/preview → shape → renderChart ─────────
   async function rebuild() {
     const my = ++seq;
@@ -126,7 +133,7 @@ export function mountChartEditor(host, cfg = {}) {
     c.option = synthesizeOption(data, c.kind);
     inst?.dispose?.();
     inst = renderChart(preview, { cfg: c }, c.theme);
-    cfg.onChange?.({ ...c });
+    cfg.onChange?.(recipe());
   }
 
   // initial load + first preview
@@ -134,8 +141,12 @@ export function mountChartEditor(host, cfg = {}) {
 
   return {
     el: root,
-    /** The shape the Designer POSTs to /api/charts. */
-    getPayload: () => ({ source_file_id: sourceId, title: title.trim(), spec: { ...c } }),
+    /** The shape the Designer POSTs to /api/charts — the recipe only, NO baked
+        option (privacy F-E: customer-derived data never reaches the server spec). */
+    getPayload: () => ({ source_file_id: sourceId, title: title.trim(), spec: recipe() }),
+    /** The live (client-side) synthesized option — lets the Designer render the
+        just-added tile immediately, no round-trip. Never persisted. */
+    getOption: () => c.option,
     valid: () => !!(sourceId && title.trim() && c.group_by),
     destroy: () => { inst?.dispose?.(); root.remove(); },
   };
