@@ -13,8 +13,8 @@ use tower::Layer;
 use tower_http::services::{ServeDir, ServeFile};
 
 use api::{
-    admin, auth, cases, files, group, me, middleware, objects, projects, rail, search, settings,
-    state::AppState, types,
+    admin, auth, cases, designer, files, group, me, middleware, objects, projects, rail, search,
+    settings, state::AppState, types,
 };
 
 #[tokio::main]
@@ -32,6 +32,8 @@ async fn main() -> eyre::Result<()> {
         .route("/health", get(health))
         .nest("/auth", auth::routes())
         .nest("/cases", cases::routes())
+        .nest("/charts", designer::chart_routes())
+        .nest("/dashboards", designer::dashboard_routes())
         .nest("/me", me::routes())
         .nest("/files", files::routes())
         .nest("/group", group::routes())

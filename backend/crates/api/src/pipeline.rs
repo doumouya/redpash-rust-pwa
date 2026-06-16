@@ -142,8 +142,103 @@ pub async fn upload_csv(
     })
 }
 
-/// SEALED: the only function that inserts a project_files row. Registers the
-/// file entity first (day-one #2) in the same tx.
+/// THE chart write path (file-producing → lives here per the one-write-path rule;
+/// there is no public db inserter). A chart is a `project_files{file_type:'chart'}`
+/// row whose `spec` is the OPAQUE chart cfg; it has NO bytes (storage_path='') and
+/// NO genesis step. Project is DERIVED from the source CSV (the IDOR anchor); RBAC =
+/// Member+ on that project (admin bypasses). Registers the entity in the same tx so
+/// require_action cascades chart→project. Returns the new rid.
+pub(crate) async fn create_chart(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &str,
+    caller_is_admin: bool,
+    source_file_id: &str,
+    title: &str,
+    spec: &serde_json::Value,
+) -> Result<String, AppError> {
+    let project: Option<String> = sqlx::query_scalar(
+        "SELECT project_id FROM project_files WHERE redpash_id = $1 AND file_type = 'csv'",
+    )
+    .bind(source_file_id)
+    .fetch_optional(pool)
+    .await?;
+    let project =
+        project.ok_or_else(|| AppError::not_found("not_found", format!("source file {source_file_id}")))?;
+    if !caller_is_admin {
+        let grant = rbac::resolve_grant(pool, cache, caller, &project).await?;
+        if !grant.effective().is_some_and(|r| r >= Role::Member) {
+            return Err(AppError::not_found("not_found", format!("project {project}")));
+        }
+    }
+    let rid = id::new("CHT");
+    let mut tx = pool.begin().await?;
+    db::register_entity(&mut tx, &rid, "chart").await?;
+    sqlx::query(
+        "INSERT INTO project_files (redpash_id, project_id, filename, file_type, source_file_id, spec)
+         VALUES ($1, $2, $3, 'chart', $4, $5)",
+    )
+    .bind(&rid)
+    .bind(&project)
+    .bind(title)
+    .bind(source_file_id)
+    .bind(spec)
+    .execute(&mut *tx)
+    .await?;
+    db::grant_owner(&mut tx, &rid, caller).await?;
+    tx.commit().await?;
+    Ok(rid)
+}
+
+/// THE dashboard write path (sibling of create_chart). A dashboard is a
+/// `project_files{file_type:'dashboard'}` row whose `spec` is the OPAQUE 15×10
+/// layout; no source_file_id, no bytes, no genesis step. RBAC = Member+ on the
+/// supplied project (admin bypasses). Registers the entity in the same tx.
+pub(crate) async fn create_dashboard(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &str,
+    caller_is_admin: bool,
+    project: &str,
+    title: &str,
+    folder: Option<&str>,
+    spec: &serde_json::Value,
+) -> Result<String, AppError> {
+    let exists: Option<i32> = sqlx::query_scalar("SELECT 1 FROM projects WHERE redpash_id = $1")
+        .bind(project)
+        .fetch_optional(pool)
+        .await?;
+    if exists.is_none() {
+        return Err(AppError::not_found("not_found", format!("project {project}")));
+    }
+    if !caller_is_admin {
+        let grant = rbac::resolve_grant(pool, cache, caller, project).await?;
+        if !grant.effective().is_some_and(|r| r >= Role::Member) {
+            return Err(AppError::not_found("not_found", format!("project {project}")));
+        }
+    }
+    let rid = id::new("DSH");
+    let mut tx = pool.begin().await?;
+    db::register_entity(&mut tx, &rid, "dashboard").await?;
+    sqlx::query(
+        "INSERT INTO project_files (redpash_id, project_id, filename, file_type, folder, spec)
+         VALUES ($1, $2, $3, 'dashboard', $4, $5)",
+    )
+    .bind(&rid)
+    .bind(project)
+    .bind(title)
+    .bind(folder)
+    .bind(spec)
+    .execute(&mut *tx)
+    .await?;
+    db::grant_owner(&mut tx, &rid, caller).await?;
+    tx.commit().await?;
+    Ok(rid)
+}
+
+/// SEALED: the only function that inserts a *CSV* project_files row (the chart +
+/// dashboard creators above are its non-parsing siblings). Registers the file
+/// entity first (day-one #2) in the same tx.
 #[allow(clippy::too_many_arguments)]
 async fn insert_file(
     pool: &PgPool,
