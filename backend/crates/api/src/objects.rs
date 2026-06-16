@@ -468,6 +468,19 @@ fn org_builtin(type_id: &str) -> Option<(&'static str, &'static str)> {
                 WHERE m.member_redpash_id = ANY($1)
                   AND m.object_redpash_id IN (t.redpash_id, t.company_id)))",
         )),
+        // Case browse view. Reach = membership on the case itself OR either
+        // declared scope_parent (company_id / project_id) — mirrors the
+        // type_definitions scope_parents and the rbac::require_action cascade
+        // used by get/patch/delete. Browse + DELETE only (registry_read_only);
+        // cases are created + advanced by agents on the dedicated /api/cases
+        // surface, where the status workflow lives.
+        "case" => Some((
+            "cases",
+            "($1::text[] IS NULL OR EXISTS (
+                SELECT 1 FROM memberships m
+                WHERE m.member_redpash_id = ANY($1)
+                  AND m.object_redpash_id IN (t.redpash_id, t.company_id, t.project_id)))",
+        )),
         _ => None,
     }
 }
@@ -475,8 +488,11 @@ fn org_builtin(type_id: &str) -> Option<(&'static str, &'static str)> {
 /// file/project are managed by their own flows (upload, /projects) and have
 /// non-text, provenance-owned typed columns — the registry exposes them READ +
 /// DELETE only, never create/edit. (Rename has its own dedicated endpoint.)
+/// `case` joins them browse+DELETE-only here: cases are created and advanced by
+/// agents on the dedicated /api/cases surface (where the status workflow lives),
+/// not the generic registry.
 fn registry_read_only(type_id: &str) -> bool {
-    matches!(type_id, "file" | "project")
+    matches!(type_id, "file" | "project" | "case")
 }
 
 /// The CSV-only row scope the file registry surface advertises. file/chart/
