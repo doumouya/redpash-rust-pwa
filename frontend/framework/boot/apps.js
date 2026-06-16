@@ -39,7 +39,7 @@ export const APPS = [
     landing: "#/registry",
     pages: [
       { id: "console", label: "Console", icon: "bi-sliders2", built: true },
-      { id: "registry", label: "Data Registry", icon: "bi-database", built: true },
+      { id: "registry", label: "Data Registry", icon: "bi-diagram-3", built: true },
       { id: "cases", label: "Cases", icon: "bi-kanban", built: true },
       { id: "monitoring", label: "Monitoring", icon: "bi-activity", built: true },
     ],
