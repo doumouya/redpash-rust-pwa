@@ -43,6 +43,7 @@
 @import "../framework/sql-editor/sql-editor.css";
 @import "../framework/chart/chart.css";
 @import "../framework/dashboard-grid/dashboard-grid.css";
+@import "../framework/chart-editor/chart-editor.css";
 
 /* 3 — page sheets (.pg-<app>-<page> scoped; may read --rp-* vars, never set
        framework classes) */

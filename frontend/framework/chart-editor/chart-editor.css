@@ -1,0 +1,43 @@
+/* chart-editor — the author-a-chart form + a live preview, side by side. Sole
+   owner of .rp-ce-*. The framework select/atoms own their own look; this sheet
+   lays out the form grid + the preview pane. */
+
+.rp-ce {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) minmax(16rem, 1.3fr);
+  gap: var(--rp-sp-4);
+  min-width: min(54rem, 80vw);
+}
+
+.rp-ce-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+}
+
+.rp-ce-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-1);
+}
+
+.rp-ce-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+
+/* the live ECharts preview mounts straight into this pane (it must be sized). */
+.rp-ce-preview {
+  min-height: 18rem;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface);
+}
+
+/* stack form-over-preview on a narrow viewport (the modal goes single-column). */
+@media (max-width: 48rem) {
+  .rp-ce { grid-template-columns: 1fr; }
+}
