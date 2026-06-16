@@ -42,12 +42,14 @@
 @import "../framework/column-manager/column-manager.css";
 @import "../framework/sql-editor/sql-editor.css";
 @import "../framework/chart/chart.css";
+@import "../framework/dashboard-grid/dashboard-grid.css";
 
 /* 3 — page sheets (.pg-<app>-<page> scoped; may read --rp-* vars, never set
        framework classes) */
 @import "../apps/auth/login/login.css";
 @import "../apps/settings/settings/settings.css";
 @import "../apps/studio/workspace/workspace.css";
+@import "../apps/studio/designer/designer.css";
 @import "../apps/admin/org/org.css";
 @import "../apps/admin/console/console.css";
 @import "../apps/admin/registry/registry.css";

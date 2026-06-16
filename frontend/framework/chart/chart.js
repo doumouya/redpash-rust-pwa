@@ -30,7 +30,7 @@ export function mountChart(host, cfg = {}) {
   host.append(card);
 
   if (empty) {
-    return { el: card, canvas, chart: null, resize() {}, setOption() {}, dispose() {} };
+    return { el: card, canvas, chart: null, resize() {}, setOption() {}, dispose() {}, destroy() {} };
   }
 
   // ensureRegisteredThemes() is fire-and-forget (memoized); a cold first paint
@@ -49,6 +49,7 @@ export function mountChart(host, cfg = {}) {
     resize() { chart.resize(); },
     setOption(opt) { chart.setOption(opt); },
     dispose() { window.removeEventListener("resize", onResize); chart.dispose(); },
+    destroy() { window.removeEventListener("resize", onResize); chart.dispose(); },
   };
 }
 

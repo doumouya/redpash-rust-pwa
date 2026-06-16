@@ -1,0 +1,16 @@
+/* studio/designer — the Designer page. The framework dashboard-grid + chart own
+   the look; this sheet is the page frame + the demo text-tile styling. */
+
+.pg-studio-designer {
+  height: 100%;
+}
+
+/* A text element's content (title / notes) — fills its grid cell. */
+.pg-studio-designer-text {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--rp-sp-3);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
