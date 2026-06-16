@@ -572,6 +572,16 @@ async fn download_attachment(
     let bytes = tokio::fs::read(state.attachment_path(&att))
         .await
         .map_err(|e| AppError::internal("io", format!("read attachment: {e}")))?;
+    // Read-access audit (privacy finding F-I / GDPR Art. 30): downloading a stored
+    // attachment is access to personal data — record WHO accessed WHAT (ids only,
+    // never the bytes).
+    event::info(
+        &state.db,
+        "case_attachment_download",
+        format!("attachment {att} downloaded from case {rid}"),
+        Some(caller.rid.clone()),
+        serde_json::json!({ "type": "case_attachment", "case": &rid, "attachment": &att }),
+    );
     // Sanitize the filename for the header (strip quote/backslash/CR/LF) — no header
     // injection from a crafted upload name.
     let safe_name: String =

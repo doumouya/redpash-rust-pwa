@@ -81,6 +81,16 @@ async fn export_me(
     .fetch_all(&state.db)
     .await?;
 
+    // Read-access audit (privacy finding F-I / GDPR Art. 30): a subject-access
+    // export is a significant access to personal data — record it.
+    crate::event::info(
+        &state.db,
+        "data_export",
+        format!("data-subject export by {rid}"),
+        Some(rid.clone()),
+        serde_json::json!({ "type": "user", "subject": rid }),
+    );
+
     Ok(Json(serde_json::json!({
         "subject": subject,
         "preferences": preferences,
