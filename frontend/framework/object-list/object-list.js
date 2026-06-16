@@ -47,9 +47,9 @@ function listToolbar(s) {
   const c = [];
   if (s.creatable) c.push({ kind: "button", id: "new", icon: "bi-plus-lg", title: s.createTitle ?? `New ${s.typeLabel}` });
   c.push(
+    { kind: "toggle", id: "filter", icon: "bi-funnel", title: "Filter", active: (st) => st.hasFilter },
     { kind: "sep" },
     { kind: "search", id: "search", placeholder: `Search ${s.typeLabelPlural.toLowerCase()}…`, value: s.query ?? "" },
-    { kind: "toggle", id: "filter", icon: "bi-funnel", title: "Filter", active: (st) => st.hasFilter },
     { kind: "sep" },
     // edit / select / delete — one interaction mode at a time.
     { kind: "toggle", id: "edit", icon: "bi-pencil", title: "Edit cells", group: "mode", active: (st) => st.mode === "edit", when: (st) => st.editable },
