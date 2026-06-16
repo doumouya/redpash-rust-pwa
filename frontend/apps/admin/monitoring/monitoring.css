@@ -4,7 +4,7 @@
    (rem/%); px only for the card hairline. */
 
 .pg-admin-monitoring {
-  display: block;
+  height: 100%;
 }
 
 .pg-admin-monitoring-kpis {
