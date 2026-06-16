@@ -1,0 +1,38 @@
+{
+  "skill_name": "rust-object-registry-design",
+  "notes": "Should-trigger task prompts for the skill-creator eval loop. Assertions are qualitative (design-methodology output) — graded by whether the response follows the method: detect rigidity, EXTEND lean's already-built registry (type_definitions/type_fields + objects.rs's generic handlers + the registry_display_fields derive), ground in rustc's patterns, stage the work, and seam-map before editing. Run with-skill vs baseline (no skill) to see the lift. Near-miss should-NOT-trigger queries live in the description-optimization trigger set, not here.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "add-new-entity-type-without-boilerplate",
+      "prompt": "I need to add a new 'integration' object type to the RedPash backend (like connectors, but for outbound webhooks). Is there a way to add it without a migration to extend a type enum, a new db module, a new route module, plus RBAC and audit wiring each time? How should I approach this on lean?",
+      "expected_output": "Recognizes this as the rigidity the registry already solves on lean; points to the BUILT seeds — type_definitions/type_fields (a type/field is a row), objects.rs's generic builtin_list/builtin_view + the registry_display_fields derive, org_builtin + the shared reach predicate, entities + register_entity (the one polymorphic id space), and rbac::resolve_grant (type-agnostic RBAC); references the rustc DefId + Providers patterns; recommends EXTENDING the registry (a row + the generic handler), NOT writing the Nth hand-rolled module. Cites docs/REDMAP.md + docs/decisions/day-one.md and the seam map.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "name": "keep-or-kill-a-closed-check",
+      "prompt": "We still have closed Postgres CHECK constraints in a few places (e.g. cases.status, cases.type). I want anything that grows per-vertical to be data-driven — a row insert, not a redeploy — without breaking the existing builtin types. Where should I draw the line?",
+      "expected_output": "Identifies the closed-CHECK tell and applies the Ch.17-vs-Ch.6 rule: a bounded invariant (the RBAC Role tier) stays an enum; an open set that grows per vertical becomes a registry. Notes lean ALREADY data-drives the type/field registry (type_definitions/type_fields) and the cases workflow (a workflows-as-data transition map, not a hardcoded match); proposes the rustc Interner::prefill pattern (seed the builtins byte-identically) for any remaining closed set worth opening; insists on back-compat for the existing builtins as the bar.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "name": "user-defined-custom-objects",
+      "prompt": "We want RedPash users to define their own object types at runtime — e.g. a real-estate customer creates a 'Listing' type with their own fields — and get CRUD, RBAC, and field validation for free, no code deploy. How is the backend structured to make that possible on lean?",
+      "expected_output": "Lands on the hybrid storage already in lean (builtins keep typed tables via org_builtin; custom types live in entity_data, FK to entities ON DELETE CASCADE); the generic /api/objects/:type/:rid handler that serves any type; type_definitions/type_fields as the type+field declaration; reuse of resolve_grant for auto-wired RBAC; register_type modeled on rustc's Providers (register, don't edit a match). Frames it as EXTENDING the built registry, not a from-scratch build.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 4,
+      "name": "new-connector-type-no-new-module",
+      "prompt": "Two more connector types are coming (S3, then database CDC). Design how a new connector plugs into the framework WITHOUT a new hand-written module each time.",
+      "expected_output": "Connects connector-as-type to the object registry and the connector-through-framework posture (a connector is a thin transport that calls the framework's sealed pipeline, never the storage layer); reuse of connectors_core::host_gate (the SSRF/TLS gate) + the conduit pattern (mysql_loader as the worked example — pull → bytes → the client's store, no customer data on our servers) so a new connector is a registered transport, not a new module; references the rustc query/Providers extensibility model.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}

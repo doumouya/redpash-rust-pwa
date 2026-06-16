@@ -1,0 +1,46 @@
+{
+  "skill_name": "rust-data-engine",
+  "notes": "Should-trigger task prompts for the rust-data-engine skill (working RedPash's data crate, polars 0.54 via the doumouya/polars-rp fork). Grading is qualitative: does the response use the actual data-crate patterns — lazy/col() expressions over row loops, reuse the right module (steps::apply / group_by::execute / filter::apply_filter / parse::from_csv_bytes), 0.54 type model (Column -> as_materialized_series() -> Series -> typed downcast vs AnyValue at the boundary), serde JSON page-shape, the wasm Workbook surface (NOT parse_csv/apply_filter/auto_clean), pure-compute discipline enforced by tools/purity-check.sh, wasm cfg awareness — rather than generic Polars or HTTP-in-the-crate answers? Run with-skill vs baseline (no skill).",
+  "evals": [
+    {
+      "id": 1,
+      "name": "add-cleaning-step",
+      "prompt": "I want to add a cleaning step to the engine that drops rows where a chosen column is null. Where in the data crate does it go, and how should I write it so it works on both the server and the in-browser wasm build?",
+      "expected_output": "Points to the steps::apply dispatch (a new clean op is one match arm with a free-form `kind` string and zero DB/DTO/route changes; unknown kinds -> DataError::InvalidSpec), routed to steps/rows.rs — and notes drop_nulls already exists. Expresses it as a Polars lazy filter (col(x).is_not_null()) collected once, not a row loop; keeps it pure-compute (no HTTP/io/time). Notes it's automatically on both surfaces because the wasm Workbook calls the same engine fn (cdylib+rlib) and tools/purity-check.sh gates the wasm32 build. Reuses the module pattern rather than inventing.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "name": "parse-csv-infer-types",
+      "prompt": "A user uploaded a CSV that might not be UTF-8 (could be Latin-1). I need to parse it into a dataframe in the data crate and infer each column's type. How?",
+      "expected_output": "Use the upload front door parse::from_csv_bytes(bytes, tld) — it detects encoding first (chardetng / encoding module), decodes (locale-aware via the tld hint), sniffs the dialect, and reads CSV via CsvReadOptions into a LazyFrame, returning (DataFrame, diag, encoding); type inference via the dtype module / DataType (dtype::summarize). Stays lazy; avoids assuming UTF-8; does not hand-roll a UTF-8 read.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "name": "groupby-aggregation",
+      "prompt": "For Reports I need to group by the 'company' column, sum 'amount', and count rows per company. Show me how to do this in the engine.",
+      "expected_output": "Points at group_by::execute(df, &ReportSpec) as the Reports home/worked example — a ReportSpec with group_by:[\"company\"] and aggregations [{col:\"amount\", fn: sum}, {col:\"*\", fn: count}] (col:\"*\" is the count-of-rows shortcut). If hand-writing Polars: .lazy().group_by([col(\"company\")]).agg([col(\"amount\").sum(), ...]).collect(), then sort the collected DataFrame eagerly with SortMultipleOptions (NOT a lazy sort chained off group_by().agg(), which can silently drop). Expression-based, collected once; not a manual HashMap row loop.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 4,
+      "name": "anyvalue-to-json",
+      "prompt": "When I read a cell out of a column I get an AnyValue, but I need an owned String to put in the JSON response. What's the right pattern, and why AnyValue rather than a typed column read here?",
+      "expected_output": "The cell / av-to-owned pattern (match AnyValue variants -> owned Option<String>), matching BOTH AnyValue::String(&str) and AnyValue::StringOwned(PlSmallStr) — see view::cell; serde for the JSON; the page-shape {columns, rows, total} wire contract via view::page -> Page::to_json. Explains AnyValue is the type-erased value used at the boundary (one fn for all column types) while typed access (Column::as_materialized_series().str()/.i64()) is for the hot path; ties to the boundary discipline.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 5,
+      "name": "wasm-surface",
+      "prompt": "How do I expose a new filtered-and-sorted view of a CSV to the browser from the data crate? What's the wasm surface I'm adding to?",
+      "expected_output": "Identifies the wasm surface as the #[wasm_bindgen] Workbook impl in wasm.rs (a resident parsed CSV), NOT a flat parse_csv/apply_filter/auto_clean list. Notes Workbook.view(query_json, offset, limit) already does this: deserialize the shared QuerySpec {filter?, search?, sort?}, run search::effective_filter + filter::apply_filter -> sort::apply_sort -> view::page, returning the page-shape JSON. No logic in wasm.rs (it only marshals JSON <-> DataFrame and calls the same engine fns the server runs); the JS method list is GENERATED from the exports so there's no wired-vs-exported drift; purity is wasm-cfg-gated.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}
