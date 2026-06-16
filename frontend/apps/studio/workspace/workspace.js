@@ -50,6 +50,9 @@ export default async function mount(root, ctx) {
   let gridView = null; // grid-view composer (toolbar + table)
   let grid = null; // = gridView.table
   let uploader = null;
+  let uploading = false; // re-entry guard: serialize upload batches (the keyboard
+  // path can re-open the picker mid-upload; a 2nd concurrent batch could race
+  // ensure_default_project — see uploadFiles).
   let overviewList = null; // the Overview's Files table — a files object-list over /files
   let columns = []; // current column metas
   let allRows = []; // the full loaded page (before the search filter)
@@ -490,18 +493,53 @@ export default async function mount(root, ctx) {
     return items.find((f) => f.rid === rid)?.filename ?? rid;
   }
 
-  async function uploadFile(file) {
-    uploader?.busy(true);
+  // Upload one or many files. Each CSV is its own request (the backend pipeline
+  // is per-file: one genesis + cleanness score + project_files row), uploaded
+  // SEQUENTIALLY — the first upload may mint the user's default project, so
+  // parallel first-uploads could race it. A single clean upload opens the file
+  // (the original flow); multiple refresh the Overview so they all appear.
+  async function uploadFiles(files) {
+    const list = [...(files || [])].filter(Boolean);
+    if (!list.length || uploading) return; // guard re-entry (keyboard picker mid-batch)
+    uploading = true;
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const out = await api.upload("/files", fd);
-      toast({ message: `${out.filename} uploaded` });
+      const ok = [];
+      let failed = 0;
+      for (let i = 0; i < list.length; i++) {
+        uploader?.busy(true, list.length > 1 ? `Uploading ${i + 1} of ${list.length}…` : "");
+        try {
+          const fd = new FormData();
+          fd.append("file", list[i]);
+          ok.push(await api.upload("/files", fd));
+        } catch {
+          failed++;
+        }
+      }
       invalidateRailData();
-      await openFile(out.rid);
-    } catch (e) {
-      toast({ message: e.message || "Upload failed", tone: "danger" });
+      if (ok.length && !failed) {
+        toast({ message: ok.length === 1 ? `${ok[0].filename} uploaded` : `${ok.length} files uploaded` });
+      } else if (ok.length) {
+        toast({ message: `${ok.length} uploaded, ${failed} failed`, tone: "danger" });
+      } else {
+        toast({ message: failed > 1 ? `All ${failed} uploads failed` : "Upload failed", tone: "danger" });
+      }
+      // exactly one file, uploaded → open it (preserves the single-file flow);
+      // otherwise re-render the Overview so every new file shows in the Files table.
+      if (list.length === 1 && ok.length === 1) {
+        // a flaky post-upload GET must not strand the spinner: the file IS saved.
+        try {
+          await openFile(ok[0].rid);
+        } catch (e) {
+          toast({ message: e.message || "Uploaded, but couldn't open the file", tone: "danger" });
+          uploader?.busy(false);
+          renderEmpty();
+        }
+        return;
+      }
       uploader?.busy(false);
+      if (ok.length) renderEmpty();
+    } finally {
+      uploading = false;
     }
   }
 
@@ -526,8 +564,9 @@ export default async function mount(root, ctx) {
     });
     current = null;
     uploader = mountUploader(page.section("main"), {
-      hint: "CSV, TSV or text — open it for a full-screen view of the data",
-      onFile: uploadFile,
+      multiple: true,
+      hint: "CSV, TSV or text — pick one or several; open a file for a full-screen view",
+      onFiles: uploadFiles,
     });
     // Overview = the Files table: the SAME generic object-list (redtable + the
     // filter toolbar), sourced from /files so it works without the registry backend
