@@ -347,7 +347,13 @@ export function mountObjectList(host, cfg) {
 
   return {
     el: root,
-    update: (p = {}) => { if (p.type) show(p.type); },
+    // type switch re-shows; an external FilterNode (e.g. a rail status tab) scopes
+    // the loaded rows client-side — same filterNode the panel drives, so they stay
+    // in sync. `filter:null` clears.
+    update: (p = {}) => {
+      if (p.type) { show(p.type); return; }
+      if ("filter" in p) { filterNode = p.filter || null; paint(); refreshToolbar(); }
+    },
     current: () => current?.type_id ?? null,
     destroy: () => { gridView?.destroy(); root.remove(); },
   };

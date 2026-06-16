@@ -4,12 +4,13 @@
 
    Create + inline edit are SUPPRESSED here (cfg.source — the same lever the
    Overview uses for its read-only /files view): cases are born from agents, and
-   a create FORM needs the `case` type_fields seed (a backend item). The kanban
-   board, the workflow-aware drag, the detail drawer + comments + activity arrive
-   in Phase B/C on the dedicated /api/cases contract.
+   a create FORM needs the `case` type_fields seed. The kanban board, the
+   workflow-aware drag, the detail drawer + comments + activity arrive in Phase
+   B/C on the dedicated /api/cases contract.
 
-   Single type → no contextual type-tab rail (rail:false): a focused, full-width
-   work surface — and what the Phase-B board will want anyway. */
+   Rail: the server descriptor (GET /api/rail/cases) supplies the workflow STAGES
+   as tabs (the internal kanban columns — All · Backlog · … · Done); clicking one
+   scopes the table to that status, client-side, via the object-list filter. */
 
 import { assemblePage } from "../../../framework/page-assembly/page-assembly.js";
 import { mountObjectList } from "../../../framework/object-list/object-list.js";
@@ -26,6 +27,12 @@ const CASE_COLUMNS = [
   { key: "created_at", label: "Created" },
 ];
 
+/* A rail stage tab → the FilterNode the object-list scopes by. "all" clears it. */
+function stageFilter(status) {
+  if (!status || status === "all") return null;
+  return { node: "group", op: "and", children: [{ node: "pred", col: "status", op: "eq", value: status }] };
+}
+
 export default async function mount(root, ctx) {
   let objList = null;
 
@@ -33,7 +40,16 @@ export default async function mount(root, ctx) {
     session: ctx.getSession(),
     activePageId: "cases",
     title: "Cases",
-    rail: false,
+    // The rail's stage tabs come from the server (GET /api/rail/cases). Selecting
+    // one scopes the table to that status (or clears for "all").
+    rail: {
+      active: "all",
+      onRailTab: (tab) => {
+        if (tab?.kind !== "section") return;
+        page.rail?.setActive(tab.id);
+        objList?.update({ filter: stageFilter(tab.id) });
+      },
+    },
     sections: [{ key: "main" }],
   });
 

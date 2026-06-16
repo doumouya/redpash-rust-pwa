@@ -97,6 +97,20 @@ const CONSOLE_SECTIONS: [(&str, &str, &str); 3] = [
     ("policies", "Policies", "bi-shield-lock"),
 ];
 
+/// The Cases rail: workflow-stage filters (the kanban columns of the internal
+/// workflow). "all" clears the filter; each other tab scopes the table to that
+/// status, client-side (the page's onRailTab applies it). Static chrome (kind
+/// "section"); Phase B's board reads the same stages. `id` MATCHES the status
+/// enum value so the page can filter on it directly.
+const CASE_STATUS_SECTIONS: [(&str, &str, &str); 6] = [
+    ("all", "All cases", "bi-collection"),
+    ("backlog", "Backlog", "bi-inbox"),
+    ("todo", "To do", "bi-circle"),
+    ("in_progress", "In progress", "bi-arrow-repeat"),
+    ("in_review", "In review", "bi-eye"),
+    ("done", "Done", "bi-check2-circle"),
+];
+
 /// `view -> RailView`. DEFAULT (any unmapped view) → the workspace InstanceTree,
 /// so unmapped pages still get the Browse rail until their own descriptor lands.
 fn descriptor(view: &str) -> RailView {
@@ -116,6 +130,9 @@ fn descriptor(view: &str) -> RailView {
         "settings" => RailView::PrefGroups,
         // The Console: its own (heterogeneous) policy sections — static chrome.
         "console" => RailView::Sections { group: "Console", items: &CONSOLE_SECTIONS },
+        // Cases: workflow-stage filter tabs (the kanban columns); the page scopes
+        // the table to the clicked status client-side.
+        "cases" => RailView::Sections { group: "Status", items: &CASE_STATUS_SECTIONS },
         // Designer (page not built yet) — projects → chart/dashboard files.
         "designer" => RailView::InstanceTree {
             group_type: "project",
