@@ -26,7 +26,7 @@ export const APPS = [
     pages: [
       // id stays `workspace` (route / file path / deep-links); the visible
       // label is its real name — the data cleaner (clean a CSV in a few clicks).
-      { id: "workspace", label: "Data Cleaner", icon: "bi-magic", built: true },
+      { id: "workspace", label: "Data Cleaner", icon: "bi-stars", built: true },
       { id: "designer", label: "Designer", icon: "bi-grid-1x2", built: true },
       // sheetwise — later slice
     ],
