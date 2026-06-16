@@ -1,0 +1,31 @@
+# The on-device customer-data store: GlueSQL-wasm + IndexedDB ("InnoDB version").
+# Wasm-ONLY (idb storage needs web-sys) — deliberately ISOLATED from the backend
+# workspace (its own [workspace] + Cargo.lock) so its idb/getrandom-js deps never
+# touch the pure `data` crate or the native build. Built by tools/build-wasm-gluesql.sh
+# -> frontend/wasm/gluesql.js, shipped beside the Polars engine (data.js):
+# Polars computes, GlueSQL persists + serves queries on the device.
+[package]
+name = "gluesql-store"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gluesql = { version = "0.19", default-features = false }
+gluesql-idb-storage = "0.19"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+serde_json = "1"
+csv = "1"
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
