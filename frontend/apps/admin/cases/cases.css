@@ -1,0 +1,7 @@
+/* admin/cases — Cases, Phase A: a thin instance of the generic object-list over
+   the `case` type (the framework components own the entire look — ui-fork-audit
+   R1/R2). A focused, full-width surface (no contextual rail — cases is one type). */
+
+.pg-admin-cases {
+  height: 100%;
+}
