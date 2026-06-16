@@ -1,0 +1,34 @@
+/* perm-cell — the cycling permission cell (admin field matrices). Sole owner
+   of .rp-perm-cell (ui-fork-audit R4). State rides data-perm: none | r | rw. */
+
+.rp-perm-cell {
+  min-width: 3rem;
+  height: var(--rp-ctl-h);
+  padding: 0 var(--rp-pad-x);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-sm);
+  background: var(--rp-surface);
+  color: var(--rp-text-mute);
+  font-family: var(--rp-font-mono);
+  font-size: var(--rp-text-xs);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--rp-fast) var(--rp-ease),
+    color var(--rp-fast) var(--rp-ease),
+    border-color var(--rp-fast) var(--rp-ease);
+}
+
+.rp-perm-cell:hover {
+  background: var(--rp-hover);
+}
+
+.rp-perm-cell[data-perm="r"] {
+  color: var(--rp-info);
+  border-color: color-mix(in srgb, var(--rp-info) 35%, var(--rp-border));
+}
+
+.rp-perm-cell[data-perm="rw"] {
+  color: var(--rp-ok);
+  border-color: color-mix(in srgb, var(--rp-ok) 35%, var(--rp-border));
+}

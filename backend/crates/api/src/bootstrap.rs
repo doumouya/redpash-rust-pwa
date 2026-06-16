@@ -1,84 +1,38 @@
-//! Doc: docs/internal/code/backend/api/bootstrap.md
-//! Startup-time idempotent setup.
-//!
-//! Runs after migrations. Ensures the dev user + their default project
-//! exist so the upload pipeline always has somewhere to put files. Once
-//! Phase 4 (Google OAuth) ships, this falls back to a no-op when at
-//! least one human user already exists.
+//! Purpose: debug-build-only dev bootstrap. Release binaries do not contain
+//! this module — there is no fallback identity in production (day-one #10);
+//! the first real admin arrives via POST /api/auth/claim-admin.
 
-use crate::{db, id};
-use anyhow::Context;
-use shared::user::UserProfile;
+#![cfg(debug_assertions)]
+
 use sqlx::PgPool;
 
-const DEV_USERNAME: &str = "dev";
+use crate::{db, id};
 
-pub struct Bootstrap {
-    pub user:    UserProfile,
-    pub project: String,
-}
-
-pub async fn run(pool: &PgPool) -> anyhow::Result<Bootstrap> {
-    let user = match db::find_user_by_username(pool, DEV_USERNAME)
-        .await
-        .context("looking up dev user")?
-    {
-        Some(u) => u,
+/// Ensure the 'dev' user exists as a platform admin with a default project.
+/// Idempotent on every boot.
+pub async fn ensure_dev_user(pool: &PgPool) -> eyre::Result<String> {
+    let existing: Option<String> =
+        sqlx::query_scalar("SELECT redpash_id FROM users WHERE username = 'dev'")
+            .fetch_optional(pool)
+            .await?;
+    let rid = match existing {
+        Some(rid) => rid,
         None => {
             let rid = id::new("USR");
-            tracing::info!(%rid, "creating dev user");
-            db::insert_user(pool, &rid, DEV_USERNAME, "Dev user", None, None, None, None)
-                .await
-                .context("creating dev user")?
-        }
-    };
-
-    // The bootstrap/dev user is the platform admin (users.role = 'admin', mig
-    // 20260531000002). Idempotent — keeps the dev-mode RBAC bypass working
-    // (rbac::is_platform_admin) regardless of how the row was created.
-    sqlx::query("UPDATE users SET role = 'admin' WHERE redpash_id = $1 AND role <> 'admin'")
-        .bind(&user.redpash_id)
-        .execute(pool)
-        .await
-        .context("promoting dev user to admin")?;
-
-    // Bootstrap admin allowlist — promote founders / additional admins without
-    // a psql one-liner (CAS_D78667D1). `REDPASH_BOOTSTRAP_ADMINS` is a
-    // comma-separated list of `redpash_id` OR `username` values; each is
-    // promoted idempotently on every boot. Closes the gap where a non-dev
-    // login (Em's real Google account, another Torv) saw empty list pages
-    // because RBAC strips rows for a caller with no platform-admin role.
-    // Unknown tokens are a no-op (0 rows) — safe to leave stale entries.
-    if let Ok(raw) = std::env::var("REDPASH_BOOTSTRAP_ADMINS") {
-        for token in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-            let promoted = sqlx::query(
-                "UPDATE users SET role = 'admin'
-                 WHERE (redpash_id = $1 OR username = $1) AND role <> 'admin'",
+            let mut tx = pool.begin().await?;
+            db::register_entity(&mut tx, &rid, "user").await?;
+            sqlx::query(
+                "INSERT INTO users (redpash_id, username, display_name, role)
+                 VALUES ($1, 'dev', 'Dev user', 'admin')",
             )
-            .bind(token)
-            .execute(pool)
-            .await
-            .context("promoting bootstrap admin from allowlist")?;
-            if promoted.rows_affected() > 0 {
-                tracing::info!(%token, "promoted bootstrap admin from REDPASH_BOOTSTRAP_ADMINS");
-            }
-        }
-    }
-
-    let project = match db::find_default_project(pool, &user.redpash_id)
-        .await
-        .context("looking up default project")?
-    {
-        Some(p) => p,
-        None => {
-            let rid = id::new("PRJ");
-            tracing::info!(%rid, "creating default project");
-            db::insert_project(pool, &rid, &user.redpash_id, "Workspace", true)
-                .await
-                .context("creating default project")?;
+            .bind(&rid)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
             rid
         }
     };
-
-    Ok(Bootstrap { user, project })
+    db::ensure_default_project(pool, &rid).await?;
+    tracing::info!(user = %rid, "dev bootstrap ready (debug build)");
+    Ok(rid)
 }

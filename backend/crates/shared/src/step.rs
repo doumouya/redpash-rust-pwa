@@ -1,30 +1,14 @@
-//! Doc: docs/internal/code/backend/shared/step.md
-//! ProjectStep — one cleaning operation applied to a file.
+//! Purpose: the cleaning-step DTO — one row of project_steps on the wire.
 //!
-//! Wire shape mirrors the `project_steps` table:
-//!   • `ordinal`  is the position in the file's step history.
-//!   • `applied`  flips false on undo, true on redo.
-//!   • `kind`     is a string (so new step kinds can ship without
-//!                touching the DTO); the data crate pattern-matches on
-//!                known values and rejects the rest.
+//! `kind` is an OPEN string resolved against the data crate's step registry —
+//! never an enum. A new step kind ships with zero DTO/DB changes; the engine
+//! pattern-matches known kinds and rejects the rest with InvalidSpec.
 
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectStep {
-    pub redpash_id:      String,
-    pub file_redpash_id: String,
-    pub ordinal:         i32,
-    pub kind:            String,
-    pub params:          serde_json::Value,
-    pub applied:         bool,
-    pub created_at:      DateTime<Utc>,
-}
-
-/// Body of `POST /api/files/:rid/steps`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepRequest {
-    pub kind:   String,
+pub struct Step {
+    pub kind: String,
+    #[serde(default)]
     pub params: serde_json::Value,
 }

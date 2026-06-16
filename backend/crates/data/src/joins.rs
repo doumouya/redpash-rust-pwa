@@ -1,48 +1,35 @@
-//! Doc: docs/internal/code/backend/data/joins.md
-//! Detect candidate join keys between two DataFrames.
+//! Purpose: detect + execute join keys between two frames — the multi-file
+//! differentiator ("the feature that lifts RedPash from a simple cleaner to
+//! the tool that democratises multi-file analysis").
 //!
-//! Algorithm (port of clarna-django's `detect_join_keys`):
-//!   1. For each column in each frame, collect a HashSet of unique
-//!      non-empty stringified values, capped at `MAX_UNIQUE`.
-//!   2. Score every (this_col, other_col) pair by overlap coefficient:
-//!         |A ∩ B| / min(|A|, |B|)
-//!      This favours subset relationships (FK → PK) over Jaccard, which
-//!      penalises asymmetric sizes.
-//!   3. Drop pairs below `threshold` or where either set is tiny (<5
-//!      unique values), sort descending by score, cap at `max_results`.
-//!
-//! The result for the UI is one `JoinCandidate` per surviving pair,
-//! enriched with up to 5 sample-matching values so the user can verify
-//! the join would actually link real rows.
+//! Scoring is the OVERLAP COEFFICIENT |A∩B| / min(|A|,|B|), deliberately NOT
+//! Jaccard: overlap favours the subset (FK→PK) relationships real joins are,
+//! where Jaccard penalises asymmetric set sizes. Capped distinct sets keep the
+//! TOP-N BY FREQUENCY (not first-N-seen) with an alphabetical tie-break for
+//! determinism — frequent values both match autocomplete intent and strengthen
+//! the FK→PK overlap signal.
 
-use crate::{DataError, Result};
-use polars::prelude::*;
-use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
+use polars::prelude::*;
+use serde::Serialize;
+
+use crate::{DataError, Result};
+
 pub const MAX_UNIQUE: usize = 5000;
-// One non-null value is enough — the overlap threshold below does the
-// real work. The old `5` rejected legitimate single-value joins
-// produced by a narrow filter (e.g. matricule = 1243).
+// One non-null value suffices — the overlap threshold does the real work
+// (the old `5` rejected legitimate single-value joins from a narrow filter).
 const MIN_UNIQUE: usize = 1;
 
 #[derive(Debug, Serialize)]
 pub struct JoinCandidate {
     pub this_col: String,
     pub other_col: String,
-    /// Overlap coefficient — `matches / min(this_uniques, other_uniques)`.
-    /// Used as the sort key (FK→PK signal: a 100-row test export fully
-    /// covered by a 100k-row prod export ranks first). Invisible to the
-    /// end user; the frontend renders raw counts instead.
+    /// Overlap coefficient (the sort key / FK→PK signal). The UI renders raw
+    /// counts, not this.
     pub score: f32,
-    /// Count of overlapping values within the capped unique sets.
     pub matches: u32,
-    /// Unique-value count on the base file's column (after MAX_UNIQUE
-    /// cap). Powers the user-facing "X of N base values match" string.
     pub this_uniques: u32,
-    /// Unique-value count on the other file's column (after MAX_UNIQUE
-    /// cap). Powers the "(other file has N unique)" tail of the same
-    /// string — gives the user cardinality at a glance.
     pub other_uniques: u32,
     pub samples: Vec<String>,
 }
@@ -65,11 +52,7 @@ pub fn detect_pair(
             if ob.len() < MIN_UNIQUE {
                 continue;
             }
-            let (small, large) = if ta.len() <= ob.len() {
-                (ta, ob)
-            } else {
-                (ob, ta)
-            };
+            let (small, large) = if ta.len() <= ob.len() { (ta, ob) } else { (ob, ta) };
             let mut hits = 0u32;
             let mut samples: Vec<String> = Vec::with_capacity(5);
             for v in small {
@@ -81,11 +64,7 @@ pub fn detect_pair(
                 }
             }
             let denom = small.len() as f32;
-            let score = if denom > 0.0 {
-                hits as f32 / denom
-            } else {
-                0.0
-            };
+            let score = if denom > 0.0 { hits as f32 / denom } else { 0.0 };
             if score >= threshold {
                 out.push(JoinCandidate {
                     this_col: tc.clone(),
@@ -99,23 +78,15 @@ pub fn detect_pair(
             }
         }
     }
-    out.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     out.truncate(max_results);
     Ok(out)
 }
 
-/// Materialise the join. Multi-key (compound) joins are supported by
-/// passing matching-length slices; the i-th left key pairs with the
-/// i-th right key.
-///
-/// Both sides' key columns are cast to `String` before the join so
-/// mismatched dtypes (e.g. `matricule` parsed as Int64 on one side and
-/// String on the other) don't blow up the request — string equality
-/// is the right semantics for ID-style columns anyway.
+/// Materialise the join. Multi-key joins pair the i-th left key with the i-th
+/// right key. Both sides' keys cast to String first so dtype mismatches
+/// (matricule Int64 vs String) don't 500 — string equality is the right
+/// semantics for ID columns anyway.
 pub fn execute(
     left: &DataFrame,
     right: &DataFrame,
@@ -133,73 +104,33 @@ pub fn execute(
         "left" => JoinType::Left,
         "right" => JoinType::Right,
         "outer" | "full" => JoinType::Full,
-        other => {
-            return Err(DataError::InvalidSpec(format!(
-                "unsupported join type: {other}"
-            )))
-        }
+        other => return Err(DataError::InvalidSpec(format!("unsupported join type: {other}"))),
     };
-
-    // Cast each key column to String on both sides. `with_column` here
-    // replaces the column in-place since names match.
     let mut left_c = left.clone();
     let mut right_c = right.clone();
     for k in left_keys {
-        let casted = left_c
-            .column(k.as_str())
-            .map_err(DataError::from)?
-            .cast(&DataType::String)
-            .map_err(DataError::from)?;
+        let casted = left_c.column(k.as_str()).map_err(DataError::from)?.cast(&DataType::String).map_err(DataError::from)?;
         left_c.with_column(casted).map_err(DataError::from)?;
     }
     for k in right_keys {
-        let casted = right_c
-            .column(k.as_str())
-            .map_err(DataError::from)?
-            .cast(&DataType::String)
-            .map_err(DataError::from)?;
+        let casted = right_c.column(k.as_str()).map_err(DataError::from)?.cast(&DataType::String).map_err(DataError::from)?;
         right_c.with_column(casted).map_err(DataError::from)?;
     }
-
     let l: Vec<&str> = left_keys.iter().map(|s| s.as_str()).collect();
     let r: Vec<&str> = right_keys.iter().map(|s| s.as_str()).collect();
-    left_c
-        .join(&right_c, l, r, JoinArgs::new(jt), None)
-        .map_err(DataError::from)
+    left_c.join(&right_c, l, r, JoinArgs::new(jt), None).map_err(DataError::from)
 }
 
-/// Pairwise distinct-set builder used by the join detector. Also
-/// re-used by `bin/audit_distincts.rs` to measure distinct-payload
-/// shape across the dev DB and by `data::distinct::for_column` to
-/// power the workspace's filter-autocomplete.
-///
-/// **Top-N-by-frequency, not first-N-seen.** When a column has more
-/// than `cap` distinct values, the set kept is the *most frequent*
-/// `cap` of them — not the first seen in row order (Torv ↔ Gus
-/// 2026-05-24). Two reasons:
-///   1. Filter autocomplete cares about what the user is likely to
-///      type, which correlates with frequency.
-///   2. Joins detection's FK→PK signal is strictly improved: the
-///      most-frequent values on the small side are disproportionately
-///      likely to overlap the other side too.
-///
-/// Below-cap columns are unaffected — every distinct value is kept,
-/// frequency order doesn't matter.
+/// Per-column distinct set, capped at `cap`. Over-cap columns keep the
+/// TOP-N BY FREQUENCY (alphabetical tie-break → deterministic). Also reused by
+/// distinct-for-autocomplete.
 pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, HashSet<String>>> {
     let mut out: HashMap<String, HashSet<String>> = HashMap::with_capacity(df.width());
     for c in df.columns() {
         let name = c.name().to_string();
-
-        // First pass: count occurrences. HashMap<value, count> grows
-        // as wide as the column's full distinct cardinality (uncapped
-        // here intentionally — we need the full count distribution to
-        // pick the top N at the end). At dev-DB scale (P99 ≈ 17k
-        // distincts on a 400k-row file) this is tens of KB resident
-        // per column; comfortable.
         let mut counts: HashMap<String, u32> = HashMap::new();
         for i in 0..c.len() {
-            let v = c.get(i).map_err(DataError::from)?;
-            let s = match v {
+            let s = match c.get(i).map_err(DataError::from)? {
                 AnyValue::Null => continue,
                 AnyValue::String(s) => (*s).to_string(),
                 AnyValue::StringOwned(s) => s.to_string(),
@@ -209,22 +140,51 @@ pub fn unique_per_col(df: &DataFrame, cap: usize) -> Result<HashMap<String, Hash
                 *counts.entry(s).or_insert(0) += 1;
             }
         }
-
-        // If the column fits under the cap, every distinct value
-        // stays — skip the sort entirely.
         if counts.len() <= cap {
             out.insert(name, counts.into_keys().collect());
             continue;
         }
-
-        // Otherwise pick the top-N by count. Tie-break alphabetically
-        // so the cut is deterministic across runs (ID-heavy columns
-        // are all count=1; without a tie-break the kept set would
-        // vary run-to-run).
         let mut by_count: Vec<(String, u32)> = counts.into_iter().collect();
         by_count.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         by_count.truncate(cap);
         out.insert(name, by_count.into_iter().map(|(v, _)| v).collect());
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_fk_to_pk_overlap_and_ignores_unrelated() {
+        // employees.dept_id ⊆ departments.id (a 2-of-2 subset → score 1.0),
+        // while name/label columns don't overlap.
+        let emp = df![
+            "dept_id" => ["D1", "D2", "D1", "D2"],
+            "name" => ["Alice", "Bob", "Carol", "Dan"],
+        ]
+        .unwrap();
+        let dept = df![
+            "id" => ["D1", "D2", "D3"],
+            "label" => ["Eng", "Sales", "Ops"],
+        ]
+        .unwrap();
+        let cands = detect_pair(&emp, &dept, 0.3, 20).unwrap();
+        let top = cands.first().expect("a candidate");
+        assert_eq!((top.this_col.as_str(), top.other_col.as_str()), ("dept_id", "id"));
+        assert!((top.score - 1.0).abs() < 1e-6, "FK fully covered → score 1.0");
+        // no name↔label candidate survives the threshold
+        assert!(!cands.iter().any(|c| c.this_col == "name" && c.other_col == "label"));
+    }
+
+    #[test]
+    fn execute_inner_join_links_rows_across_dtype_mismatch() {
+        // left key Int64, right key String — must still join (cast to String).
+        let left = df!["k" => [1i64, 2, 3], "v" => ["a", "b", "c"]].unwrap();
+        let right = df!["k" => ["1", "2"], "w" => ["x", "y"]].unwrap();
+        let out = execute(&left, &right, &["k".into()], &["k".into()], "inner").unwrap();
+        assert_eq!(out.height(), 2);
+        assert!(out.get_column_names().iter().any(|n| n.as_str() == "w"));
+    }
 }

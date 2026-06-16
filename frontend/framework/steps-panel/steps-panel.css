@@ -1,0 +1,72 @@
+/* steps-panel — the cleaning history timeline + undo/redo. Sole owner of
+   .rp-steps*. */
+
+.rp-steps {
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius);
+  box-shadow: var(--rp-ring);
+  padding: var(--rp-sp-3) var(--rp-sp-4);
+}
+
+.rp-steps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--rp-sp-2);
+}
+
+.rp-steps-title {
+  margin: 0;
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.rp-steps-actions {
+  display: inline-flex;
+  gap: var(--rp-gap);
+}
+
+.rp-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rp-steps-item {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-gap);
+  padding: 0.375rem 0;
+  font-size: var(--rp-text-sm);
+  border-bottom: 1px solid var(--rp-border);
+}
+.rp-steps-item:last-child {
+  border-bottom: 0;
+}
+
+.rp-steps-item.is-undone {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.rp-steps-kind {
+  font-family: var(--rp-font-mono);
+  font-size: var(--rp-text-xs);
+  color: var(--rp-accent);
+}
+
+.rp-steps-detail {
+  color: var(--rp-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-steps-none {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+  padding: var(--rp-sp-2) 0;
+}

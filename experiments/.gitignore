@@ -1,0 +1,3 @@
+# spike build artifacts — never commit (multi-GB)
+*/target/
+*/pkg/

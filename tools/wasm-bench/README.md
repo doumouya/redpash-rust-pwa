@@ -1,103 +1,58 @@
-# `tools/wasm-bench/` — WASM Phase C bench harness
+# wasm-bench — is client-side wasm fast enough to be the default?
 
-Measures parse-on-wasm vs server round-trip on a representative CSV.
-Deliverable contract: `docs/internal/architecture/roadmap-webassembly.md`
-§5 Phase C ("an honest perf + size delta").
+The data engine (`backend/crates/data`) compiles twice — native (server) and
+wasm32 (browser). This harness times the **same ops on both surfaces** across a
+row-count sweep so we can answer, with numbers, two questions:
 
-## What's here
+1. **The wasm tax** — for each op, how much does the wasm path cost vs native?
+   (read the **ratio**, not the machine-relative ms).
+2. **The cliff** — at what row count does each op cross ~100 ms / ~1 s, i.e.
+   where should the client path hand off to the server (the over-cap fallback)?
 
-| File | Purpose |
-|---|---|
-| `generate.py` | Generates 3 deterministic clean CSV shapes into `corpus/` |
-| `generate-tricky.py` | Generates a chaos-at-scale CSV (70% clean + 30% mixed trap shapes) into `corpus/` |
-| `generate-type-truth.py` | Generates a known-truth dtype-mismatch CSV (exactly 1000 traps across 4 typed columns) into `corpus/` |
-| `generate-stress.py` | Generates a 40%-density variant of the type-truth probe — DENSITY × N traps, tight inference warm-up; scales with row count |
-| `corpus/` | Output dir (gitignored — regenerable) |
-| `fixtures/` | Hand-curated permanent regression fixtures (tracked) |
-| `README.md` | This doc |
+## Ops & surfaces
 
-The bench **page** lives at `frontend/wasm-bench.html` (served by Axum
-at `/wasm-bench.html`). It's outside `partials/` because it's a
-standalone measurement tool, not part of the SPA router.
+`parse` · `page` (window) · `filter` (single-column) · `search` (free-text, all
+columns) · `sort` · `score` (cleanness report) — each the median of K warmed
+runs. Windowed ops serialize `Page::to_json().to_string()` on **both** surfaces
+(marshal parity, so the ratio doesn't flatter native).
+
+- **wasm**: the `-Oz` shipped engine loaded in a node host (`bench-wasm.mjs`,
+  reusing the `wasm-smoke` loader). One fresh node process per size — wasm linear
+  memory only grows within a process, so a shared process would corrupt the
+  per-size peak.
+- **native**: `cargo`-built `bench_native` bin, `--release`.
 
 ## Run
 
-    # 1. boot the backend (serves /api/demo/parse + /wasm/*)
-    cargo run -p api
+```sh
+sh tools/build-wasm.sh                                   # the -Oz engine
+cargo build -p api --release --bin bench_native          # the native side
+sh tools/wasm-bench/run.sh                                # full sweep 1k..500k
+# subset / shape:
+SIZES="1000 10000 100000" SHAPE=narrow sh tools/wasm-bench/run.sh
+```
 
-    # 2. (one-shot, or whenever the schema changes) regenerate the corpus
-    python3 tools/wasm-bench/generate.py
-    python3 tools/wasm-bench/generate-tricky.py        # chaos-at-scale, 100k rows
-    # python3 tools/wasm-bench/generate-tricky.py 1000000   # 1M-row variant
-    python3 tools/wasm-bench/generate-type-truth.py    # known-truth dtype probe (1000 traps, 1% density)
-    python3 tools/wasm-bench/generate-stress.py        # 40%-density variant, 5k rows (~190 KB, 2000 traps)
-    # python3 tools/wasm-bench/generate-stress.py 500000  # 500k-row variant (~20 MB, 200k traps)
+Output: `results/results-<shape>.md` (per-op tables + ratio + memory + cliffs) and
+`results/results-<shape>.json`. Corpus CSVs + raw JSONL are gitignored.
 
-    # 3. (if wasm.rs or the data crate changed) rebuild the bundle
-    sh tools/build-wasm.sh
+## Read it honestly (the caveats baked into results.md)
 
-    # 4. open the bench page, drop one of the corpus files
-    open http://localhost:8080/wasm-bench.html
+- **node ≠ browser.** Node has no main-thread freeze / render contention. Node is
+  the reproducible throughput proxy; the *cap* decision needs a browser pass
+  (Playwright follow-on). If they disagree, the browser governs.
+- **`-Oz` vs `-O3`.** The shipped engine is size-optimized (`-Oz`, slower). These
+  are the honest *shipped-UX* numbers; an `-O3` rebuild narrows the ratio — a
+  named follow-on, not the headline.
+- **WSL2.** Absolutes are VM-relative; the wasm/native **ratio** cancels most of
+  it. Re-run on target hardware before moving `ROW_CAP`.
+- **single-thread tax.** wasm runs sort/filter/score on one thread; native uses
+  rayon. The ratio *widens* with size on those ops — structural, not a bug.
 
-The page reports parse-time per lane (wasm vs server) over N iterations
-(default 3). First wasm iter includes cold engine load; subsequent
-iters reuse the cached engine.
+## Files
 
-## Corpus
-
-| File | Rows | Cols | Size | Role |
-|---|---|---|---|---|
-| `small.csv` | 178 | 10 | ~16 KB | parser fixed-cost floor |
-| `medium.csv` | 10,000 | 20 | ~2 MB | the §5 Phase C target |
-| `large.csv` | 431,000 | 5 | ~19 MB | size-budget edge (temps shape) |
-| `tricky-100k.csv` | 100,000 | 6 | ~8 MB | lenient-mode chaos at scale — 70% clean + 30% trap mix (commas, multi-line, wrap, missing/extra cols, UTF-8, quote soup) |
-| `type-truth-100k.csv` | 100,000 | 5 | ~3.8 MB | known-truth dtype probe — exactly 1000 type mismatches (250 int + 250 bool + 250 float + 250 date); answer key for the parse_csv mismatch counter |
-| `stress-5k.csv` | 5,000 | 5 | ~190 KB | high-density variant of type-truth — exactly 2000 mismatches (500 each); 40% trap density with only 99 warm-up rows. Stresses dtype inference robustness under sustained noise |
-| `stress-500k.csv` | 500,000 | 5 | ~20 MB | same 40% density at scale — 200,000 mismatches (50k each); combines high-density inference stress with size-budget pressure |
-
-Schema is deterministic — same `SEED` yields the same bytes — so
-repeated bench runs are comparable across sessions. The medium file's
-20-column mix exercises every dtype branch (int / float / string /
-date / datetime / bool / enum) so `dtype::summarize` and
-`stats::cleanness_report` have real inference work to do.
-
-## Known cliffs
-
-- **Server demo endpoint caps at 4 MiB** (`DEMO_MAX_BYTES` in
-  `routes/demo.rs`). `large.csv` will get a 413 from the server lane —
-  that's a real datapoint, not a bug. The wasm lane has no such cap
-  but is subject to the page's `DEMO_CAP_BYTES = 5 MB` (in
-  `wasm-engine.js`); bypassing that for bench purposes means using
-  the bench page directly which calls `engine.parse_csv` without the
-  gate.
-- **Encoding** is sniffed via `chardetng` on the wasm side too. The
-  bench corpus is UTF-8 so encoding detection is a fixed cost; testing
-  encoding-sniff perf on a non-UTF-8 file requires a separate corpus
-  (out of scope for §5 Phase C).
-
-## Fixtures (hand-curated regression tests)
-
-Unlike `corpus/` (regenerable, gitignored, perf-focused),
-`fixtures/` holds small hand-written files that pin specific edge
-cases. They're tracked in git so they survive `python3 generate.py`
-and any future corpus changes; they exist to catch behavior
-regressions, not to measure throughput.
-
-| File | Rows × Cols | Size | What it pins |
-|---|---|---|---|
-| `ultimate-tricky.csv` | 15 × 5 | ~0.7 KB | Multi-shape torture: commas-in-quoted-fields, doubled-quote (`""`) escape, multi-line cells, missing/extra columns, partial-wrap (rows 6+15), unescaped/mismatched quotes, backslash-escape (`\"`), UTF-8 mojibake (`JosÃ©`), leading/trailing whitespace. Rescue should NOT fire (whole-file wrap signature fails). |
-
-These fixtures double as **lane-parity probes** — both wasm and
-server should produce identical metrics on each (modulo the rescue
-delta documented in `docs/internal/specs/wasm-phase-c-spike.md`).
-Adding a new fixture: drop the file in `fixtures/`, add a row to
-the table above noting what it pins + the expected behavior. The
-bench page picks it up automatically via drag-drop.
-
-## Reusability
-
-Per [[feedback-process-oriented]] (Gus 2026-05-25): the bench harness
-is its own deliverable, separate from the snapshot results. Future
-Phase D/E spikes (browser-side step engine, group_by, joins) reuse
-the same generator + page shell; add per-operation lanes to the
-table as new wasm wrappers land.
+- `generate.py` — parametric corpus (`--rows N --shape {wide|narrow}`), ported
+  from the prerelease, deterministic per seed.
+- `bench-wasm.mjs` — one size, the wasm surface, JSON line out.
+- `../../backend/crates/api/src/bin/bench_native.rs` — one size, native, JSON out.
+- `run.sh` — the sweep orchestrator (fresh child per size).
+- `aggregate.mjs` — JSONL → `results/results-<shape>.{json,md}`.

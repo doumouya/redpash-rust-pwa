@@ -1,225 +1,110 @@
-/* ─────────────────────────────────────────────────────────────────
-   RedPash design tokens — the single source of every colour, space,
-   radius, type and elevation value in the app.
+/* tokens.css — the design system's single vocabulary (two tiers).
+   Tier 1 STRUCTURE (:root): spacing, radius, type, motion, density rhythm —
+   theme-agnostic. Tier 2 PALETTE: per-theme blocks remap the SAME --rp-*
+   names, keyed on html[data-theme] AND the [data-rp-theme] alias so a nested
+   element can preview a different theme without duplication.
+   Two themes only: new-dark (default) + new-light. Evolved from the
+   predecessor's identity (slate + RedPash red + glass), Catppuccin dropped. */
 
-   TWO-TIER, theme-agnostic (2026-06-05 design-language reset):
-     • Structure tier (`:root` below) — spacing / radius / type / motion.
-       Theme-independent; authored once.
-     • Palette tier (one block per theme) — colours + glass + elevation,
-       re-mapped onto the SAME `--rp-*` names so every component reads one
-       stable API and only the values swap per theme. Each block is keyed
-       on BOTH `html[data-theme="X"]` (the document theme) AND a scoped
-       `[data-rp-theme="X"]` alias, so a nested element (e.g. a Settings
-       theme-swatch preview card) can render a DIFFERENT theme than the
-       active document — one source of truth, no duplicated palettes.
-
-   Themes:  new-dark / new-light      (the RedPash identity — new-dark is
-                                        the app DEFAULT since 2026-06-07)
-            dark / catppuccin-mocha   (the Catppuccin Mocha palette)
-            light / catppuccin-latte  (the Catppuccin Latte palette)
-   ───────────────────────────────────────────────────────────────── */
-
-/* ── Structure tier — theme-agnostic ───────────────────────────────── */
 :root {
-  /* spacing scale — rem, so margins scale with root font-size + zoom */
-  --rp-sp-1: 0.25rem;  /* 4px  */
-  --rp-sp-2: 0.5rem;   /* 8px  */
-  --rp-sp-3: 0.75rem;  /* 12px */
-  --rp-sp-4: 1rem;     /* 16px */
-  --rp-sp-5: 1.5rem;   /* 24px */
-  --rp-sp-6: 2rem;     /* 32px */
-  --rp-sp-8: 3rem;     /* 48px */
+  /* spacing scale */
+  --rp-sp-1: 0.25rem;
+  --rp-sp-2: 0.5rem;
+  --rp-sp-3: 0.75rem;
+  --rp-sp-4: 1rem;
+  --rp-sp-5: 1.5rem;
+  --rp-sp-6: 2rem;
+  --rp-sp-8: 3rem;
 
-  /* radius — px ON PURPOSE: rem/em radii rendered inconsistently across
-     different-sized elements (Em). The one sanctioned px carve-out. */
-  --rp-radius:      10px;
-  --rp-radius-lg:   16px;
+  /* radius (px on purpose — corners don't scale with font size) */
+  --rp-radius-sm: 7px;
+  --rp-radius: 10px;
+  --rp-radius-lg: 16px;
   --rp-radius-pill: 999px;
 
-  /* type — rem, NOT px, so the scale honors HiDPI, zoom, OS scaling, and
-     the Settings A−/A+ knob. `--rp-font-display` is a TREATMENT over the
-     body stack (weight + tracking in component CSS) — no extra webfont, a
-     deliberate low-bandwidth (Africa-first) choice; swap to a self-hosted
-     variable face here if a stronger display voice is wanted. */
-  --rp-font:         system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --rp-font-brand:   "Savate", var(--rp-font);  /* brand wordmark (.rp-brand) — referenced, keep */
-  /* xs/sm are still referenced 33× (e.g. .rp-muted) — collapsed onto md so the
-     lean build has one readable body size. Give them a distinct value here if a
-     smaller step is wanted; never leave them undefined (font-size falls back to
-     inherited → wrong size). */
-  --rp-text-xs: var(--rp-text-md);
-  --rp-text-sm: var(--rp-text-md);
-  --rp-text-md: 1rem;     /* 16px — body, controls */
-  --rp-text-lg: 1.5rem;  /* 20px — section titles */
-  --rp-text-xl: 2rem;     /* 32px — page titles (unchanged — zero-visual) */
-  --rp-text-2xl: 2.5rem;  /* 40px — display (new) */
+  /* type */
+  --rp-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rp-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  --rp-text-xs: 0.75rem;
+  --rp-text-sm: 0.8125rem;
+  --rp-text-md: 0.9375rem;
+  --rp-text-lg: 1.125rem;
+  --rp-text-xl: 1.5rem;
+  --rp-text-2xl: 2.25rem;
+
+  /* density rhythm — the Linear-calm knob set. Components consume these;
+     prefs.css density attrs retune them globally (one knob, not per-sheet). */
+  --rp-row-h: 2.25rem;      /* 36px table/list rows */
+  --rp-ctl-h: 2rem;         /* 32px controls (buttons, inputs) */
+  --rp-pad-x: 0.75rem;      /* horizontal cell/control padding */
+  --rp-gap: 0.5rem;         /* default flex/grid gap */
+  --rp-topbar-h: 3.25rem;   /* 52px */
+  --rp-rail-w: 15rem;       /* 240px, fixed — no icon-only collapse */
 
   /* motion */
   --rp-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --rp-fast: 0.12s;
+  --rp-slow: 0.22s;
+
+  /* breakpoints — the documented source of truth. CSS can't var() inside a
+     @media query, so each media rule repeats the rem literal and tags it with
+     the matching token name in a comment to stay grep-synced. Floor = iPad Mini
+     landscape (1024x768 = 64rem).
+       --rp-bp-lg 80rem (1280px): below, Data Cleaner side panels overlay
+       --rp-bp-md 64rem (1024px): the FLOOR; below, the rail also drawers
+       --rp-bp-sm 48rem  (768px): portrait safety net (kept usable, not a target) */
+  --rp-bp-lg: 80rem;
+  --rp-bp-md: 64rem;
+  --rp-bp-sm: 48rem;
 }
 
-/* ═══ Palette tier ═══════════════════════════════════════════════════ */
-
-/* ── Catppuccin Mocha — the app default + the `dark` alias (zero-visual:
-   identical to the pre-reset `:root`). The `:root` selector makes Mocha
-   the universal fallback, so every theme block below need only override
-   what differs. ─────────────────────────────────────────────────────── */
+/* ── new-dark (default) ───────────────────────────────────────────────── */
 :root,
-html[data-theme="dark"],
-html[data-theme="catppuccin-mocha"],
-[data-rp-theme="dark"],
-[data-rp-theme="catppuccin-mocha"] {
-  color-scheme: dark;
-
-  --rp-bg:        #11111b;  /* crust   — topbar · rail · page gutter */
-  --rp-surface:   #1e1e2e;  /* base    — lifted content card          */
-  --rp-surface-2: #313244;  /* surface0 — inputs · hover insets · chips */
-  --rp-border:    #45475a;  /* surface1 — card + control borders       */
-
-  --rp-text:      #cdd6f4;
-  --rp-text-dim:  #a6adc8;
-  --rp-text-mute: #6c7086;
-
-  --rp-accent:    #f38ba8;
-  --rp-on-accent: #11111b;  /* dark text reads on the light-pink accent */
-  --rp-mauve:     #cba6f7;
-  --rp-ok:        #a6e3a1;
-  --rp-warn:      #f9e2af;
-  --rp-info:      #89b4fa;
-  --rp-danger:    #f38ba8;
-
-  --rp-teal:        #94e2d5;
-  --rp-peach:       #fab387;
-  --rp-hover:       rgba(255, 255, 255, 0.05);
-  --rp-accent-soft: rgba(137, 180, 250, 0.14);
-  --rp-ok-soft:     rgba(166, 227, 161, 0.14);
-  --rp-warn-soft:   rgba(249, 226, 175, 0.14);
-  --rp-info-soft:   rgba(137, 180, 250, 0.14);
-
-  --rp-glass:        rgba(30, 30, 46, 0.55);
-  --rp-glass-border: rgba(205, 214, 244, 0.12);
-  --rp-blur:         16px;
-  --rp-shadow:       0 24px 60px -16px rgba(0, 0, 0, 0.7);
-  /* dark-mode lifted-card chrome — the page bg is so dark a drop-shadow
-     is invisible, so an inset 1px ring does the delineating. */
-  --rp-shadow-card:  0 0 0 1px var(--rp-border),
-                     0 1px 2px rgba(0, 0, 0, 0.25);
-}
-
-/* ── Catppuccin Latte — the `light` alias (zero-visual: identical to the
-   pre-reset `html[data-theme="light"]`). ───────────────────────────── */
-html[data-theme="light"],
-html[data-theme="catppuccin-latte"],
-[data-rp-theme="light"],
-[data-rp-theme="catppuccin-latte"] {
-  color-scheme: light;
-
-  --rp-bg:        #e6e9ef;  /* mantle */
-  --rp-surface:   #ffffff;
-  --rp-surface-2: #eff1f5;  /* base */
-  --rp-border:    #ccd0da;  /* surface0 */
-
-  --rp-text:      #4c4f69;
-  --rp-text-dim:  #5c5f77;
-  --rp-text-mute: #8c8fa1;
-
-  --rp-accent:    #d20f39;
-  --rp-on-accent: #ffffff;
-  --rp-mauve:     #8839ef;
-  --rp-ok:        #40a02b;
-  --rp-warn:      #df8e1d;
-  --rp-info:      #1e66f5;
-  --rp-danger:    #d20f39;
-
-  --rp-teal:        #179299;
-  --rp-peach:       #fe640b;
-  --rp-hover:       rgba(76, 79, 105, 0.06);
-  --rp-accent-soft: rgba(30, 102, 245, 0.10);
-  --rp-ok-soft:     rgba(64, 160, 43, 0.10);
-  --rp-warn-soft:   rgba(223, 142, 29, 0.10);
-  --rp-info-soft:   rgba(30, 102, 245, 0.10);
-
-  --rp-glass:        rgba(255, 255, 255, 0.62);
-  --rp-glass-border: rgba(255, 255, 255, 0.75);
-  --rp-shadow:       0 1px 2px rgba(76, 79, 105, 0.08), 0 12px 32px rgba(76, 79, 105, 0.10);
-  --rp-shadow-card:  0 0 0 1px rgba(76, 79, 105, 0.06),
-                     0 1px 2px rgba(76, 79, 105, 0.04),
-                     0 8px 24px rgba(76, 79, 105, 0.06);
-}
-
-/* ── NEW IDENTITY · New Dark — confident RedPash red on calm slate.
-   Defines the FULL colour set (the universal fallback is Mocha). ────── */
 html[data-theme="new-dark"],
 [data-rp-theme="new-dark"] {
-  color-scheme: dark;
-
-  --rp-bg:        #0c0d10;
-  --rp-surface:   #15171b;
+  --rp-bg: #0c0d10;
+  --rp-surface: #15171b;
   --rp-surface-2: #1c1f25;
-  --rp-border:    #2a2e37;
-
-  --rp-text:      #e6e8ec;
-  --rp-text-dim:  #a0a6b0;
+  --rp-border: #2a2e37;
+  --rp-text: #e6e8ec;
+  --rp-text-dim: #a0a6b0;
   --rp-text-mute: #6b7280;
-
-  --rp-accent:    #f04438;  /* RedPash red */
-  --rp-on-accent: #ffffff;
-  --rp-mauve:     #b692f6;
-  --rp-ok:        #2dd4a7;
-  --rp-warn:      #f5b14c;
-  --rp-info:      #5b8def;
-  --rp-danger:    #ff5c5c;
-
-  --rp-teal:        #2dd4bf;
-  --rp-peach:       #fb923c;
-  --rp-hover:       rgba(255, 255, 255, 0.05);
+  --rp-accent: #f04438;
   --rp-accent-soft: rgba(240, 68, 56, 0.14);
-  --rp-ok-soft:     rgba(45, 212, 167, 0.16);
-  --rp-warn-soft:   rgba(245, 177, 76, 0.16);
-  --rp-info-soft:   rgba(91, 141, 239, 0.16);
-
-  --rp-glass:        rgba(255, 255, 255, 0.045);
-  --rp-glass-border: rgba(255, 255, 255, 0.09);
-  --rp-blur:         14px;
-  --rp-shadow:       0 1px 2px rgba(0, 0, 0, 0.4);
-  --rp-shadow-card:  0 1px 2px rgba(0, 0, 0, 0.4),
-                     0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  --rp-on-accent: #ffffff;
+  --rp-ok: #2dd4a7;
+  --rp-warn: #f5b14c;
+  --rp-info: #5b8def;
+  --rp-danger: #ff5c5c;
+  --rp-hover: rgba(255, 255, 255, 0.05);
+  --rp-glass: rgba(255, 255, 255, 0.045);
+  --rp-glass-blur: 14px;
+  --rp-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --rp-ring: 0 0 0 1px var(--rp-border);
+  color-scheme: dark;
 }
 
-/* ── NEW IDENTITY · New Light — board-grade clean light. ───────────── */
+/* ── new-light ────────────────────────────────────────────────────────── */
 html[data-theme="new-light"],
 [data-rp-theme="new-light"] {
-  color-scheme: light;
-
-  --rp-bg:        #fafafb;
-  --rp-surface:   #ffffff;
+  --rp-bg: #fafafb;
+  --rp-surface: #ffffff;
   --rp-surface-2: #f4f5f7;
-  --rp-border:    #e4e7ec;
-
-  --rp-text:      #16191f;
-  --rp-text-dim:  #667085;
-  --rp-text-mute: #98a2b3;
-
-  --rp-accent:    #f04438;  /* RedPash red */
+  --rp-border: #e4e7ec;
+  --rp-text: #1a1d23;
+  --rp-text-dim: #5a6170;
+  --rp-text-mute: #9aa1ad;
+  --rp-accent: #f04438;
+  --rp-accent-soft: rgba(240, 68, 56, 0.1);
   --rp-on-accent: #ffffff;
-  --rp-mauve:     #8b5cf6;
-  --rp-ok:        #16a34a;
-  --rp-warn:      #d97706;
-  --rp-info:      #2563eb;
-  --rp-danger:    #dc2626;
-
-  --rp-teal:        #0d9488;
-  --rp-peach:       #ea580c;
-  --rp-hover:       rgba(16, 24, 40, 0.05);
-  --rp-accent-soft: rgba(240, 68, 56, 0.10);
-  --rp-ok-soft:     rgba(22, 163, 74, 0.10);
-  --rp-warn-soft:   rgba(217, 119, 6, 0.10);
-  --rp-info-soft:   rgba(37, 99, 235, 0.10);
-
-  --rp-glass:        rgba(255, 255, 255, 0.65);
-  --rp-glass-border: rgba(16, 24, 40, 0.07);
-  --rp-blur:         14px;
-  --rp-shadow:       0 1px 2px rgba(16, 24, 40, 0.06);
-  --rp-shadow-card:  0 0 0 1px rgba(16, 24, 40, 0.06),
-                     0 12px 28px -12px rgba(16, 24, 40, 0.16);
+  --rp-ok: #0e9f6e;
+  --rp-warn: #c27803;
+  --rp-info: #3f66d4;
+  --rp-danger: #e02424;
+  --rp-hover: rgba(16, 24, 40, 0.04);
+  --rp-glass: rgba(255, 255, 255, 0.65);
+  --rp-glass-blur: 14px;
+  --rp-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --rp-ring: 0 0 0 1px var(--rp-border);
+  color-scheme: light;
 }

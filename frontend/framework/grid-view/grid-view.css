@@ -1,0 +1,27 @@
+/* grid-view — a thin composer: [toolbar?] [sheet?] [redtable] in a flex column.
+   It owns only the column layout; the children style themselves. The column is
+   itself a sized flex parent so the redtable's DC1 fill kicks in. Sole owner of
+   .rp-gridview (ui-fork-audit R4). */
+
+.rp-gridview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--rp-sp-2);
+}
+
+/* toolbar + sheet are fixed-height bands; only the table grows. */
+.rp-gridview-toolbar { flex-shrink: 0; }
+
+.rp-gridview-sheet { flex-shrink: 0; }
+.rp-gridview-sheet.is-empty { display: none; }
+
+/* the table slot fills the remaining height; the redtable's own min-height:0 +
+   .rp-redtable-scroll flex:1 (DC1) then makes the body scroll within it. */
+.rp-gridview-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

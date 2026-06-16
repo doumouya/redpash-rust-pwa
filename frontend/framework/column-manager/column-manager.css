@@ -1,0 +1,119 @@
+/* column-manager — per-column cleaning surface. Sole owner of .rp-colmgr*.
+   Compact for a ~280px side panel. knobs: --rp-colmgr-cols-max-h */
+
+.rp-colmgr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+  font-size: var(--rp-text-sm);
+}
+
+.rp-colmgr-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+}
+
+.rp-colmgr-title {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rp-colmgr-count {
+  margin-inline-start: auto;
+  color: var(--rp-accent);
+  font-size: var(--rp-text-xs);
+}
+
+/* the column checklist — scrolls within the panel rather than pushing the ops
+   off-screen on a wide file. */
+.rp-colmgr-cols {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-1);
+  max-height: var(--rp-colmgr-cols-max-h, 13rem);
+  overflow: auto;
+  padding: var(--rp-sp-2);
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius-sm);
+  box-shadow: var(--rp-ring);
+}
+
+.rp-colmgr-col {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+  cursor: pointer;
+}
+
+.rp-colmgr-col-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-colmgr-empty {
+  margin: 0;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+  font-style: italic;
+}
+
+.rp-colmgr-ops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+
+.rp-colmgr-group-label {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* stack ops full-width — the labels ("Find & replace in selected…") are long
+   and a 280px panel has no room for a button grid. */
+.rp-colmgr-op-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-1);
+}
+
+.rp-colmgr-op {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* the inline action-sheet for an op's params */
+.rp-colmgr-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+
+.rp-colmgr-sheet:empty {
+  display: none;
+}
+
+.rp-colmgr-sheet:not(:empty) {
+  padding-top: var(--rp-sp-3);
+  border-top: 1px solid var(--rp-border);
+}
+
+.rp-colmgr-sheet-title {
+  font-weight: 600;
+}
+
+.rp-colmgr-control {
+  display: block;
+}
+
+.rp-colmgr-sheet-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rp-sp-2);
+}

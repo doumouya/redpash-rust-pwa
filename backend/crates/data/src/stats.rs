@@ -1,112 +1,57 @@
-//! Doc: docs/internal/code/backend/data/stats.md
-//! Column statistics + the file-level **cleanness score**.
+//! Purpose: the file-level CLEANNESS SCORE (0-100) — the product's first
+//! promise (the instant quality report). Two tiers, ported verbatim because
+//! the calibration is the moat:
 //!
-//! `unique_values` iterates a single column, collects up to ~3× the
-//! requested cap into a HashSet (to keep the result diverse when the
-//! column is huge), then sorts and truncates. Output is alphabetical
-//! ASCII order; the frontend renders as a `<datalist>`.
+//!   score = value_quality x structural_integrity
+//!
+//! value_quality (0-100) = 0.35*completeness + 0.25*type_consistency
+//!                       + 0.25*value_hygiene + 0.15*row_uniqueness
+//! structural_integrity (0-1) = min(shape, encoding, header) — a GATE, not a
+//!   fifth averaged component: a file parsed into one bogus column is 0%
+//!   usable no matter how "complete" that column looks, so structure caps the
+//!   ceiling rather than diluting into an average.
+//!
+//! Sentinels route through the unified `crate::sentinels` (one list now).
 
-use crate::{DataError, Result};
-use polars::prelude::*;
-use shared::file::ColumnMeta;
 use std::collections::{HashMap, HashSet};
 
-/// Values that are "filled" but carry no information — they're not
-/// nulls (so the completeness component never sees them) and they're
-/// not real data either. Matched case-insensitively. Exposed so the
-/// `find_sentinels` scan (and any UI that wants the canonical list)
-/// can reuse it without redefining.
-pub const SENTINELS: &[&str] = &[
-    // English + symbolic
-    "n/a",
-    "na",
-    "n.a.",
-    "-",
-    "--",
-    "—",
-    "–",
-    "?",
-    "??",
-    "???",
-    "null",
-    "(null)",
-    "<null>",
-    "none",
-    "nan",
-    "nil",
-    ".",
-    "..",
-    "tbd",
-    "tba",
-    "x",
-    "unknown",
-    "undefined",
-    "missing",
-    "(blank)",
-    "blank",
-    // French — the founding (Fleury) locale: inconnu / non disponible /
-    // sans objet / non communiqué. These were the biggest miss (a French
-    // dataset's junk slipped straight through the English-only set).
-    "inconnu",
-    "n/d",
-    "nd",
-    "n.d.",
-    "non disponible",
-    "s/o",
-    "s.o.",
-    "n.c.",
-    // Excel error literals exported as text
-    "#n/a",
-    "#name?",
-    "#ref!",
-    "#value!",
-    "#div/0!",
-    "#num!",
-    "#null!",
-];
+use polars::prelude::*;
+use shared::file::ColumnMeta;
 
-/// One sentinel value discovered across the frame, with per-column
-/// counts. `value` keeps the cell's *original* casing / whitespace
-/// (so the UI shows what the user actually has on disk) while
-/// `canonical` is the lowercased-trimmed key used to bucket variants
-/// like `"N/A"` / `"n/a"` / `" N/A "` together.
+use crate::{sentinels, DataError, Result};
+
+/// One sentinel value discovered across the frame, with per-column counts.
+/// `value` keeps original casing (UI shows what's on disk); `canonical` is the
+/// trim+lowercase key bucketing "N/A"/"n/a"/" N/A " together.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SentinelOccurrence {
     pub value: String,
     pub canonical: String,
     pub total: u64,
-    /// `(column_name, count)` pairs, sorted by count desc.
     pub columns: Vec<(String, u64)>,
 }
 
-/// Scan every string column for cells whose trimmed-lowercased form
-/// matches one of `SENTINELS` **or one of `extras`** (the user's
-/// learned set + any ad-hoc values typed into the modal). Returns
-/// one entry per *distinct sentinel as it appears in the file*
-/// (`"N/A"` and `"n/a"` are reported separately so the UI can
-/// preserve casing). Sorted by total count desc, then by value asc
-/// for stability. Empty when the frame has no string columns or no
-/// matches were found.
-///
-/// The `extras` list is **user data** — typos and noise get in.
-/// We canonicalise each entry (trim + lowercase) and skip empties
-/// before matching; the original casing only matters for the
-/// per-user prefs round-trip the frontend does.
-pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurrence> {
-    // Union of the canonical sentinel list + the caller's extras. The
-    // `HashSet<&str>` here borrows from `extras_lower`, which has to
-    // outlive the scan loop — hence the explicit owned vec above it.
+/// The per-call canonical vocabulary: the unified list ∪ the caller's extras
+/// (learned + global sentinels), each canonicalised. The owned vec must
+/// outlive the borrowed set.
+fn vocabulary(extras: &[String]) -> (Vec<String>, HashSet<&'static str>) {
     let extras_lower: Vec<String> = extras
         .iter()
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty())
         .collect();
-    let mut canonical: HashSet<&str> = SENTINELS.iter().copied().collect();
-    for e in &extras_lower {
-        canonical.insert(e.as_str());
-    }
+    let base: HashSet<&'static str> = sentinels::SENTINELS.iter().copied().collect();
+    (extras_lower, base)
+}
 
-    // (value_as_found) → (canonical, total, per-column counts)
+fn matches_vocab(canon: &str, base: &HashSet<&str>, extras_lower: &[String]) -> bool {
+    base.contains(canon) || extras_lower.iter().any(|e| e == canon)
+}
+
+/// Scan string columns for sentinel cells (∪ extras). One entry per distinct
+/// value as found (casing preserved), sorted by total desc then value asc.
+pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurrence> {
+    let (extras_lower, base) = vocabulary(extras);
     let mut buckets: HashMap<String, (String, u64, HashMap<String, u64>)> = HashMap::new();
     for series in df.columns() {
         if !matches!(series.dtype(), DataType::String) {
@@ -114,13 +59,9 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
         }
         let cname = series.name().to_string();
         for i in 0..series.len() {
-            let av = match series.get(i) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let raw: String = match av {
-                AnyValue::String(s) => s.to_string(),
-                AnyValue::StringOwned(s) => s.to_string(),
+            let raw = match series.get(i) {
+                Ok(AnyValue::String(s)) => s.to_string(),
+                Ok(AnyValue::StringOwned(s)) => s.to_string(),
                 _ => continue,
             };
             let trimmed = raw.trim();
@@ -128,12 +69,10 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
                 continue;
             }
             let canon = trimmed.to_ascii_lowercase();
-            if !canonical.contains(canon.as_str()) {
+            if !matches_vocab(&canon, &base, &extras_lower) {
                 continue;
             }
-            let entry = buckets
-                .entry(raw.clone())
-                .or_insert_with(|| (canon, 0u64, HashMap::new()));
+            let entry = buckets.entry(raw.clone()).or_insert_with(|| (canon, 0u64, HashMap::new()));
             entry.1 += 1;
             *entry.2.entry(cname.clone()).or_insert(0u64) += 1;
         }
@@ -141,84 +80,35 @@ pub fn find_sentinels(df: &DataFrame, extras: &[String]) -> Vec<SentinelOccurren
     let mut out: Vec<SentinelOccurrence> = buckets
         .into_iter()
         .map(|(value, (canonical, total, cols_map))| {
-            // Stable per-column ordering: by count desc, then name asc.
             let mut cols: Vec<(String, u64)> = cols_map.into_iter().collect();
             cols.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-            SentinelOccurrence {
-                value,
-                canonical,
-                total,
-                columns: cols,
-            }
+            SentinelOccurrence { value, canonical, total, columns: cols }
         })
         .collect();
     out.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.value.cmp(&b.value)));
     out
 }
 
-/// Full per-file breakdown — every sub-score that feeds into the
-/// blended `score`. Returned by `cleanness_report`; the upload path
-/// just uses `cleanness().score` for persistence, but the eval harness
-/// (`examples/score_dir.rs`) and any future "why is this 86?" UI can
-/// surface each component to point the user at what to fix.
+/// Full per-file breakdown — every sub-score feeding the blend.
 #[derive(Debug, Clone, Copy)]
 pub struct CleannessReport {
-    /// Blended final score, 0..100. `value_quality * structural`.
     pub score: f32,
-    // ── value-quality components, 0..100 each (weights in cleanness) ──
-    /// `100 − mean(null_pct)`. Weight 35%.
     pub completeness: f32,
-    /// Strict-parse pass rate against each column's `semantic_dtype`. Weight 25%.
     pub type_consistency: f32,
-    /// Fraction of string cells with no whitespace pad / no sentinel value. Weight 25%.
     pub value_hygiene: f32,
-    /// `100 × distinct_rows / total_rows`. Weight 15%.
     pub row_uniqueness: f32,
-    /// Pre-clamp weighted blend of the four above, 0..100.
     pub value_quality: f32,
-    // ── structural-tier sub-signals, 0..1 each (min taken as gate) ───
-    /// `1/m` if the lone column is m-fields-per-cell under-parsed, else 1.0.
     pub shape_integrity: f32,
-    /// Fraction of string cells free of U+FFFD or `Ã©`-style mojibake.
     pub encoding_integrity: f32,
-    /// 0.5 if the lone column's name is a `sep` / `#…` / `Key: value` artefact.
     pub header_integrity: f32,
-    /// `min` of the three structural sub-signals — the gate.
     pub structural: f32,
 }
 
-/// File-level cleanness score (0–100).
-///
-/// Two tiers:
-///   • **structural integrity** ∈ [0,1] — did the file even parse into
-///     a sane shape? Catches the doubly-CSV-encoded export that lands
-///     as one giant quoted column, and mojibake from a wrong encoding.
-///   • **value quality** ∈ [0,100] — given a sane shape, how clean are
-///     the values? A weighted blend of four components.
-///
-///   `score = value_quality × structural_integrity`
-///
-/// Structure is a *gate*, not a fifth averaged component: a file that
-/// parsed into one bogus column is 0% usable no matter how "complete"
-/// that column looks, so it has to cap the ceiling rather than dilute
-/// into an average. `structural_integrity` is the *weakest link* (min)
-/// of three sub-signals — `shape`, `encoding`, `header`.
-///
-/// Returns `None` for an empty frame (no columns or no rows) — nothing
-/// to score, and the DB column is nullable so `None` round-trips.
+/// File-level cleanness (0-100), or None for an empty frame.
 pub fn cleanness(df: &DataFrame, columns: &[ColumnMeta], extras: &[String]) -> Option<f32> {
     cleanness_report(df, columns, extras).map(|r| r.score)
 }
 
-/// Full breakdown — same gate × value-quality math as `cleanness`, but
-/// returns every sub-score so diagnostic surfaces (the eval harness,
-/// the cleaner sidebar's "why is this low?" view, …) can point at the
-/// specific component that's pulling the file down.
-/// `extras` extends the canonical `SENTINELS` vocabulary that
-/// `value_hygiene_score` matches against — typically the union of
-/// the caller's `prefs.learned_sentinels` and the `global_sentinels`
-/// view (≥2-user submissions). An empty slice reproduces the
-/// pre-learning baseline byte-for-byte.
 pub fn cleanness_report(
     df: &DataFrame,
     columns: &[ColumnMeta],
@@ -227,18 +117,13 @@ pub fn cleanness_report(
     if df.width() == 0 || df.height() == 0 || columns.is_empty() {
         return None;
     }
-
-    // ── value quality — four components, each 0..100 ───────────────
     let completeness = completeness_score(columns);
     let type_consistency = type_consistency_score(df, columns);
     let value_hygiene = value_hygiene_score(df, extras);
     let row_uniqueness = row_uniqueness_score(df);
-    let value_quality = 0.35 * completeness
-        + 0.25 * type_consistency
-        + 0.25 * value_hygiene
-        + 0.15 * row_uniqueness;
+    let value_quality =
+        0.35 * completeness + 0.25 * type_consistency + 0.25 * value_hygiene + 0.15 * row_uniqueness;
 
-    // ── structural integrity — 0..1 gate, weakest link ────────────
     let shape = shape_integrity(df);
     let encoding = encoding_integrity(df);
     let header = header_integrity(df);
@@ -258,8 +143,6 @@ pub fn cleanness_report(
     })
 }
 
-/// **Completeness** — `100 − null_pct` per column, averaged. An
-/// all-null (`"empty"` dtype) column is pinned to 0.
 fn completeness_score(columns: &[ColumnMeta]) -> f32 {
     let sum: f32 = columns
         .iter()
@@ -274,16 +157,6 @@ fn completeness_score(columns: &[ColumnMeta]) -> f32 {
     sum / columns.len() as f32
 }
 
-/// **Type consistency** — per column, how cleanly its cells parse as
-/// the *intended* type (`ColumnMeta::semantic_dtype`, sniffed by
-/// `dtype::summarize`). When storage and semantic agree (already-typed
-/// columns, genuine string columns), the column scores 100. When they
-/// diverge — a `string`-stored column whose values are *trying* to be
-/// `float` / `date` / `bool` / `int` — the score is the fraction of
-/// non-null non-empty cells that pass a strict native parse for the
-/// intent. A `prix_ht` column of clean numbers scores 100; one peppered
-/// with `€995,83` and `1 234,56 EUR` scores proportionally low. The
-/// non-null denominator keeps this orthogonal to `completeness_score`.
 fn type_consistency_score(df: &DataFrame, columns: &[ColumnMeta]) -> f32 {
     if columns.is_empty() {
         return 100.0;
@@ -292,14 +165,10 @@ fn type_consistency_score(df: &DataFrame, columns: &[ColumnMeta]) -> f32 {
     for cm in columns {
         let storage = cm.dtype.as_str();
         let intent = cm.semantic_dtype.as_str();
-        // Polars typed it OK, or it's genuinely a text column — nothing
-        // for type-consistency to dock.
         if storage != "string" || intent == "string" || intent == "empty" {
             sum += 100.0;
             continue;
         }
-        // Storage / semantic disagree: count non-null non-empty cells
-        // that natively parse as the intended type.
         let Ok(c) = df.column(&cm.name) else {
             sum += 100.0;
             continue;
@@ -322,24 +191,15 @@ fn type_consistency_score(df: &DataFrame, columns: &[ColumnMeta]) -> f32 {
                 clean += 1;
             }
         }
-        sum += if total == 0 {
-            100.0
-        } else {
-            100.0 * clean as f32 / total as f32
-        };
+        sum += if total == 0 { 100.0 } else { 100.0 * clean as f32 / total as f32 };
     }
     sum / columns.len() as f32
 }
 
-/// Strict numeric parse — matches what Polars would natively type as a
-/// float (Rust's `f64::parse` is the same parser). `€995.83` /
-/// `1234,56` / `1 234.56` all fail; `1234`, `-12.34`, `1.5e10` pass.
 fn is_clean_numeric(s: &str) -> bool {
     s.parse::<f64>().is_ok()
 }
 
-/// Strict ISO date — `yyyy-mm-dd` with `mm`/`dd` allowed to be 1 or 2
-/// digits. Any other format (slashes, dots, `dd/mm/yyyy`, …) is dirty.
 fn is_clean_iso_date(s: &str) -> bool {
     let parts: Vec<&str> = s.split('-').collect();
     parts.len() == 3
@@ -351,35 +211,12 @@ fn is_clean_iso_date(s: &str) -> bool {
         && parts[2].chars().all(|c| c.is_ascii_digit())
 }
 
-/// Strict boolean — exact `true` / `false` (case-insensitive). Any
-/// French / coded variant (`Oui`, `O`, `1`, …) is dirty.
 fn is_clean_bool(s: &str) -> bool {
     matches!(s.to_ascii_lowercase().as_str(), "true" | "false")
 }
 
-/// **Value hygiene** — fraction of string cells that aren't
-/// whitespace-padded and aren't a sentinel (`N/A`, `-`, `?`, …).
-/// Sentinels matter because they're "filled" — completeness misses
-/// them entirely. Genuinely empty / whitespace-only cells are skipped
-/// (that's completeness's concern). 100 when there are no string cells.
-///
-/// `extras` extends the canonical `SENTINELS` list with caller-supplied
-/// values (typically `prefs.learned_sentinels` ∪ `global_sentinels`).
-/// Each extra is canonicalised (trim + lowercase) before matching;
-/// passing `&[]` reproduces the pre-learning behaviour exactly.
 fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
-    // Build the per-call canonical vocabulary. `HashSet<&str>` borrows
-    // from `extras_lower`, so the owned vec has to outlive the loop.
-    let extras_lower: Vec<String> = extras
-        .iter()
-        .map(|s| s.trim().to_ascii_lowercase())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let mut sentinels: HashSet<&str> = SENTINELS.iter().copied().collect();
-    for e in &extras_lower {
-        sentinels.insert(e.as_str());
-    }
-
+    let (extras_lower, base) = vocabulary(extras);
     let (mut total, mut clean) = (0u64, 0u64);
     for c in df.columns() {
         if !matches!(c.dtype(), DataType::String) {
@@ -390,10 +227,10 @@ fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
-            } // null-ish — not hygiene's job
+            }
             total += 1;
             let padded = raw.len() != trimmed.len();
-            let is_sentinel = sentinels.contains(trimmed.to_ascii_lowercase().as_str());
+            let is_sentinel = matches_vocab(&trimmed.to_ascii_lowercase(), &base, &extras_lower);
             if !padded && !is_sentinel {
                 clean += 1;
             }
@@ -406,8 +243,6 @@ fn value_hygiene_score(df: &DataFrame, extras: &[String]) -> f32 {
     }
 }
 
-/// **Row uniqueness** — `100 × distinct_rows / total_rows`. Exact
-/// full-row duplicates are the `drop_duplicates` step's target.
 fn row_uniqueness_score(df: &DataFrame) -> f32 {
     let rows = df.height();
     if rows == 0 {
@@ -416,25 +251,15 @@ fn row_uniqueness_score(df: &DataFrame) -> f32 {
     let cols = df.columns();
     let mut seen: HashSet<Vec<Option<String>>> = HashSet::with_capacity(rows);
     for i in 0..rows {
-        let key: Vec<Option<String>> = cols
-            .iter()
-            .map(|c| c.get(i).ok().and_then(av_to_owned))
-            .collect();
+        let key: Vec<Option<String>> = cols.iter().map(|c| c.get(i).ok().and_then(av_to_owned)).collect();
         seen.insert(key);
     }
     100.0 * seen.len() as f32 / rows as f32
 }
 
-/// **Parse-shape integrity** ∈ [0,1] — a single-column frame is
-/// intrinsically suspect: real datasets almost never have exactly one
-/// column. When that lone column's values *consistently* split into
-/// m≥2 fields on a delimiter, the file was under-parsed — a wrong
-/// delimiter (a `;`-file read as `,`), or a doubly-CSV-encoded export
-/// that landed as one giant quoted column. Integrity is `1/m` (the
-/// file should have had ~m columns). The "consistently" guard — ≥80%
-/// of values share one modal field count — is what keeps a genuine
-/// one-column free-text file (where comma counts vary wildly) from
-/// tripping it. Multi-column frames parsed fine → 1.0.
+/// Parse-shape integrity: a single-column frame whose lone column consistently
+/// (>=80% modal) splits into m>=2 fields was under-parsed → 1/m. Multi-column
+/// frames → 1.0.
 fn shape_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
@@ -448,7 +273,6 @@ fn shape_integrity(df: &DataFrame) -> f32 {
     const DELIMS: [char; 4] = [',', ';', '\t', '|'];
     let mut worst = 1.0f32;
     for d in DELIMS {
-        // Sample ~300 values; tally how many fields each splits into.
         let step = (c.len() / 300).max(1);
         let mut counts: HashMap<usize, u32> = HashMap::new();
         let (mut sampled, mut i) = (0u32, 0usize);
@@ -472,12 +296,6 @@ fn shape_integrity(df: &DataFrame) -> f32 {
     worst
 }
 
-/// **Header integrity** ∈ [0,1] — only meaningful for a single-column
-/// frame (a multi-column frame parsed fine; don't second-guess its
-/// headers). A lone column whose *name* is a junk / preamble artifact —
-/// an Excel `sep=` hint, a `#`-comment line, a `Key: value` metadata
-/// line, or blank — means the parser latched onto a preamble row
-/// instead of the real header. 0.5 (a clearly-suspect parse), else 1.0.
 fn header_integrity(df: &DataFrame) -> f32 {
     if df.width() != 1 {
         return 1.0;
@@ -491,7 +309,7 @@ fn header_integrity(df: &DataFrame) -> f32 {
         || lower == "sep"
         || lower.starts_with("sep=")
         || name.starts_with('#')
-        || name.contains(": "); // "Domaine: clients" — a preamble line, not a header
+        || name.contains(": ");
     if junk {
         0.5
     } else {
@@ -499,21 +317,10 @@ fn header_integrity(df: &DataFrame) -> f32 {
     }
 }
 
-// High-frequency French double-decode mojibake signatures — what you
-// get when a UTF-8 file is read as latin-1 (or vice versa). Each is a
-// two-byte sequence starting with `Ã` followed by the second byte of
-// the original UTF-8 character: `Ã©` was `é`, `Ã¨` was `è`, etc. These
-// are valid UTF-8 themselves, so a wrong-encoding decode produces text
-// that looks intact but is garbage. Listed roughly in frequency order
-// for French; `Ã©` alone catches >50% of real-world cases.
+/// French double-decode mojibake signatures (UTF-8 read as latin-1): `Ã©` was
+/// `é`, etc. Valid UTF-8 themselves, so the text looks intact but is garbage.
 const MOJIBAKE_SIGS: &[&str] = &["Ã©", "Ã¨", "Ãª", "Ã ", "Ã§", "Ã®", "Ã´", "Ã¢", "Ã¹", "Ã»"];
 
-/// **Encoding integrity** ∈ [0,1] — fraction of string cells with no
-/// encoding damage. Catches both flavours: **U+FFFD** replacement
-/// chars (the parser couldn't decode some bytes) and **`Ã©`-style
-/// double-decode** mojibake (the parser decoded successfully but with
-/// the wrong codec — common when a latin-1 file is read as UTF-8). A
-/// cell hitting either signal counts as damaged once.
 fn encoding_integrity(df: &DataFrame) -> f32 {
     let (mut total, mut damaged) = (0u64, 0u64);
     for c in df.columns() {
@@ -535,50 +342,12 @@ fn encoding_integrity(df: &DataFrame) -> f32 {
     }
 }
 
-/// One cell as an owned `String` — `None` for null / non-string cells.
 fn cell_str(c: &Column, i: usize) -> Option<String> {
     match c.get(i) {
         Ok(AnyValue::String(s)) => Some(s.to_string()),
         Ok(AnyValue::StringOwned(s)) => Some(s.to_string()),
         _ => None,
     }
-}
-
-/// Count cells that differ between `before` and `after`. Compares every
-/// column that exists in both frames, stringifying values so dtype
-/// changes (e.g. fill_null replacing nulls with a literal "Unknown")
-/// still count as a change.
-///
-/// Only valid when both frames have the same row count — the caller
-/// gates this on `rows_before == rows_after`.
-pub fn count_cell_diffs(before: &DataFrame, after: &DataFrame) -> u64 {
-    let n = before.height().min(after.height());
-    let after_names: HashSet<String> = after
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-    let common: Vec<String> = before
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .filter(|n| after_names.contains(n))
-        .collect();
-
-    let mut changed = 0u64;
-    for cname in &common {
-        let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else {
-            continue;
-        };
-        for i in 0..n {
-            let bs = bc.get(i).ok().and_then(av_to_owned);
-            let as_ = ac.get(i).ok().and_then(av_to_owned);
-            if bs != as_ {
-                changed += 1;
-            }
-        }
-    }
-    changed
 }
 
 fn av_to_owned(v: AnyValue) -> Option<String> {
@@ -590,178 +359,8 @@ fn av_to_owned(v: AnyValue) -> Option<String> {
     }
 }
 
-/// One cell that changes between the before/after frames — the row the
-/// UI's Before|After table renders. `before`/`after` are the stringified
-/// cell values (`None` = null), so a `Some → None` pair is a value the
-/// step would blank out.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct CellChange {
-    pub column: String,
-    pub row: usize,
-    pub before: Option<String>,
-    pub after: Option<String>,
-}
-
-/// A header that changes name (old → new) without changing its values.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct RenamePair {
-    pub from: String,
-    pub to: String,
-}
-
-/// Structured before/after diff — the data behind the generic
-/// "preview before apply" feature. The richer sibling of
-/// [`count_cell_diffs`] (same stringify-compare via [`av_to_owned`], so
-/// cross-dtype casts compare by displayed value): it also captures the
-/// dimension change, the added / removed / renamed columns, and a capped
-/// sample of changed cells for the UI table.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct FrameDiff {
-    pub rows_before: u64,
-    pub rows_after: u64,
-    pub cells_changed: u64,
-    /// Subset of `cells_changed` that go from a value to null — the
-    /// "data loss" signal (e.g. casting unparseable cells). This is what
-    /// the cast-only `cast_preview` surfaced; kept here so the generic
-    /// preview carries the same warning for every tool.
-    pub cells_nulled: u64,
-    pub columns_added: Vec<String>,
-    pub columns_removed: Vec<String>,
-    pub columns_renamed: Vec<RenamePair>,
-    pub columns_changed: Vec<String>,
-    pub sample: Vec<CellChange>,
-}
-
-/// Diff `before` against `after` (the result of dry-running a step).
-///
-/// `kind` only steers rename detection: the rename-y kinds
-/// (`rename_column`, `snake_case_columns`, `replace_in_names`) preserve
-/// column order + count, so a positional name change is reported as a
-/// rename (old → new) rather than a remove + add. Every other kind
-/// reports plain added / removed columns from the set difference.
-///
-/// Cell-level diffing runs only when row counts match — index alignment
-/// is meaningful then. When a step changes the row count (drop_nulls,
-/// filter_rows, …) the dropped/added rows ARE the story, so `rows_before`
-/// / `rows_after` carry it and the cell sample is left empty. `sample_cap`
-/// bounds the sample globally; a per-column cap (~⅓ of it) keeps one wide
-/// column from crowding out the rest. O(rows × common-cols), pure scan.
-pub fn diff_frames(
-    before: &DataFrame,
-    after: &DataFrame,
-    kind: &str,
-    sample_cap: usize,
-) -> FrameDiff {
-    let rows_before = before.height() as u64;
-    let rows_after = after.height() as u64;
-
-    let before_names: Vec<String> = before
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-    let after_names: Vec<String> = after
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-    let before_set: HashSet<&String> = before_names.iter().collect();
-    let after_set: HashSet<&String> = after_names.iter().collect();
-
-    let mut columns_added = Vec::new();
-    let mut columns_removed = Vec::new();
-    let mut columns_renamed = Vec::new();
-
-    let positional_rename = before_names.len() == after_names.len()
-        && matches!(
-            kind,
-            "rename_column" | "snake_case_columns" | "replace_in_names"
-        );
-    if positional_rename {
-        for (b, a) in before_names.iter().zip(after_names.iter()) {
-            if b != a {
-                columns_renamed.push(RenamePair {
-                    from: b.clone(),
-                    to: a.clone(),
-                });
-            }
-        }
-    } else {
-        columns_removed = before_names
-            .iter()
-            .filter(|n| !after_set.contains(*n))
-            .cloned()
-            .collect();
-        columns_added = after_names
-            .iter()
-            .filter(|n| !before_set.contains(*n))
-            .cloned()
-            .collect();
-    }
-
-    let mut cells_changed = 0u64;
-    let mut cells_nulled = 0u64;
-    let mut columns_changed: Vec<String> = Vec::new();
-    let mut sample: Vec<CellChange> = Vec::new();
-    let per_col_cap = (sample_cap / 3).max(2);
-
-    if rows_before == rows_after {
-        let n = before.height();
-        for cname in &before_names {
-            if !after_set.contains(cname) {
-                continue;
-            } // removed or renamed away
-            let (Ok(bc), Ok(ac)) = (before.column(cname), after.column(cname)) else {
-                continue;
-            };
-            let mut col_touched = false;
-            let mut per_col = 0usize;
-            for i in 0..n {
-                let bs = bc.get(i).ok().and_then(av_to_owned);
-                let as_ = ac.get(i).ok().and_then(av_to_owned);
-                if bs != as_ {
-                    cells_changed += 1;
-                    if bs.is_some() && as_.is_none() {
-                        cells_nulled += 1;
-                    }
-                    col_touched = true;
-                    if sample.len() < sample_cap && per_col < per_col_cap {
-                        sample.push(CellChange {
-                            column: cname.clone(),
-                            row: i,
-                            before: bs,
-                            after: as_,
-                        });
-                        per_col += 1;
-                    }
-                }
-            }
-            if col_touched {
-                columns_changed.push(cname.clone());
-            }
-        }
-    }
-
-    FrameDiff {
-        rows_before,
-        rows_after,
-        cells_changed,
-        cells_nulled,
-        columns_added,
-        columns_removed,
-        columns_renamed,
-        columns_changed,
-        sample,
-    }
-}
-
-/// Count rows where *every* column is null. Cross-column — can't be
-/// derived from per-column null_pct (a column with 50% nulls and
-/// another with 50% nulls might have zero rows where both are null).
-/// Drives the Drop-nulls form's context surface so the user can see
-/// the obvious-junk count before picking a strategy.
-///
-/// Width-0 / height-0 frames return 0. O(rows × cols), pure scan.
+/// Count rows where every column is null — cross-column, can't be derived from
+/// per-column null_pct. Drives the drop-nulls form's context surface.
 pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
     let n = df.height();
     if n == 0 || df.width() == 0 {
@@ -770,21 +369,14 @@ pub fn count_fully_null_rows(df: &DataFrame) -> u64 {
     let cols = df.columns();
     let mut count = 0u64;
     for i in 0..n {
-        let mut all_null = true;
-        for c in cols {
-            if !matches!(c.get(i), Ok(AnyValue::Null)) {
-                all_null = false;
-                break;
-            }
-        }
-        if all_null {
+        if cols.iter().all(|c| matches!(c.get(i), Ok(AnyValue::Null))) {
             count += 1;
         }
     }
     count
 }
 
-/// Up to `limit` distinct non-null values from `col`, sorted.
+/// Up to `limit` distinct non-null values from a column, sorted.
 pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<String>> {
     let column = df.column(col).map_err(DataError::from)?;
     let scan_cap = limit.saturating_mul(3).max(limit);
@@ -793,8 +385,7 @@ pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<Stri
         if set.len() >= scan_cap {
             break;
         }
-        let v = column.get(i).map_err(DataError::from)?;
-        let s = match v {
+        let s = match column.get(i).map_err(DataError::from)? {
             AnyValue::Null => continue,
             AnyValue::String(s) => (*s).to_string(),
             AnyValue::StringOwned(s) => s.to_string(),
@@ -811,51 +402,56 @@ pub fn unique_values(df: &DataFrame, col: &str, limit: usize) -> Result<Vec<Stri
 }
 
 #[cfg(test)]
-mod diff_tests {
+mod tests {
     use super::*;
-    use crate::steps::apply;
-    use serde_json::json;
+    use crate::dtype;
 
-    #[test]
-    fn value_change_counts_cells_nulls_and_samples() {
-        let df = df!["name" => ["FOO", "Bar", "baz"]].unwrap();
-        let after = apply(df.clone(), "change_case", &json!({ "mode": "lower" })).unwrap();
-        let d = diff_frames(&df, &after, "change_case", 12);
-        assert_eq!((d.rows_before, d.rows_after), (3, 3));
-        // "FOO"→"foo" and "Bar"→"bar" change; "baz" is already lower.
-        assert_eq!(d.cells_changed, 2);
-        assert_eq!(d.cells_nulled, 0);
-        assert_eq!(d.columns_changed, vec!["name".to_string()]);
-        assert!(d
-            .sample
-            .iter()
-            .any(|c| c.before.as_deref() == Some("FOO") && c.after.as_deref() == Some("foo")));
+    fn report(text: &str) -> CleannessReport {
+        let df = crate::parse::from_text(text).unwrap();
+        let cols = dtype::summarize(&df).unwrap();
+        cleanness_report(&df, &cols, &[]).unwrap()
     }
 
     #[test]
-    fn rename_reads_as_a_rename_not_remove_plus_add() {
-        let df = df!["old" => [1, 2, 3]].unwrap();
-        let after = apply(
-            df.clone(),
-            "rename_column",
-            &json!({ "from": "old", "to": "new" }),
+    fn a_clean_file_scores_high() {
+        let r = report("id,name,amount\n1,Alice,10.5\n2,Bob,20.0\n3,Carol,33.9\n");
+        assert!(r.score > 95.0, "clean file scored {}", r.score);
+        assert_eq!(r.structural, 1.0);
+    }
+
+    #[test]
+    fn sentinels_dock_value_hygiene_including_fr() {
+        // FR sentinel "inconnu" must count as junk (the unified-list win).
+        let r = report("id,city\n1,Paris\n2,inconnu\n3,Lyon\n4,N/A\n");
+        assert!(r.value_hygiene < 100.0, "sentinels ignored: {}", r.value_hygiene);
+    }
+
+    #[test]
+    fn structural_gate_caps_a_wrong_delimiter_file() {
+        // A ;-delimited file read as one column: every value splits into ~3
+        // on ';' → shape_integrity ~1/3 → score capped low even though the
+        // single column is "complete".
+        let df = crate::parse::from_text("a;b;c\n1;2;3\n4;5;6\n7;8;9\n").unwrap();
+        // sniff forces multi-col normally; simulate the under-parse by a
+        // genuine 1-col frame of ;-joined rows:
+        let one = DataFrame::new_infer_height(vec![Series::new(
+            "rec".into(),
+            &["1;2;3", "4;5;6", "7;8;9", "a;b;c"],
         )
+        .into()])
         .unwrap();
-        let d = diff_frames(&df, &after, "rename_column", 12);
-        assert_eq!(d.columns_renamed.len(), 1);
-        assert_eq!(d.columns_renamed[0].from, "old");
-        assert_eq!(d.columns_renamed[0].to, "new");
-        assert!(d.columns_removed.is_empty() && d.columns_added.is_empty());
-        assert_eq!(d.cells_changed, 0); // values untouched
+        let cols = dtype::summarize(&one).unwrap();
+        let r = cleanness_report(&one, &cols, &[]).unwrap();
+        assert!(r.shape_integrity < 0.5, "shape gate didn't fire: {}", r.shape_integrity);
+        let _ = df;
     }
 
     #[test]
-    fn row_drop_reports_delta_and_leaves_sample_empty() {
-        let df = df!["v" => [10, 20, 30]].unwrap();
-        let after = apply(df.clone(), "drop_rows", &json!({ "indices": [1] })).unwrap();
-        let d = diff_frames(&df, &after, "drop_rows", 12);
-        assert_eq!((d.rows_before, d.rows_after), (3, 2));
-        assert!(d.sample.is_empty()); // row-count change → cell diff is not meaningful
-        assert_eq!(d.cells_changed, 0);
+    fn find_sentinels_buckets_by_casing() {
+        let df = crate::parse::from_text("c\nN/A\nn/a\nAlice\n").unwrap();
+        let occ = find_sentinels(&df, &[]);
+        // "N/A" and "n/a" are separate values but share the canonical key.
+        assert_eq!(occ.len(), 2);
+        assert!(occ.iter().all(|o| o.canonical == "n/a"));
     }
 }

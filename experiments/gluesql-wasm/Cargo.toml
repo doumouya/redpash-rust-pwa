@@ -1,0 +1,23 @@
+[package]
+name = "gluesql-wasm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gluesql = { version = "0.19", default-features = false, features = ["gluesql_memory_storage"] }
+wasm-bindgen = "0.2"
+futures = "0.3"
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

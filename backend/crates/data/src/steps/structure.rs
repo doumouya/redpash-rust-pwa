@@ -137,7 +137,7 @@ pub(super) fn unwrap_csv(df: DataFrame, _params: &serde_json::Value) -> Result<D
 
     // Re-emit every record in one canonical CSV (comma, standard
     // quoting), conformed to the header width so the buffer is
-    // rectangular for the typed re-parse via `parse_text`.
+    // rectangular for the typed re-parse via `from_text`.
     let conform = |r: &[String]| -> Vec<String> {
         let mut out = r.to_vec();
         out.resize(width, String::new());
@@ -156,7 +156,7 @@ pub(super) fn unwrap_csv(df: DataFrame, _params: &serde_json::Value) -> Result<D
     let text = String::from_utf8(buf)
         .map_err(|e| DataError::InvalidSpec(format!("unwrap csv utf8: {e}")))?;
 
-    crate::parse::parse_text(text)
+    crate::parse::from_text(text)
 }
 
 pub(super) fn join_columns(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
@@ -331,4 +331,60 @@ pub(super) fn format_dates(df: DataFrame, params: &serde_json::Value) -> Result<
         with_new
     };
     result.collect().map_err(DataError::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A wrapped one-column frame whose rows each use a DIFFERENT inner
+    /// delimiter and quote style — the `raw_dossier_onecol_tricky`
+    /// shape. After `unwrap_csv` every row must land in the same
+    /// columns, regardless of its individual wrapping.
+    #[test]
+    fn unwrap_csv_handles_per_row_delimiter_and_quote_variation() {
+        let df = df![
+            "id,\"name\",\"city\",\"ok\"" => [
+                "R1,\"Alice\",\"Paris\",\"yes\"",          // comma + double quote
+                "R2;\"Bob\";\"Lyon\";\"no\"",              // semicolon
+                "R3|\"Carol\"|\"Nice\"|\"yes\"",           // pipe
+                "R4,\\\"Dan\\\",\\\"Metz\\\",\\\"no\\\"",  // backslash-escaped quote
+                "R5,'Eve','Lille','yes'",                  // single quote
+                "R6,Frank,Caen,no",                        // bare, unquoted
+            ]
+        ]
+        .unwrap();
+
+        let out = unwrap_csv(df, &serde_json::Value::Null).unwrap();
+
+        assert_eq!(
+            out.width(),
+            4,
+            "every row must unwrap to the 4 real columns"
+        );
+        assert_eq!(out.height(), 6);
+
+        let cols: Vec<&str> = out.get_column_names().iter().map(|c| c.as_str()).collect();
+        assert_eq!(cols, ["id", "name", "city", "ok"]);
+
+        let col = |name: &str| -> Vec<String> {
+            out.column(name)
+                .unwrap()
+                .str()
+                .unwrap()
+                .iter()
+                .map(|o| o.unwrap_or("").to_string())
+                .collect()
+        };
+        // The `;`, `|`, `\"`-escaped and `'`-quoted rows all split into
+        // the right cells — not just the dominant comma/double-quote row.
+        assert_eq!(
+            col("name"),
+            ["Alice", "Bob", "Carol", "Dan", "Eve", "Frank"]
+        );
+        assert_eq!(
+            col("city"),
+            ["Paris", "Lyon", "Nice", "Metz", "Lille", "Caen"]
+        );
+    }
 }

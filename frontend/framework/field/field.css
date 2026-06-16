@@ -1,0 +1,41 @@
+/* field — labeled form row. Sole owner of .rp-field*. */
+
+.rp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: var(--rp-sp-4);
+}
+
+.rp-field-label {
+  font-size: var(--rp-text-sm);
+  font-weight: 500;
+  color: var(--rp-text);
+}
+
+.rp-field-help {
+  font-size: var(--rp-text-xs);
+  color: var(--rp-text-mute);
+}
+
+.rp-field-error {
+  font-size: var(--rp-text-xs);
+  color: var(--rp-danger);
+}
+
+.rp-field--inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-4);
+}
+
+/* bare: no outer margin — for hosts that own their own row rhythm
+   (settings-form rows, table cells). */
+.rp-field--bare {
+  margin-bottom: 0;
+}
+
+.rp-field--inline .rp-field-label {
+  flex: 1;
+}

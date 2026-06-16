@@ -1,0 +1,4 @@
+# generated corpus CSVs + raw per-run JSONL — regenerated on demand, never commit
+corpus/
+results/raw-*.jsonl
+# keep the deliverable: results/results-*.md and results/results-*.json

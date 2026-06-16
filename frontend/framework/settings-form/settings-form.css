@@ -1,0 +1,33 @@
+/* settings-form — the registry renderer (one renderer; Settings renders the
+   pref registry, Admin Console renders the policy registry). Sole owner of
+   .rp-sform*. */
+
+.rp-sform-group {
+  margin-bottom: var(--rp-sp-6);
+}
+
+.rp-sform-group-title {
+  margin: 0 0 var(--rp-sp-3);
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.rp-sform-rows {
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius);
+  box-shadow: var(--rp-ring);
+  padding: var(--rp-sp-2) var(--rp-sp-4);
+}
+
+/* each row is OUR element (settings-form composes field via its bare option —
+   never by styling field's classes; the ui-fork-audit R4 enforces this). */
+.rp-sform-row {
+  padding: var(--rp-sp-3) 0;
+}
+
+.rp-sform-row + .rp-sform-row {
+  border-top: 1px solid var(--rp-border);
+}

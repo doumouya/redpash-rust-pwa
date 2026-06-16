@@ -1,0 +1,19 @@
+/* select — native select, token-skinned (less is more: no custom listbox
+   until a real need arrives). Sole owner of .rp-select. */
+
+.rp-select {
+  height: var(--rp-ctl-h);
+  padding: 0 var(--rp-pad-x);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+  min-width: 9rem;
+}
+
+.rp-select:focus {
+  outline: none;
+  border-color: var(--rp-accent);
+}

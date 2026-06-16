@@ -1,65 +1,21 @@
-/* ── prefs ──────────────────────────────────────────────────────
-   User preferences that reshape the whole app are implemented as
-   token overrides under <html data-*> attributes. Boot script in
-   index.html sets the attributes before first paint; settings.js
-   updates them at runtime via setPref(name, value).
-
-   This file authors none of the values directly — it remaps the
-   tokens authored in tokens.css. Every component already consumes
-   var(--rp-sp-*) and var(--rp-text-*), so changing the token here
-   propagates everywhere with no per-component edit. */
-
-/* ── density — touch-area + breathing room ─────────────────────
-   The spacing scale shifts under data-density. Cozy is the default
-   (matches tokens.css raw values), so no override block needed for
-   it. Compact tightens chrome (denser tables, slimmer panels).
-   Comfortable loosens. */
+/* prefs.css — preference-driven token retuning. The density/fontSize prefs
+   set <html data-*> attributes (pre-paint via the index.html FOUC script);
+   these blocks retune the RHYTHM tokens — components never branch on the
+   attribute themselves (one knob). */
 
 html[data-density="compact"] {
-  --rp-sp-2: 0.375rem;
-  --rp-sp-3: 0.5rem;
-  --rp-sp-4: 0.75rem;
-  --rp-sp-5: 1.125rem;
-  --rp-sp-6: 1.5rem;
-  --rp-sp-8: 2.25rem;
+  --rp-row-h: 1.875rem;
+  --rp-ctl-h: 1.75rem;
+  --rp-pad-x: 0.5rem;
+  --rp-gap: 0.375rem;
 }
 
 html[data-density="comfortable"] {
-  --rp-sp-2: 0.625rem;
-  --rp-sp-3: 0.875rem;
-  --rp-sp-4: 1.25rem;
-  --rp-sp-5: 1.75rem;
-  --rp-sp-6: 2.375rem;
-  --rp-sp-8: 3.5rem;
+  --rp-row-h: 2.625rem;
+  --rp-ctl-h: 2.25rem;
+  --rp-pad-x: 1rem;
+  --rp-gap: 0.625rem;
 }
 
-/* ── font size — A− / A+ stepper (Settings → Appearance) ─────────
-   ONE knob: scale the ROOT font-size and the whole rem-based UI —
-   text AND spacing (--rp-sp-* are rem) — scales together, so bigger
-   text comes with proportional breathing room. md = the browser
-   default (no override, also honors the user's own browser size);
-   sm/lg step ±12.5%. This is *why* everything is rem: px can't ride
-   this knob (that was the HiDPI "tiny + cramped" bug). */
-
-html[data-font-size="sm"] { font-size: 87.5%;  }  /* root ~14px → UI ×0.875 */
-html[data-font-size="lg"] { font-size: 112.5%; }  /* root ~18px → UI ×1.125 */
-
-/* A− / A+ stepper (Settings → Appearance) — the size buttons signal
-   their direction by their own glyph size. The preview "Aa" rides the
-   live --rp-text-md so the user sees the current size as they step. */
-.rp-fontstep { display: inline-flex; align-items: center; gap: 0.5rem; }
-.rp-fontstep__btn { font-weight: 700; line-height: 1; min-width: 2.5rem; }
-.rp-fontstep__btn--dn { font-size: var(--rp-text-md); }
-.rp-fontstep__btn--up { font-size: var(--rp-text-lg); }
-.rp-fontstep__btn:disabled { opacity: 0.4; cursor: default; }
-.rp-fontstep__preview {
-  min-width: 2.5ch; text-align: center; font-weight: 600;
-  color: var(--rp-text-mute); font-size: var(--rp-text-md);
-}
-
-/* ── show stage dots — workspace rail file tabs ─────────────────
-   The dot next to each file tab name signals stage at-a-glance.
-   Useful most of the time; cluttery if the rail is full. Hidden
-   when the pref is off. */
-
-html[data-show-stage-dots="0"] .rt-tab-dot { display: none; }
+html[data-fontsize="sm"] { font-size: 14px; }
+html[data-fontsize="lg"] { font-size: 17px; }

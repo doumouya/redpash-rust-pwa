@@ -1,31 +1,36 @@
-//! Purpose: RBAC effective-access resolver — the entity-membership-model §2
-//! query in code. Default-deny; the keystone every gate reads.
-//! Doc: docs/internal/code/backend/api/rbac.md
+//! Purpose: RBAC — one polymorphic edge, ONE generated resolver, ONE gate.
 //!
-//! `effective_role(caller, object)` returns the *highest* permission tier the
-//! caller holds on the object, across three sources unioned (per
-//! docs/internal/specs/rbac/entity-membership-model.md §2):
-//!   1. direct  — a membership edge on the object itself
-//!   2. cascade — a membership on the object's scope (its company / project)
-//!   3. team    — a membership held by any team the caller belongs to (recursive)
-//! `None` = no edge reaches the object → access denied. `resolve_grant` splits
-//! the result by **reach** (own = a membership on the object itself; cascade =
-//! on its company/project) so write gates enforce precisely — a case reporter
-//! and a bare company member are both `member` tier, but only the reporter
-//! holds the object directly. `require_grant` / `require_view` are the
-//! handler-facing gates (dev_user bypasses as the dev-mode platform admin).
+//! Day-one decisions #5/#6 made code:
+//!   - The cascade lives in `type_definitions.scope_parents` (data). The
+//!     recursive `scopes` CTE is generated once by `TypeDefCache` and shared
+//!     by the grant resolver, the admin edge introspection, AND company-of —
+//!     the predecessor's three hand-synced SQL copies collapse to one source.
+//!     The cascade is fully transitive (file → project → company falls out of
+//!     recursion instead of a hand-written join arm).
+//!   - `require_action` is the ONLY handler-facing gate: vertical tier floor
+//!     (View→Viewer, Create/Edit→Member, Delete→Admin) ∩ the company's
+//!     horizontal Contract (team-PK → object-TYPE → CRUD), wired from the
+//!     first route. `require_rule` exists as the documented escape hatch for
+//!     reach-split atoms (e.g. members-manage); it is not the default.
+//!
+//! Denial is 404, never 403 (leak-free). Platform-admin bypass is FIRST in
+//! every gate — and the admin verdict arrives pre-resolved on the `Caller`
+//! (the per-request auth context), so gates never re-query it.
 
-use crate::{error::AppError, state::AppState};
+use std::collections::BTreeMap;
 
-// Post-neuter, only the #[cfg(test)] neuter_tests dead-pool oracle still names
-// PgPool; the runtime gates admit before any pool is touched. cfg-gating the
-// import keeps the non-test build warning-clean now that load_contract /
-// company_of (the only runtime PgPool namers) are gone.
-#[cfg(test)]
 use sqlx::PgPool;
 
-/// RBAC permission tier. Ordered `Viewer < Member < Admin < Owner` so the
-/// derived `Ord` makes "highest role wins" a plain `max`.
+use crate::{error::AppError, type_cache::TypeDefCache};
+
+/// The per-request auth context — resolved ONCE by the session extractor.
+#[derive(Debug, Clone)]
+pub struct Caller {
+    pub rid: String,
+    pub is_platform_admin: bool,
+}
+
+/// Ordered so "highest role wins" is a plain `max`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role {
     Viewer,
@@ -35,7 +40,6 @@ pub enum Role {
 }
 
 impl Role {
-    /// Map the `role` rank used in the SQL (`owner=4 … viewer=1`) to a tier.
     fn from_rank(rank: i32) -> Option<Role> {
         match rank {
             4 => Some(Role::Owner),
@@ -45,8 +49,6 @@ impl Role {
             _ => None,
         }
     }
-    /// Lowercase wire label — matches the `memberships.role` CHECK values.
-    /// Used by the admin introspection endpoint to serialize a tier.
     pub fn as_str(&self) -> &'static str {
         match self {
             Role::Owner => "owner",
@@ -57,225 +59,324 @@ impl Role {
     }
 }
 
-/// A caller's resolved access on an object, split by REACH. Write atoms need
-/// the split: `direct` = the tier from a membership ON the object itself (own
-/// reach — reporter/assignee/case-team); `scope` = the tier from a membership
-/// on the object's company/project (cascade). `effective()` = the higher of
-/// the two (what `*.view` reads).
+/// Resolved access split by REACH: `direct` = an edge ON the object itself;
+/// `scope` = an edge on something the object cascades to. A case reporter and
+/// a bare company member are both member-tier — only the reporter is direct.
 #[derive(Debug, Clone, Copy)]
 pub struct Grant {
     pub direct: Option<Role>,
-    pub scope:  Option<Role>,
+    pub scope: Option<Role>,
 }
 
 impl Grant {
-    /// Effective tier — the highest of either reach (`None` = no access).
     pub fn effective(&self) -> Option<Role> {
         self.direct.max(self.scope)
     }
-    /// Does the caller hold a membership directly on the object (own reach)?
     pub fn is_member(&self) -> bool {
         self.direct.is_some()
     }
-    /// At least `min` via the company/project cascade?
     pub fn scope_at_least(&self, min: Role) -> bool {
         self.scope.map_or(false, |r| r >= min)
     }
 }
 
-/// Is `caller` a platform admin (full access — the catalog's `*.view.all`)?
-/// The bootstrap `dev_user` always is (fast-path, no query — keeps dev mode
-/// working), plus any user with `users.role = 'admin'` (mig 20260531000002).
-/// Platform admins bypass every gate.
-pub async fn is_platform_admin(state: &AppState, caller: &str) -> sqlx::Result<bool> {
-    if caller == state.dev_user.as_ref() {
-        return Ok(true);
+const RANKED_CTE: &str = ",
+ranked(object_redpash_id, rank) AS (
+    SELECT object_redpash_id,
+           CASE role WHEN 'owner' THEN 4 WHEN 'admin' THEN 3
+                     WHEN 'member' THEN 2 WHEN 'viewer' THEN 1 ELSE 0 END
+    FROM memberships
+    WHERE member_redpash_id IN (SELECT pid FROM principals)
+)";
+
+/// Reach-split grant for `caller` on `object`. The WITH clause (principal
+/// closure + recursive scopes) is the generated single source.
+pub async fn resolve_grant(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &str,
+    object: &str,
+) -> sqlx::Result<Grant> {
+    let sql = format!(
+        "{with}{ranked}
+SELECT
+  (SELECT max(rank) FROM ranked WHERE object_redpash_id = $2) AS direct,
+  (SELECT max(rank) FROM ranked
+    WHERE object_redpash_id IN (SELECT oid FROM scopes WHERE oid <> $2)) AS scope",
+        with = cache.rbac_with_clause(),
+        ranked = RANKED_CTE,
+    );
+    let (direct, scope): (Option<i32>, Option<i32>) =
+        sqlx::query_as(&sql).bind(caller).bind(object).fetch_one(pool).await?;
+    Ok(Grant { direct: direct.and_then(Role::from_rank), scope: scope.and_then(Role::from_rank) })
+}
+
+/// Admin introspection — the membership edges (across the subject's principal
+/// closure) granting any reach on `object`, with the WHY. Same generated WITH
+/// clause; different projection. Route applies the platform-admin gate.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GrantEdge {
+    pub object: String,
+    pub member: String,
+    pub role: String,
+    pub context_role: String,
+    pub reach: String,
+}
+
+pub async fn grant_edges(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    subject: &str,
+    object: &str,
+) -> sqlx::Result<Vec<GrantEdge>> {
+    let sql = format!(
+        "{with}
+SELECT m.object_redpash_id, m.member_redpash_id, m.role, m.context_role,
+       CASE WHEN m.object_redpash_id = $2 THEN 'direct' ELSE 'scope' END AS reach
+FROM memberships m
+WHERE m.member_redpash_id IN (SELECT pid FROM principals)
+  AND m.object_redpash_id IN (SELECT oid FROM scopes)
+ORDER BY reach, m.role",
+        with = cache.rbac_with_clause(),
+    );
+    let rows: Vec<(String, String, String, String, String)> =
+        sqlx::query_as(&sql).bind(subject).bind(object).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(object, member, role, context_role, reach)| GrantEdge {
+            object,
+            member,
+            role,
+            context_role,
+            reach,
+        })
+        .collect())
+}
+
+/// The object's company — the third consumer of the same generated CTE: the
+/// first ancestor in the scope closure whose entity type is 'company'.
+pub async fn company_of(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    object: &str,
+) -> sqlx::Result<Option<String>> {
+    let sql = format!(
+        "{with}
+SELECT s.oid FROM scopes s JOIN entities e ON e.id = s.oid AND e.type = 'company'
+ORDER BY s.depth LIMIT 1",
+        with = cache.rbac_with_clause(),
+    );
+    // $1 (caller) is unused by this projection but the shared WITH clause
+    // binds it — pass the object for both.
+    sqlx::query_scalar(&sql).bind(object).bind(object).fetch_optional(pool).await
+}
+
+/// Caller + every team they belong to (recursive). Resolve once, then list
+/// queries scope rows with `member_redpash_id = ANY($principals)`.
+pub async fn principals(pool: &PgPool, caller: &str) -> sqlx::Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "WITH RECURSIVE p(pid) AS (
+                SELECT $1::text
+            UNION
+                SELECT m.object_redpash_id FROM memberships m
+                JOIN p ON p.pid = m.member_redpash_id
+                JOIN entities e ON e.id = m.object_redpash_id AND e.type = 'team')
+         SELECT pid FROM p",
+    )
+    .bind(caller)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(p,)| p).collect())
+}
+
+// ─── the per-company horizontal contract ───────────────────────────────────
+
+/// Versioned JSONB in company_rbac (active = max(version)). INVARIANT:
+/// enforcement branches on tier + team PKs + object TYPEs only; `labels` and
+/// `context_role` are display-only — no enforcement path reads them.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Contract {
+    #[serde(default)]
+    pub company: String,
+    /// company_owner — god of this company's subtree.
+    #[serde(default)]
+    pub owner: Option<String>,
+    /// company_admins — ORG management only, fail-closed for content.
+    #[serde(default)]
+    pub admins: Vec<String>,
+    /// DISPLAY ONLY.
+    #[serde(default)]
+    pub labels: BTreeMap<String, String>,
+    /// team PK → object TYPE → allowed actions (⊆ {c,r,u,d}).
+    #[serde(default)]
+    pub grants: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+impl Contract {
+    pub fn is_company_owner(&self, user: &str) -> bool {
+        self.owner.as_deref() == Some(user)
     }
-    let row: Option<(String,)> = sqlx::query_as("SELECT role FROM users WHERE redpash_id = $1")
-        .bind(caller)
-        .fetch_optional(&state.db)
-        .await?;
-    Ok(row.map_or(false, |(r,)| r == "admin"))
+    /// Union over the caller's principals; a user PK is never a grant key.
+    pub fn allows(&self, principals: &[String], object_type: &str, action: &str) -> bool {
+        principals.iter().any(|p| {
+            self.grants
+                .get(p)
+                .and_then(|by_type| by_type.get(object_type))
+                .map_or(false, |acts| acts.iter().any(|a| a == action))
+        })
+    }
 }
 
-/// Generic write/access gate. LEAN SINGLE-USER NEUTER (CAS_C8A9): admits
-/// unconditionally with ZERO per-request RBAC/membership SQL — it returns
-/// `Ok(())` before the pool is ever touched, so the sole user is never denied
-/// and no `resolve_grant`/`is_platform_admin` query runs. The signature is
-/// UNCHANGED (`rule`, `label`, `object` retained) so every call site compiles;
-/// the multi-tenant body that consulted the `rule` closure against a resolved
-/// `Grant` lives in the `full-app-pre-slim` snapshot.
-pub async fn require_grant(
-    _state:  &AppState,
-    _caller: &str,
-    _object: &str,
-    _label:  &str,
-    _rule:   impl Fn(Grant) -> bool,
-) -> Result<(), AppError> {
-    Ok(())
+pub async fn load_contract(pool: &PgPool, company_id: &str) -> sqlx::Result<Option<Contract>> {
+    let row: Option<sqlx::types::Json<Contract>> = sqlx::query_scalar(
+        "SELECT contract FROM company_rbac WHERE company_id = $1 ORDER BY version DESC LIMIT 1",
+    )
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|j| j.0))
 }
 
-/// View gate (`*.view`). LEAN SINGLE-USER NEUTER (CAS_C8A9): admits with zero
-/// per-request SQL (signature unchanged; see `require_grant`).
-pub async fn require_view(
-    _state:  &AppState,
-    _caller: &str,
-    _object: &str,
-    _label:  &str,
-) -> Result<(), AppError> {
-    Ok(())
-}
+// ─── THE gate ───────────────────────────────────────────────────────────────
 
-/// The action being attempted, mapped to its CRUD letter (the contract's grant
-/// alphabet) and its framework-default minimum tier (the vertical axis). The
-/// contract's object-type grant is the *additional* horizontal gate on top.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action { View, Create, Edit, Delete }
+pub enum Action {
+    View,
+    Create,
+    Edit,
+    Delete,
+}
 
 impl Action {
     pub fn crud(self) -> &'static str {
-        match self { Action::View => "r", Action::Create => "c", Action::Edit => "u", Action::Delete => "d" }
+        match self {
+            Action::View => "r",
+            Action::Create => "c",
+            Action::Edit => "u",
+            Action::Delete => "d",
+        }
     }
-    /// Default minimum tier for the action. (Per-company contracts tighten the
-    /// horizontal axis; this is the universal vertical floor.)
+    /// The universal vertical floor.
     pub fn min_tier(self) -> Role {
         match self {
-            Action::View                 => Role::Viewer,
+            Action::View => Role::Viewer,
             Action::Create | Action::Edit => Role::Member,
-            Action::Delete               => Role::Admin,
+            Action::Delete => Role::Admin,
         }
     }
 }
 
-/// Contract-aware gate. LEAN SINGLE-USER NEUTER (CAS_C8A9): admits
-/// unconditionally with ZERO per-request RBAC/membership SQL — returns `Ok(())`
-/// before the pool is touched (no `resolve_grant`/`company_of`/`load_contract`).
-/// Signature unchanged (`action: Action` retained) so all call sites compile.
-/// The multi-tenant tier ∩ contract decision lives in the `full-app-pre-slim`
-/// snapshot.
+/// PURE decision — tier (vertical) ∩ contract (horizontal). No contract ⇒
+/// tier-only (non-breaking); company_owner ⇒ full subtree; company_admin is
+/// NOT auto-content (fail-closed).
+fn evaluate(
+    grant: Grant,
+    contract: Option<&Contract>,
+    principals: &[String],
+    caller: &str,
+    object_type: &str,
+    action: Action,
+) -> bool {
+    let tier_ok = grant.effective().map_or(false, |r| r >= action.min_tier());
+    match contract {
+        None => tier_ok,
+        Some(c) if c.is_company_owner(caller) => true,
+        Some(c) => tier_ok && c.allows(principals, object_type, action.crud()),
+    }
+}
+
+/// The single handler-facing gate. 404 on deny, always.
 pub async fn require_action(
-    _state:  &AppState,
-    _caller: &str,
-    _object: &str,
-    _action: Action,
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &Caller,
+    object: &str,
+    action: Action,
 ) -> Result<(), AppError> {
-    Ok(())
+    if caller.is_platform_admin {
+        return Ok(());
+    }
+    let object_type = cache.object_kind(object);
+    let grant = resolve_grant(pool, cache, &caller.rid, object).await?;
+    let company = company_of(pool, cache, object).await?;
+    let contract = match &company {
+        Some(c) => load_contract(pool, c).await?,
+        None => None,
+    };
+    let princ =
+        if contract.is_some() { principals(pool, &caller.rid).await? } else { Vec::new() };
+    if evaluate(grant, contract.as_ref(), &princ, &caller.rid, object_type, action) {
+        Ok(())
+    } else {
+        Err(AppError::not_found("not_found", format!("{object_type} {object}")))
+    }
 }
 
-// ─── RBAC-neuter gate tests (CAS_C8A9A3EC0935498880A468625FE3F490) ──────────
-// Tester-owned (the coder cannot edit this module). Lean single-user-mode
-// neuter: the four gate fns + require_platform_admin_mw admit unconditionally,
-// then the multi-tenant machinery (resolve_grant / GRANT_SQL / EDGES_SQL /
-// principals / Contract / load_contract / company_of / evaluate) is deleted.
-// CHECKPOINT-1 APPROVED scope (the authoritative comment on the Case).
-//
-// RED-now / GREEN-after design — the honest proof of "ZERO per-request RBAC SQL":
-//   We build an AppState whose `db` is a LAZY pool pointed at an unreachable
-//   address (127.0.0.1:1 — connection refused the instant any query runs) and a
-//   `TypeDefCache::default()` (no DB). The caller is a NON-dev RID.
-//   • TODAY: require_grant/require_view/require_action with a non-dev caller call
-//     `resolve_grant` (and friends) → the lazy pool tries to connect → Err. The
-//     gate returns Err, so `is_ok()` is FALSE → these tests FAIL (correct red).
-//   • AFTER the no-op-neuter: the gate returns Ok(()) before touching the pool →
-//     these tests PASS (green). A green here is a PROOF the gate did no SQL,
-//     because the only pool available would have errored on the first query.
-//
-// We deliberately use a NON-dev caller: a dev_user caller already trips the
-// `is_platform_admin` fast-path (Ok with no SQL) TODAY, so it can't distinguish
-// "neutered" from "not neutered" — it would be a fake-green (the same trap the
-// objects.rs IDOR harness flags). The dev_user path is asserted separately as
-// the floor that must STILL hold.
+/// Convenience: any reach at all (View).
+pub async fn require_view(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &Caller,
+    object: &str,
+) -> Result<(), AppError> {
+    require_action(pool, cache, caller, object, Action::View).await
+}
+
+/// The ESCAPE HATCH for reach-split atoms only (e.g. members-manage rules
+/// like "direct member or cascade admin"). Routine CRUD uses require_action;
+/// reaching for this in a normal handler is a review finding.
+pub async fn require_rule(
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &Caller,
+    object: &str,
+    label: &str,
+    rule: impl Fn(Grant) -> bool,
+) -> Result<(), AppError> {
+    if caller.is_platform_admin {
+        return Ok(());
+    }
+    let grant = resolve_grant(pool, cache, &caller.rid, object).await?;
+    if rule(grant) {
+        Ok(())
+    } else {
+        Err(AppError::not_found("not_found", format!("{label} {object}")))
+    }
+}
+
 #[cfg(test)]
-mod neuter_tests {
+mod tests {
     use super::*;
-    use crate::state::{AppState, FileEntry};
-    use dashmap::DashMap;
-    use std::{path::PathBuf, sync::Arc};
 
-    const DEV: &str = "USR_dev_bootstrap";
-    const NON_DEV: &str = "USR_some_other_caller";
-    const OBJECT: &str = "CMP_target_object";
-
-    /// An AppState backed by a LAZY pool to an unreachable DB. `connect_lazy`
-    /// never opens a socket until the first query — so a gate that returns Ok
-    /// WITHOUT querying never touches it, and a gate that DOES query gets a
-    /// connection-refused Err. That asymmetry is the AC-5 "zero per-request SQL"
-    /// oracle. `type_cache` is the empty registry (object_kind is pure/in-memory).
-    fn state_with_dead_pool() -> AppState {
-        // Port 1 is unbound; connect_lazy defers the failing connect to query
-        // time. A short acquire_timeout makes the RED state (a gate that still
-        // queries) fail FAST instead of waiting the default 30s connect timeout
-        // — once the gate is neutered it returns Ok before the pool is touched,
-        // so the timeout is never hit in the green state.
-        let db: PgPool = sqlx::postgres::PgPoolOptions::new()
-            .acquire_timeout(std::time::Duration::from_millis(200))
-            .connect_lazy("postgres://nobody@127.0.0.1:1/nodb")
-            .expect("connect_lazy parses the URL without connecting");
-        AppState {
-            db,
-            files:               Arc::new(DashMap::<String, FileEntry>::new()),
-            data_dir:            Arc::new(PathBuf::from("/tmp/redpash-neuter-test")),
-            dev_user:            Arc::new(DEV.to_string()),
-            oauth:               None,
-            http:                reqwest::Client::default(),
-            avatars:             Arc::new(DashMap::new()),
-            dev_login:           false,
-            type_cache:          Arc::new(crate::type_cache::TypeDefCache::empty()),
-        }
+    fn member_grant() -> Grant {
+        Grant { direct: None, scope: Some(Role::Member) }
     }
 
-    // ── AC-5 / AC-6: require_view admits a NON-dev caller with no SQL ─────────
-    #[tokio::test]
-    async fn ac5_require_view_admits_non_dev_caller_without_touching_the_pool() {
-        let state = state_with_dead_pool();
-        let r = require_view(&state, NON_DEV, OBJECT, "object").await;
-        assert!(
-            r.is_ok(),
-            "require_view denied/errored for a non-dev caller — in lean single-user mode it must \
-             admit unconditionally with ZERO per-request SQL (a query against the dead pool would \
-             have errored; an Err here means the multi-tenant resolve_grant path still runs). got: {r:?}"
-        );
+    #[test]
+    fn tier_floor_holds_without_a_contract() {
+        assert!(evaluate(member_grant(), None, &[], "USR_x", "case", Action::View));
+        assert!(evaluate(member_grant(), None, &[], "USR_x", "case", Action::Edit));
+        assert!(!evaluate(member_grant(), None, &[], "USR_x", "case", Action::Delete));
     }
 
-    // ── AC-5 / AC-6: require_grant admits regardless of the closure rule ──────
-    #[tokio::test]
-    async fn ac5_require_grant_admits_non_dev_caller_without_touching_the_pool() {
-        let state = state_with_dead_pool();
-        // A rule that REJECTS every grant — proves the neuter short-circuits
-        // BEFORE the rule is even consulted (no resolve_grant, no rule eval).
-        let r = require_grant(&state, NON_DEV, OBJECT, "object", |_g| false).await;
-        assert!(
-            r.is_ok(),
-            "require_grant denied/errored for a non-dev caller (even with an always-false rule) — \
-             lean mode must admit before resolving any Grant. An Err means resolve_grant queried \
-             the dead pool. got: {r:?}"
-        );
-    }
-
-    // ── AC-5 / AC-6: require_action (the contract-aware gate) admits ──────────
-    #[tokio::test]
-    async fn ac5_require_action_admits_non_dev_caller_without_touching_the_pool() {
-        let state = state_with_dead_pool();
-        for action in [Action::View, Action::Create, Action::Edit, Action::Delete] {
-            let r = require_action(&state, NON_DEV, OBJECT, action).await;
-            assert!(
-                r.is_ok(),
-                "require_action({action:?}) denied/errored for a non-dev caller — lean mode must \
-                 admit before resolve_grant/company_of/load_contract/principals run. An Err means \
-                 one of those queried the dead pool. got: {r:?}"
-            );
-        }
-    }
-
-    // ── AC-6 floor: the dev_user path STILL admits (must never regress) ───────
-    #[tokio::test]
-    async fn ac6_dev_user_still_admits_across_all_gates() {
-        let state = state_with_dead_pool();
-        assert!(require_view(&state, DEV, OBJECT, "object").await.is_ok(),
-            "dev_user must still pass require_view in lean mode");
-        assert!(require_grant(&state, DEV, OBJECT, "object", |_g| false).await.is_ok(),
-            "dev_user must still pass require_grant in lean mode");
-        assert!(require_action(&state, DEV, OBJECT, Action::Delete).await.is_ok(),
-            "dev_user must still pass require_action in lean mode");
+    #[test]
+    fn contract_intersects_and_owner_overrides() {
+        let c: Contract = serde_json::from_str(
+            r#"{"company":"CMP_x","owner":"USR_o",
+                "grants":{"TEM_eng":{"case":["c","r","u"]}}}"#,
+        )
+        .unwrap();
+        let eng = vec!["TEM_eng".to_string()];
+        // member tier + contract grant → allowed
+        assert!(evaluate(member_grant(), Some(&c), &eng, "USR_x", "case", Action::Edit));
+        // contract grants 'u' but not 'd'; tier wouldn't allow Delete anyway
+        assert!(!evaluate(member_grant(), Some(&c), &eng, "USR_x", "case", Action::Delete));
+        // no contract grant for this type → denied even with tier
+        assert!(!evaluate(member_grant(), Some(&c), &eng, "USR_x", "user", Action::Edit));
+        // company owner bypasses all of it
+        let no_grant = Grant { direct: None, scope: None };
+        assert!(evaluate(no_grant, Some(&c), &[], "USR_o", "user", Action::Delete));
+        // labels never enforce: a caller whose only key is a label gets nothing
+        assert!(!c.allows(&["Manager".to_string()], "case", "u"));
     }
 }

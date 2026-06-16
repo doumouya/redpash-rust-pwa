@@ -1,0 +1,154 @@
+/* atoms — the lowest-level vocabulary: button, chip, input, badge, spinner,
+   kbd. Sole owner of these classes (ui-fork-audit R4).
+   knobs: --rp-atom-radius */
+
+/* ── rp-btn ── the text button. Variants: default · accent (ONE per view —
+   the primary action) · ghost (low-emphasis). */
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--rp-gap) * 0.75);
+  height: var(--rp-ctl-h);
+  padding: 0 var(--rp-pad-x);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-atom-radius, var(--rp-radius));
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  font-size: var(--rp-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--rp-fast) var(--rp-ease), border-color var(--rp-fast) var(--rp-ease);
+  user-select: none;
+  white-space: nowrap;
+}
+.rp-btn:hover {
+  background: var(--rp-hover);
+}
+.rp-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rp-btn--accent {
+  background: var(--rp-accent);
+  border-color: var(--rp-accent);
+  color: var(--rp-on-accent);
+  font-weight: 600;
+}
+.rp-btn--accent:hover {
+  background: var(--rp-accent);
+  filter: brightness(1.08);
+}
+.rp-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--rp-text-dim);
+}
+.rp-btn--ghost:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-btn--danger {
+  color: var(--rp-danger);
+}
+.rp-btn--sm {
+  height: 1.625rem;
+  padding: 0 var(--rp-sp-2);
+  font-size: var(--rp-text-xs);
+}
+/* icon-only: square, no horizontal padding; the bi glyph centers via the
+   flex alignment already on .rp-btn. */
+.rp-btn--icon {
+  width: var(--rp-ctl-h);
+  padding: 0;
+  font-size: var(--rp-text-md);
+}
+
+/* ── rp-chip ── pill selector (single-select rows live in chip-row). */
+.rp-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.625rem;
+  padding: 0 var(--rp-sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--rp-radius-pill);
+  background: transparent;
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+  transition: background var(--rp-fast) var(--rp-ease), color var(--rp-fast) var(--rp-ease);
+  white-space: nowrap;
+}
+.rp-chip:hover {
+  color: var(--rp-text);
+}
+.rp-chip.is-active {
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  box-shadow: var(--rp-ring), var(--rp-shadow);
+}
+
+/* ── rp-input ── single-line text input. */
+.rp-input {
+  height: var(--rp-ctl-h);
+  padding: 0 var(--rp-pad-x);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-atom-radius, var(--rp-radius));
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font-size: var(--rp-text-sm);
+  width: 100%;
+}
+.rp-input::placeholder {
+  color: var(--rp-text-mute);
+}
+.rp-input:focus {
+  outline: none;
+  border-color: var(--rp-accent);
+}
+
+/* ── rp-badge ── soft-tint label pill (status / role / plan). */
+.rp-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 var(--rp-sp-2);
+  border-radius: var(--rp-radius-pill);
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rp-badge--ok { background: color-mix(in srgb, var(--rp-ok) 14%, transparent); color: var(--rp-ok); }
+.rp-badge--warn { background: color-mix(in srgb, var(--rp-warn) 14%, transparent); color: var(--rp-warn); }
+.rp-badge--danger { background: color-mix(in srgb, var(--rp-danger) 14%, transparent); color: var(--rp-danger); }
+.rp-badge--info { background: color-mix(in srgb, var(--rp-info) 14%, transparent); color: var(--rp-info); }
+.rp-badge--accent { background: var(--rp-accent-soft); color: var(--rp-accent); }
+
+/* ── rp-spinner ── async feedback (used sparingly — optimistic UI first). */
+.rp-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--rp-border);
+  border-top-color: var(--rp-accent);
+  border-radius: 50%;
+  animation: rp-spin 0.7s linear infinite;
+}
+@keyframes rp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── rp-kbd ── keyboard hint. */
+.rp-kbd {
+  display: inline-block;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--rp-border);
+  border-bottom-width: 2px;
+  border-radius: var(--rp-radius-sm);
+  background: var(--rp-surface);
+  font-family: var(--rp-font-mono);
+  font-size: var(--rp-text-xs);
+  color: var(--rp-text-dim);
+}

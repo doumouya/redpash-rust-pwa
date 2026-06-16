@@ -1,68 +1,40 @@
-# Pure-compute crate. Everything that touches a row, a byte buffer, or
-# a Polars frame lives here so the `api` crate stays small and focused
-# on HTTP plumbing.
-
 [package]
-name    = "data"
-version = { workspace = true }
-edition = { workspace = true }
+name = "data"
+version = "0.1.0"
+edition = "2021"
 
-# Two crate types so the wasm32 build produces a `.wasm` cdylib while
-# the server build still works with `data` as a path-rlib dependency
-# of `api`. Native builds emit both an rlib and an unused cdylib; the
-# rlib is what `api` links against.
+# PURE COMPUTE. Nothing here does io/networking/threads/time — it compiles to
+# wasm32-unknown-unknown unchanged ("one engine, two surfaces"). The crate-type
+# yields both the server rlib (linked by api) and the browser .wasm cdylib.
+# render/doc-rendering deliberately lives OUTSIDE this crate (day-one: keep the
+# pure-compute story clean) — the predecessor's stub-plus-4-deps muddied it.
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-shared          = { path = "../shared" }
-serde           = { workspace = true }
-serde_json      = { workspace = true }
-thiserror       = { workspace = true }
-anyhow          = { workspace = true }
+shared = { path = "../shared" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chardetng = { workspace = true }
+encoding_rs = { workspace = true }
+chrono = { workspace = true }
+# csv is pure-compute when writing to a Vec<u8> (steps/structure unwrap_csv),
+# so it rides on BOTH targets — the reference ships it to wasm the same way.
+csv = { workspace = true }
 
-chardetng       = { workspace = true }
-encoding_rs     = { workspace = true }
-csv             = { workspace = true }
-calamine        = { workspace = true }
+# Server build: workspace polars (with `fmt` default — powers DataFrame Debug).
+# rust_xlsxwriter (export.rs XLSX) is server-only — won't build on wasm.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+polars = { workspace = true }
 rust_xlsxwriter = { workspace = true }
 
-chrono          = { workspace = true }
-tracing         = { workspace = true }
-
-# Server-only deps (wasm32 dep graph excludes these). Two reasons:
-#   1. `polars` default `fmt` feature pulls `comfy-table` → `crossterm`
-#      (terminal IO; not wasm32-compatible). Server keeps the workspace
-#      polars (with defaults — `fmt` powers DataFrame Debug); wasm gets
-#      a default-less polars below.
-#   2. The doc-render deps (`pulldown-cmark`, `syntect`, `gray_matter`,
-#      `maud`) drive `render.rs` for `/api/docs` + Maud templates.
-#      `syntect` ⇒ `onig_sys` (needs `clang` to build a C regex engine)
-#      and ⇒ `crossterm`; neither compiles on wasm32. Gated here +
-#      `#[cfg(not(target_arch = "wasm32"))]` on `pub mod render` in
-#      `lib.rs`. Matches roadmap-webassembly.md "what binds now" rule.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-polars          = { workspace = true }
-pulldown-cmark  = { workspace = true }
-syntect         = { workspace = true }
-gray_matter     = { workspace = true }
-maud            = { workspace = true }
-
-# WASM-only block. Three things:
-#   1. `polars` is overridden with `default-features = false` so the
-#      `fmt` default (→ comfy-table → crossterm) stops pulling terminal-
-#      IO crates that don't compile on wasm32.
-#   2. `uuid` gets the `js` feature for wasm32 RNG.
-#   3. `getrandom` 0.3.x is pulled directly with `wasm_js` so feature
-#      unification flips it on for every transitive consumer (polars /
-#      rayon-core / ahash). The cfg flag this needs is set in the build
-#      command: `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`.
+# WASM build: polars with default-features = false (no fmt → no
+# comfy-table → no crossterm terminal IO), plus the wasm RNG wiring.
+# getrandom needs RUSTFLAGS='--cfg getrandom_backend="wasm_js"' at build —
+# set in tools/build-wasm.sh and tools/purity-check.sh.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-polars          = { version = "0.54", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
-uuid            = { version = "1", features = ["v4", "serde", "js"] }
-getrandom       = { version = "0.3", features = ["wasm_js"] }
-wasm-bindgen    = "0.2"
-# Pipes Rust panics through `console.error` with file + line + payload
-# so the browser shows real messages instead of bare `unreachable
-# executed` traps. Installed once at module init via #[wasm_bindgen(start)].
+polars = { version = "0.54", default-features = false, features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"

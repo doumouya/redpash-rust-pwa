@@ -1,0 +1,22 @@
+/* studio/workspace — page-scoped only; the framework components own the look.
+   Step 1 of the redtable-family rebuild: the loaded view is the bare table
+   filling the surface, so the only page-owned rule is lifting the redtable's
+   default 60vh cap (a documented framework knob) for this page's full-height
+   grid. Relative units; never a framework .rp- class in a selector. */
+
+.pg-studio-workspace {
+  height: 100%;
+  /* the loaded data view is a `fill` section; let the grid span the full
+     surface height instead of the redtable's free-standing 60vh default. */
+  --rp-redtable-max-h: none;
+}
+
+/* console body (SQL / Report modals): a builder above, a bare result table
+   below. The result table keeps the framework's default height cap, so it
+   scrolls inside the modal rather than growing unbounded. */
+.pg-studio-workspace-console {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+  min-width: min(56rem, 82vw);
+}

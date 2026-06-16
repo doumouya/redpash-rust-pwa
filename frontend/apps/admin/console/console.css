@@ -1,0 +1,56 @@
+/* admin/console — page-scoped chrome for the two admin matrices; the
+   components (chip-row, perm-cell, settings-form, field) own the look
+   (ui-fork-audit R1/R2). */
+
+.pg-admin-console {
+  height: 100%;
+}
+
+/* app-visibility matrix: one row per role, inline toggle fields per app */
+.pg-admin-console-visrow {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-5);
+  padding: var(--rp-sp-2) 0;
+}
+
+.pg-admin-console-visrole {
+  width: 5rem;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  text-transform: capitalize;
+}
+
+/* objects & fields matrix: field label column + four tier columns */
+.pg-admin-console-matrixwrap {
+  margin-top: var(--rp-sp-3);
+}
+
+.pg-admin-console-note {
+  margin: 0 0 var(--rp-sp-3);
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+}
+
+.pg-admin-console-matrix {
+  display: grid;
+  grid-template-columns: minmax(10rem, 18rem) repeat(4, minmax(4rem, 6rem));
+  gap: var(--rp-sp-2) var(--rp-sp-3);
+  align-items: center;
+}
+
+.pg-admin-console-mhead {
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.pg-admin-console-mfield {
+  font-size: var(--rp-text-sm);
+}
+
+.pg-admin-console-mcell {
+  text-align: center;
+}

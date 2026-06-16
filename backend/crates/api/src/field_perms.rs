@@ -1,226 +1,219 @@
-//! Purpose: the **field registry** — every object field as a `FieldRow`
-//! (= the spec's FieldDef): identity + storage (`data_type`) + presentation
-//! (`editor`/`options`/`rel`) + permission (`perm_class` → per-role cells) +
-//! `is_editable`/`is_sortable`. The redtable of fields (CAS_C4219F2B) AND the
-//! per-type field catalog the TypeDefinition contract serves (CAS_0FBF301F §3/§4).
-//! Doc: docs/internal/code/backend/api/field_perms.md
+//! Purpose: field-level permissions — the predecessor's PermClass pattern,
+//! re-rooted on the DB catalog. Per-role read/write cells DERIVE from a
+//! field's `perm_class` (type_fields, seeded data — never persisted cells, so
+//! seeds can't drift), and the sparse `field_permissions` override table
+//! layers on top. `require_fields` is the write gate: it runs AFTER the
+//! coarse Edit gate, so its denial may be a 403 naming the blocked field —
+//! existence is already admitted, nothing leaks.
 //!
-//! Per-role permissions DERIVE from `perm_class` (not hand-authored per field),
-//! so a custom object's fields resolve without source-code defaults — the
-//! disposability requirement (spec §3.3). The `field_permissions` override
-//! table layers on top (the existing /admin/fields merge); `require_fields`
-//! enforces on write.
-//!
-//! Scope: the membership-bearing object types (company / project / case / team /
-//! file / chart / dashboard) — where the resolver's `effective()` tier maps onto
-//! these columns. `user` (a subject) and `comment` (author-gated) stay out.
+//! Tier resolution rides the ONE resolver (rbac::resolve_grant → effective);
+//! platform admins bypass FIRST, like every gate in the house.
 
-use serde::Serialize;
+use std::collections::HashMap;
 
-use crate::{error::AppError, state::AppState};
+use sqlx::PgPool;
 
-/// Permission for one `(field, role)` cell. `Write` implies `Read`. Ordered so
-/// "at least Read" becomes a `>=` once enforcement lands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[serde(rename_all = "lowercase")]
+use crate::{
+    error::AppError,
+    rbac::{self, Caller},
+    type_cache::TypeDefCache,
+};
+
+/// Permission for one `(field, role)` cell. `Write` implies `Read`; ordered so
+/// "at least Read" is a `>=`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Perm {
     None,
     Read,
     Write,
 }
 
-use Perm::{None as N, Read as R, Write as W};
-
 impl Perm {
-    pub fn as_str(self) -> &'static str {
+    /// The wire shape on /api/types cells: "rw" | "r" | "".
+    pub fn wire(self) -> &'static str {
         match self {
-            Perm::None => "none",
-            Perm::Read => "read",
-            Perm::Write => "write",
+            Perm::Write => "rw",
+            Perm::Read => "r",
+            Perm::None => "",
         }
     }
-    pub fn from_str(s: &str) -> Option<Perm> {
-        match s {
-            "none" => Some(Perm::None),
-            "read" => Some(Perm::Read),
-            "write" => Some(Perm::Write),
-            _ => None,
+    /// A field_permissions override row → a cell (can_write implies read).
+    pub fn from_flags(can_read: bool, can_write: bool) -> Perm {
+        if can_write {
+            Perm::Write
+        } else if can_read {
+            Perm::Read
+        } else {
+            Perm::None
         }
     }
 }
 
 /// The permission class of a field — the per-role default matrix DERIVES from
-/// it (spec §3.1), so custom objects resolve without hand-authored defaults.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+/// it, so a custom type's fields resolve without hand-authored defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermClass {
     /// `W W R R` — default editable field (owner/admin write, below read).
     Standard,
-    /// `W W W R` — member-writable content (case fields; participants edit).
+    /// `W W W R` — member-writable content (participants edit).
     Collaborative,
-    /// `W R R R` — ownership transfer / re-parent / personal-default flag.
+    /// `W R R R` — ownership-adjacent knobs (role/status/kind).
     OwnerGrade,
-    /// `W N N N` — owner-only personal pin (e.g. dashboard.is_favorite).
+    /// `W N N N` — owner-only personal pin.
     Personal,
-    /// `R R R R` — computed / system-managed (is_editable=false).
+    /// `R R R R` — system-managed (username, company_id).
     Readonly,
 }
 
 impl PermClass {
-    /// Wire string (matches the serde snake_case repr); the type registry uses
-    /// it to stamp `perm_class` onto a FieldDef.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            PermClass::Standard => "standard",
-            PermClass::Collaborative => "collaborative",
-            PermClass::OwnerGrade => "owner_grade",
-            PermClass::Personal => "personal",
-            PermClass::Readonly => "readonly",
-        }
-    }
-    /// Parse the stored wire string (TypeDefCache load) back to the enum.
-    pub fn from_str(s: &str) -> Option<PermClass> {
+    /// Parse the stored wire string (type_fields.perm_class) back to the enum.
+    pub fn parse(s: &str) -> Option<PermClass> {
         match s {
-            "standard"      => Some(PermClass::Standard),
+            "standard" => Some(PermClass::Standard),
             "collaborative" => Some(PermClass::Collaborative),
-            "owner_grade"   => Some(PermClass::OwnerGrade),
-            "personal"      => Some(PermClass::Personal),
-            "readonly"      => Some(PermClass::Readonly),
-            _               => None,
-        }
-    }
-    /// `[owner, admin, member, viewer]`.
-    fn cells(self) -> [Perm; 4] {
-        match self {
-            PermClass::Standard      => [W, W, R, R],
-            PermClass::Collaborative => [W, W, W, R],
-            PermClass::OwnerGrade    => [W, R, R, R],
-            PermClass::Personal      => [W, N, N, N],
-            PermClass::Readonly      => [R, R, R, R],
-        }
-    }
-}
-
-/// A relationship field → another type (e.g. `case.assignee_id` → `user`).
-/// Lets pickers + rid write-validation work without hardcoding (spec §2).
-#[derive(Debug, Clone, Serialize)]
-pub struct Rel {
-    #[serde(rename = "type")]
-    pub ty:    &'static str,
-    pub multi: bool,
-}
-
-/// One field row in the registry = the spec's FieldDef. The per-role cells
-/// (`owner`/`admin`/`member`/`viewer`) are derived from `perm_class` at
-/// construction; `field_permissions` overrides layer on at serve time.
-#[derive(Debug, Clone, Serialize)]
-pub struct FieldRow {
-    pub object:      &'static str,
-    pub field:       &'static str,
-    pub is_editable: bool,
-    pub is_sortable: bool,
-    /// Storage type — backend-owned, write-validated (spec §4.2).
-    pub data_type:   &'static str,
-    /// Presentation editor id — opaque to the backend, FE-resolved (spec §5).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub editor:      Option<&'static str>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub options:     Vec<&'static str>,
-    pub perm_class:  PermClass,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rel:         Option<Rel>,
-    pub owner:       Perm,
-    pub admin:       Perm,
-    pub member:      Perm,
-    pub viewer:      Perm,
-    /// Set during the GET merge when a cell is overridden away from the default.
-    #[serde(default)]
-    pub is_overridden: bool,
-}
-
-impl FieldRow {
-    /// Set the cell for `role` and mark the row overridden (the GET merge).
-    pub fn apply_override(&mut self, role: &str, perm: Perm) {
-        match role {
-            "owner" => self.owner = perm,
-            "admin" => self.admin = perm,
-            "member" => self.member = perm,
-            "viewer" => self.viewer = perm,
-            _ => return,
-        }
-        self.is_overridden = true;
-    }
-    /// The catalog-default perm for `role` (pre-override) — the PUT revert check.
-    pub fn default_for(&self, role: &str) -> Option<Perm> {
-        match role {
-            "owner" => Some(self.owner),
-            "admin" => Some(self.admin),
-            "member" => Some(self.member),
-            "viewer" => Some(self.viewer),
+            "owner_grade" => Some(PermClass::OwnerGrade),
+            "personal" => Some(PermClass::Personal),
+            "readonly" => Some(PermClass::Readonly),
             _ => None,
         }
     }
-    /// Reconstruct a row from stored inputs (the TypeDefCache load path) — the
-    /// SAME derivation as `fld()`: the per-role cells + default editor +
-    /// is_editable come from `(data_type, perm_class)`, never stored, so the
-    /// seeded rows can't drift from the derivation. Strings are interned to
-    /// `&'static str` by the caller (the cache lives for the process).
-    pub(crate) fn from_parts(
-        object:      &'static str,
-        field:       &'static str,
-        data_type:   &'static str,
-        perm_class:  PermClass,
-        is_sortable: bool,
-        options:     Vec<&'static str>,
-        rel:         Option<Rel>,
-    ) -> Self {
-        let [owner, admin, member, viewer] = perm_class.cells();
-        FieldRow {
-            object,
-            field,
-            is_editable: !matches!(perm_class, PermClass::Readonly),
-            is_sortable,
-            data_type,
-            editor: default_editor(data_type, perm_class),
-            options,
-            perm_class,
-            rel,
-            owner,
-            admin,
-            member,
-            viewer,
-            is_overridden: false,
+    /// `[owner, admin, member, viewer]`.
+    pub fn cells(self) -> [Perm; 4] {
+        use Perm::{None as N, Read as R, Write as W};
+        match self {
+            PermClass::Standard => [W, W, R, R],
+            PermClass::Collaborative => [W, W, W, R],
+            PermClass::OwnerGrade => [W, R, R, R],
+            PermClass::Personal => [W, N, N, N],
+            PermClass::Readonly => [R, R, R, R],
         }
     }
 }
 
-/// Default editor id for a `data_type` (readonly fields get none). Opaque to the
-/// backend — the FE editor-registry resolves it, falling back to "text".
-fn default_editor(data_type: &str, pc: PermClass) -> Option<&'static str> {
-    if matches!(pc, PermClass::Readonly) {
-        return None;
-    }
-    Some(match data_type {
-        "enum"    => "chip-enum",
-        "rid"     => "entity-picker",
-        "boolean" => "toggle",
-        _         => "text", // string / markdown / int / float / datetime / json
-    })
+/// The four tiers, in cells() order. The ONE place the role↔index mapping
+/// lives; admin.rs validates override roles against it.
+pub const TIERS: [&str; 4] = ["owner", "admin", "member", "viewer"];
+
+pub fn tier_index(role: &str) -> Option<usize> {
+    TIERS.iter().position(|r| *r == role)
 }
 
-/// Field-level write gate (CAS_C4219F2B slice 3). LEAN SINGLE-USER NEUTER
-/// (CAS_C8A9): admits unconditionally with ZERO per-request RBAC/membership SQL
-/// — the sole user can write every field. Signature unchanged so all call sites
-/// (cases/dashboards/charts/companies/files/objects) compile; the multi-tenant
-/// per-field tier check (catalog defaults ⊕ `field_permissions` overrides) lives
-/// in the `full-app-pre-slim` snapshot.
+/// The merged cell matrix for one type: field → `[Perm; 4]` in TIERS order
+/// (perm_class derivation ⊕ field_permissions overrides). Loaded once per
+/// request and shared across rows — list masking must not re-query per row.
+pub struct FieldMatrix {
+    cells: HashMap<String, [Perm; 4]>,
+}
+
+impl FieldMatrix {
+    /// Fast path: when every cell of every field is at least Read, masking is
+    /// a no-op — the common case until an admin stores a hiding override.
+    pub fn fully_readable(&self) -> bool {
+        self.cells.values().all(|c| c.iter().all(|p| *p >= Perm::Read))
+    }
+    /// The fields BELOW Read for a tier — what masking strips from `data`.
+    pub fn unreadable(&self, tier_idx: usize) -> Vec<&str> {
+        self.cells
+            .iter()
+            .filter(|(_, c)| c[tier_idx] < Perm::Read)
+            .map(|(f, _)| f.as_str())
+            .collect()
+    }
+    pub fn cell(&self, field: &str, tier_idx: usize) -> Perm {
+        self.cells.get(field).map(|c| c[tier_idx]).unwrap_or(Perm::None)
+    }
+}
+
+/// Load the merged matrix for a type (both write gates and read masking
+/// resolve through this one derivation).
+pub async fn matrix(pool: &PgPool, type_id: &str) -> Result<FieldMatrix, AppError> {
+    let classes: Vec<(String, String)> =
+        sqlx::query_as("SELECT field, perm_class FROM type_fields WHERE type_id = $1")
+            .bind(type_id)
+            .fetch_all(pool)
+            .await?;
+    let mut cells: HashMap<String, [Perm; 4]> = classes
+        .into_iter()
+        .map(|(f, pc)| {
+            let derived =
+                PermClass::parse(&pc).map(PermClass::cells).unwrap_or([Perm::None; 4]);
+            (f, derived)
+        })
+        .collect();
+    let overrides: Vec<(String, String, bool, bool)> = sqlx::query_as(
+        "SELECT field, role, can_read, can_write FROM field_permissions WHERE type_id = $1",
+    )
+    .bind(type_id)
+    .fetch_all(pool)
+    .await?;
+    for (field, role, r, w) in overrides {
+        if let (Some(c), Some(i)) = (cells.get_mut(&field), tier_index(&role)) {
+            c[i] = Perm::from_flags(r, w);
+        }
+    }
+    Ok(FieldMatrix { cells })
+}
+
+/// Field-level write gate. Runs AFTER the coarse Edit gate has admitted the
+/// caller (so a 403 here leaks nothing — existence is already known): every
+/// field being written must resolve to `Write` for the caller's effective
+/// tier in the merged matrix (perm_class derivation ⊕ field_permissions
+/// overrides). Platform admins bypass. 403 `field_forbidden` naming the FIRST
+/// blocked field. A field missing from the catalog is default-deny (None) —
+/// the handlers also reject it earlier as 400 unknown_field.
 pub async fn require_fields(
-    _state:       &AppState,
-    _caller:      &str,
-    _object_rid:  &str,
-    _object_type: &str,
-    _fields:      &[&str],
+    pool: &PgPool,
+    cache: &TypeDefCache,
+    caller: &Caller,
+    object: &str,
+    type_id: &str,
+    fields: &[&str],
 ) -> Result<(), AppError> {
+    if fields.is_empty() || caller.is_platform_admin {
+        return Ok(());
+    }
+    // The coarse gate already passed, so a grant exists in every normal path;
+    // a contract-company-owner with zero membership edges is the documented
+    // edge (leak-free 404 keeps the house shape until that tier is modeled).
+    let tier = rbac::resolve_grant(pool, cache, &caller.rid, object)
+        .await?
+        .effective()
+        .ok_or_else(|| AppError::not_found("not_found", format!("{type_id} {object}")))?;
+    let role = tier.as_str();
+    let idx = tier_index(role).expect("rbac::Role strings align with TIERS");
+
+    let classes: Vec<(String, String)> =
+        sqlx::query_as("SELECT field, perm_class FROM type_fields WHERE type_id = $1")
+            .bind(type_id)
+            .fetch_all(pool)
+            .await?;
+    let overrides: HashMap<String, Perm> = sqlx::query_as::<_, (String, bool, bool)>(
+        "SELECT field, can_read, can_write FROM field_permissions
+         WHERE type_id = $1 AND role = $2",
+    )
+    .bind(type_id)
+    .bind(role)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(f, r, w)| (f, Perm::from_flags(r, w)))
+    .collect();
+
+    for f in fields {
+        let derived = classes
+            .iter()
+            .find(|(fld, _)| fld == f)
+            .and_then(|(_, pc)| PermClass::parse(pc))
+            .map(|pc| pc.cells()[idx])
+            .unwrap_or(Perm::None);
+        let perm = overrides.get(*f).copied().unwrap_or(derived);
+        if perm != Perm::Write {
+            return Err(AppError::forbidden(
+                "field_forbidden",
+                format!("your role ({role}) can't edit {type_id}.{f}"),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -228,30 +221,33 @@ pub async fn require_fields(
 mod tests {
     use super::*;
 
-    /// Stage 0/1 (CAS_0FBF301F): the `case.status` field's enum + options drive
-    /// validation (no hardcoded `matches!`). Reconstruct the field via
-    /// `from_parts` (the cache load path) + prove the validator accepts a valid
-    /// status and rejects an invalid one with `rule_code = data_type`.
     #[test]
-    fn case_status_field_drives_validation() {
-        let def = FieldRow::from_parts(
-            "case", "status", "enum", PermClass::Collaborative, true,
-            vec!["backlog", "todo", "in_progress", "in_review", "done"], None,
-        );
-        assert_eq!(def.data_type, "enum");
-        assert_eq!(def.editor, Some("chip-enum"));
+    fn cells_derive_per_class() {
+        use Perm::{None as N, Read as R, Write as W};
+        assert_eq!(PermClass::Standard.cells(), [W, W, R, R]);
+        assert_eq!(PermClass::Collaborative.cells(), [W, W, W, R]);
+        assert_eq!(PermClass::OwnerGrade.cells(), [W, R, R, R]);
+        assert_eq!(PermClass::Personal.cells(), [W, N, N, N]);
+        assert_eq!(PermClass::Readonly.cells(), [R, R, R, R]);
+    }
 
-        let ok = crate::validate_rules::validate_value(
-            def.data_type, &def.options, "status", &[],
-            &serde_json::json!("in_progress"), &crate::validate_rules::Row::new(),
-        );
-        assert!(ok.is_ok(), "valid status must pass");
+    #[test]
+    fn wire_and_flags_round() {
+        assert_eq!(Perm::Write.wire(), "rw");
+        assert_eq!(Perm::Read.wire(), "r");
+        assert_eq!(Perm::None.wire(), "");
+        assert_eq!(Perm::from_flags(true, true), Perm::Write);
+        assert_eq!(Perm::from_flags(false, true), Perm::Write); // write implies read
+        assert_eq!(Perm::from_flags(true, false), Perm::Read);
+        assert_eq!(Perm::from_flags(false, false), Perm::None);
+    }
 
-        let bad = crate::validate_rules::validate_value(
-            def.data_type, &def.options, "status", &[],
-            &serde_json::json!("frozen"), &crate::validate_rules::Row::new(),
-        );
-        assert!(!bad.is_ok(), "invalid status must fail");
-        assert_eq!(bad.errors[0].rule_code, "data_type");
+    #[test]
+    fn tiers_align_with_role_strings() {
+        // rbac::Role::as_str must map onto cells() indices.
+        assert_eq!(tier_index(crate::rbac::Role::Owner.as_str()), Some(0));
+        assert_eq!(tier_index(crate::rbac::Role::Admin.as_str()), Some(1));
+        assert_eq!(tier_index(crate::rbac::Role::Member.as_str()), Some(2));
+        assert_eq!(tier_index(crate::rbac::Role::Viewer.as_str()), Some(3));
     }
 }

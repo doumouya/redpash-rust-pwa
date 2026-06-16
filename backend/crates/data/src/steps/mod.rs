@@ -1,93 +1,69 @@
-//! Doc: docs/internal/code/backend/data/steps/mod.md
-//! Apply / replay cleaning steps against a Polars DataFrame.
+//! Purpose: apply / replay cleaning steps. `apply` is the single switch from
+//! `kind` (open string) → Polars op; the api crate's hydrate path replays the
+//! `project_steps` history over the immutable base CSV to reconstruct the
+//! current view (non-destructive editing, undo = flip `applied`).
 //!
-//! `apply` is the single switch from `kind` (string) → Polars op. Every
-//! handler in the api crate that mutates a file's state goes through
-//! `replay`: the canonical file is the on-disk CSV; the persistent
-//! history is `project_steps`; the current view is the replay result.
+//! `kind` is free-form text (shared::Step) so a new op ships with zero DB/DTO
+//! changes; unknown kinds are a clean InvalidSpec.
 //!
-//! Supported kinds (Phase A complete set, except split / join / dates /
-//! fix_invalid which land in Phase A.2):
-//!
-//!   drop_columns       params.cols: [string]
-//!   drop_rows          params.indices: [int]
-//!   drop_nulls         params.cols?: [string]   (empty → any-null row)
-//!   set_cell           params.row: int, params.column: string,
-//!                      params.value: string|number|null
-//!                      Replace one cell at (row, column). Cast to the
-//!                      column's dtype; empty/null → NULL cell.
-//!   fill_nulls         params.strategy: "fixed"|"zero"|"forward"
-//!                      params.column?: string
-//!                      params.value?:  string|number  (for fixed)
-//!   cast               params.column: string, params.dtype: int|float|str|bool
-//!   rename_column      params.from, params.to
-//!   snake_case_columns no params; renames every header to snake_case
-//!   replace_in_names   params.find: string, params.replace?: string
-//!   change_case        params.mode: "lower"|"upper"|"title"
-//!   filter_columns     params.cols: [string]    (columns to KEEP)
-//!   filter_rows        params.combinator: "and"|"or"
-//!                      params.predicates: [{ column, op, value?, case_sensitive? }]
-//!                      ops: eq · neq · in · not_in · contains · starts_with ·
-//!                           ends_with · gt · gte · lt · lte · between ·
-//!                           before · after · is_null · not_null
-//!                      Drops rows that fail the combined predicate — undoable
-//!                      like every other step; canonical CSV stays intact.
-//!   unwrap_csv         no params. Rescues a "wrapped" CSV — one where every
-//!                      row parsed as a single quoted column because the
-//!                      original separator was wrapped in quotes. Re-parses
-//!                      the single column's values as CSV themselves.
-//!   replace_text       params.column, params.find, params.replace?, params.is_regex?
-//!                      remove_text = replace_text with replace=""
-
-use crate::{DataError, Result};
-use polars::prelude::*;
+//! Ported this slice: drop/filter columns, drop/filter/drop_nulls rows,
+//! set_cell, fill_nulls, locale-aware cast, change_case, replace_text,
+//! fix_invalid. DEFERRED to the structure micro-slice (next): unwrap_csv,
+//! join_columns, split_column, format_dates — they error clearly until then.
 
 mod cells;
 mod columns;
 mod rows;
 mod structure;
-mod util;
+// `util` exposes the ONE filter-predicate compiler (build_filter_predicate),
+// reused by `crate::filter` — so the module must be crate-visible, not private
+// to `steps`. Everything else in it stays pub(super)-gated.
+pub(crate) mod util;
+
+use shared::Step;
+
+use crate::{DataError, Result};
+use polars::prelude::DataFrame;
 
 pub fn apply(df: DataFrame, kind: &str, params: &serde_json::Value) -> Result<DataFrame> {
     match kind {
         "drop_columns" => columns::drop_columns(df, params),
         "filter_columns" => columns::filter_columns(df, params),
+        "rename_column" => columns::rename_column(df, params),
+        "snake_case_columns" => columns::snake_case_columns(df, params),
+        "replace_in_names" => columns::replace_in_names(df, params),
 
         "drop_rows" => rows::drop_rows(df, params),
         "filter_rows" => rows::filter_rows(df, params),
-
-        "unwrap_csv" => structure::unwrap_csv(df, params),
-
         "drop_nulls" => rows::drop_nulls(df, params),
 
         "set_cell" => cells::set_cell(df, params),
         "fill_nulls" => cells::fill_nulls(df, params),
         "cast" => cells::cast(df, params),
-
-        "rename_column" => columns::rename_column(df, params),
-        "snake_case_columns" => columns::snake_case_columns(df, params),
-        "replace_in_names" => columns::replace_in_names(df, params),
-
         "change_case" => cells::change_case(df, params),
         "replace_text" => cells::replace_text(df, params),
         "fix_invalid" => cells::fix_invalid(df, params),
 
+        "unwrap_csv" => structure::unwrap_csv(df, params),
         "join_columns" => structure::join_columns(df, params),
         "split_column" => structure::split_column(df, params),
         "format_dates" => structure::format_dates(df, params),
 
-        other => Err(DataError::InvalidSpec(format!(
-            "unknown step kind: {other}"
-        ))),
+        // Genesis marker: "the data as uploaded". It carries the baseline
+        // cleanness on its step record (ordinal 0) but transforms nothing, so
+        // replaying it is the identity — the base CSV already IS this state.
+        "original" => Ok(df),
+
+        other => Err(DataError::InvalidSpec(format!("unknown step kind: {other}"))),
     }
 }
 
-/// Apply a sequence of steps in order. Used by the api crate's hydrate
-/// path to reconstruct the current view from the base CSV.
-pub fn replay(base: DataFrame, steps: &[(&str, serde_json::Value)]) -> Result<DataFrame> {
+/// Apply a sequence of steps in order — the hydrate path's reconstruction of
+/// the current view from the base CSV.
+pub fn replay(base: DataFrame, steps: &[Step]) -> Result<DataFrame> {
     let mut df = base;
-    for (kind, params) in steps {
-        df = apply(df, kind, params)?;
+    for step in steps {
+        df = apply(df, &step.kind, &step.params)?;
     }
     Ok(df)
 }
@@ -95,55 +71,87 @@ pub fn replay(base: DataFrame, steps: &[(&str, serde_json::Value)]) -> Result<Da
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
-    /// A wrapped one-column frame whose rows each use a DIFFERENT inner
-    /// delimiter and quote style — the `raw_dossier_onecol_tricky`
-    /// shape. After `unwrap_csv` every row must land in the same
-    /// columns, regardless of its individual wrapping.
+    fn df3() -> DataFrame {
+        crate::parse::from_text("id,name,amount\n1,FOO,10\n2,Bar,20\n3,baz,30\n").unwrap()
+    }
+
     #[test]
-    fn unwrap_csv_handles_per_row_delimiter_and_quote_variation() {
-        let df = df![
-            "id,\"name\",\"city\",\"ok\"" => [
-                "R1,\"Alice\",\"Paris\",\"yes\"",          // comma + double quote
-                "R2;\"Bob\";\"Lyon\";\"no\"",              // semicolon
-                "R3|\"Carol\"|\"Nice\"|\"yes\"",           // pipe
-                "R4,\\\"Dan\\\",\\\"Metz\\\",\\\"no\\\"",  // backslash-escaped quote
-                "R5,'Eve','Lille','yes'",                  // single quote
-                "R6,Frank,Caen,no",                        // bare, unquoted
-            ]
-        ]
+    fn change_case_lowers_string_columns() {
+        let out = apply(df3(), "change_case", &json!({"mode":"lower"})).unwrap();
+        let names: Vec<String> =
+            out.column("name").unwrap().str().unwrap().iter().map(|o| o.unwrap_or("").into()).collect();
+        assert_eq!(names, ["foo", "bar", "baz"]);
+    }
+
+    #[test]
+    fn drop_and_filter_columns_round_trip() {
+        let out = apply(df3(), "drop_columns", &json!({"cols":["amount"]})).unwrap();
+        assert_eq!(out.width(), 2);
+        let out = apply(df3(), "filter_columns", &json!({"cols":["name"]})).unwrap();
+        assert_eq!(out.get_column_names().len(), 1);
+    }
+
+    #[test]
+    fn filter_rows_applies_predicate() {
+        let out = apply(
+            df3(),
+            "filter_rows",
+            &json!({"predicates":[{"column":"amount","op":"gte","value":20}]}),
+        )
         .unwrap();
+        assert_eq!(out.height(), 2);
+    }
 
-        let out = apply(df, "unwrap_csv", &serde_json::Value::Null).unwrap();
+    #[test]
+    fn locale_cast_recovers_french_numbers() {
+        // Build the frame directly: a CSV with FR-comma decimals would be
+        // ambiguous against the comma delimiter (that's why real FR exports
+        // are `;`-delimited). This isolates the cast's locale coercion.
+        use polars::prelude::*;
+        let df = DataFrame::new_infer_height(vec![Series::new(
+            "p".into(),
+            &["1 234,56", "€99,90", "1000 EUR"],
+        )
+        .into()])
+        .unwrap();
+        let out = apply(df, "cast", &json!({"column":"p","dtype":"float"})).unwrap();
+        let vals: Vec<Option<f64>> = out.column("p").unwrap().f64().unwrap().iter().collect();
+        assert_eq!(vals, vec![Some(1234.56), Some(99.90), Some(1000.0)]);
+    }
 
-        assert_eq!(
-            out.width(),
-            4,
-            "every row must unwrap to the 4 real columns"
-        );
-        assert_eq!(out.height(), 6);
+    #[test]
+    fn replay_threads_steps_in_order() {
+        let steps = vec![
+            Step { kind: "drop_columns".into(), params: json!({"cols":["amount"]}) },
+            Step { kind: "change_case".into(), params: json!({"mode":"upper"}) },
+        ];
+        let out = replay(df3(), &steps).unwrap();
+        assert_eq!(out.width(), 2);
+        let names: Vec<String> =
+            out.column("name").unwrap().str().unwrap().iter().map(|o| o.unwrap_or("").into()).collect();
+        assert_eq!(names, ["FOO", "BAR", "BAZ"]);
+    }
 
-        let cols: Vec<&str> = out.get_column_names().iter().map(|c| c.as_str()).collect();
-        assert_eq!(cols, ["id", "name", "city", "ok"]);
+    #[test]
+    fn unknown_and_deferred_kinds_error_cleanly() {
+        assert!(apply(df3(), "frobnicate", &json!({})).is_err());
+        assert!(apply(df3(), "unwrap_csv", &serde_json::Value::Null).is_err());
+    }
 
-        let col = |name: &str| -> Vec<String> {
-            out.column(name)
-                .unwrap()
-                .str()
-                .unwrap()
-                .iter()
-                .map(|o| o.unwrap_or("").to_string())
-                .collect()
-        };
-        // The `;`, `|`, `\"`-escaped and `'`-quoted rows all split into
-        // the right cells — not just the dominant comma/double-quote row.
-        assert_eq!(
-            col("name"),
-            ["Alice", "Bob", "Carol", "Dan", "Eve", "Frank"]
-        );
-        assert_eq!(
-            col("city"),
-            ["Paris", "Lyon", "Nice", "Metz", "Lille", "Caen"]
-        );
+    #[test]
+    fn original_genesis_kind_is_identity() {
+        // The genesis marker transforms nothing — replaying it reconstructs the
+        // base frame unchanged (the baseline cleanness rides on its step record,
+        // not in the frame), so hydrate over the as-uploaded data is a no-op.
+        let before = df3();
+        let out = apply(df3(), "original", &json!({})).unwrap();
+        assert_eq!(out.shape(), before.shape());
+        let names: Vec<String> =
+            out.column("name").unwrap().str().unwrap().iter().map(|o| o.unwrap_or("").into()).collect();
+        let expect: Vec<String> =
+            before.column("name").unwrap().str().unwrap().iter().map(|o| o.unwrap_or("").into()).collect();
+        assert_eq!(names, expect);
     }
 }

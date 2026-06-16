@@ -1,0 +1,17 @@
+/* object-list — the generic object-table page body. Sole owner of .rp-objlist*.
+   It composes the redtable family (a grid-toolbar + the redtable via mountGridView),
+   so the table + toolbar own their look; this owns only the full-height host and the
+   create modal's field stack. (Relative units.) */
+
+.rp-objlist {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.rp-objlist-form {
+  display: grid;
+  gap: var(--rp-sp-3);
+  min-width: 18rem;
+}

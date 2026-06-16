@@ -1,0 +1,64 @@
+/* topbar — sidebar toggle · centred omnisearch · per-app nav icons + app
+   launcher. Shares the rail's --rp-bg with NO border between them, so topbar +
+   rail read as one continuous chrome frame and the surface floats inside it (the
+   universals — theme/settings/sign-out/profile — live in the rail footer now,
+   not here). Sole owner of .rp-topbar*. */
+
+.rp-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--rp-gap);
+  height: var(--rp-topbar-h);
+  padding: 0 var(--rp-sp-4);
+  background: var(--rp-bg);
+  z-index: 50;
+}
+
+.rp-topbar-lead {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* centre cell holds the omnisearch (which sets its own width). */
+.rp-topbar-center {
+  justify-self: center;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* per-app page nav, rendered as icon links (Em: icons over text). */
+.rp-topbar-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rp-ctl-h);
+  height: var(--rp-ctl-h);
+  border-radius: var(--rp-radius);
+  color: var(--rp-text-dim);
+}
+.rp-topbar-nav-icon:hover {
+  color: var(--rp-text);
+  background: var(--rp-hover);
+  text-decoration: none;
+}
+.rp-topbar-nav-icon.is-active {
+  color: var(--rp-text);
+  background: var(--rp-accent-soft);
+}
+.rp-topbar-nav-icon .bi { font-size: var(--rp-text-md); }
+
+.rp-topbar-actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rp-sp-1);
+}
+
+/* portrait safety net — drop the per-app page-nav icons; the launcher + the
+   sidebar toggle + omnisearch are enough to navigate. */
+@media (max-width: 48rem) { /* --rp-bp-sm */
+  .rp-topbar-nav-icon { display: none; }
+}

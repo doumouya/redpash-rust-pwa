@@ -1,0 +1,79 @@
+/* side-panel — a tabbed, collapsible inline panel (the tab container that
+   lives inside a workspace region). NOT responsive itself; workspace-panels
+   owns the @media + drawer. Sole owner of every .rp-sidepanel* class
+   (ui-fork-audit R4). */
+
+.rp-sidepanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--rp-bg);
+}
+
+/* ── tab strip: icon+label chips + the collapse chevron ─────────────────── */
+.rp-sidepanel-tabs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: var(--rp-sp-2) var(--rp-sp-2);
+  border-bottom: 1px solid var(--rp-border);
+}
+/* a left panel's tabs grow from the left, collapse chevron trails right; a
+   right panel mirrors (chevron leads, tabs fill the rest). */
+.rp-sidepanel--left .rp-sidepanel-collapse { margin-left: auto; }
+.rp-sidepanel--right .rp-sidepanel-collapse { margin-right: auto; }
+
+.rp-sidepanel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+  height: 1.75rem;
+  padding: 0 var(--rp-sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--rp-radius-pill);
+  background: transparent;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--rp-fast) var(--rp-ease), color var(--rp-fast) var(--rp-ease);
+}
+.rp-sidepanel-tab:hover { color: var(--rp-text); background: var(--rp-hover); }
+.rp-sidepanel-tab.is-active {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent);
+}
+.rp-sidepanel-tab-icon { font-size: 0.875rem; flex-shrink: 0; }
+.rp-sidepanel-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the collapse chevron is the rp-btn--icon atom; the panel only marks it. */
+.rp-sidepanel-collapse { flex-shrink: 0; }
+
+/* ── body: stacked panes; only the active one shows (cached, never re-mounted). */
+.rp-sidepanel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.rp-sidepanel-pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--rp-sp-3);
+}
+.rp-sidepanel-pane.is-active { display: block; }
+
+/* ── collapsed: the body folds away; the strip stays as a thin handle so the
+   chevron can re-open it. Width is driven by the parent region (workspace-
+   panels), so collapsing here just hides the body. ──────────────────────── */
+.rp-sidepanel.is-collapsed .rp-sidepanel-body { display: none; }
+.rp-sidepanel.is-collapsed .rp-sidepanel-tab-label { display: none; }

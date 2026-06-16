@@ -1,0 +1,36 @@
+/* modal — create/confirm ONLY (the minimalism rule). Sole owner of .rp-modal*. */
+
+.rp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.rp-modal {
+  width: min(26rem, 92vw);
+  max-height: 85vh;
+  overflow: auto;
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius-lg);
+  box-shadow: var(--rp-ring), 0 16px 48px rgba(0, 0, 0, 0.35);
+  padding: var(--rp-sp-5);
+}
+
+.rp-modal-title {
+  margin: 0 0 var(--rp-sp-4);
+  font-size: var(--rp-text-lg);
+  font-weight: 600;
+}
+
+.rp-modal-body {
+  margin-bottom: var(--rp-sp-5);
+}
+
+.rp-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rp-gap);
+}

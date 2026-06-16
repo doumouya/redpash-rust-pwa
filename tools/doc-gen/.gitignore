@@ -1,6 +1,0 @@
-# Generated proof output + the regenerable parity manifest (re-derived from the live DB).
-# The canonical per-object docs (wired during the doc rebuild) are committed elsewhere.
-out/
-schema.contract.json
-component.contract.json
-api.contract.json

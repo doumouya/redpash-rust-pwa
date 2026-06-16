@@ -1,93 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="new-dark">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#11111b" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RedPash</title>
-
-  <!-- Apply the saved theme + visual prefs (density, font size) before
-       first paint — no flash of the wrong theme / sizing. Inline
-       rather than imported so it runs synchronously before the CSS
-       evaluates. Reads both the new unified namespace (`rp-pref-*`,
-       JSON-encoded — migration 023) and the legacy per-pref keys
-       (raw strings) so this paint is correct across the transitional
-       window. prefs.js's migration on module-load moves legacy keys
-       into the new namespace and removes them. -->
-  <script>
-    try {
-      var d = document.documentElement;
-      // FOUC pre-paint — read each appearance pref before any CSS
-      // applies so the first paint already carries the right theme.
-      // CAS_55984AC7 step 6a — the registry's preferred key is the
-      // kebab `<page>-<leaf>` shape (general-theme, etc.); legacy
-      // camelCase + the old rp-* namespace are still read as
-      // fallbacks until the user next touches the pref (prefs.js
-      // setPref clears the legacy aliases on write).
-      function rp(names, ok) {
-        for (var i = 0; i < names.length; i++) {
-          var raw = localStorage.getItem(names[i]);
-          if (raw == null) continue;
-          try { var v = JSON.parse(raw); if (ok(v)) return v; } catch (_) {}
-          if (ok(raw)) return raw;
-        }
-        return null;
-      }
-      var t  = rp(["rp-pref-general-theme",    "rp-pref-theme",    "rp-theme"],
-                  function (v) { return ["light","dark","new-dark","new-light","catppuccin-mocha","catppuccin-latte"].indexOf(v) >= 0; });
-      var dn = rp(["rp-pref-general-density",  "rp-pref-density",  "rp-density"],
-                  function (v) { return v === "compact" || v === "cozy" || v === "comfortable"; });
-      var fs = rp(["rp-pref-general-fontSize", "rp-pref-fontSize", "rp-font-size"],
-                  function (v) { return v === "sm" || v === "md" || v === "lg"; });
-      // No stored theme → New Dark, the app default (prefs.js
-      // general-theme). Set it here too so the FIRST paint is New Dark,
-      // not the tokens.css `:root` Catppuccin-Mocha fallback.
-      d.dataset.theme = t || "new-dark";
-      if (dn) d.dataset.density  = dn;
-      if (fs) d.dataset.fontSize = fs;
-    } catch (e) {}
-  </script>
-
-  <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="description" content="Upload a file you don't fully trust. Get it back clean." />
   <link rel="manifest" href="/manifest.json" />
-
-  <!-- Savate — the RedPash brand wordmark face. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Savate:wght@900&display=swap" />
-
-  <!-- Bootstrap Icons — the icon set the redtable components use.
-       Self-hosted (vendor/) so the UI's icons never depend on a CDN
-       being reachable (firewall / tracking-prevention / outage). -->
+  <!-- Bootstrap Icons — the icon set the rail + components use. Self-hosted
+       (vendor/) so the UI never depends on a CDN. A plain <link>, not a
+       main.css @import: its @font-face url()s resolve relative to the vendor
+       dir (build-fe leaves vendor/ as-is; only .js + the css manifest hash). -->
   <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.css" />
-
-  <!-- ECharts — the 8th atom; the Workspace body renders chart-typed
-       files through this. Loaded globally because chart files can
-       appear behind any rail click. -->
-  <script src="/vendor/echarts/echarts.min.js"></script>
-  <!-- Prebuilt ECharts themes (Apache 2.0, from apache/echarts).
-       Each script self-registers via echarts.registerTheme so the
-       Designer's Style picker can pass the name straight to
-       echarts.init. The redpash-mocha + redpash-latte themes load
-       dynamically from /echarts-themes/ via designer.js. -->
-  <script src="/echarts-themes/builtin/macarons.js"></script>
-  <script src="/echarts-themes/builtin/roma.js"></script>
-  <script src="/echarts-themes/builtin/shine.js"></script>
-  <script src="/echarts-themes/builtin/infographic.js"></script>
-  <script src="/echarts-themes/builtin/dark.js"></script>
-  <script src="/echarts-themes/builtin/tech-blue.js"></script>
-  <script src="/echarts-themes/builtin/v5.js"></script>
-  <script src="/echarts-themes/builtin/gray.js"></script>
-
+  <script>
+    // FOUC pre-paint: apply theme/density/fontsize from the localStorage
+    // mirror BEFORE any CSS evaluates. The pref-registry keeps the mirror in
+    // sync; the server-resolved cascade corrects after boot if they differ.
+    (function () {
+      try {
+        var read = function (k) {
+          var v = localStorage.getItem("rp-pref-" + k);
+          return v ? JSON.parse(v) : null;
+        };
+        var t = read("theme");
+        if (t === "new-light" || t === "new-dark") document.documentElement.dataset.theme = t;
+        var d = read("density");
+        if (d === "compact" || d === "comfortable") document.documentElement.dataset.density = d;
+        var f = read("fontsize");
+        if (f === "sm" || f === "lg") document.documentElement.dataset.fontsize = f;
+      } catch (e) { /* prefs are a nicety, never a boot blocker */ }
+    })();
+  </script>
   <link rel="stylesheet" href="/styles/main.css" />
 </head>
 <body>
-  <!-- App shell. The router (scripts/main.js) renders the active page
-       partial into #app. Kept intentionally bare — the frontend reset
-       rebuilds every page from here. -->
-  <main id="app"></main>
-
-  <script type="module" src="/scripts/main.js"></script>
+  <main id="app" aria-busy="true"></main>
+  <script type="module" src="/framework/boot/main.js"></script>
 </body>
 </html>

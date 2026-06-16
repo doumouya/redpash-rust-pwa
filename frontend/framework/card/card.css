@@ -1,0 +1,33 @@
+/* card — lifted content tile (launcher tiles, glanceables). One of the two
+   sanctioned glass surfaces (topbar is the other). Sole owner of .rp-card*. */
+
+.rp-card {
+  display: block;
+  padding: var(--rp-sp-4);
+  background: var(--rp-glass);
+  backdrop-filter: blur(var(--rp-glass-blur));
+  border-radius: var(--rp-radius-lg);
+  box-shadow: var(--rp-ring), var(--rp-shadow);
+  color: var(--rp-text);
+  text-align: left;
+  transition: background var(--rp-fast) var(--rp-ease);
+}
+
+a.rp-card:hover,
+button.rp-card:hover {
+  background: var(--rp-hover);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.rp-card-title {
+  margin: 0 0 var(--rp-sp-1);
+  font-size: var(--rp-text-md);
+  font-weight: 600;
+}
+
+.rp-card-sub {
+  margin: 0;
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+}

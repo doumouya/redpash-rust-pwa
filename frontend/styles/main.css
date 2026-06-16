@@ -1,84 +1,52 @@
-/* ─────────────────────────────────────────────────────────────────
-   RedPash — CSS manifest.
+/* main.css — THE one @import manifest. A sheet not named here is not in the
+   app (ui-fork-audit R6 enforces: @import only in this file, every sheet
+   imported exactly once, framework before apps).
+   Cascade order: foundation → framework components → page sheets. */
 
-   This file is the entire @import graph and nothing else: every
-   stylesheet in the app is listed here, in cascade order. There is
-   no @import anywhere else — a sheet not named here is not in the
-   app. That keeps the CSS layer fully traceable (css-audit enforces
-   it: no orphan sheet, no surprise import).
+/* 1 — foundation */
+@import "tokens.css";
+@import "prefs.css";
+@import "base.css";
 
-   Order matters. Later @imports override earlier ones at equal
-   specificity. The layers below sort that out:
+/* 2 — framework components (each sheet is the sole owner of its .rp-* classes) */
+@import "../framework/atoms/atoms.css";
+@import "../framework/menu/menu.css";
+@import "../framework/field/field.css";
+@import "../framework/select/select.css";
+@import "../framework/modal/modal.css";
+@import "../framework/card/card.css";
+@import "../framework/chip-row/chip-row.css";
+@import "../framework/empty-state/empty-state.css";
+@import "../framework/toast/toast.css";
+@import "../framework/settings-form/settings-form.css";
+@import "../framework/topbar/topbar.css";
+@import "../framework/rail/rail.css";
+@import "../framework/surface/surface.css";
+@import "../framework/page-assembly/shell.css";
+@import "../framework/redtable/redtable.css";
+@import "../framework/pager/pager.css";
+@import "../framework/stat/stat.css";
+@import "../framework/score-badge/score-badge.css";
+@import "../framework/uploader/uploader.css";
+@import "../framework/steps-panel/steps-panel.css";
+@import "../framework/perm-cell/perm-cell.css";
+@import "../framework/filter-panel/filter-panel.css";
+@import "../framework/joins-wizard/joins-wizard.css";
+@import "../framework/object-list/object-list.css";
+@import "../framework/omni/omni.css";
+@import "../framework/side-panel/side-panel.css";
+@import "../framework/grid-toolbar/grid-toolbar.css";
+@import "../framework/grid-view/grid-view.css";
+@import "../framework/workspace-panels/workspace-panels.css";
+@import "../framework/report-builder/report-builder.css";
+@import "../framework/column-manager/column-manager.css";
+@import "../framework/sql-editor/sql-editor.css";
 
-     1. Foundation — tokens / prefs / base. Loaded first so every
-        rule downstream sees the resolved CSS variables.
-     2. Shared atoms — .rt-* primitives used by every page (button,
-        toolbar, table, pager, card, topbar, rail, …). Loaded
-        BEFORE page-specific files so a `home.css` rule like
-        `#rpHomeView .rt-toolbar { … }` can override the atom's
-        base; if the atom loaded after, a page rule lacking #id
-        scope would be silently overridden by the atom default.
-        2026-05-25 reorg — these were previously grouped under a
-        "Workspace" section header, which hid the shared status
-        of toolbar/table/pager post-naming-consistency alignment.
-     2.5 Framework atoms + components — the sandbox-proven rp-* layer
-        (atoms.css + framework/*), loaded after the legacy atoms and
-        before the page sheets so byte-identical atoms no-op and the few
-        remaining page-sheet conflicts still win (zero-visual). CAS_37B2E1BF.
-     3. Page-specific sheets — login, home, monitoring, cases,
-        workspace, etc. These ride on top of the atoms with #id-
-        scoped overrides per [[unify-behavior-not-names]] +
-        [[no-mystery-css]].
-   ───────────────────────────────────────────────────────────────── */
-
-/* ── 1. foundation ─────────────────────────────────────────────── */
-@import "tokens.css";    /* design tokens — every value */
-@import "prefs.css";     /* pref-driven token overrides — density, font size */
-@import "base.css";      /* reset + document defaults + brand text */
-
-/* ── 2. shared atoms — .rt-* primitives, used by every page ─────── */
-@import "sw-update.css"; /* service-worker update banner */
-
-/* ── 2.5 framework atoms + components — the rp-* layer (CAS_37B2E1BF) ─────
-   The sandbox-proven framework sheets, now LIVE. Placed AFTER the legacy
-   shared atoms and BEFORE the page-specific sheets so that:
-     (a) the shared atoms (rp-chip, rp-btn, rp-search, …) are byte-identical to
-         their legacy twins — dual-load is a no-op until the legacy duplicates
-         are deleted (the dedup phase); and
-     (b) the only 5 selectors that DIFFER from a page sheet (.rp-input vs
-         profile.css, the chart-empty ::after vs shell.css, .rp-main.rp-cases-main
-         + .rp-cases-detail vs cases.css) are still won by the Layer-3 page sheet
-         below → ZERO live-visual change at import.
-   atoms.css first (foundation), then components in framework-sandbox order. */
-@import "framework/atoms.css";
-@import "framework/topbar.css";
-@import "framework/omni.css";
-@import "framework/rail.css";
-@import "framework/dashboards.css";
-@import "framework/surface.css";
-@import "framework/head.css";
-@import "framework/chip-row.css";
-@import "framework/stat.css";
-@import "framework/chart.css";
-@import "framework/table.css";
-@import "framework/menu.css";
-@import "framework/seg.css";
-@import "framework/panel.css";
-@import "framework/card.css";       /* rp-card — generic glass card primitive (sibling of rp-panel) */
-@import "framework/pager.css";
-@import "framework/redtable.css";
-@import "framework/field.css";
-@import "framework/activity.css";   /* rp-activity — event timeline (Cases/Monitoring) */
-@import "framework/badge.css";
-@import "framework/toolbar.css";
-@import "framework/editor-code.css"; /* rp-editor — code/SQL editor (syntax-highlight overlay) */
-@import "framework/user-picker.css"; /* rp-user-picker — shared search-input + results dropdown (relocated from styles/) */
-@import "framework/modal.css";       /* rp-modal-* — shared overlay-modal (relocated from styles/) */
-
-/* ── 3. page-specific sheets — ride on top of the atoms ─────────── */
-@import "shell.css";     /* rail-page shell — monitoring */
-@import "login.css";     /* the sign-in page */
-@import "page.css";      /* generic page shell — the 404 / error shell (.rp-page) */
-@import "monitoring.css"; /* /monitoring — window chips, top-routes table, modal */
-@import "workspace.css"; /* /workspace — the redtable-as-a-browser shell */
-@import "sheetwise.css"; /* /sheetwise — SQL console + Connectors (design-language pilot) */
+/* 3 — page sheets (.pg-<app>-<page> scoped; may read --rp-* vars, never set
+       framework classes) */
+@import "../apps/auth/login/login.css";
+@import "../apps/settings/settings/settings.css";
+@import "../apps/studio/workspace/workspace.css";
+@import "../apps/admin/org/org.css";
+@import "../apps/admin/console/console.css";
+@import "../apps/admin/registry/registry.css";

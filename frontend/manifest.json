@@ -1,15 +1,10 @@
 {
   "name": "RedPash",
   "short_name": "RedPash",
-  "description": "Clean, explore, and report on CSVs in your browser.",
+  "description": "Upload a file you don't fully trust. Get it back clean.",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "orientation": "any",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
-  "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
-  ]
+  "background_color": "#0c0d10",
+  "theme_color": "#0c0d10",
+  "icons": []
 }

@@ -1,22 +1,17 @@
-//! Doc: docs/internal/code/backend/data/steps/columns.md
-//! Column-shape + name cleaning steps: drop columns by name, keep a
-//! whitelist, rename one, normalise all headers to snake_case, or
-//! find-and-replace a substring across every header. Pure schema
-//! mutations — column VALUES are untouched (those live in `cells`).
+//! Purpose: column-shape + name cleaning steps (drop / keep / rename /
+//! snake_case / replace-in-names). Pure schema mutations — values untouched.
 
 use std::collections::HashSet;
 
-use crate::{DataError, Result};
 use polars::prelude::*;
 
 use super::util::{arr_strings, select_keep, snake_case};
+use crate::{DataError, Result};
 
 pub(super) fn drop_columns(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
     let cols = arr_strings(params, "cols");
     if cols.is_empty() {
-        return Err(DataError::InvalidSpec(
-            "drop_columns needs params.cols: [string]".into(),
-        ));
+        return Err(DataError::InvalidSpec("drop_columns needs params.cols: [string]".into()));
     }
     let to_drop: HashSet<&str> = cols.iter().map(|s| s.as_str()).collect();
     let keep: Vec<String> = df
@@ -28,13 +23,11 @@ pub(super) fn drop_columns(df: DataFrame, params: &serde_json::Value) -> Result<
     select_keep(df, &keep)
 }
 
-/// params.cols = the names to KEEP, in the order to keep them.
+/// params.cols = names to KEEP, in order.
 pub(super) fn filter_columns(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
     let cols = arr_strings(params, "cols");
     if cols.is_empty() {
-        return Err(DataError::InvalidSpec(
-            "filter_columns needs params.cols: [string]".into(),
-        ));
+        return Err(DataError::InvalidSpec("filter_columns needs params.cols: [string]".into()));
     }
     select_keep(df, &cols)
 }
@@ -43,15 +36,12 @@ pub(super) fn rename_column(df: DataFrame, params: &serde_json::Value) -> Result
     let from = params
         .get("from")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| DataError::InvalidSpec("rename_column needs params.from: string".into()))?;
+        .ok_or_else(|| DataError::InvalidSpec("rename_column needs params.from".into()))?;
     let to = params
         .get("to")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| DataError::InvalidSpec("rename_column needs params.to: string".into()))?;
-    df.lazy()
-        .rename([from], [to], true)
-        .collect()
-        .map_err(DataError::from)
+        .ok_or_else(|| DataError::InvalidSpec("rename_column needs params.to".into()))?;
+    df.lazy().rename([from], [to], true).collect().map_err(DataError::from)
 }
 
 pub(super) fn snake_case_columns(df: DataFrame, _params: &serde_json::Value) -> Result<DataFrame> {
@@ -70,16 +60,14 @@ pub(super) fn snake_case_columns(df: DataFrame, _params: &serde_json::Value) -> 
     }
     let olds: Vec<&str> = pairs.iter().map(|(a, _)| a.as_str()).collect();
     let news: Vec<&str> = pairs.iter().map(|(_, b)| b.as_str()).collect();
-    df.lazy()
-        .rename(olds, news, true)
-        .collect()
-        .map_err(DataError::from)
+    df.lazy().rename(olds, news, true).collect().map_err(DataError::from)
 }
 
 pub(super) fn replace_in_names(df: DataFrame, params: &serde_json::Value) -> Result<DataFrame> {
-    let find = params.get("find").and_then(|v| v.as_str()).ok_or_else(|| {
-        DataError::InvalidSpec("replace_in_names needs params.find: string".into())
-    })?;
+    let find = params
+        .get("find")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| DataError::InvalidSpec("replace_in_names needs params.find".into()))?;
     let replace = params.get("replace").and_then(|v| v.as_str()).unwrap_or("");
     let pairs: Vec<(String, String)> = df
         .columns()
@@ -96,8 +84,5 @@ pub(super) fn replace_in_names(df: DataFrame, params: &serde_json::Value) -> Res
     }
     let olds: Vec<&str> = pairs.iter().map(|(a, _)| a.as_str()).collect();
     let news: Vec<&str> = pairs.iter().map(|(_, b)| b.as_str()).collect();
-    df.lazy()
-        .rename(olds, news, true)
-        .collect()
-        .map_err(DataError::from)
+    df.lazy().rename(olds, news, true).collect().map_err(DataError::from)
 }

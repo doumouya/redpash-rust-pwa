@@ -1,0 +1,14 @@
+/* shell — the railed-page layout frame page-assembly builds. Sole owner of
+   .rp-shell*. */
+
+.rp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rp-shell-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}

@@ -1,0 +1,79 @@
+/* report-builder — the group-by + measures form. Sole owner of every .rp-rb*
+   class (ui-fork-audit R4). Relative units throughout; 1px is the hairline
+   exception. */
+
+.rp-rb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-4);
+}
+
+.rp-rb-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+
+.rp-rb-heading {
+  margin: 0;
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rp-text-mute);
+}
+
+/* ── group-by chips ──────────────────────────────────────────────────────── */
+.rp-rb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rp-sp-2);
+  align-items: center;
+}
+.rp-rb-empty {
+  font-size: var(--rp-text-sm);
+  font-style: italic;
+  color: var(--rp-text-mute);
+}
+.rp-rb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rp-sp-1);
+  padding: 0.125rem var(--rp-sp-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-pill);
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent);
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+  transition: background var(--rp-fast) var(--rp-ease);
+}
+.rp-rb-chip:hover { background: var(--rp-hover); }
+.rp-rb-chip .bi { font-size: 0.75rem; opacity: 0.7; }
+
+/* ── measures: fn × column rows ──────────────────────────────────────────── */
+.rp-rb-measures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+.rp-rb-measure {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+}
+.rp-rb-mfn { flex: 0 0 40%; min-width: 0; }
+.rp-rb-mcol { flex: 1; min-width: 0; }
+/* the composed native <select>s fill their flex slot (select.css owns .rp-select;
+   this only sizes the elements the builder lays out — no class ownership). */
+.rp-rb-measure select { width: 100%; min-width: 0; }
+.rp-rb-mremove { flex-shrink: 0; }
+
+/* ── footer ──────────────────────────────────────────────────────────────── */
+.rp-rb-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rp-sp-2);
+  margin-top: var(--rp-sp-2);
+}

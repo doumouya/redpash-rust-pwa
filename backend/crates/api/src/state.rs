@@ -1,152 +1,131 @@
-//! Doc: docs/internal/code/backend/api/state.md
-//! Shared application state.
-//!
-//! Cloned into every handler via Axum's `State<AppState>` extractor —
-//! everything inside is `Arc`-backed and cheap to clone.
-//!
-//! Three stores:
-//!   - `db`       : Postgres pool — required from phase 2 onwards.
-//!   - `files`    : in-memory cache of parsed CSV uploads keyed by RID.
-//!                  Survives many requests; lost on restart. Cache miss
-//!                  re-reads from `<data_dir>/files/<rid>.bin` and
-//!                  reparses with Polars.
-//!   - `data_dir` : root of on-disk storage. Configured via
-//!                  REDPASH_DATA_DIR (default `./data`). The `files/`
-//!                  subdir holds uploaded byte blobs.
-//!   - `dev_user`   : RID of the bootstrap user. Read only by
-//!                    `routes::me::resolve_user_rid` when no
-//!                    `rp_session` cookie is present *and* OAuth is
-//!                    disabled (i.e. local dev without Google creds).
-//!                    Every upload / list / create now uses the
-//!                    session user instead.
+//! Purpose: shared application state — Arc-backed, cheap to clone.
+
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use dashmap::DashMap;
 use polars::prelude::DataFrame;
-use shared::file::{ColumnMeta, FileSummary};
+use shared::file::ColumnMeta;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::{path::PathBuf, sync::Arc, time::Duration};
 
+/// A hydrated file in the in-memory cache: the parsed frame (base CSV + applied
+/// steps replayed) plus its summary. Arc-shared so a page read clones cheaply.
 #[derive(Clone)]
 pub struct FileEntry {
-    pub summary: FileSummary,
     pub columns: Vec<ColumnMeta>,
-    pub frame:   Arc<DataFrame>,
+    pub cleanness: Option<f32>,
+    pub frame: Arc<DataFrame>,
 }
 
-/// Google OAuth config — present only when all three env vars are set.
-/// When `None`, the auth routes return 503 and the `current_user`
-/// extractor falls back to the bootstrap dev_user.
+/// Present only when all three GOOGLE_OAUTH_* env vars are set; without them
+/// the auth routes 503 and (debug builds only) the dev bootstrap user serves.
 #[derive(Clone, Debug)]
 pub struct OAuthConfig {
-    pub client_id:     String,
+    pub client_id: String,
     pub client_secret: String,
-    pub redirect_uri:  String,
+    pub redirect_uri: String,
 }
+
+/// session-id → (user rid, is_platform_admin, cached_at). 60s TTL: kills the
+/// predecessor's 2+ session/admin queries per request while keeping role
+/// changes near-live. Logout invalidates eagerly.
+pub type SessionCache = Arc<DashMap<String, (String, bool, std::time::Instant)>>;
+pub const SESSION_CACHE_TTL: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db:              PgPool,
-    pub files:           Arc<DashMap<String, FileEntry>>,
-    pub data_dir:        Arc<PathBuf>,
-    pub dev_user:        Arc<String>,
-    pub oauth:           Option<Arc<OAuthConfig>>,
-    pub http:            reqwest::Client,
-    /// Cache of fetched avatar bytes keyed by source URL. Google's
-    /// `lh3.googleusercontent.com` returns opaque responses to the
-    /// browser (Firefox OBR), so `/api/me/avatar` proxies them
-    /// server-side. Values are `(bytes, content_type)`. Lost on
-    /// restart — refilled on first hit.
-    pub avatars:         Arc<DashMap<String, (Vec<u8>, String)>>,
-    /// When true, `POST /api/auth/dev-login` mints a session for ANY
-    /// user by RID with no credentials — powers the Home header's
-    /// "log in as user" switcher for testing owner-scoped flows.
-    /// Opt-in via `REDPASH_DEV_LOGIN`; off by default. Never enable in
-    /// production — it's an unauthenticated session-mint endpoint.
-    pub dev_login:       bool,
-    /// The data-driven type registry (type_definitions/type_fields/
-    /// type_scope_roles), loaded once after migrate. Replaces the code-side
-    /// field/type/role registries (object-registry Stage 1).
-    pub type_cache:          Arc<crate::type_cache::TypeDefCache>,
+    pub db: PgPool,
+    pub oauth: Option<Arc<OAuthConfig>>,
+    pub http: reqwest::Client,
+    pub type_cache: Arc<crate::type_cache::TypeDefCache>,
+    pub sessions: SessionCache,
+    /// Root of on-disk file storage. Uploaded bytes live IMMUTABLE under
+    /// `<data_dir>/files/<rid>.bin`; the cache rehydrates from there on miss.
+    pub data_dir: Arc<PathBuf>,
+    /// In-memory parsed-frame cache, keyed by file rid. Lost on restart;
+    /// refilled by single-flight hydration (see files::hydrate). NOTE: a
+    /// size/LRU budget is the documented Phase-4 follow-on — today it is
+    /// unbounded (fine at dev scale).
+    pub files: Arc<DashMap<String, FileEntry>>,
+    /// Per-rid hydration locks — single-flight so concurrent readers of a
+    /// cold file parse it once, not N times (kills the predecessor's
+    /// duplicate-parse race).
+    pub hydrating: Arc<DashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Cross-origin allowlist for the CSRF origin guard (host[:port] entries
+    /// from REDPASH_ALLOWED_ORIGINS). Loopback origins are always allowed in
+    /// debug builds; in release, only these.
+    pub allowed_origins: Arc<Vec<String>>,
+    /// Debug builds only: the auto-bootstrapped dev user's rid. Release
+    /// builds never have one — no fallback identity exists (day-one #10).
+    #[cfg(debug_assertions)]
+    pub dev_user: Arc<String>,
 }
 
 impl AppState {
-    pub async fn init() -> anyhow::Result<Self> {
+    pub async fn init() -> eyre::Result<Self> {
         let url = std::env::var("DATABASE_URL")
-            .map_err(|_| anyhow::anyhow!("DATABASE_URL is not set — see backend/.env.example"))?;
-
+            .map_err(|_| eyre::eyre!("DATABASE_URL is not set"))?;
         let db = PgPoolOptions::new()
             .max_connections(8)
             .acquire_timeout(Duration::from_secs(5))
             .connect(&url)
             .await?;
 
-        // 1. Schema. sqlx::migrate! embeds the migrations at build time
-        //    relative to the api crate's manifest dir.
+        // Order: migrate (which seeds the registry) → load the cache.
         sqlx::migrate!("../../migrations").run(&db).await?;
-
-        // 1b. Type registry — load the seeded type_definitions/type_fields/
-        //     type_scope_roles into the immutable cache. Order is migrate
-        //     (which seeds) → load, never the reverse.
         let type_cache = Arc::new(crate::type_cache::TypeDefCache::load(&db).await?);
 
-        // 2. Dev user + default project.
-        let bs = crate::bootstrap::run(&db).await?;
-
-        // 3. On-disk layout.
-        let data_dir: PathBuf = std::env::var("REDPASH_DATA_DIR")
-            .unwrap_or_else(|_| "./data".into())
-            .into();
-        std::fs::create_dir_all(data_dir.join("files"))?;
-
-        tracing::info!(user = %bs.user.redpash_id, project = %bs.project, "bootstrap ready");
-
-        // Google OAuth — opt-in via env vars. Without all three set,
-        // auth routes 503 and the app stays in dev_user-only mode for
-        // local development.
         let oauth = match (
-            std::env::var("GOOGLE_OAUTH_CLIENT_ID").ok().filter(|s| !s.is_empty()),
-            std::env::var("GOOGLE_OAUTH_CLIENT_SECRET").ok().filter(|s| !s.is_empty()),
-            std::env::var("GOOGLE_OAUTH_REDIRECT_URI").ok().filter(|s| !s.is_empty()),
+            env_nonempty("GOOGLE_OAUTH_CLIENT_ID"),
+            env_nonempty("GOOGLE_OAUTH_CLIENT_SECRET"),
+            env_nonempty("GOOGLE_OAUTH_REDIRECT_URI"),
         ) {
             (Some(client_id), Some(client_secret), Some(redirect_uri)) => {
-                tracing::info!("google oauth configured (redirect_uri = {redirect_uri})");
+                tracing::info!(%redirect_uri, "google oauth configured");
                 Some(Arc::new(OAuthConfig { client_id, client_secret, redirect_uri }))
             }
             _ => {
-                tracing::info!("google oauth not configured — running in dev_user mode");
+                tracing::info!("google oauth not configured");
                 None
             }
         };
 
-        // bs.project is intentionally dropped — every upload looks up
-        // (or creates) the *session user's* default project now.
-        let _ = bs.project;
+        // Debug-only dev bootstrap: a 'dev' platform-admin user + default
+        // project so local dev works with zero setup. Compiled OUT of
+        // release binaries entirely (day-one #10) — not an env flag.
+        #[cfg(debug_assertions)]
+        let dev_user = Arc::new(crate::bootstrap::ensure_dev_user(&db).await?);
 
-        // Dev-only "log in as user" switch — opt-in, off by default.
-        let dev_login = std::env::var("REDPASH_DEV_LOGIN")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        if dev_login {
-            tracing::warn!("REDPASH_DEV_LOGIN enabled — /api/auth/dev-login mints sessions with no credentials. Dev only.");
-        }
+        let data_dir: PathBuf =
+            std::env::var("REDPASH_DATA_DIR").unwrap_or_else(|_| "./data".into()).into();
+        std::fs::create_dir_all(data_dir.join("files"))?;
+
+        let allowed_origins: Vec<String> = std::env::var("REDPASH_ALLOWED_ORIGINS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
 
         Ok(Self {
             db,
-            files:           Arc::new(DashMap::new()),
-            data_dir:        Arc::new(data_dir),
-            dev_user:        Arc::new(bs.user.redpash_id),
             oauth,
-            http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .expect("reqwest client init"),
-            avatars: Arc::new(DashMap::new()),
-            dev_login,
+            http: reqwest::Client::builder().timeout(Duration::from_secs(10)).build()?,
             type_cache,
+            sessions: Arc::new(DashMap::new()),
+            data_dir: Arc::new(data_dir),
+            files: Arc::new(DashMap::new()),
+            hydrating: Arc::new(DashMap::new()),
+            allowed_origins: Arc::new(allowed_origins),
+            #[cfg(debug_assertions)]
+            dev_user,
         })
     }
 
     pub fn file_path(&self, rid: &str) -> PathBuf {
         self.data_dir.join("files").join(format!("{rid}.bin"))
     }
+}
+
+fn env_nonempty(key: &str) -> Option<String> {
+    std::env::var(key).ok().filter(|s| !s.is_empty())
 }

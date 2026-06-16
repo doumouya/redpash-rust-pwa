@@ -1,0 +1,60 @@
+/* login — page-scoped (.pg-auth-login). Reads --rp-* tokens; never touches
+   framework classes (ui-fork-audit R1/R2). */
+
+.pg-auth-login {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(60rem 30rem at 70% -10%, var(--rp-accent-soft), transparent 60%),
+    var(--rp-bg);
+}
+
+.pg-auth-login-card {
+  width: min(22rem, 90vw);
+  padding: var(--rp-sp-6) var(--rp-sp-5);
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius-lg);
+  box-shadow: var(--rp-ring), var(--rp-shadow);
+  text-align: center;
+}
+
+.pg-auth-login-brand {
+  margin: 0 0 var(--rp-sp-2);
+  font-size: var(--rp-text-xl);
+  letter-spacing: -0.02em;
+}
+
+.pg-auth-login-brand::first-letter {
+  color: var(--rp-accent);
+}
+
+.pg-auth-login-tag {
+  margin: 0 0 var(--rp-sp-5);
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+  line-height: 1.5;
+}
+
+.pg-auth-login-cta {
+  display: inline-block;
+  height: var(--rp-ctl-h);
+  line-height: var(--rp-ctl-h);
+  padding: 0 var(--rp-sp-4);
+  border-radius: var(--rp-radius);
+  background: var(--rp-accent);
+  color: var(--rp-on-accent);
+  font-size: var(--rp-text-sm);
+  font-weight: 600;
+}
+
+.pg-auth-login-cta:hover {
+  text-decoration: none;
+  filter: brightness(1.08);
+}
+
+.pg-auth-login-note {
+  margin: var(--rp-sp-4) 0 0;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+}

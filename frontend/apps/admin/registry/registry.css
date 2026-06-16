@@ -1,0 +1,6 @@
+/* admin/registry — the Data Registry: a thin instance of the generic object-list
+   page (the framework components own the entire look — ui-fork-audit R1/R2). */
+
+.pg-admin-registry {
+  height: 100%;
+}

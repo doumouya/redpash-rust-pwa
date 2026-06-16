@@ -1,0 +1,61 @@
+/* score-badge — the cleanness pill + breakdown disclosure. Sole owner of
+   .rp-score*. */
+
+.rp-score {
+  display: inline-block;
+  position: relative;
+}
+
+.rp-score-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border: 0;
+  border-radius: var(--rp-radius-pill);
+  font-weight: 700;
+  font-size: var(--rp-text-md);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+}
+
+.rp-score-pill.is-ok { background: color-mix(in srgb, var(--rp-ok) 16%, transparent); color: var(--rp-ok); }
+.rp-score-pill.is-warn { background: color-mix(in srgb, var(--rp-warn) 16%, transparent); color: var(--rp-warn); }
+.rp-score-pill.is-danger { background: color-mix(in srgb, var(--rp-danger) 16%, transparent); color: var(--rp-danger); }
+
+.rp-score-unit {
+  font-size: var(--rp-text-xs);
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.rp-score-pop {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  min-width: 14rem;
+  padding: var(--rp-sp-3) var(--rp-sp-4);
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius);
+  box-shadow: var(--rp-ring), 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 80;
+  display: none;
+}
+.rp-score.is-open .rp-score-pop {
+  display: block;
+}
+
+.rp-score-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rp-sp-4);
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+  padding: 0.1875rem 0;
+}
+.rp-score-row b {
+  color: var(--rp-text);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,23 @@
+/* empty-state — THE onboarding surface: one sentence + the view's single
+   primary action. No tours, no hint chips. Sole owner of .rp-empty*. */
+
+.rp-empty {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: var(--rp-sp-8) var(--rp-sp-5);
+  gap: var(--rp-sp-2);
+}
+
+.rp-empty-title {
+  margin: 0;
+  font-size: var(--rp-text-lg);
+  font-weight: 600;
+}
+
+.rp-empty-line {
+  margin: 0 0 var(--rp-sp-3);
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+  max-width: 26rem;
+}

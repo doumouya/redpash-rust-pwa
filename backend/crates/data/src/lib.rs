@@ -1,79 +1,44 @@
-//! Doc: docs/internal/code/backend/data/lib.md
-//! # `data` — Pure-compute layer
+//! Purpose: the RedPash data engine — pure compute over dataframes.
+//! One engine, two surfaces: this exact crate runs natively in the api crate
+//! AND as wasm32 in the browser. Zero io / http / threads / time by law
+//! (tools/purity-check.sh gates every commit on a wasm32 cargo check).
 //!
-//! Everything in this crate is HTTP-agnostic. The `api` crate calls
-//! these functions and serialises the results; tests can exercise them
-//! directly without spinning up a server.
-//!
-//! Modules:
-//!   - `encoding`  : detect encoding from a byte buffer (chardetng)
-//!   - `parse`     : streaming CSV parse via Polars `LazyFrame`
-//!   - `dtype`     : per-column type inference + light stats
-//!   - `dedup`     : full-row + per-PK duplicate detection
-//!   - `joins`     : detect_join_keys port — set-overlap scoring
-//!   - `group_by`  : aggregation engine used by Reports
-//!   - `steps`     : apply / undo / redo a `project_steps` operation
-//!   - `render`    : Markdown → HTML for `/docs`, Maud templates for
-//!                   reports + dashboards, syntect for code highlighting
-//!
-//! Most modules are stubbed at this stage — they fill in as each phase
-//! lands. The signatures + module boundaries are stable, so the `api`
-//! crate can wire its routes today and the implementations land
-//! independently.
+//! render/doc-rendering deliberately lives OUTSIDE this crate (the
+//! predecessor's stub-plus-deps muddied the pure-compute story).
 
-pub mod dedup;
+pub mod clean;
 pub mod distinct;
 pub mod dtype;
 pub mod encoding;
+pub mod error;
+pub mod filter;
 pub mod group_by;
 pub mod joins;
 pub mod parse;
+pub mod search;
+pub mod sentinels;
+pub mod sort;
+pub mod sql;
 pub mod stats;
 pub mod steps;
 pub mod structure;
-// `render` is the Markdown / Maud / syntect path for `/api/docs` and
-// the report templates. Server-side only — its transitive deps
-// (`onig_sys`, `crossterm`) don't compile on wasm32-unknown-unknown.
-// See docs/internal/roadmap-webassembly.md §3 + §7.
-pub mod clean;
-pub mod export;
+pub mod view;
+
+// Export (CSV/XLSX/JSON) is server-only — rust_xlsxwriter doesn't build on wasm.
 #[cfg(not(target_arch = "wasm32"))]
-pub mod render;
+pub mod export;
 
-// `sql` — Polars-SQL execution substrate (`SQLContext`). Compiles on both
-// surfaces (SQL-redtable Phase 5): the wasm32 polars build now carries the
-// `sql` feature (Cargo.toml; safe because `default-features = false` keeps the
-// `fmt`→comfy-table→crossterm chain out). The browser runs read-only SQL over
-// the SAME engine via `wasm::run_sql`. See docs/internal/specs/sql-redtable/phase-0-coverage.md.
-pub mod sql;
+pub use error::DataError;
 
-// `wasm` — Phase B wasm-bindgen wrappers (apply_filter / apply_sort /
-// auto_clean / step_preview). Only compiled for wasm32; the server
-// build doesn't see this module. See docs/internal/roadmap-webassembly.md §5.
+/// Crate result alias.
+pub type Result<T> = std::result::Result<T, DataError>;
+
+/// Row caps as ONE constant kept in lockstep across the server page clamp,
+/// the SQL result cap, and the client engine buffer (CAS_21B43BEC lesson).
+pub const ROW_CAP: usize = 500_000;
+
+// wasm-bindgen wrappers (JSON-in/JSON-out over the same engine the server
+// runs). Generated method list — never a hand-maintained array (the
+// predecessor's 13-vs-6 drift). Lands with the parse/score wrappers next.
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
-
-/// Crate-level error. Wraps Polars, IO, and parse failures into a single
-/// type the `api` crate can map to HTTP status codes.
-#[derive(Debug, thiserror::Error)]
-pub enum DataError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Polars error: {0}")]
-    Polars(#[from] polars::error::PolarsError),
-
-    #[error("Encoding error: {0}")]
-    Encoding(String),
-
-    #[error("Invalid spec: {0}")]
-    InvalidSpec(String),
-
-    #[error("Not found: {0}")]
-    NotFound(String),
-
-    #[error("Export error: {0}")]
-    Export(String),
-}
-
-pub type Result<T> = std::result::Result<T, DataError>;

@@ -1,78 +1,42 @@
-#!/usr/bin/env sh
-# Purpose: builds the data crate as a browser-loadable wasm module.
-# Doc: docs/internal/code/tools/shell/build-wasm.md
-# ─────────────────────────────────────────────────────────────────────────────
-# Build the `data` crate as a browser-loadable wasm module.
-#
-# Four stages, gated by `wasm-bindgen` and `wasm-opt`:
-#   1. `cargo build --target wasm32-unknown-unknown -p data` (release)
-#   2. `wasm-bindgen --target web` → JS glue + import-bound .wasm
-#   3. `wasm-opt -Oz --strip-debug` → final cdylib
-#   4. content-hash the .wasm (data_bg.<hash>.wasm) + rewrite the data.js
-#      loader → the hash is the cache version (no manual bumping, never stale)
-#
-# Output lands in `frontend/wasm/` (gitignored — regenerated on demand).
-# Source of truth: backend/crates/data/src/wasm.rs (the four wrappers).
-# See docs/internal/roadmap-webassembly.md for the architecture context.
-#
-# Usage:  sh tools/build-wasm.sh
-# Run from anywhere; resolves the repo root from this script's location.
-#
-# Prerequisites (one-shot, per machine):
-#   rustup target add wasm32-unknown-unknown
-#   cargo install wasm-bindgen-cli --version 0.2.121
-#   cargo install wasm-opt
-# ─────────────────────────────────────────────────────────────────────────────
-set -e
+#!/usr/bin/env bash
+# Purpose: build the data crate's browser engine — the 4-stage pipeline:
+#   1. cargo build (wasm32, release, getrandom wasm_js backend)
+#   2. wasm-bindgen --target web  → frontend/wasm/data.js glue + data_bg.wasm
+#   3. wasm-opt -Oz               → size-optimized binary
+#   4. content-hash rename        → data_bg.<hash12>.wasm + loader URL rewrite
+# THE HASH IS THE CACHE VERSION: a rebuild yields new bytes → new hash → new
+# URL, so the service worker's cache-first can never serve a stale engine and
+# nobody ever hand-bumps a cache version.
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_ROOT/backend"
+# shellcheck disable=SC1090
+. "$HOME/.cargo/env" 2>/dev/null || true
 
-echo "════════════════════════  1/3  cargo build (release, wasm32)  ════════════════════════"
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
-  cargo build --release --target wasm32-unknown-unknown -p data
-cd "$REPO_ROOT"
+OUT=frontend/wasm
+TARGET=backend/target/wasm32-unknown-unknown/release/data.wasm
 
-echo
-echo "════════════════════════  2/3  wasm-bindgen → frontend/wasm/  ═══════════════════════"
-mkdir -p frontend/wasm
-wasm-bindgen --target web --out-dir frontend/wasm --out-name data \
-  backend/target/wasm32-unknown-unknown/release/data.wasm
+echo "== 1/4 cargo build (wasm32 release)"
+(cd backend && RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
+  cargo build --quiet --release --target wasm32-unknown-unknown -p data)
 
-echo
-echo "════════════════════════  3/3  wasm-opt -Oz --strip-debug  ══════════════════════════"
-wasm-opt -Oz --strip-debug \
-  --enable-reference-types --enable-bulk-memory --enable-mutable-globals \
-  --enable-nontrapping-float-to-int --enable-sign-ext --enable-simd \
-  --enable-multivalue --enable-tail-call --enable-extended-const --enable-gc \
-  -o frontend/wasm/data_bg.opt.wasm frontend/wasm/data_bg.wasm
-mv frontend/wasm/data_bg.opt.wasm frontend/wasm/data_bg.wasm
+echo "== 2/4 wasm-bindgen"
+rm -rf "$OUT"
+mkdir -p "$OUT"
+wasm-bindgen --target web --out-dir "$OUT" --out-name data "$TARGET"
 
-echo
-echo "════════════════════════  4/4  content-hash (kills manual cache-bumping)  ════════════"
-# The wasm is big (~12 MB) + rebuilt often. Naming it by CONTENT HASH makes
-# the hash the cache version: every rebuild → new bytes → new hash → new
-# URL, so the browser cache-misses fresh (never stale) with ZERO manual
-# version bumps — the treadmill that got the caching SW gutted. Drop any
-# prior hashed build so the dir holds exactly one, then rewrite the single
-# loader reference in data.js (wasm-bindgen's `new URL('data_bg.wasm', …)`).
-rm -f frontend/wasm/data_bg.*.wasm
-HASH=$(sha256sum frontend/wasm/data_bg.wasm | cut -c1-12)
-mv frontend/wasm/data_bg.wasm "frontend/wasm/data_bg.${HASH}.wasm"
-sed -i "s|new URL('data_bg.wasm', import.meta.url)|new URL('data_bg.${HASH}.wasm', import.meta.url)|" frontend/wasm/data.js
-echo "  data_bg.${HASH}.wasm  (data.js loader rewritten — content-versioned, no manual bump)"
-WASM_FILE="frontend/wasm/data_bg.${HASH}.wasm"
+echo "== 3/4 wasm-opt -Oz"
+wasm-opt -Oz --strip-debug --enable-bulk-memory --enable-nontrapping-float-to-int \
+  -o "$OUT/data_bg.opt.wasm" "$OUT/data_bg.wasm"
+mv "$OUT/data_bg.opt.wasm" "$OUT/data_bg.wasm"
 
-echo
-echo "════════════════════════  artifact sizes  ═══════════════════════════════════════════"
-for f in "$WASM_FILE" frontend/wasm/data.js; do
-  raw=$(wc -c < "$f")
-  gz=$(gzip -c -9 "$f" | wc -c)
-  awk -v f="$f" -v raw="$raw" -v gz="$gz" \
-    'BEGIN { printf "  %-32s  %7.2f MB raw  %7.2f MB gz\n", f, raw/1024/1024, gz/1024/1024 }'
-done
+echo "== 4/4 content-hash"
+HASH=$(sha256sum "$OUT/data_bg.wasm" | cut -c1-12)
+mv "$OUT/data_bg.wasm" "$OUT/data_bg.${HASH}.wasm"
+# the bindgen glue references data_bg.wasm relative to itself — point it at
+# the hashed name
+sed -i "s/data_bg\.wasm/data_bg.${HASH}.wasm/g" "$OUT/data.js"
 
-total_gz=$( { gzip -c -9 "$WASM_FILE"; gzip -c -9 frontend/wasm/data.js; } | wc -c )
-awk -v t="$total_gz" 'BEGIN { printf "  TOTAL OVER-THE-WIRE              %7.2f MB gz\n", t/1024/1024 }'
-echo
-echo "done."
+RAW=$(stat -c%s "$OUT/data_bg.${HASH}.wasm")
+GZ=$(gzip -c "$OUT/data_bg.${HASH}.wasm" | wc -c)
+echo "engine: data_bg.${HASH}.wasm  raw $((RAW / 1024)) KiB · gz $((GZ / 1024)) KiB"

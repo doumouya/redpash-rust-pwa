@@ -1,0 +1,42 @@
+/* toast — async feedback with optional undo. Sole owner of .rp-toast*. */
+
+.rp-toast-stack {
+  position: fixed;
+  bottom: var(--rp-sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-gap);
+  z-index: 120;
+}
+
+.rp-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-4);
+  padding: var(--rp-sp-3) var(--rp-sp-4);
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius);
+  box-shadow: var(--rp-ring), 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: var(--rp-text-sm);
+  animation: rp-toast-in var(--rp-slow) var(--rp-ease);
+}
+
+.rp-toast--danger {
+  box-shadow: 0 0 0 1px var(--rp-danger), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.rp-toast-action {
+  border: 0;
+  background: none;
+  color: var(--rp-accent);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: var(--rp-text-sm);
+}
+
+@keyframes rp-toast-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: none; }
+}

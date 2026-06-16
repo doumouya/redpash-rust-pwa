@@ -1,0 +1,36 @@
+/* uploader — drop zone + file pick. Sole owner of .rp-uploader*. */
+
+.rp-uploader {
+  display: grid;
+  place-items: center;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-6);
+  border: 1.5px dashed var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+  text-align: center;
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+  transition: border-color var(--rp-fast) var(--rp-ease), background var(--rp-fast) var(--rp-ease);
+  cursor: pointer;
+}
+
+.rp-uploader:hover,
+.rp-uploader.is-over {
+  border-color: var(--rp-accent);
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+}
+
+.rp-uploader.is-busy {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.rp-uploader-hint {
+  font-size: var(--rp-text-xs);
+  color: var(--rp-text-mute);
+}
+
+.rp-uploader input[type="file"] {
+  display: none;
+}

@@ -1,0 +1,465 @@
+/* rail (rp-rail) — the page's left navigation: a data-driven two-level
+   group/tab strip. A group = a container (project / status bucket); a tab =
+   a leaf (file / case). Ported from the predecessor rail (CAS_37B2E1BF),
+   token names adapted to redpash-next's tokens.css; the name-keyed [data-c]
+   mark palette and the upload/views/chips zones were dropped (not in the
+   redpash-next config). Sole owner of every .rp-rail* class (ui-fork-audit R4).
+
+   Two independent narrowings:
+     .compact   — desktop icon-only rail (3.75rem), toggled by the head chevron.
+     @media     — narrow-viewport overlay drawer (.is-open), separate behavior.
+
+   knobs: --rp-rail-w */
+
+.rp-rail {
+  width: var(--rp-rail-w);
+  flex: 0 0 var(--rp-rail-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-bg);
+  /* No border: topbar + rail share --rp-bg as one continuous chrome frame; the
+     surface's lighter fill + rounded top-left corner does the separation. */
+  overflow: hidden;
+  transition: width var(--rp-slow) var(--rp-ease);
+}
+.rp-rail.compact {
+  width: 3.75rem;
+  flex-basis: 3.75rem;
+}
+
+/* ── filter zone: name search (composes the input atom). No title above it —
+   the page name lives in the topbar, so the rail goes straight to its search.
+   Top-pads to var(--rp-sp-5) to line the search up with the surface's content
+   (the surface has the same padding-top). */
+.rp-rail-filter {
+  flex-shrink: 0;
+  padding: var(--rp-sp-5) 0.625rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+}
+/* compact: the search collapses to JUST its icon — centered, full-width
+   clickable; the input is hidden. Clicking expands the rail + focuses the
+   field (wired in rail.js). */
+.rp-rail.compact .rp-rail-filter { padding: var(--rp-sp-5) 0 0.5rem; }
+.rp-rail.compact .rp-rail-search { justify-content: center; cursor: pointer; min-height: 1.875rem; }
+.rp-rail.compact .rp-rail-search input { display: none; }
+.rp-rail.compact .rp-rail-search-icon { position: static; left: auto; }
+/* wrapper around the rp-input atom — search-icon overlay + rail-tuned height.
+   The input atom styles itself; the rail only positions it (no atom override). */
+.rp-rail-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.rp-rail-search-icon {
+  position: absolute;
+  left: 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--rp-text-mute);
+  pointer-events: none;
+}
+.rp-rail-search input {
+  flex: 1;
+  min-width: 0;
+  height: 1.875rem;
+  padding-left: 1.875rem;
+}
+/* the auto-completed suffix is a real text selection (so typing overwrites it),
+   but shown as a faded GHOST suggestion — no highlight bar, muted colour — so
+   "o[rders…]" reads as "the part you haven't typed yet". */
+.rp-rail-search input::selection { background: transparent; color: var(--rp-text-mute); }
+
+/* ── pinned overview pseudo-tab above the groups ────────────────────────── */
+.rp-rail-overview { padding: 0 0.5rem; margin: 0.25rem 0 0.5rem; }
+.rp-rail-overview .rp-rail-tab-icon { font-size: 0.8125rem; }
+
+/* ── body + empty state ─────────────────────────────────────────────────── */
+.rp-rail-body { flex: 1; overflow-y: auto; padding: 0.25rem 0.375rem; }
+.rp-rail-state {
+  padding: var(--rp-sp-4) var(--rp-sp-3);
+  text-align: center;
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+}
+
+/* ── a group = a container ──────────────────────────────────────────────── */
+.rp-rail-group { margin-bottom: 0.125rem; }
+.rp-rail-group-head {
+  width: 100%;
+  height: 2.125rem;
+  padding: 0 0.375rem;
+  gap: 0.5rem;
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 0.5rem;
+  color: var(--rp-text-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease);
+}
+.rp-rail-group-head:hover { background: var(--rp-hover); }
+.rp-rail-group-caret {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  transition: transform 0.15s var(--rp-ease);
+  flex-shrink: 0;
+}
+.rp-rail-group:not(.expanded) .rp-rail-group-caret { transform: rotate(-90deg); }
+.rp-rail-group-mark {
+  width: 1.375rem;
+  height: 1.375rem;
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5938rem;
+  font-weight: 700;
+  color: var(--rp-on-accent);
+  /* mountRail sets `--mark:<color>` inline (hex / var(--rp-…)); the fallback
+     keeps an uncolored mark visible rather than transparent. */
+  background: var(--mark, var(--rp-surface-2));
+}
+.rp-rail-group-name {
+  flex: 1;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--rp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-rail-group-count {
+  font-size: 0.6875rem;
+  color: var(--rp-text-mute);
+  padding: 1px 0.375rem;
+  border-radius: var(--rp-radius-pill);
+  background: var(--rp-hover);
+}
+.rp-rail-group-add {
+  width: 100%;
+  height: 1.75rem;
+  margin-top: 0.125rem;
+  padding: 0 0.5rem 0 2rem;
+  gap: 0.375rem;
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 0.5rem;
+  color: var(--rp-text-mute);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-rail-group-add i { font-size: 0.8125rem; }
+.rp-rail-group-add:hover { background: var(--rp-hover); color: var(--rp-text); }
+
+/* Inline-rename + hide affordances — hover-fade, mirror each other. */
+.rp-rail-group-rename,
+.rp-rail-group-hide {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-rail-group-rename i { font-size: 0.75rem; }
+.rp-rail-group-hide i { font-size: 0.875rem; }
+.rp-rail-group-head:hover .rp-rail-group-rename,
+.rp-rail-group-head:hover .rp-rail-group-hide { opacity: 1; }
+.rp-rail-group-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+/* hide reads as destructive — accent-tinted on hover (parallel to tab-hide). */
+.rp-rail-group-hide:hover {
+  background: color-mix(in srgb, var(--rp-accent) 14%, transparent);
+  color: var(--rp-accent);
+}
+
+/* Editing state — drop the ellipsis so the full value shows; accent outline
+   reads as a focused text input. */
+.rp-rail-group-name-editing,
+.rp-rail-tab-name-editing {
+  background: var(--rp-surface-2);
+  outline: 1px solid var(--rp-accent);
+  outline-offset: 0;
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  cursor: text;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+.rp-rail-group-name-editing input,
+.rp-rail-tab-name-editing input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  padding: 0;
+}
+
+/* ── a tab = a leaf ─────────────────────────────────────────────────────── */
+.rp-rail-group-body { padding: 0.125rem 0 0.25rem; }
+.rp-rail-group:not(.expanded) .rp-rail-group-body { display: none; }
+.rp-rail-tab {
+  width: 100%;
+  height: 2rem;
+  padding: 0 0.375rem 0 2rem;
+  gap: 0.5rem;
+  display: flex;
+  align-items: center;
+  position: relative;
+  border: 0;
+  background: transparent;
+  border-radius: 0.5rem;
+  color: var(--rp-text-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-rail-tab:hover { background: var(--rp-hover); color: var(--rp-text); }
+/* active = the brand accent (accent-soft bg + accent text + accent rail-bar). */
+.rp-rail-tab.active { background: var(--rp-accent-soft); color: var(--rp-accent); }
+/* search type-ahead cursor — the match ↑↓ is currently on (a tint; distinct
+   from .active's accent bar). Cleared on blur/Escape/next keystroke. */
+.rp-rail-tab.is-cursor,
+.rp-rail-group-head.is-cursor { background: var(--rp-hover); }
+.rp-rail-tab:disabled { opacity: 0.4; cursor: default; }
+.rp-rail-tab:disabled:hover { background: transparent; color: var(--rp-text-dim); }
+.rp-rail-tab.active::before {
+  content: "";
+  position: absolute;
+  left: 0.875rem;
+  top: 0.4375rem;
+  bottom: 0.4375rem;
+  width: 0.1875rem;
+  border-radius: var(--rp-radius-pill);
+  background: var(--rp-accent);
+}
+.rp-rail-tab-icon { font-size: 0.875rem; color: var(--rp-text-mute); flex-shrink: 0; }
+.rp-rail-tab.active .rp-rail-tab-icon { color: var(--rp-accent); }
+.rp-rail-tab-name {
+  flex: 1;
+  text-align: left;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-rail-tab-dot { width: 0.4375rem; height: 0.4375rem; border-radius: var(--rp-radius-pill); flex-shrink: 0; }
+.rp-rail-tab-dot.is-clean { background: var(--rp-ok); }
+.rp-rail-tab-dot.is-warn  { background: var(--rp-warn); }
+.rp-rail-tab-dot.is-dirty { background: var(--rp-accent); }
+
+/* Per-row rename / hide affordances — hover-fade, mirror the group ones. */
+.rp-rail-tab-rename,
+.rp-rail-tab-hide {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3125rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  opacity: 0;
+  transition: opacity 0.14s var(--rp-ease), background 0.14s var(--rp-ease), color 0.14s var(--rp-ease);
+}
+.rp-rail-tab-rename i { font-size: 0.75rem; }
+.rp-rail-tab-hide i { font-size: 0.8125rem; }
+.rp-rail-tab:hover .rp-rail-tab-rename,
+.rp-rail-tab.active .rp-rail-tab-rename,
+.rp-rail-tab:hover .rp-rail-tab-hide,
+.rp-rail-tab.active .rp-rail-tab-hide { opacity: 1; }
+.rp-rail-tab-rename:hover { background: var(--rp-surface-2); color: var(--rp-text); }
+.rp-rail-tab-hide:hover { background: var(--rp-surface-2); color: var(--rp-accent); }
+
+/* ── compact mode — icon only ───────────────────────────────────────────── */
+.rp-rail.compact .rp-rail-group-head { padding: 0; justify-content: center; }
+.rp-rail.compact .rp-rail-group-caret,
+.rp-rail.compact .rp-rail-group-name,
+.rp-rail.compact .rp-rail-group-count,
+.rp-rail.compact .rp-rail-group-rename,
+.rp-rail.compact .rp-rail-group-hide,
+.rp-rail.compact .rp-rail-group-add,
+.rp-rail.compact .rp-rail-tab-name,
+.rp-rail.compact .rp-rail-tab-rename,
+.rp-rail.compact .rp-rail-tab-hide,
+.rp-rail.compact .rp-rail-footer-create span,
+.rp-rail.compact .rp-rail-footer-create {
+  display: none;
+}
+.rp-rail.compact .rp-rail-tab { padding: 0; justify-content: center; }
+.rp-rail.compact .rp-rail-tab.active::before { left: 0.375rem; }
+.rp-rail.compact .rp-rail-tab-dot { position: absolute; top: 0.375rem; right: 0.5625rem; }
+.rp-rail.compact .rp-rail-overview { padding: 0 0.375rem; }
+
+/* ── footer: contextual create + the universals cluster ─────────────────── */
+.rp-rail-footer {
+  flex-shrink: 0;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+/* divider over the footer links — 70% width, centered (not a full-width rule).
+   A hairline border (the sanctioned px exception), not a px height. */
+.rp-rail-footer::before {
+  content: "";
+  align-self: center;
+  width: 70%;
+  border-top: 1px solid var(--rp-border);
+}
+/* the create button is the rp-btn atom; the rail only stretches it full-width. */
+.rp-rail-footer-create { width: 100%; }
+
+.rp-rail-footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center; /* centered in the opened rail (and when compact) */
+  gap: 0.25rem;
+}
+.rp-rail-footer-create + .rp-rail-footer-nav {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-rail-footer-nav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4375rem;
+  color: var(--rp-text-mute);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s var(--rp-ease), color 0.12s var(--rp-ease);
+}
+.rp-rail-footer-nav-item:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-rail-footer-nav-item.is-active { background: var(--rp-accent-soft); color: var(--rp-accent); }
+/* Profile avatar — initials chip rather than an icon. */
+.rp-rail-footer-nav-avatar {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--rp-text);
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+}
+.rp-rail-footer-nav-avatar.is-active {
+  background: var(--rp-accent-soft);
+  border-color: var(--rp-accent);
+  color: var(--rp-accent);
+}
+.rp-rail.compact .rp-rail-footer-nav { justify-content: center; }
+
+/* ── hidden recovery drawer ─────────────────────────────────────────────── */
+.rp-rail-hidden {
+  margin: 0.5rem 0.375rem 0;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--rp-border);
+}
+.rp-rail.compact .rp-rail-hidden { display: none; }
+.rp-rail-hidden-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: var(--rp-text-mute);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.rp-rail-hidden-summary::-webkit-details-marker { display: none; }
+.rp-rail-hidden-summary::marker { content: ""; }
+.rp-rail-hidden-summary:hover { color: var(--rp-text); }
+.rp-rail-hidden[open] .rp-rail-hidden-summary { color: var(--rp-text); }
+.rp-rail-hidden-body { padding: 0.25rem 0 0.5rem; }
+.rp-rail-hidden-section { margin-bottom: 0.375rem; }
+.rp-rail-hidden-section:last-child { margin-bottom: 0; }
+.rp-rail-hidden-title {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rp-text-mute);
+  padding: 0.25rem 0.25rem 0.1875rem;
+}
+.rp-rail-hidden-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.4375rem;
+  border: 0;
+  background: transparent;
+  border-radius: 0.375rem;
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+.rp-rail-hidden-item:hover { background: var(--rp-hover); color: var(--rp-text); }
+.rp-rail-hidden-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-rail-hidden-meta { color: var(--rp-text-mute); }
+.rp-rail-hidden-restore { font-size: 0.8125rem; color: var(--rp-info); flex-shrink: 0; }
+.rp-rail-hidden-item:hover .rp-rail-hidden-restore { color: var(--rp-text); }
+
+/* ── narrow-viewport overlay drawer (separate from .compact) ──────────────
+   At/below --rp-bp-md (64rem = the 1024 floor) the rail becomes a fixed
+   off-canvas drawer; the topbar's sidebar toggle drives `.is-open` (rail.js
+   branches on matchMedia) and a scrim dims the rest. Above md it's the static
+   sidebar (or the `.compact` icon-rail). */
+.rp-rail-scrim {
+  position: fixed;
+  inset: var(--rp-topbar-h) 0 0 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 59;
+  display: none; /* only ever shown inside the md media, when .is-open */
+}
+@media (max-width: 64rem) { /* --rp-bp-md */
+  .rp-rail {
+    position: fixed;
+    top: var(--rp-topbar-h);
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    /* the drawer overrides the desktop icon-rail: always full width here. */
+    width: var(--rp-rail-w);
+    flex-basis: var(--rp-rail-w);
+    transform: translateX(-100%);
+    transition: transform var(--rp-slow) var(--rp-ease);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  .rp-rail.compact {
+    width: var(--rp-rail-w);
+    flex-basis: var(--rp-rail-w);
+  }
+  .rp-rail.is-open { transform: translateX(0); }
+  .rp-rail-scrim.is-open { display: block; }
+}

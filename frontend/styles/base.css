@@ -1,32 +1,53 @@
-/* ── base ───────────────────────────────────────────────────────
-   Reset, document defaults, and the shared brand text atoms. */
+/* base.css — reset + document defaults. Pages and components build on this;
+   nothing here knows about any specific component. */
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-html, body { height: 100%; }
-
+html,
 body {
   margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
   font-family: var(--rp-font);
   font-size: var(--rp-text-md);
-  line-height: 1.5;
-  color: var(--rp-text);
   background: var(--rp-bg);
+  color: var(--rp-text);
   -webkit-font-smoothing: antialiased;
 }
 
-#app { min-height: 100%; }
-
-a { color: var(--rp-info); }
-
-/* The RedPash wordmark. Font, weight and colour only — each surface
-   sets its own size (login is large, the home bar is small). */
-.rp-wordmark {
-  font-family: var(--rp-font-brand);
-  font-weight: 900;
-  letter-spacing: -0.01em;
-  color: var(--rp-text);
+#app {
+  height: 100%;
 }
-.rp-wordmark b { color: var(--rp-accent); font-weight: 900; }
 
-.rp-muted { margin: 0; color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
+a {
+  color: var(--rp-info);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rp-accent);
+  outline-offset: 1px;
+  border-radius: var(--rp-radius-sm);
+}
+
+::selection {
+  background: var(--rp-accent-soft);
+}

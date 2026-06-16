@@ -1,0 +1,19 @@
+[package]
+name = "gluesql-spike"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Its OWN workspace root, so the backend/ workspace never absorbs this spike
+# (isolated Cargo.lock, zero risk to the data crate / ci.sh).
+[workspace]
+
+[dependencies]
+gluesql = "0.19"
+gluesql-csv-storage = "0.19"
+futures = "0.3"
+csv = "1"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3

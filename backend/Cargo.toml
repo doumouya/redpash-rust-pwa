@@ -1,97 +1,45 @@
-# ━━━━━━━━━━━━━━━━━━ REDPASH BACKEND — Cargo workspace ━━━━━━━━━━━━━━━━━━
-#
-# Three crates form the backend:
-#
-#   api      Axum HTTP server. One route module per resource. Auth +
-#            middleware live here. Imports `data` for any heavy lift.
-#   data     Polars + CSV + chardetng + Maud. Pure compute, no HTTP.
-#            Anything that touches a row or a byte buffer is here.
-#   shared   DTOs serialised over the wire. Both crates depend on it so
-#            request / response types stay in sync at compile time.
-#
-# Build:    cargo build --release   (in this directory)
-# Run dev:  cargo run -p api
-# Test:     cargo test --workspace
-#
-# The default profile leaves debug symbols on; `release` strips them.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+# RedPash-next workspace — three crates, one hard boundary:
+#   data   = pure compute (NO io / http / sqlx / tokio::fs) -> compiles to wasm32
+#   shared = wire DTOs only (serde structs both sides speak)
+#   api    = the axum edge (http + postgres + the data crate, native only)
+# The boundary is enforced mechanically: tools/purity-check.sh runs
+# `cargo check --target wasm32-unknown-unknown -p data` in CI.
 [workspace]
 resolver = "2"
-members  = ["crates/api", "crates/data", "crates/shared"]
+members = ["crates/api", "crates/data", "crates/shared"]
 
-[workspace.package]
-version  = "0.1.0"
-edition  = "2021"
-authors  = ["Mansa <mansa@redpash.app>"]
-license  = "Proprietary"
-
-# Shared dependencies — pinned here so every crate uses the same versions.
 [workspace.dependencies]
-# Web stack
-axum            = { version = "0.7", features = ["macros", "multipart"] }
-tokio           = { version = "1", features = ["full"] }
-tower           = "0.5"
-tower-http      = { version = "0.6", features = ["cors", "trace", "fs", "compression-br", "limit", "set-header"] }
-bytes           = "1"
-dashmap         = "6"
-
-# Serialisation + errors
-serde           = { version = "1", features = ["derive"] }
-serde_json      = "1"
-thiserror       = "1"
-anyhow          = "1"
-# Rich error reporting — eyre::Report captures the full error chain
-# (source links + lazy backtrace via std::backtrace). Used inside
-# AppError::inner as the server-side-only payload that never crosses
-# the IntoResponse airlock to the wire. See observability lane work
-# 2026-05-24.
-eyre            = "0.6"
-
-# DB
-sqlx            = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "mysql", "uuid", "chrono", "json", "migrate"] }
-futures-util    = "0.3"   # TryStreamExt — stream sqlx result cursors (bounded memory); a primitive already in-tree via sqlx
-
-# Data layer
-polars          = { version = "0.54", features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
-chardetng       = "0.1"
-csv             = "1.3"
-encoding_rs     = "0.8"
-# Excel readers — used at upload to convert .xlsx/.xls/.xlsm/.xlsb/.ods
-# into CSV bytes before they enter the standard CSV pipeline.
-calamine        = "0.26"
-# Excel writer — renders a DataFrame as a .xlsx workbook at export time.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+axum = { version = "0.7", features = ["macros", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "compression-br", "limit", "set-header"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "json", "chrono", "migrate", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+eyre = "0.6"
+dotenvy = "0.15"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap = "6"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+thiserror = "2"
+# Server polars carries defaults (fmt → DataFrame Debug). The wasm32 build
+# overrides this with default-features = false (Cargo.toml in the data crate)
+# to keep the fmt → comfy-table → crossterm terminal-IO chain off wasm.
+polars = { version = "0.54", features = ["lazy", "csv", "strings", "dtype-full", "regex", "concat_str", "sql"] }
+chardetng = "0.1"
+encoding_rs = "0.8"
+csv = "1.3"
 rust_xlsxwriter = "0.95"
 
-# HTML rendering for reports / docs
-pulldown-cmark  = "0.12"
-syntect         = "5"
-gray_matter     = "0.2"
-maud            = "0.26"
-
-# Misc
-chrono          = { version = "0.4", features = ["serde"] }
-uuid            = { version = "1", features = ["v4", "serde"] }
-dotenvy         = "0.15"
-tracing         = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-# OAuth (Phase 4 auth) — rustls only, no OpenSSL native dep.
-reqwest         = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-
-[profile.release]
-lto             = "thin"
-codegen-units   = 1
-strip           = "symbols"
-
-# polars wasm patch (RedPash fork doumouya/polars-rp). polars 0.54's async/cloud
-# machinery drags tokio's `net` (-> mio) and `rt-multi-thread` (-> OS threads) onto
-# wasm32-unknown-unknown, neither of which has a wasm backend. The fork keeps those
-# paths compiling (they're runtime-guarded, never reached on wasm) while target-
-# gating the wasm-fatal leaves off wasm and giving polars-async a current-thread
-# runtime on wasm. See docs/internal/runbooks for the full diagnosis. Patching the
-# umbrella to the git fork cascades to every sub-crate because the fork (unlike a
-# published crate) keeps intra-workspace path-deps. Drop this patch when upstream
-# ships wasm32-unknown-unknown support. Rebase the fork's single patch commit on
-# each polars bump (the divergence is ~110 lines across 11 files).
+# polars-on-wasm fork (doumouya/polars-rp). polars 0.54 made polars-async
+# (tokio multi-thread + net → mio) an unconditional dep of polars-core; the
+# fork gates tokio off wasm and gives polars-async a bare current-thread
+# runtime WITHOUT .enable_time() (which panics at build() on wasm). ~110
+# lines across 11 files; rebase-able per polars bump. See runbook 0023 in
+# the predecessor repo. Cascades to sub-crates through path-deps where a
+# published-crate vendor would not.
 [patch.crates-io]
 polars = { git = "https://github.com/doumouya/polars-rp", rev = "0bb178d6ea1239ba009ca69a569ea66871b8a328" }

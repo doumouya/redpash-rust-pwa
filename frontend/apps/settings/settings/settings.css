@@ -1,0 +1,5 @@
+/* settings — page-scoped only; the registry renderer owns the look. */
+
+.pg-settings-settings {
+  height: 100%;
+}

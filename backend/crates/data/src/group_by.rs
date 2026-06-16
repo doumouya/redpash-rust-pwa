@@ -17,16 +17,23 @@
 
 use crate::{DataError, Result};
 use polars::prelude::*;
+use shared::filter::{FilterNode, GroupOp, PredOp};
 use shared::report::{AggFn, Aggregation, ReportSpec};
 
 pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     // 1. Optional pre-filter via the same FilterNode tree the cleaner uses.
+    //    The reference routed this through `parse::apply_filter` (which took a
+    //    JSON string); redpash-next has no such entry point and the cleaner's
+    //    predicate compiler is private to `steps`, so we deserialise the
+    //    free-form `spec.filter` value into the CANONICAL `shared::FilterNode`
+    //    tree and compile it to a Polars Expr right here. Empty / null filters
+    //    leave the frame untouched, exactly like the reference.
     let mut lf = df.clone().lazy();
     if let Some(v) = spec.filter.as_ref() {
-        let json = serde_json::to_string(v).unwrap_or_default();
-        if !json.is_empty() && json != "null" {
-            let filtered = crate::parse::apply_filter(df.clone(), &json)?;
-            lf = filtered.lazy();
+        if !v.is_null() {
+            if let Some(expr) = filter_value_to_expr(v)? {
+                lf = lf.filter(expr);
+            }
         }
     }
 
@@ -119,6 +126,170 @@ pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
         }
     }
     Ok(df)
+}
+
+/// Deserialise the free-form `spec.filter` JSON value into the canonical
+/// `shared::FilterNode` tree and compile it to a single Polars predicate.
+/// `Ok(None)` means "no constraint" (null filter or an empty AND group);
+/// the caller then skips `lf.filter` entirely.
+fn filter_value_to_expr(v: &serde_json::Value) -> Result<Option<Expr>> {
+    let node: FilterNode = serde_json::from_value(v.clone())
+        .map_err(|e| DataError::InvalidSpec(format!("report filter: {e}")))?;
+    tree_expr(&node)
+}
+
+/// Recursively turn a FilterNode into a Polars Expr.
+/// `Ok(None)` means "no constraint" (e.g. empty AND group); the caller
+/// then skips applying any filter rather than wasting an Expr.
+fn tree_expr(node: &FilterNode) -> Result<Option<Expr>> {
+    match node {
+        FilterNode::Pred { col, op, value, case_sensitive } => {
+            Ok(Some(pred_expr(col, *op, value.as_ref(), *case_sensitive)?))
+        }
+        FilterNode::Group { op, children } => {
+            // Empty groups: empty AND = TRUE (no-op), empty OR = FALSE.
+            if children.is_empty() {
+                return Ok(match op {
+                    GroupOp::And => None,
+                    GroupOp::Or => Some(lit(false)),
+                });
+            }
+            let mut acc: Option<Expr> = None;
+            for child in children {
+                if let Some(ce) = tree_expr(child)? {
+                    acc = Some(match (acc.take(), op) {
+                        (None, _) => ce,
+                        (Some(a), GroupOp::And) => a.and(ce),
+                        (Some(a), GroupOp::Or) => a.or(ce),
+                    });
+                }
+            }
+            Ok(acc)
+        }
+    }
+}
+
+/// One Polars Expr for a single leaf predicate. Numeric ops cast the value to
+/// f64 (Polars widens the column side); string ops cast the COLUMN to String
+/// (guards against drift to Categorical/Utf8View). Mirrors the cleaner's
+/// `steps::util::build_filter_predicate` semantics so report pre-filters and
+/// persisted filter_rows steps behave identically.
+fn pred_expr(
+    column: &str,
+    op: PredOp,
+    value: Option<&serde_json::Value>,
+    case_sensitive: bool,
+) -> Result<Expr> {
+    let c = col(column);
+    let op_label = |o: PredOp| -> &'static str {
+        match o {
+            PredOp::Eq => "eq",
+            PredOp::Neq => "neq",
+            PredOp::Contains => "contains",
+            PredOp::NotContains => "not_contains",
+            PredOp::StartsWith => "starts_with",
+            PredOp::EndsWith => "ends_with",
+            PredOp::Gt => "gt",
+            PredOp::Gte => "gte",
+            PredOp::Lt => "lt",
+            PredOp::Lte => "lte",
+            PredOp::Between => "between",
+            PredOp::In => "in",
+            PredOp::IsNull => "is_null",
+            PredOp::NotNull => "not_null",
+        }
+    };
+    let need_value = || -> Result<&serde_json::Value> {
+        value.ok_or_else(|| {
+            DataError::InvalidSpec(format!("filter op `{}` needs a value", op_label(op)))
+        })
+    };
+    let json_to_string = |v: &serde_json::Value| -> String {
+        match v {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Null => String::new(),
+            other => other.to_string(),
+        }
+    };
+    let val_string = || -> Result<String> { Ok(json_to_string(need_value()?)) };
+    let val_f64 = || -> Result<f64> {
+        let v = need_value()?;
+        v.as_f64()
+            .or_else(|| v.as_i64().map(|n| n as f64))
+            .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+            .ok_or_else(|| {
+                DataError::InvalidSpec(format!(
+                    "filter op `{}` needs a numeric value",
+                    op_label(op)
+                ))
+            })
+    };
+    let val_array = || -> Result<Vec<String>> {
+        let v = need_value()?;
+        v.as_array()
+            .map(|a| a.iter().map(&json_to_string).collect())
+            .ok_or_else(|| {
+                DataError::InvalidSpec(format!("filter op `{}` needs an array value", op_label(op)))
+            })
+    };
+
+    Ok(match op {
+        PredOp::Eq => c.cast(DataType::String).eq(lit(val_string()?)),
+        PredOp::Neq => c.cast(DataType::String).neq(lit(val_string()?)),
+        PredOp::In => {
+            let needles = val_array()?;
+            if needles.is_empty() {
+                lit(false)
+            } else {
+                let s = c.cast(DataType::String);
+                needles.into_iter().map(|v| s.clone().eq(lit(v))).reduce(|a, b| a.or(b)).unwrap()
+            }
+        }
+        PredOp::Contains => {
+            let pat = val_string()?;
+            if case_sensitive {
+                c.cast(DataType::String).str().contains_literal(lit(pat))
+            } else {
+                c.cast(DataType::String).str().to_lowercase().str().contains_literal(lit(pat.to_lowercase()))
+            }
+        }
+        PredOp::NotContains => {
+            let pat = val_string()?;
+            let inner = if case_sensitive {
+                c.cast(DataType::String).str().contains_literal(lit(pat))
+            } else {
+                c.cast(DataType::String).str().to_lowercase().str().contains_literal(lit(pat.to_lowercase()))
+            };
+            inner.not()
+        }
+        PredOp::StartsWith => c.cast(DataType::String).str().starts_with(lit(val_string()?)),
+        PredOp::EndsWith => c.cast(DataType::String).str().ends_with(lit(val_string()?)),
+        PredOp::Gt => c.gt(lit(val_f64()?)),
+        PredOp::Gte => c.gt_eq(lit(val_f64()?)),
+        PredOp::Lt => c.lt(lit(val_f64()?)),
+        PredOp::Lte => c.lt_eq(lit(val_f64()?)),
+        PredOp::Between => {
+            let arr = need_value()?.as_array().ok_or_else(|| {
+                DataError::InvalidSpec("filter op `between` needs value: [low, high]".into())
+            })?;
+            if arr.len() != 2 {
+                return Err(DataError::InvalidSpec(
+                    "filter op `between` needs exactly two endpoints".into(),
+                ));
+            }
+            let parse = |v: &serde_json::Value| -> Result<f64> {
+                v.as_f64()
+                    .or_else(|| v.as_i64().map(|n| n as f64))
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+                    .ok_or_else(|| DataError::InvalidSpec("between endpoints must be numeric".into()))
+            };
+            let lo = parse(&arr[0])?;
+            let hi = parse(&arr[1])?;
+            c.clone().gt_eq(lit(lo)).and(c.lt_eq(lit(hi)))
+        }
+        PredOp::IsNull => c.is_null(),
+        PredOp::NotNull => c.is_not_null(),
+    })
 }
 
 fn apply_windows(df: DataFrame, windows: &[shared::report::WindowSpec]) -> Result<DataFrame> {
@@ -269,5 +440,170 @@ fn default_alias(a: &Aggregation) -> String {
         fn_label.to_string()
     } else {
         format!("{}_{fn_label}", a.col)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared::report::{SortSpec, TopNFilter, WindowSpec};
+
+    fn sample() -> DataFrame {
+        df![
+            "city"   => ["Paris", "Paris", "Lyon", "Lyon", "Lyon"],
+            "plan"   => ["A", "B", "A", "A", "B"],
+            "amount" => [100i64, 200, 50, 70, 30],
+        ]
+        .unwrap()
+    }
+
+    fn agg(col: &str, fn_: AggFn, alias: &str) -> Aggregation {
+        Aggregation { col: col.into(), fn_, alias: Some(alias.into()) }
+    }
+
+    #[test]
+    fn group_and_sum_aggregates_per_key() {
+        let spec = ReportSpec {
+            group_by: vec!["city".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        assert_eq!(out.height(), 2);
+        assert!(out.get_column_names().iter().any(|n| n.as_str() == "total"));
+    }
+
+    #[test]
+    fn no_group_no_agg_returns_row_count() {
+        let spec = ReportSpec::default();
+        let out = execute(&sample(), &spec).unwrap();
+        // Single summary cell with the source row count.
+        assert_eq!(out.shape(), (1, 1));
+        let rows = out.column("rows").unwrap().i64().unwrap().get(0).unwrap();
+        assert_eq!(rows, 5);
+    }
+
+    #[test]
+    fn group_with_no_agg_gets_implicit_count() {
+        let spec = ReportSpec { group_by: vec!["city".into()], ..Default::default() };
+        let out = execute(&sample(), &spec).unwrap();
+        assert_eq!(out.height(), 2);
+        assert!(out.get_column_names().iter().any(|n| n.as_str() == "count"));
+    }
+
+    #[test]
+    fn no_group_with_agg_is_single_summary_row() {
+        let spec = ReportSpec {
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        assert_eq!(out.height(), 1);
+        let total = out.column("total").unwrap().i64().unwrap().get(0).unwrap();
+        assert_eq!(total, 450);
+    }
+
+    #[test]
+    fn user_sort_descending_orders_subtotals() {
+        let spec = ReportSpec {
+            group_by: vec!["city".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            sort: vec![SortSpec { col: "total".into(), dir: "desc".into() }],
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        let totals: Vec<Option<i64>> = out.column("total").unwrap().i64().unwrap().iter().collect();
+        // Paris=300 should precede Lyon=150 under desc sort.
+        assert_eq!(totals, vec![Some(300), Some(150)]);
+    }
+
+    #[test]
+    fn pre_filter_restricts_rows_before_grouping() {
+        let spec = ReportSpec {
+            group_by: vec!["city".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            filter: Some(serde_json::json!({
+                "node": "pred",
+                "col": "plan",
+                "op": "eq",
+                "value": "A"
+            })),
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        // Only plan==A rows survive: Paris(100), Lyon(50+70=120).
+        let mut pairs: Vec<(String, i64)> = out
+            .column("city")
+            .unwrap()
+            .str()
+            .unwrap()
+            .iter()
+            .zip(out.column("total").unwrap().i64().unwrap().iter())
+            .map(|(c, t)| (c.unwrap().to_string(), t.unwrap()))
+            .collect();
+        pairs.sort();
+        assert_eq!(pairs, vec![("Lyon".into(), 120), ("Paris".into(), 100)]);
+    }
+
+    #[test]
+    fn aggregate_window_percent_of_partition() {
+        let spec = ReportSpec {
+            group_by: vec!["city".into(), "plan".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            windows: vec![WindowSpec {
+                alias: "pct".into(),
+                fn_: "sum".into(),
+                col: "total".into(),
+                partition_by: vec!["city".into()],
+                as_percent: true,
+                order_by: None,
+                offset: 1,
+            }],
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        assert!(out.get_column_names().iter().any(|n| n.as_str() == "pct"));
+    }
+
+    #[test]
+    fn top_n_global_with_single_group_level() {
+        // Single group level + empty partition_by → the true GLOBAL path.
+        // City sums: Paris=300, Lyon=150 → global top-1 = Paris 300.
+        let spec = ReportSpec {
+            group_by: vec!["city".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            top_n: Some(TopNFilter {
+                n: 1,
+                order_by: "total".into(),
+                direction: "desc".into(),
+                partition_by: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        assert_eq!(out.height(), 1);
+        let total = out.column("total").unwrap().i64().unwrap().get(0).unwrap();
+        assert_eq!(total, 300);
+    }
+
+    #[test]
+    fn top_n_empty_partition_defaults_to_per_outer_group() {
+        // Empty partition_by with a MULTI-level group_by → documented
+        // fallback: top-N of the deepest dimension within each outer group.
+        // group_by [city, plan] → top-1 plan per city = 2 rows
+        // (Paris/B=200, Lyon/A=120).
+        let spec = ReportSpec {
+            group_by: vec!["city".into(), "plan".into()],
+            aggregations: vec![agg("amount", AggFn::Sum, "total")],
+            top_n: Some(TopNFilter {
+                n: 1,
+                order_by: "total".into(),
+                direction: "desc".into(),
+                partition_by: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        let out = execute(&sample(), &spec).unwrap();
+        assert_eq!(out.height(), 2, "top-1 plan per city");
     }
 }

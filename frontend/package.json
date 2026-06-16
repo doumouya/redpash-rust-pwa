@@ -1,0 +1,6 @@
+{
+  "name": "redpash-frontend",
+  "private": true,
+  "type": "module",
+  "description": "Marker so node:test treats the vanilla ES modules as ESM. No dependencies, no build — the browser loads these files as-is."
+}

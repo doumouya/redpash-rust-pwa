@@ -12,6 +12,9 @@
 //! analytical surface run natively or via a trivial rewrite; the window
 //! ranking/navigation family — ROW_NUMBER/RANK/LAG/LEAD/NTILE — routes through
 //! the expression API instead, and is filled in a later phase).
+//!
+//! Compiles on BOTH surfaces (the wasm polars carries the `sql` feature), so
+//! this module is deliberately NOT cfg-gated.
 
 use polars::prelude::*;
 use polars::sql::SQLContext;
@@ -22,7 +25,12 @@ use crate::{DataError, Result};
 /// well past any single source's size; rather than risk OOM we bound the
 /// collected result and ask the caller to add a `LIMIT`. In lockstep with the
 /// frontend client-engine row cap (CAS_21B43BEC).
-pub const SQL_RESULT_ROW_CAP: usize = 500_000;
+///
+/// Reconciliation: the predecessor declared its own `SQL_RESULT_ROW_CAP` (also
+/// 500_000). The target unifies every row cap behind the single
+/// [`crate::ROW_CAP`] constant (server page clamp + SQL cap + client buffer),
+/// so this name is now a re-export alias rather than a second source of truth.
+pub use crate::ROW_CAP as SQL_RESULT_ROW_CAP;
 
 /// Run a read-only SQL query against a set of named in-memory tables.
 ///

@@ -1,0 +1,94 @@
+/* surface — the page's content frame: head band (title · meta · actions) +
+   sections. The lighter INSET panel that floats inside the topbar+rail dark
+   frame: a single rounded top-left corner (where rail-right meets topbar-bottom)
+   sells the continuity. Calm: no glass here. Sole owner of .rp-surface*. */
+
+.rp-surface {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--rp-sp-5) var(--rp-sp-6);
+  background: var(--rp-surface);
+  border-top-left-radius: var(--rp-radius-lg);
+}
+
+.rp-surface-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-4);
+  margin-bottom: var(--rp-sp-5);
+}
+
+.rp-surface-title {
+  margin: 0;
+  font-size: var(--rp-text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.rp-surface-meta {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-sm);
+}
+
+.rp-surface-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: var(--rp-gap);
+}
+
+.rp-surface-section {
+  margin-bottom: var(--rp-sp-6);
+}
+
+.rp-surface-section-title {
+  margin: 0 0 var(--rp-sp-3);
+  font-size: var(--rp-text-xs);
+  font-weight: 600;
+  color: var(--rp-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* section layout options (pages pick via the section spec, never via CSS) */
+.rp-surface-section-body--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--rp-gap);
+}
+
+.rp-surface-section-body--row {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-gap);
+  flex-wrap: wrap;
+}
+
+/* `fill`: the section grows to the full surface height (a full-height app like
+   the Data Cleaner, whose table scrolls internally instead of the page). Scoped
+   via :has so every other page keeps the default block + page-scroll model. */
+.rp-surface:has(.rp-surface-section-body--fill) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rp-surface-section:has(> .rp-surface-section-body--fill) {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rp-surface-section-body--fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* at the 1024 floor, tighten the inset and let a long title + actions wrap
+   instead of overflowing. */
+@media (max-width: 64rem) { /* --rp-bp-md */
+  .rp-surface { padding: var(--rp-sp-4); }
+  .rp-surface-head { flex-wrap: wrap; }
+}

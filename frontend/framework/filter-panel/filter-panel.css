@@ -1,0 +1,152 @@
+/* filter-panel — the FilterNode builder. Sole owner of .rp-fp*. Compact,
+   calm (Linear density); designed for a ~280px side panel. */
+
+.rp-fp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+  font-size: var(--rp-text-sm);
+}
+
+/* combinator (All / Any) — only shown when >1 row */
+.rp-fp-combo {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+}
+
+.rp-fp-combo:empty {
+  display: none;
+}
+
+.rp-fp-combo-label {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rp-fp-seg {
+  display: inline-flex;
+  border-radius: var(--rp-radius-sm);
+  box-shadow: var(--rp-ring);
+  overflow: hidden;
+}
+
+.rp-fp-seg-btn {
+  padding: 0.1875rem var(--rp-sp-3);
+  border: 0;
+  background: var(--rp-surface);
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-xs);
+  cursor: pointer;
+}
+
+.rp-fp-seg-btn + .rp-fp-seg-btn {
+  border-left: 1px solid var(--rp-border);
+}
+
+.rp-fp-seg-btn.is-active {
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent);
+  font-weight: 600;
+}
+
+/* the rows list */
+.rp-fp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+
+.rp-fp-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--rp-sp-2);
+  align-items: center;
+  padding: var(--rp-sp-2);
+  background: var(--rp-surface);
+  border-radius: var(--rp-radius-sm);
+  box-shadow: var(--rp-ring);
+}
+
+/* column + op stack full width on the left; value spans the row below; remove
+   hugs the top-right — keeps the row legible at 280px without horizontal scroll */
+.rp-fp-col,
+.rp-fp-op,
+.rp-fp-value {
+  grid-column: 1;
+  min-width: 0;
+}
+
+/* the column/op selects own their width (rp-select min-width: 9rem) — we don't
+   style another component's class (ui-fork-audit R4). The select host is a
+   block so each control sits on its own line, comfortable at ~280px. */
+.rp-fp-col,
+.rp-fp-op {
+  display: block;
+}
+
+.rp-fp-remove {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+}
+
+.rp-fp-value {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+}
+
+.rp-fp-value:empty {
+  display: none;
+}
+
+.rp-fp-text {
+  width: 100%;
+}
+
+.rp-fp-num {
+  width: 100%;
+  min-width: 0;
+}
+
+.rp-fp-and {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+  flex: 0 0 auto;
+}
+
+/* a nested AND/OR group — recessed surface + hairline so the tree reads at a
+   glance; its head carries the group's own All/Any toggle + a remove. */
+.rp-fp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-sm);
+  background: var(--rp-surface-2);
+}
+
+.rp-fp-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-2);
+}
+
+.rp-fp-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rp-sp-2);
+}
+
+.rp-fp-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rp-sp-2);
+  padding-top: var(--rp-sp-2);
+  border-top: 1px solid var(--rp-border);
+}

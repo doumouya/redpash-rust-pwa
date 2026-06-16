@@ -1,0 +1,74 @@
+/* sql-editor — the Workspace SQL console. Sole owner of .rp-sqleditor*.
+   knob: --rp-sqleditor-input-min-h (the textarea's minimum height). */
+
+.rp-sqleditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+  font-size: var(--rp-text-sm);
+  --rp-sqleditor-input-min-h: 8rem;
+}
+
+.rp-sqleditor-hint {
+  color: var(--rp-text-mute);
+  font-size: var(--rp-text-xs);
+}
+
+.rp-sqleditor-t {
+  font-family: var(--rp-font-mono);
+  color: var(--rp-accent);
+}
+
+.rp-sqleditor-input {
+  width: 100%;
+  min-height: var(--rp-sqleditor-input-min-h);
+  resize: vertical;
+  padding: var(--rp-sp-3);
+  font-family: var(--rp-font-mono);
+  font-size: var(--rp-text-sm);
+  line-height: 1.5;
+  color: var(--rp-text);
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-sm);
+  box-shadow: var(--rp-ring);
+}
+
+.rp-sqleditor-input:focus {
+  outline: none;
+  border-color: var(--rp-accent);
+}
+
+.rp-sqleditor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-sp-3);
+  flex-wrap: wrap;
+}
+
+.rp-sqleditor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+  margin-left: auto;
+}
+
+.rp-sqleditor-name {
+  width: 10rem;
+}
+
+/* status line — tone is data-driven (muted while running, ok / danger on settle) */
+.rp-sqleditor-status {
+  min-width: 0;
+  font-size: var(--rp-text-xs);
+  color: var(--rp-text-mute);
+}
+
+.rp-sqleditor-status[data-tone="ok"] {
+  color: var(--rp-ok);
+}
+
+.rp-sqleditor-status[data-tone="danger"] {
+  color: var(--rp-danger);
+}

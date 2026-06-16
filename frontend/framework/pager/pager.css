@@ -1,0 +1,44 @@
+/* pager — rows info + page controls. Sole owner of .rp-pager*. */
+
+.rp-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rp-gap);
+  font-size: var(--rp-text-sm);
+  color: var(--rp-text-dim);
+}
+/* at the 1024 floor, wrap rather than overflow when space is tight. */
+@media (max-width: 64rem) { /* --rp-bp-md */
+  .rp-pager { flex-wrap: wrap; row-gap: var(--rp-sp-2); }
+}
+
+.rp-pager-pages {
+  display: inline-flex;
+  gap: 0.125rem;
+}
+
+.rp-pager-btn {
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: var(--rp-radius-sm);
+  background: transparent;
+  color: var(--rp-text-dim);
+  font-size: var(--rp-text-sm);
+  cursor: pointer;
+}
+.rp-pager-btn:hover {
+  background: var(--rp-hover);
+  color: var(--rp-text);
+}
+.rp-pager-btn.is-active {
+  background: var(--rp-accent-soft);
+  color: var(--rp-text);
+  font-weight: 600;
+}
+.rp-pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

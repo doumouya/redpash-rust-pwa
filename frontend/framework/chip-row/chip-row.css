@@ -1,0 +1,10 @@
+/* chip-row — single-select pill tabs. Sole owner of .rp-chip-row. */
+
+.rp-chip-row {
+  display: inline-flex;
+  gap: 0.1875rem;
+  padding: 0.1875rem;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-pill);
+}

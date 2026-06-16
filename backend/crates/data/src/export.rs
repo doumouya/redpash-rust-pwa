@@ -11,6 +11,9 @@
 //! columns export as numbers, booleans as booleans, everything else as
 //! text. Nulls become blank cells / JSON `null`. Dates and other types
 //! with no native cell form fall back to their text representation.
+//!
+//! SERVER-ONLY: `rust_xlsxwriter` does not build on wasm32, so this module
+//! is gated behind `#[cfg(not(target_arch = "wasm32"))]` in `lib.rs`.
 
 use polars::prelude::*;
 use rust_xlsxwriter::{Format, Workbook, Worksheet};
@@ -19,7 +22,8 @@ use crate::{DataError, Result};
 
 impl From<rust_xlsxwriter::XlsxError> for DataError {
     fn from(e: rust_xlsxwriter::XlsxError) -> Self {
-        DataError::Export(e.to_string())
+        // Target has no Export variant — map to Internal.
+        DataError::Internal(e.to_string())
     }
 }
 
@@ -92,7 +96,8 @@ pub fn to_json(df: &DataFrame) -> Result<Vec<u8>> {
     }
 
     serde_json::to_vec_pretty(&serde_json::Value::Array(rows))
-        .map_err(|e| DataError::Export(e.to_string()))
+        // Target has no Export variant — map serialization failure to Internal.
+        .map_err(|e| DataError::Internal(e.to_string()))
 }
 
 /// `AnyValue` → `serde_json::Value`, mirroring `write_cell`'s typing.

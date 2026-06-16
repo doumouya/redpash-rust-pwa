@@ -107,3 +107,91 @@ pub fn for_column(
         truncated,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_q_returns_sorted_distincts_capped_by_limit() {
+        let df = df![
+            "city" => ["Paris", "Lyon", "Paris", "Nice", "Lyon", "Paris"],
+        ]
+        .unwrap();
+        let r = for_column(&df, "city", None, 100).unwrap();
+        assert_eq!(r.values, vec!["Lyon", "Nice", "Paris"]);
+        assert_eq!(r.total, 3);
+        assert!(!r.truncated);
+    }
+
+    #[test]
+    fn q_is_case_insensitive_substring() {
+        let df = df![
+            "city" => ["Paris", "Lyon", "Nice", "Marseille"],
+        ]
+        .unwrap();
+        let r = for_column(&df, "city", Some("ar"), 100).unwrap();
+        // "Paris" and "Marseille" both contain "ar" case-insensitively.
+        assert_eq!(r.values, vec!["Marseille", "Paris"]);
+        // total is the pre-q distinct count, not the matched count.
+        assert_eq!(r.total, 4);
+    }
+
+    #[test]
+    fn limit_caps_values_but_not_total() {
+        let df = df![
+            "n" => ["a", "b", "c", "d", "e"],
+        ]
+        .unwrap();
+        let r = for_column(&df, "n", None, 2).unwrap();
+        assert_eq!(r.values.len(), 2);
+        assert_eq!(r.values, vec!["a", "b"]);
+        assert_eq!(r.total, 5);
+        assert!(!r.truncated);
+    }
+
+    #[test]
+    fn nulls_and_empty_strings_are_skipped() {
+        let df = df![
+            "c" => [Some("x"), None, Some(""), Some("y"), Some("x")],
+        ]
+        .unwrap();
+        let r = for_column(&df, "c", None, 100).unwrap();
+        assert_eq!(r.values, vec!["x", "y"]);
+        assert_eq!(r.total, 2);
+    }
+
+    #[test]
+    fn missing_column_is_not_found() {
+        let df = df!["a" => [1i64, 2, 3]].unwrap();
+        let err = for_column(&df, "nope", None, 10).unwrap_err();
+        match err {
+            DataError::NotFound(msg) => assert!(msg.contains("nope")),
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn over_cap_keeps_top_n_by_frequency_and_sets_truncated() {
+        // MAX_UNIQUE + 1 distinct values: the rarest one (single
+        // occurrence) is dropped, the cap survivors are the frequent
+        // ones. Build values v0..=vN where v0 is the loser.
+        let mut col: Vec<String> = Vec::new();
+        // v0 appears once (the rarest → cut).
+        col.push("v0".to_string());
+        // v1..=vN each appear twice (kept).
+        for i in 1..=MAX_UNIQUE {
+            let s = format!("v{i}");
+            col.push(s.clone());
+            col.push(s);
+        }
+        let series = Series::new("k".into(), col);
+        let df = DataFrame::new_infer_height(vec![series.into_column()]).unwrap();
+        let r = for_column(&df, "k", None, MAX_UNIQUE).unwrap();
+        assert!(r.truncated);
+        assert_eq!(r.total, (MAX_UNIQUE + 1) as u32);
+        assert_eq!(r.values.len(), MAX_UNIQUE);
+        // the single-occurrence "v0" must have been cut.
+        assert!(!r.values.iter().any(|v| v == "v0"));
+    }
+}

@@ -1,0 +1,76 @@
+/* grid-toolbar — a data-driven control strip above a grid. Composes the atoms
+   (button, input) + menu; declares only its own layout chrome. Sole owner of
+   every .rp-gtb* class (ui-fork-audit R4). */
+
+.rp-gtb {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-2);
+  flex-wrap: wrap;
+  padding: var(--rp-sp-2) 0;
+}
+
+/* a control whose `when`/`visible` predicate failed — folds out of the strip. */
+.rp-gtb .is-hidden { display: none; }
+
+/* menus wrap their trigger in a positioned item so the dropdown anchors. */
+.rp-gtb-item { display: inline-flex; }
+
+/* search: the input atom inside a search-icon overlay (mirrors the rail's
+   pattern — the atom styles itself, the toolbar only positions it). */
+.rp-gtb-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  max-width: 22rem;
+}
+.rp-gtb-search-icon {
+  position: absolute;
+  left: var(--rp-sp-3);
+  font-size: 0.8125rem;
+  color: var(--rp-text-mute);
+  pointer-events: none;
+}
+/* the search input is the atom (.rp-input, owned by atoms.css); we add our own
+   .rp-gtb-input only to make room for the overlaid search icon (R4-clean). */
+.rp-gtb-input { padding-left: 1.875rem; }
+
+/* a toggle in its on state — accent-tinted (reuses the atom; only the state
+   skin is the toolbar's). */
+.rp-gtb-toggle.is-active {
+  background: var(--rp-accent-soft);
+  border-color: var(--rp-accent);
+  color: var(--rp-accent);
+}
+
+/* an inline status chip (e.g. "3 selected") — quiet, label-driven. */
+.rp-gtb-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.625rem;
+  padding: 0 var(--rp-sp-3);
+  border: 0;
+  border-radius: var(--rp-radius-pill);
+  background: var(--rp-surface-2);
+  color: var(--rp-text-dim);
+  font: inherit;
+  font-size: var(--rp-text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rp-gtb-chip:hover { color: var(--rp-text); }
+
+/* a divider between control clusters. A hairline (sanctioned px exception). */
+.rp-gtb-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.125rem var(--rp-sp-1);
+  background: var(--rp-border);
+}
+
+/* push everything after a flex spacer to the right edge: a search control
+   with flex grows; otherwise consumers add a {kind:"sep"} or rely on wrap. */
+.rp-gtb-search ~ .rp-gtb-item,
+.rp-gtb-search ~ [data-gtb] { flex-shrink: 0; }
