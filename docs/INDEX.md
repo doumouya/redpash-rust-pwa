@@ -35,6 +35,11 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [internal/code/backend/api-routes.md](internal/code/backend/api-routes.md) | The HTTP route catalog the frontend speaks (auth, me, files, objects/registry, types, rail, search, …) |
 | [internal/code/backend/data-engine.md](internal/code/backend/data-engine.md) | The `data` crate: cleaning steps, group_by/reports, filters, the wasm `Workbook` surface |
 | [internal/code/backend/connectors.md](internal/code/backend/connectors.md) | Connectors as a conduit — pull an external source → CSV bytes → client GlueSQL; the SSRF/TLS gate |
+| [internal/code/backend/schema.md](internal/code/backend/schema.md) | The Postgres data model — the entity-registry spine, `type_definitions`/`type_fields`, `entity_data` vs typed tables, the file pipeline + `audit` schemas |
+| [internal/code/backend/rbac.md](internal/code/backend/rbac.md) | The authorization model — `require_action`/`require_rule`, the `scope_parents` reach cascade, leak-free 404, the per-role field-permission layer |
+| [internal/code/backend/objects.md](internal/code/backend/objects.md) | The polymorphic object registry — `/api/objects/:type` as one handler over every registered type; `entity_data` vs typed tables; the IDOR guard |
+| [internal/code/backend/cases.md](internal/code/backend/cases.md) | The `/api/cases` surface — the workflow-as-data engine (transition map → 422), the 10 endpoints, metadata-only attachments |
+| [internal/code/backend/monitoring.md](internal/code/backend/monitoring.md) | The in-app audit trail — the `audit` schema, the `redpash-audit-ingest` bin, the four platform-admin `/api/monitoring/*` endpoints |
 
 ## Code — Frontend (`frontend/`)
 

@@ -210,11 +210,29 @@ read-only registry types (file/project/case) are browse + DELETE only.
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/projects?limit=` | — (default 50, clamped 1–200) | `{ items:[{rid, name, file_count, is_default, created_at}] }` |
+| POST | `/projects` | `{ name }` | the created project `{ rid, name, file_count:0, is_default:false, created_at }` — any authed caller (a top-level container, no parent gate); creator auto-owned |
 | PATCH | `/projects/:rid` | `{ name }` | `{ rid, name }` (Edit; rail's inline rename) |
 
 The caller's reach-scoped projects, newest first, each with a CSV `file_count`. Reach =
 membership on the project or its company (admin → all). `is_default` is **DERIVED** from
 the caller's `users.default_project_id`, never a stored column.
+
+### `/api/cases[/:rid]`
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/cases` | — | reach-scoped `{ items }` (newest first) |
+| POST | `/cases` | `{ title, description?, case_type?, priority?, assignee_id?, project_id?, company_id? }` | the created case — Member+ on each supplied scope_parent (the IDOR guard); status = the workflow initial |
+| GET | `/cases/workflows` | — | the workflow transition map (stages + allowed transitions) |
+| GET | `/cases/:rid` | — | one case (View reach; leak-free `404`) |
+| PATCH | `/cases/:rid` | `{ status }` | the updated case — **workflow-enforced**: an illegal `from→to` is `422` |
+| POST | `/cases/:rid/comments` | `{ body }` | the created comment (Member+) |
+| GET · POST | `/cases/:rid/attachments` | POST: multipart `file` | list / the created attachment (METADATA-ONLY — no customer bytes in the DB) |
+| GET · DELETE | `/cases/:rid/attachments/:att` | — | download / `204` (per-attachment IDOR guard `WHERE id AND case_id`) |
+
+A case is a registry entity (`case` type) driven by a **workflow-as-data** engine — the PATCH transition is
+enforced against a pure transition map (internal live; external dormant). Attachments mirror the
+project-files storage model (metadata in Postgres, the blob in the project_files store), never customer
+bytes in the DB. See [cases.md](cases.md).
 
 ### `/api/monitoring/*`
 | Method | Path | Body | Response |

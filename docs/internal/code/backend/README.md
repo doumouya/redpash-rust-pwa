@@ -24,9 +24,14 @@ This README is the index. The detail lives in the sibling topic docs below
 
 | Doc | Covers |
 |---|---|
-| [`api-routes.md`](api-routes.md) | The `api` crate's HTTP surface — the full `/api` route catalog (auth, `/me`, files + steps/undo/redo/export/sql/joins, `group/preview`, rail/search/settings/types/objects/projects/admin/health), the page-shape contract, and the auth/RBAC model (opaque `rp_session` cookie, leak-free 404 denials). |
+| [`api-routes.md`](api-routes.md) | The `api` crate's HTTP surface — the full `/api` route catalog (auth, `/me`, files + steps/undo/redo/export/sql/joins, `group/preview`, rail/search/settings/types/objects/projects/cases/monitoring/admin/health), the page-shape contract, and the auth/RBAC model (opaque `rp_session` cookie, leak-free 404 denials). |
 | [`data-engine.md`](data-engine.md) | The `data` crate (compute) — the `steps::apply` cleaning-op dispatch, `group_by::execute` + `ReportSpec`, the canonical recursive `FilterNode`, and the `data::wasm` resident client engine (`Workbook`). |
 | [`connectors.md`](connectors.md) | Ingest paths feeding the one file write-path — how external sources reach `pipeline::upload_csv` through the framework layer (RBAC, audit, post-upload cascade) rather than the storage layer. |
+| [`cases.md`](cases.md) | The `/api/cases` surface — the agent-handoff workflow engine (workflows-as-DATA, transition map keyed by `source`, PATCH enforces `to ∈ transitions[from]` → 422), the 5 case endpoints + `GET /workflows`, and metadata-only attachments (no customer bytes in Postgres; sealed `pipeline::upload_attachment`; per-attachment IDOR guard). |
+| [`objects.md`](objects.md) | The polymorphic object registry — `/api/objects/:type[/:rid]` as ONE handler set over every registered type; the `entity_data` JSONB store vs the org-builtin TYPED tables on one wire shape, the generic CRUD path + the `scope_parent_id` IDOR guard, read-only registry types (file/project/case) with `registry_display_fields` + the `HIDDEN_COLUMNS` denylist, the reach-scoped list shape, and the field gate (RBAC depth in `rbac.md`). |
+| [`schema.md`](schema.md) | The Postgres data model — the entity-registry spine, the data-driven type registry (`type_definitions`/`type_fields`), the polymorphic `entity_data` store vs. typed subtype tables, the file pipeline tables + derived views, `memberships` as the RBAC substrate, and the `audit`/observability system schemas. |
+| [`rbac.md`](rbac.md) | The authorization model — the entity+membership spine, reach resolution via `type_definitions.scope_parents`, `require_action`/`require_rule` + the day-one #3 IDOR guard, the leak-free 404 invariant, platform-admin bypass, and the per-role field-permission layer (`PermClass` + sparse overrides). |
+| [`monitoring.md`](monitoring.md) | The in-app audit trail — the `audit` schema (run/finding/`run_diff`), the `redpash-audit-ingest` bin (explode contract + count-only gap), and the four platform-admin `/api/monitoring/*` endpoints. |
 
 ## DC3 needs NO new backend
 

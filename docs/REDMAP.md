@@ -21,6 +21,11 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `internal/code/backend/api-routes.md` | `backend/crates/api/src/{auth,me,group,objects,types,rail,search,projects,admin}.rs` + `files/` |
 | `internal/code/backend/data-engine.md` | `backend/crates/data/src/{steps/,group_by,wasm}.rs`; `backend/crates/shared/src/filter.rs` |
 | `internal/code/backend/connectors.md` | `backend/crates/api/src/{connectors_core,mysql_loader}.rs` |
+| `internal/code/backend/schema.md` | `backend/migrations/`; `backend/crates/api/src/{db,type_cache}.rs` |
+| `internal/code/backend/rbac.md` | `backend/crates/api/src/{rbac,session,field_perms,type_cache,db}.rs` |
+| `internal/code/backend/objects.md` | `backend/crates/api/src/{objects,types,type_cache}.rs` |
+| `internal/code/backend/cases.md` | `backend/crates/api/src/cases.rs`; `backend/crates/api/src/pipeline.rs` (attachments) |
+| `internal/code/backend/monitoring.md` | `backend/crates/api/src/monitoring.rs`; `backend/crates/api/src/bin/audit_ingest.rs`; `backend/migrations/20260617000001_audit_monitoring.sql` |
 | `internal/code/frontend/README.md` | `frontend/index.html`; `frontend/framework/{boot,registry,page-assembly}/` |
 | `internal/code/frontend/components.md` | `frontend/framework/` (all `rp-*` components); `frontend/styles/tokens.css` |
 | `internal/code/frontend/conventions.md` | `tools/ui-fork-audit/`; `tools/ci.sh`; `frontend/styles/`; `frontend/framework-sandbox.html` |
