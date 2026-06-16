@@ -111,6 +111,14 @@ const CASE_STATUS_SECTIONS: [(&str, &str, &str); 6] = [
     ("done", "Done", "bi-check2-circle"),
 ];
 
+/// The Monitoring rail: the two audit-trail views (runs · findings). Static chrome
+/// (kind "section"); the page swaps the surface to the clicked view. Keys MATCH
+/// monitoring.js's showView dispatch.
+const MONITORING_SECTIONS: [(&str, &str, &str); 2] = [
+    ("runs", "Audit runs", "bi-clock-history"),
+    ("findings", "Audit findings", "bi-exclamation-diamond"),
+];
+
 /// `view -> RailView`. DEFAULT (any unmapped view) → the workspace InstanceTree,
 /// so unmapped pages still get the Browse rail until their own descriptor lands.
 fn descriptor(view: &str) -> RailView {
@@ -133,6 +141,10 @@ fn descriptor(view: &str) -> RailView {
         // Cases: workflow-stage filter tabs (the kanban columns); the page scopes
         // the table to the clicked status client-side.
         "cases" => RailView::Sections { group: "Status", items: &CASE_STATUS_SECTIONS },
+        // Monitoring: the two audit-trail views (runs · findings); the page swaps
+        // the surface to the clicked view. (Data lands via the backend lane — the
+        // audit.* schema + /api/monitoring/* endpoints; M2.)
+        "monitoring" => RailView::Sections { group: "Audits", items: &MONITORING_SECTIONS },
         // Designer (page not built yet) — projects → chart/dashboard files.
         "designer" => RailView::InstanceTree {
             group_type: "project",

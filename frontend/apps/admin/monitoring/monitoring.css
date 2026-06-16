@@ -1,0 +1,46 @@
+/* admin/monitoring — the audit-tools observability page. Page-scoped chrome only
+   (.pg-admin-monitoring-*); the stat / chart / redtable components own their look.
+   Each view is a KPI row (stat tiles + chart cards) above a table. Relative units
+   (rem/%); px only for the card hairline. */
+
+.pg-admin-monitoring {
+  display: block;
+}
+
+.pg-admin-monitoring-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-4);
+}
+
+.pg-admin-monitoring-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+  flex: 1 1 18rem;
+  min-width: 16rem;
+  padding: var(--rp-sp-3);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+  background: var(--rp-surface);
+}
+
+.pg-admin-monitoring-card-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+
+/* the ECharts instance mounts straight into this slot — it must be sized. */
+.pg-admin-monitoring-chartslot {
+  width: 100%;
+  height: 14rem;
+}
+
+.pg-admin-monitoring-table {
+  margin-top: var(--rp-sp-3);
+}
