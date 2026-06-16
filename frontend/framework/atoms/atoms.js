@@ -60,6 +60,18 @@ export function input(cfg = {}) {
   return i;
 }
 
+/** textarea({placeholder, value, rows, onInput}) — the multiline `input`. */
+export function textarea(cfg = {}) {
+  const t = el("textarea", {
+    class: "rp-textarea",
+    placeholder: cfg.placeholder ?? "",
+    rows: String(cfg.rows ?? 3),
+  });
+  if (cfg.value != null) t.value = cfg.value;
+  if (cfg.onInput) t.addEventListener("input", () => cfg.onInput(t.value));
+  return t;
+}
+
 /** badge({label, tone?: 'ok'|'warn'|'danger'|'info'|'accent'}) */
 export function badge(cfg) {
   return el(
@@ -78,5 +90,5 @@ export function kbd(label) {
 }
 
 register("atoms", null, {
-  builders: ["button", "chip", "input", "badge", "spinner", "kbd"],
+  builders: ["button", "chip", "input", "textarea", "badge", "spinner", "kbd"],
 });

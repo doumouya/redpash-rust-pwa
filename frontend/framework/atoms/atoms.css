@@ -107,6 +107,29 @@
   border-color: var(--rp-accent);
 }
 
+/* ── rp-textarea ── the multiline input (comment composers, descriptions). */
+.rp-textarea {
+  display: block;
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.5rem var(--rp-pad-x);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-atom-radius, var(--rp-radius));
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font: inherit;
+  font-size: var(--rp-text-sm);
+  line-height: 1.5;
+  resize: vertical;
+}
+.rp-textarea::placeholder {
+  color: var(--rp-text-mute);
+}
+.rp-textarea:focus {
+  outline: none;
+  border-color: var(--rp-accent);
+}
+
 /* ── rp-badge ── soft-tint label pill (status / role / plan). */
 .rp-badge {
   display: inline-flex;

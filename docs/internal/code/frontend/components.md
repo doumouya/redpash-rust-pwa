@@ -149,6 +149,7 @@ markup (R8).
 - **`button({label?, icon?, variant?:'accent'|'ghost'|'danger', size?:'sm', onClick, disabled, type, title?, ariaLabel?})`** — icon + no label → square icon-only button (`.rp-btn--icon`); always give it a `title`/`ariaLabel`.
 - **`chip({label, active, onClick})`** — the selection primitive behind `chip-row`.
 - **`input({placeholder, value, type, onInput, onEnter})`** — `onInput(value)` on input, `onEnter(value)` on Enter.
+- **`textarea({placeholder, value, rows?, onInput})`** — the multiline `input` (`.rp-textarea`; comment composers, descriptions); `onInput(value)` on input.
 - **`badge({label, tone?})`**, **`spinner()`**, **`kbd(label)`**.
 
 ---

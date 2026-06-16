@@ -16,10 +16,10 @@ import { renderChart, synthesizeOption } from "../../../framework/chart/render.j
 import { chartTheme } from "../../../framework/chart/theme.js";
 import { api } from "../../../framework/boot/api.js";
 import { el } from "../../../framework/boot/dom.js";
+import { fmtDateTime } from "../../../framework/boot/format.js";
 
 const PAGE_SIZE = 50;
 const sha7 = (s) => (s ? String(s).slice(0, 7) : "—");
-const when = (s) => { try { return s ? new Date(s).toLocaleString() : "—"; } catch { return String(s ?? "—"); } };
 
 // a compact one-line summary of a run's stats jsonb — its shape is the backend's,
 // so stay tolerant: prefer a `count`, else join the numeric entries.
@@ -110,7 +110,7 @@ export default async function mount(root, ctx) {
         { key: "headline", label: "Headline" },
       ],
       rows: rows.map((r) => ({
-        __k: String(r.id), time: when(r.ran_at), tool: r.tool,
+        __k: String(r.id), time: fmtDateTime(r.ran_at), tool: r.tool,
         sha: sha7(r.git_sha), branch: r.git_branch || "—", headline: headline(r.stats),
       })),
       rowKey: (r) => r.__k, mode: "pager", interaction: "browse",

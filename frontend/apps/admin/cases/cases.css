@@ -1,7 +1,115 @@
-/* admin/cases — Cases, Phase A: a thin instance of the generic object-list over
-   the `case` type (the framework components own the entire look — ui-fork-audit
-   R1/R2). A focused, full-width surface (no contextual rail — cases is one type). */
+/* admin/cases — Cases. The LIST view is a thin object-list (the framework owns
+   that look). The DETAIL view (Phase C-1, surface swap) is page-scoped chrome
+   below (.pg-admin-cases-detail-*): a record header + a comment thread (main) +
+   a properties/attachments/activity aside. Relative units; 1px hairlines only. */
 
 .pg-admin-cases {
   height: 100%;
 }
+
+/* ── detail (full record view) ──────────────────────────────────────────── */
+.pg-admin-cases-detail {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+}
+
+.pg-admin-cases-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-sp-3);
+  flex-wrap: wrap;
+}
+.pg-admin-cases-detail-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.pg-admin-cases-detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem);
+  gap: var(--rp-sp-4);
+  align-items: start;
+}
+@media (max-width: 56rem) {
+  .pg-admin-cases-detail-body { grid-template-columns: 1fr; }
+}
+
+.pg-admin-cases-detail-h3 {
+  margin: var(--rp-sp-2) 0 var(--rp-sp-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+}
+
+/* comment thread */
+.pg-admin-cases-detail-feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-3);
+}
+.pg-admin-cases-detail-comment {
+  display: flex;
+  gap: var(--rp-sp-2);
+}
+.pg-admin-cases-detail-avatar {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rp-border);
+  border-radius: 50%;
+  background: var(--rp-surface);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--rp-text-mute);
+}
+.pg-admin-cases-detail-cbody { flex: 1 1 auto; min-width: 0; }
+.pg-admin-cases-detail-cmeta {
+  display: flex;
+  gap: var(--rp-sp-2);
+  align-items: baseline;
+}
+.pg-admin-cases-detail-cauthor { font-weight: 600; font-size: var(--rp-text-sm); }
+.pg-admin-cases-detail-ctime { font-size: 0.7rem; color: var(--rp-text-mute); }
+.pg-admin-cases-detail-ctext { white-space: pre-wrap; word-break: break-word; }
+
+/* composer */
+.pg-admin-cases-detail-composer {
+  margin-top: var(--rp-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-sp-2);
+}
+.pg-admin-cases-detail-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* aside: properties / attachments / activity */
+.pg-admin-cases-detail-prop {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-1) 0;
+  border-bottom: 1px solid var(--rp-border);
+}
+.pg-admin-cases-detail-prop-k { color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
+.pg-admin-cases-detail-prop-v { font-size: var(--rp-text-sm); text-align: right; word-break: break-word; }
+.pg-admin-cases-detail-act {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rp-sp-2);
+  padding: var(--rp-sp-1) 0;
+}
+.pg-admin-cases-detail-act-text { font-size: var(--rp-text-sm); }
+.pg-admin-cases-detail-act-time { font-size: 0.7rem; color: var(--rp-text-mute); white-space: nowrap; }
+.pg-admin-cases-detail-muted { margin: 0; color: var(--rp-text-mute); font-size: var(--rp-text-sm); }
