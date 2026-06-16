@@ -38,3 +38,23 @@ store, no new persistence. (Files/projects are created by their own flows — up
 
 A change that moves the registry (ids/metadata) off the server, or that puts cell
 VALUES into it, contradicts this record and is an Em-level decision, not a refactor.
+
+## Accepted exceptions (Em decision, 2026-06-16)
+
+The 2026-06-16 privacy assessment (`docs/privacy/assessment-2026-06-16.md`) found two
+places where customer data *does* sit server-side. Em ruled these **intentional and
+accepted**, with at-rest encryption as the planned mitigation:
+
+- **`project_files.columns_meta.sample`** — one representative cell per column, kept for
+  UX (the column-shape preview). Finding **F-J**; classified `accepted` by
+  `tools/privacy-audit/`. Mitigation: encrypt the registry sample (pending).
+- **`<data_dir>/files/{rid}.bin` (and `attachments/*.bin`)** — the raw recovery blob.
+  The registry alone can't reconstitute the bytes; the blob is the deliberate
+  server-side recovery store. Mitigation: encrypt at rest under `REDPASH_MASTER_KEY`
+  (pending) + close the orphan-on-delete gap (F-A).
+
+**Not covered by this carve-out:** the Designer chart/dashboard `spec.option` snapshot
+(finding **F-E**) bakes group keys + aggregates into `project_files.spec`. That is *not*
+accepted — it is being fixed **recipe-only** (drop `option`, re-derive on load), which
+honours both this record and the "derive, don't store" binding rule. The guardrail above
+still applies to it.

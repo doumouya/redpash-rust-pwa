@@ -20,6 +20,13 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [decisions/client-data-engines.md](decisions/client-data-engines.md) | Engine roles by job: Polars = compute, GlueSQL-idb = on-device store, Postgres = registry |
 | [decisions/registry-redundancy.md](decisions/registry-redundancy.md) | The privacy posture — registry (ids/metadata) in Postgres, customer data client-side |
 
+## Privacy (`docs/privacy/`)
+
+| Doc | What |
+|---|---|
+| [privacy/privacy-by-design.md](privacy/privacy-by-design.md) | The standing PbD register — roles, data inventory, the 7 principles, risk register; enforced by `tools/privacy-audit/` |
+| [privacy/assessment-2026-06-16.md](privacy/assessment-2026-06-16.md) | Dated independent GDPR/PbD assessment — verdict + findings register F-A…F-L |
+
 ## Code — Backend (`backend/crates/{api,data,shared}`)
 
 | Doc | What |

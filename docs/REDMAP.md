@@ -15,6 +15,8 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `decisions/day-one.md` | `backend/migrations/`; `backend/crates/api/src/{rbac,objects,field_perms}.rs`; `backend/crates/shared/src/filter.rs` |
 | `decisions/client-data-engines.md` | `backend/crates/data/src/wasm.rs`; `frontend/wasm/`; `frontend/wasm-src/gluesql/`; `frontend/framework/engine/` |
 | `decisions/registry-redundancy.md` | `backend/crates/api/src/{objects,types,pipeline}.rs` |
+| `privacy/privacy-by-design.md` | `tools/privacy-audit/`; cross-cuts the F-A…F-L code areas (`db,cases,event,designer.rs`, `migrations/`, `frontend/`) |
+| `privacy/assessment-2026-06-16.md` | dated review of the same surface as `privacy/privacy-by-design.md` |
 | `internal/code/backend/README.md` | `backend/crates/{api,data,shared}/` (the workspace) |
 | `internal/code/backend/api-routes.md` | `backend/crates/api/src/{auth,me,group,objects,types,rail,search,projects,admin}.rs` + `files/` |
 | `internal/code/backend/data-engine.md` | `backend/crates/data/src/{steps/,group_by,wasm}.rs`; `backend/crates/shared/src/filter.rs` |
