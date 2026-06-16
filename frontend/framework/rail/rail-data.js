@@ -122,10 +122,11 @@ function markFor(id) {
 }
 
 /* Mount the global rail. Content is fetched from /api/rail/<spec.view>; the page
-   supplies only { view, overview?, onRailTab?, active?, search?, create?, onCreate? }.
-   `create:{label}` + `onCreate()` light up the rail's footer create button (e.g.
-   the Workspace's "New project"); omit them and the footer shows the universals
-   only. The
+   supplies only { view, overview?, onRailTab?, active?, search? }. The global
+   rail footer is UNIVERSALS-ONLY by design: create/add actions live in the
+   toolbar "+" (the app-wide create affordance — every object-list opens its
+   create there), NEVER the rail footer. tools/rail-create-audit enforces this,
+   so don't reintroduce a footer create here. The
    controller layers the LOCAL view state the server tree doesn't carry: the
    per-user hide set + restore drawer, a client-side name filter, the initials
    marks, and collapse-persist. Server-flagged `renamable`/`hidable` nodes
@@ -233,11 +234,10 @@ export function mountAppRail(host, spec, session) {
               render();
             },
           },
-    footer: universalFooter(spec.create ?? null, session),
+    footer: universalFooter(null, session),
     groups: [],
     on: {
       ...footerHandlers,
-      create: spec.onCreate,
       tab: (id, groupId) => {
         const tab = findTab(id, groupId) ?? { id, kind: undefined };
         if (spec.onRailTab) spec.onRailTab(tab);
