@@ -154,8 +154,7 @@ async fn get_one(
 ) -> Result<Json<ObjectView>, AppError> {
     require_type(&state, &type_id)?;
     if let Some((table, _)) = org_builtin(&type_id) {
-        let catalog = catalog_fields(&state.db, &type_id).await?;
-        let mut view = builtin_view(&state, table, &type_id, &catalog, &rid).await?;
+        let mut view = builtin_view(&state, table, &type_id, &rid).await?;
         rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::View).await?;
         mask_view(&state, &caller, &type_id, &mut view).await?;
         return Ok(Json(view));
@@ -645,30 +644,119 @@ fn validate_payload(
     Ok(())
 }
 
-/// Load one typed row → ObjectView (404 leak-free on miss). `owner` is the
-/// first owner membership edge — typed tables have no owner_id column
-/// (ownership IS a membership row).
+/// Internal / sensitive columns the generic registry NEVER surfaces, even though
+/// they're real columns. Generic by exact column name across every builtin table:
+///   - `google_sub`    — the OAuth subject (a server secret),
+///   - `storage_path`  — the on-disk file path (server filesystem),
+///   - `columns_meta`  — per-column CSV profile incl. `sample`, the first real cell
+///                       VALUE of each column = raw user data (governance: never
+///                       broadcast it; the bulk list would, unmaskably),
+///   - `spec`          — chart/dashboard config JSON (data-derived).
+/// `columns_meta`/`spec` are JSONB blobs that render as opaque `::text` anyway, so
+/// hiding them costs nothing for the grid. DISPLAY-only — the write gate is the
+/// curated type_fields (validate_payload), so this list never affects PATCH/create.
+const HIDDEN_COLUMNS: &[&str] = &["google_sub", "storage_path", "columns_meta", "spec"];
+
+/// Field names interpolate into SQL — accept only bare identifiers (the typed
+/// tables are ours; belt-and-braces, same posture as catalog_fields).
+fn bare_ident(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// The ordered DISPLAY field set for a builtin type. READ-ONLY registry types
+/// (file/project/case) DERIVE every real column of the typed table — don't
+/// hand-seed — so the browse view shows the WHOLE object, minus HIDDEN_COLUMNS;
+/// type_fields is then an OVERLAY for ORDER (cataloged fields first in their
+/// curated ordinal, then the remaining real columns in schema order). The
+/// EDITABLE builtins (user/company/team) instead keep their curated type_fields:
+/// that catalog IS their editable field set, and /api/types' per-tier cells + the
+/// edit form are built off it. The `bool` flags cataloged (carries the curated
+/// label/perm/options for /api/types) vs a derived readonly column. `None` for
+/// non-builtin (entity_data) types. This is THE field set both /api/types (column
+/// headers, via types::payload) and /objects (row data, here) share, so the FE
+/// column⋂row-keys intersection keeps every field. The WRITE gate stays
+/// catalog_fields — deriving here never widens what PATCH/create accept.
+pub async fn registry_display_fields(
+    pool: &PgPool,
+    type_id: &str,
+) -> Result<Option<Vec<(String, bool)>>, AppError> {
+    let Some((table, _)) = org_builtin(type_id) else {
+        return Ok(None);
+    };
+    // Editable builtins keep their curated catalog (see above) — only the
+    // read-only registry browse types derive the full table.
+    if !registry_read_only(type_id) {
+        let cataloged: Vec<String> =
+            sqlx::query_scalar("SELECT field FROM type_fields WHERE type_id = $1 ORDER BY ordinal")
+                .bind(type_id)
+                .fetch_all(pool)
+                .await?;
+        return Ok(Some(cataloged.into_iter().map(|f| (f, true)).collect()));
+    }
+    let real: Vec<String> = sqlx::query_scalar(
+        "SELECT column_name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position",
+    )
+    .bind(table)
+    .fetch_all(pool)
+    .await?;
+    for c in &real {
+        if !bare_ident(c) {
+            return Err(AppError::internal("registry", format!("unsafe column name {c:?}")));
+        }
+    }
+    let real: Vec<String> =
+        real.into_iter().filter(|c| !HIDDEN_COLUMNS.contains(&c.as_str())).collect();
+    let real_set: std::collections::HashSet<&str> = real.iter().map(String::as_str).collect();
+    let cataloged: Vec<String> =
+        sqlx::query_scalar("SELECT field FROM type_fields WHERE type_id = $1 ORDER BY ordinal")
+            .bind(type_id)
+            .fetch_all(pool)
+            .await?;
+    let mut out: Vec<(String, bool)> = Vec::with_capacity(real.len());
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for f in cataloged {
+        if real_set.contains(f.as_str()) && seen.insert(f.clone()) {
+            out.push((f, true));
+        }
+    }
+    for c in real {
+        if seen.insert(c.clone()) {
+            out.push((c, false));
+        }
+    }
+    Ok(Some(out))
+}
+
+/// Load one typed row → ObjectView (404 leak-free on miss). Columns DERIVE from
+/// registry_display_fields (the whole object, minus the denylist). `owner` is the
+/// first owner membership edge — typed tables have no owner_id column (ownership
+/// IS a membership row).
 async fn builtin_view(
     state: &AppState,
     table: &str,
     type_id: &str,
-    catalog: &[CatalogField],
     rid: &str,
 ) -> Result<ObjectView, AppError> {
-    // ::text so non-text typed columns (file's row_count/cleanness_pct/created_at)
-    // decode uniformly as Option<String>; a no-op on the all-text org builtins.
-    let cols =
-        catalog.iter().map(|c| format!("t.{}::text", c.field)).collect::<Vec<_>>().join(", ");
-    let sql = format!("SELECT {cols} FROM {table} t WHERE t.redpash_id = $1{}", builtin_row_scope(type_id));
+    let fields = registry_display_fields(&state.db, type_id)
+        .await?
+        .ok_or_else(|| AppError::internal("registry", format!("{type_id} is not a builtin")))?;
+    // ::text so non-text typed columns (row_count, created_at, attachments jsonb, …)
+    // decode uniformly as Option<String>; a no-op on the all-text columns.
+    let cols = fields.iter().map(|(f, _)| format!("t.{f}::text")).collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT {cols} FROM {table} t WHERE t.redpash_id = $1{}",
+        builtin_row_scope(type_id)
+    );
     let row = sqlx::query(&sql)
         .bind(rid)
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(|| AppError::not_found("not_found", format!("{type_id} {rid}")))?;
     let mut data = Map::new();
-    for (i, c) in catalog.iter().enumerate() {
+    for (i, (f, _)) in fields.iter().enumerate() {
         let v: Option<String> = row.try_get(i)?;
-        data.insert(c.field.clone(), v.map(Value::String).unwrap_or(Value::Null));
+        data.insert(f.clone(), v.map(Value::String).unwrap_or(Value::Null));
     }
     let owner: Option<String> = sqlx::query_scalar(
         "SELECT member_redpash_id FROM memberships
@@ -800,7 +888,7 @@ async fn builtin_create(
         serde_json::json!({ "type": type_id, "rid": rid }),
     );
 
-    let view = builtin_view(state, table, type_id, &catalog, &rid).await?;
+    let view = builtin_view(state, table, type_id, &rid).await?;
     Ok((StatusCode::CREATED, Json(view)))
 }
 
@@ -817,7 +905,7 @@ async fn builtin_patch(
     body: PatchBody,
 ) -> Result<Json<ObjectView>, AppError> {
     let catalog = catalog_fields(&state.db, type_id).await?;
-    let _ = builtin_view(state, table, type_id, &catalog, rid).await?; // 404 on miss
+    let _ = builtin_view(state, table, type_id, rid).await?; // 404 on miss
     rbac::require_action(&state.db, &state.type_cache, &caller, rid, Action::Edit).await?;
     validate_payload(&catalog, &body.data, type_id)?;
 
@@ -847,7 +935,7 @@ async fn builtin_patch(
         Some(caller.rid.clone()),
         serde_json::json!({ "type": type_id, "rid": rid }),
     );
-    let mut view = builtin_view(state, table, type_id, &catalog, rid).await?;
+    let mut view = builtin_view(state, table, type_id, rid).await?;
     mask_view(state, &caller, type_id, &mut view).await?;
     Ok(Json(view))
 }
@@ -864,7 +952,9 @@ async fn builtin_list(
     reach: &str,
     q: ListQuery,
 ) -> Result<Json<Value>, AppError> {
-    let catalog = catalog_fields(&state.db, type_id).await?;
+    let fields = registry_display_fields(&state.db, type_id)
+        .await?
+        .ok_or_else(|| AppError::internal("registry", format!("{type_id} is not a builtin")))?;
     let viewer: Option<Vec<String>> = if caller.is_platform_admin {
         None
     } else {
@@ -873,9 +963,8 @@ async fn builtin_list(
     let viewer_ref = viewer.as_deref();
 
     // ::text so non-text typed columns decode uniformly as Option<String> (and
-    // concat_ws search coerces consistently); a no-op on the all-text org builtins.
-    let cols =
-        catalog.iter().map(|c| format!("t.{}::text", c.field)).collect::<Vec<_>>().join(", ");
+    // concat_ws search coerces consistently); a no-op on the all-text columns.
+    let cols = fields.iter().map(|(f, _)| format!("t.{f}::text")).collect::<Vec<_>>().join(", ");
     let search = format!("concat_ws(' ', {cols}) ILIKE '%' || $2 || '%'");
 
     let all_count: i64 =
@@ -911,9 +1000,9 @@ async fn builtin_list(
         let mut m = Map::new();
         let rid: String = row.try_get(0)?;
         m.insert("rid".into(), Value::String(rid));
-        for (i, c) in catalog.iter().enumerate() {
+        for (i, (f, _)) in fields.iter().enumerate() {
             let v: Option<String> = row.try_get(i + 1)?;
-            m.insert(c.field.clone(), v.map(Value::String).unwrap_or(Value::Null));
+            m.insert(f.clone(), v.map(Value::String).unwrap_or(Value::Null));
         }
         items.push(Value::Object(m));
     }
