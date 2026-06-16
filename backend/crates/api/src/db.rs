@@ -251,8 +251,49 @@ pub async fn claim_first_admin(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
     Ok(res.rows_affected() > 0)
 }
 
+/// Insert a project + its full registry spine inside an OPEN tx: the entity
+/// row, the `projects` subtype row, and the creator's owner grant. The shared
+/// core of `create_project` (own tx) and `ensure_default_project` (which sets
+/// the same project as the user's default in the SAME tx, so create+default
+/// stay atomic). Private — every project is born through one of those two.
+/// Returns the new project's `(rid, created_at)` — created_at lets `create_project`
+/// hand back the full `projects.rs` list-item shape without a re-fetch.
+async fn insert_project(
+    tx: &mut Transaction<'_, Postgres>,
+    owner_rid: &str,
+    name: &str,
+) -> sqlx::Result<(String, chrono::DateTime<chrono::Utc>)> {
+    let pid = id::new("PRJ");
+    register_entity(tx, &pid, "project").await?;
+    let created_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("INSERT INTO projects (redpash_id, name) VALUES ($1, $2) RETURNING created_at")
+            .bind(&pid)
+            .bind(name)
+            .fetch_one(&mut **tx)
+            .await?;
+    grant_owner(tx, &pid, owner_rid).await?;
+    Ok((pid, created_at))
+}
+
+/// Create a new project owned by `owner_rid`. A project is a top-level
+/// container — any caller may create one (the same baseline capability that
+/// gives every user a default project); the creator becomes its owner via
+/// `grant_owner`. Exercises both spines: entity registry + owner auto-grant.
+/// Returns `(rid, created_at)`.
+pub async fn create_project(
+    pool: &PgPool,
+    owner_rid: &str,
+    name: &str,
+) -> sqlx::Result<(String, chrono::DateTime<chrono::Utc>)> {
+    let mut tx = pool.begin().await?;
+    let out = insert_project(&mut tx, owner_rid, name).await?;
+    tx.commit().await?;
+    Ok(out)
+}
+
 /// Every user needs a default project (uploads land there when unspecified).
-/// Idempotent; exercises both spines: entity registry + owner auto-grant.
+/// Idempotent; create + set-as-default share one tx so a crash never strands a
+/// project that isn't yet anyone's default.
 pub async fn ensure_default_project(pool: &PgPool, user_rid: &str) -> sqlx::Result<String> {
     if let Some(Some(pid)) =
         sqlx::query_scalar::<_, Option<String>>("SELECT default_project_id FROM users WHERE redpash_id = $1")
@@ -263,13 +304,7 @@ pub async fn ensure_default_project(pool: &PgPool, user_rid: &str) -> sqlx::Resu
         return Ok(pid);
     }
     let mut tx = pool.begin().await?;
-    let pid = id::new("PRJ");
-    register_entity(&mut tx, &pid, "project").await?;
-    sqlx::query("INSERT INTO projects (redpash_id, name) VALUES ($1, 'My project')")
-        .bind(&pid)
-        .execute(&mut *tx)
-        .await?;
-    grant_owner(&mut tx, &pid, user_rid).await?;
+    let (pid, _) = insert_project(&mut tx, user_rid, "My project").await?;
     sqlx::query("UPDATE users SET default_project_id = $2 WHERE redpash_id = $1")
         .bind(user_rid)
         .bind(&pid)

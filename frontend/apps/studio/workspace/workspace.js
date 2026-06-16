@@ -30,6 +30,8 @@ import { mountJoinsWizard } from "../../../framework/joins-wizard/joins-wizard.j
 import { mountReportBuilder } from "../../../framework/report-builder/report-builder.js";
 import { pickSource } from "../../../framework/engine/window-source.js";
 import { openModal } from "../../../framework/modal/modal.js";
+import { mountField } from "../../../framework/field/field.js";
+import { input } from "../../../framework/atoms/atoms.js";
 import { el } from "../../../framework/boot/dom.js";
 import { toast } from "../../../framework/toast/toast.js";
 import { invalidateRailData } from "../../../framework/rail/rail-data.js";
@@ -76,7 +78,47 @@ export default async function mount(root, ctx) {
       overview: { label: "Overview", icon: "bi-magic", active: !current, onSelect: () => renderEmpty() },
       onRailTab: (tab) => { if (tab?.kind === "file") openFile(tab.id); },
       active: current?.rid,
+      // The rail footer's create button — projects are born here (the "project
+      // flow"). object-list keeps `project` browse-only; this is its create path.
+      create: { label: "New project" },
+      onCreate: () => newProject(),
     };
+  }
+
+  // Name a new project → POST /projects, then refresh the rail so it appears.
+  // A project is a top-level container any user owns once created (the backend
+  // grants the caller owner), so this is a plain create — no parent to scope to.
+  function newProject() {
+    let name = "";
+    let busy = false;
+    let modal = null;
+    async function submit() {
+      if (busy) return; // a 2nd Enter / Create click while the POST is in flight
+      const n = name.trim();
+      if (!n) { toast({ message: "Project name is required", tone: "danger" }); return; }
+      busy = true;
+      try {
+        await api.post("/projects", { name: n });
+        modal?.close();
+        toast({ message: `Project “${n}” created` });
+        // Re-pull the rail IN PLACE so the new project appears — NOT renderEmpty(),
+        // which would tear down an open file + its unsaved staged steps.
+        page?.rail?.refresh?.();
+      } catch (e) {
+        busy = false; // let the user retry
+        toast({ message: e.message || "Couldn't create the project", tone: "danger" });
+      }
+    }
+    const body = el("div");
+    mountField(body, { label: "Project name", control: input({ onInput: (v) => (name = v), onEnter: () => submit() }) });
+    modal = openModal({
+      title: "New project",
+      body,
+      actions: [
+        { label: "Cancel", variant: "ghost", onClick: ({ close }) => close() },
+        { label: "Create", variant: "accent", onClick: () => submit() },
+      ],
+    });
   }
 
   const pageRows = () => Number(getPref("workspace.page_rows") ?? 1000);

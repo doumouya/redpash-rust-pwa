@@ -12,12 +12,14 @@
 
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     routing::{get, patch},
     Json, Router,
 };
 use serde::Deserialize;
 
 use crate::{
+    db,
     error::AppError,
     rbac::{self, Action, Caller},
     state::AppState,
@@ -25,7 +27,7 @@ use crate::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(list))
+        .route("/", get(list).post(create))
         .route("/:rid", patch(rename))
 }
 
@@ -85,6 +87,39 @@ async fn list(
         })
         .collect();
     Ok(Json(serde_json::json!({ "items": items })))
+}
+
+#[derive(Deserialize)]
+struct CreateBody {
+    name: String,
+}
+
+/// POST /api/projects — create a new project owned by the caller. Any authed
+/// caller may create a top-level project: a project is a ROOT container, so
+/// there is no parent to gate against (mirrors `ensure_default_project`, which
+/// gives every user one for free). The creator becomes its owner via
+/// `grant_owner`, so it's immediately reachable. Returns the new row in the
+/// `list` item shape — a fresh project has no files and is not the default.
+async fn create(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(body): Json<CreateBody>,
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(AppError::bad_request("name_required", "name must be a non-empty string"));
+    }
+    let (rid, created_at) = db::create_project(&state.db, &caller.rid, name).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "rid": rid,
+            "name": name,
+            "file_count": 0,
+            "is_default": false,
+            "created_at": created_at.to_rfc3339(),
+        })),
+    ))
 }
 
 // rename (Edit) — the rail's inline project rename. Edit-gated like the file

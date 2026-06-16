@@ -122,7 +122,10 @@ function markFor(id) {
 }
 
 /* Mount the global rail. Content is fetched from /api/rail/<spec.view>; the page
-   supplies only { view, overview?, onRailTab?, active?, search? }. The
+   supplies only { view, overview?, onRailTab?, active?, search?, create?, onCreate? }.
+   `create:{label}` + `onCreate()` light up the rail's footer create button (e.g.
+   the Workspace's "New project"); omit them and the footer shows the universals
+   only. The
    controller layers the LOCAL view state the server tree doesn't carry: the
    per-user hide set + restore drawer, a client-side name filter, the initials
    marks, and collapse-persist. Server-flagged `renamable`/`hidable` nodes
@@ -230,10 +233,11 @@ export function mountAppRail(host, spec, session) {
               render();
             },
           },
-    footer: universalFooter(null, session),
+    footer: universalFooter(spec.create ?? null, session),
     groups: [],
     on: {
       ...footerHandlers,
+      create: spec.onCreate,
       tab: (id, groupId) => {
         const tab = findTab(id, groupId) ?? { id, kind: undefined };
         if (spec.onRailTab) spec.onRailTab(tab);
@@ -268,5 +272,9 @@ export function mountAppRail(host, spec, session) {
     () => handle.setGroups([], null, "Couldn't load the rail.")
   );
 
+  // Re-pull the rail tree IN PLACE (after a create/delete that adds/removes a
+  // node) — repaints the groups without re-mounting the page, so an open file +
+  // its unsaved staged work survive. Augments the base mountRail handle.
+  handle.refresh = reload;
   return handle;
 }
