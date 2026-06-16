@@ -34,6 +34,10 @@
 </head>
 <body>
   <main id="app" aria-busy="true"></main>
+  <!-- ECharts — vendored/self-hosted (no CDN; works offline). Plain script so
+       window.echarts is ready before the boot module mounts any chart. build-fe
+       leaves vendor/ as-is (not hashed), like bootstrap-icons. -->
+  <script src="/vendor/echarts/echarts.min.js"></script>
   <script type="module" src="/framework/boot/main.js"></script>
 </body>
 </html>

@@ -41,6 +41,7 @@
 @import "../framework/report-builder/report-builder.css";
 @import "../framework/column-manager/column-manager.css";
 @import "../framework/sql-editor/sql-editor.css";
+@import "../framework/chart/chart.css";
 
 /* 3 — page sheets (.pg-<app>-<page> scoped; may read --rp-* vars, never set
        framework classes) */

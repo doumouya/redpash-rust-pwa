@@ -1,0 +1,62 @@
+/* chart — the ECharts-backed chart tile (framework component). Sole owner of the
+   .rp-chart-* classes. Ported from the prerelease chart tile; tokens mapped to
+   lean (--rp-glass-blur, --rp-border). */
+
+/* Auto-fit grid of 1-N chart cards (a chart strip). */
+.rp-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
+  gap: var(--rp-sp-3);
+  margin-bottom: var(--rp-sp-6);
+}
+
+/* The chart tile container — glass surface, flex column (title + canvas). */
+.rp-chart-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--rp-sp-3) var(--rp-sp-3) var(--rp-sp-2);
+  background: var(--rp-glass);
+  -webkit-backdrop-filter: blur(var(--rp-glass-blur));
+  backdrop-filter: blur(var(--rp-glass-blur));
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius);
+}
+
+/* Small uppercase tile title — the rp-title atom, sized by the card ancestor
+   context (never a 2nd class on the element). */
+.rp-chart-card .rp-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rp-text-mute);
+  margin-bottom: var(--rp-sp-2);
+}
+
+/* The ECharts mount slot — load-bearing height (an unsized canvas renders a
+   0px-tall chart); full width; flex:1. */
+.rp-chart-canvas {
+  flex: 1;
+  width: 100%;
+  height: 11.25rem;
+  min-height: 11.25rem;
+}
+
+/* Faded dashed placeholder for an empty/echarts-less slot — a muted em-dash. */
+.rp-chart-card--empty {
+  background: var(--rp-glass);
+  border: 1px dashed var(--rp-border);
+  opacity: 0.45;
+}
+.rp-chart-card--empty .rp-chart-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rp-text-mute);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rp-chart-card--empty .rp-chart-canvas::after {
+  content: "\2014";
+}
