@@ -16,6 +16,7 @@ import { mountSelect } from "../select/select.js";
 import { input } from "../atoms/atoms.js";
 import { TYPE_LIST, TYPE_TO_KIND, THEMES } from "../chart/build.js";
 import { renderChart, synthesizeOption } from "../chart/render.js";
+import { chartTheme } from "../chart/theme.js";
 
 const AGG_FNS = [
   ["count", "Count"], ["sum", "Sum"], ["mean", "Average"],
@@ -26,7 +27,7 @@ export function mountChartEditor(host, cfg = {}) {
   const files = cfg.files || [];
   // The live chart cfg (the spec we persist). Seeded from `initial.spec` when editing.
   const c = {
-    kind: "cartesian", type: "bar", theme: "redpash-newdark",
+    kind: "cartesian", type: "bar", theme: chartTheme(),
     legend: true, legendPos: "top", tooltip: true, axisLine: true, splitLines: true,
     group_by: "", agg_fn: "count", agg_col: "", option: null,
     ...(cfg.initial?.spec || {}),

@@ -34,6 +34,13 @@ export const THEMES = {
     series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af","#a6e3a1","#74c7ec"] },
   "redpash-latte": { name: "RedPash Latte", registered: true,
     series: ["#1e66f5","#8839ef","#179299","#fe640b","#d20f39","#df8e1d","#40a02b","#04a5e5"] },
+  // The app's primary themes (chart/theme.js registers the JSON; chartTheme()
+  // returns one of these per html[data-theme]) — listed so the editor's theme
+  // dropdown can offer the same identity the rest of the app wears.
+  "redpash-newdark": { name: "RedPash Dark", registered: true,
+    series: ["#89b4fa","#cba6f7","#94e2d5","#fab387","#f38ba8","#f9e2af","#a6e3a1","#74c7ec"] },
+  "redpash-newlight": { name: "RedPash Light", registered: true,
+    series: ["#1e66f5","#8839ef","#179299","#fe640b","#d20f39","#df8e1d","#40a02b","#04a5e5"] },
   dark:        { name: "Dark", registered: true,
     series: ["#4992ff","#7cffb2","#fddd60","#ff6e76","#58d9f9","#05c091","#ff8a45","#8d48e3"] },
   "tech-blue": { name: "Tech Blue", registered: true,
