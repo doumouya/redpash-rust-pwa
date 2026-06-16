@@ -41,9 +41,9 @@ pub async fn payload(pool: &PgPool) -> Result<Value, AppError> {
     )
     .fetch_all(pool)
     .await?;
-    let fields: Vec<(String, String, String, i32, String, String, String, String, Option<Value>)> =
+    let fields: Vec<(String, String, String, i32, String, String, String, String, String, Option<Value>)> =
         sqlx::query_as(
-            "SELECT type_id, field, label, ordinal, data_type, perm_class, field_group, scope, options
+            "SELECT type_id, field, label, ordinal, data_type, perm_class, data_class, field_group, scope, options
              FROM type_fields ORDER BY type_id, ordinal",
         )
         .fetch_all(pool)
@@ -59,7 +59,7 @@ pub async fn payload(pool: &PgPool) -> Result<Value, AppError> {
         let mut fs: Vec<Value> = fields
             .iter()
             .filter(|f| f.0 == type_id)
-            .map(|(_, key, label, ordinal, data_type, perm_class, field_group, scope, options)| {
+            .map(|(_, key, label, ordinal, data_type, perm_class, data_class, field_group, scope, options)| {
                 // derived from perm_class (unknown class → default-deny) …
                 let mut cells = PermClass::parse(perm_class)
                     .map(PermClass::cells)
@@ -78,6 +78,7 @@ pub async fn payload(pool: &PgPool) -> Result<Value, AppError> {
                     "label": label,
                     "data_type": data_type,
                     "perm_class": perm_class,
+                    "data_class": data_class,
                     "field_group": field_group,
                     "scope": scope,
                     "ordinal": ordinal,
