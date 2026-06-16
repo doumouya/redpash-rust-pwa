@@ -22,9 +22,8 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  flex: 1 1 12rem;
-  min-width: 8rem;
-  max-width: 22rem;
+  flex: 1 1 12rem;   /* grows to take ALL available space (no max cap); 12rem basis before grow */
+  min-width: 8rem;   /* floor before the flex-wrap strip drops it to its own row */
 }
 .rp-gtb-search-icon {
   position: absolute;
