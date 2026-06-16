@@ -7,6 +7,7 @@ pub mod admin;
 pub mod auth;
 pub mod bootstrap;
 pub mod connectors_core;
+pub mod mysql_loader;
 pub mod db;
 pub mod error;
 pub mod event;
