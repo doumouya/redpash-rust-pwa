@@ -84,10 +84,19 @@ again — which is the whole reason it's a *log*, not a store.
 
 - **Polars read-only SQL console: SHIPPED** (`Workbook.sql` + the window-source
   seam + the editor; commits aedd8a1, a53c9aa).
-- **GlueSQL-client: NOT adopted** — scoped as the **git-for-data version-log**
-  future (durable branch/diff/revert on data; the working tree stays Polars, the
-  canonical history stays server `project_steps`-generalised). Adopt deliberately,
-  for the change-log role only — never the query or compute path.
+- **GlueSQL-client: ADOPTED 2026-06-16** — as the **on-device customer-data store**
+  (Em's "GlueSQL InnoDB version"): durable + queryable in the user's browser via
+  IndexedDB, the data home that keeps customer data OFF our servers. A connector
+  pull is a server *conduit* → CSV → the client's GlueSQL ingests a queryable
+  table (ETL). **Polars stays the compute/working engine** — GlueSQL is never the
+  crunch path, only durable persistence + light SQL over the resident set. Shipped:
+  `frontend/wasm-src/gluesql/` → `frontend/wasm/gluesql.js` (~1 MB gz; `ingest_csv`
+  / `query` / `drop_table`). See `project-innodb-data-store`.
+  *(Supersedes the original scoping below — GlueSQL-idb went from "version-log only,
+  not adopted" to the adopted data store; the git-for-data change-log is a future
+  role layered atop it.)*
+  > ~~NOT adopted — scoped as the git-for-data version-log future; never the query
+  > or compute path.~~ (original 2026-06-13 stance)
 - **Resolved:** ~~idb-storage index test~~ → no (empty `Index`/`IndexMut`; source
   0.19.0 + browser spike). The single most-important open measurement is closed.
 - **Still open** (only if the version-log direction is pursued): a faster durable
