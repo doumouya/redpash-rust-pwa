@@ -216,6 +216,20 @@ The caller's reach-scoped projects, newest first, each with a CSV `file_count`. 
 membership on the project or its company (admin → all). `is_default` is **DERIVED** from
 the caller's `users.default_project_id`, never a stored column.
 
+### `/api/monitoring/*`
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/monitoring/audit-runs?page&size&tool&q` | — | `{ items:[{id, tool, ran_at, git_sha, git_branch, stats}], total, page, size }` |
+| GET | `/monitoring/audit-runs/stats` | — | `{ total, by_tool:{tool→count}, last_7d }` |
+| GET | `/monitoring/audit-findings?page&size&run&tool&kind&q` | — | `{ items:[{run_id, tool, kind, finding_key, severity}], total, page, size, run }` |
+| GET | `/monitoring/audit-findings/stats?run&tool` | — | `{ total, by_severity:{low/med/high→count}, by_kind:{kind→count}, run }` |
+
+Read-only audit trail behind the Admin Monitoring page — the audit suite's runs + findings
+(the `audit.*` schema written by the `redpash-audit-ingest` bin). **Platform admin only**;
+every handler is leak-free `404` for non-admins. `size` clamps 1–200. Findings default to the
+most-recent run (per `tool`) when `run` is omitted, and the stats scope to that SAME run so the
+KPI strip matches the list. The rows are NOT registry entities (a system `audit` schema).
+
 ### `/api/admin`
 | Method | Path | Body | Response |
 |---|---|---|---|
