@@ -13,7 +13,7 @@ use tower::Layer;
 use tower_http::services::{ServeDir, ServeFile};
 
 use api::{
-    admin, auth, files, group, me, middleware, objects, projects, rail, search, settings,
+    admin, auth, cases, files, group, me, middleware, objects, projects, rail, search, settings,
     state::AppState, types,
 };
 
@@ -31,6 +31,7 @@ async fn main() -> eyre::Result<()> {
     let api_router = Router::new()
         .route("/health", get(health))
         .nest("/auth", auth::routes())
+        .nest("/cases", cases::routes())
         .nest("/me", me::routes())
         .nest("/files", files::routes())
         .nest("/group", group::routes())

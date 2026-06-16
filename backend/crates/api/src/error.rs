@@ -50,6 +50,13 @@ impl AppError {
     pub fn conflict(kind: &'static str, msg: impl Into<String>) -> Self {
         Self { status: StatusCode::CONFLICT, kind, message: msg.into(), inner: None }
     }
+    /// 422 — the request is well-formed but violates a domain rule (e.g. a
+    /// workflow status transition that isn't allowed). Distinct from 400
+    /// (malformed) and 409 (resource-state conflict): the body is valid, the
+    /// *move* is rejected. The wire `message` IS the contract (MCP surfaces it).
+    pub fn unprocessable(kind: &'static str, msg: impl Into<String>) -> Self {
+        Self { status: StatusCode::UNPROCESSABLE_ENTITY, kind, message: msg.into(), inner: None }
+    }
     pub fn internal(kind: &'static str, msg: impl Into<String>) -> Self {
         Self { status: StatusCode::INTERNAL_SERVER_ERROR, kind, message: msg.into(), inner: None }
     }

@@ -424,6 +424,16 @@ async fn load(state: &AppState, type_id: &str, rid: &str) -> Result<ObjectView, 
 /// user list. The fuller company-share rule for users is the documented
 /// follow-on. project/file/case keep their existing surfaces; custom types
 /// keep entity_data.
+/// The `case` reach predicate — shared by the registry browse list (here, via the
+/// `case` arm below) and the dedicated `/api/cases` list (`cases.rs`), so the two
+/// can't drift. `$1` = the caller's principal closure (NULL ⇒ platform admin);
+/// reach = membership on the case itself OR either declared scope_parent
+/// (company_id / project_id). Table alias is `t`.
+pub(crate) const CASE_REACH: &str = "($1::text[] IS NULL OR EXISTS (
+                SELECT 1 FROM memberships m
+                WHERE m.member_redpash_id = ANY($1)
+                  AND m.object_redpash_id IN (t.redpash_id, t.company_id, t.project_id)))";
+
 fn org_builtin(type_id: &str) -> Option<(&'static str, &'static str)> {
     match type_id {
         "user" => Some((
@@ -473,13 +483,7 @@ fn org_builtin(type_id: &str) -> Option<(&'static str, &'static str)> {
         // used by get/patch/delete. Browse + DELETE only (registry_read_only);
         // cases are created + advanced by agents on the dedicated /api/cases
         // surface, where the status workflow lives.
-        "case" => Some((
-            "cases",
-            "($1::text[] IS NULL OR EXISTS (
-                SELECT 1 FROM memberships m
-                WHERE m.member_redpash_id = ANY($1)
-                  AND m.object_redpash_id IN (t.redpash_id, t.company_id, t.project_id)))",
-        )),
+        "case" => Some(("cases", CASE_REACH)),
         _ => None,
     }
 }
