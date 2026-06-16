@@ -23,7 +23,7 @@ use shared::report::{AggFn, Aggregation, ReportSpec};
 pub fn execute(df: &DataFrame, spec: &ReportSpec) -> Result<DataFrame> {
     // 1. Optional pre-filter via the same FilterNode tree the cleaner uses.
     //    The reference routed this through `parse::apply_filter` (which took a
-    //    JSON string); redpash-next has no such entry point and the cleaner's
+    //    JSON string); RedPash has no such entry point and the cleaner's
     //    predicate compiler is private to `steps`, so we deserialise the
     //    free-form `spec.filter` value into the CANONICAL `shared::FilterNode`
     //    tree and compile it to a Polars Expr right here. Empty / null filters

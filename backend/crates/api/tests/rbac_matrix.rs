@@ -8,7 +8,7 @@
 //! reach, the entity_data custom-object arm, company_of, and the horizontal
 //! contract intersection.
 //!
-//! Needs DATABASE_URL (e.g. postgres://mansa:mansa@localhost:5433/redpash_next);
+//! Needs DATABASE_URL (e.g. postgres://mansa:mansa@localhost:5433/redpash_prerelease);
 //! skips cleanly when unset so plain `cargo test` stays green offline.
 //! Seeds are fresh rids per run and torn down through the entity registry
 //! (one delete path — the cascade IS the cleanup).

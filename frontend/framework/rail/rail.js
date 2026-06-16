@@ -1,5 +1,5 @@
 /* rail — the page's left navigation: a data-driven two-level group/tab strip
-   ported from the predecessor (CAS_37B2E1BF) into redpash-next conventions.
+   ported from the predecessor (CAS_37B2E1BF) into RedPash conventions.
    A group = a container (project / status bucket); a tab = a leaf (file / case).
    The rail owns its own structure + behavior ("lego brick"): pages supply a
    config of data + handlers, the builder emits the whole rp-rail-* DOM.

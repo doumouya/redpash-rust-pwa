@@ -1,9 +1,9 @@
 /* rail (rp-rail) — the page's left navigation: a data-driven two-level
    group/tab strip. A group = a container (project / status bucket); a tab =
    a leaf (file / case). Ported from the predecessor rail (CAS_37B2E1BF),
-   token names adapted to redpash-next's tokens.css; the name-keyed [data-c]
+   token names adapted to RedPash's tokens.css; the name-keyed [data-c]
    mark palette and the upload/views/chips zones were dropped (not in the
-   redpash-next config). Sole owner of every .rp-rail* class (ui-fork-audit R4).
+   RedPash config). Sole owner of every .rp-rail* class (ui-fork-audit R4).
 
    Two independent narrowings:
      .compact   — desktop icon-only rail (3.75rem), toggled by the head chevron.

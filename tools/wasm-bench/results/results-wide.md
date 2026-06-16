@@ -1,4 +1,4 @@
-# wasm vs native — redpash-next data engine (wide corpus)
+# wasm vs native — RedPash data engine (wide corpus)
 
 One engine, two surfaces. **wasm = `-Oz` (the *shipped* build) in a node host**; **native = `--release`** (opt-level 3, multi-threaded). Each cell is the **median** of K warmed runs (K=6, 4 at ≥250k; W=2 warmup). Windowed ops include `Page::to_json().to_string()` on BOTH surfaces (marshal parity). Absolutes are machine-relative (WSL2) — **read the ratio**, not the milliseconds.
 

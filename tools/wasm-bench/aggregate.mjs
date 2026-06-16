@@ -44,7 +44,7 @@ const cliffs = Object.fromEntries(OPS.map((op) => [op, { ms100: cliff(op, 100), 
 
 writeFileSync(join(outDir, `results-${shape}.json`), JSON.stringify({ shape, generated_rows: sizes, table, cliffs }, null, 2));
 
-let md = `# wasm vs native — redpash-next data engine (${shape} corpus)\n\n`;
+let md = `# wasm vs native — RedPash data engine (${shape} corpus)\n\n`;
 md += `One engine, two surfaces. **wasm = \`-Oz\` (the *shipped* build) in a node host**; `;
 md += `**native = \`--release\`** (opt-level 3, multi-threaded). Each cell is the **median** of K warmed runs `;
 md += `(K=6, 4 at ≥250k; W=2 warmup). Windowed ops include \`Page::to_json().to_string()\` on BOTH surfaces `;

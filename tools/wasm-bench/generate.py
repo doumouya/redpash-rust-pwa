@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Parametric synthetic CSV corpus for the redpash-next wasm perf bench.
+Parametric synthetic CSV corpus for the RedPash wasm perf bench.
 
 Ported from the prerelease tools/wasm-bench/generate.py (datatool/data),
 made parametric so the per-op scaling sweep emits the SAME schema at every

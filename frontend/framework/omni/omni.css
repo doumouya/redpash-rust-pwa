@@ -1,6 +1,6 @@
 /* omni — the topbar's centred omnisearch: a pill box + a results dropdown.
    Sole owner of every .rp-omni* class (ui-fork-audit R4). Calm chrome (no glass)
-   to match the rest of redpash-next; results come from GET /api/search and each
+   to match the rest of RedPash; results come from GET /api/search and each
    carries a ready #/… hash. */
 
 .rp-omni {
