@@ -232,7 +232,7 @@ export function mountObjectList(host, cfg) {
       case "edit": case "select": case "delete": setMode(id); return;
       case "delsel": deleteSelected(); return;
       case "clearsel": gridView?.table?.clearSelection?.(); selection = []; refreshToolbar(); return;
-      case "refresh": reload(); return;
+      case "refresh": return reload();
       case "rownum": rowNumbers = !rowNumbers; gridView?.table?.update({ rowNumbers }); refreshToolbar(); return;
     }
   }

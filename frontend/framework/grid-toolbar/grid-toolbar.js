@@ -130,7 +130,16 @@ export function mountGridToolbar(host, cfg) {
   root.addEventListener("click", (e) => {
     const t = e.target.closest("[data-gtb]");
     if (!t || !root.contains(t) || t.disabled) return;
-    cfg.onAction?.(t.dataset.gtb, {});
+    const r = cfg.onAction?.(t.dataset.gtb, {});
+    // A promise-returning action spins the button's icon until it settles — the
+    // refresh button (its onAction returns reload()) rotates while reloading.
+    // Floor it at one full rotation so a fast reload still reads as a spin,
+    // not a flicker (the data is already in by then — this is just feedback).
+    if (r && typeof r.then === "function" && !t.classList.contains("is-spinning")) {
+      t.classList.add("is-spinning");
+      const minSpin = new Promise((res) => setTimeout(res, 700));
+      Promise.allSettled([Promise.resolve(r), minSpin]).then(() => t.classList.remove("is-spinning"));
+    }
   });
 
   render();

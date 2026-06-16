@@ -13,6 +13,13 @@
 /* a control whose `when`/`visible` predicate failed — folds out of the strip. */
 .rp-gtb .is-hidden { display: none; }
 
+/* a promise-returning action (e.g. refresh → reload) spins its icon until done. */
+@keyframes rp-gtb-spin { to { transform: rotate(360deg); } }
+.rp-gtb [data-gtb].is-spinning .bi {
+  display: inline-block;
+  animation: rp-gtb-spin 0.7s linear infinite;
+}
+
 /* menus wrap their trigger in a positioned item so the dropdown anchors. */
 .rp-gtb-item { display: inline-flex; }
 
