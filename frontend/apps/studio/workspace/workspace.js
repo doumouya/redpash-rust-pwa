@@ -78,10 +78,6 @@ export default async function mount(root, ctx) {
       overview: { label: "Overview", icon: "bi-magic", active: !current, onSelect: () => renderEmpty() },
       onRailTab: (tab) => { if (tab?.kind === "file") openFile(tab.id); },
       active: current?.rid,
-      // The rail footer's create button — projects are born here (the "project
-      // flow"). object-list keeps `project` browse-only; this is its create path.
-      create: { label: "New project" },
-      onCreate: () => newProject(),
     };
   }
 
@@ -548,6 +544,10 @@ export default async function mount(root, ctx) {
         { key: "created_at", label: "Created" },
       ],
       onOpen: (r) => openFile(r.rid),
+      // New project lives in the toolbar "+" — the app-wide create affordance
+      // (every object-list opens its create there). The Workspace is the project
+      // flow, so the Files overview hosts it; creating refreshes the rail in place.
+      create: { label: "New project", onCreate: newProject },
     });
   }
 

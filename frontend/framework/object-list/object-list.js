@@ -8,14 +8,18 @@
    Workspace carries, minus the cleaner-specific parts — search · FILTER (the only
    summonable PANEL) · edit/select/delete modes · refresh · row-numbers ·
    rows-per-page · show/hide columns · download. New only for creatable types;
-   browse-only registry types (file/project) get filter+edit+delete, not create.
+   browse-only registry types (file/project) get filter+edit+delete, not create —
+   unless the page injects its own create flow via `create` (below).
    Items load fully, so filter + search run CLIENT-side over the loaded rows.
 
-   mountObjectList(host, { type, source?, columns?, onOpen? }) -> { el,
+   mountObjectList(host, { type, source?, columns?, onOpen?, create? }) -> { el,
    update({type}), current(), destroy }
      source?  — fetch override (default /objects/:type; e.g. /files for Overview)
      columns? — column override (else derived from the type registry)
-     onOpen?  — browse-mode row click → onOpen(row) (e.g. open a file) */
+     onOpen?  — browse-mode row click → onOpen(row) (e.g. open a file)
+     create?  — { label, onCreate } — light up the toolbar "+" with a custom
+                create flow (the app-wide create affordance) even on a browse-only
+                / sourced list; e.g. the Workspace Files overview hosts New project */
 
 import { api } from "../boot/api.js";
 import { el } from "../boot/dom.js";
@@ -41,7 +45,7 @@ const isEmptyFilter = (node) => !node || (Array.isArray(node?.children) && node.
 /* The toolbar as DATA — the only summonable PANEL is filter. */
 function listToolbar(s) {
   const c = [];
-  if (s.creatable) c.push({ kind: "button", id: "new", icon: "bi-plus-lg", title: `New ${s.typeLabel}` });
+  if (s.creatable) c.push({ kind: "button", id: "new", icon: "bi-plus-lg", title: s.createTitle ?? `New ${s.typeLabel}` });
   c.push(
     { kind: "sep" },
     { kind: "search", id: "search", placeholder: `Search ${s.typeLabelPlural.toLowerCase()}…`, value: s.query ?? "" },
@@ -112,7 +116,12 @@ export function mountObjectList(host, cfg) {
     return {
       typeLabel: current?.display_name ?? "object",
       typeLabelPlural: current?.display_name_plural ?? "objects",
-      creatable: !!current && !cfg.source && !READ_ONLY.has(current.type_id),
+      // A page can inject its own create flow (cfg.create = { label, onCreate });
+      // the toolbar "+" then fires that instead of the built-in typed-object
+      // create, so a browse-only / sourced list (e.g. the Workspace's Files
+      // overview) can still host a create action in the canonical place.
+      creatable: !!cfg.create || (!!current && !cfg.source && !READ_ONLY.has(current.type_id)),
+      createTitle: cfg.create?.label ?? null,
       columns: fields().map((f) => ({ key: f.key, label: f.label ?? f.key, hidden: hiddenCols.has(f.key) })),
       query,
       hasFilter: !!filterNode,
@@ -228,7 +237,7 @@ export function mountObjectList(host, cfg) {
     if (ctx?.menu === "rows") { pageRows = Number(id); mountTable(); return; }
     if (ctx?.menu === "export") { exportCsv(); return; }
     switch (id) {
-      case "new": openCreate(); return;
+      case "new": (cfg.create?.onCreate ?? openCreate)(); return;
       case "edit": case "select": case "delete": setMode(id); return;
       case "delsel": deleteSelected(); return;
       case "clearsel": gridView?.table?.clearSelection?.(); selection = []; refreshToolbar(); return;
