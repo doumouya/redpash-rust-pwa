@@ -17,9 +17,8 @@ The contract both surfaces speak is the **page shape** `{ columns, rows, total }
 (`rows` = arrays of stringified cells aligned to `columns`) — emitted identically
 by `data::view::page` on the server and by the wasm `Workbook` in the browser.
 
-This README is the index. The detail lives in the sibling topic docs below; the
-frontend's-eye view of the same surface is in
-[`../frontend/backend.md`](../frontend/backend.md) (the monolith these docs split).
+This README is the index. The detail lives in the sibling topic docs below
+(split out from the former `frontend/backend.md` monolith).
 
 ## Topic docs
 

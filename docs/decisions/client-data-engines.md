@@ -1,4 +1,4 @@
-# Client data engines — roles by job (and the GlueSQL evaluation)
+# Client data engines — roles by job (and the GlueSQL decision)
 
 The browser carries data engines by **role**, mirroring the server's
 Postgres↔compute split. This record locks which engine does what, and why —
@@ -14,13 +14,16 @@ to prevent; changing a role is an Em-level decision, not a refactor.
    `SQLContext`; shipped, client result `==` server, ~3.8× faster on the real
    389k file). Frames are **immutable**. This is the moat vs the JVM market; not
    replaceable on the crunch path.
-2. **GlueSQL (wasm, IndexedDB) — the durable MUTATION / VERSION LOG**
-   *(evaluated; NOT yet adopted)*. ~1 MB gz. NOT a query engine and NOT the
-   working store — it is too slow for either (see findings). Its one fit: a
-   **small, incremental, durable write log** — each edit is one tiny
-   `INSERT`/`UPDATE` that survives reload. **git-for-data**: GlueSQL records the
-   commits (durable, branchable); Polars is the working tree; the bulk dataset
-   never enters it — only the diffs do.
+2. **GlueSQL (wasm, IndexedDB) — the ON-DEVICE CUSTOMER-DATA STORE** *(ADOPTED
+   2026-06-16)*. ~1 MB gz. Durable + queryable in the user's browser via IndexedDB
+   — the data home that keeps customer data off our servers (a connector pull is a
+   server *conduit* → CSV → the client's GlueSQL ingests a queryable table). It is
+   **NOT the compute/crunch path** (too slow — see findings) and **not an
+   indexed-query store**; its role is durable persistence + light SQL over the
+   resident set. The **git-for-data** version log — small incremental
+   `INSERT`/`UPDATE` diffs, branchable, with Polars as the working tree — is a
+   future role layered atop it. *(Originally scoped "version-log only, NOT
+   adopted"; superseded — see Status.)*
 3. **Server Postgres — the indexed source-of-record + canonical history.** Real
    indexes, real transactions, the truth. Selective queries over big data, and the
    canonical commit history (`project_steps` generalised to data), resolve here.
@@ -77,7 +80,7 @@ again — which is the whole reason it's a *log*, not a store.
 | scan / sort / aggregate / score / clean / big data | **Polars** (or server) |
 | read-only SELECT preview over the open file | **Polars** (`Workbook.sql`, shipped) |
 | the working dataset the user queries + edits | **Polars** (working tree) |
-| durable edit / version log — small incremental writes, survive reload | **GlueSQL (idb)** — git-for-data |
+| the durable on-device data home (customer data, off our servers) + the edit/version log | **GlueSQL (idb)** — adopted; git-for-data diffs a future layer |
 | canonical history, indexed / selective query over big data | **server Postgres** |
 
 ## Status + open measurements

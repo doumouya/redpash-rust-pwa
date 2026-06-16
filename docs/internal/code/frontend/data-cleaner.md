@@ -26,7 +26,7 @@ side panels. The earlier 3-panel `workspace-panels` shell is gone.
 > **DC3 needs no new wasm wrappers.** `POST /api/group/preview` (reports), `POST
 > /api/files/:rid/steps[/batch]` (clean/edit/delete), and the recursive
 > `FilterNode` on `POST /page` already cover the feature set. See
-> [`backend.md`](backend.md).
+> [`../backend/api-routes.md`](../backend/api-routes.md).
 
 ## The layout — one full-bleed surface
 
@@ -299,4 +299,4 @@ away with the panel shell; the modal is now the home for every derived view.)
 > never calls a bare `/steps`. The `clientSource` (window-source) re-parses from the
 > CSV `export` endpoint.
 
-Full request/response shapes + the engine behind them: [`backend.md`](backend.md).
+Full request/response shapes + the engine behind them: [`../backend/api-routes.md`](../backend/api-routes.md) + [`../backend/data-engine.md`](../backend/data-engine.md).
