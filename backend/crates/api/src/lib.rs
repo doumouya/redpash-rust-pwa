@@ -8,6 +8,7 @@ pub mod auth;
 pub mod bootstrap;
 pub mod cases;
 pub mod connectors_core;
+pub mod crypto;
 pub mod mysql_loader;
 pub mod db;
 pub mod designer;

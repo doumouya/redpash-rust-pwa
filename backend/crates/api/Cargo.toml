@@ -12,6 +12,10 @@ path = "src/main.rs"
 name = "redpash-audit-ingest"
 path = "src/bin/audit_ingest.rs"
 
+[[bin]]
+name = "redpash-rotate-secrets"
+path = "src/bin/rotate_secrets.rs"
+
 [dependencies]
 shared = { path = "../shared" }
 data = { path = "../data" }
@@ -31,3 +35,6 @@ chrono = { workspace = true }
 dashmap = { workspace = true }
 reqwest = { workspace = true }
 polars = { workspace = true }
+# Connector-secret encryption (privacy F-F): AES-256-GCM under REDPASH_MASTER_KEY.
+aes-gcm = { version = "0.10", features = ["getrandom"] }
+base64 = "0.22"

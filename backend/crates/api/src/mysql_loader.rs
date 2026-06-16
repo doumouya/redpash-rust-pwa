@@ -83,7 +83,10 @@ impl Cfg {
         connectors_core::host_gate(&host, ssl_mode).map_err(|e| AppError::bad_request("connector_host", e))?;
         let port = u16::try_from(config.get("port").and_then(|v| v.as_u64()).unwrap_or(3306)).unwrap_or(3306);
         let user = s("user").unwrap_or_else(|| "root".into());
-        let pass = s("password").unwrap_or_default();
+        // Decrypt the stored secret (v1: AEAD envelope); legacy plaintext passes
+        // through. (privacy F-F)
+        let pass = crate::crypto::decrypt_secret(&s("password").unwrap_or_default())
+            .map_err(|e| AppError::bad_request("connector_secret", e))?;
         let mut opts = MySqlConnectOptions::new()
             .host(&host)
             .port(port)
