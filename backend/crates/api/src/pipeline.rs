@@ -195,6 +195,84 @@ async fn insert_file(
     Ok(())
 }
 
+pub struct AttachmentOutcome {
+    pub rid: String,
+    pub filename: String,
+    pub mime: String,
+    pub size_bytes: u64,
+}
+
+/// RAW attachment store — the case analogue of `upload_csv`, but with NO parse /
+/// summarize / score: the bytes land IMMUTABLE on disk and a `case_attachments`
+/// METADATA row references them. "No customer data in Postgres" holds by
+/// construction (there is no bytes column — only `storage_path`); the on-disk
+/// `.bin` is the durable share + recovery source (exactly as CSVs), and the client
+/// caches a GlueSQL working copy. The CALLER gates RBAC (`require_action` Edit on
+/// the case) before calling — this just seals the write. `insert_attachment` is
+/// PRIVATE (the seal, mirroring `insert_file`): no public `db::insert_attachment`.
+#[allow(clippy::too_many_arguments)]
+pub async fn upload_attachment(
+    pool: &PgPool,
+    data_dir: &Path,
+    case_id: &str,
+    comment_id: Option<&str>,
+    uploaded_by: &str,
+    filename: &str,
+    mime: &str,
+    bytes: Vec<u8>,
+) -> Result<AttachmentOutcome, AppError> {
+    let size_bytes = bytes.len() as u64;
+    let rid = id::new("ATT");
+    let storage_rel = format!("attachments/{rid}.bin");
+    let abs_path = data_dir.join("attachments").join(format!("{rid}.bin"));
+    if let Some(parent) = abs_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| AppError::internal("io", format!("mkdir: {e}")))?;
+    }
+    tokio::fs::write(&abs_path, &bytes)
+        .await
+        .map_err(|e| AppError::internal("io", format!("write: {e}")))?;
+    let mut blob_guard = BlobGuard::arm(abs_path.clone());
+    insert_attachment(pool, &rid, case_id, comment_id, uploaded_by, filename, mime, size_bytes as i64, &storage_rel)
+        .await?;
+    blob_guard.disarm();
+    Ok(AttachmentOutcome { rid, filename: filename.to_string(), mime: mime.to_string(), size_bytes })
+}
+
+/// SEALED: the only inserter of a `case_attachments` row (no public db helper).
+/// Attachments are NOT registered entities — their RBAC derives from the parent
+/// case — so there is no `register_entity` here (unlike `insert_file`).
+#[allow(clippy::too_many_arguments)]
+async fn insert_attachment(
+    pool: &PgPool,
+    rid: &str,
+    case_id: &str,
+    comment_id: Option<&str>,
+    uploaded_by: &str,
+    filename: &str,
+    mime: &str,
+    size_bytes: i64,
+    storage_rel: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO case_attachments
+           (redpash_id, case_id, comment_id, uploaded_by, filename, mime, size_bytes, storage_path)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+    )
+    .bind(rid)
+    .bind(case_id)
+    .bind(comment_id)
+    .bind(uploaded_by)
+    .bind(filename)
+    .bind(mime)
+    .bind(size_bytes)
+    .bind(storage_rel)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Strip a known upload extension from a filename for the display name.
 fn strip_upload_ext(name: &str) -> &str {
     for ext in [".csv", ".tsv", ".txt", ".xlsx", ".xls"] {

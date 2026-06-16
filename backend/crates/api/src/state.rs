@@ -98,6 +98,7 @@ impl AppState {
         let data_dir: PathBuf =
             std::env::var("REDPASH_DATA_DIR").unwrap_or_else(|_| "./data".into()).into();
         std::fs::create_dir_all(data_dir.join("files"))?;
+        std::fs::create_dir_all(data_dir.join("attachments"))?;
 
         let allowed_origins: Vec<String> = std::env::var("REDPASH_ALLOWED_ORIGINS")
             .unwrap_or_default()
@@ -123,6 +124,12 @@ impl AppState {
 
     pub fn file_path(&self, rid: &str) -> PathBuf {
         self.data_dir.join("files").join(format!("{rid}.bin"))
+    }
+
+    /// Case attachment bytes — immutable raw `.bin` (no parse), the analogue of
+    /// `file_path` for the `attachments/` store.
+    pub fn attachment_path(&self, rid: &str) -> PathBuf {
+        self.data_dir.join("attachments").join(format!("{rid}.bin"))
     }
 }
 

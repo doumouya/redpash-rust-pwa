@@ -15,7 +15,9 @@
 //! /objects/case); create / comment / workflow / attachments live ONLY here.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
+    http::header,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -28,6 +30,7 @@ use crate::{
     error::AppError,
     event, id,
     objects::CASE_REACH,
+    pipeline,
     rbac::{self, Action, Caller, Role},
     state::AppState,
 };
@@ -40,6 +43,8 @@ pub fn routes() -> Router<AppState> {
         .route("/workflows", get(workflows))
         .route("/:rid", get(get_one).patch(patch))
         .route("/:rid/comments", post(add_comment))
+        .route("/:rid/attachments", get(list_attachments).post(add_attachment))
+        .route("/:rid/attachments/:att", get(download_attachment).delete(delete_attachment))
 }
 
 // ─── the workflow engine: workflows-as-data, keyed by `source` ──────────────
@@ -458,6 +463,159 @@ async fn patch(
         .await?
         .ok_or_else(|| AppError::internal("case", "updated case row not found"))?;
     Ok(Json(row))
+}
+
+// ─── attachments: bytes immutable on disk, METADATA-only in Postgres ────────
+
+/// POST /api/cases/:rid/attachments — Edit reach. Multipart `file` (RAW store via
+/// the sealed pipeline::upload_attachment) + optional `comment_id`. 256 MiB cap is
+/// the router-wide DefaultBodyLimit; any MIME accepted.
+async fn add_attachment(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path(rid): Path<String>,
+    mut mp: Multipart,
+) -> Result<Json<Value>, AppError> {
+    rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::Edit).await?;
+    if fetch_case(&state.db, &rid).await?.is_none() {
+        return Err(AppError::not_found("not_found", format!("case {rid}")));
+    }
+    let mut bytes: Option<Vec<u8>> = None;
+    let mut filename = "attachment".to_string();
+    let mut mime = "application/octet-stream".to_string();
+    let mut comment_id: Option<String> = None;
+    while let Some(field) =
+        mp.next_field().await.map_err(|e| AppError::bad_request("multipart", e.to_string()))?
+    {
+        match field.name().unwrap_or("") {
+            "file" => {
+                if let Some(f) = field.file_name() {
+                    filename = f.to_string();
+                }
+                if let Some(ct) = field.content_type() {
+                    mime = ct.to_string();
+                }
+                bytes = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|e| AppError::bad_request("multipart", e.to_string()))?
+                        .to_vec(),
+                );
+            }
+            "comment_id" => comment_id = Some(field.text().await.unwrap_or_default()),
+            _ => {}
+        }
+    }
+    let bytes =
+        bytes.ok_or_else(|| AppError::bad_request("no_file", "multipart field `file` is required"))?;
+    let comment = comment_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let out = pipeline::upload_attachment(
+        &state.db,
+        &state.data_dir,
+        &rid,
+        comment,
+        &caller.rid,
+        &filename,
+        &mime,
+        bytes,
+    )
+    .await?;
+    event::info(
+        &state.db,
+        "case_attach",
+        format!("attached {} to case {rid}", out.filename),
+        Some(caller.rid.clone()),
+        json!({ "case": rid, "attachment": out.rid }),
+    );
+    Ok(Json(json!({
+        "rid": out.rid, "case_id": rid, "filename": out.filename,
+        "mime": out.mime, "size_bytes": out.size_bytes,
+    })))
+}
+
+/// GET /api/cases/:rid/attachments — View reach. Metadata only (no storage_path).
+async fn list_attachments(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path(rid): Path<String>,
+) -> Result<Json<Value>, AppError> {
+    rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::View).await?;
+    let items: Vec<Value> = sqlx::query_scalar(
+        "SELECT to_jsonb(a) - 'storage_path' FROM case_attachments a WHERE case_id = $1 ORDER BY created_at",
+    )
+    .bind(&rid)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(json!({ "items": items })))
+}
+
+/// GET /api/cases/:rid/attachments/:att — View reach. RAW download with the STORED
+/// mime + filename (NOT the CSV export path). Forced `attachment` disposition +
+/// `nosniff` so an uploaded .html can never render inline (stored-XSS guard). 404
+/// leak-free if the attachment isn't this case's.
+async fn download_attachment(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path((rid, att)): Path<(String, String)>,
+) -> Result<Response, AppError> {
+    rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::View).await?;
+    let row: Option<(String, String)> = sqlx::query_as(
+        "SELECT filename, mime FROM case_attachments WHERE redpash_id = $1 AND case_id = $2",
+    )
+    .bind(&att)
+    .bind(&rid)
+    .fetch_optional(&state.db)
+    .await?;
+    let (filename, mime) =
+        row.ok_or_else(|| AppError::not_found("not_found", format!("attachment {att}")))?;
+    let bytes = tokio::fs::read(state.attachment_path(&att))
+        .await
+        .map_err(|e| AppError::internal("io", format!("read attachment: {e}")))?;
+    // Sanitize the filename for the header (strip quote/backslash/CR/LF) — no header
+    // injection from a crafted upload name.
+    let safe_name: String =
+        filename.chars().map(|c| if matches!(c, '"' | '\\' | '\r' | '\n') { '_' } else { c }).collect();
+    let headers = [
+        (header::CONTENT_TYPE, mime),
+        (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}\"")),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+    ];
+    Ok((headers, bytes).into_response())
+}
+
+/// DELETE /api/cases/:rid/attachments/:att — Edit reach (removing an attachment is
+/// editing the case, not deleting it). Removes the row + the blob. 404 leak-free.
+async fn delete_attachment(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path((rid, att)): Path<(String, String)>,
+) -> Result<axum::http::StatusCode, AppError> {
+    rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::Edit).await?;
+    let existed: Option<i32> =
+        sqlx::query_scalar("SELECT 1 FROM case_attachments WHERE redpash_id = $1 AND case_id = $2")
+            .bind(&att)
+            .bind(&rid)
+            .fetch_optional(&state.db)
+            .await?;
+    if existed.is_none() {
+        return Err(AppError::not_found("not_found", format!("attachment {att}")));
+    }
+    sqlx::query("DELETE FROM case_attachments WHERE redpash_id = $1")
+        .bind(&att)
+        .execute(&state.db)
+        .await?;
+    // Best-effort blob removal — the row is the source of truth; an orphan .bin is
+    // harmless (and a future BlobGuard sweep can reap it).
+    let _ = tokio::fs::remove_file(state.attachment_path(&att)).await;
+    event::info(
+        &state.db,
+        "case_attach_remove",
+        format!("removed attachment {att} from case {rid}"),
+        Some(caller.rid.clone()),
+        json!({ "case": rid, "attachment": att }),
+    );
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
