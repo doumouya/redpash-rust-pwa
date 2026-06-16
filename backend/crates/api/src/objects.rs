@@ -275,7 +275,7 @@ async fn delete_one(
         return Ok(StatusCode::NO_CONTENT);
     }
 
-    db::delete_entity(&state.db, &rid).await?;
+    db::delete_entity_and_blobs(&state.db, &state.data_dir, &rid).await?;
     event::warn(
         &state.db,
         format!("{type_id}_delete"),

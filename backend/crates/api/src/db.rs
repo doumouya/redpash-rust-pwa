@@ -55,11 +55,52 @@ pub async fn register_entity(
     Ok(())
 }
 
-/// THE delete path — through the registry; FK cascade clears the subtype row,
-/// memberships, and everything downstream.
+/// THE row-delete path — through the registry; FK cascade clears the subtype
+/// row, memberships, and everything downstream. Blob-bearing entities
+/// (file / attachment) should be deleted via [`delete_entity_and_blobs`], which
+/// ALSO sweeps the on-disk bytes the cascade can't (the `.bin` has no FK).
 pub async fn delete_entity(pool: &PgPool, id: &str) -> sqlx::Result<bool> {
     let res = sqlx::query("DELETE FROM entities WHERE id = $1").bind(id).execute(pool).await?;
     Ok(res.rows_affected() > 0)
+}
+
+/// `delete_entity` + sweep the on-disk blobs the FK cascade would orphan
+/// (privacy finding F-A): the cascade drops the project_files / case_attachments
+/// ROWS, but `<data_dir>/{files,attachments}/<rid>.bin` has no FK — so collect
+/// the paths BEFORE the rows vanish, delete, then remove the bytes. The HTTP
+/// delete handlers use this. Direct deletes (a file, a project's files, a case's
+/// attachments) are covered; deeper teardowns (company/team -> project -> file)
+/// are reconciled by the periodic orphan reaper.
+pub async fn delete_entity_and_blobs(
+    pool: &PgPool,
+    data_dir: &std::path::Path,
+    id: &str,
+) -> sqlx::Result<bool> {
+    let file_rids: Vec<String> = sqlx::query_scalar(
+        "SELECT redpash_id FROM project_files WHERE redpash_id = $1 OR project_id = $1",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+    let att_rids: Vec<String> = sqlx::query_scalar(
+        "SELECT redpash_id FROM case_attachments WHERE redpash_id = $1 OR case_id = $1",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+
+    let deleted = delete_entity(pool, id).await?;
+    if deleted {
+        // Best-effort: the row is the source of truth; a leftover .bin (e.g. a
+        // chart/dashboard row carries no blob) is harmless, a missing one is the goal.
+        for rid in file_rids {
+            let _ = tokio::fs::remove_file(data_dir.join("files").join(format!("{rid}.bin"))).await;
+        }
+        for rid in att_rids {
+            let _ = tokio::fs::remove_file(data_dir.join("attachments").join(format!("{rid}.bin"))).await;
+        }
+    }
+    Ok(deleted)
 }
 
 /// Objects a user is the SOLE owner of (an owner edge with no OTHER owner). A
@@ -126,6 +167,13 @@ pub async fn scrub_user_tx(pool: &PgPool, rid: &str) -> sqlx::Result<bool> {
         .await?;
     sqlx::query("DELETE FROM user_preferences WHERE user_id = $1").bind(rid).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM user_sentinels WHERE user_id = $1").bind(rid).execute(&mut *tx).await?;
+    // Anonymize the user's authored case-comment bodies — free text may carry PII.
+    // The row + authorship are RETAINED for thread continuity (body is NOT NULL, so
+    // tombstone rather than null); only the content is erased. (privacy finding F-B)
+    sqlx::query("UPDATE case_comments SET body = '[deleted]' WHERE author_id = $1")
+        .bind(rid)
+        .execute(&mut *tx)
+        .await?;
     // Null PII, retain the identity row (archived "Deleted User"). `status <>
     // 'archived'` makes a re-scrub a no-op (rows_affected 0 → the caller 404s and
     // the audit event isn't re-emitted).

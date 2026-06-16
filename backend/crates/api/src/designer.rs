@@ -184,7 +184,7 @@ async fn delete_chart(
 ) -> Result<StatusCode, AppError> {
     rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::Delete).await?;
     ensure_exists(&state.db, &rid, "chart").await?;
-    db::delete_entity(&state.db, &rid).await?;
+    db::delete_entity_and_blobs(&state.db, &state.data_dir, &rid).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -286,7 +286,7 @@ async fn delete_dashboard(
 ) -> Result<StatusCode, AppError> {
     rbac::require_action(&state.db, &state.type_cache, &caller, &rid, Action::Delete).await?;
     ensure_exists(&state.db, &rid, "dashboard").await?;
-    db::delete_entity(&state.db, &rid).await?;
+    db::delete_entity_and_blobs(&state.db, &state.data_dir, &rid).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
