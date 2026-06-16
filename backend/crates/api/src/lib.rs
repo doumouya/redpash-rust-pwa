@@ -19,6 +19,7 @@ pub mod files;
 pub mod group;
 pub mod id;
 pub mod me;
+pub mod monitoring;
 pub mod objects;
 pub mod pipeline;
 pub mod projects;

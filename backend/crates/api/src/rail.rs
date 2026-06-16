@@ -565,9 +565,9 @@ mod tests {
 
     #[test]
     fn unmapped_view_falls_through_to_workspace_tree() {
-        // Any unknown view gets the Browse InstanceTree (org/settings/console
-        // are now mapped — see mapped_views_pick_their_mode).
-        for v in ["totally-unknown", "monitoring", ""] {
+        // Any unknown view gets the Browse InstanceTree (org/settings/console/
+        // monitoring are now mapped — see mapped_views_pick_their_mode).
+        for v in ["totally-unknown", "no-such-view", ""] {
             match descriptor(v) {
                 RailView::InstanceTree { group_type, leaf_type, leaf_where } => {
                     assert_eq!(group_type, "project");
@@ -599,6 +599,14 @@ mod tests {
                     ["visibility", "fields", "policies"]);
             }
             _ => panic!("console should map to Sections"),
+        }
+        // Monitoring maps to its two audit-trail views (the backend M2 surface).
+        match descriptor("monitoring") {
+            RailView::Sections { group, items } => {
+                assert_eq!(group, "Audits");
+                assert_eq!(items.iter().map(|s| s.0).collect::<Vec<_>>(), ["runs", "findings"]);
+            }
+            _ => panic!("monitoring should map to Sections"),
         }
     }
 
