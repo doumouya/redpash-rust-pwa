@@ -65,7 +65,7 @@ export function mountTopbar(host, cfg) {
     if (apps.length) {
       mountMenu(actions, {
         trigger: button({
-          icon: "bi-columns-gap",
+          icon: "bi-grid-3x3-gap-fill",
           variant: "ghost",
           title: "Switch app",
           ariaLabel: "Switch app",
