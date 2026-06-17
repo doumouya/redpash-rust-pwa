@@ -49,6 +49,9 @@ fn builtin_table(type_id: &str) -> Option<(&'static str, &'static str)> {
         "file" | "chart" | "dashboard" => ("project_files", "redpash_id"),
         "case" => ("cases", "redpash_id"),
         "connection" => ("connectors", "redpash_id"),
+        // messaging: channel = its own membership gate; message cascades to channel.
+        "channel" => ("channels", "redpash_id"),
+        "message" => ("messages", "redpash_id"),
         _ => return None,
     })
 }

@@ -71,6 +71,11 @@ enum RailView {
         group: &'static str,
         items: &'static [(&'static str, &'static str, &'static str)],
     },
+    /// The caller's channels grouped Channels / Direct messages, each tab a channel
+    /// (kind "channel") carrying its unread count. Reach is the caller's OWN channel
+    /// membership — even a platform admin sees only their channels here (the personal
+    /// sidebar must not surface everyone's DMs). The one dynamic, non-project tree.
+    Messaging,
 }
 
 enum TypeListSpec {
@@ -145,6 +150,9 @@ fn descriptor(view: &str) -> RailView {
         // the surface to the clicked view. (Data lands via the backend lane — the
         // audit.* schema + /api/monitoring/* endpoints; M2.)
         "monitoring" => RailView::Sections { group: "Audits", items: &MONITORING_SECTIONS },
+        // Messaging: the caller's channels grouped Channels / Direct messages, with
+        // per-channel unread (the dynamic chat sidebar).
+        "messaging" => RailView::Messaging,
         // Designer (page not built yet) — projects → chart/dashboard files.
         "designer" => RailView::InstanceTree {
             group_type: "project",
@@ -186,6 +194,9 @@ async fn rail(
         RailView::PrefGroups => pref_groups(&state.db).await?,
         // Static page chrome — no DB, no reach filter.
         RailView::Sections { group, items } => sections_group(group, items),
+        // The caller's chat channels — always their OWN membership (ignore the
+        // admin=None shortcut; the sidebar is personal, never all DMs).
+        RailView::Messaging => messaging_groups(&state.db, &caller.rid).await?,
     };
 
     Ok(Json(json!({ "groups": groups })))
@@ -533,6 +544,59 @@ fn sections_group(
     })]
 }
 
+// ─── Messaging (the caller's channels, grouped Channels / Direct messages) ────
+
+/// The chat sidebar: the caller's channels split into two groups by `kind`, each
+/// tab a channel (kind "channel") carrying its unread count (messages newer than
+/// the caller's last read). Reach = the caller's OWN membership (principals), so a
+/// DM never shows to a non-member — even an admin sees only their own channels here.
+/// A `dm`'s display name is the OTHER member's name (a DM has none of its own).
+async fn messaging_groups(pool: &sqlx::PgPool, caller_rid: &str) -> Result<Vec<Value>, AppError> {
+    let principals = rbac::principals(pool, caller_rid).await?;
+    let rows: Vec<(String, String, String, i64)> = sqlx::query_as(
+        "SELECT c.redpash_id,
+                CASE WHEN c.kind = 'dm' THEN COALESCE(
+                       (SELECT u.display_name FROM memberships mm JOIN users u ON u.redpash_id = mm.member_redpash_id
+                         WHERE mm.object_redpash_id = c.redpash_id AND mm.member_redpash_id <> $2 LIMIT 1), c.name)
+                     ELSE c.name END AS display,
+                c.kind,
+                (SELECT COUNT(*)::BIGINT FROM messages m
+                   WHERE m.channel_id = c.redpash_id
+                     AND m.created_at > COALESCE(
+                         (SELECT r.last_read_at FROM channel_reads r WHERE r.channel_id = c.redpash_id AND r.user_id = $2),
+                         'epoch'::timestamptz)) AS unread
+           FROM channels c
+          WHERE EXISTS (SELECT 1 FROM memberships m
+                         WHERE m.member_redpash_id = ANY($1) AND m.object_redpash_id = c.redpash_id)
+          ORDER BY c.created_at DESC",
+    )
+    .bind(principals.as_slice())
+    .bind(caller_rid)
+    .fetch_all(pool)
+    .await?;
+
+    let mut channels = Vec::new();
+    let mut dms = Vec::new();
+    for (rid, name, kind, unread) in rows {
+        let tab = json!({
+            "id": rid,
+            "name": name,
+            "kind": "channel",
+            "icon": if kind == "dm" { "bi-person" } else { "bi-hash" },
+            "unread": unread,
+        });
+        if kind == "dm" {
+            dms.push(tab);
+        } else {
+            channels.push(tab);
+        }
+    }
+    Ok(vec![
+        json!({ "id": "channels", "name": "Channels", "collapsed": false, "count": channels.len(), "tabs": channels }),
+        json!({ "id": "direct", "name": "Direct messages", "collapsed": false, "count": dms.len(), "tabs": dms }),
+    ])
+}
+
 /// The cleanliness dot token for a file leaf, matching the score-badge tone
 /// thresholds exactly: >= 90 clean, >= 70 warn, else dirty. None (no score yet)
 /// ⇒ None — the caller OMITS the "dot" key rather than emitting a null.
@@ -608,6 +672,8 @@ mod tests {
             }
             _ => panic!("monitoring should map to Sections"),
         }
+        // Messaging maps to the dynamic chat sidebar (the caller's channels).
+        assert!(matches!(descriptor("messaging"), RailView::Messaging));
     }
 
     #[test]
