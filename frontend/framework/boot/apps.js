@@ -45,6 +45,15 @@ export const APPS = [
     ],
   },
   {
+    id: "messaging",
+    name: "Messaging",
+    icon: "bi-chat-dots", // app glyph for the launcher (in-app chat)
+    landing: "#/messaging",
+    pages: [
+      { id: "messaging", label: "Messaging", icon: "bi-chat-dots", built: true },
+    ],
+  },
+  {
     id: "settings",
     name: "Settings",
     hidden: true,

@@ -141,6 +141,8 @@ Knobs: `--rp-wsp-left-w`, `--rp-wsp-right-w` (default `18rem`).
 | **topbar** | toggle · omnisearch · per-app nav + launcher | `mountTopbar(host, {session,activePageId,onToggleRail?})` → `{el,update(){},destroy}` | nav derives from the apps registry |
 | **rail** | the page's left nav (data-driven) | `mountRail(host, config)` → `{el,setGroups(groups,hidden,emptyText),setActive(id),toggleCollapse(want?),destroy}` | bespoke handle — **no `update`** |
 | **report-builder** | group-by + measures form | `mountReportBuilder(host, {columns,aggFns,onRun,onClear})` → `{el,update({columns}),destroy}` | emits `{groupBy:[key], measures:[{col,fn}]}` |
+| **markdown** | SAFE Markdown → DOM (`.rp-md`) | `renderMarkdown(text)` → HTMLElement | builds text NODES (never innerHTML / raw-HTML passthrough), so injected tags render literal — XSS-safe by construction. Subset: bold/italic/code/fenced/quote/lists + links (http(s)/mailto only, new-tab) |
+| **message-thread** | a channel's feed + Markdown composer (`.rp-mt`) | `mountMessageThread(host, {channelId, session})` → `{destroy}` | renders bodies via `renderMarkdown`; composer = the `textarea` atom + Write/Preview + a wrap/prefix toolbar; polls `GET /api/messages?after=` (P1; SSE in P2) + marks the channel read |
 
 ### The atoms (leaf building blocks)
 `atoms.js` exports **plain builder functions returning a DOM node** (no

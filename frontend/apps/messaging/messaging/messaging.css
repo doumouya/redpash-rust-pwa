@@ -1,0 +1,7 @@
+/* messaging/messaging — page-scoped chrome. The message-thread (framework) owns
+   the feed + composer look; this just fills the surface so the thread can scroll
+   within it (height:100% like every other page root). */
+
+.pg-messaging-messaging {
+  height: 100%;
+}

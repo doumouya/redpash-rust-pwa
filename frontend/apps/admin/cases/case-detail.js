@@ -13,10 +13,7 @@ import { el } from "../../../framework/boot/dom.js";
 import { button, badge, textarea } from "../../../framework/atoms/atoms.js";
 import { mountEmptyState } from "../../../framework/empty-state/empty-state.js";
 import { toast } from "../../../framework/toast/toast.js";
-import { fmtDateTime } from "../../../framework/boot/format.js";
-
-// two-letter avatar from an id (CAS_… / USR_… → strip the type prefix).
-const initials = (id) => String(id || "?").replace(/^[A-Z]+_/, "").slice(0, 2).toUpperCase();
+import { fmtDateTime, initials } from "../../../framework/boot/format.js";
 // the kanban stages → badge tone.
 const STATUS_TONE = {
   backlog: "", todo: "info", in_progress: "accent", in_review: "warn",

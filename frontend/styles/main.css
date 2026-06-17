@@ -44,6 +44,8 @@
 @import "../framework/chart/chart.css";
 @import "../framework/dashboard-grid/dashboard-grid.css";
 @import "../framework/chart-editor/chart-editor.css";
+@import "../framework/markdown/markdown.css";
+@import "../framework/message-thread/message-thread.css";
 
 /* 3 — page sheets (.pg-<app>-<page> scoped; may read --rp-* vars, never set
        framework classes) */
@@ -55,3 +57,4 @@
 @import "../apps/admin/registry/registry.css";
 @import "../apps/admin/cases/cases.css";
 @import "../apps/admin/monitoring/monitoring.css";
+@import "../apps/messaging/messaging/messaging.css";
