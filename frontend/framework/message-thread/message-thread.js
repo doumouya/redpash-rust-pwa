@@ -49,8 +49,9 @@ export function mountMessageThread(host, { channelId, session } = {}) {
   const seen = new Set();       // message rids already rendered (poll dedup)
 
   function addMessage(m) {
-    if (!m || !m.rid || seen.has(m.rid)) return;
-    seen.add(m.rid);
+    const id = m && (m.rid ?? m.redpash_id); // BE returns redpash_id for messages
+    if (!id || seen.has(id)) return;
+    seen.add(id);
     feed.append(el("div", { class: "rp-mt-msg" },
       el("div", { class: "rp-mt-avatar" }, initials(m.author_id)),
       el("div", { class: "rp-mt-msg-body" },
