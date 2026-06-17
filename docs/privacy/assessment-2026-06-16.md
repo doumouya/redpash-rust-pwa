@@ -112,3 +112,28 @@ work. The one caveat: a system can't credibly claim "Privacy by Design" while qu
 storing customer-derived data in the registry it promised would hold none — **reconcile
 F-E and F-J** (honour the posture or formally amend the decision) to keep the claim
 honest. Recommended next slice: the audit tool (shipped) + the four compliance-blockers.
+
+## 9. Resolution status (2026-06-17)
+
+This assessment drove an enforcement slice. Of the findings: **9 closed**, 1
+accepted, 1 partial, 1 deferred to the go-live workstream
+([`privacy-by-design.md`](privacy-by-design.md) § Go-live).
+
+| Finding | Status | Commit |
+|---|---|---|
+| F-G data_class dimension | closed | `f496bba` |
+| F-A blob-sweep on delete | closed | `d87a174` |
+| F-B comment-scrub on erasure | closed | `d87a174` |
+| F-E recipe-only chart spec | closed | `a7e7d28` |
+| F-H `/api/me/export` | closed | `c35b313` |
+| F-I read-access audit | closed | `b7344a3` |
+| F-F encryption + key rotation | closed | `bd2ade2` |
+| F-L comment doc + check refine | closed | `9a52d9d` |
+| F-K logout client-storage clear | closed | `580e7d4` |
+| F-J `columns_meta.sample` | accepted (at-rest encryption → go-live) | — |
+| F-C retention | partial — session-GC + blob reaper shipped; partition rotation → go-live | `5228275` |
+| F-D privacy notice | deferred → go-live workstream | — |
+
+The `tools/privacy-audit` ratchet floor is now **2** (F-C partition rotation, F-D
+notice) — both go-live-gated. Re-run `node tools/privacy-audit/audit.js` for the
+live state.

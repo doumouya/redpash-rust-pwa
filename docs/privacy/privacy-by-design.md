@@ -70,6 +70,36 @@ The open items are the findings in [`assessment-2026-06-16.md`](assessment-2026-
 the check flips green and the `ci-audit` baseline drops — the register stays honest
 because the floor is machine-checked, not asserted.
 
+## Go-live workstream (pre-production gate)
+
+RedPash runs on localhost today — no real external users — so the user-facing and
+production-hardening items below are a **deliberate pre-launch workstream**, not
+skipped. They are MANDATORY before the app processes real users' personal data
+online (Em decision, 2026-06-17).
+
+**Required before go-live:**
+- **Privacy notice + consent surface (F-D)** — Art. 12-14 transparency: a
+  user-facing notice (controller identity, data inventory, lawful basis, the
+  on-device posture, subject rights incl. `/api/me/export`, retention, no
+  trackers) surfaced pre-auth, plus any consent capture. The technical content is
+  known; the legal specifics (entity, contact, jurisdiction / DPA) are Em's.
+- **Observability retention via partition rotation (F-C)** — convert
+  `events`/`request_log`/`db_query_log` to monthly partitions and extend
+  `redpash-retention` to DETACH/DROP old ones (the session-GC + orphan-blob reaper
+  already ship). Decide convert-existing vs future-only.
+- **At-rest encryption of the accepted registry exceptions (F-J)** — encrypt
+  `columns_meta.sample` + the `.bin` recovery blobs under `REDPASH_MASTER_KEY`
+  (the mitigation named in `decisions/registry-redundancy.md`). The crypto +
+  rotation primitives already exist (`crypto.rs`).
+
+**Hardening / completeness follow-ups:**
+- **Connector-write encryption adoption (F-F)** — when the connector-create route
+  lands, call `crypto::encrypt_secret` on write (the read path + rotation are done).
+- **data_class-keyed log redaction (F-I)** — strip personal context from event
+  payloads by `data_class` (today's access events log ids only, so low risk).
+- **Derived-field classification (F-G)** — classify uncataloged/derived columns
+  (`google_sub` is denylisted; `avatar_url` is uncataloged).
+
 ## How to keep this current
 
 - A new personal-data store, egress, or client-side persistence ⇒ add a row to the data
