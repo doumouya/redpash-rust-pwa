@@ -76,11 +76,39 @@ export const footerHandlers = {
     try {
       await api.post("/auth/logout");
     } finally {
+      await clearClientStorage();
       location.hash = "#/login";
       location.reload();
     }
   },
 };
+
+/* Shared-device privacy (privacy finding F-K): on sign-out, wipe ALL on-device
+   state so the next person to log in on this browser can't reach the prior
+   user's data. Safe to clear: prefs are server-authoritative and re-hydrate on
+   the next login; the IndexedDB stores are the per-user GlueSQL customer-data
+   namespaces (dormant today — usually a no-op — but wired-safe for when the
+   on-device engine goes live). Best-effort throughout; never blocks logout. */
+async function clearClientStorage() {
+  try { localStorage.clear(); } catch { /* storage may be unavailable */ }
+  try { sessionStorage.clear(); } catch { /* storage may be unavailable */ }
+  try {
+    if (typeof indexedDB !== "undefined" && indexedDB.databases) {
+      const dbs = await indexedDB.databases();
+      await Promise.all(
+        dbs
+          .filter((d) => d && d.name)
+          .map(
+            (d) =>
+              new Promise((resolve) => {
+                const req = indexedDB.deleteDatabase(d.name);
+                req.onsuccess = req.onerror = req.onblocked = () => resolve();
+              })
+          )
+      );
+    }
+  } catch { /* enumeration unsupported on this browser — best-effort */ }
+}
 
 /* Default tab dispatch by `kind` when the page provides no onRailTab override.
    A file opens in the Workspace; type/instance/section tabs are page-specific
