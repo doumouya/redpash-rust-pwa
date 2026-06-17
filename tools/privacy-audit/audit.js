@@ -289,7 +289,10 @@ const CARGO = readSafe(p("backend", "Cargo.toml")) + "\n" + readSafe(p("backend"
   // A real server-side HTML sanitizer is a DEPENDENCY, not a comment — the
   // "sanitize" tokens in cases.rs are the FE-escape note + filename-header code.
   const noServerSanitizer = !/(ammonia|sanitize[_-]?html|scrub_html|html[_-]?sanitiz)/i.test(CARGO);
-  if (staleClaim && noServerSanitizer && /case_comments/.test(cases)) {
+  // Resolved EITHER by a real sanitizer dep (above) OR by a corrective, truthful
+  // `COMMENT ON COLUMN case_comments.body` that supersedes the stale inline note.
+  const docCorrected = /COMMENT ON COLUMN\s+case_comments\.body/i.test(sqlBlob);
+  if (staleClaim && noServerSanitizer && !docCorrected && /case_comments/.test(cases)) {
     add({
       id: "F-L", severity: "Medium", principle: "5 End-to-End Security (integrity)", article: "Art. 32",
       title: "Comment body raw plaintext; schema comment misleads",
