@@ -251,6 +251,15 @@ function findCollectionFns(rawText, strippedText) {
     // `fetch_optional` is a single-record read — out of scope for a LIST audit.)
     if (!/\.fetch_all\s*\(/.test(body)) continue;
 
+    // This is a LIST/READ-surface audit. A MUTATION handler whose body happens
+    // to fetch_all for VALIDATION — not to return rows — is not a list surface:
+    // e.g. messaging::create_channel batches a member-existence check
+    // (`SELECT redpash_id … WHERE redpash_id = ANY($1)`) then validates it
+    // in-memory; the result never crosses the wire as a collection. Skip
+    // write-verb-named fns so a create/update/delete isn't miscounted as a leak-
+    // prone list (read surfaces are named list_/get_/search_/rail/me, never these).
+    if (/^(?:create|update|delete|insert|upsert|post|mark|claim|grant|revoke|set)_/.test(fnName)) continue;
+
     out.push({
       name:   fnName,
       params: params,
