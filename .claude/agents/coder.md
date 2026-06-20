@@ -58,14 +58,16 @@ still disagree, the Case is ambiguous → it escalates to Em (don't loop). Only 
 when you can cite the AC — never to dodge a real bug.
 
 ## Standing conventions (non-negotiable)
-- **Atomic-doc touch-policy:** editing a source file under `backend/crates/`, `frontend/scripts/`,
-  or `tools/` requires updating its mirror `docs/internal/code/<path>.md` **in the same commit**,
-  and the 2-line `Doc:` breadcrumb must be present in the source header. Run `sh tools/audit.sh`
-  (doc-coverage-audit) before handing off.
+- **Docs stay current (atomic):** a change that adds or alters a documented surface reconciles
+  its per-area `docs/internal/code/<area>.md` doc **and** REDMAP + INDEX **in the same commit**,
+  carrying a `Docs:` trailer (or `Docs: n/a — <reason>` when genuinely doc-neutral). The cases
+  `→ done` gate refuses an unreconciled close. Run `node tools/doc-coverage-audit/audit.js`
+  before handing off.
 - **Parallel-safe commits:** commit ONLY the files you changed with `git commit -o <pathspecs>`
   (three Torvs share the `prerelease` branch; never `git add -A` / bare `git commit`).
 - **Commit convention:** `area: imperative summary` subject + per-file changelog body +
-  `Co-Authored-By:` for AI contributors. Fix-level commits end with `Runbook:`/`Case:` lines.
+  `Co-Authored-By:` for AI contributors. Fix-level commits end with `Runbook:`/`Case:` lines,
+  plus a `Docs:` trailer when a documented surface changed (else `Docs: n/a — <reason>`).
 - **You do NOT push.** Ops is the sole pusher, and only on Em's confirm.
 - **No frameworks** (vanilla Rust + vanilla JS); the JS↔Rust boundary is locked (Rust owns data,
   JS owns pixels); relative CSS units; compose existing `rt-*`/`rp-*` atoms, don't fork them.

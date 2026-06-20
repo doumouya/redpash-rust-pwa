@@ -30,7 +30,7 @@ The dated diagnostic that seeded it: [`parity-review-2026-06-20.md`](parity-revi
 `api-route:projects` `api-route:rail` `api-route:search` `api-route:settings`
 `api-route:types`
 
-**bin** — `bin:redpash-api` `bin:redpash-audit-ingest` `bin:redpash-retention`
+**bin** — `bin:redpash-api` `bin:redpash-audit-ingest` `bin:redpash-commit-ingest` `bin:redpash-retention`
 `bin:redpash-rotate-secrets`
 
 **data-mod** — `data-mod:clean` `data-mod:distinct` `data-mod:dtype` `data-mod:encoding`
@@ -39,7 +39,7 @@ The dated diagnostic that seeded it: [`parity-review-2026-06-20.md`](parity-revi
 `data-mod:stats` `data-mod:steps` `data-mod:structure` `data-mod:view` `data-mod:wasm`
 
 **db-table** — `db-table:audit.finding` `db-table:audit.run` `db-table:case_attachments`
-`db-table:case_comments` `db-table:cases` `db-table:channel_reads` `db-table:channels`
+`db-table:case_comments` `db-table:case_docs_reconciled` `db-table:cases` `db-table:channel_reads` `db-table:channels`
 `db-table:companies` `db-table:company_rbac` `db-table:connector_jobs`
 `db-table:connectors` `db-table:db_query_log` `db-table:entities` `db-table:entity_data`
 `db-table:events` `db-table:field_permissions` `db-table:memberships` `db-table:messages`
@@ -69,7 +69,7 @@ The dated diagnostic that seeded it: [`parity-review-2026-06-20.md`](parity-revi
 ## Known gaps (recorded — in prerelease, not yet in lean)
 
 The genuine losses from the graduation (see [parity-review-2026-06-20](parity-review-2026-06-20.md)).
-Recorded here so they're remembered, not lost. Re-land is Em's per-item, roadmap call;
+Recorded here so they're remembered, not lost. Re-land is Em's per-item call;
 until then they are `[gap]` (expected-absent — not a regression). The connector schema
 (`db-table:connectors`/`connector_jobs` + `api-mod:connectors_core`) IS live — what's
 missing is the loaders/codecs/route/UI on top of it.
@@ -84,3 +84,16 @@ missing is the loaders/codecs/route/UI on top of it.
 - `api-mod:field_validate` `[gap]` — codec-delegating field validator. Med. *(objects.rs has inline registry field-validation only)*
 - `api-mod:redact` `[gap]` — sensitive-data redaction. Med. *(also privacy F-I "data_class-keyed log redaction")*
 - `api-mod:db_query` `[gap]` — query-observability capture writer. Med. *(the `db_query_log` table + retention reaper are live; the writer is gone)*
+
+### The connector vision (folded from the retired roadmap, Phase 4)
+
+The cluster above isn't a pile of modules — it's one design the graduation dropped: a
+connector is a **self-describing async job**, not in-request ETL. Re-landing means
+(a) `connectors_core`'s SSRF/TLS host gate (12 tested bypass encodings) stays the entry
+point — already live; (b) every credential is AEAD-encrypted via `crypto.rs` (the codec
+shipped — see [`code/backend/schema.md`](code/backend/schema.md)), not plaintext JSONB;
+(c) sync runs as `connector_jobs` rows (status poll/SSE), the loader extracting to a temp
+file then through the SEALED `pipeline::upload_csv` (never `insert_file` directly — the
+bypass class CAS_A4448B94); (d) the codec registry + Avro meta-codec decode the wire
+format, the validators gate the fields. Order if they return: `connectors_core` (live) →
+codecs → loaders → `/api/connectors` route + jobs runner → UI.

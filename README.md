@@ -10,7 +10,7 @@ model, the pure-compute data crate, leak-free RBAC, the step-replay cleaner)
 survives intact; what changes is baked in from
 [`docs/decisions/day-one.md`](docs/decisions/day-one.md).
 
-- Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- What exists: [`docs/internal/capability-ledger.md`](docs/internal/capability-ledger.md) (the live capability index) + [`docs/REDMAP.md`](docs/REDMAP.md) (doc⇄code map)
 - Dev: `cd backend && cargo run -p api` (set `DATABASE_URL` for migrations)
 - Gates: `sh tools/ci.sh` (includes the wasm32 purity check on the data crate)
-- This repo is the primary tree; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the rebuild plan.
+- This repo is the primary tree; the rebuild has graduated — the capability ledger records what shipped vs the remaining `[gap]`s.

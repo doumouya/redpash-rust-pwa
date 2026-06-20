@@ -112,6 +112,22 @@ mod workflow {
     pub fn is_known_state(source: &str, status: &str) -> bool {
         states(source).contains(&status)
     }
+
+    /// The workflow's terminal/completion state = the LAST in `states` (internal `done`,
+    /// external `Closed`). `done` ALLOWS reopen, so terminality is the ordering
+    /// convention, not "no outgoing edges".
+    pub fn is_terminal(source: &str, status: &str) -> bool {
+        states(source).last() == Some(&status)
+    }
+
+    /// Does this transition ENTER the terminal close the docs-currency gate guards?
+    /// Reopen (`from` already terminal) and a same-state re-drop are exempt. Keyed on
+    /// terminality PER WORKFLOW (not the literal `done`) so the external `Closed`
+    /// terminal is gated for free when that workflow is lit up. Pure + named so the
+    /// gated-transition rule is unit-testable, not inline magic in the handler.
+    pub fn is_doc_gated_close(source: &str, from: &str, to: &str) -> bool {
+        is_terminal(source, to) && !is_terminal(source, from)
+    }
 }
 
 fn workflow_json(source: &str) -> Value {
@@ -446,11 +462,35 @@ async fn patch(
         ));
     }
 
-    sqlx::query("UPDATE cases SET status = $1, updated_at = now() WHERE redpash_id = $2")
-        .bind(to)
-        .bind(&rid)
-        .execute(&state.db)
-        .await?;
+    // Docs-currency gate (CLAUDE.md "Docs stay current"): a Case can't ENTER its terminal
+    // until its change is reconciled into the docs. `case_docs_reconciled` is fed by
+    // `redpash-commit-ingest` (best-effort, pre-push) from git — a commit referencing this
+    // case that touched `docs/` OR declared a `Docs:` ack, dated after the case's close
+    // floor. Reopen / same-state is exempt; only entering the terminal is gated.
+    let entering_terminal = workflow::is_doc_gated_close(&source, &from, to);
+    if entering_terminal && !docs_reconciled(&state.db, &rid).await? {
+        return Err(AppError::unprocessable(
+            "docs_not_reconciled",
+            format!(
+                "case {rid} can't close until its change is reconciled into the docs — a \
+                 commit referencing {rid} must touch docs/ (or declare `Docs: n/a — <reason>`), \
+                 then run `cargo run -p api --bin redpash-commit-ingest`"
+            ),
+        ));
+    }
+
+    // Stamp the docs-gate floor on a successful terminal entry, so the NEXT cycle needs a
+    // FRESH reconciliation — a reopen+rework can't reclose on this cycle's stale row.
+    sqlx::query(
+        "UPDATE cases SET status = $1, updated_at = now(),
+                docs_gate_floor = CASE WHEN $3 THEN now() ELSE docs_gate_floor END
+         WHERE redpash_id = $2",
+    )
+    .bind(to)
+    .bind(&rid)
+    .bind(entering_terminal)
+    .execute(&state.db)
+    .await?;
     event::info(
         &state.db,
         "case_status",
@@ -463,6 +503,28 @@ async fn patch(
         .await?
         .ok_or_else(|| AppError::internal("case", "updated case row not found"))?;
     Ok(Json(row))
+}
+
+/// Has a commit referencing this case reconciled its docs FRESHLY — touched `docs/` or
+/// carried a `Docs:` ack, AND dated after the case's last close (`docs_gate_floor`)?
+/// The docs-currency close-gate's read (CLAUDE.md "Docs stay current"); the signal is
+/// fed by the `redpash-commit-ingest` bin. The floor makes a reopen+rework reconcile its
+/// OWN docs — a prior cycle's row (`commit_at < floor`) is stale. No qualifying row ⇒ the
+/// close is refused.
+async fn docs_reconciled(pool: &PgPool, rid: &str) -> Result<bool, AppError> {
+    let ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM case_docs_reconciled r
+             WHERE r.case_rid = $1 AND (r.touched_docs OR r.docs_ack)
+               AND r.commit_at > COALESCE(
+                   (SELECT docs_gate_floor FROM cases WHERE redpash_id = $1),
+                   '-infinity'::timestamptz)
+         )",
+    )
+    .bind(rid)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
 }
 
 // ─── attachments: bytes immutable on disk, METADATA-only in Postgres ────────
@@ -676,5 +738,28 @@ mod tests {
     fn unknown_source_defaults_to_internal() {
         assert_eq!(workflow::initial("anything"), "backlog");
         assert!(workflow::is_valid("anything", "backlog", "todo"));
+    }
+
+    #[test]
+    fn is_terminal_is_the_last_state_per_workflow() {
+        assert!(workflow::is_terminal("internal", "done"));
+        assert!(!workflow::is_terminal("internal", "in_review"));
+        assert!(workflow::is_terminal("external", "Closed"));
+        assert!(!workflow::is_terminal("external", "Solution Provided"));
+    }
+
+    #[test]
+    fn doc_gate_fires_only_on_entering_a_terminal() {
+        // ENTERING the terminal from a non-terminal is gated (internal)…
+        assert!(workflow::is_doc_gated_close("internal", "in_review", "done"));
+        assert!(workflow::is_doc_gated_close("internal", "in_progress", "done"));
+        // …and the external terminal is gated for free (future-proof; dormant today).
+        assert!(workflow::is_doc_gated_close("external", "Solution Provided", "Closed"));
+        // reopen and a same-state re-drop are exempt (no re-reconciliation).
+        assert!(!workflow::is_doc_gated_close("internal", "done", "done"));
+        assert!(!workflow::is_doc_gated_close("internal", "done", "in_progress"));
+        // every non-terminal target is ungated.
+        assert!(!workflow::is_doc_gated_close("internal", "backlog", "todo"));
+        assert!(!workflow::is_doc_gated_close("internal", "in_progress", "in_review"));
     }
 }

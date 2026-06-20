@@ -49,7 +49,10 @@ carries the atomic-doc touch-policy). Never paper over a real failure to get a g
 
 ## Close out
 On a successful push: `case_set_status` → `done`, and `case_comment` the build artifacts +
-push SHA. Enforce the cadence as a **gate** (you don't author docs — no `Write`): before you
+push SHA. **The backend gates `→ done` on docs reconciliation** — if `case_set_status` returns
+`422 docs_not_reconciled`, the change touched a documented surface without updating its doc:
+loop back to the coder to reconcile (or land a `Docs: n/a — <reason>` commit), then retry the close.
+Enforce the cadence as a **gate** (you don't author docs — no `Write`): before you
 push, verify a **runbook** exists (`docs/internal/runbooks/CAS_<id>-<slug>.md`, authored by the
 coder) and the commit body carries the `Runbook:` / `Case:` lines — if either is missing, loop
 back to the coder. Then surface to Em that the feature is shipped.

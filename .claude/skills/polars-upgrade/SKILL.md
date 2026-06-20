@@ -129,8 +129,8 @@ wasm — never reached) and remove only the wasm-fatal leaves. The full patch re
 [`references/polars-0.43-to-0.54.md`](references/polars-0.43-to-0.54.md) §wasm. The WHY
 now lives in lean at the `backend/Cargo.toml` comment block above the `[patch.crates-io]`
 stanza and in `docs/internal/code/frontend/conventions.md` (the smoke-test note);
-the original post-mortem was the predecessor's runbook `0023-polars-0.54-wasm-fork.md`
-(cited from `docs/ROADMAP.md`). Headlines:
+the original post-mortem was the predecessor's runbook `0023-polars-0.54-wasm-fork.md`.
+Headlines:
 
 - Drop `streaming` from the umbrella `csv` feature (collect-based lazy, not the streaming engine).
 - Target-gate the *unused / file / net* tokio deps off wasm (polars-core, polars-io);

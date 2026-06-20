@@ -28,7 +28,7 @@ consolidated) · **genuinely-lost** · **intentionally-dropped** · **net-new-in
 ## Genuinely lost (the real backlog)
 
 The losses form one coherent cluster — the **connector/codec/validation lineage** — plus
-the doc archive. Disposition (re-land / drop / defer) is roadmap-dependent and is Em's
+the doc archive. Disposition (re-land / drop / defer) is Em's
 per-item call; left **deferred** here pending that.
 
 | Capability | Significance | Verified state in lean | Disposition |
@@ -67,4 +67,4 @@ The concern is valid but **bounded and nameable** — a focused ~6-item cluster,
 14 the raw diff produced. Nothing here is committed as a re-land; the durable fix is the
 [capability ledger](capability-ledger.md) + the reproducible parity audit, so the next
 rebuild reconciles against a record instead of memory. Re-land decisions: Em, per-item,
-roadmap-driven (connectors first if they're returning). Tracked on CAS_1D79.
+capability-ledger-driven (connectors first if they're returning). Tracked on CAS_1D79.

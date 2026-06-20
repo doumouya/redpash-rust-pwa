@@ -23,6 +23,9 @@
                            doc titles and the dropped `redpash_next` / `*_next`
                            DB name, anywhere under docs/ or in CLAUDE.md.
 
+   docs/archive/ is EXCLUDED from every check — archived docs are frozen history,
+   out of the live-spine contract (no INDEX/REDMAP row; retired naming is expected).
+
    Heuristic, not a parser — regex + small file walks. Findings carry enough
    context (file + line + snippet + what's expected) to confirm in seconds.
 
@@ -51,7 +54,9 @@ function walk(dir, pred, out) {
   out = out || [];
   if (!fs.existsSync(dir)) return out;
   fs.readdirSync(dir, { withFileTypes: true }).forEach(function (ent) {
-    if (ent.name === '.git' || ent.name === 'node_modules') return;
+    // docs/archive/ is frozen history (retired docs) — out of the live-spine
+    // contract: no INDEX/REDMAP row required, and retired naming is expected.
+    if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === 'archive') return;
     var full = path.join(dir, ent.name);
     if (ent.isDirectory()) walk(full, pred, out);
     else if (ent.isFile() && pred(full)) out.push(full);

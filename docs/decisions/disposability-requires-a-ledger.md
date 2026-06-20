@@ -34,3 +34,13 @@ This is the *audit-everything / encode-the-fix-once* reflex applied to instituti
 memory — the same loop as the privacy register and the planned governance layer
 (assess → standing register → reproducible audit). Disposability stays cheap **because**
 the ledger makes deletion a reconciliation, not a gamble.
+
+## What disposability does NOT mean (folded from the retired roadmap)
+
+Cheap deletion is not cheap *re-derivation*. The vertical-specific cleverness is **ported,
+not re-invented**: the FR locale corpus, the SSRF encoding list, the cleanness-score
+calibration, the join detector. Rewriting those from scratch would be burning the moat to
+admire the flame — the ledger exists precisely so a rebuild *carries them forward* instead
+of rediscovering them. And the frugality is itself load-bearing: no frameworks, no job
+queue / daemon / CI service beyond what a fresh clone runs — the everything-from-a-fresh-clone
+constraint is a feature (the Africa-first deployment story), not a limitation to grow out of.

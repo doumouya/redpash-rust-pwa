@@ -11,7 +11,6 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 
 | Doc | Code area(s) it maps to |
 |---|---|
-| `ROADMAP.md` | whole repo — the rebuild plan, cross-cuts every crate + the frontend |
 | `decisions/day-one.md` | `backend/migrations/`; `backend/crates/api/src/{rbac,objects,field_perms}.rs`; `backend/crates/shared/src/filter.rs` |
 | `decisions/client-data-engines.md` | `backend/crates/data/src/wasm.rs`; `frontend/wasm/`; `frontend/wasm-src/gluesql/`; `frontend/framework/engine/` |
 | `decisions/registry-redundancy.md` | `backend/crates/api/src/{objects,types,pipeline}.rs` |
@@ -54,8 +53,8 @@ frontend/
 docs/
   INDEX.md     flat one-line-per-doc index
   REDMAP.md    this file
-  ROADMAP.md   the rebuild plan
   decisions/   locked architectural decisions
+  archive/     retired docs (history only — e.g. the graduated ROADMAP)
   internal/
     code/{backend,frontend}/   per-area code docs
     specs/                     work items / specs

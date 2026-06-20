@@ -20,6 +20,10 @@ path = "src/bin/rotate_secrets.rs"
 name = "redpash-retention"
 path = "src/bin/retention.rs"
 
+[[bin]]
+name = "redpash-commit-ingest"
+path = "src/bin/commit_ingest.rs"
+
 [dependencies]
 shared = { path = "../shared" }
 data = { path = "../data" }

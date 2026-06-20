@@ -8,7 +8,6 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 
 | Doc | What |
 |---|---|
-| [ROADMAP.md](ROADMAP.md) | The rebuild-from-scratch roadmap — phases + per-phase acceptance gates |
 | [REDMAP.md](REDMAP.md) | Structural map: docs ⇄ code-area cross-reference + repo layout (scan before diving) |
 | [INDEX.md](INDEX.md) | This file |
 

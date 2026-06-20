@@ -50,8 +50,8 @@ shell wrapper around one `psql` query.
 **None of that DB machinery exists in lean.** The audit-trail schema, the
 ingest binary, and `tools/audit.sh` were not ported — the
 "Audits-as-CI ratchet (findings in Postgres, `run_diff` SQL, only new/regressed
-fail)" is an explicit **Phase 7** item in [`docs/ROADMAP.md`](../../docs/ROADMAP.md).
-So this lean version adapts the *contract*, not the *backend*:
+fail)" was a **Phase 7** goal of the now-retired rebuild roadmap. So this lean version
+adapts the *contract*, not the *backend*:
 
 - The suite runner is **inlined** into `check.sh` (lean has no `tools/audit.sh`),
   globbing tracked `tools/*-audit/audit.js` — the same auto-discovery prerelease's
