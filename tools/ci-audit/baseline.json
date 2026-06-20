@@ -2,6 +2,7 @@
   "admin-scope": 0,
   "api-doc": 0,
   "auth": 0,
+  "capability": 0,
   "case-coverage": 0,
   "class-count": 0,
   "connectors": 0,

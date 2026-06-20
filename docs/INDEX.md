@@ -19,6 +19,14 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [decisions/day-one.md](decisions/day-one.md) | The day-one locked decisions baked into the rebuild (retrofitting costs 10×) |
 | [decisions/client-data-engines.md](decisions/client-data-engines.md) | Engine roles by job: Polars = compute, GlueSQL-idb = on-device store, Postgres = registry |
 | [decisions/registry-redundancy.md](decisions/registry-redundancy.md) | The privacy posture — registry (ids/metadata) in Postgres, customer data client-side |
+| [decisions/disposability-requires-a-ledger.md](decisions/disposability-requires-a-ledger.md) | No capability lives only in memory — a rebuild reconciles against the capability ledger; enforced by `tools/capability-audit/` |
+
+## Governance & memory (`docs/internal/`)
+
+| Doc | What |
+|---|---|
+| [internal/capability-ledger.md](internal/capability-ledger.md) | The source of truth for what exists (every capability as a key); `tools/capability-audit/` fails CI on a dropped or undocumented capability |
+| [internal/parity-review-2026-06-20.md](internal/parity-review-2026-06-20.md) | Dated prerelease→lean parity diagnostic — what the graduation genuinely dropped vs merely refactored |
 
 ## Privacy (`docs/privacy/`)
 
