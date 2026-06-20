@@ -319,11 +319,31 @@ function parseTopNests(modStripped, modRaw) {
   return nests;
 }
 
-/* recurse a module file: emit its .route()s under `prefix`, then descend into
-   any `.nest("/sub", child::routes())` it declares, carrying prefix + gate. */
-function extractModule(routesDir, mod, prefix, rbac, out, visited, depth) {
+/* extract the brace-matched body of `fn <name>(...) { … }` from stripped source.
+   Returns { text, offset } — offset = index of the first body char in the
+   source, so lineOf(raw, offset + i) maps a body match back to its true line —
+   or null when the fn isn't found. */
+function fnBody(s, fnName) {
+  var m = new RegExp('\\bfn\\s+' + fnName + '\\s*\\(').exec(s);
+  if (!m) return null;
+  var brace = s.indexOf('{', m.index);
+  if (brace < 0) return null;
+  var close = matchBraces(s, brace);
+  if (close < 0) return null;
+  return { text: s.slice(brace + 1, close), offset: brace + 1 };
+}
+
+/* recurse a router fn: emit its .route()s under `prefix`, then descend into any
+   `.nest("/sub", child::childFn())` it declares, carrying prefix + gate. `fnName`
+   names the router fn to scan — a module may expose SEVERAL (e.g. messaging's
+   channel_routes + message_routes, designer's chart_routes + dashboard_routes),
+   so we scope to the one THIS nest targets rather than the whole file (which
+   would cross-attach a sibling fn's routes under the wrong prefix). `fnName ===
+   null` scans the whole file: the main.rs root assembles its router inline in
+   main(), not a routes() fn. */
+function extractModule(routesDir, mod, fnName, prefix, rbac, out, visited, depth) {
   if (depth > 8) return;
-  var key = mod + '@' + prefix;
+  var key = mod + '::' + (fnName || '*') + '@' + prefix;
   if (visited.has(key)) return;
   visited.add(key);
 
@@ -334,19 +354,28 @@ function extractModule(routesDir, mod, prefix, rbac, out, visited, depth) {
   var s = strip(raw);
   var searchText = moduleSearchText(routesDir, mod); // file + dir siblings, for handler sigs
 
+  // Scope to the named router fn's body (base offsets indices back to real
+  // lines); the root (fnName=null) scans the whole file.
+  var scope = s, base = 0;
+  if (fnName) {
+    var body = fnBody(s, fnName);
+    if (!body) return;
+    scope = body.text; base = body.offset;
+  }
+
   // .route("/p", get(h).post(h2)) — one path, one-or-more methods.
   var rRe = /\.route\s*\(/g, m;
-  while ((m = rRe.exec(s))) {
-    var open = s.indexOf('(', m.index);
-    var close = matchParens(s, open);
+  while ((m = rRe.exec(scope))) {
+    var open = scope.indexOf('(', m.index);
+    var close = matchParens(scope, open);
     if (close < 0) { rRe.lastIndex = m.index + 6; continue; }
-    var span = s.slice(open + 1, close);
+    var span = scope.slice(open + 1, close);
     var lit = span.match(/^\s*"([^"]*)"/);
     if (!lit) { rRe.lastIndex = close; continue; }
     var routePath = lit[1];
     var chain = span.slice(lit.index + lit[0].length);
     var full = joinPath(prefix, routePath);
-    var line = lineOf(raw, m.index);
+    var line = lineOf(raw, base + m.index);
     collectMethods(chain).forEach(function (method) {
       var handler = handlerFor(chain, method);
       var types = handlerTypes(searchText, handler);
@@ -365,15 +394,17 @@ function extractModule(routesDir, mod, prefix, rbac, out, visited, depth) {
     rRe.lastIndex = close;
   }
 
-  // .nest("/sub", child::routes()) — descend, inheriting the parent gate.
+  // .nest("/sub", child::childFn()) — descend, inheriting the parent gate. The
+  // target fn is captured (child[2]) so a module's non-`routes()` router fns
+  // (channel_routes, chart_routes, …) resolve, not only fns named `routes`.
   var nRe = /\.nest\s*\(/g, n;
-  while ((n = nRe.exec(s))) {
-    var nopen = s.indexOf('(', n.index);
-    var nclose = matchParens(s, nopen);
+  while ((n = nRe.exec(scope))) {
+    var nopen = scope.indexOf('(', n.index);
+    var nclose = matchParens(scope, nopen);
     if (nclose < 0) { nRe.lastIndex = n.index + 5; continue; }
-    var nspan = s.slice(nopen + 1, nclose);
+    var nspan = scope.slice(nopen + 1, nclose);
     var sub = nspan.match(/^\s*"([^"]*)"/);
-    var child = nspan.match(/(?:super::)?([a-z_]+)\s*::\s*routes\s*\(/);
+    var child = nspan.match(/(?:super::)?([a-z_]+)\s*::\s*([a-z_]+)\s*\(/);
     if (sub && child) {
       var childGated = rbac.gated;
       for (var g = 0; g < GATE_MW.length; g++) {
@@ -382,7 +413,7 @@ function extractModule(routesDir, mod, prefix, rbac, out, visited, depth) {
       var childRbac = childGated
         ? { source: 'nest-layer', hint: 'platform_admin', gated: true }
         : { source: 'handler', hint: null, gated: false };
-      extractModule(routesDir, child[1], joinPath(prefix, sub[1]), childRbac, out, visited, depth + 1);
+      extractModule(routesDir, child[1], child[2], joinPath(prefix, sub[1]), childRbac, out, visited, depth + 1);
     }
     nRe.lastIndex = nclose;
   }
@@ -405,7 +436,7 @@ function rustRoutes(root) {
   var visited = new Set();
   // The entry "module" is main.rs (resolved by moduleFile as the flat
   // `main.rs`); prefix `/api`; ungated root.
-  extractModule(routesDir, 'main', '/api',
+  extractModule(routesDir, 'main', null, '/api',
     { source: 'handler', hint: null, gated: false }, out, visited, 0);
 
   // dedupe by (method, raw path) — a child module nested under the same prefix

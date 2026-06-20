@@ -235,6 +235,27 @@ enforced against a pure transition map (internal live; external dormant). Attach
 project-files storage model (metadata in Postgres, the blob in the project_files store), never customer
 bytes in the DB. See [cases.md](cases.md).
 
+### `/api/charts` · `/api/dashboards`
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/charts` | `{ source_file_id, filename?, spec }` | the chart row (Member+ on the **source CSV's** project — the pipeline writer derives + gates it); `spec` must be a JSON **object** else `400 invalid_spec` |
+| GET | `/charts/:rid` | — | the chart row + `spec` for load (`storage_path` stripped); `View` reach, leak-free `404` |
+| PUT | `/charts/:rid` | `{ filename?, spec? }` | updated row (`Edit` reach); `spec` is REPLACED wholesale (the FE owns the blob, not a merge); `source_file_id` is immutable ⇒ `400` |
+| DELETE | `/charts/:rid` | — | `204` (`Delete` reach; cascades via the entities registry) |
+| POST | `/dashboards` | `{ project_id, filename?, spec }` | the dashboard row (Member+ on the project); `spec` must be a JSON **object** |
+| GET | `/dashboards/:rid` | — | the dashboard row + `spec`; `View` reach |
+| PUT | `/dashboards/:rid` | `{ filename?, spec? }` | updated row (`Edit` reach); `spec` REPLACED wholesale |
+| DELETE | `/dashboards/:rid` | — | `204` (`Delete` reach; cascades) |
+
+The Designer's chart + dashboard **mutation** surface. Both are `project_files` rows (`file_type`
+chart/dashboard) whose `spec` is an **opaque** jsonb blob (the ECharts cfg / the 15×10 layout) — the
+backend never parses its contents, only guards that it's a JSON object. The generic registry (`/objects`)
+deliberately keeps them OFF its surface (catalog-less spec blobs); creation goes through the sealed
+`pipeline::create_chart` / `create_dashboard` (the one-write-path rule), so chart RBAC derives from the
+source CSV's project and dashboard RBAC from the supplied project (the IDOR guard lives in the pipeline
+writer). View/Edit/Delete cascade chart/dashboard → project → company. `/api/group/preview` (the chart
+data engine) is the read side, documented above.
+
 ### `/api/channels` · `/api/messages`
 | Method | Path | Body / Query | Response |
 |---|---|---|---|
