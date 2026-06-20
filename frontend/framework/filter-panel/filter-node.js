@@ -108,6 +108,12 @@ export function assembleFilter(rows, combinator) {
   return { node: "group", op: combinator === "or" ? "or" : "and", children };
 }
 
+/** A FilterNode that imposes no constraint: null/absent, or a Group with no
+    children (the match-all empty filter). Callers null out an empty filter so
+    they don't send / apply it. */
+export const isEmptyFilter = (node) =>
+  !node || (Array.isArray(node?.children) && node.children.length === 0);
+
 /** One FilterNode child -> one row model. Inverse of rowToNode: a Group child
     becomes a nested-group row (`{ group:true, op, children:[...] }`) and recurses;
     anything else becomes a predicate row. */

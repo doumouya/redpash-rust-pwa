@@ -23,6 +23,7 @@ import { mountRedTable } from "../../../framework/redtable/redtable.js";
 import { mountGridView } from "../../../framework/grid-view/grid-view.js";
 import { mountObjectList } from "../../../framework/object-list/object-list.js";
 import { mountFilterPanel } from "../../../framework/filter-panel/filter-panel.js";
+import { isEmptyFilter } from "../../../framework/filter-panel/filter-node.js";
 import { mountColumnManager } from "../../../framework/column-manager/column-manager.js";
 import { mountStepsPanel } from "../../../framework/steps-panel/steps-panel.js";
 import { mountSqlEditor } from "../../../framework/sql-editor/sql-editor.js";
@@ -39,9 +40,6 @@ import { getPref, setPref } from "../../../framework/registry/pref-registry.js";
 import { mainToolbar } from "./toolbar-spec.js";
 import { CLEAN_OPS } from "./clean-catalog.js";
 import { buildReportSpec, AGG_FNS } from "./report-spec.js";
-
-// a Group with no children is "match all" — treat that as no filter.
-const isEmptyFilter = (node) => !node || (Array.isArray(node?.children) && node.children.length === 0);
 
 export default async function mount(root, ctx) {
   const session = ctx.getSession();

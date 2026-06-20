@@ -25,7 +25,7 @@ import { api } from "../boot/api.js";
 import { el } from "../boot/dom.js";
 import { mountGridView } from "../grid-view/grid-view.js";
 import { mountFilterPanel } from "../filter-panel/filter-panel.js";
-import { evalFilter } from "../filter-panel/filter-node.js";
+import { evalFilter, isEmptyFilter } from "../filter-panel/filter-node.js";
 import { mountEmptyState } from "../empty-state/empty-state.js";
 import { mountField } from "../field/field.js";
 import { openModal, confirmModal } from "../modal/modal.js";
@@ -40,7 +40,6 @@ const REQUIRED = { user: ["display_name"], company: ["name"], team: ["name", "co
    the project flow). Mirrors the backend contract. */
 const READ_ONLY = new Set(["file", "project"]);
 const PAGE_SIZES = [25, 50, 100, 500];
-const isEmptyFilter = (node) => !node || (Array.isArray(node?.children) && node.children.length === 0);
 
 /* The toolbar as DATA — the only summonable PANEL is filter. */
 function listToolbar(s) {
