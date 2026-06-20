@@ -99,7 +99,7 @@ var MAIN_RS  = path.join(SRC_DIR, 'main.rs');
                         these IS gated (lean gates per-handler, not per-nest).
      REACH_HELPER     — fn-body tokens whose presence makes the fn reach-aware
                         (it threads or computes the principal/cascade closure). */
-var IN_HANDLER_GATE = ['is_platform_admin', 'require_view(', 'require_action(', 'require_rule('];
+var IN_HANDLER_GATE = ['is_platform_admin', 'require_view(', 'require_action(', 'require_rule(', 'require_admin('];
 var REACH_HELPER    = ['principals(', 'resolve_grant(', 'rbac_with_clause(', 'grant_edges('];
 
 /* ── classification taxonomy ─────────────────────────────────────────────── */
