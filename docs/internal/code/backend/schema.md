@@ -143,13 +143,18 @@ Google `sub` identity, scrub-and-retain deletion), `companies`/`teams`
 ([`init.sql:124`](../../../../backend/migrations/20260612000000_init.sql)),
 `projects` ([`init.sql:145`](../../../../backend/migrations/20260612000000_init.sql)),
 `cases` ([`init.sql:251`](../../../../backend/migrations/20260612000000_init.sql)),
-`connectors` ([`init.sql:325`](../../../../backend/migrations/20260612000000_init.sql)).
+`connectors` ([`init.sql:325`](../../../../backend/migrations/20260612000000_init.sql)),
+`channels`/`messages` (the messaging builtins — a channel = a scoped entity, a
+message = an entity scoped to its channel, so chat reuses the RBAC cascade with no
+new authorization; [`messaging.sql:34`](../../../../backend/migrations/20260618000000_messaging.sql),
+see [`messaging.md`](messaging.md)).
 Supporting non-entity tables: `sessions` (self-GC on read,
 [`db.rs:334`](../../../../backend/crates/api/src/db.rs)), `user_preferences`,
 `user_sentinels`, `field_permissions` (sparse per-field overrides, defaults
 derive from `perm_class`), `company_rbac` (append-only versioned contract),
 `case_comments`, `case_attachments` (metadata-only, NOT an entity,
-[`case_priority_attachments.sql:17`](../../../../backend/migrations/20260617000000_case_priority_attachments.sql)).
+[`case_priority_attachments.sql:17`](../../../../backend/migrations/20260617000000_case_priority_attachments.sql)),
+`channel_reads` (per-`(channel,user)` read cursor → unread counts).
 
 ---
 
@@ -226,16 +231,22 @@ and are gated at the handler (platform-admin, leak-free 404).
   learned sentinels, report/dashboard are all derived. A second storage path for
   one concept is a bug, not a feature.
 
-## Declared-but-unimplemented
+## Staged — codec shipped, consumer pending
 
-- **Connector secret encryption.** `connectors.config` is documented as storing
-  every credential AEAD-encrypted (`v1:<base64(nonce‖ct‖tag)>` under
-  `REDPASH_MASTER_KEY`) — a plaintext secret there is "a Phase-4 audit failure,
-  not a convention" ([`init.sql:320`](../../../../backend/migrations/20260612000000_init.sql)).
-  No encrypt/decrypt path exists yet; the connector loader is itself unwired (see
-  [`connectors.md`](connectors.md)). `connector_jobs` (async sync) is staged but
-  has no runner.
-- **Partition retention.** `events`/`request_log`/`db_query_log` are partitioned
-  for DROP-PARTITION retention, but there is **no retention GC** — only the
-  `_default` partition exists; nothing creates time-bounded partitions or drops
-  old ones yet.
+- **Connector secret encryption.** The AEAD codec **is now live**:
+  `crypto.rs` (`encrypt_secret`/`decrypt_secret`, AES-256-GCM, `v1:<base64(nonce‖ct‖tag)>`
+  under `REDPASH_MASTER_KEY` + optional `_PREV`) with field-agnostic **dual-key rotation**
+  (`rotate_value_in_place`, driven by the `redpash-rotate-secrets` bin). What's still
+  unwired is the *consumer*: the connector **loader** that would write/read
+  `connectors.config` is a gap (`api-route:connectors`; see [`connectors.md`](connectors.md)
+  and the capability ledger), and `connector_jobs` (async sync) has no runner. So a
+  plaintext secret in `connectors.config` is still "a Phase-4 audit failure, not a
+  convention" ([`init.sql:320`](../../../../backend/migrations/20260612000000_init.sql)) —
+  the encryption to enforce it now exists.
+- **Retention.** The `redpash-retention` bin **now runs** the zero-risk pass: GC expired
+  `sessions` (a plain `DELETE` — not partitioned) and reap **orphan blobs**
+  (`<data_dir>/{files,attachments}/<rid>.bin` with no registry row, past a 1-hour
+  in-flight grace). Still deferred: **DROP-PARTITION rotation** for
+  `events`/`request_log`/`db_query_log` — they ship with a single `_default` partition,
+  so real time-window retention needs a partitioning migration first (privacy F-C; see
+  [`../../../privacy/assessment-2026-06-16.md`](../../../privacy/assessment-2026-06-16.md)).

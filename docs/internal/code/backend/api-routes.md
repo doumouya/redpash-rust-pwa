@@ -43,6 +43,7 @@ reach-filtered); mutations gate via `rbac::require_action(Action::{View|Edit|Del
 | Method | Path | Response |
 |---|---|---|
 | GET | `/me` | `{ user, is_platform_admin, settings: {…resolved platform→role→user cascade} }` |
+| GET | `/me/export` | the **data-subject access / portability** bundle (GDPR) — scoped to `caller.rid`, so a subject only exports themselves; emits a `data_export` audit event |
 
 One request boots the client (user + admin flag + behavior cascade). The FE hides
 surfaces off this payload; the backend gates remain the real boundary.
@@ -233,6 +234,22 @@ A case is a registry entity (`case` type) driven by a **workflow-as-data** engin
 enforced against a pure transition map (internal live; external dormant). Attachments mirror the
 project-files storage model (metadata in Postgres, the blob in the project_files store), never customer
 bytes in the DB. See [cases.md](cases.md).
+
+### `/api/channels` · `/api/messages`
+| Method | Path | Body / Query | Response |
+|---|---|---|---|
+| GET | `/channels` | — | the caller's channels only (reach = membership): `{ items:[{ rid, name (DM ⇒ the other member), kind, last_message, last_at, unread }] }` |
+| POST | `/channels` | `{ name?, kind, member_ids[] }` | the channel; `kind:"dm"` is **GET-or-create** by member set; any authed caller (global chat v1) |
+| POST | `/channels/:rid/read` | `{ at? }` (default now) | upserts the `(channel,user)` read baseline — unread = messages newer than `at` |
+| GET | `/messages` | `?channel=<rid>&after=<ISO cursor?>` | `{ items }` ascending (`View` reach on the channel); a bad `after` ⇒ clean `400` |
+| POST | `/messages` | `{ channel_id, body }` | the created message (`Edit` reach); empty body ⇒ `400` |
+
+In-app chat (channels + DMs) on the **registry substrate** — a channel is a scoped entity
+(membership = who's in), a DM a 2-member channel, a message an entity scoped to its channel,
+so RBAC reach is the generated channel-membership cascade with **no messaging-specific
+authorization**. Bodies are raw Markdown (FE renders safe `md→html`, no server sanitizer —
+the `case_comments` contract). Near-real-time = **polling** (`?after=<cursor>`); SSE/Web Push
+are a later phase. See [messaging.md](messaging.md).
 
 ### `/api/monitoring/*`
 | Method | Path | Body | Response |

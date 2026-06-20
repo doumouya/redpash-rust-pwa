@@ -47,6 +47,7 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [internal/code/backend/rbac.md](internal/code/backend/rbac.md) | The authorization model — `require_action`/`require_rule`, the `scope_parents` reach cascade, leak-free 404, the per-role field-permission layer |
 | [internal/code/backend/objects.md](internal/code/backend/objects.md) | The polymorphic object registry — `/api/objects/:type` as one handler over every registered type; `entity_data` vs typed tables; the IDOR guard |
 | [internal/code/backend/cases.md](internal/code/backend/cases.md) | The `/api/cases` surface — the workflow-as-data engine (transition map → 422), the 10 endpoints, metadata-only attachments |
+| [internal/code/backend/messaging.md](internal/code/backend/messaging.md) | In-app chat (channels + DMs) on the registry substrate — RBAC by channel-membership cascade, `/api/channels` + `/api/messages`, polling, safe Markdown |
 | [internal/code/backend/monitoring.md](internal/code/backend/monitoring.md) | The in-app audit trail — the `audit` schema, the `redpash-audit-ingest` bin, the four platform-admin `/api/monitoring/*` endpoints |
 
 ## Code — Frontend (`frontend/`)
