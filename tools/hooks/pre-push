@@ -48,7 +48,9 @@ fi
 # OR a `Docs:` ack). The gate is the hard enforcement — a DB-down / missing-cargo /
 # build blip here must not wedge a push. See backend/.../bin/commit_ingest.rs.
 if command -v cargo >/dev/null 2>&1; then
-  cargo run -q -p api --bin redpash-commit-ingest >/dev/null 2>&1 \
+  # The Cargo workspace is in backend/, not the repo root — run cargo there (a subshell
+  # keeps the hook's CWD at $REPO for everything else). git/.env still resolve correctly.
+  ( cd "$REPO/backend" && cargo run -q -p api --bin redpash-commit-ingest ) >/dev/null 2>&1 \
     || echo "pre-push: commit-ingest skipped (DB/build unavailable) — not blocking." >&2
 fi
 
