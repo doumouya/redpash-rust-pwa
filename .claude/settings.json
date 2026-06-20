@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat /home/mansa/rust-project/redpash-rust-pwa/.claude/case-first-reminder.txt 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
