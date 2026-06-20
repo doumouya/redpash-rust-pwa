@@ -528,29 +528,30 @@ pub async fn add_steps(
         .bind(file)
         .execute(&mut *tx)
         .await?;
-    let mut next: i32 = sqlx::query_scalar(
+    let next: i32 = sqlx::query_scalar(
         "SELECT coalesce(max(ordinal), -1) + 1 FROM project_steps WHERE file_id = $1",
     )
     .bind(file)
     .fetch_one(&mut *tx)
     .await?;
-    let mut ids = Vec::with_capacity(steps.len());
-    for (kind, params, cleanness) in steps {
-        let sid = id::new("STP");
-        sqlx::query(
-            "INSERT INTO project_steps (id, file_id, ordinal, kind, params, applied, cleanness)
-             VALUES ($1, $2, $3, $4, $5, true, $6)",
-        )
-        .bind(&sid)
-        .bind(file)
-        .bind(next)
-        .bind(kind)
-        .bind(params)
-        .bind(cleanness)
-        .execute(&mut *tx)
-        .await?;
-        ids.push(sid);
-        next += 1;
+    // Pre-mint one id per step, then INSERT all N rows in ONE multi-row statement
+    // (sequential ordinals from `next`) instead of a round-trip per step. The redo
+    // stack was dropped once above; ids return in step order.
+    let ids: Vec<String> = steps.iter().map(|_| id::new("STP")).collect();
+    if !steps.is_empty() {
+        let mut qb = sqlx::QueryBuilder::new(
+            "INSERT INTO project_steps (id, file_id, ordinal, kind, params, applied, cleanness) ",
+        );
+        qb.push_values(steps.iter().enumerate(), |mut b, (i, (kind, params, cleanness))| {
+            b.push_bind(&ids[i])
+                .push_bind(file)
+                .push_bind(next + i as i32)
+                .push_bind(kind)
+                .push_bind(params)
+                .push_bind(true)
+                .push_bind(cleanness);
+        });
+        qb.build().execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(ids)

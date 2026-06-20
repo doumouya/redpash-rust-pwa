@@ -158,14 +158,20 @@ async fn create_channel(
     members.sort();
     members.dedup();
 
-    // Each member must exist — a clean 400 over a raw FK 500.
-    for m in &members {
-        let exists: Option<i32> = sqlx::query_scalar("SELECT 1 FROM users WHERE redpash_id = $1")
-            .bind(m)
-            .fetch_optional(&state.db)
-            .await?;
-        if exists.is_none() {
-            return Err(AppError::bad_request("invalid_member", format!("no such user {m}")));
+    // Each member must exist — a clean 400 over a raw FK 500. ONE query (batched
+    // via `= ANY`), then an in-memory check, vs a SELECT round-trip per member.
+    if !members.is_empty() {
+        let found: std::collections::HashSet<String> =
+            sqlx::query_scalar("SELECT redpash_id FROM users WHERE redpash_id = ANY($1)")
+                .bind(&members)
+                .fetch_all(&state.db)
+                .await?
+                .into_iter()
+                .collect();
+        for m in &members {
+            if !found.contains(m) {
+                return Err(AppError::bad_request("invalid_member", format!("no such user {m}")));
+            }
         }
     }
 
@@ -206,13 +212,16 @@ async fn create_channel(
         .execute(&mut *tx)
         .await?;
     db::grant_owner(&mut tx, &rid, &caller.rid).await?;
-    for m in &members {
+    if !members.is_empty() {
+        // All members in ONE insert (multi-row via UNNEST) instead of a round-trip
+        // per member; ON CONFLICT keeps it idempotent.
         sqlx::query(
             "INSERT INTO memberships (object_redpash_id, member_redpash_id, role)
-             VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+             SELECT $1, m, 'member' FROM UNNEST($2::text[]) AS m
+             ON CONFLICT DO NOTHING",
         )
         .bind(&rid)
-        .bind(m)
+        .bind(&members)
         .execute(&mut *tx)
         .await?;
     }

@@ -344,8 +344,13 @@ RULES.push({
       // Update brace depth (very crude — strings/comments ignored).
       var opens = (line.match(/{/g) || []).length;
       var closes = (line.match(/}/g) || []).length;
-      // Detect a for/while/iter chain opening a block on this line.
-      var startsLoop = /\b(for|while)\b[^{;]*\{/.test(line)
+      // Detect a for/while/iter chain opening a block on this line. A Rust `for`
+      // loop is ALWAYS `for PAT in ITER {` — require the `in` keyword so a trait
+      // impl (`impl Trait for Type {`) isn't misread as a loop body (the bare-`for`
+      // regex flagged every sqlx::query inside such an impl — e.g. session.rs's
+      // `impl FromRequestParts … for Caller {`).
+      var startsLoop = /\bfor\b[^{;]*\bin\b[^{;]*\{/.test(line)
+                    || /\bwhile\b[^{;]*\{/.test(line)
                     || /\.\s*(iter|iter_mut|into_iter|for_each)\s*\(/.test(line);
       if (startsLoop && opens > closes) {
         stack.push({ start: i, snippet: line.trim() });
