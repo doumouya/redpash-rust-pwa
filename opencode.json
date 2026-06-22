@@ -4,10 +4,10 @@
   "small_model": "ollama/gemma4:latest",
   "provider": {
     "ollama": {
-      "npm": "@ai-sdk/openai-compatible",
+      "npm": "ollama-ai-provider-v2",
       "name": "Ollama (local)",
       "options": {
-        "baseURL": "http://localhost:11434/v1"
+        "baseURL": "http://localhost:11434/api"
       },
       "models": {
         "gemma4:latest": { "name": "Gemma 4 (local)" }

@@ -269,7 +269,9 @@ OpenCode exactly as they fence Claude.
 
 What the config does:
 
-- **Local models, no cloud.** Points OpenCode at Ollama (`http://localhost:11434/v1`); the
+- **Local models, no cloud.** Points OpenCode at the local Ollama server (`http://localhost:11434`,
+  via the `ollama-ai-provider-v2` provider — the generic OpenAI-compatible adapter truncates
+  Ollama's stream to one token); the
   default model is whatever `ollama list` shows (`gemma4:latest` today). Fits the
   data-governance posture — the model runs where the data is.
 - **The MCP, mirrored.** Registers the same `tools/mcp-server/` (relative `command`, the dev
