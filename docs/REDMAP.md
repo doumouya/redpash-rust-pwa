@@ -14,6 +14,7 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `decisions/day-one.md` | `backend/migrations/`; `backend/crates/api/src/{rbac,objects,field_perms}.rs`; `backend/crates/shared/src/filter.rs` |
 | `decisions/client-data-engines.md` | `backend/crates/data/src/wasm.rs`; `frontend/wasm/`; `frontend/wasm-src/gluesql/`; `frontend/framework/engine/` |
 | `decisions/registry-redundancy.md` | `backend/crates/api/src/{objects,types,pipeline}.rs` |
+| `decisions/vision.md` | `backend/crates/data/`; `frontend/apps/studio/workspace/` (the Upload→Clean→Visualise spine the vision drives) |
 | `privacy/privacy-by-design.md` | `tools/privacy-audit/`; cross-cuts the F-A…F-L code areas (`db,cases,event,designer.rs`, `migrations/`, `frontend/`) |
 | `privacy/assessment-2026-06-16.md` | dated review of the same surface as `privacy/privacy-by-design.md` |
 | `decisions/disposability-requires-a-ledger.md` | `tools/capability-audit/`; `docs/internal/capability-ledger.md` |
@@ -35,6 +36,10 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `internal/code/frontend/conventions.md` | `tools/ui-fork-audit/`; `tools/ci.sh`; `frontend/styles/`; `frontend/framework-sandbox.html` |
 | `internal/code/frontend/data-cleaner.md` | `frontend/apps/studio/workspace/`; `frontend/framework/{column-manager,sql-editor,engine}/` |
 | `internal/specs/*` | the work item's own target area (named in the spec) |
+| `internal/runbooks/0011-object-kind-prefix-mismatch.md` | `backend/crates/api/src/type_cache.rs`; `backend/crates/api/src/id.rs` |
+| `internal/runbooks/0012-connector-gate-ssrf-encodings.md` | `backend/crates/api/src/connectors_core.rs`; `backend/crates/api/src/mysql_loader.rs` |
+| `internal/runbooks/0023-polars-0.54-wasm-fork.md` | `backend/Cargo.toml`; `backend/crates/data/`; `tools/purity-check.sh` |
+| `internal/runbooks/objects-scope-parent-idor.md` | `backend/crates/api/src/objects.rs`; `backend/crates/api/tests/objects_idor.rs` |
 
 ## Repo layout (scan-before-dive)
 

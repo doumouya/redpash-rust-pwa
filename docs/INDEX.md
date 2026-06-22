@@ -15,6 +15,7 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 
 | Doc | What |
 |---|---|
+| [decisions/vision.md](decisions/vision.md) | The product north-star — who RedPash serves, the three-step promise (Upload→Clean→Visualise), the join problem, and the two strategic bets that bind how it evolves |
 | [decisions/day-one.md](decisions/day-one.md) | The day-one locked decisions baked into the rebuild (retrofitting costs 10×) |
 | [decisions/client-data-engines.md](decisions/client-data-engines.md) | Engine roles by job: Polars = compute, GlueSQL-idb = on-device store, Postgres = registry |
 | [decisions/registry-redundancy.md](decisions/registry-redundancy.md) | The privacy posture — registry (ids/metadata) in Postgres, customer data client-side |
@@ -65,3 +66,13 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 |---|---|
 | [internal/specs/docs-reorg.md](internal/specs/docs-reorg.md) | This docs reorganization task (hierarchy + INDEX/REDMAP + reconcile + audit gate) |
 | [internal/specs/build-fe-wasm-src.md](internal/specs/build-fe-wasm-src.md) | Bug: build-fe ships `frontend/wasm-src/` (~381 MiB Rust artifacts) into the dist |
+| [internal/specs/agent-system-review-2026-06-12.md](internal/specs/agent-system-review-2026-06-12.md) | Dated review of the `/feature` 5-role orchestrator — 49 prerelease findings (+ F50 from the lean re-verify), each tagged addressed/open/diverged against the current lean tree |
+
+## Runbooks (`docs/internal/runbooks/`)
+
+| Doc | What |
+|---|---|
+| [internal/runbooks/0011-object-kind-prefix-mismatch.md](internal/runbooks/0011-object-kind-prefix-mismatch.md) | Historical record — the predecessor's hardcoded `TEAM`/`DSH` prefix dispatch drifted from minted `TEM_`/`FIL_`; lean closes it by construction (unique `rid_prefix` + registry-driven `object_kind`) |
+| [internal/runbooks/0012-connector-gate-ssrf-encodings.md](internal/runbooks/0012-connector-gate-ssrf-encodings.md) | The connector SSRF/TLS gate hole — IPv6-wrapper / zone-id / trailing-dot encodings of `169.254.169.254` slipped `is_blocked_host`; fixed by `embedded_ipv4`+`ip_literal`+`is_unspecified`, pinned by 5 tests |
+| [internal/runbooks/0023-polars-0.54-wasm-fork.md](internal/runbooks/0023-polars-0.54-wasm-fork.md) | polars 0.54 won't compile for wasm32 (tokio→mio); fix = the `doumouya/polars-rp` fork via `[patch.crates-io]` (live on lean) + the upgrade playbook |
+| [internal/runbooks/objects-scope-parent-idor.md](internal/runbooks/objects-scope-parent-idor.md) | Historical record for the FIXED cross-tenant `scope_parent_id` IDOR in `objects.rs::create` — the `require_rule >= Member` reach gate, the day-one #3 FK, the regression test, the auth-audit Cat-4 detector |
