@@ -76,7 +76,7 @@ migration on the PK (the column is `TEXT`).
 | `CHT` | chart | `project_files` (`file_type='chart'`) | project |
 | `DSH` | dashboard | `project_files` (`file_type='dashboard'`) | project |
 | `CAS` | case | `cases` | company, project |
-| `CON` | connection | `connections` | — |
+| `CON` | connection | `connectors` | — |
 | `CHN` | channel | `channels` | — |
 | `MSG` | message | `messages` | channel |
 | `PRF` | preference | registry (`entity_data`) | — |
