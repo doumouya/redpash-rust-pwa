@@ -21,6 +21,22 @@ spine as needed:
 
 ---
 
+## The JS↔Rust boundary (locked)
+
+The load-bearing rule the layering rests on:
+
+> **Rust owns the data. JS owns the pixels.**
+
+Anything that transforms, computes over, or persists data — parse, encoding sniff, the
+cleaner steps, type inference, dedup, joins, aggregation, cleanness, **filter, sort,
+export** — is Rust (the `data` crate's charter: *anything that touches a row or a byte*),
+and runs identically on the server and as wasm in the browser. Anything that draws or
+responds to a human — rendering, the redtable surface, panels/toolbars, routing, building
+the ECharts option *from data Rust supplied* — is JS (*anything that touches a pixel*).
+There is ONE filter, ONE sort, ONE step engine, written once in Rust; never build a data
+engine in JS. The engine is [`../backend/data-engine.md`](../backend/data-engine.md); why
+it runs both places is [`../../../decisions/client-data-engines.md`](../../../decisions/client-data-engines.md).
+
 ## The one-binary, one-`/me` model
 
 `backend/crates/api` serves the API under `/api` and the static `frontend/` tree

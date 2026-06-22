@@ -5,7 +5,10 @@ same engine can run on the server and in the browser:
 
 - **`api`** — the Axum edge. Mounts the `/api` routers (`backend/crates/api/src/main.rs`),
   owns sessions/RBAC/CSRF, hydrates frames per `rid`, and serves the static frontend
-  as a fallback. All io/http/state lives here.
+  as a fallback. All io/http/state lives here. The `/api` router carries two layers —
+  a CSRF **origin guard** (`middleware::origin_guard`, on state-changing methods) and a
+  256 MiB body limit — and requests trace as structured JSON; the DB pool + the
+  load-bearing startup order live in `state.rs` (schema.md → Connection & startup).
 - **`data`** — pure compute over Polars. Cleaning steps, group-by/reports, the
   canonical `FilterNode`, and the page view. **No io/http/threads/time** — that
   purity is what lets it compile to wasm32 and run client-side, byte-identical to

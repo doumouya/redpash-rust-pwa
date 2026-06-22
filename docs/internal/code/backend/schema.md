@@ -15,6 +15,26 @@ a derived view.
 
 ---
 
+## Connection & startup
+
+Postgres is reached through **`sqlx`** from the `api` crate — **no ORM, no second store**.
+`AppState::init` ([`state.rs`](../../../../backend/crates/api/src/state.rs)) opens ONE
+`PgPool` (`max_connections=8`, 5 s acquire timeout) from `DATABASE_URL`; the binary
+refuses to start if it is unset. The pool is `Arc`-cloned into every handler via
+`State<AppState>`, so handlers never open their own connection.
+
+Startup runs once, **in this order** (load-bearing):
+
+1. **Migrate** — `sqlx::migrate!("../../migrations")` (embedded in the binary; the files
+   live at `backend/migrations/`). This also SEEDS the type registry.
+2. **Load the registry** — `TypeDefCache::load` reads the seeded `type_definitions` /
+   `type_fields` into an immutable in-memory cache. Migrate (seeds) → load, never the reverse.
+3. **Bootstrap** (debug builds) — `bootstrap::ensure_dev_user` ensures the `dev` admin +
+   a default project, so a fresh DB is usable in local dev.
+
+The in-process caches in `AppState` (hydrated frames, the type registry) are **derived
+views** — they refill from Postgres/disk on a miss; none are durable.
+
 ## Spine 1 — the entity registry (`entities`)
 
 ```sql
