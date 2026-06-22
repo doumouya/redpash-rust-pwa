@@ -15,7 +15,7 @@ compatibility: backend/crates/data (polars 0.54 via the doumouya/polars-rp fork;
 # Rust data engine (the `data` crate)
 
 > **Live companion doc — read it first / keep it open:**
-> [`docs/internal/code/backend/data-engine.md`](../../../code/backend/data-engine.md) is the source of
+> [`docs/internal/code/backend/data-engine.md`](../../../docs/internal/code/backend/data-engine.md) is the source of
 > truth for the *current* engine surface (every cleaning `kind`, the `ReportSpec` pipeline, the canonical
 > `FilterNode`, and the wasm `Workbook` method table). This skill teaches the Polars *idioms + discipline*;
 > the doc carries the live API. When they disagree, **the code wins** (and the doc, not this skill, is what
@@ -94,7 +94,7 @@ This is the crate's center of gravity and the part most worth understanding:
   `Workbook` methods (`from_csv`, `page`, `filter_page`, `view`, `score`, `sql`, `rows`, `cols`) each reuse
   the exact server function. The JS method list is **generated** from these exports, so there is no
   "exported-vs-wired" drift. See [`references/boundary.md`](references/boundary.md) and the live
-  [`data-engine.md`](../../../code/backend/data-engine.md) §wasm for the full table.
+  [`data-engine.md`](../../../docs/internal/code/backend/data-engine.md) §wasm for the full table.
 
 ## Discipline (why the boundaries are where they are)
 

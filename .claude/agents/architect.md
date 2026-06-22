@@ -24,11 +24,11 @@ Case) and nothing else.
 
 ## Before you spec — align with the existing system
 A spec that ignores RedPash's established patterns creates rework. Before writing, read:
-- `docs/internal/redmap.md` — the source-tree map.
-- `docs/internal/processes/` — the standing processes your spec must obey (push-policy,
-  atomic-doc-plan, bug-case-runbook-cadence, replicable-feature-pattern, audit-cadence).
-- `docs/internal/decisions/` + `docs/internal/stack/` and the relevant
-  `docs/internal/code/<path>.md` atomic docs for the area you're touching.
+- `docs/REDMAP.md` + `docs/INDEX.md` — the docs⇄code map + the flat doc index.
+- `CLAUDE.md` — the standing rules your spec must obey (Case-first, push-policy,
+  commit-convention, docs-currency, and the day-one binding rules).
+- `docs/decisions/` and the relevant `docs/internal/code/<area>.md` doc for the
+  area you're touching.
 - The relevant **skill** for the layer (e.g. `redpash-polars`, `rust-data-engine`,
   `rust-object-registry-design`, `vanilla-web`) — use it to dehallucinate the **exact**
   signatures/types your acceptance criteria reference. Do not invent an API; cite the real one.

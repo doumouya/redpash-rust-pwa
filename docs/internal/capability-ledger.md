@@ -57,6 +57,7 @@ The dated diagnostic that seeded it: [`parity-review-2026-06-20.md`](parity-revi
 
 **tool** — `tool:admin-scope-audit` `tool:api-doc-audit` `tool:auth-audit`
 `tool:capability-audit` `tool:case-coverage-audit` `tool:class-count-audit`
+`tool:claude-refs-audit`
 `tool:connectors-audit` `tool:crossing-audit` `tool:css-audit` `tool:css-cross-page-audit`
 `tool:css-tab-compare-audit` `tool:doc-coverage-audit` `tool:fe-framework-audit`
 `tool:hooks` `tool:html-audit` `tool:js-audit` `tool:list-endpoint-rbac-audit`

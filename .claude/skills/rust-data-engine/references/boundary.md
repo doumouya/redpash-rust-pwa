@@ -72,7 +72,7 @@ The top-level `parse_score(bytes, tld)` runs the same upload front door (`parse:
   hand-maintained array — the predecessor's "13-exported-vs-6-wired" drift is *designed out*. If a method is
   exported here, it is callable from JS, full stop.
 - The full, authoritative method table (signatures, `total` semantics, the QuerySpec order) lives in the live
-  doc [`data-engine.md`](../../../../code/backend/data-engine.md) §wasm — read it rather than trusting a copy.
+  doc [`data-engine.md`](../../../../docs/internal/code/backend/data-engine.md) §wasm — read it rather than trusting a copy.
 
 **Trade-off (named honestly).** JSON-everything is *not* the "Rust and WebAssembly" book's
 headline-recommended boundary. The book tells you to **minimize serializing/copying** and to keep large,

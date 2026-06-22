@@ -16,7 +16,7 @@ and surface only the two human checkpoints to Em.
 - **Case = the handoff bus.** Each role is dispatched with the **Case ID** (and the spec-doc
   path) and loads its own context fresh from it — do NOT paste prior role transcripts between
   roles. That keeps each role's context clean (this is the whole point of the Case handoff).
-- **State ledger.** Maintain `docs/internal/state/current_feature.md` (template already exists):
+- **State ledger.** Maintain `docs/internal/state/current_feature.md` (created at Step 0 if absent):
   after every step write the active checklist, the gate result, and the retry counters. If this
   session dies or its context bloats, the ledger is how the next session resumes. Never copy the
   spec into the ledger — the spec lives in the Case/spec doc.
@@ -38,8 +38,8 @@ Initialize/append `docs/internal/state/current_feature.md`: the request, a fresh
 zeroed retry counters.
 
 ### Step 1 — architect (spec)
-Dispatch `subagent_type: architect` with the feature request. It reads `docs/internal/redmap.md` +
-`docs/internal/processes/` + the relevant skill, then writes a **Case** (`case_create`, when
+Dispatch `subagent_type: architect` with the feature request. It reads `docs/REDMAP.md` +
+`CLAUDE.md` (the standing rules) + the relevant skill, then writes a **Case** (`case_create`, when
 the `redpash-slack` MCP is up) AND a spec doc at `docs/internal/specs/<slug>.md` with numbered
 acceptance criteria + exact API contracts. Record the Case ID + spec path in the ledger.
 
