@@ -29,7 +29,9 @@ whole model hangs off:
 - **One polymorphic id space.** A RID is `<PREFIX>_<32-hex>`; the prefix is
   globally unique per type (#1), so `object_kind(rid)` is a prefix→type HashMap
   lookup with no disambiguation
-  ([`type_cache.rs:132`](../../../../backend/crates/api/src/type_cache.rs)).
+  ([`type_cache.rs:132`](../../../../backend/crates/api/src/type_cache.rs)). The
+  full scheme — format, the prefix registry, the two mint paths, and why UUID over
+  Crockford-base32 — is [`redpash-id.md`](redpash-id.md).
 - **One delete path.** `delete_entity` does `DELETE FROM entities WHERE id = $1`
   ([`db.rs:60`](../../../../backend/crates/api/src/db.rs)); the FK cascade clears
   the subtype row, every membership edge, and all downstream rows — zero

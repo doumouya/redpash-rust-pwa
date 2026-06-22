@@ -2,6 +2,7 @@
 //! 122 bits of uuid-v4 randomness; no PK-collision retry needed.
 //! Day-one decision #1: prefixes are UNIQUE per type (see the
 //! type_definitions seed) — `object_kind` resolution is a plain map lookup.
+//! Doc (full scheme + prefix registry + rationale): docs/internal/code/backend/redpash-id.md
 
 use uuid::Uuid;
 

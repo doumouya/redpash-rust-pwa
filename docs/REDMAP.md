@@ -24,6 +24,7 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `internal/code/backend/data-engine.md` | `backend/crates/data/src/{steps/,group_by,wasm}.rs`; `backend/crates/shared/src/filter.rs` |
 | `internal/code/backend/connectors.md` | `backend/crates/api/src/{connectors_core,mysql_loader}.rs` |
 | `internal/code/backend/schema.md` | `backend/migrations/`; `backend/crates/api/src/{db,type_cache}.rs` |
+| `internal/code/backend/redpash-id.md` | `backend/crates/api/src/id.rs`; `backend/crates/api/src/{objects,db}.rs` (mint paths); `backend/migrations/` (the `type_definitions.rid_prefix` seed) |
 | `internal/code/backend/rbac.md` | `backend/crates/api/src/{rbac,session,field_perms,type_cache,db}.rs` |
 | `internal/code/backend/objects.md` | `backend/crates/api/src/{objects,types,type_cache}.rs` |
 | `internal/code/backend/cases.md` | `backend/crates/api/src/cases.rs`; `backend/crates/api/src/pipeline.rs` (attachments) |
