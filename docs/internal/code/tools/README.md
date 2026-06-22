@@ -257,6 +257,37 @@ slip fails a check, not a teammate's afternoon.
 
 ---
 
+## External agents — OpenCode (open models)
+
+RedPash is built by a fleet of agents; not all are Claude. **OpenCode** — running local
+open-weight models (`gemma4:latest` via [Ollama](https://ollama.com)) — is wired in by a
+committed [`opencode.json`](../../../../opencode.json) at the repo root, with
+[`AGENTS.md`](../../../../AGENTS.md) as its operating envelope. The principle: the discipline
+is **enforced at git/DB, not in any one harness's prompt**, so the same gates (the `pre-push`
+case-coverage hook above, the backend docs-currency close-gate, the audit ratchet) fence
+OpenCode exactly as they fence Claude.
+
+What the config does:
+
+- **Local models, no cloud.** Points OpenCode at Ollama (`http://localhost:11434/v1`); the
+  default model is whatever `ollama list` shows (`gemma4:latest` today). Fits the
+  data-governance posture — the model runs where the data is.
+- **The MCP, mirrored.** Registers the same `tools/mcp-server/` (relative `command`, the dev
+  session self-minted — no secret committed), so OpenCode gets the `case_*` tools and can
+  follow case-first.
+- **The foundation is hard-denied.** A per-path `permission` block blocks edits to
+  `backend/crates/**`, `backend/migrations/**`, `frontend/framework/**`, and the rules /
+  enforcement files; denies `git push` and destructive bash; and confines OpenCode to its lane
+  (frontend apps, docs, tests, tools). A `build` (constrained) and a read-only `reviewer` agent
+  are defined. So an open model can't reach the foundation, and the gates catch anything else.
+
+Setup (once): install + run Ollama, `ollama pull <model>`, build the MCP server's `dist/` (it
+must exist), have the API on `:8080` for the MCP — then `opencode` at the repo root reads the
+config. The one machine-specific value is `REDPASH_SLACK_DIR` in `opencode.json` (an absolute
+path); split it into `~/.config/opencode/opencode.json` if this ever goes multi-machine.
+
+---
+
 ## Related
 
 - [Tools — backend index](../backend/README.md) — the three-crate workspace the

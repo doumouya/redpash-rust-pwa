@@ -1,0 +1,93 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma4:latest",
+  "small_model": "ollama/gemma4:latest",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "gemma4:latest": { "name": "Gemma 4 (local)" }
+      }
+    }
+  },
+  "mcp": {
+    "redpash": {
+      "type": "local",
+      "command": ["node", "tools/mcp-server/dist/server.js"],
+      "enabled": true,
+      "environment": {
+        "REDPASH_API_BASE": "http://localhost:8080/api",
+        "REDPASH_SLACK_DIR": "/home/mansa/Internal-Slack"
+      }
+    }
+  },
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "read": "allow",
+    "grep": "allow",
+    "glob": "allow",
+    "webfetch": "ask",
+    "websearch": "ask",
+    "external_directory": "deny",
+    "doom_loop": "ask",
+    "edit": {
+      "*": "ask",
+      "docs/**": "allow",
+      "frontend/apps/**": "allow",
+      "frontend/styles/**": "allow",
+      "tools/**": "ask",
+      "backend/**": "deny",
+      "frontend/framework/**": "deny",
+      "frontend/wasm/**": "deny",
+      "backend/crates/api/tests/**": "allow",
+      "tools/hooks/**": "deny",
+      "tools/ci-audit/**": "deny",
+      "CLAUDE.md": "deny",
+      "AGENTS.md": "deny",
+      "opencode.json": "deny",
+      ".git/**": "deny"
+    },
+    "bash": {
+      "*": "ask",
+      "cargo test*": "allow",
+      "cargo build*": "allow",
+      "cargo check*": "allow",
+      "cargo fmt*": "allow",
+      "cargo clippy*": "allow",
+      "node tools/*": "allow",
+      "sh tools/ci*.sh": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git add*": "allow",
+      "git commit*": "allow",
+      "git push*": "deny",
+      "*pkill*": "deny",
+      "* kill *": "deny",
+      "rm -rf*": "deny",
+      "*dropdb*": "deny",
+      "*DROP DATABASE*": "deny",
+      "*DROP TABLE*": "deny"
+    }
+  },
+  "agent": {
+    "build": {
+      "description": "RedPash builder on a local model — safe lanes only (frontend apps, docs, tests, tools). The foundation is denied by the permission config.",
+      "model": "ollama/gemma4:latest",
+      "prompt": "You are an OpenCode builder on the RedPash project. Read AGENTS.md and CLAUDE.md first and obey them. Stay in your lane (frontend/apps, docs, tests, tools); the backend, migrations, frontend/framework, and the rules/enforcement are off-limits and the permission config will block you there. Open a Case via the redpash MCP before non-trivial work, commit ONLY the files you changed with `git commit -o`, never push, and prefer small verifiable diffs a gate can check.",
+      "tools": { "read": true, "edit": true, "bash": true, "write": true }
+    },
+    "reviewer": {
+      "description": "Read-only RedPash reviewer on a local model — reads + greps, never edits or runs commands.",
+      "model": "ollama/gemma4:latest",
+      "prompt": "You are an OpenCode reviewer on the RedPash project. You READ and REVIEW only — you never edit files or run commands. Check changes against AGENTS.md + CLAUDE.md (case-first, parallel-safe commits, no frameworks, docs-currency) and report findings; flag anything touching the foundation (backend, migrations, RBAC, the object model).",
+      "tools": { "read": true, "edit": false, "bash": false, "write": false }
+    }
+  },
+  "default_agent": "build"
+}
