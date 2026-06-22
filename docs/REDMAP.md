@@ -35,11 +35,20 @@ retired next-era naming — the old `*-next` doc titles and the `*_next` DB name
 | `internal/code/frontend/components.md` | `frontend/framework/` (all `rp-*` components); `frontend/styles/tokens.css` |
 | `internal/code/frontend/conventions.md` | `tools/ui-fork-audit/`; `tools/ci.sh`; `frontend/styles/`; `frontend/framework-sandbox.html` |
 | `internal/code/frontend/data-cleaner.md` | `frontend/apps/studio/workspace/`; `frontend/framework/{column-manager,sql-editor,engine}/` |
+| `internal/code/tools/README.md` | `tools/` (the whole tree) — `tools/ci.sh`; `tools/ci-audit/`; `tools/*-audit/`; `tools/{purity-check,build-wasm,build-wasm-gluesql,build-fe,test-fe}.sh`; `tools/lib/`; `tools/mcp-server/`; `tools/wasm-bench/`; `tools/hooks/` |
 | `internal/specs/*` | the work item's own target area (named in the spec) |
 | `internal/runbooks/0011-object-kind-prefix-mismatch.md` | `backend/crates/api/src/type_cache.rs`; `backend/crates/api/src/id.rs` |
 | `internal/runbooks/0012-connector-gate-ssrf-encodings.md` | `backend/crates/api/src/connectors_core.rs`; `backend/crates/api/src/mysql_loader.rs` |
 | `internal/runbooks/0023-polars-0.54-wasm-fork.md` | `backend/Cargo.toml`; `backend/crates/data/`; `tools/purity-check.sh` |
 | `internal/runbooks/objects-scope-parent-idor.md` | `backend/crates/api/src/objects.rs`; `backend/crates/api/tests/objects_idor.rs` |
+| `decisions/target-architecture.md` | `backend/crates/api/src/{objects,types}.rs`; `backend/migrations/` |
+| `decisions/object-model.md` | `backend/crates/api/src/{objects,types,pipeline}.rs`; `backend/migrations/` |
+| `internal/auth/dev-user.md` | `backend/crates/api/src/{auth,bootstrap,state}.rs` |
+| `internal/auth/google.md` | `backend/crates/api/src/{auth,session}.rs` |
+| `internal/runbooks/0007-column-drag-reorder-cluster.md` | `frontend/framework/redtable/`; `frontend/framework/grid-view/` |
+| `internal/runbooks/0009-cleaning-type-coercion-regression.md` | `backend/crates/data/src/{clean,steps/util,steps/cells}.rs` |
+| `internal/runbooks/0010-rbac-admin-nest-privilege-escalation.md` | `backend/crates/api/src/{admin,monitoring,rbac}.rs` |
+| `internal/runbooks/0022-admin-scope-registry-list.md` | `backend/crates/api/src/{objects,rail}.rs` |
 
 ## Repo layout (scan-before-dive)
 

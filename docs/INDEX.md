@@ -16,6 +16,8 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | Doc | What |
 |---|---|
 | [decisions/vision.md](decisions/vision.md) | The product north-star — who RedPash serves, the three-step promise (Upload→Clean→Visualise), the join problem, and the two strategic bets that bind how it evolves |
+| [decisions/target-architecture.md](decisions/target-architecture.md) | The durable platform DNA — the 3-bucket rule (entity / edge / derived view), the two spines (entity registry + unified membership edge), cascade-as-data, single-table-subtype; the WHY behind day-one's locked line items |
+| [decisions/object-model.md](decisions/object-model.md) | A new object exists only for a new SHAPE, never a new combination — the orthogonal-primitive rule; what is stored vs derived (no reports/dashboards tables); underpins day-one #1/#2 |
 | [decisions/day-one.md](decisions/day-one.md) | The day-one locked decisions baked into the rebuild (retrofitting costs 10×) |
 | [decisions/client-data-engines.md](decisions/client-data-engines.md) | Engine roles by job: Polars = compute, GlueSQL-idb = on-device store, Postgres = registry |
 | [decisions/registry-redundancy.md](decisions/registry-redundancy.md) | The privacy posture — registry (ids/metadata) in Postgres, customer data client-side |
@@ -34,6 +36,13 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 |---|---|
 | [privacy/privacy-by-design.md](privacy/privacy-by-design.md) | The standing PbD register — roles, data inventory, the 7 principles, risk register; enforced by `tools/privacy-audit/` |
 | [privacy/assessment-2026-06-16.md](privacy/assessment-2026-06-16.md) | Dated independent GDPR/PbD assessment — verdict + findings register F-A…F-L |
+
+## Auth (`docs/internal/auth/`)
+
+| Doc | What |
+|---|---|
+| [internal/auth/dev-user.md](internal/auth/dev-user.md) | The dev-user / bootstrap / first-admin path — `#[cfg(debug_assertions)]` dev-login (compiled OUT of release, not a runtime flag), the auto-admin `dev` bootstrap user + default project, and `POST /auth/claim-admin` (the atomic first-admin claim) |
+| [internal/auth/google.md](internal/auth/google.md) | The production Google OAuth authorization-code flow — backend-minted opaque `rp_session` (no Google token reaches JS), the `rp_oauth_state` CSRF bridge, upsert-by-`sub`, the `Caller`/60s-cache lifecycle (day-one #10) |
 
 ## Code — Backend (`backend/crates/{api,data,shared}`)
 
@@ -60,6 +69,12 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [internal/code/frontend/conventions.md](internal/code/frontend/conventions.md) | ui-fork-audit R1–R9, the CI gates, CSS tokens, how to add a component |
 | [internal/code/frontend/data-cleaner.md](internal/code/frontend/data-cleaner.md) | The Data Cleaner (`apps/studio/workspace`): orchestrator, engine seam, catalogs, modes |
 
+## Code — Tools (`tools/`)
+
+| Doc | What |
+|---|---|
+| [internal/code/tools/README.md](internal/code/tools/README.md) | The `tools/` immune system — the `ci.sh` gate, the auto-discovered `*-audit/` suite + ci-audit ratchet, the wasm/FE build scripts, `tools/lib/`, the MCP server, wasm-bench, and the tracked git hooks |
+
 ## Specs / work items (`docs/internal/specs/`)
 
 | Doc | What |
@@ -72,7 +87,11 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 
 | Doc | What |
 |---|---|
+| [internal/runbooks/0007-column-drag-reorder-cluster.md](internal/runbooks/0007-column-drag-reorder-cluster.md) | Historical record — four bugs (thead↔tbody desync, weak edge drop indicator, trailing-sentinel `appendChild` off-by-one, spec-index edit-mode mis-target) on the predecessor's in-table column drag-reorder; lean closes the class by construction (one `redtable` keyed by `data-col`/`data-key`, reorder = `update({columns})` re-render, no drag interaction) |
+| [internal/runbooks/0009-cleaning-type-coercion-regression.md](internal/runbooks/0009-cleaning-type-coercion-regression.md) | Historical record — the cleaner stopped cleaning (`type_consistency` gap on the Fleury corpus) because plain `.cast()` is locale-naive; fixed (live on lean) by `normalize_numeric_cell`/`normalize_bool_cell`/day-first `parse_date_flex` in `steps/util.rs`, pinned by in-crate tests |
+| [internal/runbooks/0010-rbac-admin-nest-privilege-escalation.md](internal/runbooks/0010-rbac-admin-nest-privilege-escalation.md) | Historical record — the predecessor's `/admin` nest had no platform-admin gate (any authed user could `POST /admin/memberships` to self-grant Owner) while `/monitoring` did; lean closes it by construction (admin verdict pre-resolved on `Caller`, gate is the FIRST line of every `/admin`/`/monitoring` handler, leak-free 404) |
 | [internal/runbooks/0011-object-kind-prefix-mismatch.md](internal/runbooks/0011-object-kind-prefix-mismatch.md) | Historical record — the predecessor's hardcoded `TEAM`/`DSH` prefix dispatch drifted from minted `TEM_`/`FIL_`; lean closes it by construction (unique `rid_prefix` + registry-driven `object_kind`) |
 | [internal/runbooks/0012-connector-gate-ssrf-encodings.md](internal/runbooks/0012-connector-gate-ssrf-encodings.md) | The connector SSRF/TLS gate hole — IPv6-wrapper / zone-id / trailing-dot encodings of `169.254.169.254` slipped `is_blocked_host`; fixed by `embedded_ipv4`+`ip_literal`+`is_unspecified`, pinned by 5 tests |
+| [internal/runbooks/0022-admin-scope-registry-list.md](internal/runbooks/0022-admin-scope-registry-list.md) | Architecture record — user surfaces de-admin-scoped via the object registry + reach-scoped delivery ("one engine, two surfaces"); the generic `/api/objects/:type` reach-scoped list; staged rollout (shipped vs deferred) |
 | [internal/runbooks/0023-polars-0.54-wasm-fork.md](internal/runbooks/0023-polars-0.54-wasm-fork.md) | polars 0.54 won't compile for wasm32 (tokio→mio); fix = the `doumouya/polars-rp` fork via `[patch.crates-io]` (live on lean) + the upgrade playbook |
 | [internal/runbooks/objects-scope-parent-idor.md](internal/runbooks/objects-scope-parent-idor.md) | Historical record for the FIXED cross-tenant `scope_parent_id` IDOR in `objects.rs::create` — the `require_rule >= Member` reach gate, the day-one #3 FK, the regression test, the auth-audit Cat-4 detector |
