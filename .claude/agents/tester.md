@@ -54,8 +54,9 @@ escalate to Em (the spec's approver). Don't loop past 2.
   then enforce it by discipline — the red test must exist and fail before impl lands.
 - **Frontend (vanilla JS):** `sh tools/test-fe.sh` (the `node:test` harness, Phase 2) /
   `node --test frontend/tests/`. No JS test framework — `node:test` only.
-- **Runtime UI:** `node tools/page-verify/verify.js --pages <p>` for live page behavior (cap to
-  1–2 browsers; needs the dev server + `REDPASH_DEV_LOGIN=1`).
+- **Runtime UI:** no headless page-verify harness on lean — exercise live page behavior manually
+  on the dev server (`:8080`, `REDPASH_DEV_LOGIN=1`); the `node:test` FE gate above is the
+  automated check.
 - Bound resources: `--jobs 4`; never run a server build + wasm build + browsers concurrently.
 
 ## Coverage check

@@ -21,9 +21,10 @@ Run the build/verify steps the change requires (skip what it doesn't touch):
   wasm32, bindgen, `wasm-opt -Oz`, content-hashes the artifact (the hash IS the cache version;
   never hand-bump a cache). Report artifact size.
 - **server:** `cargo build --jobs 4 -p api` (and `cargo run -p api` to boot for a smoke check).
-- **health gate:** `sh tools/health-check.sh` — stack version, Postgres reach, ports, cargo
-  check, audit suite, git state. This is the green light.
-- **CI gate:** `sh tools/ci-audit/check.sh` — no regressions (exit 1 blocks the push).
+- **green-light gate:** `sh tools/ci.sh` — the full host gate: purity-check, `cargo` build + test
+  (workspace), the audit ratchet (`ci-audit`), the FE `node:test` gate, and the FE build self-check.
+- **CI gate:** `sh tools/ci-audit/check.sh` — the audit ratchet on its own; no regressions (exit 1
+  blocks the push). Re-run at push time even if `ci.sh` was green, since commits may have landed.
 
 ## Resource discipline (32 GB host)
 Serialize the heavy stages — **never** run server build + wasm build + a browser run at once

@@ -84,7 +84,7 @@ First dispatch the `pr-review-toolkit` specialists yourself, in parallel, **read
 specialist's findings onto the Case (MCP down → append a findings digest to the spec doc, never
 raw transcripts into a dispatch prompt). These dispatches are sub-gates of the review step and
 do NOT count against the 8 role-hop cap. Then dispatch `subagent_type: reviewer` → runs
-`sh tools/audit.sh` + `sh tools/ci-audit/check.sh`; weighs the specialists' Case-posted
+`sh tools/ci.sh` + `sh tools/ci-audit/check.sh`; weighs the specialists' Case-posted
 findings (flags, never fixes); checks coverage.
 A regression or unresolved finding → loop back to coder/tester under the circuit breaker. On
 green → reviewer `case_comment`s the audit/coverage trail and `set_status` → `in_review`.
@@ -97,7 +97,7 @@ per-branch). Do not push until Em confirms. On approval, make it durable: `case_
 `CHECKPOINT-2 APPROVED by Em — …` quoting Em's words.
 
 ### Step 5 — ops (build + push)
-Dispatch `subagent_type: ops` → `sh tools/build-wasm.sh` (if wasm touched) + `sh tools/health-check.sh`
+Dispatch `subagent_type: ops` → `sh tools/build-wasm.sh` (if wasm touched) + `sh tools/ci.sh`
 + `sh tools/ci-audit/check.sh` (re-run at push time — exit 1 blocks even if the reviewer's run
 was green, since commits may have landed since); on Em's confirm, push (sole pusher) and
 `set_status` → `done`.

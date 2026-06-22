@@ -415,8 +415,7 @@ Lean `reviewer.md` has `Bash` + `case_set_status` and "run only read-only/audit 
 `ops.md` has `Bash` and "no Edit/Write" as prose. A compromised reviewer can run any command
 *and* rubber-stamp `→ in_review`. **Fix:** the Phase-3 `PreToolUse` deny-by-default allowlist —
 reviewer: `git diff*`/`git log*`/`cargo check*`/`sh tools/ci.sh`/`sh tools/ci-audit/check.sh`
-(use the lean gate names — `reviewer.md` still says `sh tools/audit.sh`, which doesn't exist on
-lean; see F50); ops: those plus `cargo build --jobs 4 -p api`/`cargo run -p api`/`git status*`/`git commit -o *`/
+(the lean gate names — `reviewer.md` now points at `sh tools/ci.sh`, F50 fixed); ops: those plus `cargo build --jobs 4 -p api`/`cargo run -p api`/`git status*`/`git commit -o *`/
 `rustup target add …`/`kill <numeric-pid>` (which also enforces the no-`pkill` rule
 mechanically)/the gated `git push`. Pair with removing the user-level push allow + the F5
 pre-push gate.
@@ -455,6 +454,14 @@ prompts. **Fix:** repoint the reviewer's "full static-analysis suite" line and o
 line with the lean live-verify path (or drop it until one is restored); fold these script names
 into the same `.claude/**` link/command-check audit proposed in F29 so a renamed gate fails the
 tool, not the user.
+
+**RESOLVED 2026-06-22 (CAS_E88B45C9):** the role prompts were repointed to the real lean gates —
+`reviewer.md` + `feature.md` (reviewer step) → `sh tools/ci.sh`; `ops.md` "green-light gate" +
+`feature.md` (ops step) → `sh tools/ci.sh` (the `ci-audit/check.sh` ratchet retained as the
+push-time block); `tester.md` runtime-UI → manual on the dev server (no headless page-verify on
+lean). The three missing scripts (`audit.sh`/`health-check.sh`/`page-verify`) are still absent —
+the prompts simply no longer call them. The `.claude/**` command-check audit (F29) stays OPEN as
+the durable guard against this recurring.
 
 ### F32 / F33 / F34(sim) / F36 / F48 / F49(sim) — `agent-roles.md`, the docs ontology shelves, and `orchestrator-sim.html` consistency — `DIVERGED` (these artifacts did not graduate to lean)
 The prerelease `docs/internal/processes/agent-roles.md` (the authoritative role-system doc), the
