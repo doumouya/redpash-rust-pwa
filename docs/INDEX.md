@@ -82,6 +82,9 @@ same commit whenever you add a doc — `tools/doc-coverage-audit` gates it.
 | [internal/specs/docs-reorg.md](internal/specs/docs-reorg.md) | This docs reorganization task (hierarchy + INDEX/REDMAP + reconcile + audit gate) |
 | [internal/specs/build-fe-wasm-src.md](internal/specs/build-fe-wasm-src.md) | Bug: build-fe ships `frontend/wasm-src/` (~381 MiB Rust artifacts) into the dist |
 | [internal/specs/agent-system-review-2026-06-12.md](internal/specs/agent-system-review-2026-06-12.md) | Dated review of the `/feature` 5-role orchestrator — 49 prerelease findings (+ F50 from the lean re-verify), each tagged addressed/open/diverged against the current lean tree |
+| [internal/specs/portfolio-foundation.md](internal/specs/portfolio-foundation.md) | Coordination brief — extract RedPash's foundation into a clean, RedPash-free "build-engine" and build the portfolio demos through it (each a logged Case) |
+| [internal/specs/portfolio-foundation-p.md](internal/specs/portfolio-foundation-p.md) | Torv's reframe + per-area input on the build-engine — enforcement-gates-as-the-product, all-JSONB data model, workflow-as-data, DB-persisted orchestrator state, the baggage list |
+| [internal/specs/portfolio-foundation-torv.md](internal/specs/portfolio-foundation-torv.md) | Torv addendum to `-p.md` — the deltas only: fold an `agent-refs` audit into ci.sh (F50/F29), generalize docs-currency into pluggable close-preconditions, the 4 `workflows`-table invariants, the `scope_parent_id` FK/IDOR backstop |
 
 ## Runbooks (`docs/internal/runbooks/`)
 
