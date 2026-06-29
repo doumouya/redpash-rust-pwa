@@ -39,7 +39,6 @@
 //                          and retries the failed call once.
 //
 // SECURITY: the bridge logs URLs / statuses only — never the cookie value.
-const API_BASE_DEFAULT = "http://localhost:8080/api";
 export class CaseApiError extends Error {
     status;
     body;
@@ -51,7 +50,14 @@ export class CaseApiError extends Error {
     }
 }
 function apiBase() {
-    return (process.env.REDPASH_API_BASE ?? API_BASE_DEFAULT).replace(/\/+$/, "");
+    // F1 (reviewer): no :8080 fallback. The numu adapter runs on a DEDICATED port,
+    // so REDPASH_API_BASE MUST be set explicitly — fail loud rather than silently
+    // mint a numu_session against the RedPash :8080 backend.
+    const base = process.env.REDPASH_API_BASE;
+    if (!base) {
+        throw new CaseApiError("REDPASH_API_BASE is not set — the numu Cases adapter requires an explicit base URL (e.g. http://127.0.0.1:8099/api); there is no :8080 fallback.", 0, null);
+    }
+    return base.replace(/\/+$/, "");
 }
 // RedPash → numu priority enum mapping (AC-4). RedPash used
 // `medium`/`critical`; numu's enum is `low|normal|high|urgent`. Anything

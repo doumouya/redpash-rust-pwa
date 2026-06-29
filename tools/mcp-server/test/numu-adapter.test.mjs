@@ -210,6 +210,22 @@ test("AC-6: case_comment POSTs /objects/comment with bare {subject_id, body} (no
     assert.equal(comment.redpash_id, "CMT_1", "comment response is unwrapped too");
 });
 
+// ── F1 (reviewer fast-follow): no :8080 fallback — apiBase throws when unset ──
+test("F1/AC-1: adapter throws (never falls back to :8080) when REDPASH_API_BASE is unset", async () => {
+    resetEnv();
+    delete process.env.REDPASH_API_BASE; // simulate the missing-config footgun
+    const calls = installFetch([]); // any fetch would throw "no scripted response"
+    const { createCase, CaseApiError } = await loadAdapter();
+    await assert.rejects(
+        () => createCase({ title: "x", project_id: "PRJ_x" }),
+        (err) => {
+            assert.ok(err instanceof CaseApiError, "must throw CaseApiError (not a generic/fetch error)");
+            return true;
+        },
+    );
+    assert.equal(calls.length, 0, "must NOT fetch (esp. never :8080) when the base is unset");
+});
+
 // ── AC-6 / mapping: set_status reads etag from a prior GET, sends If-Match on PATCH ──
 test("AC-6: case_set_status GETs the case, then PATCHes /objects/case/:id with bare {status} + If-Match", async () => {
     resetEnv();
