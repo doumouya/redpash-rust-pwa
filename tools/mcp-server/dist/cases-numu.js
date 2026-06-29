@@ -91,7 +91,12 @@ let mintInFlight = null;
 async function mintSession() {
     if (mintInFlight)
         return mintInFlight;
-    const url = apiBase() + "/auth/dev-login";
+    // F2 (live round-trip): numu mounts /auth/* at the ROOT (lib.rs merges
+    // auth_routes at the top level), while /objects/* is nested under /api.
+    // RedPash's dev-login lived under the /api base, so cases.js prepended the
+    // full base; here we must strip a trailing /api segment so the mint hits
+    // <host>/auth/dev-login. /objects/* calls keep the /api base unchanged.
+    const url = apiBase().replace(/\/api\/*$/, "") + "/auth/dev-login";
     mintInFlight = (async () => {
         try {
             const res = await fetch(url, { method: "POST" });

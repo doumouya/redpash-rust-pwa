@@ -322,7 +322,10 @@ test("AC-1/AC-3: REDPASH_API_BASE points the adapter at numu (not the RedPash :8
     const { getCase } = await loadAdapter();
     await getCase("CAS_abc123");
     for (const c of calls) {
-        assert.match(c.url, /^http:\/\/127\.0\.0\.1:8090\/api\//, `every call must hit the numu base, got ${c.url}`);
+        // The numu HOST, not :8080. NB: /objects/* sits under /api but the
+        // root-mounted /auth/dev-login does NOT (lib.rs merges auth at the top
+        // level) — so assert the host, not a blanket /api prefix (F2).
+        assert.match(c.url, /^http:\/\/127\.0\.0\.1:8090\//, `every call must hit the numu host, got ${c.url}`);
         assert.doesNotMatch(c.url, /:8080/, "must not fall back to the RedPash :8080 default");
         assert.doesNotMatch(c.url, /\/cases(\/|$|\?)/, "must use /objects/* routes, not RedPash /cases/*");
     }
